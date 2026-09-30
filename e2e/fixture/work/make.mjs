@@ -205,7 +205,9 @@ const sources = [
     freshness: { state: 'synced', since: '2026-09-30T09:57:00.000Z', ago: 180, syncNo: 14 }, user: { id: ADA.id, name: ADA.name } },
   { id: 'invoice-azdo', provider: 'azure-devops', mode: 'read-only', org: 'https://dev.azure.com/invoice-app', scope: { projects: ['Invoicing'], areas: ['Invoicing\\Integrations', 'Invoicing\\Portal'] },
     capabilities: { comments: { read: true, write: false, format: 'markdown' }, transitions: 'graph', concurrency: 'revision', permissionsProbe: 'per-area', deletesVisible: true, push: 'none', dryRun: true },
-    freshness: { state: 'unreachable', since: '2026-09-30T09:14:00.000Z', ago: 2760, error: 'ECONNREFUSED dev.azure.com' } },
+    freshness: { state: 'unreachable', since: '2026-09-30T09:14:00.000Z', ago: 2760, error: 'ECONNREFUSED dev.azure.com' },
+    // the same person, as Azure DevOps knows her (its own id)
+    user: { id: 'aad.QWRh', name: ADA.name } },
 ];
 const people = { 'invoice-jira': [ADA, BEN], 'invoice-azdo': [CHIDI] };
 const states = {

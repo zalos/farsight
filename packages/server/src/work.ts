@@ -337,8 +337,9 @@ function replaceJoinLinks(cache: WorkCache, links: readonly WorkLinkFact[]): voi
 
 /**
  * The tracker user each source's credential acts as, learned from one
- * connect per server lifetime (fixture: at once; Jira/ADO: one call). An item
- * answer asks for it; a list answer only reports what is already known.
+ * connect per server lifetime (fixture: at once; Jira/ADO: one call). The item
+ * answer and the list answer both ask for it, so every source card can say who
+ * the tracker knows us as — not only the sources whose items were opened first.
  */
 const sessionUsers = new Map<string, Promise<{ id: string; name: string } | undefined>>();
 function userOf(cfg: SourceConfig): Promise<{ id: string; name: string } | undefined> {
@@ -355,10 +356,17 @@ function userOf(cfg: SourceConfig): Promise<{ id: string; name: string } | undef
   }
   return p;
 }
-const knownUser = async (cfg: SourceConfig) => {
-  const key = `${cfg.id}|${cfg.provider}|${cfg.site ?? cfg.org ?? cfg.path ?? ''}`;
-  return sessionUsers.has(key) ? sessionUsers.get(key) : undefined;
-};
+/**
+ * The user for a source card: asks as the item answer does, but waits at most
+ * `waitMs` — an unreachable tracker must not hold the list. The connect keeps
+ * going, so the next list answer carries what it learned.
+ */
+const USER_WAIT_MS = 2000;
+function cardUser(cfg: SourceConfig, waitMs = USER_WAIT_MS): Promise<{ id: string; name: string } | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<undefined>((r) => { timer = setTimeout(() => r(undefined), waitMs); });
+  return Promise.race([userOf(cfg), late]).finally(() => clearTimeout(timer));
+}
 
 export interface WorkRouteContext {
   ws: string;
@@ -403,7 +411,7 @@ function graphLinks(index: GraphIndex | null): WorkLinkFact[] {
 }
 
 async function sourceCard(cfg: SourceConfig, cache: WorkCache, items: readonly WorkItem[]): Promise<WorkSourceFacts & { counts: { items: ReturnType<typeof itemsByState> } }> {
-  const user = await knownUser(cfg);
+  const user = await cardUser(cfg);
   const row = cache.getSource(cfg.id);
   const f = freshness(row);
   const provider = providerFor(cfg.provider);

@@ -233,6 +233,8 @@ test('GET /api/work: source cards with freshness and Counteds, items with link a
   assert.equal(card.freshness.state, 'synced');
   assert.equal(typeof card.freshness.syncNo, 'number');
   assert.ok(card.capabilities);
+  // who the tracker knows us as, on the list answer too — before any item of the source was opened
+  assert.deepEqual(card.user, { id: 'fixture-user', name: 'Fixture user' });
   noProblems(card.counts.items, 'source card items');
   noProblems(body.counts.items, 'items');
   noProblems(body.counts.sources, 'sources');
