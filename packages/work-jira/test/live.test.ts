@@ -12,6 +12,9 @@
 //   FARSIGHT_JIRA_KEYCHAIN   token reference   (default keychain:farsight/jira-example)
 //
 // The defaults are placeholders; point the env at your own Jira test site.
+//
+// The label comes off again in a `finally`, and the run starts by removing any
+// `live-*` label an earlier, interrupted run left on KAN-3.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -57,11 +60,30 @@ const cfg: SourceConfig = {
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+type Raw = ReturnType<typeof createJiraClient>;
+/** The `live-*` labels on an issue, read through the raw client. */
+async function liveLabels(raw: Raw, key: string): Promise<string[]> {
+  const issue = await raw.get<{ fields: { labels?: string[] } }>(`/rest/api/3/issue/${key}?fields=labels`);
+  return (issue.fields.labels ?? []).filter((l) => l.startsWith('live-'));
+}
+/** Take labels off an issue in one edit; nothing to take off, no request. */
+async function removeLabels(raw: Raw, key: string, labels: readonly string[]): Promise<void> {
+  if (!labels.length) return;
+  await raw.put(`/rest/api/3/issue/${key}`, { update: { labels: labels.map((l) => ({ remove: l })) } });
+}
+
 test('live: sync → incremental → hydrate → comment through the gate → conflict', { skip: skip ?? false, timeout: 180_000 }, async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-jira-live-'));
   const cache = new WorkCache(join(dir, 'work.db'));
   const provider = createJiraProvider();
+  const raw = createJiraClient({ site: SITE, user: USER, secret: await resolveSecret(REF) });
+  const label = `live-${Date.now()}`;
   try {
+    // 0 · the labels earlier runs left on KAN-3 come off before this run adds its own
+    const left = await liveLabels(raw, 'KAN-3');
+    await removeLabels(raw, 'KAN-3', left);
+    if (left.length) t.diagnostic(`removed ${left.length} label(s) earlier runs left on KAN-3: ${left.join(', ')}`);
+
     // 1 · full sync through the engine (connect → discover → pull → hydrate)
     const first = await syncSource(cfg, provider, cache);
     assert.equal(first.error, undefined, first.error);
@@ -82,9 +104,6 @@ test('live: sync → incremental → hydrate → comment through the gate → co
     t.diagnostic(`full sync ${first.syncNo}: pulled ${first.pulled} (KAN ${kan.length}, SAM1 ${sam.length}), ${changes} changelog entries, ${comments} comments, ${first.durationMs} ms`);
 
     // 2 · edit an issue on the site, then an incremental sync sees only what moved
-    const secret = await resolveSecret(REF);
-    const raw = createJiraClient({ site: SITE, user: USER, secret });
-    const label = `live-${Date.now()}`;
     await raw.put('/rest/api/3/issue/KAN-3', { update: { labels: [{ add: label }] } });
     let second = await syncSource(cfg, provider, cache);
     for (let i = 0; i < 6 && !cache.getItem(workItemId(SRC, 'KAN-3'))?.labels.includes(label); i++) {
@@ -131,6 +150,8 @@ test('live: sync → incremental → hydrate → comment through the gate → co
     await raw.put('/rest/api/3/issue/KAN-1', { update: { labels: [{ remove: label }] } });
     t.diagnostic(`conflict detected by the engine and by the provider (cached ${stale.revision}, site ${direct.revision})`);
   } finally {
+    // the run's own label comes off again, whatever step failed
+    await removeLabels(raw, 'KAN-3', [label]).catch((err) => t.diagnostic(`could not remove ${label} from KAN-3: ${(err as Error).message}`));
     cache.close();
     rmSync(dir, { recursive: true, force: true });
   }
