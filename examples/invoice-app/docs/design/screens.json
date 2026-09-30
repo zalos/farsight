@@ -1,0 +1,95 @@
+{
+  "name": "Invoice app — screens",
+  "figma": {
+    "file": "https://www.figma.com/design/INVOICEAPPDEMO0000/Invoice-app"
+  },
+  "screens": [
+    {
+      "id": "INV-01",
+      "name": "Invoice list",
+      "route": "/invoices",
+      "nodeId": "1-2",
+      "image": "docs/design/inv-01.svg",
+      "operations": [
+        "listInvoices",
+        "createInvoice",
+        "getInvoice",
+        "updateInvoice"
+      ],
+      "phase": "1",
+      "description": "Every invoice, newest first, with its status and a way into the draft editor."
+    },
+    {
+      "id": "INV-02",
+      "name": "New invoice",
+      "route": "/invoices/new",
+      "nodeId": "1-3",
+      "image": "docs/design/inv-02.svg",
+      "operations": [
+        "createInvoice",
+        "getInvoice"
+      ],
+      "phase": "1",
+      "description": "Draft a new invoice for a customer: pick the customer, add line items, save."
+    },
+    {
+      "id": "INV-03",
+      "name": "Discard draft",
+      "route": "/invoices/[id]/discard",
+      "nodeId": "1-4",
+      "operations": [
+        "deleteInvoice"
+      ],
+      "phase": "2",
+      "description": "Confirm and discard a draft invoice that will never be sent."
+    }
+  ],
+  "flows": [
+    {
+      "id": "new-invoice",
+      "name": "Start a new invoice",
+      "description": "A billing user drafts an invoice for a customer: pick the customer, add line items, save.",
+      "screens": [
+        "INV-02"
+      ],
+      "operations": [
+        "createInvoice"
+      ],
+      "phase": "1",
+      "leadsTo": [
+        "draft-and-send"
+      ]
+    },
+    {
+      "id": "draft-and-send",
+      "name": "Draft and send an invoice",
+      "description": "A billing user reviews a draft in the list, and can discard a draft that will never be sent.",
+      "screens": [
+        "INV-01",
+        "INV-03"
+      ],
+      "docs": [
+        "docs/design/flows.md"
+      ],
+      "operations": [
+        "listInvoices",
+        "deleteInvoice"
+      ],
+      "phase": "1"
+    },
+    {
+      "id": "billing-cycle",
+      "name": "Billing cycle",
+      "description": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent.",
+      "screens": [
+        "INV-02",
+        "INV-01",
+        "INV-03"
+      ],
+      "docs": [
+        "docs/design/flows.md"
+      ],
+      "phase": "1"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/workItems/352/comments?$expand=renderedText&api-version=7.2-preview.4",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000024",
+  "content-type": "application/json; charset=utf-8; api-version=7.2-preview.4",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01138",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000020",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000024",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000024"
+ },
+ "body": {
+  "totalCount": 0,
+  "count": 0,
+  "comments": []
+ }
+}

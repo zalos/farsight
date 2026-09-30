@@ -1,0 +1,49 @@
+{
+ "status": 200,
+ "body": {
+  "count": 1,
+  "value": [
+   {
+    "namespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "name": "Tagging",
+    "displayName": "Tagging",
+    "separatorValue": "/",
+    "elementLength": -1,
+    "writePermission": 4,
+    "readPermission": 1,
+    "dataspaceCategory": "Default",
+    "actions": [
+     {
+      "bit": 1,
+      "name": "Enumerate",
+      "displayName": "Enumerate tag definitions",
+      "namespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2"
+     },
+     {
+      "bit": 2,
+      "name": "Create",
+      "displayName": "Create tag definition",
+      "namespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2"
+     },
+     {
+      "bit": 4,
+      "name": "Update",
+      "displayName": "Update tag definition",
+      "namespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2"
+     },
+     {
+      "bit": 8,
+      "name": "Delete",
+      "displayName": "Delete tag definition",
+      "namespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2"
+     }
+    ],
+    "structureValue": 1,
+    "extensionType": null,
+    "isRemotable": false,
+    "useTokenTranslator": true,
+    "systemBitMask": 0
+   }
+  ]
+ }
+}

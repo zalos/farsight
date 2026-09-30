@@ -1,0 +1,142 @@
+# Billing API — the contract for examples/invoice-app.
+#
+# Deliberate drift against the code (the fixture for docs/proposals/openapi-surface.md):
+#   - DELETE /invoices/{id} is declared here and not implemented        → spec-only
+#   - POST /invoices/{id}/finalize is implemented and not declared here → code-only (undocumented)
+#   - PATCH /invoices/{id} declares billing:admin; the code enforces billing:write → security-mismatch
+openapi: 3.1.0
+info:
+  title: Billing API
+  version: 1.2.0
+  description: Create, edit and send customer invoices. Every operation needs a billing scope.
+servers:
+  - url: https://billing.example.com
+tags:
+  - name: Invoices
+    description: The invoice lifecycle from draft to sent.
+paths:
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [Invoices]
+      summary: List every invoice, newest first.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, open, paid] }
+          description: Only invoices in this state.
+      security:
+        - billingAuth: [billing:read]
+      responses:
+        '200':
+          description: The invoices the caller may see.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Invoice' }
+    post:
+      operationId: createInvoice
+      tags: [Invoices]
+      summary: Draft a new invoice for a customer.
+      description: Totals are computed on creation; nothing reaches the customer until the invoice is finalized.
+      security:
+        - billingAuth: [billing:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DraftInvoice' }
+      responses:
+        '201':
+          description: The draft as stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+  /invoices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getInvoice
+      tags: [Invoices]
+      summary: Fetch one invoice by id.
+      security:
+        - billingAuth: [billing:read]
+      responses:
+        '200':
+          description: The invoice.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '404':
+          description: No invoice with that id.
+    patch:
+      operationId: updateInvoice
+      tags: [Invoices]
+      summary: Change the line items of a draft invoice.
+      description: Only drafts can change; a sent invoice is locked.
+      security:
+        - billingAuth: [billing:admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoicePatch' }
+      responses:
+        '200':
+          description: The updated invoice.
+        '409':
+          description: The invoice is no longer a draft.
+    delete:
+      operationId: deleteInvoice
+      tags: [Invoices]
+      summary: Discard a draft invoice.
+      security:
+        - billingAuth: [billing:admin]
+      responses:
+        '204':
+          description: Deleted.
+components:
+  securitySchemes:
+    billingAuth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.com/token
+          scopes:
+            billing:read: Read invoices
+            billing:write: Create and edit drafts
+            billing:admin: Finalize and delete
+  schemas:
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        customerId: { type: string }
+        status: { type: string, enum: [draft, open, paid] }
+        subtotal: { type: number }
+        tax: { type: number }
+        total: { type: number }
+    DraftInvoice:
+      type: object
+      required: [customerId, lines]
+      properties:
+        customerId: { type: string }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              amount: { type: number }
+    InvoicePatch:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              amount: { type: number }

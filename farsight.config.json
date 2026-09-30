@@ -1,0 +1,20 @@
+{
+  "tags": {
+    "engine": ["packages/core"],
+    "adapter": ["packages/parsers"],
+    "gui": ["packages/server", "viewer"],
+    "agent-surface": ["packages/mcp"],
+    "cli": ["packages/cli"],
+    "demo": ["examples/invoice-app"]
+  },
+  "glossary": {
+    "ingestTsJs": { "label": "Parse a TS/JS repo", "description": "Turns one repository's source into semantic-graph nodes and edges." },
+    "trace": { "label": "Trace a flow", "description": "Finds everything connected to a starting point, out to a bounded depth." },
+    "impact": { "label": "What depends on this", "description": "Everything that could break if the starting point changes." },
+    "serveGraph": { "label": "Open the explorer", "description": "Serves the graph to the visual HUD in the browser." },
+    "runMcpServer": { "label": "Brief the AI agents", "description": "Feeds the graph to coding agents over MCP." }
+  },
+  "tests": {
+    "e2e": { "runner": "playwright", "results": "e2e/test-results/results.json" }
+  }
+}

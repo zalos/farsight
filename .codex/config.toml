@@ -1,0 +1,11 @@
+[mcp_servers.farsight]
+command = "node"
+args = [
+    "packages/cli/dist/cli.js",
+    "mcp",
+    "--graph",
+    "graph.json",
+]
+
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"

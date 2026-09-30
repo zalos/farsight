@@ -1,0 +1,217 @@
+{
+  "config": {
+    "rootDir": "e2e",
+    "reporter": [
+      [
+        "json",
+        {
+          "outputFile": "e2e/results.json"
+        }
+      ]
+    ],
+    "projects": [
+      {
+        "id": "desktop-1440",
+        "name": "desktop-1440"
+      },
+      {
+        "id": "mobile-390",
+        "name": "mobile-390"
+      }
+    ]
+  },
+  "stats": {
+    "startTime": "2026-09-21T09:14:03.000Z",
+    "duration": 33214,
+    "expected": 5,
+    "skipped": 1,
+    "unexpected": 1,
+    "flaky": 1
+  },
+  "suites": [
+    {
+      "title": "billing.pw.spec.ts",
+      "file": "billing.pw.spec.ts",
+      "line": 0,
+      "column": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "billing",
+          "file": "billing.pw.spec.ts",
+          "line": 13,
+          "column": 6,
+          "specs": [
+            {
+              "title": "the invoice list shows every invoice newest first",
+              "file": "billing.pw.spec.ts",
+              "line": 14,
+              "column": 3,
+              "ok": true,
+              "tests": [
+                {
+                  "projectId": "desktop-1440",
+                  "projectName": "desktop-1440",
+                  "status": "expected",
+                  "expectedStatus": "passed",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "passed",
+                      "duration": 812
+                    }
+                  ]
+                },
+                {
+                  "projectId": "mobile-390",
+                  "projectName": "mobile-390",
+                  "status": "flaky",
+                  "expectedStatus": "passed",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "failed",
+                      "duration": 30011
+                    },
+                    {
+                      "retry": 1,
+                      "status": "passed",
+                      "duration": 941
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "a new invoice is created and appears in the list",
+              "file": "billing.pw.spec.ts",
+              "line": 19,
+              "column": 3,
+              "ok": true,
+              "tests": [
+                {
+                  "projectId": "desktop-1440",
+                  "projectName": "desktop-1440",
+                  "status": "expected",
+                  "expectedStatus": "passed",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "passed",
+                      "duration": 1204
+                    }
+                  ]
+                },
+                {
+                  "projectId": "mobile-390",
+                  "projectName": "mobile-390",
+                  "status": "skipped",
+                  "expectedStatus": "skipped",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "skipped"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "suites": []
+        }
+      ]
+    },
+    {
+      "title": "new-invoice.pw.spec.ts",
+      "file": "new-invoice.pw.spec.ts",
+      "line": 0,
+      "column": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "new invoice",
+          "file": "new-invoice.pw.spec.ts",
+          "line": 14,
+          "column": 6,
+          "suites": [],
+          "specs": [
+            {
+              "title": "a draft is saved for the picked customer",
+              "file": "new-invoice.pw.spec.ts",
+              "line": 15,
+              "column": 3,
+              "ok": true,
+              "tests": [
+                {
+                  "projectId": "desktop-1440",
+                  "projectName": "desktop-1440",
+                  "status": "expected",
+                  "expectedStatus": "passed",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "passed",
+                      "duration": 900
+                    }
+                  ]
+                },
+                {
+                  "projectId": "mobile-390",
+                  "projectName": "mobile-390",
+                  "status": "expected",
+                  "expectedStatus": "passed",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "passed",
+                      "duration": 900
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "title": "a draft with no line items is refused",
+              "file": "new-invoice.pw.spec.ts",
+              "line": 20,
+              "column": 3,
+              "ok": false,
+              "tests": [
+                {
+                  "projectId": "desktop-1440",
+                  "projectName": "desktop-1440",
+                  "status": "unexpected",
+                  "expectedStatus": "passed",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "failed",
+                      "duration": 900
+                    }
+                  ]
+                },
+                {
+                  "projectId": "mobile-390",
+                  "projectName": "mobile-390",
+                  "status": "expected",
+                  "expectedStatus": "passed",
+                  "results": [
+                    {
+                      "retry": 0,
+                      "status": "passed",
+                      "duration": 900
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "farsight": {
+    "sourceDigest": "ce3afa739e71",
+    "repo": "invoice-app"
+  }
+}

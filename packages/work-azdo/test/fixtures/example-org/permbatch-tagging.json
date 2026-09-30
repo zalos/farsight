@@ -1,0 +1,78 @@
+{
+ "status": 200,
+ "requestBody": {
+  "alwaysAllowAdministrators": false,
+  "evaluations": [
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "/00000000-0000-4000-8000-000000000006",
+    "permissions": 1
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "/00000000-0000-4000-8000-000000000006",
+    "permissions": 2
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "00000000-0000-4000-8000-000000000006",
+    "permissions": 1
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "00000000-0000-4000-8000-000000000006",
+    "permissions": 2
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "",
+    "permissions": 1
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "",
+    "permissions": 2
+   }
+  ]
+ },
+ "body": {
+  "evaluations": [
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "/00000000-0000-4000-8000-000000000006",
+    "permissions": 1,
+    "value": true
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "/00000000-0000-4000-8000-000000000006",
+    "permissions": 2,
+    "value": false
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "00000000-0000-4000-8000-000000000006",
+    "permissions": 1,
+    "value": false
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "00000000-0000-4000-8000-000000000006",
+    "permissions": 2,
+    "value": false
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "",
+    "permissions": 1,
+    "value": false
+   },
+   {
+    "securityNamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2",
+    "token": "",
+    "permissions": 2,
+    "value": false
+   }
+  ]
+ }
+}

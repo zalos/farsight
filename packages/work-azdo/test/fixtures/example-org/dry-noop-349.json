@@ -1,0 +1,46 @@
+{
+ "status": 400,
+ "method": "PATCH",
+ "path": "/ExampleProject/_apis/wit/workitems/349?validateOnly=true&api-version=7.1",
+ "requestBody": [
+  {
+   "op": "test",
+   "path": "/rev",
+   "value": 1
+  },
+  {
+   "op": "replace",
+   "path": "/fields/System.Title",
+   "value": "Mobile app"
+  }
+ ],
+ "headers": {
+  "content-type": "application/json; charset=utf-8",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.02996"
+ },
+ "body": {
+  "$id": "1",
+  "customProperties": {
+   "FieldReferenceName": null,
+   "FieldStatusFlags": "none",
+   "ErrorMessage": "The field 'State' contains the value 'To Do' that is not in the list of supported values",
+   "FieldStatusCode": 0,
+   "RuleValidationErrors": [
+    {
+     "fieldReferenceName": "System.State",
+     "fieldStatusFlags": "required, hasValues, limitedToValues, invalidListValue",
+     "errorMessage": "The field 'State' contains the value 'To Do' that is not in the list of supported values",
+     "fieldStatusCode": 4194317,
+     "ruleValidationErrors": null
+    }
+   ]
+  },
+  "innerException": null,
+  "message": "The field 'State' contains the value 'To Do' that is not in the list of supported values",
+  "typeName": "Microsoft.TeamFoundation.WorkItemTracking.Server.RuleValidationException, Microsoft.TeamFoundation.WorkItemTracking.Server",
+  "typeKey": "RuleValidationException",
+  "errorCode": 0,
+  "eventId": 3200
+ }
+}

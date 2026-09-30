@@ -1,0 +1,54 @@
+{
+ "status": 200,
+ "method": "POST",
+ "path": "/ExampleProject/_apis/wit/wiql?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000038",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.03097",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000010",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000038",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000038"
+ },
+ "body": {
+  "queryType": "flat",
+  "queryResultType": "workItem",
+  "asOf": "2026-09-30T22:31:39.303Z",
+  "columns": [
+   {
+    "referenceName": "System.Id",
+    "name": "ID",
+    "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.Id"
+   }
+  ],
+  "sortColumns": [
+   {
+    "field": {
+     "referenceName": "System.Id",
+     "name": "ID",
+     "url": "https://dev.azure.com/example-org/_apis/wit/fields/System.Id"
+    },
+    "descending": false
+   }
+  ],
+  "workItems": [
+   {
+    "id": 349,
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/349"
+   },
+   {
+    "id": 350,
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350"
+   },
+   {
+    "id": 351,
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351"
+   },
+   {
+    "id": 352,
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352"
+   }
+  ]
+ }
+}

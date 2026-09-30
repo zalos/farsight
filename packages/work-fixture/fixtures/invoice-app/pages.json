@@ -1,0 +1,18 @@
+{
+  "full": [
+    {
+      "file": "full-1.json"
+    },
+    {
+      "file": "full-2.json"
+    }
+  ],
+  "incremental": {
+    "2026-09-18T10:00:00.000Z": [
+      "inc-1.json"
+    ],
+    "2026-09-24T16:00:00.000Z": [
+      "inc-2.json"
+    ]
+  }
+}

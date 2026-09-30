@@ -1,0 +1,5660 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/workitemtypes?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000039",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.12367",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000010",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000039",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000039"
+ },
+ "body": {
+  "count": 15,
+  "value": [
+   {
+    "name": "Task",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.Task",
+    "description": "Tracks work that needs to be done.",
+    "color": "A4880A",
+    "icon": {
+     "id": "icon_clipboard",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_clipboard?color=A4880A&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.RemainingWork",
+      "name": "Remaining Work",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BacklogPriority",
+      "name": "Backlog Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Activity",
+      "name": "Activity",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CMMI.Blocked",
+      "name": "Blocked",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+      "name": "Resolved By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+      "name": "Resolved Date",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Done": [
+      {
+       "to": "Done",
+       "actions": null
+      },
+      {
+       "to": "In Progress",
+       "actions": null
+      },
+      {
+       "to": "To Do",
+       "actions": null
+      }
+     ],
+     "In Progress": [
+      {
+       "to": "In Progress",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": [
+        "Microsoft.VSTS.Actions.Checkin"
+       ]
+      },
+      {
+       "to": "To Do",
+       "actions": [
+        "Microsoft.VSTS.Actions.StopWork"
+       ]
+      }
+     ],
+     "Removed": [
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "To Do",
+       "actions": null
+      }
+     ],
+     "To Do": [
+      {
+       "to": "To Do",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": [
+        "Microsoft.VSTS.Actions.Checkin"
+       ]
+      },
+      {
+       "to": "In Progress",
+       "actions": [
+        "Microsoft.VSTS.Actions.StartWork"
+       ]
+      }
+     ],
+     "": [
+      {
+       "to": "To Do",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "To Do",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "In Progress",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Done",
+      "color": "339933",
+      "category": "Completed"
+     },
+     {
+      "name": "Removed",
+      "color": "ffffff",
+      "category": "Removed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Task"
+   },
+   {
+    "name": "Bug",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.Bug",
+    "description": "Describes a divergence between required and actual behavior, and tracks the work done to correct the defect and verify the correction.",
+    "color": "CC293D",
+    "icon": {
+     "id": "icon_insect",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_insect?color=CC293D&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.SystemInfo",
+      "name": "System Info",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.ReproSteps",
+      "name": "Repro Steps",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BacklogPriority",
+      "name": "Backlog Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+      "name": "Effort",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.RemainingWork",
+      "name": "Remaining Work",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Activity",
+      "name": "Activity",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.AcceptanceCriteria",
+      "name": "Acceptance Criteria",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Severity",
+      "name": "Severity",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ValueArea",
+      "name": "Value Area",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.FoundIn",
+      "name": "Found In",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+      "name": "Resolved By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+      "name": "Resolved Date",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Approved": [
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "Committed": [
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "Done": [
+      {
+       "to": "Done",
+       "actions": null
+      },
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      }
+     ],
+     "New": [
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "Removed": [
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "New",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "New",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "Approved",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "Committed",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Done",
+      "color": "339933",
+      "category": "Completed"
+     },
+     {
+      "name": "Removed",
+      "color": "ffffff",
+      "category": "Removed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Bug"
+   },
+   {
+    "name": "Code Review Request",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.CodeReviewRequest",
+    "description": "Represents the master work item for a code review. Child work items should be created of the type Code Review Response.",
+    "color": "B4009E",
+    "icon": {
+     "id": "icon_code_review",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_code_review?color=B4009E&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ClosingComment",
+      "name": "Closing Comment",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ContextCode",
+      "name": "Associated Context Code",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ContextType",
+      "name": "Associated Context Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.Context",
+      "name": "Associated Context",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ContextOwner",
+      "name": "Associated Context Owner",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ClosedStatusCode",
+      "name": "Closed Status Code",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ClosedStatus",
+      "name": "Closed Status",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateCode",
+      "name": "State Code",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Closed": [
+      {
+       "to": "Closed",
+       "actions": null
+      }
+     ],
+     "Requested": [
+      {
+       "to": "Requested",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": [
+        "Microsoft.VSTS.Actions.Checkin",
+        "Microsoft.VSTS.CodeReview.Abandon"
+       ]
+      }
+     ],
+     "": [
+      {
+       "to": "Requested",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Requested",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "Closed",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Code%20Review%20Request"
+   },
+   {
+    "name": "Code Review Response",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.CodeReviewResponse",
+    "description": "This is a child work item that should be parented to a Code Review Request work item. It is assigned to the reviewer and contains the current state of the review for this reviewer.",
+    "color": "B4009E",
+    "icon": {
+     "id": "icon_code_response",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_code_response?color=B4009E&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.AcceptedDate",
+      "name": "Accepted Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.AcceptedBy",
+      "name": "Accepted By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ReviewedBy",
+      "name": "Reviewed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ClosingComment",
+      "name": "Closing Comment",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ClosedStatusCode",
+      "name": "Closed Status Code",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.CodeReview.ClosedStatus",
+      "name": "Closed Status",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateCode",
+      "name": "State Code",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Accepted": [
+      {
+       "to": "Accepted",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": [
+        "Microsoft.VSTS.CodeReview.Complete",
+        "Microsoft.VSTS.CodeReview.Decline",
+        "Microsoft.VSTS.CodeReview.Remove"
+       ]
+      }
+     ],
+     "Closed": [
+      {
+       "to": "Closed",
+       "actions": null
+      },
+      {
+       "to": "Requested",
+       "actions": [
+        "Microsoft.VSTS.CodeReview.Reassign"
+       ]
+      }
+     ],
+     "Requested": [
+      {
+       "to": "Requested",
+       "actions": null
+      },
+      {
+       "to": "Accepted",
+       "actions": [
+        "Microsoft.VSTS.CodeReview.Accept"
+       ]
+      },
+      {
+       "to": "Closed",
+       "actions": [
+        "Microsoft.VSTS.CodeReview.Decline",
+        "Microsoft.VSTS.CodeReview.Remove"
+       ]
+      }
+     ],
+     "": [
+      {
+       "to": "Requested",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Requested",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "Accepted",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Closed",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Code%20Review%20Response"
+   },
+   {
+    "name": "Epic",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.Epic",
+    "description": "Epics help teams effectively manage and groom their product backlog",
+    "color": "E06C00",
+    "icon": {
+     "id": "icon_crown",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_crown?color=E06C00&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BacklogPriority",
+      "name": "Backlog Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.TargetDate",
+      "name": "Target Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.StartDate",
+      "name": "Start Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BusinessValue",
+      "name": "Business Value",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.TimeCriticality",
+      "name": "Time Criticality",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+      "name": "Effort",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.AcceptanceCriteria",
+      "name": "Acceptance Criteria",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ValueArea",
+      "name": "Value Area",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+      "name": "Resolved By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+      "name": "Resolved Date",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Done": [
+      {
+       "to": "Done",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "In Progress",
+       "actions": null
+      }
+     ],
+     "In Progress": [
+      {
+       "to": "In Progress",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "New": [
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      },
+      {
+       "to": "In Progress",
+       "actions": null
+      }
+     ],
+     "Removed": [
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "New",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "New",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "In Progress",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Done",
+      "color": "339933",
+      "category": "Completed"
+     },
+     {
+      "name": "Removed",
+      "color": "ffffff",
+      "category": "Removed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Epic"
+   },
+   {
+    "name": "Feature",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.Feature",
+    "description": "Tracks a feature that will be released with the product",
+    "color": "773B93",
+    "icon": {
+     "id": "icon_trophy",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_trophy?color=773B93&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BacklogPriority",
+      "name": "Backlog Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.TargetDate",
+      "name": "Target Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.StartDate",
+      "name": "Start Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BusinessValue",
+      "name": "Business Value",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.TimeCriticality",
+      "name": "Time Criticality",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+      "name": "Effort",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ValueArea",
+      "name": "Value Area",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.AcceptanceCriteria",
+      "name": "Acceptance Criteria",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+      "name": "Resolved By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+      "name": "Resolved Date",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Done": [
+      {
+       "to": "Done",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "In Progress",
+       "actions": null
+      }
+     ],
+     "In Progress": [
+      {
+       "to": "In Progress",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "New": [
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      },
+      {
+       "to": "In Progress",
+       "actions": null
+      }
+     ],
+     "Removed": [
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "New",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "New",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "In Progress",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Done",
+      "color": "339933",
+      "category": "Completed"
+     },
+     {
+      "name": "Removed",
+      "color": "ffffff",
+      "category": "Removed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Feature"
+   },
+   {
+    "name": "Feedback Request",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.FeedbackRequest",
+    "description": "Represents the master work item for a feedback session. Child work items should be created of the type Feedback Response.",
+    "color": "004B50",
+    "icon": {
+     "id": "icon_review",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_review?color=004B50&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Feedback.ApplicationType",
+      "name": "Application Type",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Feedback.ApplicationStartInformation",
+      "name": "Application Start Information",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Feedback.ApplicationLaunchInstructions",
+      "name": "Application Launch Instructions",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Active": [
+      {
+       "to": "Active",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      }
+     ],
+     "Closed": [
+      {
+       "to": "Closed",
+       "actions": null
+      },
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ],
+     "Removed": [
+      {
+       "to": "Removed",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Active",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Closed",
+      "color": "339933",
+      "category": "Completed"
+     },
+     {
+      "name": "Removed",
+      "color": "ffffff",
+      "category": "Removed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Feedback%20Request"
+   },
+   {
+    "name": "Feedback Response",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.FeedbackResponse",
+    "description": "This is a child work item that should be parented to a Feedback Request work item. It is assigned to the reviewer and contains the current state of the review for this reviewer.",
+    "color": "004B50",
+    "icon": {
+     "id": "icon_response",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_response?color=004B50&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Rating",
+      "name": "Rating",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.SystemInfo",
+      "name": "System Info",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Active": [
+      {
+       "to": "Active",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": null
+      }
+     ],
+     "Closed": [
+      {
+       "to": "Closed",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Active",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Closed",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Feedback%20Response"
+   },
+   {
+    "name": "Impediment",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.Impediment",
+    "description": "Tracks an obstacle to progress.",
+    "color": "B4009E",
+    "icon": {
+     "id": "icon_traffic_cone",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_traffic_cone?color=B4009E&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Resolution",
+      "name": "Resolution",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+      "name": "Resolved By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+      "name": "Resolved Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BacklogPriority",
+      "name": "Backlog Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+      "name": "Effort",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Closed": [
+      {
+       "to": "Closed",
+       "actions": null
+      },
+      {
+       "to": "Open",
+       "actions": null
+      }
+     ],
+     "Open": [
+      {
+       "to": "Open",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "Open",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Open",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Closed",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Impediment"
+   },
+   {
+    "name": "Product Backlog Item",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.ProductBacklogItem",
+    "description": "Tracks an activity the user will be able to perform with the product.",
+    "color": "0098C7",
+    "icon": {
+     "id": "icon_list",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_list?color=0098C7&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BacklogPriority",
+      "name": "Backlog Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.BusinessValue",
+      "name": "Business Value",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+      "name": "Effort",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.AcceptanceCriteria",
+      "name": "Acceptance Criteria",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ValueArea",
+      "name": "Value Area",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+      "name": "Resolved By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+      "name": "Resolved Date",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Approved": [
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "Committed": [
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "Done": [
+      {
+       "to": "Done",
+       "actions": null
+      },
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      }
+     ],
+     "New": [
+      {
+       "to": "New",
+       "actions": null
+      },
+      {
+       "to": "Committed",
+       "actions": null
+      },
+      {
+       "to": "Approved",
+       "actions": null
+      },
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "Done",
+       "actions": null
+      }
+     ],
+     "Removed": [
+      {
+       "to": "Removed",
+       "actions": null
+      },
+      {
+       "to": "New",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "New",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "New",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "Approved",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "Committed",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Done",
+      "color": "339933",
+      "category": "Completed"
+     },
+     {
+      "name": "Removed",
+      "color": "ffffff",
+      "category": "Removed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Product%20Backlog%20Item"
+   },
+   {
+    "name": "Shared Steps",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.SharedStep",
+    "description": "Server-side data for reusable set of test steps.",
+    "color": "004B50",
+    "icon": {
+     "id": "icon_test_step",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_test_step?color=004B50&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Issue",
+      "name": "Issue",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.Steps",
+      "name": "Steps",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.Parameters",
+      "name": "Parameters",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Active": [
+      {
+       "to": "Active",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": null
+      }
+     ],
+     "Closed": [
+      {
+       "to": "Closed",
+       "actions": null
+      },
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Active",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Closed",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Shared%20Steps"
+   },
+   {
+    "name": "Shared Parameter",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.SharedParameter",
+    "description": "Server-side data for reusable set of parameters.",
+    "color": "004B50",
+    "icon": {
+     "id": "icon_test_parameter",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_test_parameter?color=004B50&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.Parameters",
+      "name": "Parameters",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Active": [
+      {
+       "to": "Active",
+       "actions": null
+      },
+      {
+       "to": "Inactive",
+       "actions": null
+      }
+     ],
+     "Inactive": [
+      {
+       "to": "Inactive",
+       "actions": null
+      },
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Active",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Inactive",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Shared%20Parameter"
+   },
+   {
+    "name": "Test Case",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.TestCase",
+    "description": "Server-side data for a set of steps to be tested.",
+    "color": "004B50",
+    "icon": {
+     "id": "icon_test_case",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_test_case?color=004B50&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+      "name": "State Change Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+      "name": "Activated Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+      "name": "Activated By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+      "name": "Closed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+      "name": "Closed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Common.Priority",
+      "name": "Priority",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.Steps",
+      "name": "Steps",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.AutomatedTestName",
+      "name": "Automated Test Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.AutomatedTestStorage",
+      "name": "Automated Test Storage",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.AutomatedTestId",
+      "name": "Automated Test Id",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.AutomatedTestType",
+      "name": "Automated Test Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.Parameters",
+      "name": "Parameters",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.LocalDataSource",
+      "name": "Local Data Source",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.AutomationStatus",
+      "name": "Automation status",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Closed": [
+      {
+       "to": "Closed",
+       "actions": null
+      },
+      {
+       "to": "Ready",
+       "actions": null
+      },
+      {
+       "to": "Design",
+       "actions": null
+      }
+     ],
+     "Design": [
+      {
+       "to": "Design",
+       "actions": null
+      },
+      {
+       "to": "Ready",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": null
+      }
+     ],
+     "Ready": [
+      {
+       "to": "Ready",
+       "actions": null
+      },
+      {
+       "to": "Closed",
+       "actions": null
+      },
+      {
+       "to": "Design",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "Design",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Design",
+      "color": "b2b2b2",
+      "category": "Proposed"
+     },
+     {
+      "name": "Ready",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Closed",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Test%20Case"
+   },
+   {
+    "name": "Test Plan",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.TestPlan",
+    "description": "Tracks test activities for a specific milestone or release.",
+    "color": "004B50",
+    "icon": {
+     "id": "icon_test_plan",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_test_plan?color=004B50&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.StartDate",
+      "name": "Start Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Scheduling.FinishDate",
+      "name": "Finish Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Active": [
+      {
+       "to": "Active",
+       "actions": null
+      },
+      {
+       "to": "Inactive",
+       "actions": null
+      }
+     ],
+     "Inactive": [
+      {
+       "to": "Inactive",
+       "actions": null
+      },
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "Active",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "Active",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Inactive",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Test%20Plan"
+   },
+   {
+    "name": "Test Suite",
+    "referenceName": "Microsoft.VSTS.WorkItemTypes.TestSuite",
+    "description": "Tracks test activites for a specific feature, requirement, or user story.",
+    "color": "004B50",
+    "icon": {
+     "id": "icon_test_suite",
+     "url": "https://example.visualstudio.com/_apis/wit/workItemIcons/icon_test_suite?color=004B50&v=2"
+    },
+    "isDisabled": false,
+    "fields": [
+     {
+      "referenceName": "System.IterationPath",
+      "name": "Iteration Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationId",
+      "name": "Iteration ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.ExternalLinkCount",
+      "name": "External Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel7",
+      "name": "Iteration Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel6",
+      "name": "Iteration Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel5",
+      "name": "Iteration Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel4",
+      "name": "Iteration Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel3",
+      "name": "Iteration Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel2",
+      "name": "Iteration Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.IterationLevel1",
+      "name": "Iteration Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel7",
+      "name": "Area Level 7",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel6",
+      "name": "Area Level 6",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel5",
+      "name": "Area Level 5",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel4",
+      "name": "Area Level 4",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel3",
+      "name": "Area Level 3",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel2",
+      "name": "Area Level 2",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaLevel1",
+      "name": "Area Level 1",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.TeamProject",
+      "name": "Team Project",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Parent",
+      "name": "Parent",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RemoteLinkCount",
+      "name": "Remote Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CommentCount",
+      "name": "Comment Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.HyperLinkCount",
+      "name": "Hyperlink Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AttachedFileCount",
+      "name": "Attached File Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.NodeName",
+      "name": "Node Name",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaPath",
+      "name": "Area Path",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RevisedDate",
+      "name": "Revised Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedDate",
+      "name": "Changed Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Id",
+      "name": "ID",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AreaId",
+      "name": "Area ID",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedAs",
+      "name": "Authorized As",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Title",
+      "name": "Title",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.State",
+      "name": "State",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "System.AuthorizedDate",
+      "name": "Authorized Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Watermark",
+      "name": "Watermark",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Rev",
+      "name": "Rev",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.ChangedBy",
+      "name": "Changed By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Reason",
+      "name": "Reason",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.AssignedTo",
+      "name": "Assigned To",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.WorkItemType",
+      "name": "Work Item Type",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedDate",
+      "name": "Created Date",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.CreatedBy",
+      "name": "Created By",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Description",
+      "name": "Description",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.History",
+      "name": "History",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.RelatedLinkCount",
+      "name": "Related Link Count",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.Tags",
+      "name": "Tags",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumn",
+      "name": "Board Column",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardColumnDone",
+      "name": "Board Column Done",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "System.BoardLane",
+      "name": "Board Lane",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+      "name": "Integration Build",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.TestSuiteTypeId",
+      "name": "Test Suite Type Id",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.TestSuiteType",
+      "name": "Test Suite Type",
+      "alwaysRequired": true
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.QueryText",
+      "name": "Query Text",
+      "alwaysRequired": false
+     },
+     {
+      "referenceName": "Microsoft.VSTS.TCM.TestSuiteAudit",
+      "name": "Test Suite Audit",
+      "alwaysRequired": false
+     }
+    ],
+    "transitions": {
+     "Completed": [
+      {
+       "to": "Completed",
+       "actions": null
+      },
+      {
+       "to": "In Planning",
+       "actions": null
+      },
+      {
+       "to": "In Progress",
+       "actions": null
+      }
+     ],
+     "In Planning": [
+      {
+       "to": "In Planning",
+       "actions": null
+      },
+      {
+       "to": "Completed",
+       "actions": null
+      },
+      {
+       "to": "In Progress",
+       "actions": null
+      }
+     ],
+     "In Progress": [
+      {
+       "to": "In Progress",
+       "actions": null
+      },
+      {
+       "to": "In Planning",
+       "actions": null
+      },
+      {
+       "to": "Completed",
+       "actions": null
+      }
+     ],
+     "": [
+      {
+       "to": "In Progress",
+       "actions": null
+      }
+     ]
+    },
+    "states": [
+     {
+      "name": "In Planning",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "In Progress",
+      "color": "007acc",
+      "category": "InProgress"
+     },
+     {
+      "name": "Completed",
+      "color": "339933",
+      "category": "Completed"
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Test%20Suite"
+   }
+  ]
+ },
+ "note": "trimmed: xmlForm and fieldInstances removed, fields reduced to referenceName/name/alwaysRequired"
+}

@@ -1,0 +1,941 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/workItems/351/updates?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000036",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01384",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000015",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000036",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000036"
+ },
+ "body": {
+  "count": 15,
+  "value": [
+   {
+    "id": 1,
+    "workItemId": 351,
+    "rev": 1,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:45:09.93Z",
+    "fields": {
+     "System.Id": {
+      "newValue": 351
+     },
+     "System.AreaId": {
+      "newValue": 29
+     },
+     "System.NodeName": {
+      "newValue": "ExampleProject"
+     },
+     "System.AreaLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.Rev": {
+      "newValue": 1
+     },
+     "System.AuthorizedDate": {
+      "newValue": "2026-05-07T23:44:25.227Z"
+     },
+     "System.RevisedDate": {
+      "newValue": "2026-05-07T23:45:09.93Z"
+     },
+     "System.IterationId": {
+      "newValue": 29
+     },
+     "System.IterationLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.WorkItemType": {
+      "newValue": "Product Backlog Item"
+     },
+     "System.State": {
+      "newValue": "New"
+     },
+     "System.Reason": {
+      "newValue": "New backlog item"
+     },
+     "System.AssignedTo": {},
+     "System.CreatedDate": {
+      "newValue": "2026-05-07T23:44:25.227Z"
+     },
+     "System.CreatedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.ChangedDate": {
+      "newValue": "2026-05-07T23:44:25.227Z"
+     },
+     "System.ChangedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.AuthorizedAs": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.PersonId": {
+      "newValue": 296860500
+     },
+     "System.Watermark": {
+      "newValue": 987
+     },
+     "System.IsDeleted": {
+      "newValue": false
+     },
+     "System.CommentCount": {
+      "newValue": 0
+     },
+     "System.TeamProject": {
+      "newValue": "ExampleProject"
+     },
+     "System.AreaPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.IterationPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.Title": {
+      "newValue": "Vendor onboarding form"
+     },
+     "System.BoardColumn": {
+      "newValue": "New"
+     },
+     "System.BoardColumnDone": {
+      "newValue": false
+     },
+     "Microsoft.VSTS.Common.StateChangeDate": {
+      "newValue": "2026-05-07T23:44:25.227Z"
+     },
+     "Microsoft.VSTS.Common.Priority": {
+      "newValue": 2
+     },
+     "Microsoft.VSTS.Common.ValueArea": {
+      "newValue": "Business"
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_System.ExtensionMarker": {
+      "newValue": true
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column": {
+      "newValue": "New"
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column.Done": {
+      "newValue": false
+     },
+     "System.Description": {
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company / Person's Name * </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/1"
+   },
+   {
+    "id": 2,
+    "workItemId": 351,
+    "rev": 2,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:49:29.21Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 1,
+      "newValue": 2
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:44:25.227Z",
+      "newValue": "2026-05-07T23:45:09.93Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:45:09.93Z",
+      "newValue": "2026-05-07T23:49:29.21Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:44:25.227Z",
+      "newValue": "2026-05-07T23:45:09.93Z"
+     },
+     "System.Watermark": {
+      "oldValue": 987,
+      "newValue": 988
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company / Person's Name * </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company / Person's Name * </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/2"
+   },
+   {
+    "id": 3,
+    "workItemId": 351,
+    "rev": 3,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:52:22.47Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 2,
+      "newValue": 3
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:45:09.93Z",
+      "newValue": "2026-05-07T23:49:29.21Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:49:29.21Z",
+      "newValue": "2026-05-07T23:52:22.47Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:45:09.93Z",
+      "newValue": "2026-05-07T23:49:29.21Z"
+     },
+     "System.Watermark": {
+      "oldValue": 988,
+      "newValue": 990
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company / Person's Name * </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company / Person's Name * </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Email * </li><li>Phone Number </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/3"
+   },
+   {
+    "id": 4,
+    "workItemId": 351,
+    "rev": 4,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:15:33.713Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 3,
+      "newValue": 4
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:49:29.21Z",
+      "newValue": "2026-05-07T23:52:22.47Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:52:22.47Z",
+      "newValue": "2026-05-13T19:15:33.713Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:49:29.21Z",
+      "newValue": "2026-05-07T23:52:22.47Z"
+     },
+     "System.Watermark": {
+      "oldValue": 990,
+      "newValue": 992
+     },
+     "System.CommentCount": {
+      "oldValue": 0,
+      "newValue": 1
+     },
+     "System.History": {
+      "newValue": "<div>Need to have a way to check duplicates.</div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/4"
+   },
+   {
+    "id": 5,
+    "workItemId": 351,
+    "rev": 5,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:17:45.39Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 4,
+      "newValue": 5
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:52:22.47Z",
+      "newValue": "2026-05-13T19:15:33.713Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:15:33.713Z",
+      "newValue": "2026-05-13T19:17:45.39Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:52:22.47Z",
+      "newValue": "2026-05-13T19:15:33.713Z"
+     },
+     "System.Watermark": {
+      "oldValue": 992,
+      "newValue": 998
+     }
+    },
+    "relations": {
+     "added": [
+      {
+       "rel": "AttachedFile",
+       "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/attachments/00000000-0000-4000-8000-000000000011",
+       "attributes": {
+        "authorizedDate": "2026-05-13T19:15:33.713Z",
+        "id": 4680317,
+        "resourceCreatedDate": "2026-05-13T19:15:21.18Z",
+        "resourceModifiedDate": "2026-05-13T19:15:21.18Z",
+        "revisedDate": "9999-01-01T00:00:00Z",
+        "resourceSize": 174526,
+        "name": "Vendor form.pdf"
+       }
+      }
+     ]
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/5"
+   },
+   {
+    "id": 6,
+    "workItemId": 351,
+    "rev": 6,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:17:54.91Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 5,
+      "newValue": 6
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:15:33.713Z",
+      "newValue": "2026-05-13T19:17:45.39Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:17:45.39Z",
+      "newValue": "2026-05-13T19:17:54.91Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:15:33.713Z",
+      "newValue": "2026-05-13T19:17:45.39Z"
+     },
+     "System.Watermark": {
+      "oldValue": 998,
+      "newValue": 999
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company / Person's Name * </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Email * </li><li>Phone Number </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US)<br> </li><li>Country </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Point of Contact Email * </li><li>Accounting Email * </li><li>Phone Number </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/6"
+   },
+   {
+    "id": 7,
+    "workItemId": 351,
+    "rev": 7,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:21:14.487Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 6,
+      "newValue": 7
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:17:45.39Z",
+      "newValue": "2026-05-13T19:17:54.91Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:17:54.91Z",
+      "newValue": "2026-05-13T19:21:14.487Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:17:45.39Z",
+      "newValue": "2026-05-13T19:17:54.91Z"
+     },
+     "System.Watermark": {
+      "oldValue": 999,
+      "newValue": 1000
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US)<br> </li><li>Country </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Point of Contact Email * </li><li>Accounting Email * </li><li>Phone Number </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US)<br> </li><li>Country </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Point of Contact Email * </li><li>Accounting Email * </li><li>Phone Number </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div><div>See attachment for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/7"
+   },
+   {
+    "id": 8,
+    "workItemId": 351,
+    "rev": 8,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:21:49.55Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 7,
+      "newValue": 8
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:17:54.91Z",
+      "newValue": "2026-05-13T19:21:14.487Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:21:14.487Z",
+      "newValue": "2026-05-13T19:21:49.55Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:17:54.91Z",
+      "newValue": "2026-05-13T19:21:14.487Z"
+     },
+     "System.Watermark": {
+      "oldValue": 1000,
+      "newValue": 1001
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US)<br> </li><li>Country </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><li>Checking or Savings Account * </li><li>Personal or Business Account * </li><li>Point of Contact Email * </li><li>Accounting Email * </li><li>Phone Number </li><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div><div>See attachment for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div><div>See attachment for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/8"
+   },
+   {
+    "id": 9,
+    "workItemId": 351,
+    "rev": 9,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:22:27.283Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 8,
+      "newValue": 9
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:21:14.487Z",
+      "newValue": "2026-05-13T19:21:49.55Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:21:49.55Z",
+      "newValue": "2026-05-13T19:22:27.283Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:21:14.487Z",
+      "newValue": "2026-05-13T19:21:49.55Z"
+     },
+     "System.Watermark": {
+      "oldValue": 1001,
+      "newValue": 1002
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 will be attached </li> </ul> </ul><div><br> </div><div>See attachment for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><li>Other forms or information may be optional </li> </ul> </ul><div><br> </div><div>See attachment for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/9"
+   },
+   {
+    "id": 10,
+    "workItemId": 351,
+    "rev": 10,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:30:16.913Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 9,
+      "newValue": 10
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:21:49.55Z",
+      "newValue": "2026-05-13T19:22:27.283Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:22:27.283Z",
+      "newValue": "2026-05-13T19:30:16.913Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:21:49.55Z",
+      "newValue": "2026-05-13T19:22:27.283Z"
+     },
+     "System.Watermark": {
+      "oldValue": 1002,
+      "newValue": 1003
+     }
+    },
+    "relations": {
+     "added": [
+      {
+       "rel": "AttachedFile",
+       "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/attachments/00000000-0000-4000-8000-000000000013",
+       "attributes": {
+        "authorizedDate": "2026-05-13T19:22:27.283Z",
+        "id": 4680342,
+        "resourceCreatedDate": "2026-05-13T19:22:22.57Z",
+        "resourceModifiedDate": "2026-05-13T19:22:22.57Z",
+        "revisedDate": "9999-01-01T00:00:00Z",
+        "resourceSize": 3561019,
+        "name": "Invoice 1001.pdf"
+       }
+      }
+     ]
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/10"
+   },
+   {
+    "id": 11,
+    "workItemId": 351,
+    "rev": 11,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:30:47.32Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 10,
+      "newValue": 11
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:22:27.283Z",
+      "newValue": "2026-05-13T19:30:16.913Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:30:16.913Z",
+      "newValue": "2026-05-13T19:30:47.32Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:22:27.283Z",
+      "newValue": "2026-05-13T19:30:16.913Z"
+     },
+     "System.Watermark": {
+      "oldValue": 1003,
+      "newValue": 1004
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><li>Other forms or information may be optional </li> </ul> </ul><div><br> </div><div>See attachment for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/11"
+   },
+   {
+    "id": 12,
+    "workItemId": 351,
+    "rev": 12,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:31:13.43Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 11,
+      "newValue": 12
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:30:16.913Z",
+      "newValue": "2026-05-13T19:30:47.32Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:30:47.32Z",
+      "newValue": "2026-05-13T19:31:13.43Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:30:16.913Z",
+      "newValue": "2026-05-13T19:30:47.32Z"
+     },
+     "System.Watermark": {
+      "oldValue": 1004,
+      "newValue": 1005
+     }
+    },
+    "relations": {
+     "added": [
+      {
+       "rel": "AttachedFile",
+       "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/attachments/00000000-0000-4000-8000-000000000012",
+       "attributes": {
+        "authorizedDate": "2026-05-13T19:30:47.32Z",
+        "id": 4680352,
+        "resourceCreatedDate": "2026-05-13T19:30:40.573Z",
+        "resourceModifiedDate": "2026-05-13T19:30:40.573Z",
+        "revisedDate": "9999-01-01T00:00:00Z",
+        "resourceSize": 420861,
+        "name": "Sample invoices.pdf"
+       }
+      }
+     ]
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/12"
+   },
+   {
+    "id": 13,
+    "workItemId": 351,
+    "rev": 13,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:31:34.567Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 12,
+      "newValue": 13
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:30:47.32Z",
+      "newValue": "2026-05-13T19:31:13.43Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:31:13.43Z",
+      "newValue": "2026-05-13T19:31:34.567Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:30:47.32Z",
+      "newValue": "2026-05-13T19:31:13.43Z"
+     },
+     "System.Watermark": {
+      "oldValue": 1005,
+      "newValue": 1006
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li><li>Aggregated Total </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/13"
+   },
+   {
+    "id": 14,
+    "workItemId": 351,
+    "rev": 14,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-14T21:46:01.967Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 13,
+      "newValue": 14
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:31:13.43Z",
+      "newValue": "2026-05-13T19:31:34.567Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:31:34.567Z",
+      "newValue": "2026-05-14T21:46:01.967Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:31:13.43Z",
+      "newValue": "2026-05-13T19:31:34.567Z"
+     },
+     "System.Watermark": {
+      "oldValue": 1006,
+      "newValue": 1007
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li><li>Aggregated Total </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li><li>Aggregated Total </li><li>Currency </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/14"
+   },
+   {
+    "id": 15,
+    "workItemId": 351,
+    "rev": 15,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "name": "guest.dev example.com <guest.dev@example.com>",
+     "displayName": "guest.dev example.com",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000003",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+      }
+     },
+     "uniqueName": "guest.dev@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+    },
+    "revisedDate": "9999-01-01T00:00:00Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 14,
+      "newValue": 15
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-13T19:31:34.567Z",
+      "newValue": "2026-05-14T21:46:01.967Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-14T21:46:01.967Z",
+      "newValue": "9999-01-01T00:00:00Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-13T19:31:34.567Z",
+      "newValue": "2026-05-14T21:46:01.967Z"
+     },
+     "System.ChangedBy": {
+      "oldValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      },
+      "newValue": {
+       "displayName": "guest.dev example.com",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000003",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000003",
+       "uniqueName": "guest.dev@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+      }
+     },
+     "System.AuthorizedAs": {
+      "oldValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      },
+      "newValue": {
+       "displayName": "guest.dev example.com",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000003",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000003",
+       "uniqueName": "guest.dev@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+      }
+     },
+     "System.PersonId": {
+      "oldValue": 296860500,
+      "newValue": 309403355
+     },
+     "System.Watermark": {
+      "oldValue": 1007,
+      "newValue": 1009
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li><li>Aggregated Total </li><li>Currency </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>",
+      "newValue": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted +# (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li><li>Aggregated Total </li><li>Currency </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/updates/15"
+   }
+  ]
+ }
+}

@@ -1,0 +1,74 @@
+{
+  "projects": [
+    {
+      "key": "INV",
+      "name": "Invoice app",
+      "id": "10000"
+    }
+  ],
+  "types": [
+    {
+      "name": "Epic",
+      "category": "epic"
+    },
+    {
+      "name": "Story",
+      "category": "story"
+    },
+    {
+      "name": "Task",
+      "category": "task"
+    },
+    {
+      "name": "Bug",
+      "category": "bug"
+    }
+  ],
+  "states": [
+    {
+      "name": "To Do",
+      "category": "todo"
+    },
+    {
+      "name": "In Progress",
+      "category": "in-progress"
+    },
+    {
+      "name": "Done",
+      "category": "done"
+    }
+  ],
+  "fields": [
+    {
+      "id": "customfield_10016",
+      "name": "Story point estimate",
+      "canonical": "estimate",
+      "origin": "found"
+    },
+    {
+      "id": "customfield_10020",
+      "name": "Sprint",
+      "canonical": "iteration",
+      "origin": "found"
+    }
+  ],
+  "linkTypes": [
+    {
+      "native": "Parent",
+      "kind": "parent"
+    },
+    {
+      "native": "Relates",
+      "kind": "relates"
+    },
+    {
+      "native": "Blocks",
+      "kind": "blocks"
+    },
+    {
+      "native": "Duplicate",
+      "kind": "duplicates"
+    }
+  ],
+  "bodyFormat": "markdown"
+}

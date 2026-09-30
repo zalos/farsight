@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "farsight-viewer",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["packages/cli/dist/cli.js", "serve", "graph.json", "--port", "4477"],
+      "port": 4477
+    }
+  ]
+}

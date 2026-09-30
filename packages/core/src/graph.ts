@@ -1,0 +1,535 @@
+/**
+ * The Semantic Graph — the single contract every language adapter emits into
+ * and every GUI lens reads from. See docs/ARCHITECTURE.md.
+ */
+
+export type NodeKind =
+  | 'repo'
+  | 'module'
+  | 'file'
+  | 'class'
+  | 'function'
+  | 'component' // UI component (React etc.)
+  | 'page' // application/UI route (React Router, Angular routes…)
+  | 'route' // HTTP endpoint
+  | 'table' // database table / model
+  | 'queue' // message topic / queue
+  | 'rule' // validation rule / schema
+  | 'guard' // auth / permission check
+  | 'flag' // feature flag
+  | 'external' // third-party service (an HTTP call to another host)
+  | 'api' // an API surface: one OpenAPI/Swagger document (contains its route nodes)
+  | 'design' // a design source: one screens manifest / Figma file (contains its screen nodes)
+  | 'flow' // a named user flow from a design manifest: an ordered set of screens — a feature, and a journey entry
+  | 'test' // one test case (it/test), or a synthetic run-level node for a report with no per-test attribution
+  | 'work' // a work item from a tracker (Jira issue, Azure DevOps work item) — id work::<sourceId>::<key>, no loc
+  | 'unknown'; // the "?" stub: a call the graph could not resolve to any indexed source
+
+export type EdgeKind =
+  | 'contains'
+  | 'imports'
+  | 'calls'
+  | 'renders'
+  | 'http' // client call site -> route (possibly cross-repo)
+  | 'publishes'
+  | 'consumes'
+  | 'reads'
+  | 'writes'
+  | 'validates'
+  | 'guards'
+  | 'covers' // a test -> what it verifies; meta.evidence says declared | static | observed
+  | 'tracks'; // a work item -> what it is about; meta.via says declared | commit | branch | url
+
+/** Source location — powers IDE deep links (vscode://file/...). */
+export interface Loc {
+  repo: string;
+  path: string;
+  line: number;
+  col?: number;
+  /** Last line of the declaration's span (`line(node.end)`) — lets consumers slice whole bodies, not snippets. */
+  endLine?: number;
+}
+
+/** One selectable arm of a branch point. */
+export interface BranchArm {
+  /** 'then' | 'else' | "case 'x'" | 'default' | 'try' | 'catch' | 'taken' */
+  label: string;
+  /** Condition that selects this arm: "speed >= 98", "!(speed >= 98)", "no exception thrown". */
+  requires: string;
+  /** First line of the arm's span (1-based, inclusive). */
+  line: number;
+  /** Last line of the arm's span. */
+  endLine: number;
+  /** Plain-language label for this arm, from a `// @business …` comment directive. */
+  business?: string;
+}
+
+/** A decision point inside a function/component/route body. Static conditions only — what must hold, not what happened. */
+export interface BranchPoint {
+  kind: 'if' | 'switch' | 'ternary' | 'logical' | 'catch';
+  /** Line of the test / discriminant / `try`. */
+  line: number;
+  /** Source text of the test, whitespace-collapsed, ≤120 chars. */
+  condition: string;
+  /** Some arm ends in return/throw — guard-clause shape. */
+  exits?: true;
+  /** Plain-language label for this fork, from a `// @business …` comment directive. */
+  business?: string;
+  arms: BranchArm[];
+}
+
+// ── API contracts: what a spec (OpenAPI/Swagger) declares about a route ──
+// A spec is documentation about HTTP endpoints, so it augments the same
+// `route` node ids the code adapters emit (docs augment, never replace).
+// `status` says which evidence exists; `drift` is computed once by
+// core/openapi.ts reconcile() and stored so every consumer shows one truth.
+
+export type DriftKind =
+  | 'spec-only' //                declared in the spec, no implementation found
+  | 'code-only' //                implemented, missing from the spec (only stamped when the repo has a spec)
+  | 'security-missing-in-code' // spec requires security; no guard on the route
+  | 'security-missing-in-spec' // route is guarded; spec declares no security (only when the spec uses security at all)
+  | 'security-mismatch' //        both sides gate it, but the scopes the spec names are not the ones the code enforces
+  | 'deprecated-in-spec-only' //  spec marks it deprecated; code carries no deprecated tag
+  | 'body-undeclared' //          code validates a request body the spec does not describe
+  | 'body-unvalidated' //         spec requires a body; no validation rule is attached to the route
+  | 'security-declared-only'; //  farsight.config.json declares a gate on the route; the code enforces none the parser can see
+
+export interface ContractParam {
+  name: string;
+  in: 'path' | 'query' | 'header' | 'cookie';
+  required?: boolean;
+  type?: string;
+  description?: string;
+}
+
+export interface OperationContract {
+  /** both = declared + implemented · spec-only = declared, no implementation in a repo that has code · code-only = implemented, missing from the repo's spec · declared = from a spec-only source (no code to compare — not a gap) */
+  status: 'both' | 'spec-only' | 'code-only' | 'declared';
+  /** owning `api` node id (or the implied surface id `<repo>::api::implemented`) */
+  apiId: string;
+  /** where the operation sits in the spec file — powers the ⧉ deep link into the spec */
+  spec?: { path: string; line?: number; operationId?: string };
+  summary?: string;
+  description?: string;
+  deprecated?: boolean;
+  tags?: string[];
+  params?: ContractParam[];
+  requestBody?: { contentType?: string; schema?: string; required?: boolean; fields?: string[] };
+  responses?: { status: string; description?: string; schema?: string }[];
+  /** flattened security requirements: "bearer", "oauth2: billing:write" */
+  security?: string[];
+  /** server base paths the spec prefixes (`/v1`) — lets consumers match `fetch('/v1/x')` to `/x` */
+  servers?: string[];
+  /** operation-level `x-*` extensions, verbatim (`x-phase: 2`, `x-internal: true`) — scalars are mirrored as tags (`phase:2`, `internal`) */
+  extensions?: Record<string, unknown>;
+  drift?: { kind: DriftKind; message: string }[];
+}
+
+/** A harvested reference that is a link, not prose: `@see <url>`, `@design <url|id>`. Prose stays in `docs`. */
+export interface NodeLink {
+  /** doc = a repo-relative document (`ref`), opened with the ⧉ editor link like a source line */
+  kind: 'see' | 'design' | 'doc';
+  url?: string;
+  /** a non-URL target: a symbol, a design id ("SCR-07"), a repo-relative doc path */
+  ref?: string;
+  /** the H1 of a repo-relative doc, read at ingest — the anchor's human title */
+  title?: string;
+}
+
+/**
+ * page/component nodes: where this screen was designed and how the design and
+ * the code relate. From a `@design` annotation or a design manifest source.
+ * Never carries image bytes — an `image` is a reference the server resolves.
+ */
+export interface DesignRef {
+  /** both = designed + built · design-only = designed, not built · code-only = built, no design row (only when a manifest exists) */
+  status: 'both' | 'design-only' | 'code-only';
+  origin: 'annotation' | 'manifest';
+  /** owning `design` node id (the manifest / Figma file) — absent for a bare @design annotation */
+  designId?: string;
+  /** stable id the docs use ("SCR-07") */
+  id?: string;
+  name?: string;
+  /** Figma node id ("26-9") */
+  nodeId?: string;
+  url?: string;
+  /** a repo-relative image, or a Figma render the server caches — resolved by /api/design/image, never inlined */
+  image?: { kind: 'file' | 'figma'; path?: string };
+  /** design-side last-modified; `freshness` says where it came from */
+  lastModified?: string;
+  freshness?: 'figma' | 'manifest';
+  /** operationIds the design says this screen uses */
+  operations?: string[];
+  phase?: string;
+  /** flow nodes only: the flows this one requires first / leads to next (manifest flow ids) — linked journeys */
+  requires?: string[];
+  leadsTo?: string[];
+  /** flow nodes only: who the flow is for, and who answers for it (absent prints as an absence word) */
+  persona?: string;
+  owner?: string;
+  /** screen nodes only: the numbered steps its spec and tests name (`SCR-07.2`) */
+  steps?: { id: string; name: string; operation?: string }[];
+  /** design nodes only: the product surfaces the manifest scopes, drawn or not */
+  surfaces?: { id: string; name: string; status?: 'built' | 'partly built' | 'not started'; description?: string }[];
+  drift?: { kind: DesignDriftKind; message: string }[];
+}
+
+export type DesignDriftKind =
+  | 'design-only' //            designed, no page/component at that route
+  | 'code-only' //              page exists, no design row (manifest present)
+  | 'operation-not-in-spec' //  manifest names an operationId no contract declares
+  | 'operation-unreached' //    built page never reaches an operation the design says it uses
+  | 'operation-undeclared' //   built page calls an operation the design does not list
+  | 'screen-unknown' //         a flow names a screen id the manifest does not define
+  | 'flow-unknown'; //          a flow's requires/leadsTo names a flow id the manifest does not define
+
+// ── tests: what verifies this, and how do we know ──────────────────────────
+// docs/proposals/tests-surface.md §3.1. A `test` node is one test case; a
+// `covers` edge says what it verifies and carries its evidence class. Claims
+// (@covers) are never rendered as observations (a coverage report).
+//
+// Documented `meta` keys on a `covers` edge (GraphEdge.meta, untyped by design):
+//   evidence : 'declared' | 'static' | 'observed'  — frozen; the printed word for `static` is *reached*
+//   inactive : true                                — the case is .skip/.todo; the edge lifts no chip
+//   match    : 'name+line' | 'name' | 'line±1'     — observed edges: how the coverage hit met the node
+//   signal · helper · line · hits                  — how a static/observed edge was found
+
+/** What one test run said about one test — joined to the graph by node id + a source digest. */
+export interface TestRun {
+  /** report file digest or the reporter's run id */
+  id: string;
+  /** ISO timestamp the report recorded */
+  at: string;
+  /** `flaky` = the reporter retried and the case ended green; it is not `passed` and never prints as one */
+  status: 'passed' | 'failed' | 'skipped' | 'flaky' | 'unknown';
+  durationMs?: number;
+  /** retries the reporter recorded (Playwright: results.length - 1) */
+  retries?: number;
+  /** the Playwright / Nx project this run belongs to — one TestRun per project */
+  project?: string;
+  /** how the report row was joined to the node: an exact full name, or a `.each` template turned into a pattern */
+  join?: 'exact' | 'each-template';
+  /** `.each` only: how many expanded rows this template joined */
+  rows?: number;
+  /** the repo content digest (or legacy sourceHash) at run time, when the reporter recorded one */
+  sourceDigest?: string;
+  /**
+   * unchanged = a recorded sourceDigest equals the fragment's · changed = it differs ·
+   * unknown = no digest was recorded. A file mtime alone never proves freshness
+   * (swarm review 2026-09-14 §3-C.1), so `unknown` is the honest default.
+   */
+  freshness: 'unchanged' | 'changed' | 'unknown';
+  /** freshness === 'changed' — the source moved after the run. `unknown` is not stale and not fresh. */
+  stale: boolean;
+  /**
+   * `changed` only: **what** moved. `commit` = the checkout is on a different
+   * commit than the one the run saw · `working-tree` = the same commit, and the
+   * files differ — the working tree differs from HEAD (uncommitted edits at the
+   * run or now), which no commit list will show. Decided from the commit the
+   * stamp recorded when it has one, otherwise from HEAD's commit time against the
+   * run's time (a HEAD committed before the run was already checked out).
+   * Absent when git could not be asked. The Tests and Changes surfaces say the
+   * same thing from it (story swarm 2026-09-25: *the code changed after this
+   * run* beside a Changes spine at one commit for 27 syncs).
+   */
+  changedBy?: 'commit' | 'working-tree';
+  /** the commit the report's stamp recorded (`farsight.commit`), when it recorded one */
+  commit?: string;
+  /** repo-relative path to the html/json report for the ⧉ link */
+  report?: string;
+}
+
+/** `test` nodes only: what kind of test this is and where it sits — like `contract` on a route. */
+export interface TestRef {
+  level: 'unit' | 'integration' | 'e2e';
+  runner: 'vitest' | 'jest' | 'node:test' | 'playwright' | 'cypress' | 'junit' | 'other';
+  /** describe path, outermost first */
+  suite: string[];
+  /** Playwright project / Nx project */
+  project?: string;
+  /** repo-relative spec path (loc.path is the same; kept for grouping) */
+  file: string;
+  /** raw @covers values as written, resolved or not */
+  declares?: string[];
+  /** @covers values nothing in the graph matched — drawn as orphans, never silently dropped */
+  unresolved?: string[];
+  /** true for the synthetic run-level node a report with no per-test attribution hangs off */
+  runLevel?: boolean;
+  /** last observed run, joined by test id */
+  run?: TestRun;
+  /** every run seen for this case, one per project; `run` stays and is the fold — older consumers keep working */
+  runs?: TestRun[];
+  /** .skip / .todo: the case exists, its static edges carry `meta.inactive` and lift no chip */
+  inactive?: boolean;
+  /** run-level nodes only: the repo-relative files the coverage report contains (hit or not) — the whole-scope exactness rule reads it */
+  files?: string[];
+}
+
+/** What was read to produce the `covers` edges of a fragment — printed next to freshness. */
+export interface TestsMeta {
+  /** spec files claimed as tests */
+  files: number;
+  /** test cases extracted */
+  cases: number;
+  /** covers edges by evidence class */
+  edges: { declared: number; static: number; observed: number };
+  /** test cases a results report was joined to (status/duration on the node) */
+  runs: number;
+  /**
+   * One entry per matched report file, plus (from the named-gaps pass) one per configured
+   * glob that matched nothing. `glob`/`matched`/`reason` and the join counts are optional
+   * because a graph written by an older build has neither.
+   */
+  reports: {
+    kind: 'results' | 'coverage';
+    runner: string;
+    level: string;
+    freshness: TestRun['freshness'];
+    /** absent on a glob that matched no file */
+    path?: string;
+    /** the configured glob this entry came from */
+    glob?: string;
+    /** how many files that glob matched */
+    matched?: number;
+    /** why this entry reads the way it does */
+    reason?: 'ok' | 'no-match' | 'unreadable' | 'empty' | 'no-digest' | 'digest-changed';
+    /** `digest-changed` only: a new commit, or the same commit with a working tree that differs (`TestRun.changedBy`) */
+    changedBy?: 'commit' | 'working-tree';
+    mtime?: string;
+    runId?: string;
+    /** results reports: test cases this report was joined to */
+    joined?: number;
+    /** results reports: rows the report itself carried */
+    rows?: number;
+    /**
+     * results reports: rows that reached no test node at all — the run saw a case
+     * this graph does not index. `rows - joined` cannot answer it (one row may join
+     * several nodes, and the rows of one `.each` template fold into a single run),
+     * so the count is recorded on its own. Absent on a graph written before this.
+     */
+    unjoined?: number;
+    /** coverage reports: observed covers edges this report produced */
+    edges?: number;
+    /** `.each` templates joined / left unjoined by this report */
+    eachJoined?: number;
+    eachUnjoined?: number;
+  }[];
+  /**
+   * Structured, ordered and uncapped — every blind spot as data, so a consumer can
+   * name the glob and the paths instead of re-parsing a sentence. Optional: an
+   * older graph has only `blindSpots`.
+   */
+  gaps?: {
+    kind: 'missing-artefact' | 'unreadable' | 'empty' | 'unresolved-claim' | 'unjoined-each' | 'no-digest' | 'digest-changed' | 'no-config';
+    level?: string;
+    reportKind?: 'results' | 'coverage';
+    glob?: string;
+    paths: string[];
+    /** the sentence `blindSpots` carries for this gap */
+    text: string;
+  }[];
+  /** one honest sentence per gap — "No unit coverage report found; declared and static evidence only" */
+  blindSpots: string[];
+  /** the content digest the fragment was ingested at — what a stamped report must equal */
+  sourceDigest?: string;
+}
+
+/**
+ * `external` nodes only: which third-party system this is and how we knew it.
+ * Three sources, one node (the clarity-phase plan §1):
+ * an SDK specifier the parser recognises, a non-literal `fetch` behind a constant
+ * host, or a `farsight.config.json → externals` declaration.
+ */
+export type ExternalKind = 'erp' | 'ocr' | 'files' | 'email' | 'queue' | 'db' | 'http';
+
+export interface ExternalRef {
+  kind: ExternalKind;
+  /** how this external was known: the SDK specifier, the host constant, or farsight.config.json */
+  source: 'sdk' | 'host' | 'config';
+  /** the client class the edges come through (BcClient · AzureDocumentIntelligenceProvider · AzureBlobFileStore) */
+  via?: string;
+  /** the package specifier (sdk) or the constant's name (host) */
+  ref?: string;
+}
+
+// ── stories: a component shown on its own (docs/ARCHITECTURE.md ADR 9) ─────
+// A story file is code — `*.stories.*` in Component Story Format — so the
+// stories pass reads it at ingest and puts each story on the component node it
+// renders, whether or not any Storybook runs. A running Storybook is only the
+// renderer: the server probes its `/index.json` and maps entries onto the same
+// ids. Stories are an attribute of the component, not nodes of their own: a
+// story has no behaviour a journey, an impact walk or a coverage denominator
+// would read, and it is always about exactly one component.
+
+/** One story (CSF named export) of a component. */
+export interface StoryRef {
+  /** the Storybook story id, computed the way Storybook computes it: sanitize(title) + '--' + sanitize(name from export) */
+  id: string;
+  /** the name a person reads: the story's `name:`, else the export name in start case ("As Link") */
+  name: string;
+  /** the story's `title:` (`Primitives/Button`), or the auto-title Storybook derives from the path */
+  title?: string;
+  /** 'meta' = written in the file's default export; 'auto' = derived from the path the way Storybook would */
+  titleFrom?: 'meta' | 'auto';
+  /** the CSF export name ("AsLink") */
+  exportName: string;
+  /** repo-relative story file */
+  file: string;
+  line: number;
+  /** the JSDoc above the story export — what the author says this story shows */
+  docs?: string;
+  /** repo-relative config dir of the Storybook whose stories globs collect this file; absent when none does */
+  storybook?: string;
+}
+
+/** One Storybook a repo carries: where its config lives, and where it runs when it runs. Farsight never starts it. */
+export interface StorybookRef {
+  /** repo-relative `.storybook` directory */
+  configDir: string;
+  /** repo-relative directory Storybook resolves `importPath`/`componentPath` against (default: the config dir's parent) */
+  root: string;
+  /** where it is served when it runs — absent when nothing said and nothing could be read */
+  url?: string;
+  /** config = farsight.config.json · script = a port read from project.json/package.json · default = Storybook's own default port */
+  urlFrom?: 'config' | 'script' | 'default';
+  /** the command that starts it, for the not-running sentence */
+  command?: string;
+  /** a display name */
+  name?: string;
+  /** config = declared in farsight.config.json · discovered = a `.storybook/main.*` found in the repo */
+  source: 'config' | 'discovered';
+  /** the `stories` globs its main file declares, relative to the config dir, as written */
+  globs?: string[];
+}
+
+/** What the stories pass read, per repo — printed next to the stories themselves. */
+export interface StoriesMeta {
+  storybooks: StorybookRef[];
+  /** story files read */
+  files: number;
+  /** stories put on a component node */
+  stories: number;
+  /** components that carry at least one story */
+  components: number;
+  /** story files whose stories reached no node — kept, never dropped, so a reader can fix the name */
+  unresolved: { file: string; reason: 'no-component' | 'component-unresolved' | 'unparsed'; component?: string; stories: number }[];
+}
+
+export interface GraphNode {
+  id: string;
+  kind: NodeKind;
+  name: string;
+  lang?: string;
+  loc?: Loc;
+  docs?: string;
+  signature?: string;
+  /** First lines of the implementation — code lens preview. Code is the source of truth. */
+  snippet?: string;
+  /** Logical group (JSDoc @group, or file-derived). Groups collapse in the GUI and expand on demand. */
+  group?: string;
+  tags: string[];
+  /** Decision points inside a function/component/route body — Journey forks. */
+  branches?: BranchPoint[];
+  /** route nodes only: what an OpenAPI/Swagger spec declares about this endpoint + drift vs the code. */
+  contract?: OperationContract;
+  /** harvested references that are links (`@see <url>`, `@design`) — rendered as anchors, never as prose */
+  links?: NodeLink[];
+  /** page/component nodes: the design this screen was built from (or should be) — see DesignRef */
+  design?: DesignRef;
+  /** test nodes only: level/runner/suite and the last observed run — see TestRef */
+  test?: TestRef;
+  /** external nodes only: which third-party system this is and how we knew it — see ExternalRef */
+  external?: ExternalRef;
+  /** component/page nodes: the stories that render this component on its own — see StoryRef */
+  stories?: StoryRef[];
+  /** Lens-specific presentation data, e.g. business-friendly labels. */
+  facets?: {
+    /** label overrides the business-lens name (glossary); description is the plain-language summary (@business). */
+    business?: { label?: string; description?: string };
+  };
+}
+
+// ── resolution: how do we know this edge exists, and how sure are we ──
+// Types land here in P1 because the frozen diff contract (farsight-diff v1)
+// carries them; adapters start stamping every edge in P4.
+export type ResolutionTechnique =
+  | 'static-import' //   HIGH   — importer resolved on disk / tsconfig paths / workspace pkg
+  | 'fetch→route' //     HIGH   — client call site stitched to a route by method+path
+  | 'db-builder' //      HIGH   — Drizzle/JPA builder chain or repository method
+  | 'annotation-scan' // HIGH   — @guard/@entrypoint/@covers, Spring annotations
+  | 'raw-sql' //         HIGH   — the table name was read out of a SQL statement the code runs (shared/sql.ts)
+  | 'same-file' //       HIGH   — the callee is declared in the caller's own file (a sibling function, this.method())
+  | 'jsx-render' //      HIGH   — the rendered component is a JSX element written in the caller's own body
+  | 'DI-binding' //      MEDIUM — Java field-type → implementing bean
+  | 'detected' //        MEDIUM — the adapter recognised the edge from a shape (a middleware name, a file convention); nobody declared it
+  | 'import-resolution' // MEDIUM/HIGH — a test's import of the symbol it exercises (HIGH when it also calls it)
+  | 'route-literal' //   MEDIUM — a string literal in a test (page.goto('/x'), request.post('/x')) matched to a page/route
+  | 'coverage-report' // HIGH   — a coverage/results report observed the node executing
+  | 'method-name' //     MEDIUM — a member call resolved to the one class method of that name (mock / in-memory twins set aside)
+  | 'interface' //       MEDIUM — a member call resolved through the receiver's declared type to its production implementer
+  | 'hook-binding' //    MEDIUM — this.<field>.<path>.<fn>() resolved to the function expression bound at `new C({ … })`
+  | 'sdk-import' //      MEDIUM — a function that uses an imported SDK binding reaches the SDK's system
+  | 'constant-host' //   MEDIUM — a non-literal fetch inside a class whose base URL starts with a constant host
+  | 'name-match' //     LOW    — last-resort symbol name match
+  | 'work-key'; //       MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
+
+export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface EdgeResolution {
+  status: 'resolved' | 'heuristic' | 'unresolved';
+  technique: ResolutionTechnique;
+  confidence: ConfidenceTier;
+  /** unresolved only: what we considered and rejected/couldn't reach. May be empty — that is the point. */
+  candidates?: string[];
+  /** resolved/heuristic only: the other implementers an interface/hook resolution set aside (doubles included) — never walked, always printed */
+  alternatives?: string[];
+  note?: string;
+}
+
+export interface GraphEdge {
+  id: string;
+  kind: EdgeKind;
+  from: string;
+  to: string;
+  /**
+   * Adapter-specific facts about the edge. Three keys are part of the shared
+   * contract (the clarity-phase plan §1):
+   * - `deferred: true` — the edge was made inside a function expression that is
+   *   an object-literal property value (a hook, a callback stored for later);
+   *   journeys do not descend it, `impact_of` reports it separately.
+   * - `origin: 'setup'` — the edge leaves the setup closure (container
+   *   construction); journeys print the boot once instead of under every request.
+   * - `tx: true` — the edge was made inside a withOps/withTenant/withTx callback
+   *   (the drill's transaction boundary).
+   */
+  meta?: Record<string, string | number | boolean>;
+  /** absent === legacy/unstamped (adapters stamp every edge from P4 onward) */
+  resolution?: EdgeResolution;
+}
+
+/** A saved or derived subgraph — a "quest" in the GUI. */
+export interface Flow {
+  id: string;
+  name: string;
+  entryIds: string[];
+  nodeIds: string[];
+  edgeIds: string[];
+}
+
+/** What a language adapter returns for one repo. */
+export interface GraphFragment {
+  repo: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /**
+   * Freshness signal: how many source files were parsed, a hash over their paths+mtimes
+   * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
+   * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
+   */
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta };
+  /** OpenAPI documents that were found but could not be read — reported, never fatal. */
+  specErrors?: string[];
+  /** true when a farsight.config.json at the repo root was applied by ingestRepo */
+  configApplied?: boolean;
+}

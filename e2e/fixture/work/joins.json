@@ -1,0 +1,241 @@
+{
+ "work::invoice-jira::INV-2": {
+  "links": [
+   {
+    "nodeId": "invoice-app::page::/invoices/new",
+    "via": "declared",
+    "tier": "HIGH",
+    "provenance": "screens.json names INV-2 on the new-invoice screen"
+   },
+   {
+    "nodeId": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+    "via": "commit",
+    "tier": "MEDIUM",
+    "sha": "a1c9e02",
+    "provenance": "commit a1c9e02 names INV-2 in its subject"
+   },
+   {
+    "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+    "via": "commit",
+    "tier": "MEDIUM",
+    "sha": "a1c9e02",
+    "provenance": "commit a1c9e02 names INV-2 in its subject"
+   }
+  ],
+  "commits": [
+   {
+    "repo": "invoice-app",
+    "sha": "a1c9e02",
+    "at": "2026-09-08T16:40:00.000Z",
+    "author": "Ben Lindqvist",
+    "subject": "INV-2 draft form saves line items",
+    "via": "subject",
+    "files": [
+     {
+      "path": "src/ui/CreateInvoiceForm.tsx",
+      "status": "modified"
+     },
+     {
+      "path": "src/server/invoiceService.ts",
+      "status": "modified"
+     }
+    ],
+    "nodes": [
+     "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+     "invoice-app::src/ui/CreateInvoiceForm.tsx::submit",
+     "invoice-app::src/server/invoiceService.ts::createInvoice",
+     "invoice-app::src/server/invoiceService.ts::listInvoices"
+    ]
+   },
+   {
+    "repo": "invoice-app",
+    "sha": "5d0b7f1",
+    "at": "2026-09-10T14:55:00.000Z",
+    "author": "Ben Lindqvist",
+    "subject": "Merge pull request #14 from INV-2-new-invoice",
+    "via": "merge-subject",
+    "files": [
+     {
+      "path": "src/api/client.ts",
+      "status": "modified"
+     }
+    ],
+    "nodes": [
+     "invoice-app::src/api/client.ts::createInvoice"
+    ]
+   }
+  ],
+  "findings": []
+ },
+ "work::invoice-jira::INV-3": {
+  "links": [
+   {
+    "nodeId": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+    "via": "branch",
+    "tier": "MEDIUM",
+    "sha": "9e41aa3",
+    "provenance": "branch INV-3-newest-first"
+   }
+  ],
+  "commits": [
+   {
+    "repo": "invoice-app",
+    "sha": "9e41aa3",
+    "at": "2026-09-24T10:12:00.000Z",
+    "author": "Ben Lindqvist",
+    "subject": "Sort the invoice list newest first",
+    "via": "branch",
+    "branch": "INV-3-newest-first",
+    "files": [
+     {
+      "path": "src/server/invoiceService.ts",
+      "status": "modified"
+     }
+    ],
+    "nodes": [
+     "invoice-app::src/server/invoiceService.ts::listInvoices"
+    ]
+   }
+  ],
+  "findings": []
+ },
+ "work::invoice-jira::INV-4": {
+  "links": [],
+  "commits": [],
+  "findings": [
+   {
+    "kind": "done-not-built",
+    "text": "Discard a draft invoice is done; no code in the graph is linked to it",
+    "provenances": [
+     {
+      "source": "tracker",
+      "what": "INV-4 is Done since 12 Sep"
+     },
+     {
+      "source": "code",
+      "what": "no commit, branch or declaration names INV-4"
+     }
+    ]
+   }
+  ]
+ },
+ "work::invoice-jira::INV-5": {
+  "links": [
+   {
+    "nodeId": "invoice-app::route::POST /invoices/:id/approve",
+    "via": "commit",
+    "tier": "MEDIUM",
+    "sha": "c07d2b9",
+    "provenance": "commit c07d2b9 names INV-5 in its subject"
+   }
+  ],
+  "commits": [
+   {
+    "repo": "invoice-app",
+    "sha": "c07d2b9",
+    "at": "2026-09-28T09:30:00.000Z",
+    "author": "Ada Okafor",
+    "subject": "INV-5 approval route behind requireScope",
+    "via": "subject",
+    "files": [
+     {
+      "path": "src/server/approvals.ts",
+      "status": "modified"
+     }
+    ],
+    "nodes": [
+     "invoice-app::route::POST /invoices/:id/approve"
+    ]
+   }
+  ],
+  "findings": [
+   {
+    "kind": "todo-but-committed",
+    "text": "Approve an invoice before it is sent is to do; 1 commit names it",
+    "provenances": [
+     {
+      "source": "tracker",
+      "what": "INV-5 is To Do"
+     },
+     {
+      "source": "code",
+      "what": "commit c07d2b9 names INV-5"
+     }
+    ]
+   }
+  ]
+ },
+ "work::invoice-jira::INV-6": {
+  "links": [
+   {
+    "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+    "via": "commit",
+    "tier": "MEDIUM",
+    "sha": "e5f21c8",
+    "provenance": "commit e5f21c8 names INV-6 in its subject"
+   },
+   {
+    "nodeId": "invoice-app::src/server/taxEngine.ts::taxRateFor",
+    "via": "commit",
+    "tier": "MEDIUM",
+    "sha": "e5f21c8",
+    "provenance": "commit e5f21c8 names INV-6 in its subject"
+   }
+  ],
+  "commits": [
+   {
+    "repo": "invoice-app",
+    "sha": "e5f21c8",
+    "at": "2026-09-17T13:02:00.000Z",
+    "author": "Ada Okafor",
+    "subject": "INV-6 round tax per line, not per invoice",
+    "via": "subject",
+    "files": [
+     {
+      "path": "src/server/taxEngine.ts",
+      "status": "modified"
+     },
+     {
+      "path": "test/taxEngine.test.ts",
+      "status": "added"
+     }
+    ],
+    "nodes": [
+     "invoice-app::src/server/taxEngine.ts::computeTax",
+     "invoice-app::src/server/taxEngine.ts::taxRateFor"
+    ]
+   },
+   {
+    "repo": "invoice-app",
+    "sha": "b88e1d4",
+    "at": "2026-09-18T09:45:00.000Z",
+    "author": "Ada Okafor",
+    "subject": "INV-6 keep two decimals in taxRateFor",
+    "via": "subject",
+    "files": [
+     {
+      "path": "src/server/taxEngine.ts",
+      "status": "modified"
+     }
+    ],
+    "nodes": [
+     "invoice-app::src/server/taxEngine.ts::computeTax",
+     "invoice-app::src/server/taxEngine.ts::taxRateFor"
+    ]
+   }
+  ],
+  "findings": []
+ },
+ "work::invoice-jira::INV-7": {
+  "links": [
+   {
+    "nodeId": "invoice-app::src/server/ocr.ts::readInvoice",
+    "via": "url",
+    "tier": "LOW",
+    "provenance": "the item body names the OCR reader"
+   }
+  ],
+  "commits": [],
+  "findings": []
+ }
+}

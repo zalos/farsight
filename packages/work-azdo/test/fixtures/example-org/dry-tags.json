@@ -1,0 +1,33 @@
+{
+ "status": 403,
+ "method": "PATCH",
+ "path": "/ExampleProject/_apis/wit/workitems/352?validateOnly=true&api-version=7.1",
+ "requestBody": [
+  {
+   "op": "test",
+   "path": "/rev",
+   "value": 4
+  },
+  {
+   "op": "add",
+   "path": "/fields/System.Tags",
+   "value": "farsight-dry; b"
+  }
+ ],
+ "body": {
+  "$id": "1",
+  "customProperties": {
+   "Descriptor": "Microsoft.IdentityModel.Claims.ClaimsIdentity;00000000-0000-4000-8000-000000000004\\dev@example.com",
+   "IdentityDisplayName": null,
+   "Token": "/00000000-0000-4000-8000-000000000006",
+   "RequestedPermissions": 2,
+   "NamespaceId": "bb50f182-8e5e-40b8-bc21-e8752a1e7ae2"
+  },
+  "innerException": null,
+  "message": "TF401289: The current user does not have permissions to create tags.",
+  "typeName": "Microsoft.VisualStudio.Services.Security.AccessCheckException, Microsoft.VisualStudio.Services.WebApi",
+  "typeKey": "AccessCheckException",
+  "errorCode": 0,
+  "eventId": 3000
+ }
+}

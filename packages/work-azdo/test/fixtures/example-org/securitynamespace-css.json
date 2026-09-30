@@ -1,0 +1,90 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/_apis/securitynamespaces/83e28ad4-2d72-4ceb-97b0-c7726d5502c3?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000033",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.00114",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000020",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000033",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000033"
+ },
+ "body": {
+  "count": 1,
+  "value": [
+   {
+    "namespaceId": "83e28ad4-2d72-4ceb-97b0-c7726d5502c3",
+    "name": "CSS",
+    "displayName": "CSS",
+    "separatorValue": ":",
+    "elementLength": -1,
+    "writePermission": 2,
+    "readPermission": 1,
+    "dataspaceCategory": "Integration",
+    "actions": [
+     {
+      "bit": 1,
+      "name": "GENERIC_READ",
+      "displayName": "View permissions for this node",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 2,
+      "name": "GENERIC_WRITE",
+      "displayName": "Edit this node",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 4,
+      "name": "CREATE_CHILDREN",
+      "displayName": "Create child nodes",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 8,
+      "name": "DELETE",
+      "displayName": "Delete this node",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 16,
+      "name": "WORK_ITEM_READ",
+      "displayName": "View work items in this node",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 32,
+      "name": "WORK_ITEM_WRITE",
+      "displayName": "Edit work items in this node",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 64,
+      "name": "MANAGE_TEST_PLANS",
+      "displayName": "Manage test plans",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 128,
+      "name": "MANAGE_TEST_SUITES",
+      "displayName": "Manage test suites",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     },
+     {
+      "bit": 512,
+      "name": "WORK_ITEM_SAVE_COMMENT",
+      "displayName": "Edit work item comments in this node",
+      "namespaceId": "00000000-0000-0000-0000-000000000000"
+     }
+    ],
+    "structureValue": 1,
+    "extensionType": "Microsoft.Azure.Boards.Plugins.Security.CSSNodeSecurityExtension",
+    "isRemotable": true,
+    "useTokenTranslator": true,
+    "systemBitMask": 0
+   }
+  ]
+ }
+}

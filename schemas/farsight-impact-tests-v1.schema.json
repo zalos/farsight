@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farsight.dev/schemas/farsight-impact-tests-v1.schema.json",
+  "title": "farsight-impact-tests v1",
+  "description": "What uses the changed code, by distance, and which tests a CI job can run for it — with the reasons it must not trust the list. Prose contract: docs/contracts/farsight-impact-tests-v1.md. v1 may gain optional fields and new enum members; nothing listed here changes meaning or goes away without a version bump. The document never carries a total across hops: the single number is what this design exists to replace.",
+  "type": "object",
+  "required": ["schema", "identity", "seeds", "hops", "select", "unselectable", "fallback", "fallback_reason", "excluded", "cut", "bound"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "farsight-impact-tests v1" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "seeds": {
+      "type": "array",
+      "description": "What the question was asked about: a node that was named, or a changed file range that resolved to one.",
+      "items": { "$ref": "#/$defs/seed" }
+    },
+    "hops": {
+      "type": "array",
+      "description": "One entry per distance, nearest first. A node listed here is at its NEAREST hop across every seed. There is deliberately no total.",
+      "items": { "$ref": "#/$defs/hop" }
+    },
+    "select": {
+      "type": "object",
+      "description": "Tests a job can name and run, one key per runner seen (`vitest`, `playwright`, …). A runner this graph holds none of has no key — an absent key is not an empty suite. This list is a FLOOR whenever `bound` is `floor`.",
+      "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/selectEntry" } }
+    },
+    "unselectable": {
+      "type": "array",
+      "description": "Seeds and their DIRECT dependents that yield no test a job could name and run. `unselectable | length == 0` is the CI gate.",
+      "items": { "$ref": "#/$defs/unselectable" }
+    },
+    "fallback": {
+      "description": "`run-all` when the selection cannot be trusted to be complete, otherwise null. Never implied and never omitted.",
+      "enum": ["run-all", null]
+    },
+    "fallback_reason": {
+      "description": "The sentence behind `fallback`, so a job can say why it ran everything. Null exactly when `fallback` is null.",
+      "type": ["string", "null"]
+    },
+    "excluded": {
+      "type": "object",
+      "description": "Reached only across an edge the walk does not cross: the boot (`setup`) and work that runs later on its own (`deferred`). Named apart, never summed into a hop.",
+      "required": ["setup", "deferred"],
+      "additionalProperties": false,
+      "properties": {
+        "setup": { "type": "array", "items": { "type": "string" } },
+        "deferred": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "cut": {
+      "type": "array",
+      "description": "Where the walk stopped, by reason. What the reader has not seen is part of the answer.",
+      "items": { "$ref": "#/$defs/cut" }
+    },
+    "bound": {
+      "description": "`floor` whenever anything was cut, capped, unstamped or resolved at run time — which on today's graphs is always. Same vocabulary as a MetricValue's bound.",
+      "enum": ["exact", "floor"]
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "description": "The `farsight-tests-matrix v1` identity block, verbatim: what the document was computed from.",
+      "required": ["source_digest", "farsight", "generated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "sync": { "type": "integer", "minimum": 0, "description": "Snapshot ordinal of the graph, when a snapshot store recorded one." },
+        "source_commit": { "type": "string", "description": "Workspace commit at snapshot time, when known." },
+        "source_digest": { "type": "object", "description": "repo name → content digest of that repo's checkout. Empty when the graph records none." },
+        "farsight": { "type": "string", "description": "The build that produced the document (`buildLine()`)." },
+        "generated_at": { "type": "string", "description": "ISO timestamp. The only field that changes between two runs over the same graph." }
+      }
+    },
+    "seed": {
+      "type": "object",
+      "required": ["id", "name", "kind", "from"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "type": "string" },
+        "from": { "enum": ["node", "hunk"], "description": "`hunk` means a changed file range resolved to this node — file-and-line granularity, with H4's caveat: the commits that touched a file are not the commits that changed a function." },
+        "hunk": { "type": "string", "description": "`path:line-line` when `from` is `hunk`." }
+      }
+    },
+    "hop": {
+      "type": "object",
+      "required": ["hop", "nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "hop": { "type": "integer", "minimum": 1, "description": "1 = uses it directly. 2+ = reaches it through something else — a path, not a prediction." },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "name", "kind", "file", "line", "edge", "strength", "one_of", "tests"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "type": "string" },
+        "file": { "type": "string", "description": "`''` when the node has no source location (a route that is declared and not built)." },
+        "line": { "type": ["integer", "null"] },
+        "edge": {
+          "type": "object",
+          "description": "The edge that reached this node. `technique`/`confidence` are null when the adapter recorded none — an absence of provenance about the edge, never a confidence level.",
+          "required": ["kind", "technique", "confidence"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "$ref": "#/$defs/edgeKind" },
+            "technique": { "type": ["string", "null"] },
+            "confidence": { "$ref": "#/$defs/tier" }
+          }
+        },
+        "strength": { "$ref": "#/$defs/strength" },
+        "one_of": {
+          "description": "The call site resolves to several implementations and the code chooses at run time. Null when it does not.",
+          "type": ["object", "null"],
+          "required": ["chosen", "alternatives"],
+          "properties": {
+            "chosen": { "type": "string" },
+            "alternatives": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "tests": { "type": "array", "items": { "$ref": "#/$defs/test" } }
+      }
+    },
+    "strength": {
+      "type": "object",
+      "description": "How well the path is known: the weakest tier RECORDED on it, and how many of its edges recorded nothing. A pair, never one ladder — `tier: null` with `unstamped: 2` is not a low confidence, it is an absence of provenance.",
+      "required": ["tier", "unstamped", "hops"],
+      "additionalProperties": false,
+      "properties": {
+        "tier": { "$ref": "#/$defs/tier" },
+        "unstamped": { "type": "integer", "minimum": 0 },
+        "hops": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "test": {
+      "type": "object",
+      "required": ["id", "title", "file", "line", "level", "runner", "project", "evidence_class", "technique", "confidence", "run_level", "inactive"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "file": { "type": "string" },
+        "line": { "type": ["integer", "null"], "description": "Null for a run-level node: a coverage report has no line." },
+        "level": { "enum": ["unit", "integration", "e2e"] },
+        "runner": { "type": "string" },
+        "project": { "type": "string", "description": "`''` when the runner records none." },
+        "evidence_class": { "$ref": "#/$defs/evidenceClass" },
+        "technique": { "type": ["string", "null"] },
+        "confidence": { "$ref": "#/$defs/tier" },
+        "run_level": { "type": "boolean", "description": "The edge came from a coverage report with no per-test attribution: the run reached it, no single test did." },
+        "inactive": { "type": "boolean", "description": "`.skip`/`.todo`: listed, and it lifts nothing." }
+      }
+    },
+    "selectEntry": {
+      "type": "object",
+      "required": ["file", "title", "project"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string" },
+        "title": { "type": "string" },
+        "project": { "type": "string" }
+      }
+    },
+    "unselectable": {
+      "type": "object",
+      "required": ["node", "name", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "node": { "type": "string" },
+        "name": { "type": "string" },
+        "reason": {
+          "description": "Closed. `no covers edge` = nothing claims, reaches or observed it. `declared only` = a route declared in a spec and not built, so nothing runs it. `inactive` = every covering case is .skip/.todo. `run-level only` = only a whole-run coverage report reached it, and a report cannot name a case to re-run.",
+          "enum": ["no covers edge", "declared only", "inactive", "run-level only"]
+        }
+      }
+    },
+    "cut": {
+      "type": "object",
+      "required": ["reason", "behind", "direct", "hop"],
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "description": "`hops` = the budget ended here. `shared` = plumbing or a rendered primitive, not opened. `setup` = the boot, which is not a dependent. `deferred` = work that runs later on its own. `cap` = more dependents at this hop than the answer lists.",
+          "enum": ["hops", "shared", "setup", "deferred", "cap"]
+        },
+        "node": { "type": "string", "description": "Absent for `cap`, which is a fact about a hop and not about any one node." },
+        "name": { "type": "string" },
+        "behind": { "type": "integer", "minimum": 0, "description": "Everything upstream of this stop the document does not list. NEVER add two of these: the sets overlap." },
+        "direct": { "type": "integer", "minimum": 0, "description": "The first ring only: unlisted nodes one edge behind this stop." },
+        "hop": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "edgeKind": {
+      "description": "The verb of the dependency, from the graph. The surface prints this verb and never promotes it to one of consequence.",
+      "enum": ["contains", "imports", "calls", "renders", "http", "publishes", "consumes", "reads", "writes", "validates", "guards", "covers", "tracks"]
+    },
+    "tier": {
+      "description": "A recorded confidence, or null when the adapter recorded none.",
+      "enum": ["HIGH", "MEDIUM", "LOW", null]
+    },
+    "evidenceClass": {
+      "description": "The printed vocabulary: the graph stores `static` and every consumer reads `reached`. A claim is never rendered as an observation.",
+      "enum": ["declared", "reached", "observed"]
+    }
+  }
+}

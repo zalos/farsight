@@ -1,0 +1,23 @@
+{
+  "name": "@farsight/server",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@farsight/core": "workspace:*",
+    "@farsight/parsers": "workspace:*",
+    "@farsight/work": "workspace:*",
+    "@farsight/work-fixture": "workspace:*",
+    "@farsight/work-jira": "workspace:*",
+    "@farsight/work-azdo": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

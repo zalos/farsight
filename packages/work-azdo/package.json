@@ -1,0 +1,19 @@
+{
+  "name": "@farsight/work-azdo",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@farsight/core": "workspace:*",
+    "@farsight/work": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

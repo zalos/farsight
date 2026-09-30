@@ -1,0 +1,103 @@
+{
+  "numTotalTestSuites": 2,
+  "numTotalTests": 8,
+  "numPassedTests": 5,
+  "numFailedTests": 0,
+  "numPendingTests": 2,
+  "numTodoTests": 1,
+  "startTime": 1757462400000,
+  "success": true,
+  "testResults": [
+    {
+      "name": "test/invoiceService.test.ts",
+      "status": "passed",
+      "startTime": 1757462400000,
+      "endTime": 1757462401200,
+      "assertionResults": [
+        {
+          "ancestorTitles": [],
+          "title": "createInvoice computes a subtotal, tax and total from the draft lines",
+          "fullName": "createInvoice computes a subtotal, tax and total from the draft lines",
+          "status": "passed",
+          "duration": 12,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [],
+          "title": "updateInvoice refuses an invoice that has left draft",
+          "fullName": "updateInvoice refuses an invoice that has left draft",
+          "status": "passed",
+          "duration": 4,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [],
+          "title": "finalizeInvoice assigns a number and records a ledger entry",
+          "fullName": "finalizeInvoice assigns a number and records a ledger entry",
+          "status": "skipped",
+          "failureMessages": []
+        }
+      ]
+    },
+    {
+      "name": "test/rates.spec.ts",
+      "status": "passed",
+      "startTime": 1757462401300,
+      "endTime": 1757462401460,
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "tax rates"
+          ],
+          "title": "the US rate is 0",
+          "fullName": "tax rates the US rate is 0",
+          "status": "passed",
+          "duration": 3,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "tax rates"
+          ],
+          "title": "the DE rate is 0.19",
+          "fullName": "tax rates the DE rate is 0.19",
+          "status": "passed",
+          "duration": 2,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "tax rates"
+          ],
+          "title": "the GB rate is 0.2",
+          "fullName": "tax rates the GB rate is 0.2",
+          "status": "passed",
+          "duration": 2,
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "tax rates"
+          ],
+          "title": "the FR treatment is confirmed with finance before it is charged",
+          "fullName": "tax rates the FR treatment is confirmed with finance before it is charged",
+          "status": "skipped",
+          "failureMessages": []
+        },
+        {
+          "ancestorTitles": [
+            "tax rates"
+          ],
+          "title": "the table reloads when the tax service publishes a change",
+          "fullName": "tax rates the table reloads when the tax service publishes a change",
+          "status": "todo",
+          "failureMessages": []
+        }
+      ]
+    }
+  ],
+  "farsight": {
+    "sourceDigest": "ce3afa739e71",
+    "repo": "invoice-app"
+  }
+}

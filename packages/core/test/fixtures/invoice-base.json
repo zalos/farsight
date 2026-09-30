@@ -1,0 +1,1430 @@
+{
+ "meta": {
+  "generatedAt": "2026-07-28T12:00:00.000Z",
+  "files": 13,
+  "sourceHash": "fixture",
+  "sync": 39,
+  "commit": "76f76740000000000000000000000000000000ba",
+  "tz": "UTC",
+  "digest": "d33aa9a37a45"
+ },
+ "roots": {},
+ "nodes": [
+  {
+   "id": "invoice-app::src/api/client.ts::listInvoices",
+   "kind": "function",
+   "name": "listInvoices",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 4,
+    "endLine": 7
+   },
+   "docs": "Fetches every invoice for the list view.",
+   "snippet": "async function listInvoices() {\n  const res = await fetch('/invoices');\n  return res.json();\n}",
+   "group": "src/api/client.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::getInvoice",
+   "kind": "function",
+   "name": "getInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 13,
+    "endLine": 16
+   },
+   "docs": "Fetches one invoice by id. Pass the id from the list row.",
+   "snippet": "async function getInvoice(id: string) {\n  const res = await fetch(`/invoices/${id}`);\n  return res.json();\n}",
+   "group": "src/api/client.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::createInvoice",
+   "kind": "function",
+   "name": "createInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 18,
+    "endLine": 21
+   },
+   "snippet": "async function createInvoice(draft: unknown) {\n  const res = await fetch('/invoices', { method: 'POST', body: JSON.stringify(draft) });\n  return res.json();\n}",
+   "group": "src/api/client.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::updateInvoice",
+   "kind": "function",
+   "name": "updateInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 23,
+    "endLine": 26
+   },
+   "snippet": "async function updateInvoice(id: string, patch: unknown) {\n  const res = await fetch(`/invoices/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });\n  return res.json();\n}",
+   "group": "src/api/client.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::finalizeInvoice",
+   "kind": "function",
+   "name": "finalizeInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 28,
+    "endLine": 31
+   },
+   "snippet": "async function finalizeInvoice(id: string) {\n  const res = await fetch(`/invoices/${id}/finalize`, { method: 'POST' });\n  return res.json();\n}",
+   "group": "src/api/client.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/auth.ts::requireScope",
+   "kind": "function",
+   "name": "requireScope",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/auth.ts",
+    "line": 10,
+    "endLine": 19
+   },
+   "docs": "Scope-based authorization middleware. Rejects with 403 when the caller's token lacks the required scope. Applied per-route in router; admin actions require billing:admin.",
+   "snippet": "function requireScope(scope: string) {\n  return (req: Request, res: Response, next: NextFunction) => {\n    const scopes: string[] = (req as any).auth?.scopes ?? [];\n    if (!scopes.includes(scope)) {\n      res.status(403).json({ error: `missing scope ${scope}` });\n      return;\n    }\n    next();\n  };\n}",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 13,
+     "condition": "!scopes.includes(scope)",
+     "exits": true,
+     "arms": [
+      {
+       "label": "then",
+       "requires": "!scopes.includes(scope)",
+       "line": 13,
+       "endLine": 16
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "auth"
+   ],
+   "facets": {
+    "business": {
+     "description": "Checks the caller is allowed to perform this billing action before the request reaches the handler."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::src/server/db.ts::table",
+   "kind": "function",
+   "name": "table",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/db.ts",
+    "line": 8,
+    "endLine": 15
+   },
+   "snippet": "function table(name: string) {\n  return {\n    findMany: async (_q?: unknown): Promise<any[]> => [],\n    findOne: async (_q?: unknown): Promise<any> => null,\n    insert: async (row: any): Promise<any> => row,\n    update: async (_q: unknown, patch: any): Promise<any> => patch,\n  };\n}",
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/events.ts::publish",
+   "kind": "function",
+   "name": "publish",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/events.ts",
+    "line": 2,
+    "endLine": 4
+   },
+   "docs": "Publishes a domain event to the message bus (NATS in production).",
+   "snippet": "async function publish(topic: string, payload: unknown) {\n  console.log('publish', topic, payload);\n}",
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::listInvoices",
+   "kind": "function",
+   "name": "listInvoices",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 6,
+    "endLine": 8
+   },
+   "docs": "Lists invoices, newest first.",
+   "snippet": "async function listInvoices() {\n  return db.invoices.findMany({ orderBy: 'created_at' });\n}",
+   "group": "src/server/invoiceService.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::table::invoices",
+   "kind": "table",
+   "name": "invoices",
+   "tags": [
+    "invoice",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::getInvoice",
+   "kind": "function",
+   "name": "getInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 15,
+    "endLine": 17
+   },
+   "docs": "Fetches a single invoice by id. Resolves to null when id matches no row — callers must null-check. See: listInvoices.",
+   "snippet": "async function getInvoice(id: string) {\n  return db.invoices.findOne({ id });\n}",
+   "group": "src/server/invoiceService.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::createInvoice",
+   "kind": "function",
+   "name": "createInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 24,
+    "endLine": 28
+   },
+   "docs": "Creates a draft invoice and computes initial totals. Totals are recomputed on every edit; see finalizing an invoice for the irreversible step. Since 1.0.",
+   "snippet": "async function createInvoice(draft: { customerId: string; lines: { amount: number }[] }) {\n  const subtotal = draft.lines.reduce((s, l) => s + l.amount, 0);\n  const tax = await computeTax(draft.customerId, subtotal);\n  return db.invoices.insert({ ...draft, status: 'draft', subtotal, tax, total: subtotal + tax });\n}",
+   "group": "src/server/invoiceService.ts",
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+   "kind": "function",
+   "name": "updateInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 35,
+    "endLine": 44
+   },
+   "docs": "Saves edits to a draft; rejects when the invoice is no longer editable.",
+   "snippet": "async function updateInvoice(id: string, patch: { lines: { amount: number }[] }) {\n  const invoice = await db.invoices.findOne({ id });\n  // @business Reject edits once the invoice has left draft\n  if (invoice.status !== 'draft') {\n    throw Object.assign(new Error('invoice is not editable'), { status: 409 });\n  }\n  const subtotal = patch.lines.reduce((s, l) => s + l.amount, 0);\n  const tax = await computeTax(invoice.customerId, subtotal);\n  return db.invoices.update({ id }, { ...patch, subtotal, tax, total: subtotal + tax });\n}",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 38,
+     "condition": "invoice.status !== 'draft'",
+     "exits": true,
+     "business": "Reject edits once the invoice has left draft",
+     "arms": [
+      {
+       "label": "then",
+       "requires": "invoice.status !== 'draft'",
+       "line": 38,
+       "endLine": 40
+      }
+     ]
+    }
+   ],
+   "group": "src/server/invoiceService.ts",
+   "tags": [
+    "invoice"
+   ],
+   "facets": {
+    "business": {
+     "description": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "kind": "function",
+   "name": "finalizeInvoice",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 58,
+    "endLine": 74
+   },
+   "docs": "Finalizes a draft: completeness check, sequential number, ledger entry, then emits invoice.finalized for the notifier to send the email. Finalizing is irreversible — the number is consumed even if the email later bounces. See: computeTax, requireScope. Since 1.0.",
+   "snippet": "async function finalizeInvoice(id: string) {\n  const invoice = await db.invoices.findOne({ id });\n  /* @business An invoice must have at least one line item before it can be sent. */\n  if (invoice.lines.length < 1) {\n    throw Object.assign(new Error('invoice has no line items'), { status: 409 });\n  }\n  try { // @business Assign the number, post the ledger entry, and notify the customer\n    const number = await nextInvoiceNumber();\n    const finalized = await db.invoices.update({ id }, { status: 'open', number, issuedAt: new Date() });\n    await db.ledger_entries.insert({ invoiceId: id, kind: 'credit', amount: invoice.total });\n    await publish('invoice.finalized', { invoiceId: id });\n    return finalized;\n  } catch (e) { // @business If the ledger or notifier is unavailable, surface the failure to the caller\n    console.error('finalize failed', e);\n  …",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 61,
+     "condition": "invoice.lines.length < 1",
+     "exits": true,
+     "business": "An invoice must have at least one line item before it can be sent.",
+     "arms": [
+      {
+       "label": "then",
+       "requires": "invoice.lines.length < 1",
+       "line": 61,
+       "endLine": 63
+      }
+     ]
+    },
+    {
+     "kind": "catch",
+     "line": 64,
+     "condition": "exception in try",
+     "exits": true,
+     "arms": [
+      {
+       "label": "try",
+       "requires": "no exception thrown",
+       "line": 64,
+       "endLine": 70,
+       "business": "Assign the number, post the ledger entry, and notify the customer"
+      },
+      {
+       "label": "catch",
+       "requires": "exception thrown",
+       "line": 70,
+       "endLine": 73,
+       "business": "If the ledger or notifier is unavailable, surface the failure to the caller"
+      }
+     ]
+    }
+   ],
+   "group": "src/server/invoiceService.ts",
+   "tags": [
+    "invoice"
+   ],
+   "facets": {
+    "business": {
+     "description": "When an invoice is sent, we verify it is complete, assign the next official invoice number, record it permanently in the accounting ledger, and email it to the customer."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::table::ledger_entries",
+   "kind": "table",
+   "name": "ledger_entries",
+   "tags": [
+    "ledger",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::queue::invoice.finalized",
+   "kind": "queue",
+   "name": "invoice.finalized",
+   "tags": [
+    "invoice",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+   "kind": "function",
+   "name": "nextInvoiceNumber",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 80,
+    "endLine": 83
+   },
+   "docs": "Sequential, gap-free numbering under an advisory lock.",
+   "snippet": "async function nextInvoiceNumber() {\n  const last = await db.invoices.findOne({ orderBy: 'number' });\n  return (last?.number ?? 0) + 1;\n}",
+   "group": "src/server/invoiceService.ts",
+   "tags": [
+    "invoice",
+    "internal"
+   ]
+  },
+  {
+   "id": "invoice-app::route::GET /invoices",
+   "kind": "route",
+   "name": "GET /invoices",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 8
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::guard::requireScope(billing:read)",
+   "kind": "guard",
+   "name": "requireScope: billing:read",
+   "tags": [
+    "auth"
+   ],
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 8
+   }
+  },
+  {
+   "id": "invoice-app::route::GET /invoices/:id",
+   "kind": "route",
+   "name": "GET /invoices/:id",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 12
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::route::POST /invoices",
+   "kind": "route",
+   "name": "POST /invoices",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 16
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::guard::requireScope(billing:write)",
+   "kind": "guard",
+   "name": "requireScope: billing:write",
+   "tags": [
+    "auth"
+   ],
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 16
+   }
+  },
+  {
+   "id": "invoice-app::route::PATCH /invoices/:id",
+   "kind": "route",
+   "name": "PATCH /invoices/:id",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 21
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::route::POST /invoices/:id/finalize",
+   "kind": "route",
+   "name": "POST /invoices/:id/finalize",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 26
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::guard::requireScope(billing:admin)",
+   "kind": "guard",
+   "name": "requireScope: billing:admin",
+   "tags": [
+    "auth"
+   ],
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 26
+   }
+  },
+  {
+   "id": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+   "kind": "rule",
+   "name": "draftInvoiceSchema",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/schemas.ts",
+    "line": 4,
+    "endLine": 14
+   },
+   "tags": [
+    "invoice"
+   ],
+   "signature": "z.object({\n  customerId: z.string().min(1),\n  lines: z\n    .array(\n      z.object({\n        description: z.string().min(1),\n        amount: z.number().nonnegative(),\n      })\n    )\n    .min(1),\n})"
+  },
+  {
+   "id": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+   "kind": "rule",
+   "name": "updateInvoiceSchema",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/schemas.ts",
+    "line": 17,
+    "endLine": 20
+   },
+   "tags": [
+    "invoice"
+   ],
+   "signature": "z.object({\n  lines: z.array(z.object({ description: z.string(), amount: z.number().nonnegative() })).min(1),\n  terms: z.string().optional(),\n})"
+  },
+  {
+   "id": "invoice-app::src/server/taxEngine.ts::computeTax",
+   "kind": "function",
+   "name": "computeTax",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/taxEngine.ts",
+    "line": 9,
+    "endLine": 13
+   },
+   "docs": "Region-based tax lookup keyed by the customer's country.",
+   "snippet": "async function computeTax(customerId: string, subtotal: number) {\n  const customer = await db.customers.findOne({ id: customerId });\n  const rate = RATES[customer?.country ?? 'US'] ?? 0;\n  return Math.round(subtotal * rate * 100) / 100;\n}",
+   "tags": [
+    "tax",
+    "tax"
+   ],
+   "facets": {
+    "business": {
+     "description": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream)."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::table::customers",
+   "kind": "table",
+   "name": "customers",
+   "tags": [
+    "customer",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/taxEngine.ts::taxTreatment",
+   "kind": "function",
+   "name": "taxTreatment",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/taxEngine.ts",
+    "line": 22,
+    "endLine": 35
+   },
+   "docs": "Human-readable tax treatment for a country — shown on the invoice PDF and in the audit log. See: computeTax. Since 1.2.",
+   "snippet": "function taxTreatment(country: string): string {\n  // @business Pick the wording that matches the customer's tax region —\n  // EU VAT, UK VAT, or none charged here.\n  switch (country) {\n    // @business EU member states: VAT at the local rate\n    case 'DE':\n    case 'FR':\n      return `VAT ${RATES[country] * 100}%`;\n    case 'GB': // @business United Kingdom: standard-rate VAT\n      return 'UK VAT 20%';\n    default: // @business US and the rest of the world: no VAT charged here\n      return 'no VAT (handled downstream)';\n  }\n}",
+   "branches": [
+    {
+     "kind": "switch",
+     "line": 25,
+     "condition": "country",
+     "exits": true,
+     "business": "Pick the wording that matches the customer's tax region — EU VAT, UK VAT, or none charged here.",
+     "arms": [
+      {
+       "label": "case 'DE'",
+       "requires": "country === 'DE'",
+       "line": 27,
+       "endLine": 27,
+       "business": "EU member states: VAT at the local rate"
+      },
+      {
+       "label": "case 'FR'",
+       "requires": "country === 'FR'",
+       "line": 28,
+       "endLine": 29
+      },
+      {
+       "label": "case 'GB'",
+       "requires": "country === 'GB'",
+       "line": 30,
+       "endLine": 31,
+       "business": "United Kingdom: standard-rate VAT"
+      },
+      {
+       "label": "default",
+       "requires": "no case matched",
+       "line": 32,
+       "endLine": 33,
+       "business": "US and the rest of the world: no VAT charged here"
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "tax"
+   ],
+   "facets": {
+    "business": {
+     "description": "How tax is handled for this customer, in plain English."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::src/server/taxEngine.ts::taxRateFor",
+   "kind": "function",
+   "name": "taxRateFor",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/taxEngine.ts",
+    "line": 43,
+    "endLine": 45
+   },
+   "docs": "Raw decimal tax rate for a country. Deprecated: Prefer taxTreatment for display and computeTax for amounts; direct rate access is slated for removal in 2.0. Since 0.9.",
+   "snippet": "function taxRateFor(country: string): number {\n  return RATES[country] ?? 0;\n}",
+   "tags": [
+    "tax",
+    "deprecated"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "kind": "component",
+   "name": "CreateInvoiceForm",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/CreateInvoiceForm.tsx",
+    "line": 10,
+    "endLine": 35
+   },
+   "docs": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+   "snippet": "function CreateInvoiceForm({ onDone }: { onDone: () => void }) {\n  const [error, setError] = useState<string | null>(null);\n\n  async function submit(form: FormData) {\n    const draft = {\n      customerId: String(form.get('customer')),\n      lines: [{ description: String(form.get('desc')), amount: Number(form.get('amount')) }],\n    };\n    const parsed = draftInvoiceSchema.safeParse(draft);\n    if (!parsed.success) { // @business Invalid input — show the validation errors instead of submitting\n      setError(parsed.error.message);\n      return;\n    }\n    await createInvoice(parsed.data);\n  …",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 19,
+     "condition": "!parsed.success",
+     "exits": true,
+     "business": "Invalid input — show the validation errors instead of submitting",
+     "arms": [
+      {
+       "label": "then",
+       "requires": "!parsed.success",
+       "line": 19,
+       "endLine": 22,
+       "business": "Invalid input — show the validation errors instead of submitting"
+      }
+     ]
+    },
+    {
+     "kind": "logical",
+     "line": 31,
+     "condition": "error && <p role=\"alert\">{error}</p>",
+     "arms": [
+      {
+       "label": "taken",
+       "requires": "error",
+       "line": 31,
+       "endLine": 31
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "invoice",
+    "ux",
+    "beta"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/CreateInvoiceForm.tsx::submit",
+   "kind": "function",
+   "name": "submit",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/CreateInvoiceForm.tsx",
+    "line": 13,
+    "endLine": 25
+   },
+   "snippet": "async function submit(form: FormData) {\n    const draft = {\n      customerId: String(form.get('customer')),\n      lines: [{ description: String(form.get('desc')), amount: Number(form.get('amount')) }],\n    };\n    const parsed = draftInvoiceSchema.safeParse(draft);\n    if (!parsed.success) { // @business Invalid input — show the validation errors instead of submitting\n      setError(parsed.error.message);\n      return;\n    }\n    await createInvoice(parsed.data);\n    onDone();\n  }",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 19,
+     "condition": "!parsed.success",
+     "exits": true,
+     "business": "Invalid input — show the validation errors instead of submitting",
+     "arms": [
+      {
+       "label": "then",
+       "requires": "!parsed.success",
+       "line": 19,
+       "endLine": 22,
+       "business": "Invalid input — show the validation errors instead of submitting"
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "kind": "component",
+   "name": "EditInvoiceDrawer",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/EditInvoiceDrawer.tsx",
+    "line": 9,
+    "endLine": 43
+   },
+   "docs": "Edit line items on a draft invoice; posted invoices are read-only here.",
+   "snippet": "function EditInvoiceDrawer({ invoiceId, onClose }: { invoiceId: string; onClose: () => void }) {\n  const [invoice, setInvoice] = useState<any>(null);\n\n  useEffect(() => {\n    getInvoice(invoiceId).then(setInvoice);\n  }, [invoiceId]);\n\n  async function onSave(lines: unknown[]) {\n    if (invoice.status !== 'draft') {\n      return; // posted invoices are read-only\n    } else { // @business Draft is still editable — persist the line-item changes\n      await updateInvoice(invoiceId, { lines });\n    }\n  }\n  …",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 17,
+     "condition": "invoice.status !== 'draft'",
+     "exits": true,
+     "arms": [
+      {
+       "label": "then",
+       "requires": "invoice.status !== 'draft'",
+       "line": 17,
+       "endLine": 19
+      },
+      {
+       "label": "else",
+       "requires": "invoice.status === 'draft'",
+       "line": 19,
+       "endLine": 21,
+       "business": "Draft is still editable — persist the line-item changes"
+      }
+     ]
+    },
+    {
+     "kind": "if",
+     "line": 26,
+     "condition": "invoice.status !== 'draft'",
+     "exits": true,
+     "business": "Only a draft can be sent; sending finalizes it for good",
+     "arms": [
+      {
+       "label": "then",
+       "requires": "invoice.status !== 'draft'",
+       "line": 26,
+       "endLine": 26
+      }
+     ]
+    },
+    {
+     "kind": "if",
+     "line": 31,
+     "condition": "!invoice",
+     "exits": true,
+     "arms": [
+      {
+       "label": "then",
+       "requires": "!invoice",
+       "line": 31,
+       "endLine": 31
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "invoice",
+    "ux"
+   ],
+   "facets": {
+    "business": {
+     "description": "Lets a user change a draft invoice before it is sent. Sent invoices are shown but can no longer be edited."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+   "kind": "function",
+   "name": "onSave",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/EditInvoiceDrawer.tsx",
+    "line": 16,
+    "endLine": 22
+   },
+   "snippet": "async function onSave(lines: unknown[]) {\n    if (invoice.status !== 'draft') {\n      return; // posted invoices are read-only\n    } else { // @business Draft is still editable — persist the line-item changes\n      await updateInvoice(invoiceId, { lines });\n    }\n  }",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 17,
+     "condition": "invoice.status !== 'draft'",
+     "exits": true,
+     "arms": [
+      {
+       "label": "then",
+       "requires": "invoice.status !== 'draft'",
+       "line": 17,
+       "endLine": 19
+      },
+      {
+       "label": "else",
+       "requires": "invoice.status === 'draft'",
+       "line": 19,
+       "endLine": 21,
+       "business": "Draft is still editable — persist the line-item changes"
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSend",
+   "kind": "function",
+   "name": "onSend",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/EditInvoiceDrawer.tsx",
+    "line": 24,
+    "endLine": 29
+   },
+   "snippet": "async function onSend() {\n    // @business Only a draft can be sent; sending finalizes it for good\n    if (invoice.status !== 'draft') return;\n    await finalizeInvoice(invoiceId);\n    onClose();\n  }",
+   "branches": [
+    {
+     "kind": "if",
+     "line": 26,
+     "condition": "invoice.status !== 'draft'",
+     "exits": true,
+     "business": "Only a draft can be sent; sending finalizes it for good",
+     "arms": [
+      {
+       "label": "then",
+       "requires": "invoice.status !== 'draft'",
+       "line": 26,
+       "endLine": 26
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "kind": "component",
+   "name": "InvoiceListPage",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/InvoiceListPage.tsx",
+    "line": 7,
+    "endLine": 30
+   },
+   "docs": "Lists invoices with status filters; entry point of the invoice UX.",
+   "snippet": "function InvoiceListPage() {\n  const [invoices, setInvoices] = useState<unknown[]>([]);\n  const [editing, setEditing] = useState<string | null>(null);\n  const [creating, setCreating] = useState(false);\n\n  useEffect(() => {\n    listInvoices().then(setInvoices);\n  }, []);\n\n  return (\n    <div>\n      <button onClick={() => setCreating(true)}>New invoice</button>\n      <ul>\n        {invoices.map((inv: any) => (\n  …",
+   "branches": [
+    {
+     "kind": "logical",
+     "line": 26,
+     "condition": "creating && <CreateInvoiceForm onDone={() => setCreating(false)} />",
+     "arms": [
+      {
+       "label": "taken",
+       "requires": "creating",
+       "line": 26,
+       "endLine": 26
+      }
+     ]
+    },
+    {
+     "kind": "logical",
+     "line": 27,
+     "condition": "editing && <EditInvoiceDrawer invoiceId={editing} onClose={() => setEditing(null)} />",
+     "arms": [
+      {
+       "label": "taken",
+       "requires": "editing",
+       "line": 27,
+       "endLine": 27
+      }
+     ]
+    }
+   ],
+   "tags": [
+    "invoice",
+    "ux"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/fields.tsx::LineItemRow",
+   "kind": "component",
+   "name": "LineItemRow",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/fields.tsx",
+    "line": 7,
+    "endLine": 15
+   },
+   "docs": "One editable invoice line: description + amount.",
+   "snippet": "function LineItemRow({ onChange }: { onChange: (v: { description: string; amount: number }) => void }) {\n  const [desc, setDesc] = useState('');\n  return (\n    <div>\n      <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder=\"Description\" />\n      <MoneyField onValue={(amount) => onChange({ description: desc, amount })} />\n    </div>\n  );\n}",
+   "tags": [
+    "ux"
+   ],
+   "facets": {
+    "business": {
+     "description": "A single line on the invoice — what was sold and for how much."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::src/ui/fields.tsx::MoneyField",
+   "kind": "component",
+   "name": "MoneyField",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/fields.tsx",
+    "line": 18,
+    "endLine": 20
+   },
+   "docs": "Currency input that normalizes to cents; rejects negative amounts.",
+   "snippet": "function MoneyField({ onValue }: { onValue: (v: number) => void }) {\n  return <input type=\"number\" min=\"0\" step=\"0.01\" onChange={(e) => onValue(Number(e.target.value))} />;\n}",
+   "tags": [
+    "ux"
+   ]
+  },
+  {
+   "id": "invoice-app::page::/invoices",
+   "kind": "page",
+   "name": "/invoices",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/router.tsx",
+    "line": 8
+   },
+   "tags": [
+    "invoice",
+    "ux"
+   ]
+  },
+  {
+   "id": "invoice-app::page::/invoices/new",
+   "kind": "page",
+   "name": "/invoices/new",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/router.tsx",
+    "line": 9
+   },
+   "tags": [
+    "invoice",
+    "ux"
+   ]
+  },
+  {
+   "id": "invoice-app::page::/invoices/:id/edit",
+   "kind": "page",
+   "name": "/invoices/:id/edit",
+   "lang": "ts",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/router.tsx",
+    "line": 10
+   },
+   "tags": [
+    "invoice",
+    "ux"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "id": "reads|invoice-app::src/server/invoiceService.ts::listInvoices|invoice-app::table::invoices",
+   "kind": "reads",
+   "from": "invoice-app::src/server/invoiceService.ts::listInvoices",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "findMany",
+    "code": "db.invoices.findMany({ orderBy: 'created_at' })",
+    "line": 7
+   }
+  },
+  {
+   "id": "reads|invoice-app::src/server/invoiceService.ts::getInvoice|invoice-app::table::invoices",
+   "kind": "reads",
+   "from": "invoice-app::src/server/invoiceService.ts::getInvoice",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "findOne",
+    "code": "db.invoices.findOne({ id })",
+    "line": 16
+   }
+  },
+  {
+   "id": "writes|invoice-app::src/server/invoiceService.ts::createInvoice|invoice-app::table::invoices",
+   "kind": "writes",
+   "from": "invoice-app::src/server/invoiceService.ts::createInvoice",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "insert",
+    "code": "db.invoices.insert({ ...draft, status: 'draft', subtotal, tax, total: subtotal + tax })",
+    "line": 27
+   }
+  },
+  {
+   "id": "reads|invoice-app::src/server/invoiceService.ts::updateInvoice|invoice-app::table::invoices",
+   "kind": "reads",
+   "from": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "findOne",
+    "code": "db.invoices.findOne({ id })",
+    "line": 36
+   }
+  },
+  {
+   "id": "writes|invoice-app::src/server/invoiceService.ts::updateInvoice|invoice-app::table::invoices",
+   "kind": "writes",
+   "from": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "update",
+    "code": "db.invoices.update({ id }, { ...patch, subtotal, tax, total: subtotal + tax })",
+    "line": 43
+   }
+  },
+  {
+   "id": "reads|invoice-app::src/server/invoiceService.ts::finalizeInvoice|invoice-app::table::invoices",
+   "kind": "reads",
+   "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "findOne",
+    "code": "db.invoices.findOne({ id })",
+    "line": 59
+   }
+  },
+  {
+   "id": "writes|invoice-app::src/server/invoiceService.ts::finalizeInvoice|invoice-app::table::invoices",
+   "kind": "writes",
+   "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "update",
+    "code": "db.invoices.update({ id }, { status: 'open', number, issuedAt: new Date() })",
+    "line": 66
+   }
+  },
+  {
+   "id": "writes|invoice-app::src/server/invoiceService.ts::finalizeInvoice|invoice-app::table::ledger_entries",
+   "kind": "writes",
+   "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "to": "invoice-app::table::ledger_entries",
+   "meta": {
+    "op": "insert",
+    "code": "db.ledger_entries.insert({ invoiceId: id, kind: 'credit', amount: invoice.total })",
+    "line": 67
+   }
+  },
+  {
+   "id": "publishes|invoice-app::src/server/invoiceService.ts::finalizeInvoice|invoice-app::queue::invoice.finalized",
+   "kind": "publishes",
+   "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "to": "invoice-app::queue::invoice.finalized"
+  },
+  {
+   "id": "reads|invoice-app::src/server/invoiceService.ts::nextInvoiceNumber|invoice-app::table::invoices",
+   "kind": "reads",
+   "from": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+   "to": "invoice-app::table::invoices",
+   "meta": {
+    "op": "findOne",
+    "code": "db.invoices.findOne({ orderBy: 'number' })",
+    "line": 81
+   }
+  },
+  {
+   "id": "guards|invoice-app::guard::requireScope(billing:read)|invoice-app::route::GET /invoices",
+   "kind": "guards",
+   "from": "invoice-app::guard::requireScope(billing:read)",
+   "to": "invoice-app::route::GET /invoices"
+  },
+  {
+   "id": "guards|invoice-app::guard::requireScope(billing:read)|invoice-app::route::GET /invoices/:id",
+   "kind": "guards",
+   "from": "invoice-app::guard::requireScope(billing:read)",
+   "to": "invoice-app::route::GET /invoices/:id"
+  },
+  {
+   "id": "guards|invoice-app::guard::requireScope(billing:write)|invoice-app::route::POST /invoices",
+   "kind": "guards",
+   "from": "invoice-app::guard::requireScope(billing:write)",
+   "to": "invoice-app::route::POST /invoices"
+  },
+  {
+   "id": "guards|invoice-app::guard::requireScope(billing:write)|invoice-app::route::PATCH /invoices/:id",
+   "kind": "guards",
+   "from": "invoice-app::guard::requireScope(billing:write)",
+   "to": "invoice-app::route::PATCH /invoices/:id"
+  },
+  {
+   "id": "guards|invoice-app::guard::requireScope(billing:admin)|invoice-app::route::POST /invoices/:id/finalize",
+   "kind": "guards",
+   "from": "invoice-app::guard::requireScope(billing:admin)",
+   "to": "invoice-app::route::POST /invoices/:id/finalize"
+  },
+  {
+   "id": "reads|invoice-app::src/server/taxEngine.ts::computeTax|invoice-app::table::customers",
+   "kind": "reads",
+   "from": "invoice-app::src/server/taxEngine.ts::computeTax",
+   "to": "invoice-app::table::customers",
+   "meta": {
+    "op": "findOne",
+    "code": "db.customers.findOne({ id: customerId })",
+    "line": 10
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/server/invoiceService.ts::createInvoice|invoice-app::src/server/taxEngine.ts::computeTax",
+   "kind": "calls",
+   "from": "invoice-app::src/server/invoiceService.ts::createInvoice",
+   "to": "invoice-app::src/server/taxEngine.ts::computeTax",
+   "meta": {
+    "line": 26
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/server/invoiceService.ts::updateInvoice|invoice-app::src/server/taxEngine.ts::computeTax",
+   "kind": "calls",
+   "from": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+   "to": "invoice-app::src/server/taxEngine.ts::computeTax",
+   "meta": {
+    "line": 42
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/server/invoiceService.ts::finalizeInvoice|invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+   "kind": "calls",
+   "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "to": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+   "meta": {
+    "line": 65
+   }
+  },
+  {
+   "id": "calls|invoice-app::route::GET /invoices|invoice-app::src/server/invoiceService.ts::listInvoices",
+   "kind": "calls",
+   "from": "invoice-app::route::GET /invoices",
+   "to": "invoice-app::src/server/invoiceService.ts::listInvoices",
+   "meta": {
+    "line": 9
+   }
+  },
+  {
+   "id": "calls|invoice-app::route::GET /invoices/:id|invoice-app::src/server/invoiceService.ts::getInvoice",
+   "kind": "calls",
+   "from": "invoice-app::route::GET /invoices/:id",
+   "to": "invoice-app::src/server/invoiceService.ts::getInvoice",
+   "meta": {
+    "line": 13
+   }
+  },
+  {
+   "id": "validates|invoice-app::src/server/schemas.ts::draftInvoiceSchema|invoice-app::route::POST /invoices",
+   "kind": "validates",
+   "from": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+   "to": "invoice-app::route::POST /invoices"
+  },
+  {
+   "id": "calls|invoice-app::route::POST /invoices|invoice-app::src/server/invoiceService.ts::createInvoice",
+   "kind": "calls",
+   "from": "invoice-app::route::POST /invoices",
+   "to": "invoice-app::src/server/invoiceService.ts::createInvoice",
+   "meta": {
+    "line": 18
+   }
+  },
+  {
+   "id": "validates|invoice-app::src/server/schemas.ts::updateInvoiceSchema|invoice-app::route::PATCH /invoices/:id",
+   "kind": "validates",
+   "from": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+   "to": "invoice-app::route::PATCH /invoices/:id"
+  },
+  {
+   "id": "calls|invoice-app::route::PATCH /invoices/:id|invoice-app::src/server/invoiceService.ts::updateInvoice",
+   "kind": "calls",
+   "from": "invoice-app::route::PATCH /invoices/:id",
+   "to": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+   "meta": {
+    "line": 23
+   }
+  },
+  {
+   "id": "calls|invoice-app::route::POST /invoices/:id/finalize|invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "kind": "calls",
+   "from": "invoice-app::route::POST /invoices/:id/finalize",
+   "to": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "meta": {
+    "line": 27
+   }
+  },
+  {
+   "id": "validates|invoice-app::src/server/schemas.ts::draftInvoiceSchema|invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "kind": "validates",
+   "from": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+   "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm"
+  },
+  {
+   "id": "calls|invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm|invoice-app::src/api/client.ts::createInvoice",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "to": "invoice-app::src/api/client.ts::createInvoice",
+   "meta": {
+    "line": 23
+   }
+  },
+  {
+   "id": "validates|invoice-app::src/server/schemas.ts::draftInvoiceSchema|invoice-app::src/ui/CreateInvoiceForm.tsx::submit",
+   "kind": "validates",
+   "from": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+   "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::submit"
+  },
+  {
+   "id": "calls|invoice-app::src/ui/CreateInvoiceForm.tsx::submit|invoice-app::src/api/client.ts::createInvoice",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/CreateInvoiceForm.tsx::submit",
+   "to": "invoice-app::src/api/client.ts::createInvoice",
+   "meta": {
+    "line": 23
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer|invoice-app::src/api/client.ts::getInvoice",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "to": "invoice-app::src/api/client.ts::getInvoice",
+   "meta": {
+    "line": 13
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer|invoice-app::src/api/client.ts::updateInvoice",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "to": "invoice-app::src/api/client.ts::updateInvoice",
+   "meta": {
+    "line": 20
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer|invoice-app::src/api/client.ts::finalizeInvoice",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "to": "invoice-app::src/api/client.ts::finalizeInvoice",
+   "meta": {
+    "line": 27
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer|invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "to": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+   "meta": {
+    "line": 35
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave|invoice-app::src/api/client.ts::updateInvoice",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+   "to": "invoice-app::src/api/client.ts::updateInvoice",
+   "meta": {
+    "line": 20
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/ui/EditInvoiceDrawer.tsx::onSend|invoice-app::src/api/client.ts::finalizeInvoice",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSend",
+   "to": "invoice-app::src/api/client.ts::finalizeInvoice",
+   "meta": {
+    "line": 27
+   }
+  },
+  {
+   "id": "calls|invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage|invoice-app::src/api/client.ts::listInvoices",
+   "kind": "calls",
+   "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "to": "invoice-app::src/api/client.ts::listInvoices",
+   "meta": {
+    "line": 13
+   }
+  },
+  {
+   "id": "renders|invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm|invoice-app::src/ui/fields.tsx::LineItemRow",
+   "kind": "renders",
+   "from": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "to": "invoice-app::src/ui/fields.tsx::LineItemRow",
+   "meta": {
+    "line": 30
+   }
+  },
+  {
+   "id": "renders|invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage|invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "kind": "renders",
+   "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "meta": {
+    "line": 26
+   }
+  },
+  {
+   "id": "renders|invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage|invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "kind": "renders",
+   "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "to": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "meta": {
+    "line": 27
+   }
+  },
+  {
+   "id": "renders|invoice-app::src/ui/fields.tsx::LineItemRow|invoice-app::src/ui/fields.tsx::MoneyField",
+   "kind": "renders",
+   "from": "invoice-app::src/ui/fields.tsx::LineItemRow",
+   "to": "invoice-app::src/ui/fields.tsx::MoneyField",
+   "meta": {
+    "line": 12
+   }
+  },
+  {
+   "id": "renders|invoice-app::page::/invoices|invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "kind": "renders",
+   "from": "invoice-app::page::/invoices",
+   "to": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "meta": {
+    "line": 8
+   }
+  },
+  {
+   "id": "renders|invoice-app::page::/invoices/new|invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "kind": "renders",
+   "from": "invoice-app::page::/invoices/new",
+   "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "meta": {
+    "line": 9
+   }
+  },
+  {
+   "id": "renders|invoice-app::page::/invoices/:id/edit|invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "kind": "renders",
+   "from": "invoice-app::page::/invoices/:id/edit",
+   "to": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "meta": {
+    "line": 10
+   }
+  },
+  {
+   "id": "http|invoice-app::src/api/client.ts::listInvoices|invoice-app::route::GET /invoices",
+   "kind": "http",
+   "from": "invoice-app::src/api/client.ts::listInvoices",
+   "to": "invoice-app::route::GET /invoices",
+   "meta": {
+    "method": "GET",
+    "path": "/invoices",
+    "line": 5
+   },
+   "resolution": {
+    "status": "resolved",
+    "technique": "fetch→route",
+    "confidence": "HIGH"
+   }
+  },
+  {
+   "id": "http|invoice-app::src/api/client.ts::getInvoice|invoice-app::route::GET /invoices/:id",
+   "kind": "http",
+   "from": "invoice-app::src/api/client.ts::getInvoice",
+   "to": "invoice-app::route::GET /invoices/:id",
+   "meta": {
+    "method": "GET",
+    "path": "/invoices/:param",
+    "line": 14
+   }
+  },
+  {
+   "id": "http|invoice-app::src/api/client.ts::createInvoice|invoice-app::route::POST /invoices",
+   "kind": "http",
+   "from": "invoice-app::src/api/client.ts::createInvoice",
+   "to": "invoice-app::route::POST /invoices",
+   "meta": {
+    "method": "POST",
+    "path": "/invoices",
+    "line": 19
+   }
+  },
+  {
+   "id": "http|invoice-app::src/api/client.ts::updateInvoice|invoice-app::route::PATCH /invoices/:id",
+   "kind": "http",
+   "from": "invoice-app::src/api/client.ts::updateInvoice",
+   "to": "invoice-app::route::PATCH /invoices/:id",
+   "meta": {
+    "method": "PATCH",
+    "path": "/invoices/:param",
+    "line": 24
+   }
+  },
+  {
+   "id": "http|invoice-app::src/api/client.ts::finalizeInvoice|invoice-app::route::POST /invoices/:id/finalize",
+   "kind": "http",
+   "from": "invoice-app::src/api/client.ts::finalizeInvoice",
+   "to": "invoice-app::route::POST /invoices/:id/finalize",
+   "meta": {
+    "method": "POST",
+    "path": "/invoices/:param/finalize",
+    "line": 29
+   }
+  }
+ ]
+}

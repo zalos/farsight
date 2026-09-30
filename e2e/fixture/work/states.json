@@ -1,0 +1,42 @@
+{
+ "invoice-jira": [
+  {
+   "name": "To Do",
+   "category": "todo"
+  },
+  {
+   "name": "In Progress",
+   "category": "in-progress"
+  },
+  {
+   "name": "In Review",
+   "category": "in-progress"
+  },
+  {
+   "name": "Done",
+   "category": "done"
+  }
+ ],
+ "invoice-azdo": [
+  {
+   "name": "New",
+   "category": "todo"
+  },
+  {
+   "name": "Active",
+   "category": "in-progress"
+  },
+  {
+   "name": "Resolved",
+   "category": "in-progress"
+  },
+  {
+   "name": "Closed",
+   "category": "done"
+  },
+  {
+   "name": "Removed",
+   "category": "removed"
+  }
+ ]
+}

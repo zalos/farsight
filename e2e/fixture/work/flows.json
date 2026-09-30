@@ -1,0 +1,13 @@
+{
+ "invoice-app::flow::new-invoice": [
+  "work::invoice-jira::INV-2",
+  "work::invoice-jira::INV-3",
+  "work::invoice-jira::INV-4"
+ ],
+ "invoice-app::flow::draft-and-send": [
+  "work::invoice-jira::INV-2",
+  "work::invoice-jira::INV-5",
+  "work::invoice-jira::INV-9"
+ ],
+ "invoice-app::flow::billing-cycle": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@farsight/mcp",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@farsight/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0",
+    "@farsight/parsers": "workspace:*",
+    "@farsight/work": "workspace:*",
+    "@farsight/work-fixture": "workspace:*",
+    "@farsight/work-jira": "workspace:*",
+    "@farsight/work-azdo": "workspace:*"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts"
+}

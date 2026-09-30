@@ -1,0 +1,41 @@
+{
+  "tags": {
+    "http-api": ["/api/"],
+    "persistence": ["/domain/"],
+    "messaging": ["/events/"],
+    "scheduled": ["/jobs/"]
+  },
+  "glossary": {
+    "InvoiceController": { "label": "Invoice endpoints", "description": "The web address the billing screens call to work with invoices." },
+    "InvoiceService": { "label": "Invoice operations", "description": "The rules for drafting, editing, sending and cancelling an invoice." },
+    "TaxCalculator": { "label": "Tax rules", "description": "Works out what tax a customer owes based on the country they are billed in." },
+    "Invoice": { "label": "Invoice", "description": "A bill sent to a customer: who owes it, how much, when it is due, and where it has got to." },
+    "InvoiceRepository": { "label": "Invoice records", "description": "Reads and writes invoices in the billing database." },
+    "InvoiceEventPublisher": { "label": "Invoice announcements", "description": "Tells other systems when an invoice goes out, and hears back when it is paid." },
+    "OverdueInvoiceJob": { "label": "Overdue sweep", "description": "The nightly check that flags invoices the customer has not paid in time." },
+    "CreateInvoiceRequest": { "label": "New invoice details", "description": "What a billing user must supply to raise an invoice." },
+    "InvoiceApiApplication": { "label": "Invoice service", "description": "The Java backend that runs invoicing." },
+    "invoices": { "label": "Invoice records", "description": "Every invoice the business has raised." },
+
+    "InvoiceService.create": { "label": "Draft an invoice", "description": "Raises a new invoice for a customer, with tax worked out." },
+    "InvoiceService.update": { "label": "Correct a draft", "description": "Changes a draft invoice before it reaches the customer." },
+    "InvoiceService.send": { "label": "Send to customer", "description": "Locks the amounts, records the send date, and emails the invoice." },
+    "InvoiceService.delete": { "label": "Cancel an invoice", "description": "Withdraws an invoice raised by mistake." },
+    "InvoiceService.requireBillingOwner": { "label": "Account check", "description": "Only the account an invoice belongs to may send or cancel it." },
+    "TaxCalculator.taxFor": { "label": "Work out the tax", "description": "The tax owed on an amount for the customer's country." },
+    "TaxCalculator.treatmentFor": { "label": "Explain the tax", "description": "How tax is handled for this customer, in plain English." },
+    "OverdueInvoiceJob.markOverdueInvoices": { "label": "Flag late invoices", "description": "Marks unpaid invoices past their due date so collections can chase them." },
+    "InvoiceEventPublisher.publishInvoiceSent": { "label": "Announce the send", "description": "Tells the rest of the business an invoice has gone out." },
+    "InvoiceEventPublisher.onPaymentSettled": { "label": "Record a payment", "description": "Marks the invoice paid once the payment service confirms the money." },
+
+    "GET /api/invoices": { "label": "List invoices", "description": "The invoices a billing user can act on today." },
+    "GET /api/invoices/:param": { "label": "Open an invoice", "description": "Everything about one invoice." },
+    "POST /api/invoices": { "label": "Raise an invoice", "description": "Creates a new draft invoice for a customer." },
+    "PUT /api/invoices/:param": { "label": "Correct an invoice", "description": "Saves changes to a draft before it is sent." },
+    "POST /api/invoices/:param/send": { "label": "Send an invoice", "description": "Sends the invoice to the customer and emails them the PDF." },
+    "DELETE /api/invoices/:param": { "label": "Cancel an invoice", "description": "Withdraws an invoice that should never have been raised." },
+
+    "invoice.sent": { "label": "Invoice sent", "description": "Announced whenever an invoice goes out to a customer." },
+    "payment.settled": { "label": "Payment received", "description": "Heard from the payments service when a customer pays." }
+  }
+}

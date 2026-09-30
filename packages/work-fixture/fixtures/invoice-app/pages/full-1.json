@@ -1,0 +1,333 @@
+{
+  "items": [
+    {
+      "id": "work::invoice-jira::INV-1",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-1",
+      "url": "https://invoice-app.atlassian.net/browse/INV-1",
+      "type": {
+        "name": "Epic",
+        "category": "epic"
+      },
+      "title": "Invoicing for billing users",
+      "body": {
+        "format": "markdown",
+        "raw": "Billing users draft, send and track invoices from one list.",
+        "text": "Billing users draft, send and track invoices from one list."
+      },
+      "state": {
+        "name": "In Progress",
+        "category": "in-progress"
+      },
+      "priority": {
+        "name": "High"
+      },
+      "assignee": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [],
+      "links": [
+        {
+          "kind": "child",
+          "target": "work::invoice-jira::INV-2",
+          "native": "Parent"
+        }
+      ],
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-18T10:00:00.000Z",
+      "revision": "2026-09-18T10:00:00.000Z",
+      "comments": [],
+      "history": [
+        {
+          "at": "2026-09-02T09:00:00.000Z",
+          "by": {
+            "id": "5b10a2844c20165700ede21g",
+            "name": "Ada Okafor",
+            "email": "ada@invoice-app.test"
+          },
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress"
+        }
+      ],
+      "fields": {},
+      "raw": {
+        "key": "INV-1",
+        "fields": {
+          "summary": "Invoicing for billing users",
+          "status": {
+            "name": "In Progress"
+          }
+        }
+      }
+    },
+    {
+      "id": "work::invoice-jira::INV-2",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-2",
+      "url": "https://invoice-app.atlassian.net/browse/INV-2",
+      "type": {
+        "name": "Story",
+        "category": "story"
+      },
+      "title": "Start a new invoice",
+      "body": {
+        "format": "markdown",
+        "raw": "As a billing user I pick the customer, add line items and save a draft. Screen INV-02, route /invoices/new.",
+        "text": "As a billing user I pick the customer, add line items and save a draft. Screen INV-02, route /invoices/new."
+      },
+      "state": {
+        "name": "Done",
+        "category": "done"
+      },
+      "assignee": {
+        "id": "5b10ac8d82e05b22cc7d4ef5",
+        "name": "Ben Lindqvist"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [
+        "billing",
+        "ui"
+      ],
+      "area": "Invoices",
+      "iteration": {
+        "name": "Invoicing Sprint 3",
+        "start": "2026-09-14T00:00:00.000Z",
+        "end": "2026-09-28T00:00:00.000Z"
+      },
+      "parent": "work::invoice-jira::INV-1",
+      "links": [
+        {
+          "kind": "parent",
+          "target": "work::invoice-jira::INV-1",
+          "native": "Parent"
+        }
+      ],
+      "estimate": {
+        "value": 5,
+        "unit": "points"
+      },
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-10T15:05:00.000Z",
+      "resolved": "2026-09-10T15:05:00.000Z",
+      "revision": "2026-09-10T15:05:00.000Z",
+      "comments": [
+        {
+          "id": "10001",
+          "author": {
+            "id": "5b10a2844c20165700ede21g",
+            "name": "Ada Okafor",
+            "email": "ada@invoice-app.test"
+          },
+          "created": "2026-09-10T15:00:00.000Z",
+          "body": {
+            "format": "markdown",
+            "raw": "Looks good on staging — closing.",
+            "text": "Looks good on staging — closing."
+          }
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-09-05T09:00:00.000Z",
+          "by": {
+            "id": "5b10ac8d82e05b22cc7d4ef5",
+            "name": "Ben Lindqvist"
+          },
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress"
+        },
+        {
+          "at": "2026-09-10T15:05:00.000Z",
+          "by": {
+            "id": "5b10ac8d82e05b22cc7d4ef5",
+            "name": "Ben Lindqvist"
+          },
+          "field": "status",
+          "from": "In Progress",
+          "to": "Done"
+        }
+      ],
+      "fields": {
+        "estimate": 5
+      },
+      "raw": {
+        "key": "INV-2",
+        "fields": {
+          "summary": "Start a new invoice",
+          "status": {
+            "name": "Done"
+          }
+        }
+      }
+    },
+    {
+      "id": "work::invoice-jira::INV-3",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-3",
+      "url": "https://invoice-app.atlassian.net/browse/INV-3",
+      "type": {
+        "name": "Task",
+        "category": "task"
+      },
+      "title": "List invoices newest first",
+      "body": {
+        "format": "markdown",
+        "raw": "GET /invoices sorted by created, newest first.",
+        "text": "GET /invoices sorted by created, newest first."
+      },
+      "state": {
+        "name": "In Progress",
+        "category": "in-progress"
+      },
+      "assignee": {
+        "id": "5b10ac8d82e05b22cc7d4ef5",
+        "name": "Ben Lindqvist"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [],
+      "area": "Invoices",
+      "iteration": {
+        "name": "Invoicing Sprint 3",
+        "start": "2026-09-14T00:00:00.000Z",
+        "end": "2026-09-28T00:00:00.000Z"
+      },
+      "links": [],
+      "estimate": {
+        "value": 2,
+        "unit": "points"
+      },
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-15T11:00:00.000Z",
+      "revision": "2026-09-15T11:00:00.000Z",
+      "comments": [],
+      "history": [
+        {
+          "at": "2026-09-15T11:00:00.000Z",
+          "by": {
+            "id": "5b10ac8d82e05b22cc7d4ef5",
+            "name": "Ben Lindqvist"
+          },
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress"
+        }
+      ],
+      "fields": {
+        "estimate": 2
+      },
+      "raw": {
+        "key": "INV-3",
+        "fields": {
+          "summary": "List invoices newest first",
+          "status": {
+            "name": "In Progress"
+          }
+        }
+      }
+    },
+    {
+      "id": "work::invoice-jira::INV-4",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-4",
+      "url": "https://invoice-app.atlassian.net/browse/INV-4",
+      "type": {
+        "name": "Story",
+        "category": "story"
+      },
+      "title": "Discard a draft invoice",
+      "body": {
+        "format": "markdown",
+        "raw": "Confirm and discard a draft that will never be sent. Screen INV-03 (Discard draft).",
+        "text": "Confirm and discard a draft that will never be sent. Screen INV-03 (Discard draft)."
+      },
+      "state": {
+        "name": "Done",
+        "category": "done"
+      },
+      "assignee": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [
+        "billing"
+      ],
+      "area": "Invoices",
+      "links": [],
+      "estimate": {
+        "value": 3,
+        "unit": "points"
+      },
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-12T10:01:00.000Z",
+      "resolved": "2026-09-12T10:01:00.000Z",
+      "revision": "2026-09-12T10:01:00.000Z",
+      "comments": [
+        {
+          "id": "10002",
+          "author": {
+            "id": "5b10ac8d82e05b22cc7d4ef5",
+            "name": "Ben Lindqvist"
+          },
+          "created": "2026-09-12T10:00:00.000Z",
+          "body": {
+            "format": "markdown",
+            "raw": "Marking done — the API side is in; the screen is phase 2.",
+            "text": "Marking done — the API side is in; the screen is phase 2."
+          }
+        }
+      ],
+      "history": [
+        {
+          "at": "2026-09-12T10:01:00.000Z",
+          "by": {
+            "id": "5b10ac8d82e05b22cc7d4ef5",
+            "name": "Ben Lindqvist"
+          },
+          "field": "status",
+          "from": "To Do",
+          "to": "Done"
+        }
+      ],
+      "fields": {
+        "estimate": 3
+      },
+      "raw": {
+        "key": "INV-4",
+        "fields": {
+          "summary": "Discard a draft invoice",
+          "status": {
+            "name": "Done"
+          }
+        }
+      }
+    }
+  ],
+  "cursor": null
+}

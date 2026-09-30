@@ -1,0 +1,248 @@
+{
+  "items": [
+    {
+      "id": "work::invoice-jira::INV-5",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-5",
+      "url": "https://invoice-app.atlassian.net/browse/INV-5",
+      "type": {
+        "name": "Story",
+        "category": "story"
+      },
+      "title": "Approve an invoice before it is sent",
+      "body": {
+        "format": "markdown",
+        "raw": "An approver signs off invoices over the threshold before they go to the customer.",
+        "text": "An approver signs off invoices over the threshold before they go to the customer."
+      },
+      "state": {
+        "name": "To Do",
+        "category": "todo"
+      },
+      "priority": {
+        "name": "Medium"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [
+        "approvals"
+      ],
+      "area": "Approvals",
+      "links": [],
+      "estimate": {
+        "value": 8,
+        "unit": "points"
+      },
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-18T10:00:00.000Z",
+      "revision": "2026-09-18T10:00:00.000Z",
+      "comments": [],
+      "history": [],
+      "fields": {
+        "estimate": 8
+      },
+      "raw": {
+        "key": "INV-5",
+        "fields": {
+          "summary": "Approve an invoice before it is sent",
+          "status": {
+            "name": "To Do"
+          }
+        }
+      }
+    },
+    {
+      "id": "work::invoice-jira::INV-6",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-6",
+      "url": "https://invoice-app.atlassian.net/browse/INV-6",
+      "type": {
+        "name": "Bug",
+        "category": "bug"
+      },
+      "title": "Tax rounds the wrong way on multi-line invoices",
+      "body": {
+        "format": "markdown",
+        "raw": "Rounding per line instead of per invoice; totals are off by a cent.",
+        "text": "Rounding per line instead of per invoice; totals are off by a cent."
+      },
+      "state": {
+        "name": "In Progress",
+        "category": "in-progress"
+      },
+      "priority": {
+        "name": "High"
+      },
+      "assignee": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [
+        "tax"
+      ],
+      "links": [
+        {
+          "kind": "relates",
+          "target": "work::invoice-jira::INV-3",
+          "native": "Relates"
+        }
+      ],
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-17T08:00:00.000Z",
+      "revision": "2026-09-17T08:00:00.000Z",
+      "comments": [],
+      "history": [
+        {
+          "at": "2026-09-17T08:00:00.000Z",
+          "by": {
+            "id": "5b10a2844c20165700ede21g",
+            "name": "Ada Okafor",
+            "email": "ada@invoice-app.test"
+          },
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress"
+        }
+      ],
+      "fields": {},
+      "raw": {
+        "key": "INV-6",
+        "fields": {
+          "summary": "Tax rounds the wrong way on multi-line invoices",
+          "status": {
+            "name": "In Progress"
+          }
+        }
+      }
+    },
+    {
+      "id": "work::invoice-jira::INV-7",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-7",
+      "url": "https://invoice-app.atlassian.net/browse/INV-7",
+      "type": {
+        "name": "Task",
+        "category": "task"
+      },
+      "title": "Spike: OCR for scanned invoices",
+      "body": {
+        "format": "markdown",
+        "raw": "Try the OCR client on ten scanned invoices.",
+        "text": "Try the OCR client on ten scanned invoices."
+      },
+      "state": {
+        "name": "To Do",
+        "category": "todo"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [],
+      "links": [],
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-18T10:00:00.000Z",
+      "revision": "2026-09-18T10:00:00.000Z",
+      "comments": [],
+      "history": [],
+      "fields": {},
+      "raw": {
+        "key": "INV-7",
+        "fields": {
+          "summary": "Spike: OCR for scanned invoices",
+          "status": {
+            "name": "To Do"
+          }
+        }
+      }
+    },
+    {
+      "id": "work::invoice-jira::INV-8",
+      "source": "invoice-jira",
+      "provider": "fixture",
+      "key": "INV-8",
+      "url": "https://invoice-app.atlassian.net/browse/INV-8",
+      "type": {
+        "name": "Bug",
+        "category": "bug"
+      },
+      "title": "Invoice list shows drafts to customers",
+      "body": {
+        "format": "markdown",
+        "raw": "Customers could see drafts at /invoices.",
+        "text": "Customers could see drafts at /invoices."
+      },
+      "state": {
+        "name": "Done",
+        "category": "done"
+      },
+      "priority": {
+        "name": "Highest"
+      },
+      "assignee": {
+        "id": "5b10ac8d82e05b22cc7d4ef5",
+        "name": "Ben Lindqvist"
+      },
+      "reporter": {
+        "id": "5b10a2844c20165700ede21g",
+        "name": "Ada Okafor",
+        "email": "ada@invoice-app.test"
+      },
+      "labels": [
+        "auth"
+      ],
+      "links": [],
+      "created": "2026-09-01T09:00:00.000Z",
+      "updated": "2026-09-09T09:00:00.000Z",
+      "resolved": "2026-09-09T09:00:00.000Z",
+      "revision": "2026-09-09T09:00:00.000Z",
+      "comments": [],
+      "history": [
+        {
+          "at": "2026-09-08T09:00:00.000Z",
+          "by": {
+            "id": "5b10ac8d82e05b22cc7d4ef5",
+            "name": "Ben Lindqvist"
+          },
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress"
+        },
+        {
+          "at": "2026-09-09T09:00:00.000Z",
+          "by": {
+            "id": "5b10ac8d82e05b22cc7d4ef5",
+            "name": "Ben Lindqvist"
+          },
+          "field": "status",
+          "from": "In Progress",
+          "to": "Done"
+        }
+      ],
+      "fields": {},
+      "raw": {
+        "key": "INV-8",
+        "fields": {
+          "summary": "Invoice list shows drafts to customers",
+          "status": {
+            "name": "Done"
+          }
+        }
+      }
+    }
+  ],
+  "cursor": "2026-09-18T10:00:00.000Z"
+}

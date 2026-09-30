@@ -1,0 +1,93 @@
+{
+ "status": 200,
+ "method": "PATCH",
+ "path": "/ExampleProject/_apis/wit/workitems/352?validateOnly=true&api-version=7.1",
+ "requestBody": [
+  {
+   "op": "test",
+   "path": "/rev",
+   "value": 4
+  },
+  {
+   "op": "remove",
+   "path": "/fields/System.AssignedTo"
+  }
+ ],
+ "body": {
+  "id": 352,
+  "rev": 4,
+  "fields": {
+   "System.AreaPath": "ExampleProject",
+   "System.TeamProject": "ExampleProject",
+   "System.IterationPath": "ExampleProject",
+   "System.WorkItemType": "Product Backlog Item",
+   "System.State": "New",
+   "System.Reason": "New backlog item",
+   "System.CreatedDate": "2026-05-07T23:52:54.957Z",
+   "System.CreatedBy": {
+    "displayName": "Pat Reviewer",
+    "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+    "_links": {
+     "avatar": {
+      "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     }
+    },
+    "id": "00000000-0000-4000-8000-000000000001",
+    "uniqueName": "pat.reviewer@example.com",
+    "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+    "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+   },
+   "System.ChangedDate": "2026-05-08T18:27:15.61Z",
+   "System.ChangedBy": {
+    "displayName": "Pat Reviewer",
+    "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+    "_links": {
+     "avatar": {
+      "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     }
+    },
+    "id": "00000000-0000-4000-8000-000000000001",
+    "uniqueName": "pat.reviewer@example.com",
+    "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+    "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+   },
+   "System.CommentCount": 0,
+   "System.Title": "Landing page",
+   "System.BoardColumn": "New",
+   "System.BoardColumnDone": false,
+   "Microsoft.VSTS.Common.StateChangeDate": "2026-05-07T23:52:54.957Z",
+   "Microsoft.VSTS.Common.Priority": 2,
+   "Microsoft.VSTS.Common.ValueArea": "Business",
+   "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column": "New",
+   "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column.Done": false,
+   "System.Description": "<ul><li>Acme branded </li><ul><li>Note: the white labeled version will be for clients signing into their client portal </li> </ul><li>Claim Verification button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Invoice Submittal button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Client log in </li><ul><li>Username </li><li>Password </li><li>Takes client to a white-labeled page that allows them to view </li><ul><li>Program financials </li><ul><li>Acme invoices submitted (date, amount, program) </li><li>Contractors paid (date, amount, program) </li><li>POs (date issued, amount, active/inactive) </li> </ul><li>File management </li><ul><li>Should resemble something like SharePoint </li><ul><li>Stores vendor contact forms, w9's, invoices </li> </ul> </ul> </ul> </ul><li>Summary of what this page is for </li><li>Follow Acme's existing website's theme? </li><ul><li>Will this page be hosted on Acme's website? </li> </ul> </ul>"
+  },
+  "multilineFieldsFormat": {
+   "System.Description": "html"
+  },
+  "_links": {
+   "self": {
+    "href": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352"
+   },
+   "workItemUpdates": {
+    "href": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352/updates"
+   },
+   "workItemRevisions": {
+    "href": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352/revisions"
+   },
+   "workItemComments": {
+    "href": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352/comments"
+   },
+   "html": {
+    "href": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_workitems/edit/352"
+   },
+   "workItemType": {
+    "href": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItemTypes/Product%20Backlog%20Item"
+   },
+   "fields": {
+    "href": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/fields"
+   }
+  },
+  "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352"
+ }
+}

@@ -1,0 +1,41 @@
+# Farsight gate policy for this repo (dogfood example).
+#
+# Facts live in the diff (farsight-diff v1); judgment lives here; the exit
+# code comes from the verdict: `farsight gate --policy compliance.yml`.
+#
+# This file is a deliberately minimal YAML subset — flat `key: value` pairs
+# and a `rules:` list of `- key: value` items. The full grammar (and the
+# closed sets `when` and `then` draw from) is documented in
+# docs/contracts/farsight-diff-v1.md § "Policy file format".
+version: 1
+rules:
+  # a permission gate disappearing from any node is a build-stopper
+  - rule: no-guard-removals
+    when: guard_removed
+    then: fail
+  # anything the contract classifies as breaking must be looked at
+  - rule: breaking-needs-review
+    when: severity:breaking
+    then: fail
+  # new HTTP surface is fine, but it should be visible in the gate log
+  - rule: announce-new-routes
+    when: route_added
+    then: warn
+  # execution-path changes are worth a look, not a block
+  - rule: announce-journey-changes
+    when: journey_changed
+    then: warn
+  # a route, page or flow that lost its last test: not a block yet, but it must
+  # never pass unremarked (docs/proposals/tests-surface.md §3.4)
+  - rule: announce-coverage-loss
+    when: coverage_lost
+    then: warn
+  # a test disappearing is a fact worth seeing in the gate log
+  - rule: announce-test-removals
+    when: test_removed
+    then: warn
+  # a changed function, route or component that no test reaches: not a block,
+  # but the gate must say so rather than letting it pass unremarked
+  - rule: announce-uncovered-changes
+    when: uncovered_change
+    then: warn

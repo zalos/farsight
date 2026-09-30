@@ -1,0 +1,9 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^pnpm -r test 2>&1 \\| grep -E \"\\^packages/\\.\\*test: \\(#\\|Done\\|Failed\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "pnpm": true
+    }
+}

@@ -1,0 +1,58 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/workItems/351/comments?$expand=renderedText&api-version=7.2-preview.4",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000023",
+  "content-type": "application/json; charset=utf-8; api-version=7.2-preview.4",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01379",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000020",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000023",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000023"
+ },
+ "body": {
+  "totalCount": 1,
+  "count": 1,
+  "comments": [
+   {
+    "mentions": [],
+    "workItemId": 351,
+    "id": 14466899,
+    "version": 1,
+    "text": "<div>Need to have a way to check duplicates.</div>",
+    "createdBy": {
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "id": "00000000-0000-4000-8000-000000000001",
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "createdDate": "2026-05-07T23:52:22.47Z",
+    "modifiedBy": {
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "id": "00000000-0000-4000-8000-000000000001",
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "modifiedDate": "2026-05-07T23:52:22.47Z",
+    "format": "html",
+    "renderedText": "<div>Need to have a way to check duplicates.</div>",
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351/comments/14466899"
+   }
+  ]
+ }
+}

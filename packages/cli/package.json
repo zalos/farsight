@@ -1,0 +1,26 @@
+{
+  "name": "@farsight/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "farsight": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@farsight/core": "workspace:*",
+    "@farsight/parsers": "workspace:*",
+    "@farsight/server": "workspace:*",
+    "@farsight/mcp": "workspace:*",
+    "@farsight/work": "workspace:*",
+    "@farsight/work-fixture": "workspace:*",
+    "@farsight/work-jira": "workspace:*",
+    "@farsight/work-azdo": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

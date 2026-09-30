@@ -1,0 +1,1464 @@
+[
+ {
+  "method": "POST",
+  "path": "/rest/api/3/issue/bulkfetch",
+  "body": {
+   "issueIdsOrKeys": [
+    "KAN-3",
+    "KAN-4",
+    "KAN-1",
+    "KAN-2"
+   ],
+   "fields": [
+    "summary",
+    "description",
+    "issuetype",
+    "status",
+    "statuscategorychangedate",
+    "priority",
+    "assignee",
+    "reporter",
+    "labels",
+    "components",
+    "parent",
+    "subtasks",
+    "issuelinks",
+    "created",
+    "updated",
+    "resolutiondate",
+    "project",
+    "customfield_10020",
+    "customfield_10016"
+   ]
+  },
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=199;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "200",
+   "x-ratelimit-remaining": "199"
+  },
+  "response": {
+   "expand": "names,schema",
+   "issues": [
+    {
+     "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+     "id": "10010",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10010",
+     "key": "KAN-1",
+     "fields": {
+      "summary": "Task 1",
+      "statuscategorychangedate": "2026-09-30T18:32:46.656-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10008",
+       "id": "10008",
+       "description": "Tasks track small, distinct pieces of work.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+       "name": "Task",
+       "subtask": false,
+       "avatarId": 10318,
+       "entityId": "00000000-0000-4000-8000-000000000013",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10013",
+       "key": "KAN-4",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+       "fields": {
+        "summary": "Invoice submission",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10004",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "To Do",
+         "id": "10004",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+          "id": 2,
+          "key": "new",
+          "colorName": "blue-gray",
+          "name": "To Do"
+         }
+        },
+        "priority": {
+         "self": "https://example.atlassian.net/rest/api/3/priority/3",
+         "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium_new.svg",
+         "name": "Medium",
+         "id": "3"
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10006",
+         "id": "10006",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000011",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [
+       {
+        "self": "https://example.atlassian.net/rest/api/3/component/10000",
+        "id": "10000",
+        "name": "Portal",
+        "description": "The contractor portal"
+       }
+      ],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:27.044-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": []
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": [
+       {
+        "id": 1,
+        "name": "KAN Sprint 1",
+        "state": "future",
+        "boardId": 2
+       }
+      ],
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [
+       "invoices",
+       "portal"
+      ],
+      "customfield_10016": 3,
+      "resolutiondate": null,
+      "issuelinks": [
+       {
+        "id": "10000",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/10000",
+        "type": {
+         "id": "10000",
+         "name": "Blocks",
+         "inward": "is blocked by",
+         "outward": "blocks",
+         "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10000"
+        },
+        "outwardIssue": {
+         "id": "10011",
+         "key": "KAN-2",
+         "self": "https://example.atlassian.net/rest/api/3/issue/10011",
+         "fields": {
+          "summary": "Task 2",
+          "status": {
+           "self": "https://example.atlassian.net/rest/api/3/status/10005",
+           "description": "",
+           "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+           "name": "In Progress",
+           "id": "10005",
+           "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+           }
+          },
+          "issuetype": {
+           "self": "https://example.atlassian.net/rest/api/3/issuetype/10009",
+           "id": "10009",
+           "description": "Stories track functionality or features expressed as user goals.",
+           "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10315?size=medium",
+           "name": "Story",
+           "subtask": false,
+           "avatarId": 10315,
+           "entityId": "00000000-0000-4000-8000-000000000014",
+           "hierarchyLevel": 0
+          }
+         }
+        }
+       }
+      ],
+      "assignee": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "updated": "2026-09-30T18:32:46.656-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10005",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Progress",
+       "id": "10005",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    },
+    {
+     "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+     "id": "10011",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10011",
+     "key": "KAN-2",
+     "fields": {
+      "summary": "Task 2",
+      "statuscategorychangedate": "2026-09-27T17:50:28.438-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10009",
+       "id": "10009",
+       "description": "Stories track functionality or features expressed as user goals.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10315?size=medium",
+       "name": "Story",
+       "subtask": false,
+       "avatarId": 10315,
+       "entityId": "00000000-0000-4000-8000-000000000014",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10013",
+       "key": "KAN-4",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+       "fields": {
+        "summary": "Invoice submission",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10004",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "To Do",
+         "id": "10004",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+          "id": 2,
+          "key": "new",
+          "colorName": "blue-gray",
+          "name": "To Do"
+         }
+        },
+        "priority": {
+         "self": "https://example.atlassian.net/rest/api/3/priority/3",
+         "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium_new.svg",
+         "name": "Medium",
+         "id": "3"
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10006",
+         "id": "10006",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000011",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:27.869-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": []
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": null,
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [
+       "invoices",
+       "recorded"
+      ],
+      "customfield_10016": 5,
+      "resolutiondate": null,
+      "issuelinks": [
+       {
+        "id": "10000",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/10000",
+        "type": {
+         "id": "10000",
+         "name": "Blocks",
+         "inward": "is blocked by",
+         "outward": "blocks",
+         "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10000"
+        },
+        "inwardIssue": {
+         "id": "10010",
+         "key": "KAN-1",
+         "self": "https://example.atlassian.net/rest/api/3/issue/10010",
+         "fields": {
+          "summary": "Task 1",
+          "status": {
+           "self": "https://example.atlassian.net/rest/api/3/status/10005",
+           "description": "",
+           "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+           "name": "In Progress",
+           "id": "10005",
+           "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+           }
+          },
+          "issuetype": {
+           "self": "https://example.atlassian.net/rest/api/3/issuetype/10008",
+           "id": "10008",
+           "description": "Tasks track small, distinct pieces of work.",
+           "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+           "name": "Task",
+           "subtask": false,
+           "avatarId": 10318,
+           "entityId": "00000000-0000-4000-8000-000000000013",
+           "hierarchyLevel": 0
+          }
+         }
+        }
+       }
+      ],
+      "assignee": null,
+      "updated": "2026-09-30T18:40:27.978-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10005",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Progress",
+       "id": "10005",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    },
+    {
+     "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+     "id": "10012",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10012",
+     "key": "KAN-3",
+     "fields": {
+      "summary": "Subtask 2.1",
+      "statuscategorychangedate": "2026-09-27T17:50:29.153-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10007",
+       "id": "10007",
+       "description": "Subtasks track small pieces of work that are part of a larger task.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10316?size=medium",
+       "name": "Subtask",
+       "subtask": true,
+       "avatarId": 10316,
+       "entityId": "fce9339a-e270-4d12-bfd8-bf3397f8ce86",
+       "hierarchyLevel": -1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:28.735-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": []
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": null,
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "customfield_10016": null,
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:29.243-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10004",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10004",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "operations,versionedRepresentations,editmeta,changelog,renderedFields",
+     "id": "10013",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+     "key": "KAN-4",
+     "fields": {
+      "summary": "Invoice submission",
+      "statuscategorychangedate": "2026-09-30T18:32:26.653-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10006",
+       "id": "10006",
+       "description": "Epics track collections of related bugs, stories, and tasks.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+       "name": "Epic",
+       "subtask": false,
+       "avatarId": 10307,
+       "entityId": "00000000-0000-4000-8000-000000000011",
+       "hierarchyLevel": 1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-30T18:32:26.241-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "heading",
+         "attrs": {
+          "level": 2
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "Invoice submission"
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "A contractor submits an invoice from the "
+          },
+          {
+           "type": "text",
+           "text": "portal",
+           "marks": [
+            {
+             "type": "strong"
+            }
+           ]
+          },
+          {
+           "type": "text",
+           "text": "; see "
+          },
+          {
+           "type": "text",
+           "text": "the spec",
+           "marks": [
+            {
+             "type": "link",
+             "attrs": {
+              "href": "https://example.com/spec"
+             }
+            }
+           ]
+          },
+          {
+           "type": "text",
+           "text": ". Owner: "
+          },
+          {
+           "type": "mention",
+           "attrs": {
+            "id": "712020:00000000-0000-0000-0000-000000000001",
+            "text": "@Farsight Test",
+            "accessLevel": ""
+           }
+          },
+          {
+           "type": "text",
+           "text": "."
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "validate totals"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "call "
+              },
+              {
+               "type": "text",
+               "text": "finalizeInvoice",
+               "marks": [
+                {
+                 "type": "code"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "orderedList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "draft"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "submit"
+              },
+              {
+               "type": "hardBreak"
+              },
+              {
+               "type": "text",
+               "text": "then approve"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "codeBlock",
+         "attrs": {
+          "language": "ts"
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "await finalizeInvoice(id);"
+          }
+         ]
+        },
+        {
+         "type": "table",
+         "content": [
+          {
+           "type": "tableRow",
+           "content": [
+            {
+             "type": "tableHeader",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "step"
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "tableHeader",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "owner"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "tableRow",
+           "content": [
+            {
+             "type": "tableCell",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "submit"
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "tableCell",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "contractor"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": null,
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": {
+       "self": "https://example.atlassian.net/rest/api/3/priority/3",
+       "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium_new.svg",
+       "name": "Medium",
+       "id": "3"
+      },
+      "labels": [],
+      "customfield_10016": null,
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-30T18:32:26.358-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10004",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10004",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    }
+   ],
+   "issueErrors": []
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/rest/api/3/changelog/bulkfetch",
+  "body": {
+   "issueIdsOrKeys": [
+    "10010",
+    "10011",
+    "10012",
+    "10013"
+   ],
+   "maxResults": 1000
+  },
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=199;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "200",
+   "x-ratelimit-remaining": "199"
+  },
+  "response": {
+   "issueChangeLogs": [
+    {
+     "issueId": "10012",
+     "changeHistories": [
+      {
+       "id": "10030",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790545829243,
+       "items": [
+        {
+         "field": "status",
+         "fieldtype": "jira",
+         "fieldId": "status",
+         "from": "10004",
+         "fromString": "To Do",
+         "to": "10004",
+         "toString": "To Do"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "issueId": "10010",
+     "changeHistories": [
+      {
+       "id": "10038",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790807566656,
+       "items": [
+        {
+         "field": "status",
+         "fieldtype": "jira",
+         "fieldId": "status",
+         "from": "10004",
+         "fromString": "To Do",
+         "to": "10005",
+         "toString": "In Progress"
+        }
+       ]
+      },
+      {
+       "id": "10037",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790807557642,
+       "items": [
+        {
+         "field": "assignee",
+         "fieldtype": "jira",
+         "fieldId": "assignee",
+         "to": "712020:00000000-0000-0000-0000-000000000001",
+         "toString": "Farsight Test",
+         "tmpToAccountId": "712020:00000000-0000-0000-0000-000000000001"
+        }
+       ]
+      },
+      {
+       "id": "10035",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790807556986,
+       "items": [
+        {
+         "field": "Link",
+         "fieldtype": "jira",
+         "to": "KAN-2",
+         "toString": "This work item blocks KAN-2"
+        }
+       ]
+      },
+      {
+       "id": "10033",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790807555533,
+       "items": [
+        {
+         "field": "Story point estimate",
+         "fieldtype": "custom",
+         "fieldId": "customfield_10016",
+         "toString": "3"
+        },
+        {
+         "field": "IssueParentAssociation",
+         "fieldtype": "jira",
+         "to": "10013",
+         "toString": "KAN-4"
+        },
+        {
+         "field": "labels",
+         "fieldtype": "jira",
+         "fieldId": "labels",
+         "fromString": "",
+         "toString": "invoices portal"
+        },
+        {
+         "field": "Sprint",
+         "fieldtype": "custom",
+         "fieldId": "customfield_10020",
+         "from": "",
+         "fromString": "",
+         "to": "1",
+         "toString": "KAN Sprint 1"
+        },
+        {
+         "field": "Component",
+         "fieldtype": "jira",
+         "fieldId": "components",
+         "to": "10000",
+         "toString": "Portal"
+        }
+       ]
+      },
+      {
+       "id": "10031",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790807516038,
+       "items": [
+        {
+         "field": "Rank",
+         "fieldtype": "custom",
+         "fieldId": "customfield_10019",
+         "from": "",
+         "fromString": "",
+         "to": "",
+         "toString": "Ranked lower"
+        }
+       ]
+      },
+      {
+       "id": "10026",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790545827574,
+       "items": [
+        {
+         "field": "status",
+         "fieldtype": "jira",
+         "fieldId": "status",
+         "from": "10004",
+         "fromString": "To Do",
+         "to": "10004",
+         "toString": "To Do"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "issueId": "10011",
+     "changeHistories": [
+      {
+       "id": "10039",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790808027978,
+       "items": [
+        {
+         "field": "labels",
+         "fieldtype": "jira",
+         "fieldId": "labels",
+         "fromString": "invoices",
+         "toString": "invoices recorded"
+        }
+       ]
+      },
+      {
+       "id": "10036",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790807557012,
+       "items": [
+        {
+         "field": "Link",
+         "fieldtype": "jira",
+         "to": "KAN-1",
+         "toString": "This work item is blocked by KAN-1"
+        }
+       ]
+      },
+      {
+       "id": "10034",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790807556340,
+       "items": [
+        {
+         "field": "Story point estimate",
+         "fieldtype": "custom",
+         "fieldId": "customfield_10016",
+         "toString": "5"
+        },
+        {
+         "field": "IssueParentAssociation",
+         "fieldtype": "jira",
+         "to": "10013",
+         "toString": "KAN-4"
+        },
+        {
+         "field": "labels",
+         "fieldtype": "jira",
+         "fieldId": "labels",
+         "fromString": "",
+         "toString": "invoices"
+        }
+       ]
+      },
+      {
+       "id": "10028",
+       "author": {
+        "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+        "accountId": "712020:00000000-0000-0000-0000-000000000001",
+        "emailAddress": "dev@example.com",
+        "avatarUrls": {
+         "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+         "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        },
+        "displayName": "Farsight Test",
+        "active": true,
+        "timeZone": "America/New_York",
+        "accountType": "atlassian"
+       },
+       "created": 1790545828437,
+       "items": [
+        {
+         "field": "status",
+         "fieldtype": "jira",
+         "fieldId": "status",
+         "from": "10004",
+         "fromString": "To Do",
+         "to": "10005",
+         "toString": "In Progress"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/rest/api/3/issue/KAN-1/comment?startAt=0&maxResults=100&orderBy=created",
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=349;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "350",
+   "x-ratelimit-remaining": "349"
+  },
+  "response": {
+   "startAt": 0,
+   "maxResults": 100,
+   "total": 2,
+   "comments": [
+    {
+     "self": "https://example.atlassian.net/rest/api/3/issue/10010/comment/10000",
+     "id": "10000",
+     "author": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+      "accountId": "712020:00000000-0000-0000-0000-000000000001",
+      "emailAddress": "dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+      },
+      "displayName": "Farsight Test",
+      "active": true,
+      "timeZone": "America/New_York",
+      "accountType": "atlassian"
+     },
+     "body": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "First comment: totals must match "
+         },
+         {
+          "type": "text",
+          "text": "invoice.total",
+          "marks": [
+           {
+            "type": "code"
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "updateAuthor": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+      "accountId": "712020:00000000-0000-0000-0000-000000000001",
+      "emailAddress": "dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+      },
+      "displayName": "Farsight Test",
+      "active": true,
+      "timeZone": "America/New_York",
+      "accountType": "atlassian"
+     },
+     "created": "2026-09-30T18:32:38.228-0400",
+     "updated": "2026-09-30T18:32:38.228-0400",
+     "jsdPublic": true
+    },
+    {
+     "self": "https://example.atlassian.net/rest/api/3/issue/10010/comment/10001",
+     "id": "10001",
+     "author": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+      "accountId": "712020:00000000-0000-0000-0000-000000000001",
+      "emailAddress": "dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+      },
+      "displayName": "Farsight Test",
+      "active": true,
+      "timeZone": "America/New_York",
+      "accountType": "atlassian"
+     },
+     "body": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Second comment."
+         }
+        ]
+       }
+      ]
+     },
+     "updateAuthor": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+      "accountId": "712020:00000000-0000-0000-0000-000000000001",
+      "emailAddress": "dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+      },
+      "displayName": "Farsight Test",
+      "active": true,
+      "timeZone": "America/New_York",
+      "accountType": "atlassian"
+     },
+     "created": "2026-09-30T18:32:38.774-0400",
+     "updated": "2026-09-30T18:32:38.774-0400",
+     "jsdPublic": true
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/rest/api/3/issue/KAN-2/comment?startAt=0&maxResults=100&orderBy=created",
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=348;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "350",
+   "x-ratelimit-remaining": "348"
+  },
+  "response": {
+   "startAt": 0,
+   "maxResults": 100,
+   "total": 1,
+   "comments": [
+    {
+     "self": "https://example.atlassian.net/rest/api/3/issue/10011/comment/10002",
+     "id": "10002",
+     "author": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+      "accountId": "712020:00000000-0000-0000-0000-000000000001",
+      "emailAddress": "dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+      },
+      "displayName": "Farsight Test",
+      "active": true,
+      "timeZone": "America/New_York",
+      "accountType": "atlassian"
+     },
+     "body": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+       {
+        "type": "paragraph",
+        "content": [
+         {
+          "type": "text",
+          "text": "Recorded by "
+         },
+         {
+          "type": "text",
+          "text": "record-fixtures",
+          "marks": [
+           {
+            "type": "strong"
+           }
+          ]
+         },
+         {
+          "type": "text",
+          "text": ": see "
+         },
+         {
+          "type": "text",
+          "text": "finalizeInvoice",
+          "marks": [
+           {
+            "type": "code"
+           }
+          ]
+         },
+         {
+          "type": "text",
+          "text": "."
+         }
+        ]
+       }
+      ]
+     },
+     "updateAuthor": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+      "accountId": "712020:00000000-0000-0000-0000-000000000001",
+      "emailAddress": "dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+       "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+      },
+      "displayName": "Farsight Test",
+      "active": true,
+      "timeZone": "America/New_York",
+      "accountType": "atlassian"
+     },
+     "created": "2026-09-30T18:40:27.160-0400",
+     "updated": "2026-09-30T18:40:27.160-0400",
+     "jsdPublic": true
+    }
+   ]
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/rest/api/3/issue/KAN-3/comment?startAt=0&maxResults=100&orderBy=created",
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=347;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "350",
+   "x-ratelimit-remaining": "347"
+  },
+  "response": {
+   "startAt": 0,
+   "maxResults": 100,
+   "total": 0,
+   "comments": []
+  }
+ },
+ {
+  "method": "GET",
+  "path": "/rest/api/3/issue/KAN-4/comment?startAt=0&maxResults=100&orderBy=created",
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=346;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "350",
+   "x-ratelimit-remaining": "346"
+  },
+  "response": {
+   "startAt": 0,
+   "maxResults": 100,
+   "total": 0,
+   "comments": []
+  }
+ }
+]

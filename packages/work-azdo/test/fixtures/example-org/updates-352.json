@@ -1,0 +1,318 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/workItems/352/updates?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000037",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01279",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000015",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000037",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000037"
+ },
+ "body": {
+  "count": 4,
+  "value": [
+   {
+    "id": 1,
+    "workItemId": 352,
+    "rev": 1,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-08T00:00:08.12Z",
+    "fields": {
+     "System.Id": {
+      "newValue": 352
+     },
+     "System.AreaId": {
+      "newValue": 29
+     },
+     "System.NodeName": {
+      "newValue": "ExampleProject"
+     },
+     "System.AreaLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.Rev": {
+      "newValue": 1
+     },
+     "System.AuthorizedDate": {
+      "newValue": "2026-05-07T23:52:54.957Z"
+     },
+     "System.RevisedDate": {
+      "newValue": "2026-05-08T00:00:08.12Z"
+     },
+     "System.IterationId": {
+      "newValue": 29
+     },
+     "System.IterationLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.WorkItemType": {
+      "newValue": "Product Backlog Item"
+     },
+     "System.State": {
+      "newValue": "New"
+     },
+     "System.Reason": {
+      "newValue": "New backlog item"
+     },
+     "System.AssignedTo": {},
+     "System.CreatedDate": {
+      "newValue": "2026-05-07T23:52:54.957Z"
+     },
+     "System.CreatedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.ChangedDate": {
+      "newValue": "2026-05-07T23:52:54.957Z"
+     },
+     "System.ChangedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.AuthorizedAs": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.PersonId": {
+      "newValue": 296860500
+     },
+     "System.Watermark": {
+      "newValue": 994
+     },
+     "System.IsDeleted": {
+      "newValue": false
+     },
+     "System.CommentCount": {
+      "newValue": 0
+     },
+     "System.TeamProject": {
+      "newValue": "ExampleProject"
+     },
+     "System.AreaPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.IterationPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.Title": {
+      "newValue": "Landing page"
+     },
+     "System.BoardColumn": {
+      "newValue": "New"
+     },
+     "System.BoardColumnDone": {
+      "newValue": false
+     },
+     "Microsoft.VSTS.Common.StateChangeDate": {
+      "newValue": "2026-05-07T23:52:54.957Z"
+     },
+     "Microsoft.VSTS.Common.Priority": {
+      "newValue": 2
+     },
+     "Microsoft.VSTS.Common.ValueArea": {
+      "newValue": "Business"
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_System.ExtensionMarker": {
+      "newValue": true
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column": {
+      "newValue": "New"
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column.Done": {
+      "newValue": false
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352/updates/1"
+   },
+   {
+    "id": 2,
+    "workItemId": 352,
+    "rev": 2,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-08T00:00:50.49Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 1,
+      "newValue": 2
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:52:54.957Z",
+      "newValue": "2026-05-08T00:00:08.12Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-08T00:00:08.12Z",
+      "newValue": "2026-05-08T00:00:50.49Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:52:54.957Z",
+      "newValue": "2026-05-08T00:00:08.12Z"
+     },
+     "System.Watermark": {
+      "oldValue": 994,
+      "newValue": 995
+     },
+     "System.Description": {
+      "newValue": "<ul><li>Acme branded </li><ul><li>Note: the white labeled version will be for clients signing into their client portal </li> </ul><li>Claim Verification button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Invoice Submittal button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Include a link to Acme's website </li><li>Summary of what this page is for </li> </ul>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352/updates/2"
+   },
+   {
+    "id": 3,
+    "workItemId": 352,
+    "rev": 3,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-08T18:27:15.61Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 2,
+      "newValue": 3
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-08T00:00:08.12Z",
+      "newValue": "2026-05-08T00:00:50.49Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-08T00:00:50.49Z",
+      "newValue": "2026-05-08T18:27:15.61Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-08T00:00:08.12Z",
+      "newValue": "2026-05-08T00:00:50.49Z"
+     },
+     "System.Watermark": {
+      "oldValue": 995,
+      "newValue": 996
+     },
+     "System.Description": {
+      "oldValue": "<ul><li>Acme branded </li><ul><li>Note: the white labeled version will be for clients signing into their client portal </li> </ul><li>Claim Verification button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Invoice Submittal button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Include a link to Acme's website </li><li>Summary of what this page is for </li> </ul>",
+      "newValue": "<ul><li>Acme branded </li><ul><li>Note: the white labeled version will be for clients signing into their client portal </li> </ul><li>Claim Verification button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Invoice Submittal button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Include a link to Acme's website </li><li>Summary of what this page is for </li><li>Follow Acme's existing website's theme? </li><ul><li>Will this page be hosted on Acme's website? </li> </ul> </ul>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352/updates/3"
+   },
+   {
+    "id": 4,
+    "workItemId": 352,
+    "rev": 4,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "9999-01-01T00:00:00Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 3,
+      "newValue": 4
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-08T00:00:50.49Z",
+      "newValue": "2026-05-08T18:27:15.61Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-08T18:27:15.61Z",
+      "newValue": "9999-01-01T00:00:00Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-08T00:00:50.49Z",
+      "newValue": "2026-05-08T18:27:15.61Z"
+     },
+     "System.Watermark": {
+      "oldValue": 996,
+      "newValue": 997
+     },
+     "System.Description": {
+      "oldValue": "<ul><li>Acme branded </li><ul><li>Note: the white labeled version will be for clients signing into their client portal </li> </ul><li>Claim Verification button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Invoice Submittal button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Include a link to Acme's website </li><li>Summary of what this page is for </li><li>Follow Acme's existing website's theme? </li><ul><li>Will this page be hosted on Acme's website? </li> </ul> </ul>",
+      "newValue": "<ul><li>Acme branded </li><ul><li>Note: the white labeled version will be for clients signing into their client portal </li> </ul><li>Claim Verification button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Invoice Submittal button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Client log in </li><ul><li>Username </li><li>Password </li><li>Takes client to a white-labeled page that allows them to view </li><ul><li>Program financials </li><ul><li>Acme invoices submitted (date, amount, program) </li><li>Contractors paid (date, amount, program) </li><li>POs (date issued, amount, active/inactive) </li> </ul><li>File management </li><ul><li>Should resemble something like SharePoint </li><ul><li>Stores vendor contact forms, w9's, invoices </li> </ul> </ul> </ul> </ul><li>Summary of what this page is for </li><li>Follow Acme's existing website's theme? </li><ul><li>Will this page be hosted on Acme's website? </li> </ul> </ul>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352/updates/4"
+   }
+  ]
+ }
+}

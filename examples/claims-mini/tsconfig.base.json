@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@claims/domain": [
+        "packages/domain/src/index.ts"
+      ],
+      "@claims/db": [
+        "packages/db/src/index.ts"
+      ]
+    }
+  }
+}

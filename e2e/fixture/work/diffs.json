@@ -1,0 +1,113 @@
+{
+ "a1c9e02": {
+  "files": [
+   {
+    "path": "src/ui/CreateInvoiceForm.tsx",
+    "status": "modified",
+    "nodes": [
+     "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+     "invoice-app::src/ui/CreateInvoiceForm.tsx::submit"
+    ],
+    "patch": "@@ -13,9 +13,12 @@ export function CreateInvoiceForm({ onDone }: { onDone: () => void }) {\n   async function submit(form: FormData) {\n     const draft = {\n       customerId: String(form.get('customer')),\n-      lines: [{ description: String(form.get('desc')), amount: Number(form.get('amount')) }],\n+      lines: form.getAll('desc').map((d, i) => ({\n+        description: String(d),\n+        amount: Number(form.getAll('amount')[i]),\n+      })),\n     };\n     const parsed = draftInvoiceSchema.safeParse(draft);\n     if (!parsed.success) {\n"
+   },
+   {
+    "path": "src/server/invoiceService.ts",
+    "status": "modified",
+    "nodes": [
+     "invoice-app::src/server/invoiceService.ts::createInvoice"
+    ],
+    "patch": "@@ -24,6 +24,7 @@ export async function createInvoice(draft: DraftInvoice) {\n   const number = await nextInvoiceNumber();\n-  return db.invoices.insert({ ...draft, number, status: 'draft' });\n+  const total = draft.lines.reduce((s, l) => s + l.amount, 0);\n+  return db.invoices.insert({ ...draft, number, total, status: 'draft' });\n }\n"
+   }
+  ],
+  "sha": "a1c9e02",
+  "subject": "INV-2 draft form saves line items",
+  "at": "2026-09-08T16:40:00.000Z",
+  "author": "Ben Lindqvist"
+ },
+ "5d0b7f1": {
+  "files": [
+   {
+    "path": "src/api/client.ts",
+    "status": "modified",
+    "nodes": [
+     "invoice-app::src/api/client.ts::createInvoice"
+    ],
+    "patch": "@@ -18,4 +18,5 @@ export async function createInvoice(draft: DraftInvoice) {\n-  return post('/invoices', draft);\n+  const res = await post('/invoices', draft);\n+  return res.invoice;\n }\n"
+   }
+  ],
+  "sha": "5d0b7f1",
+  "subject": "Merge pull request #14 from INV-2-new-invoice",
+  "at": "2026-09-10T14:55:00.000Z",
+  "author": "Ben Lindqvist"
+ },
+ "9e41aa3": {
+  "files": [
+   {
+    "path": "src/server/invoiceService.ts",
+    "status": "modified",
+    "nodes": [
+     "invoice-app::src/server/invoiceService.ts::listInvoices"
+    ],
+    "patch": "@@ -6,3 +6,3 @@\n export async function listInvoices() {\n-  return db.invoices.findMany({ orderBy: 'created_at' });\n+  return db.invoices.findMany({ orderBy: 'created_at', direction: 'desc' });\n }\n"
+   }
+  ],
+  "sha": "9e41aa3",
+  "subject": "Sort the invoice list newest first",
+  "at": "2026-09-24T10:12:00.000Z",
+  "author": "Ben Lindqvist"
+ },
+ "c07d2b9": {
+  "files": [
+   {
+    "path": "src/server/approvals.ts",
+    "status": "modified",
+    "nodes": [
+     "invoice-app::route::POST /invoices/:id/approve"
+    ],
+    "patch": "@@ -40,6 +40,8 @@ export async function approveInvoice(req: Request) {\n+  // INV-5: only an approver may approve\n+  requireScope(req, 'invoices:approve');\n   const invoice = await db.invoices.findOne({ id: req.params.id });\n"
+   }
+  ],
+  "sha": "c07d2b9",
+  "subject": "INV-5 approval route behind requireScope",
+  "at": "2026-09-28T09:30:00.000Z",
+  "author": "Ada Okafor"
+ },
+ "e5f21c8": {
+  "files": [
+   {
+    "path": "src/server/taxEngine.ts",
+    "status": "modified",
+    "nodes": [
+     "invoice-app::src/server/taxEngine.ts::computeTax"
+    ],
+    "patch": "@@ -9,5 +9,6 @@ export async function computeTax(customerId: string, subtotal: number) {\n   const customer = await db.customers.findOne({ id: customerId });\n   const rate = RATES[customer?.country ?? 'US'] ?? 0;\n-  return Math.round(subtotal * rate * 100) / 100;\n+  // round each line, then add: the invoice total matches the lines\n+  return Math.round(subtotal * rate * 100 + Number.EPSILON) / 100;\n }\n"
+   },
+   {
+    "path": "test/taxEngine.test.ts",
+    "status": "added",
+    "nodes": [],
+    "patch": "@@ -0,0 +1,4 @@\n+import { computeTax } from '../src/server/taxEngine';\n+test('rounds half up per line', async () => {\n+  expect(await computeTax('c-1', 10.005)).toBe(2.0);\n+});\n"
+   }
+  ],
+  "sha": "e5f21c8",
+  "subject": "INV-6 round tax per line, not per invoice",
+  "at": "2026-09-17T13:02:00.000Z",
+  "author": "Ada Okafor"
+ },
+ "b88e1d4": {
+  "files": [
+   {
+    "path": "src/server/taxEngine.ts",
+    "status": "modified",
+    "nodes": [
+     "invoice-app::src/server/taxEngine.ts::taxRateFor"
+    ],
+    "patch": "@@ -40,3 +40,3 @@ export function taxRateFor(country: string) {\n-  return RATES[country] ?? 0;\n+  return Number((RATES[country] ?? 0).toFixed(2));\n }\n"
+   }
+  ],
+  "sha": "b88e1d4",
+  "subject": "INV-6 keep two decimals in taxRateFor",
+  "at": "2026-09-18T09:45:00.000Z",
+  "author": "Ada Okafor"
+ }
+}

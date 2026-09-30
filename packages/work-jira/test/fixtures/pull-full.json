@@ -1,0 +1,2532 @@
+[
+ {
+  "method": "POST",
+  "path": "/rest/api/3/search/jql",
+  "body": {
+   "jql": "project in (\"KAN\", \"SAM1\") ORDER BY updated ASC",
+   "fields": [
+    "summary",
+    "description",
+    "issuetype",
+    "status",
+    "statuscategorychangedate",
+    "priority",
+    "assignee",
+    "reporter",
+    "labels",
+    "components",
+    "parent",
+    "subtasks",
+    "issuelinks",
+    "created",
+    "updated",
+    "resolutiondate",
+    "project",
+    "customfield_10020",
+    "customfield_10016"
+   ],
+   "maxResults": 5
+  },
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=199;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "200",
+   "x-ratelimit-remaining": "199"
+  },
+  "response": {
+   "issues": [
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10000",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10000",
+     "key": "SAM1-1",
+     "fields": {
+      "summary": "Implement User Authentication",
+      "statuscategorychangedate": "2026-09-27T17:50:14.770-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+       "id": "10001",
+       "description": "Epics track collections of related bugs, stories, and tasks.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+       "name": "Epic",
+       "subtask": false,
+       "avatarId": 10307,
+       "entityId": "00000000-0000-4000-8000-000000000012",
+       "hierarchyLevel": 1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:13.914-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The "
+          },
+          {
+           "type": "text",
+           "text": "User Authentication",
+           "marks": [
+            {
+             "type": "strong"
+            }
+           ]
+          },
+          {
+           "type": "text",
+           "text": " feature is crucial for ensuring that users can securely access their accounts. This task involves:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Designing the login interface."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Implementing secure password storage."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Setting up two-factor authentication."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The goal is to provide a seamless experience while maintaining high security standards. Ensure that the authentication process is user-friendly and efficient."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:14.867-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10000",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10000",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10001",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10001",
+     "key": "SAM1-2",
+     "fields": {
+      "summary": "Implement Market Analysis Tools",
+      "statuscategorychangedate": "2026-09-27T17:50:15.950-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+       "id": "10001",
+       "description": "Epics track collections of related bugs, stories, and tasks.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+       "name": "Epic",
+       "subtask": false,
+       "avatarId": 10307,
+       "entityId": "00000000-0000-4000-8000-000000000012",
+       "hierarchyLevel": 1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:15.303-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The "
+          },
+          {
+           "type": "text",
+           "text": "Market Analysis Tools",
+           "marks": [
+            {
+             "type": "strong"
+            }
+           ]
+          },
+          {
+           "type": "text",
+           "text": " will provide users with insights into market trends. This task includes:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Developing charts for price tracking."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Implementing indicators for market analysis."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Ensuring real-time data updates."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "These tools will empower users to make informed investment decisions."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:15.950-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10002",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Review",
+       "id": "10002",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10002",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10002",
+     "key": "SAM1-3",
+     "fields": {
+      "summary": "Conduct User Testing for the Platform",
+      "statuscategorychangedate": "2026-09-27T17:50:16.905-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+       "id": "10001",
+       "description": "Epics track collections of related bugs, stories, and tasks.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+       "name": "Epic",
+       "subtask": false,
+       "avatarId": 10307,
+       "entityId": "00000000-0000-4000-8000-000000000012",
+       "hierarchyLevel": 1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:16.256-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "User testing is essential to ensure that the platform meets user needs. This task includes:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Recruiting test users."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Creating test scenarios."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Collecting feedback and making adjustments."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The goal is to identify any usability issues before the official launch."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:16.905-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10001",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Progress",
+       "id": "10001",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10003",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10003",
+     "key": "SAM1-4",
+     "fields": {
+      "summary": "Prepare for Project Launch",
+      "statuscategorychangedate": "2026-09-27T17:50:17.753-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+       "id": "10001",
+       "description": "Epics track collections of related bugs, stories, and tasks.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+       "name": "Epic",
+       "subtask": false,
+       "avatarId": 10307,
+       "entityId": "00000000-0000-4000-8000-000000000012",
+       "hierarchyLevel": 1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:17.267-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "Preparing for the project launch is critical to ensure a smooth rollout. This task involves:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Finalizing marketing materials."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Setting up support channels."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Coordinating with stakeholders."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The goal is to ensure that everything is in place for a successful launch."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:17.927-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10000",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10000",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10004",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10004",
+     "key": "SAM1-5",
+     "fields": {
+      "summary": "Post-Launch Review and Feedback Collection",
+      "statuscategorychangedate": "2026-09-27T17:50:18.858-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+       "id": "10001",
+       "description": "Epics track collections of related bugs, stories, and tasks.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+       "name": "Epic",
+       "subtask": false,
+       "avatarId": 10307,
+       "entityId": "00000000-0000-4000-8000-000000000012",
+       "hierarchyLevel": 1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:18.214-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "After the launch, it's essential to gather feedback from users. This task includes:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Analyzing user feedback."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Identifying areas for improvement."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Planning for future updates."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The goal is to ensure that the platform continues to meet user needs after launch."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:18.858-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10003",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "Done",
+       "id": "10003",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/3",
+        "id": 3,
+        "key": "done",
+        "colorName": "green",
+        "name": "Done"
+       }
+      }
+     }
+    }
+   ],
+   "nextPageToken": "EAUYwsbpo480Ii9wcm9qZWN0IGluICgiS0FOIiwgIlNBTTEiKSBPUkRFUiBCWSB1cGRhdGVkIEFTQyoCW10yIFRFTkFOVF9OT1RfRk9VTkRfSU5fVEVOQU5UX1NUT1JF",
+   "isLast": false
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/rest/api/3/search/jql",
+  "body": {
+   "jql": "project in (\"KAN\", \"SAM1\") ORDER BY updated ASC",
+   "fields": [
+    "summary",
+    "description",
+    "issuetype",
+    "status",
+    "statuscategorychangedate",
+    "priority",
+    "assignee",
+    "reporter",
+    "labels",
+    "components",
+    "parent",
+    "subtasks",
+    "issuelinks",
+    "created",
+    "updated",
+    "resolutiondate",
+    "project",
+    "customfield_10020",
+    "customfield_10016"
+   ],
+   "maxResults": 5,
+   "nextPageToken": "EAUYwsbpo480Ii9wcm9qZWN0IGluICgiS0FOIiwgIlNBTTEiKSBPUkRFUiBCWSB1cGRhdGVkIEFTQyoCW10yIFRFTkFOVF9OT1RfRk9VTkRfSU5fVEVOQU5UX1NUT1JF"
+  },
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=198;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "200",
+   "x-ratelimit-remaining": "198"
+  },
+  "response": {
+   "issues": [
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10005",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10005",
+     "key": "SAM1-6",
+     "fields": {
+      "summary": "Set Up Notifications for Users",
+      "statuscategorychangedate": "2026-09-27T17:50:19.667-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10003",
+       "id": "10003",
+       "description": "Tasks track small, distinct pieces of work.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+       "name": "Task",
+       "subtask": false,
+       "avatarId": 10318,
+       "entityId": "00000000-0000-4000-8000-000000000015",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10000",
+       "key": "SAM1-1",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10000",
+       "fields": {
+        "summary": "Implement User Authentication",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10000",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "To Do",
+         "id": "10000",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+          "id": 2,
+          "key": "new",
+          "colorName": "blue-gray",
+          "name": "To Do"
+         }
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+         "id": "10001",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000012",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:19.197-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "Setting up notifications is crucial for keeping users informed about their investments. This task involves:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Designing notification settings."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Implementing alerts for price changes."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Testing notification delivery methods."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "Notifications should be customizable to enhance user experience."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:20.314-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10000",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10000",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10006",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10006",
+     "key": "SAM1-7",
+     "fields": {
+      "summary": "Create Wallet Integration",
+      "statuscategorychangedate": "2026-09-27T17:50:21.536-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10003",
+       "id": "10003",
+       "description": "Tasks track small, distinct pieces of work.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+       "name": "Task",
+       "subtask": false,
+       "avatarId": 10318,
+       "entityId": "00000000-0000-4000-8000-000000000015",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10001",
+       "key": "SAM1-2",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10001",
+       "fields": {
+        "summary": "Implement Market Analysis Tools",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10002",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "In Review",
+         "id": "10002",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "yellow",
+          "name": "In Progress"
+         }
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+         "id": "10001",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000012",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:20.560-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "Integrating a cryptocurrency wallet is essential for users to manage their assets. This task includes:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Researching wallet APIs."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Implementing wallet connection features."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Testing wallet transactions."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The integration should support multiple cryptocurrencies and ensure that transactions are secure and efficient."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:21.536-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10001",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Progress",
+       "id": "10001",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10007",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10007",
+     "key": "SAM1-8",
+     "fields": {
+      "summary": "Develop Transaction History Feature",
+      "statuscategorychangedate": "2026-09-27T17:50:22.311-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10003",
+       "id": "10003",
+       "description": "Tasks track small, distinct pieces of work.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+       "name": "Task",
+       "subtask": false,
+       "avatarId": 10318,
+       "entityId": "00000000-0000-4000-8000-000000000015",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10001",
+       "key": "SAM1-2",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10001",
+       "fields": {
+        "summary": "Implement Market Analysis Tools",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10002",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "In Review",
+         "id": "10002",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "yellow",
+          "name": "In Progress"
+         }
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+         "id": "10001",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000012",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:21.856-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The "
+          },
+          {
+           "type": "text",
+           "text": "Transaction History",
+           "marks": [
+            {
+             "type": "strong"
+            }
+           ]
+          },
+          {
+           "type": "text",
+           "text": " feature allows users to view their past transactions. This task involves:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Designing the transaction history interface."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Implementing backend logic to retrieve transaction data."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Ensuring data accuracy and security."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "This feature is vital for users to track their investment performance over time."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:22.898-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10000",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10000",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10008",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10008",
+     "key": "SAM1-9",
+     "fields": {
+      "summary": "Optimize Performance of the Application",
+      "statuscategorychangedate": "2026-09-27T17:50:23.668-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10003",
+       "id": "10003",
+       "description": "Tasks track small, distinct pieces of work.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+       "name": "Task",
+       "subtask": false,
+       "avatarId": 10318,
+       "entityId": "00000000-0000-4000-8000-000000000015",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10001",
+       "key": "SAM1-2",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10001",
+       "fields": {
+        "summary": "Implement Market Analysis Tools",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10002",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "In Review",
+         "id": "10002",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "yellow",
+          "name": "In Progress"
+         }
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+         "id": "10001",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000012",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:23.177-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "Optimizing the performance of the application is crucial for user satisfaction. This task involves:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Analyzing current performance metrics."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Identifying bottlenecks in the code."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Implementing performance improvements."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The goal is to ensure that the application runs smoothly, even under heavy load."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:24.211-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10000",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10000",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10009",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10009",
+     "key": "SAM1-10",
+     "fields": {
+      "summary": "Finalize Documentation for the Project",
+      "statuscategorychangedate": "2026-09-27T17:50:25.516-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10003",
+       "id": "10003",
+       "description": "Tasks track small, distinct pieces of work.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+       "name": "Task",
+       "subtask": false,
+       "avatarId": 10318,
+       "entityId": "00000000-0000-4000-8000-000000000015",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10004",
+       "key": "SAM1-5",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10004",
+       "fields": {
+        "summary": "Post-Launch Review and Feedback Collection",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10003",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "Done",
+         "id": "10003",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/3",
+          "id": 3,
+          "key": "done",
+          "colorName": "green",
+          "name": "Done"
+         }
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10001",
+         "id": "10001",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000012",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:24.491-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "Documentation is essential for both users and developers. This task includes:"
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Writing user manuals."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Creating API documentation."
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "Compiling developer guides."
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "The goal is to ensure that all aspects of the project are well-documented for future reference."
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10000",
+       "id": "10000",
+       "key": "SAM1",
+       "name": "(Example) Billing System Dev",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10418?size=medium"
+       }
+      },
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:25.516-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10002",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Review",
+       "id": "10002",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    }
+   ],
+   "nextPageToken": "EAoYlcjpo480Ii9wcm9qZWN0IGluICgiS0FOIiwgIlNBTTEiKSBPUkRFUiBCWSB1cGRhdGVkIEFTQyoCW10yIFRFTkFOVF9OT1RfRk9VTkRfSU5fVEVOQU5UX1NUT1JF",
+   "isLast": false
+  }
+ },
+ {
+  "method": "POST",
+  "path": "/rest/api/3/search/jql",
+  "body": {
+   "jql": "project in (\"KAN\", \"SAM1\") ORDER BY updated ASC",
+   "fields": [
+    "summary",
+    "description",
+    "issuetype",
+    "status",
+    "statuscategorychangedate",
+    "priority",
+    "assignee",
+    "reporter",
+    "labels",
+    "components",
+    "parent",
+    "subtasks",
+    "issuelinks",
+    "created",
+    "updated",
+    "resolutiondate",
+    "project",
+    "customfield_10020",
+    "customfield_10016"
+   ],
+   "maxResults": 5,
+   "nextPageToken": "EAoYlcjpo480Ii9wcm9qZWN0IGluICgiS0FOIiwgIlNBTTEiKSBPUkRFUiBCWSB1cGRhdGVkIEFTQyoCW10yIFRFTkFOVF9OT1RfRk9VTkRfSU5fVEVOQU5UX1NUT1JF"
+  },
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=197;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "200",
+   "x-ratelimit-remaining": "197"
+  },
+  "response": {
+   "issues": [
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10012",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10012",
+     "key": "KAN-3",
+     "fields": {
+      "summary": "Subtask 2.1",
+      "statuscategorychangedate": "2026-09-27T17:50:29.153-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10007",
+       "id": "10007",
+       "description": "Subtasks track small pieces of work that are part of a larger task.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10316?size=medium",
+       "name": "Subtask",
+       "subtask": true,
+       "avatarId": 10316,
+       "entityId": "fce9339a-e270-4d12-bfd8-bf3397f8ce86",
+       "hierarchyLevel": -1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:28.735-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": []
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": null,
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [],
+      "customfield_10016": null,
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-27T17:50:29.243-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10004",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10004",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10013",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+     "key": "KAN-4",
+     "fields": {
+      "summary": "Invoice submission",
+      "statuscategorychangedate": "2026-09-30T18:32:26.653-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10006",
+       "id": "10006",
+       "description": "Epics track collections of related bugs, stories, and tasks.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+       "name": "Epic",
+       "subtask": false,
+       "avatarId": 10307,
+       "entityId": "00000000-0000-4000-8000-000000000011",
+       "hierarchyLevel": 1
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-30T18:32:26.241-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": [
+        {
+         "type": "heading",
+         "attrs": {
+          "level": 2
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "Invoice submission"
+          }
+         ]
+        },
+        {
+         "type": "paragraph",
+         "content": [
+          {
+           "type": "text",
+           "text": "A contractor submits an invoice from the "
+          },
+          {
+           "type": "text",
+           "text": "portal",
+           "marks": [
+            {
+             "type": "strong"
+            }
+           ]
+          },
+          {
+           "type": "text",
+           "text": "; see "
+          },
+          {
+           "type": "text",
+           "text": "the spec",
+           "marks": [
+            {
+             "type": "link",
+             "attrs": {
+              "href": "https://example.com/spec"
+             }
+            }
+           ]
+          },
+          {
+           "type": "text",
+           "text": ". Owner: "
+          },
+          {
+           "type": "mention",
+           "attrs": {
+            "id": "712020:00000000-0000-0000-0000-000000000001",
+            "text": "@Farsight Test",
+            "accessLevel": ""
+           }
+          },
+          {
+           "type": "text",
+           "text": "."
+          }
+         ]
+        },
+        {
+         "type": "bulletList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "validate totals"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "call "
+              },
+              {
+               "type": "text",
+               "text": "finalizeInvoice",
+               "marks": [
+                {
+                 "type": "code"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "orderedList",
+         "content": [
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "draft"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "listItem",
+           "content": [
+            {
+             "type": "paragraph",
+             "content": [
+              {
+               "type": "text",
+               "text": "submit"
+              },
+              {
+               "type": "hardBreak"
+              },
+              {
+               "type": "text",
+               "text": "then approve"
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "type": "codeBlock",
+         "attrs": {
+          "language": "ts"
+         },
+         "content": [
+          {
+           "type": "text",
+           "text": "await finalizeInvoice(id);"
+          }
+         ]
+        },
+        {
+         "type": "table",
+         "content": [
+          {
+           "type": "tableRow",
+           "content": [
+            {
+             "type": "tableHeader",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "step"
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "tableHeader",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "owner"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "type": "tableRow",
+           "content": [
+            {
+             "type": "tableCell",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "submit"
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "type": "tableCell",
+             "attrs": {},
+             "content": [
+              {
+               "type": "paragraph",
+               "content": [
+                {
+                 "type": "text",
+                 "text": "contractor"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": null,
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": {
+       "self": "https://example.atlassian.net/rest/api/3/priority/3",
+       "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium_new.svg",
+       "name": "Medium",
+       "id": "3"
+      },
+      "labels": [],
+      "customfield_10016": null,
+      "resolutiondate": null,
+      "issuelinks": [],
+      "assignee": null,
+      "updated": "2026-09-30T18:32:26.358-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10004",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "To Do",
+       "id": "10004",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+        "id": 2,
+        "key": "new",
+        "colorName": "blue-gray",
+        "name": "To Do"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10010",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10010",
+     "key": "KAN-1",
+     "fields": {
+      "summary": "Task 1",
+      "statuscategorychangedate": "2026-09-30T18:32:46.656-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10008",
+       "id": "10008",
+       "description": "Tasks track small, distinct pieces of work.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+       "name": "Task",
+       "subtask": false,
+       "avatarId": 10318,
+       "entityId": "00000000-0000-4000-8000-000000000013",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10013",
+       "key": "KAN-4",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+       "fields": {
+        "summary": "Invoice submission",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10004",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "To Do",
+         "id": "10004",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+          "id": 2,
+          "key": "new",
+          "colorName": "blue-gray",
+          "name": "To Do"
+         }
+        },
+        "priority": {
+         "self": "https://example.atlassian.net/rest/api/3/priority/3",
+         "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium_new.svg",
+         "name": "Medium",
+         "id": "3"
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10006",
+         "id": "10006",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000011",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [
+       {
+        "self": "https://example.atlassian.net/rest/api/3/component/10000",
+        "id": "10000",
+        "name": "Portal",
+        "description": "The contractor portal"
+       }
+      ],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:27.044-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": []
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": [
+       {
+        "id": 1,
+        "name": "KAN Sprint 1",
+        "state": "future",
+        "boardId": 2
+       }
+      ],
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [
+       "invoices",
+       "portal"
+      ],
+      "customfield_10016": 3,
+      "resolutiondate": null,
+      "issuelinks": [
+       {
+        "id": "10000",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/10000",
+        "type": {
+         "id": "10000",
+         "name": "Blocks",
+         "inward": "is blocked by",
+         "outward": "blocks",
+         "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10000"
+        },
+        "outwardIssue": {
+         "id": "10011",
+         "key": "KAN-2",
+         "self": "https://example.atlassian.net/rest/api/3/issue/10011",
+         "fields": {
+          "summary": "Task 2",
+          "status": {
+           "self": "https://example.atlassian.net/rest/api/3/status/10005",
+           "description": "",
+           "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+           "name": "In Progress",
+           "id": "10005",
+           "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+           }
+          },
+          "issuetype": {
+           "self": "https://example.atlassian.net/rest/api/3/issuetype/10009",
+           "id": "10009",
+           "description": "Stories track functionality or features expressed as user goals.",
+           "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10315?size=medium",
+           "name": "Story",
+           "subtask": false,
+           "avatarId": 10315,
+           "entityId": "00000000-0000-4000-8000-000000000014",
+           "hierarchyLevel": 0
+          }
+         }
+        }
+       }
+      ],
+      "assignee": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "updated": "2026-09-30T18:32:46.656-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10005",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Progress",
+       "id": "10005",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    },
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10011",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10011",
+     "key": "KAN-2",
+     "fields": {
+      "summary": "Task 2",
+      "statuscategorychangedate": "2026-09-27T17:50:28.438-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10009",
+       "id": "10009",
+       "description": "Stories track functionality or features expressed as user goals.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10315?size=medium",
+       "name": "Story",
+       "subtask": false,
+       "avatarId": 10315,
+       "entityId": "00000000-0000-4000-8000-000000000014",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10013",
+       "key": "KAN-4",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+       "fields": {
+        "summary": "Invoice submission",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10004",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "To Do",
+         "id": "10004",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+          "id": 2,
+          "key": "new",
+          "colorName": "blue-gray",
+          "name": "To Do"
+         }
+        },
+        "priority": {
+         "self": "https://example.atlassian.net/rest/api/3/priority/3",
+         "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium_new.svg",
+         "name": "Medium",
+         "id": "3"
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10006",
+         "id": "10006",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000011",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:27.869-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": []
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": null,
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [
+       "invoices",
+       "recorded"
+      ],
+      "customfield_10016": 5,
+      "resolutiondate": null,
+      "issuelinks": [
+       {
+        "id": "10000",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/10000",
+        "type": {
+         "id": "10000",
+         "name": "Blocks",
+         "inward": "is blocked by",
+         "outward": "blocks",
+         "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10000"
+        },
+        "inwardIssue": {
+         "id": "10010",
+         "key": "KAN-1",
+         "self": "https://example.atlassian.net/rest/api/3/issue/10010",
+         "fields": {
+          "summary": "Task 1",
+          "status": {
+           "self": "https://example.atlassian.net/rest/api/3/status/10005",
+           "description": "",
+           "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+           "name": "In Progress",
+           "id": "10005",
+           "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+           }
+          },
+          "issuetype": {
+           "self": "https://example.atlassian.net/rest/api/3/issuetype/10008",
+           "id": "10008",
+           "description": "Tasks track small, distinct pieces of work.",
+           "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+           "name": "Task",
+           "subtask": false,
+           "avatarId": 10318,
+           "entityId": "00000000-0000-4000-8000-000000000013",
+           "hierarchyLevel": 0
+          }
+         }
+        }
+       }
+      ],
+      "assignee": null,
+      "updated": "2026-09-30T18:40:27.978-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10005",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Progress",
+       "id": "10005",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    }
+   ],
+   "isLast": true
+  }
+ }
+]

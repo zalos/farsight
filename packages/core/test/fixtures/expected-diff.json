@@ -1,0 +1,161 @@
+{
+ "schema": "farsight-diff v1",
+ "base": "sync:39 \u00b7 76f7674",
+ "head": "sync:41 \u00b7 4677268",
+ "truncated": false,
+ "counts": {
+  "route_added": 1,
+  "route_removed": 0,
+  "guard_added": 0,
+  "guard_removed": 1,
+  "journey_changed": 1,
+  "record_added": 0,
+  "record_removed": 0,
+  "record_columns_changed": 1,
+  "message_added": 1,
+  "message_removed": 0,
+  "rule_added": 0,
+  "rule_removed": 1,
+  "edge_confidence_changed": 1,
+  "node_renamed": 1,
+  "test_added": 0,
+  "test_removed": 0,
+  "coverage_lost": 0,
+  "uncovered_change": 0
+ },
+ "changes": [
+  {
+   "id": "c1",
+   "kind": "route_added",
+   "severity": "notable",
+   "confidence": "resolved",
+   "subject": {
+    "id": "invoice-app::route::DELETE /invoices/:id",
+    "kind": "route",
+    "name": "DELETE /invoices/:id"
+   },
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 61
+   },
+   "permalink": "/compare/39...41#c1"
+  },
+  {
+   "id": "c2",
+   "kind": "guard_removed",
+   "severity": "breaking",
+   "confidence": "resolved",
+   "subject": {
+    "id": "invoice-app::route::POST /invoices/:id/finalize",
+    "kind": "route",
+    "name": "POST /invoices/:id/finalize"
+   },
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 26
+   },
+   "permalink": "/compare/39...41#c2"
+  },
+  {
+   "id": "c3",
+   "kind": "journey_changed",
+   "severity": "notable",
+   "confidence": "resolved",
+   "subject": {
+    "id": "invoice-app::route::POST /invoices/:id/finalize",
+    "kind": "route",
+    "name": "POST /invoices/:id/finalize"
+   },
+   "journey": {
+    "id": "invoice-app::route::POST /invoices/:id/finalize",
+    "name": "POST /invoices/:id/finalize"
+   },
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 26
+   },
+   "permalink": "/compare/39...41#c3"
+  },
+  {
+   "id": "c4",
+   "kind": "record_columns_changed",
+   "severity": "notable",
+   "confidence": "resolved",
+   "subject": {
+    "id": "invoice-app::table::customers",
+    "kind": "table",
+    "name": "customers"
+   },
+   "permalink": "/compare/39...41#c4"
+  },
+  {
+   "id": "c5",
+   "kind": "message_added",
+   "severity": "info",
+   "confidence": "resolved",
+   "subject": {
+    "id": "invoice-app::queue::invoice.reminder",
+    "kind": "queue",
+    "name": "invoice.reminder"
+   },
+   "permalink": "/compare/39...41#c5"
+  },
+  {
+   "id": "c6",
+   "kind": "rule_removed",
+   "severity": "notable",
+   "confidence": "resolved",
+   "subject": {
+    "id": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+    "kind": "rule",
+    "name": "updateInvoiceSchema"
+   },
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/schemas.ts",
+    "line": 17,
+    "endLine": 20
+   },
+   "permalink": "/compare/39...41#c6"
+  },
+  {
+   "id": "c7",
+   "kind": "edge_confidence_changed",
+   "severity": "info",
+   "confidence": "MEDIUM",
+   "technique": "name-match",
+   "subject": {
+    "id": "invoice-app::route::GET /invoices",
+    "kind": "route",
+    "name": "GET /invoices"
+   },
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 8
+   },
+   "permalink": "/compare/39...41#c7"
+  },
+  {
+   "id": "c8",
+   "kind": "node_renamed",
+   "severity": "info",
+   "confidence": "resolved",
+   "subject": {
+    "id": "invoice-app::src/ui/CreateInvoiceForm.tsx::submitDraft",
+    "kind": "function",
+    "name": "submitDraft"
+   },
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/CreateInvoiceForm.tsx",
+    "line": 13,
+    "endLine": 25
+   },
+   "permalink": "/compare/39...41#c8"
+  }
+ ]
+}

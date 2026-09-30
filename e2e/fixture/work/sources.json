@@ -1,0 +1,78 @@
+[
+ {
+  "id": "invoice-jira",
+  "provider": "jira",
+  "mode": "edit",
+  "site": "https://invoice-app.atlassian.net",
+  "scope": {
+   "projects": [
+    "INV"
+   ]
+  },
+  "capabilities": {
+   "comments": {
+    "read": true,
+    "write": true,
+    "format": "adf"
+   },
+   "transitions": "per-item",
+   "concurrency": "compare-updated",
+   "permissionsProbe": "per-item",
+   "deletesVisible": false,
+   "push": "none",
+   "dryRun": false,
+   "actions": [
+    "comment",
+    "edit",
+    "assign",
+    "transition",
+    "link",
+    "label"
+   ]
+  },
+  "freshness": {
+   "state": "synced",
+   "since": "2026-09-30T09:57:00.000Z",
+   "ago": 180,
+   "syncNo": 14
+  },
+  "user": {
+   "id": "5b10a2844c20165700ede21g",
+   "name": "Ada Okafor"
+  }
+ },
+ {
+  "id": "invoice-azdo",
+  "provider": "azure-devops",
+  "mode": "read-only",
+  "org": "https://dev.azure.com/invoice-app",
+  "scope": {
+   "projects": [
+    "Invoicing"
+   ],
+   "areas": [
+    "Invoicing\\Integrations",
+    "Invoicing\\Portal"
+   ]
+  },
+  "capabilities": {
+   "comments": {
+    "read": true,
+    "write": false,
+    "format": "markdown"
+   },
+   "transitions": "graph",
+   "concurrency": "revision",
+   "permissionsProbe": "per-area",
+   "deletesVisible": true,
+   "push": "none",
+   "dryRun": true
+  },
+  "freshness": {
+   "state": "unreachable",
+   "since": "2026-09-30T09:14:00.000Z",
+   "ago": 2760,
+   "error": "ECONNREFUSED dev.azure.com"
+  }
+ }
+]

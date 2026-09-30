@@ -1,0 +1,31 @@
+{
+ "status": 412,
+ "method": "PATCH",
+ "path": "/ExampleProject/_apis/wit/workitems/352?validateOnly=true&api-version=7.1",
+ "requestBody": [
+  {
+   "op": "test",
+   "path": "/rev",
+   "value": 3
+  },
+  {
+   "op": "replace",
+   "path": "/fields/System.Title",
+   "value": "Landing page"
+  }
+ ],
+ "headers": {
+  "content-type": "application/json; charset=utf-8",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01365"
+ },
+ "body": {
+  "$id": "1",
+  "innerException": null,
+  "message": "VS403351: Test Operation for path /rev failed, value 4 was not equal to test value 3.",
+  "typeName": "Microsoft.VisualStudio.Services.WebApi.Patch.TestPatchOperationFailedException, Microsoft.VisualStudio.Services.WebApi",
+  "typeKey": "TestPatchOperationFailedException",
+  "errorCode": 0,
+  "eventId": 3000
+ }
+}

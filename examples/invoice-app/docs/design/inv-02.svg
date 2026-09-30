@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" font-family="Helvetica, Arial, sans-serif">
+  <rect width="640" height="400" fill="#f6f8fb"/>
+  <rect x="0" y="0" width="640" height="48" fill="#ffffff" stroke="#e2e8f0"/>
+  <text x="24" y="30" font-size="16" fill="#0b1220" font-weight="700">New invoice</text>
+  <g font-size="12" fill="#475569">
+    <text x="24" y="84">Customer</text><rect x="24" y="92" width="280" height="32" rx="6" fill="#fff" stroke="#e2e8f0"/><text x="36" y="113" fill="#94a3b8">Search customers…</text>
+    <text x="24" y="156">Line items</text>
+    <rect x="24" y="164" width="592" height="32" fill="#fff" stroke="#e2e8f0"/><text x="36" y="185">Site survey · 1 × $1,200.00</text>
+    <rect x="24" y="200" width="592" height="32" fill="#fff" stroke="#e2e8f0"/><text x="36" y="221">Panel replacement · 2 × $4,350.00</text>
+    <rect x="24" y="240" width="120" height="26" rx="6" fill="#fff" stroke="#2563eb"/><text x="40" y="257" fill="#2563eb">+ Add line</text>
+    <rect x="504" y="330" width="112" height="32" rx="6" fill="#2563eb"/><text x="536" y="351" fill="#fff">Save draft</text>
+  </g>
+  <text x="24" y="380" font-size="10" fill="#94a3b8">INV-02 · New invoice · wireframe</text>
+</svg>

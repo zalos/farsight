@@ -1,0 +1,460 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/fields?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000027",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.04867",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000015",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000027",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000027"
+ },
+ "body": {
+  "count": 88,
+  "value": [
+   {
+    "referenceName": "Microsoft.VSTS.Common.AcceptanceCriteria",
+    "name": "Acceptance Criteria",
+    "type": "html"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.AcceptedBy",
+    "name": "Accepted By",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.AcceptedDate",
+    "name": "Accepted Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ActivatedBy",
+    "name": "Activated By",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ActivatedDate",
+    "name": "Activated Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.Activity",
+    "name": "Activity",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Feedback.ApplicationLaunchInstructions",
+    "name": "Application Launch Instructions",
+    "type": "html"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Feedback.ApplicationStartInformation",
+    "name": "Application Start Information",
+    "type": "plainText"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Feedback.ApplicationType",
+    "name": "Application Type",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.AreaId",
+    "name": "Area ID",
+    "type": "integer"
+   },
+   {
+    "referenceName": "System.AreaPath",
+    "name": "Area Path",
+    "type": "treePath"
+   },
+   {
+    "referenceName": "System.AssignedTo",
+    "name": "Assigned To",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.Context",
+    "name": "Associated Context",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.ContextCode",
+    "name": "Associated Context Code",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.ContextOwner",
+    "name": "Associated Context Owner",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.ContextType",
+    "name": "Associated Context Type",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.AttachedFileCount",
+    "name": "Attached File Count",
+    "type": "integer"
+   },
+   {
+    "referenceName": "System.AuthorizedAs",
+    "name": "Authorized As",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.AuthorizedDate",
+    "name": "Authorized Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.AutomatedTestId",
+    "name": "Automated Test Id",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.AutomatedTestName",
+    "name": "Automated Test Name",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.AutomatedTestStorage",
+    "name": "Automated Test Storage",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.AutomatedTestType",
+    "name": "Automated Test Type",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.AutomationStatus",
+    "name": "Automation status",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.BacklogPriority",
+    "name": "Backlog Priority",
+    "type": "double"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CMMI.Blocked",
+    "name": "Blocked",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.BoardColumn",
+    "name": "Board Column",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.BoardColumnDone",
+    "name": "Board Column Done",
+    "type": "boolean"
+   },
+   {
+    "referenceName": "System.BoardLane",
+    "name": "Board Lane",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.BusinessValue",
+    "name": "Business Value",
+    "type": "integer"
+   },
+   {
+    "referenceName": "System.ChangedBy",
+    "name": "Changed By",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.ChangedDate",
+    "name": "Changed Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ClosedBy",
+    "name": "Closed By",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ClosedDate",
+    "name": "Closed Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.ClosedStatus",
+    "name": "Closed Status",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.ClosedStatusCode",
+    "name": "Closed Status Code",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.CodeReview.ClosingComment",
+    "name": "Closing Comment",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.CommentCount",
+    "name": "Comment Count",
+    "type": "integer"
+   },
+   {
+    "referenceName": "System.CreatedBy",
+    "name": "Created By",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.CreatedDate",
+    "name": "Created Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "System.Description",
+    "name": "Description",
+    "type": "html"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Scheduling.Effort",
+    "name": "Effort",
+    "type": "double"
+   },
+   {
+    "referenceName": "System.ExternalLinkCount",
+    "name": "External Link Count",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Scheduling.FinishDate",
+    "name": "Finish Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Build.FoundIn",
+    "name": "Found In",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.History",
+    "name": "History",
+    "type": "history"
+   },
+   {
+    "referenceName": "System.HyperLinkCount",
+    "name": "Hyperlink Count",
+    "type": "integer"
+   },
+   {
+    "referenceName": "System.Id",
+    "name": "ID",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Build.IntegrationBuild",
+    "name": "Integration Build",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.Issue",
+    "name": "Issue",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.IterationId",
+    "name": "Iteration ID",
+    "type": "integer"
+   },
+   {
+    "referenceName": "System.IterationPath",
+    "name": "Iteration Path",
+    "type": "treePath"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.LocalDataSource",
+    "name": "Local Data Source",
+    "type": "html"
+   },
+   {
+    "referenceName": "System.NodeName",
+    "name": "Node Name",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.Parameters",
+    "name": "Parameters",
+    "type": "html"
+   },
+   {
+    "referenceName": "System.Parent",
+    "name": "Parent",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.Priority",
+    "name": "Priority",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.QueryText",
+    "name": "Query Text",
+    "type": "plainText"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.Rating",
+    "name": "Rating",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.Reason",
+    "name": "Reason",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.RelatedLinkCount",
+    "name": "Related Link Count",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Scheduling.RemainingWork",
+    "name": "Remaining Work",
+    "type": "double"
+   },
+   {
+    "referenceName": "System.RemoteLinkCount",
+    "name": "Remote Link Count",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.ReproSteps",
+    "name": "Repro Steps",
+    "type": "html"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.Resolution",
+    "name": "Resolution",
+    "type": "html"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ResolvedBy",
+    "name": "Resolved By",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ResolvedDate",
+    "name": "Resolved Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "System.Rev",
+    "name": "Rev",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ReviewedBy",
+    "name": "Reviewed By",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.RevisedDate",
+    "name": "Revised Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.Severity",
+    "name": "Severity",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Scheduling.StartDate",
+    "name": "Start Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "System.State",
+    "name": "State",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.StateChangeDate",
+    "name": "State Change Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.StateCode",
+    "name": "State Code",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.Steps",
+    "name": "Steps",
+    "type": "html"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.SystemInfo",
+    "name": "System Info",
+    "type": "html"
+   },
+   {
+    "referenceName": "System.Tags",
+    "name": "Tags",
+    "type": "plainText"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Scheduling.TargetDate",
+    "name": "Target Date",
+    "type": "dateTime"
+   },
+   {
+    "referenceName": "System.TeamProject",
+    "name": "Team Project",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.TestSuiteAudit",
+    "name": "Test Suite Audit",
+    "type": "plainText"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.TestSuiteType",
+    "name": "Test Suite Type",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.TCM.TestSuiteTypeId",
+    "name": "Test Suite Type Id",
+    "type": "integer"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.TimeCriticality",
+    "name": "Time Criticality",
+    "type": "double"
+   },
+   {
+    "referenceName": "System.Title",
+    "name": "Title",
+    "type": "string"
+   },
+   {
+    "referenceName": "Microsoft.VSTS.Common.ValueArea",
+    "name": "Value Area",
+    "type": "string"
+   },
+   {
+    "referenceName": "System.Watermark",
+    "name": "Watermark",
+    "type": "integer"
+   },
+   {
+    "referenceName": "System.WorkItemType",
+    "name": "Work Item Type",
+    "type": "string"
+   }
+  ]
+ },
+ "note": "trimmed to referenceName/name/type"
+}

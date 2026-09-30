@@ -1,0 +1,13 @@
+{
+  "credential": {
+    "read": true,
+    "write": true,
+    "detail": "api token with write:jira-work"
+  },
+  "default": "allow",
+  "deny": {
+    "INV-8": {
+      "transition": "the workflow has no transition out of Done for this user"
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+ "status": 200,
+ "method": "POST",
+ "path": "/_apis/security/permissionevaluationbatch?api-version=7.1",
+ "requestBody": {
+  "alwaysAllowAdministrators": false,
+  "evaluations": [
+   {
+    "securityNamespaceId": "83e28ad4-2d72-4ceb-97b0-c7726d5502c3",
+    "token": "vstfs:///Classification/Node/00000000-0000-4000-8000-000000000016",
+    "permissions": 16
+   },
+   {
+    "securityNamespaceId": "83e28ad4-2d72-4ceb-97b0-c7726d5502c3",
+    "token": "vstfs:///Classification/Node/00000000-0000-4000-8000-000000000016",
+    "permissions": 32
+   },
+   {
+    "securityNamespaceId": "83e28ad4-2d72-4ceb-97b0-c7726d5502c3",
+    "token": "vstfs:///Classification/Node/00000000-0000-4000-8000-000000000016",
+    "permissions": 512
+   }
+  ]
+ },
+ "headers": {
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01019"
+ },
+ "body": {
+  "evaluations": [
+   {
+    "securityNamespaceId": "83e28ad4-2d72-4ceb-97b0-c7726d5502c3",
+    "token": "vstfs:///Classification/Node/00000000-0000-4000-8000-000000000016",
+    "permissions": 16,
+    "value": true
+   },
+   {
+    "securityNamespaceId": "83e28ad4-2d72-4ceb-97b0-c7726d5502c3",
+    "token": "vstfs:///Classification/Node/00000000-0000-4000-8000-000000000016",
+    "permissions": 32,
+    "value": true
+   },
+   {
+    "securityNamespaceId": "83e28ad4-2d72-4ceb-97b0-c7726d5502c3",
+    "token": "vstfs:///Classification/Node/00000000-0000-4000-8000-000000000016",
+    "permissions": 512,
+    "value": false
+   }
+  ]
+ }
+}

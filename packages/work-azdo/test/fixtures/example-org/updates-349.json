@@ -1,0 +1,226 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/workItems/349/updates?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000034",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01438",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000020",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000034",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000034"
+ },
+ "body": {
+  "count": 3,
+  "value": [
+   {
+    "id": 1,
+    "workItemId": 349,
+    "rev": 1,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "9999-01-01T00:00:00Z",
+    "fields": {
+     "System.Id": {
+      "newValue": 349
+     },
+     "System.AreaId": {
+      "newValue": 29
+     },
+     "System.AreaPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.TeamProject": {
+      "newValue": "ExampleProject"
+     },
+     "System.NodeName": {
+      "newValue": "ExampleProject"
+     },
+     "System.AreaLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.Rev": {
+      "newValue": 1
+     },
+     "System.AuthorizedDate": {
+      "newValue": "2026-05-07T23:24:20.373Z"
+     },
+     "System.RevisedDate": {
+      "newValue": "9999-01-01T00:00:00Z"
+     },
+     "System.IterationId": {
+      "newValue": 29
+     },
+     "System.IterationPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.IterationLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.WorkItemType": {
+      "newValue": "Epic"
+     },
+     "System.State": {
+      "newValue": "To Do"
+     },
+     "System.Reason": {
+      "newValue": "Added to backlog"
+     },
+     "System.AssignedTo": {},
+     "System.CreatedDate": {
+      "newValue": "2026-05-07T23:24:20.373Z"
+     },
+     "System.CreatedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.ChangedDate": {
+      "newValue": "2026-05-07T23:24:20.373Z"
+     },
+     "System.ChangedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.AuthorizedAs": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.PersonId": {
+      "newValue": 296860500
+     },
+     "System.Watermark": {
+      "newValue": 981
+     },
+     "System.IsDeleted": {
+      "newValue": false
+     },
+     "System.CommentCount": {
+      "newValue": 0
+     },
+     "System.Title": {
+      "newValue": "Mobile app"
+     },
+     "Microsoft.VSTS.Common.StateChangeDate": {
+      "newValue": "2026-05-07T23:24:20.373Z"
+     },
+     "Microsoft.VSTS.Common.Priority": {
+      "newValue": 2
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/349/updates/1"
+   },
+   {
+    "id": 2,
+    "workItemId": 349,
+    "rev": 1,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:38:16.333Z",
+    "relations": {
+     "added": [
+      {
+       "rel": "System.LinkTypes.Hierarchy-Forward",
+       "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350",
+       "attributes": {
+        "isLocked": false,
+        "name": "Child"
+       }
+      }
+     ]
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/349/updates/2"
+   },
+   {
+    "id": 3,
+    "workItemId": 349,
+    "rev": 1,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:39:06.697Z",
+    "relations": {
+     "removed": [
+      {
+       "rel": "System.LinkTypes.Hierarchy-Forward",
+       "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350",
+       "attributes": {
+        "isLocked": false,
+        "name": "Child"
+       }
+      }
+     ]
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/349/updates/3"
+   }
+  ]
+ }
+}

@@ -1,0 +1,59 @@
+[
+ {
+  "id": "int-0007",
+  "item": "work::invoice-jira::INV-6",
+  "key": "INV-6",
+  "action": "comment",
+  "payload": {
+   "body": "the rounding fix is in computeTax"
+  },
+  "requestedBy": {
+   "kind": "agent",
+   "id": "mcp-7f3a",
+   "tool": "work_comment"
+  },
+  "status": "pending",
+  "verdicts": {
+   "policy": {
+    "allowed": true,
+    "reason": "comments are granted to agents, with a person confirming"
+   },
+   "tracker": {
+    "allowed": true,
+    "reason": "the item is open to this user"
+   },
+   "credential": {
+    "allowed": true,
+    "reason": "the API token can write work items"
+   }
+  }
+ },
+ {
+  "id": "int-0006",
+  "item": "work::invoice-jira::INV-3",
+  "key": "INV-3",
+  "action": "edit",
+  "payload": {
+   "title": "List invoices, newest first"
+  },
+  "requestedBy": {
+   "kind": "human",
+   "id": "5b10a2844c20165700ede21g"
+  },
+  "status": "conflict",
+  "verdicts": {
+   "policy": {
+    "allowed": true,
+    "reason": "title edits are granted to people"
+   },
+   "tracker": {
+    "allowed": true,
+    "reason": "the item is open to this user"
+   },
+   "credential": {
+    "allowed": true,
+    "reason": "the API token can write work items"
+   }
+  }
+ }
+]

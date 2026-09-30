@@ -1,0 +1,626 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/wit/workItems/350/updates?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000035",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.01529",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000015",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000035",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000035"
+ },
+ "body": {
+  "count": 11,
+  "value": [
+   {
+    "id": 1,
+    "workItemId": 350,
+    "rev": 1,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:35:27.997Z",
+    "fields": {
+     "System.Id": {
+      "newValue": 350
+     },
+     "System.AreaId": {
+      "newValue": 29
+     },
+     "System.NodeName": {
+      "newValue": "ExampleProject"
+     },
+     "System.AreaLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.Rev": {
+      "newValue": 1
+     },
+     "System.AuthorizedDate": {
+      "newValue": "2026-05-07T23:34:21.427Z"
+     },
+     "System.RevisedDate": {
+      "newValue": "2026-05-07T23:35:27.997Z"
+     },
+     "System.IterationId": {
+      "newValue": 29
+     },
+     "System.IterationLevel1": {
+      "newValue": "ExampleProject"
+     },
+     "System.WorkItemType": {
+      "newValue": "Product Backlog Item"
+     },
+     "System.State": {
+      "newValue": "New"
+     },
+     "System.Reason": {
+      "newValue": "New backlog item"
+     },
+     "System.AssignedTo": {},
+     "System.CreatedDate": {
+      "newValue": "2026-05-07T23:34:21.427Z"
+     },
+     "System.CreatedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.ChangedDate": {
+      "newValue": "2026-05-07T23:34:21.427Z"
+     },
+     "System.ChangedBy": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.AuthorizedAs": {
+      "newValue": {
+       "displayName": "Pat Reviewer",
+       "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+       "_links": {
+        "avatar": {
+         "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+        }
+       },
+       "id": "00000000-0000-4000-8000-000000000001",
+       "uniqueName": "pat.reviewer@example.com",
+       "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+       "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "System.PersonId": {
+      "newValue": 296860500
+     },
+     "System.Watermark": {
+      "newValue": 982
+     },
+     "System.IsDeleted": {
+      "newValue": false
+     },
+     "System.CommentCount": {
+      "newValue": 0
+     },
+     "System.TeamProject": {
+      "newValue": "ExampleProject"
+     },
+     "System.AreaPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.IterationPath": {
+      "newValue": "ExampleProject"
+     },
+     "System.BoardColumn": {
+      "newValue": "New"
+     },
+     "System.BoardColumnDone": {
+      "newValue": false
+     },
+     "Microsoft.VSTS.Common.StateChangeDate": {
+      "newValue": "2026-05-07T23:34:21.427Z"
+     },
+     "Microsoft.VSTS.Common.Priority": {
+      "newValue": 2
+     },
+     "Microsoft.VSTS.Common.ValueArea": {
+      "newValue": "Business"
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_System.ExtensionMarker": {
+      "newValue": true
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column": {
+      "newValue": "New"
+     },
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column.Done": {
+      "newValue": false
+     },
+     "System.Title": {
+      "newValue": "Input Form"
+     },
+     "System.Description": {
+      "newValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li> </ul> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/1"
+   },
+   {
+    "id": 2,
+    "workItemId": 350,
+    "rev": 2,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:35:45.993Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 1,
+      "newValue": 2
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:34:21.427Z",
+      "newValue": "2026-05-07T23:35:27.997Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:35:27.997Z",
+      "newValue": "2026-05-07T23:35:45.993Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:34:21.427Z",
+      "newValue": "2026-05-07T23:35:27.997Z"
+     },
+     "System.Watermark": {
+      "oldValue": 982,
+      "newValue": 983
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li> </ul> </div>",
+      "newValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li> </ul><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/board?item=1&amp;view=14\">https://example.com/board?item=1&amp;view=14</a> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/2"
+   },
+   {
+    "id": 3,
+    "workItemId": 350,
+    "rev": 3,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:38:02.177Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 2,
+      "newValue": 3
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:35:27.997Z",
+      "newValue": "2026-05-07T23:35:45.993Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:35:45.993Z",
+      "newValue": "2026-05-07T23:38:02.177Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:35:27.997Z",
+      "newValue": "2026-05-07T23:35:45.993Z"
+     },
+     "System.Watermark": {
+      "oldValue": 983,
+      "newValue": 984
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li> </ul><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/board?item=1&amp;view=14\">https://example.com/board?item=1&amp;view=14</a> </div>",
+      "newValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li> </ul><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/3"
+   },
+   {
+    "id": 4,
+    "workItemId": 350,
+    "rev": 4,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:39:41.963Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 3,
+      "newValue": 4
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:35:45.993Z",
+      "newValue": "2026-05-07T23:38:02.177Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:38:02.177Z",
+      "newValue": "2026-05-07T23:39:41.963Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:35:45.993Z",
+      "newValue": "2026-05-07T23:38:02.177Z"
+     },
+     "System.Watermark": {
+      "oldValue": 984,
+      "newValue": 985
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li> </ul><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>",
+      "newValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li><li>Attachments </li><ul><li>Receipts, picture, etc. </li> </ul> </ul><div><br> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal after checking against acceptance criteria (does the part # match a program we're supporting </li> </ul><li>Attachments button </li> </ul> </div><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/4"
+   },
+   {
+    "id": 5,
+    "workItemId": 350,
+    "rev": 4,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:38:16.333Z",
+    "relations": {
+     "added": [
+      {
+       "rel": "System.LinkTypes.Hierarchy-Reverse",
+       "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/349",
+       "attributes": {
+        "isLocked": false,
+        "name": "Parent"
+       }
+      }
+     ]
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/5"
+   },
+   {
+    "id": 6,
+    "workItemId": 350,
+    "rev": 4,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:39:06.697Z",
+    "relations": {
+     "removed": [
+      {
+       "rel": "System.LinkTypes.Hierarchy-Reverse",
+       "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/349",
+       "attributes": {
+        "isLocked": false,
+        "name": "Parent"
+       }
+      }
+     ]
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/6"
+   },
+   {
+    "id": 7,
+    "workItemId": 350,
+    "rev": 5,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:49:06.653Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 4,
+      "newValue": 5
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:38:02.177Z",
+      "newValue": "2026-05-07T23:39:41.963Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:39:41.963Z",
+      "newValue": "2026-05-07T23:49:06.653Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:38:02.177Z",
+      "newValue": "2026-05-07T23:39:41.963Z"
+     },
+     "System.Watermark": {
+      "oldValue": 985,
+      "newValue": 986
+     },
+     "System.Title": {
+      "oldValue": "Input Form",
+      "newValue": "Claim form"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/7"
+   },
+   {
+    "id": 8,
+    "workItemId": 350,
+    "rev": 6,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:49:47.703Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 5,
+      "newValue": 6
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:39:41.963Z",
+      "newValue": "2026-05-07T23:49:06.653Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:49:06.653Z",
+      "newValue": "2026-05-07T23:49:47.703Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:39:41.963Z",
+      "newValue": "2026-05-07T23:49:06.653Z"
+     },
+     "System.Watermark": {
+      "oldValue": 986,
+      "newValue": 989
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li><li>Attachments </li><ul><li>Receipts, picture, etc. </li> </ul> </ul><div><br> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal after checking against acceptance criteria (does the part # match a program we're supporting </li> </ul><li>Attachments button </li> </ul> </div><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>",
+      "newValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li><li>Email * </li><li>Phone Number </li><li>Attachments </li><ul><li>Receipts, picture, etc. </li> </ul> </ul><div><br> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal after checking against acceptance criteria (does the part # match a program we're supporting </li><li>Should send an email to the email listed above </li> </ul><li>Attachments button </li> </ul> </div><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/8"
+   },
+   {
+    "id": 9,
+    "workItemId": 350,
+    "rev": 7,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-07T23:52:38.22Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 6,
+      "newValue": 7
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:49:06.653Z",
+      "newValue": "2026-05-07T23:49:47.703Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:49:47.703Z",
+      "newValue": "2026-05-07T23:52:38.22Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:49:06.653Z",
+      "newValue": "2026-05-07T23:49:47.703Z"
+     },
+     "System.Watermark": {
+      "oldValue": 989,
+      "newValue": 991
+     },
+     "System.Description": {
+      "oldValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li><li>Email * </li><li>Phone Number </li><li>Attachments </li><ul><li>Receipts, picture, etc. </li> </ul> </ul><div><br> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal after checking against acceptance criteria (does the part # match a program we're supporting </li><li>Should send an email to the email listed above </li> </ul><li>Attachments button </li> </ul> </div><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>",
+      "newValue": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li><li>Email * </li><li>Phone Number </li><li>Attachments </li><ul><li>Receipts, picture, etc. </li> </ul> </ul><div><br> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal after checking against acceptance criteria (does the part # match a program we're supporting </li><li>Should send an email to the email listed on the form. </li> </ul><li>Attachments button </li> </ul> </div><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/9"
+   },
+   {
+    "id": 10,
+    "workItemId": 350,
+    "rev": 8,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "2026-05-13T19:41:03.677Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 7,
+      "newValue": 8
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:49:47.703Z",
+      "newValue": "2026-05-07T23:52:38.22Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-07T23:52:38.22Z",
+      "newValue": "2026-05-13T19:41:03.677Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:49:47.703Z",
+      "newValue": "2026-05-07T23:52:38.22Z"
+     },
+     "System.Watermark": {
+      "oldValue": 991,
+      "newValue": 993
+     },
+     "System.CommentCount": {
+      "oldValue": 0,
+      "newValue": 1
+     },
+     "System.History": {
+      "newValue": "<div>Need to have a way to check duplicates</div>"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/10"
+   },
+   {
+    "id": 11,
+    "workItemId": 350,
+    "rev": 9,
+    "revisedBy": {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "name": "Pat Reviewer <pat.reviewer@example.com>",
+     "displayName": "Pat Reviewer",
+     "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+     "_links": {
+      "avatar": {
+       "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+      }
+     },
+     "uniqueName": "pat.reviewer@example.com",
+     "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+     "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+    },
+    "revisedDate": "9999-01-01T00:00:00Z",
+    "fields": {
+     "System.Rev": {
+      "oldValue": 8,
+      "newValue": 9
+     },
+     "System.AuthorizedDate": {
+      "oldValue": "2026-05-07T23:52:38.22Z",
+      "newValue": "2026-05-13T19:41:03.677Z"
+     },
+     "System.RevisedDate": {
+      "oldValue": "2026-05-13T19:41:03.677Z",
+      "newValue": "9999-01-01T00:00:00Z"
+     },
+     "System.ChangedDate": {
+      "oldValue": "2026-05-07T23:52:38.22Z",
+      "newValue": "2026-05-13T19:41:03.677Z"
+     },
+     "System.Watermark": {
+      "oldValue": 993,
+      "newValue": 1008
+     },
+     "System.Title": {
+      "oldValue": "Claim form",
+      "newValue": "Rebate form"
+     }
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350/updates/11"
+   }
+  ]
+ }
+}

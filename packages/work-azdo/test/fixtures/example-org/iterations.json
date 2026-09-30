@@ -1,0 +1,30 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/ExampleProject/_apis/work/teamsettings/iterations?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000028",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.03783",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000020",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000028",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000028"
+ },
+ "body": {
+  "count": 1,
+  "value": [
+   {
+    "id": "00000000-0000-4000-8000-000000000018",
+    "name": "Sprint 1",
+    "path": "ExampleProject\\Sprint 1",
+    "attributes": {
+     "startDate": null,
+     "finishDate": null,
+     "timeFrame": "current"
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/00000000-0000-4000-8000-000000000029/_apis/work/teamsettings/iterations/00000000-0000-4000-8000-000000000018"
+   }
+  ]
+ }
+}

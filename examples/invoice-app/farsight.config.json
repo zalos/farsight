@@ -1,0 +1,33 @@
+{
+  "tests": {
+    "unit": {
+      "runner": "vitest",
+      "results": "coverage/vitest-results.json",
+      "coverage": "coverage/coverage-final.json"
+    },
+    "e2e": {
+      "runner": "playwright",
+      "results": "e2e/results.json",
+      "coverage": "e2e/coverage/coverage-final.json"
+    }
+  },
+  "externals": [
+    {
+      "import": "src/server/erpClient.ts::ErpClient",
+      "name": "Example ERP",
+      "kind": "erp"
+    }
+  ],
+  "plumbing": [
+    "src/server/plumbing/**"
+  ],
+  "setup": [
+    "src/server/container.ts buildContainer"
+  ],
+  "storybook": {
+    "configDir": ".storybook",
+    "url": "http://127.0.0.1:4539",
+    "command": "npm run storybook",
+    "name": "Invoice app UI"
+  }
+}

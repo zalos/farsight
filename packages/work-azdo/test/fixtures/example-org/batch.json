@@ -1,0 +1,268 @@
+{
+ "status": 200,
+ "method": "POST",
+ "path": "/ExampleProject/_apis/wit/workitemsbatch?api-version=7.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000009",
+  "content-type": "application/json; charset=utf-8; api-version=7.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.0287",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000010",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000009",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000009"
+ },
+ "body": {
+  "count": 4,
+  "value": [
+   {
+    "id": 349,
+    "rev": 1,
+    "fields": {
+     "System.AreaPath": "ExampleProject",
+     "System.TeamProject": "ExampleProject",
+     "System.IterationPath": "ExampleProject",
+     "System.WorkItemType": "Epic",
+     "System.State": "To Do",
+     "System.Reason": "Added to backlog",
+     "System.CreatedDate": "2026-05-07T23:24:20.373Z",
+     "System.CreatedBy": {
+      "displayName": "Pat Reviewer",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "uniqueName": "pat.reviewer@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     },
+     "System.ChangedDate": "2026-05-07T23:24:20.373Z",
+     "System.ChangedBy": {
+      "displayName": "Pat Reviewer",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "uniqueName": "pat.reviewer@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     },
+     "System.CommentCount": 0,
+     "System.Title": "Mobile app",
+     "Microsoft.VSTS.Common.StateChangeDate": "2026-05-07T23:24:20.373Z",
+     "Microsoft.VSTS.Common.Priority": 2
+    },
+    "multilineFieldsFormat": {},
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/349"
+   },
+   {
+    "id": 350,
+    "rev": 9,
+    "fields": {
+     "System.AreaPath": "ExampleProject",
+     "System.TeamProject": "ExampleProject",
+     "System.IterationPath": "ExampleProject",
+     "System.WorkItemType": "Product Backlog Item",
+     "System.State": "New",
+     "System.Reason": "New backlog item",
+     "System.CreatedDate": "2026-05-07T23:34:21.427Z",
+     "System.CreatedBy": {
+      "displayName": "Pat Reviewer",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "uniqueName": "pat.reviewer@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     },
+     "System.ChangedDate": "2026-05-13T19:41:03.677Z",
+     "System.ChangedBy": {
+      "displayName": "Pat Reviewer",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "uniqueName": "pat.reviewer@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     },
+     "System.CommentCount": 1,
+     "System.Title": "Rebate form",
+     "System.BoardColumn": "New",
+     "System.BoardColumnDone": false,
+     "Microsoft.VSTS.Common.StateChangeDate": "2026-05-07T23:34:21.427Z",
+     "Microsoft.VSTS.Common.Priority": 2,
+     "Microsoft.VSTS.Common.ValueArea": "Business",
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column": "New",
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column.Done": false,
+     "System.Description": "<div><b>Info Required / Requested</b> </div><div>* - designates a required field </div><div><ul><li>Manufacturer * </li><li>Part Number * </li><li>Model Number </li><li>Purchase Date </li><li>Purchased From </li><li>Email * </li><li>Phone Number </li><li>Attachments </li><ul><li>Receipts, picture, etc. </li> </ul> </ul><div><br> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal after checking against acceptance criteria (does the part # match a program we're supporting </li><li>Should send an email to the email listed on the form. </li> </ul><li>Attachments button </li> </ul> </div><div><br> </div> </div><div>Example of a public notice page -&nbsp;<a href=\"https://example.com/notices\">Example product safety notice | example.com</a> </div>"
+    },
+    "multilineFieldsFormat": {
+     "System.Description": "html"
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/350"
+   },
+   {
+    "id": 351,
+    "rev": 15,
+    "fields": {
+     "System.AreaPath": "ExampleProject",
+     "System.TeamProject": "ExampleProject",
+     "System.IterationPath": "ExampleProject",
+     "System.WorkItemType": "Product Backlog Item",
+     "System.State": "New",
+     "System.Reason": "New backlog item",
+     "System.CreatedDate": "2026-05-07T23:44:25.227Z",
+     "System.CreatedBy": {
+      "displayName": "Pat Reviewer",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "uniqueName": "pat.reviewer@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     },
+     "System.ChangedDate": "2026-05-14T21:46:01.967Z",
+     "System.ChangedBy": {
+      "displayName": "guest.dev example.com",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000003",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000003",
+      "uniqueName": "guest.dev@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAz"
+     },
+     "System.CommentCount": 1,
+     "System.Title": "Vendor onboarding form",
+     "System.BoardColumn": "New",
+     "System.BoardColumnDone": false,
+     "Microsoft.VSTS.Common.StateChangeDate": "2026-05-07T23:44:25.227Z",
+     "Microsoft.VSTS.Common.Priority": 2,
+     "Microsoft.VSTS.Common.ValueArea": "Business",
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column": "New",
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column.Done": false,
+     "System.Description": "<div><b>Info Requested</b> </div><div>* - Indicates a required field </div><div><ul><li>Company Name * </li><li>Person's Name * </li><ul><li>First &amp; Last </li> </ul><li>Business Address * </li><ul><li>Street </li><li>City </li><li>Province (CAD) / State (US) [Dropdown]<br> </li><li>Country [Dropdown] </li><li>Postal / Zip </li> </ul><li>Bank Name* </li><li>Account Number * </li><li>Routing or Transit Number (3-digit Institution Code and 5-digit Branch Code) * </li><ul><li>Can this have data validation attached to the field that verifies it's a legitimate routing or transit number? </li> </ul><li>Checking or Savings Account * </li><ul><li>Single Selection field </li> </ul><li>Personal or Business Account * </li><ul><li>Single Selection field </li> </ul><li>Point of Contact Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Accounting Email * </li><ul><li>Data validation to verify it's an email address </li> </ul><li>Phone Number </li><ul><li>Formatted +# (###) ###-#### </li> </ul><li>Attachments * </li><ul><li>Invoices and a W9 attachments are required </li><ul><li>The user should be able to select whether an attachment is an 'Invoice', 'W9', or 'Miscellaneous' </li> </ul><li>Other forms or information may be optional </li> </ul><li>Invoice Information </li><ul><li>NOTE: Can we use OCR, AI, or something to scan and pre-populate invoice information based on an invoice they attached? </li><ul><li>The user should be asked to confirm that the prepopulated information is correct </li><li>We may need to do this for multiple invoices if they're uploading multiple. For this, we should provide an aggregated total amount </li><ul><li>This could be through multiple attachments, and the attachment could have one or multiple invoices within it. </li> </ul> </ul><li>Company Name </li><li>Invoice Number </li><li>Invoice Date </li><li>Subtotal </li><li>Tax </li><li>Total </li><li>Aggregated Total </li><li>Currency </li> </ul> </ul><div> </div><div><br> </div><div>See attachments for example </div><div><br> </div> </div><div><b>Form Tools</b> </div><div><ul><li>Submit button </li><ul><li>Feedback on the submittal &amp; advise next steps. Should send an email to the address listed on the form. </li> </ul><li>Attachments button </li> </ul> </div>"
+    },
+    "multilineFieldsFormat": {
+     "System.Description": "html"
+    },
+    "relations": [
+     {
+      "rel": "AttachedFile",
+      "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/attachments/00000000-0000-4000-8000-000000000011",
+      "attributes": {
+       "authorizedDate": "2026-05-13T19:15:33.713Z",
+       "id": 4680317,
+       "resourceCreatedDate": "2026-05-13T19:15:21.18Z",
+       "resourceModifiedDate": "2026-05-13T19:15:21.18Z",
+       "revisedDate": "9999-01-01T00:00:00Z",
+       "resourceSize": 174526,
+       "name": "Vendor form.pdf"
+      }
+     },
+     {
+      "rel": "AttachedFile",
+      "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/attachments/00000000-0000-4000-8000-000000000012",
+      "attributes": {
+       "authorizedDate": "2026-05-13T19:30:47.32Z",
+       "id": 4680352,
+       "resourceCreatedDate": "2026-05-13T19:30:40.573Z",
+       "resourceModifiedDate": "2026-05-13T19:30:40.573Z",
+       "revisedDate": "9999-01-01T00:00:00Z",
+       "resourceSize": 420861,
+       "name": "Sample invoices.pdf"
+      }
+     },
+     {
+      "rel": "AttachedFile",
+      "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/attachments/00000000-0000-4000-8000-000000000013",
+      "attributes": {
+       "authorizedDate": "2026-05-13T19:22:27.283Z",
+       "id": 4680342,
+       "resourceCreatedDate": "2026-05-13T19:22:22.57Z",
+       "resourceModifiedDate": "2026-05-13T19:22:22.57Z",
+       "revisedDate": "9999-01-01T00:00:00Z",
+       "resourceSize": 3561019,
+       "name": "Invoice 1001.pdf"
+      }
+     }
+    ],
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/351"
+   },
+   {
+    "id": 352,
+    "rev": 4,
+    "fields": {
+     "System.AreaPath": "ExampleProject",
+     "System.TeamProject": "ExampleProject",
+     "System.IterationPath": "ExampleProject",
+     "System.WorkItemType": "Product Backlog Item",
+     "System.State": "New",
+     "System.Reason": "New backlog item",
+     "System.CreatedDate": "2026-05-07T23:52:54.957Z",
+     "System.CreatedBy": {
+      "displayName": "Pat Reviewer",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "uniqueName": "pat.reviewer@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     },
+     "System.ChangedDate": "2026-05-08T18:27:15.61Z",
+     "System.ChangedBy": {
+      "displayName": "Pat Reviewer",
+      "url": "https://example.vssps.visualstudio.com/A00000000-0000-4000-8000-000000000005/_apis/Identities/00000000-0000-4000-8000-000000000001",
+      "_links": {
+       "avatar": {
+        "href": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+       }
+      },
+      "id": "00000000-0000-4000-8000-000000000001",
+      "uniqueName": "pat.reviewer@example.com",
+      "imageUrl": "https://dev.azure.com/example-org/_apis/GraphProfile/MemberAvatars/aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx",
+      "descriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAx"
+     },
+     "System.CommentCount": 0,
+     "System.Title": "Landing page",
+     "System.BoardColumn": "New",
+     "System.BoardColumnDone": false,
+     "Microsoft.VSTS.Common.StateChangeDate": "2026-05-07T23:52:54.957Z",
+     "Microsoft.VSTS.Common.Priority": 2,
+     "Microsoft.VSTS.Common.ValueArea": "Business",
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column": "New",
+     "WEF_E93E134D6F0E444193C858E4EBFCBAD6_Kanban.Column.Done": false,
+     "System.Description": "<ul><li>Acme branded </li><ul><li>Note: the white labeled version will be for clients signing into their client portal </li> </ul><li>Claim Verification button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Invoice Submittal button &amp; workflow </li><ul><li>Summary of what this is for </li> </ul><li>Client log in </li><ul><li>Username </li><li>Password </li><li>Takes client to a white-labeled page that allows them to view </li><ul><li>Program financials </li><ul><li>Acme invoices submitted (date, amount, program) </li><li>Contractors paid (date, amount, program) </li><li>POs (date issued, amount, active/inactive) </li> </ul><li>File management </li><ul><li>Should resemble something like SharePoint </li><ul><li>Stores vendor contact forms, w9's, invoices </li> </ul> </ul> </ul> </ul><li>Summary of what this page is for </li><li>Follow Acme's existing website's theme? </li><ul><li>Will this page be hosted on Acme's website? </li> </ul> </ul>"
+    },
+    "multilineFieldsFormat": {
+     "System.Description": "html"
+    },
+    "url": "https://dev.azure.com/example-org/00000000-0000-4000-8000-000000000006/_apis/wit/workItems/352"
+   }
+  ]
+ }
+}

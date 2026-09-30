@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farsight.dev/schemas/farsight-tests-matrix-v1.schema.json",
+  "title": "farsight-tests-matrix v1",
+  "description": "The journeys × tests matrix as one flat document: what every test says about every node on every journey, with the evidence class, the run and the identity of the code it was computed from. Prose contract: docs/contracts/farsight-tests-matrix-v1.md. v1 may gain optional fields and new enum members; nothing listed here changes meaning or goes away without a version bump.",
+  "type": "object",
+  "required": ["schema", "identity", "metric", "journeys", "rows"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "farsight-tests-matrix v1" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "metric": {
+      "type": "object",
+      "description": "The `test-coverage` MetricValue for the scope (value · bound · scopeLabel · evidence · gaps). Its shape is owned by core (`metrics.ts`) and carries its own `def.version`; this contract freezes that it is present, not its fields.",
+      "required": ["def", "scope", "scopeLabel", "numerator", "denominator", "value", "bound"],
+      "properties": {
+        "def": { "type": "object", "description": "The metric definition, including its `version` — a value stored under an older version is not comparable with this one." },
+        "scope": { "type": "object" },
+        "value": { "type": ["number", "null"] },
+        "bound": { "enum": ["exact", "floor"] },
+        "scopeLabel": { "type": "string" },
+        "numerator": { "type": "integer", "minimum": 0 },
+        "denominator": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "journeys": {
+      "type": "array",
+      "description": "One entry per flow — the same `TestMatrixRow` the catalogue and the HUD read, so the rows below and the journey summaries cannot disagree.",
+      "items": {
+        "type": "object",
+        "required": ["flowId", "name", "screens", "built", "e2e", "gap"],
+        "properties": {
+          "flowId": { "type": "string" },
+          "name": { "type": "string" },
+          "designId": { "type": "string" },
+          "screens": { "type": "integer", "minimum": 0 },
+          "built": { "type": "integer", "minimum": 0 },
+          "e2e": { "$ref": "#/$defs/e2eWord" },
+          "verifiedEndToEnd": { "type": "boolean" },
+          "gap": { "type": "string" }
+        }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "description": "One row per (flow, node, test, covers edge), sorted by every column in the order they are declared below.",
+      "items": { "$ref": "#/$defs/row" }
+    }
+  },
+  "$defs": {
+    "e2eWord": {
+      "description": "The end-to-end word for a journey: a header-only @covers is `declared`, a test body that reaches something on the journey is `reached`, a run that saw it is `observed`.",
+      "enum": ["none", "declared", "reached", "observed"]
+    },
+    "identity": {
+      "type": "object",
+      "description": "What the document was computed from. Every row repeats `sync`, `source_commit` and `source_digest`, so a CSV row taken out of the file still says which code it describes.",
+      "required": ["source_digest", "farsight", "generated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "sync": { "type": "integer", "minimum": 0, "description": "Snapshot ordinal of the graph, when a snapshot store recorded one." },
+        "source_commit": { "type": "string", "description": "Workspace commit at snapshot time, when known." },
+        "source_digest": {
+          "type": "object",
+          "description": "repo name → content digest of that repo's checkout (parsers/shared/files.ts contentDigest). Empty when the graph records none: absence of a digest is why a run's freshness reads `unknown`."
+        },
+        "farsight": { "type": "string", "description": "The build that produced the document (`buildLine()`)." },
+        "generated_at": { "type": "string", "description": "ISO timestamp. The only field that changes between two runs over the same graph." }
+      }
+    },
+    "row": {
+      "type": "object",
+      "required": [
+        "flow_id", "flow_name", "screen_id", "node_id", "node_kind", "node_name",
+        "test_id", "file", "line", "suite", "title", "level", "runner", "project",
+        "run_level", "inactive", "evidence_class", "technique", "confidence", "resolution_note", "match",
+        "run_id", "run_at", "status", "retries", "duration_ms", "freshness", "stale",
+        "source_digest", "sync", "source_commit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "flow_id": { "type": "string" },
+        "flow_name": { "type": "string" },
+        "screen_id": { "type": "string", "description": "The design id of the screen when this node is one of the flow's screens (the node id when it has none), '' otherwise." },
+        "node_id": { "type": "string" },
+        "node_kind": { "type": "string" },
+        "node_name": { "type": "string" },
+        "test_id": { "type": "string" },
+        "file": { "type": "string", "description": "Repo-relative spec path, or the report path for a run-level node." },
+        "line": { "type": ["integer", "null"], "minimum": 1 },
+        "suite": { "type": "string", "description": "The describe path, outermost first, joined with ' > '." },
+        "title": { "type": "string" },
+        "level": { "enum": ["unit", "integration", "e2e"] },
+        "runner": { "enum": ["vitest", "jest", "node:test", "playwright", "cypress", "junit", "other"] },
+        "project": { "type": "string", "description": "Playwright / Nx project, '' when the runner records none." },
+        "run_level": { "type": "boolean", "description": "true when the edge comes from a coverage report with no per-test attribution: the run reached the node, no single test did." },
+        "inactive": { "type": "boolean", "description": "The case is .skip/.todo (or its edge is marked inactive): it is listed and it lifts no word and no chip." },
+        "evidence_class": {
+          "description": "The printed vocabulary. The graph's edge class `static` prints as `reached`; `declared` is an @covers claim; `observed` is a run that executed the node.",
+          "enum": ["declared", "reached", "observed"]
+        },
+        "technique": { "type": "string", "description": "The covers edge's ResolutionTechnique (see farsight-diff-v1), '' when the edge carries no resolution." },
+        "confidence": { "enum": ["HIGH", "MEDIUM", "LOW", ""] },
+        "resolution_note": { "type": "string" },
+        "match": { "enum": ["name+line", "name", "line±1", ""], "description": "Observed edges: how the coverage row met the node." },
+        "run_id": { "type": "string" },
+        "run_at": { "type": "string", "description": "ISO timestamp the report recorded, '' when there is no run." },
+        "status": { "enum": ["passed", "failed", "skipped", "flaky", "unknown", ""], "description": "`flaky` is its own verdict — the reporter retried and it then passed; it is never `passed`." },
+        "retries": { "type": ["integer", "null"], "minimum": 0 },
+        "duration_ms": { "type": ["number", "null"], "minimum": 0 },
+        "freshness": { "enum": ["unchanged", "changed", "unknown", ""] },
+        "stale": {
+          "type": ["boolean", "null"],
+          "description": "null when freshness is `unknown` or there is no run: \"not stale\" and \"not proven fresh\" are different facts and the matrix never conflates them. CSV prints the null as `unknown`."
+        },
+        "source_digest": { "type": "string", "description": "The content digest of the repo this node lives in, from `identity.source_digest`; when the graph records none, the digest the run stamped; '' when neither exists." },
+        "sync": { "type": ["integer", "null"], "minimum": 0 },
+        "source_commit": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farsight.dev/schemas/farsight-diff-v1.schema.json",
+  "title": "farsight-diff v1",
+  "description": "The frozen change contract between two Farsight graph snapshots. Prose contract: docs/contracts/farsight-diff-v1.md. v1 may gain optional fields; nothing listed here changes meaning or goes away without a version bump.",
+  "type": "object",
+  "required": ["schema", "base", "head", "truncated", "counts", "changes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "farsight-diff v1" },
+    "base": {
+      "type": "string",
+      "description": "Base snapshot label, e.g. \"sync:39 · 76f7674\""
+    },
+    "head": {
+      "type": "string",
+      "description": "Head snapshot label, e.g. \"sync:41 · 4677268\""
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "true when `changes` was cut at the limit. `counts` stays complete either way — CI asserts on completeness."
+    },
+    "counts": {
+      "type": "object",
+      "description": "Complete change counts per kind — every kind present, zeros included.",
+      "required": [
+        "route_added", "route_removed",
+        "guard_added", "guard_removed",
+        "journey_changed",
+        "record_added", "record_removed", "record_columns_changed",
+        "message_added", "message_removed",
+        "rule_added", "rule_removed",
+        "edge_confidence_changed",
+        "node_renamed",
+        "test_added", "test_removed",
+        "coverage_lost", "uncovered_change"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "route_added": { "$ref": "#/$defs/count" },
+        "route_removed": { "$ref": "#/$defs/count" },
+        "guard_added": { "$ref": "#/$defs/count" },
+        "guard_removed": { "$ref": "#/$defs/count" },
+        "journey_changed": { "$ref": "#/$defs/count" },
+        "record_added": { "$ref": "#/$defs/count" },
+        "record_removed": { "$ref": "#/$defs/count" },
+        "record_columns_changed": { "$ref": "#/$defs/count" },
+        "message_added": { "$ref": "#/$defs/count" },
+        "message_removed": { "$ref": "#/$defs/count" },
+        "rule_added": { "$ref": "#/$defs/count" },
+        "rule_removed": { "$ref": "#/$defs/count" },
+        "edge_confidence_changed": { "$ref": "#/$defs/count" },
+        "node_renamed": { "$ref": "#/$defs/count" },
+        "test_added": { "$ref": "#/$defs/count" },
+        "test_removed": { "$ref": "#/$defs/count" },
+        "coverage_lost": { "$ref": "#/$defs/count" },
+        "uncovered_change": { "$ref": "#/$defs/count" }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/change" }
+    },
+    "gate": { "$ref": "#/$defs/gate" }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "changeKind": {
+      "enum": [
+        "route_added", "route_removed",
+        "guard_added", "guard_removed",
+        "journey_changed",
+        "record_added", "record_removed", "record_columns_changed",
+        "message_added", "message_removed",
+        "rule_added", "rule_removed",
+        "edge_confidence_changed",
+        "node_renamed",
+        "test_added", "test_removed",
+        "coverage_lost", "uncovered_change"
+      ]
+    },
+    "nodeKind": {
+      "enum": [
+        "repo", "module", "file", "class", "function", "component", "page",
+        "route", "table", "queue", "rule", "guard", "flag", "external",
+        "api", "design", "flow", "test", "unknown", "work"
+      ]
+    },
+    "confidence": {
+      "description": "'resolved' for changes not derived from a stamped edge; otherwise the edge's resolution tier.",
+      "enum": ["resolved", "HIGH", "MEDIUM", "LOW"]
+    },
+    "technique": {
+      "description": "How the underlying edge was resolved. The original six were frozen 2026-07-29; the OpenAPI, tests and clarity passes added eight more and lane B5 four more (2026-09) — an additive enumeration, since `technique` is optional and the value is the verbatim ResolutionTechnique string from packages/core/src/graph.ts.",
+      "enum": [
+        "static-import", "fetch→route", "db-builder", "annotation-scan", "DI-binding", "name-match",
+        "import-resolution", "route-literal", "coverage-report", "method-name",
+        "interface", "hook-binding", "sdk-import", "constant-host",
+        "raw-sql", "same-file", "jsx-render", "detected",
+        "work-key"
+      ]
+    },
+    "loc": {
+      "type": "object",
+      "required": ["repo", "path", "line"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": { "type": "string" },
+        "path": { "type": "string" },
+        "line": { "type": "integer", "minimum": 1 },
+        "col": { "type": "integer", "minimum": 0 },
+        "endLine": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "description": "Optional (v1 addition, 2026-09-23): file-level provenance — the commits in the compared range that touched the file the subject lives in. Never node-level; `level` is the literal \"file\" so no consumer can read it otherwise. Absent means no history has been read for that repository; an empty `commits` means the history was read and nothing in the range touched the file — the two are deliberately different answers. Produced by attributeChanges() in packages/core/src/history.ts, never by diffGraphs(), which does not read git.",
+      "required": ["commits", "level", "unindexed"],
+      "additionalProperties": false,
+      "properties": {
+        "commits": {
+          "type": "array",
+          "description": "Attributing commit shas, newest first.",
+          "items": { "type": "string" }
+        },
+        "level": {
+          "const": "file",
+          "description": "The granularity, as a literal: the file the subject lives in, never the node."
+        },
+        "unindexed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many of `commits` no sync ever ingested. Attribution drawn from a partly-ingested history is a floor, not a fact."
+        }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": ["id", "kind", "severity", "confidence", "subject", "permalink"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^c[0-9]+$",
+          "description": "Stable within a diff of the same base/head — referenced by permalinks."
+        },
+        "kind": { "$ref": "#/$defs/changeKind" },
+        "severity": { "enum": ["breaking", "notable", "info"] },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "technique": { "$ref": "#/$defs/technique" },
+        "subject": {
+          "type": "object",
+          "required": ["id", "name", "kind"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "kind": { "$ref": "#/$defs/nodeKind" }
+          }
+        },
+        "journey": {
+          "type": "object",
+          "required": ["id", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        },
+        "loc": { "$ref": "#/$defs/loc" },
+        "permalink": { "type": "string" },
+        "attribution": { "$ref": "#/$defs/attribution" },
+        "contractStatus": {
+          "type": "object",
+          "description": "Optional (v1 addition, 2026-09): on a journey_changed whose entry is a route, the OpenAPI contract status on each side when they differ. spec-only → both reads as planned → built.",
+          "required": ["from", "to"],
+          "additionalProperties": false,
+          "properties": {
+            "from": { "enum": ["both", "spec-only", "code-only", "declared", "none"] },
+            "to": { "enum": ["both", "spec-only", "code-only", "declared", "none"] }
+          }
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "required": ["policy", "result", "exit", "rules"],
+      "additionalProperties": false,
+      "properties": {
+        "policy": { "type": "string" },
+        "result": { "enum": ["pass", "fail"] },
+        "exit": { "enum": [0, 1] },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["rule", "result", "changes"],
+            "additionalProperties": false,
+            "properties": {
+              "rule": { "type": "string" },
+              "result": { "enum": ["pass", "fail", "warn", "allow"] },
+              "changes": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "farsight",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Parse codebases into a semantic graph and explore them through a game-inspired GUI",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck && pnpm e2e:typecheck",
+    "test": "pnpm -r test",
+    "lint:strings": "node scripts/lint-strings.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:typecheck": "tsc -p e2e/tsconfig.json"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@playwright/test": "1.62.1",
+    "@types/node": "^26.1.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.5.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farsight.dev/schemas/farsight-work-v1.schema.json",
+  "title": "farsight-work v1",
+  "description": "Work items from a tracker (Jira, Azure DevOps), one record shape for every provider. Prose contract: docs/contracts/farsight-work-v1.md. v1 may gain optional fields and new enum members; nothing listed here changes meaning or goes away without a version bump. The top level is the list document (`farsight work list --json`); `$defs.workItem` is one record (`farsight work show --json`).",
+  "type": "object",
+  "required": ["schema", "generatedAt", "sources", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "farsight-work v1" },
+    "generatedAt": { "type": "string", "description": "ISO 8601 UTC, when the document was produced." },
+    "sources": { "type": "array", "description": "The Farsight source ids the items came from.", "items": { "type": "string" } },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/workItem" } }
+  },
+  "$defs": {
+    "provider": { "enum": ["jira", "azure-devops", "fixture"] },
+    "workType": { "enum": ["epic", "feature", "story", "task", "bug", "other"] },
+    "stateCategory": { "enum": ["todo", "in-progress", "done", "removed"] },
+    "bodyFormat": { "enum": ["markdown", "html", "adf", "wiki"] },
+    "linkKind": { "enum": ["parent", "child", "relates", "blocks", "blocked-by", "duplicates", "other"] },
+    "estimateUnit": { "enum": ["points", "hours", "days"] },
+    "workAction": { "enum": ["comment", "edit", "assign", "transition", "link", "label", "create"] },
+    "person": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "description": "Jira accountId · ADO descriptor — stable; names are not." },
+        "name": { "type": "string" },
+        "email": { "type": "string" }
+      }
+    },
+    "body": {
+      "type": "object",
+      "required": ["format", "raw", "text"],
+      "properties": {
+        "format": { "$ref": "#/$defs/bodyFormat" },
+        "raw": { "description": "The tracker's own representation." },
+        "text": { "type": "string", "description": "Plain-text rendering." }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["kind", "target", "native"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/linkKind" },
+        "target": { "type": "string" },
+        "native": { "type": "string" }
+      }
+    },
+    "comment": {
+      "type": "object",
+      "required": ["id", "author", "created", "body"],
+      "properties": {
+        "id": { "type": "string" },
+        "author": { "$ref": "#/$defs/person" },
+        "created": { "type": "string" },
+        "updated": { "type": "string" },
+        "body": { "$ref": "#/$defs/body" }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": ["at", "field"],
+      "properties": {
+        "at": { "type": "string" },
+        "by": { "$ref": "#/$defs/person" },
+        "field": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" }
+      }
+    },
+    "workItem": {
+      "type": "object",
+      "required": ["id", "source", "provider", "key", "url", "type", "title", "state", "labels", "links", "created", "updated", "revision", "comments", "history", "fields", "raw"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^work::[^:]+::.+$", "description": "Graph node id: work::<sourceId>::<key>." },
+        "source": { "type": "string" },
+        "provider": { "$ref": "#/$defs/provider" },
+        "key": { "type": "string" },
+        "url": { "type": "string" },
+        "type": {
+          "type": "object",
+          "required": ["name", "category"],
+          "properties": { "name": { "type": "string" }, "category": { "$ref": "#/$defs/workType" } }
+        },
+        "title": { "type": "string" },
+        "body": { "$ref": "#/$defs/body" },
+        "state": {
+          "type": "object",
+          "required": ["name", "category"],
+          "properties": {
+            "name": { "type": "string", "description": "As the tracker spells it." },
+            "category": { "$ref": "#/$defs/stateCategory" },
+            "since": { "type": "string" }
+          }
+        },
+        "priority": {
+          "type": "object",
+          "required": ["name"],
+          "properties": { "name": { "type": "string" }, "rank": { "type": "number" } }
+        },
+        "assignee": { "$ref": "#/$defs/person" },
+        "reporter": { "$ref": "#/$defs/person" },
+        "labels": { "type": "array", "items": { "type": "string" } },
+        "area": { "type": "string" },
+        "iteration": {
+          "type": "object",
+          "required": ["name"],
+          "properties": { "name": { "type": "string" }, "start": { "type": "string" }, "end": { "type": "string" } }
+        },
+        "parent": { "type": "string" },
+        "links": { "type": "array", "items": { "$ref": "#/$defs/link" } },
+        "estimate": {
+          "type": "object",
+          "required": ["value", "unit"],
+          "properties": { "value": { "type": "number" }, "unit": { "$ref": "#/$defs/estimateUnit" } }
+        },
+        "created": { "type": "string" },
+        "updated": { "type": "string" },
+        "resolved": { "type": "string" },
+        "revision": { "type": "string", "description": "ADO rev · Jira fields.updated — what compare-before-write checks." },
+        "comments": { "type": "array", "items": { "$ref": "#/$defs/comment" } },
+        "history": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+        "fields": { "type": "object", "description": "Custom fields by canonical name, values as read." },
+        "raw": { "description": "The provider's record, verbatim." }
+      }
+    }
+  }
+}

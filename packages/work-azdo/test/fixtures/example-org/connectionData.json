@@ -1,0 +1,55 @@
+{
+ "status": 200,
+ "method": "GET",
+ "path": "/_apis/connectionData?api-version=7.1-preview.1",
+ "headers": {
+  "activityid": "00000000-0000-4000-8000-000000000025",
+  "content-type": "application/json; charset=utf-8; api-version=7.1-preview.1",
+  "x-content-type-options": "nosniff",
+  "x-ratelimit-cost": "0.00457",
+  "x-tfs-processid": "00000000-0000-4000-8000-000000000026",
+  "x-tfs-session": "00000000-0000-4000-8000-000000000025",
+  "x-vss-e2eid": "00000000-0000-4000-8000-000000000025"
+ },
+ "body": {
+  "authenticatedUser": {
+   "id": "00000000-0000-4000-8000-000000000002",
+   "descriptor": "Microsoft.IdentityModel.Claims.ClaimsIdentity;00000000-0000-4000-8000-000000000004\\dev@example.com",
+   "subjectDescriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAy",
+   "providerDisplayName": "Example Dev",
+   "isActive": true,
+   "properties": {
+    "Account": {
+     "$type": "System.String",
+     "$value": "dev@example.com"
+    }
+   },
+   "resourceVersion": 2,
+   "metaTypeId": 0
+  },
+  "authorizedUser": {
+   "id": "00000000-0000-4000-8000-000000000002",
+   "descriptor": "Microsoft.IdentityModel.Claims.ClaimsIdentity;00000000-0000-4000-8000-000000000004\\dev@example.com",
+   "subjectDescriptor": "aad.MDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAy",
+   "providerDisplayName": "Example Dev",
+   "isActive": true,
+   "properties": {
+    "Account": {
+     "$type": "System.String",
+     "$value": "dev@example.com"
+    }
+   },
+   "resourceVersion": 2,
+   "metaTypeId": 0
+  },
+  "instanceId": "00000000-0000-4000-8000-000000000007",
+  "deploymentId": "00000000-0000-4000-8000-000000000008",
+  "deploymentType": "hosted",
+  "locationServiceData": {
+   "serviceOwner": "00025394-6065-48ca-87d9-7f5672854ef7",
+   "defaultAccessMappingMoniker": "PublicAccessMapping",
+   "lastChangeId": 202190878,
+   "lastChangeId64": 202190878
+  }
+ }
+}

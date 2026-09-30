@@ -1,0 +1,228 @@
+<title>Farsight — System Atlas</title>
+<style>
+  :root{
+    --ground:#0A0D14; --panel:#111623; --raised:#182032; --line:#232C42;
+    --ink:#DCE4F5; --muted:#7C87A3; --dim:#525D78;
+    --amber:#F0B44E; --cyan:#5BC8DD; --ok:#6FCF8E; --warn:#E8A13C; --crit:#E06C5F; --auth:#A78BE0;
+    --accent:var(--cyan); --accent-dim:rgba(91,200,221,.12);
+    --hud:'Futura','Avenir Next Condensed','Arial Narrow',sans-serif;
+    --body:'Avenir Next','Segoe UI',system-ui,sans-serif;
+    --mono:'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box} html,body{height:100%}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);font-size:14px;overflow:hidden}
+  .hud-label{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:11px;color:var(--muted)}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  kbd{font-family:var(--mono);font-size:10px;background:var(--raised);border:1px solid var(--line);border-radius:3px;padding:1px 5px;color:var(--muted)}
+
+  .frame{display:grid;grid-template-rows:48px 1fr 30px;height:100vh}
+  .topbar{display:flex;align-items:center;gap:16px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .logo{font-family:var(--hud);letter-spacing:.22em;font-size:13px;color:var(--accent);text-transform:uppercase}
+  .logo b{color:var(--ink);font-weight:500}
+  .view-title{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--ink)}
+  .filters{display:flex;gap:6px;margin-left:auto;align-items:center}
+  .chip{font-size:11px;padding:4px 12px;border-radius:12px;border:1px solid var(--line);color:var(--muted);transition:all .15s}
+  .chip:hover{border-color:var(--muted);color:var(--ink)}
+  .chip.on{color:var(--amber);border-color:var(--amber);background:rgba(240,180,78,.1)}
+
+  .stage{position:relative;overflow:hidden}
+  canvas{display:block;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+
+  .hint{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:rgba(17,22,35,.92);border:1px solid var(--line);border-radius:3px;padding:6px 14px;font-size:11px;color:var(--muted);display:flex;gap:14px}
+  .zoombox{position:absolute;right:14px;top:12px;display:flex;flex-direction:column;background:rgba(17,22,35,.92);border:1px solid var(--line);border-radius:3px}
+  .zoombox button{width:32px;height:32px;font-size:16px;color:var(--muted)} .zoombox button:hover{color:var(--ink)}
+  .zoombox .lvl{font-family:var(--mono);font-size:9px;text-align:center;color:var(--dim);padding:4px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+
+  .tooltip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--accent);border-radius:4px;padding:10px 12px;max-width:260px;display:none;z-index:10;box-shadow:0 10px 40px -10px rgba(0,0,0,.7)}
+  .tooltip .tt-kind{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9px;color:var(--accent)}
+  .tooltip .tt-name{font-weight:600;font-size:13.5px;margin:2px 0}
+  .tooltip .tt-meta{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .tooltip .tt-desc{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+
+  .legend{position:absolute;left:14px;bottom:12px;background:rgba(17,22,35,.92);border:1px solid var(--line);border-radius:3px;padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+  .legend span{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--muted)}
+  .legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+  .statusbar{display:flex;align-items:center;gap:18px;padding:0 16px;background:var(--panel);border-top:1px solid var(--line);font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .pulse{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
+  .statusbar .right{margin-left:auto}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="frame">
+  <header class="topbar">
+    <div class="logo">FAR<b>SIGHT</b></div>
+    <span class="view-title">◈ System Atlas</span>
+    <div class="filters">
+      <span class="hud-label" style="margin-right:4px">Filter</span>
+      <button class="chip on" data-tag="invoice" onclick="toggleTag(this)">invoice</button>
+      <button class="chip" data-tag="auth" onclick="toggleTag(this)">auth</button>
+      <button class="chip" data-tag="team:billing" onclick="toggleTag(this)">team:billing</button>
+      <button class="chip" data-tag="deprecated" onclick="toggleTag(this)">deprecated</button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="hint"><span>drag to pan</span><span>scroll to zoom</span><span>hover for detail</span><span>click a region to descend</span></div>
+    <div class="zoombox">
+      <button onclick="zoomBy(1.25)" aria-label="Zoom in">+</button>
+      <div class="lvl" id="zlvl">WORLD</div>
+      <button onclick="zoomBy(0.8)" aria-label="Zoom out">−</button>
+    </div>
+    <div class="tooltip" id="tt"></div>
+    <div class="legend">
+      <span><i style="background:var(--ok)"></i>frontend repo</span>
+      <span><i style="background:var(--cyan)"></i>backend repo</span>
+      <span><i style="background:#C287D6"></i>datastore</span>
+      <span><i style="background:var(--dim)"></i>external service</span>
+      <span><i style="background:var(--amber)"></i>matches active filter</span>
+      <span style="color:var(--dim)"><i style="background:#1a2135"></i>fog — not yet indexed</span>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <span class="pulse"></span><span>atlas: 6 repos · 3 datastores · 2 external</span>
+    <span class="right" id="zoomstat">zoom 1.0× · world level</span>
+  </footer>
+</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),stage=document.getElementById('stage'),tt=document.getElementById('tt');
+let W,H,DPR=window.devicePixelRatio||1;
+let cam={x:0,y:0,z:1},drag=null,hover=null;
+let activeTags=new Set(['invoice']);
+
+const SYSTEMS=[
+ {id:'web-app',kind:'frontend',x:-300,y:-90,r:66,lang:'ts',tags:['invoice','team:billing'],desc:'Customer-facing React app. 214 components.',mods:[['pages',0,-1],['features/invoice',1,0],['features/account',-1,.7],['shared/ui',.4,1]]},
+ {id:'admin-app',kind:'frontend',x:-260,y:130,r:48,lang:'ts',tags:['team:ops'],desc:'Internal back-office. 96 components.',mods:[['ops',0,-1],['support',.9,.5],['reports',-.9,.5]]},
+ {id:'billing-api',kind:'backend',x:0,y:-40,r:78,lang:'ts',tags:['invoice','auth','team:billing'],desc:'Invoices, payments, ledger. 38 routes.',mods:[['invoice',0,-1],['payment',1,.2],['ledger',-.6,.9],['tax',.6,.9],['auth',-1,.1]]},
+ {id:'identity-svc',kind:'backend',x:60,y:-260,r:52,lang:'ts',tags:['auth'],desc:'AuthN/AuthZ, scopes, sessions. 14 routes.',mods:[['tokens',0,-1],['scopes',.9,.6],['sessions',-.9,.6]]},
+ {id:'notifier',kind:'backend',x:230,y:120,r:44,lang:'ts',tags:['invoice'],desc:'Event-driven email/SMS worker.',mods:[['email',0,-1],['sms',.8,.8]]},
+ {id:'legacy-billing',kind:'backend',x:-60,y:290,r:50,lang:'js',tags:['invoice','deprecated'],desc:'Legacy Express billing. Being strangled.',fog:true,mods:[]},
+ {id:'postgres',kind:'datastore',x:290,y:-90,r:56,lang:'sql',tags:['invoice','team:billing'],desc:'Primary DB. invoices, ledger_entries, customers…',mods:[['invoices',0,-1],['ledger',.9,.4],['customers',-.9,.4]]},
+ {id:'redis',kind:'datastore',x:330,y:-250,r:34,lang:'',tags:['auth'],desc:'Sessions + rate limits.',mods:[]},
+ {id:'events',kind:'datastore',x:150,y:250,r:38,lang:'',tags:['invoice'],desc:'NATS. invoice.finalized, payment.captured…',mods:[]},
+ {id:'stripe',kind:'external',x:480,y:40,r:40,lang:'',tags:['invoice'],desc:'Payments provider.',mods:[]},
+ {id:'postmark',kind:'external',x:430,y:220,r:34,lang:'',tags:['invoice'],desc:'Transactional email.',mods:[]},
+];
+const LINKS=[
+ ['web-app','billing-api','http'],['web-app','identity-svc','http'],['admin-app','billing-api','http'],
+ ['billing-api','postgres','sql'],['billing-api','identity-svc','http'],['billing-api','events','pub'],
+ ['billing-api','stripe','http'],['identity-svc','redis','kv'],['notifier','events','sub'],
+ ['notifier','postmark','http'],['legacy-billing','postgres','sql'],['admin-app','legacy-billing','http'],
+];
+const KIND_COLOR={frontend:'#6FCF8E',backend:'#5BC8DD',datastore:'#C287D6',external:'#525D78'};
+
+function resize(){W=stage.clientWidth;H=stage.clientHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);draw()}
+function toScreen(p){return{x:(p.x-cam.x)*cam.z+W/2,y:(p.y-cam.y)*cam.z+H/2}}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // starfield-ish grid
+  ctx.strokeStyle='rgba(35,44,66,.4)';ctx.lineWidth=1;
+  const g=64*cam.z,ox=(W/2-cam.x*cam.z)%g,oy=(H/2-cam.y*cam.z)%g;
+  ctx.beginPath();
+  for(let x=ox;x<W;x+=g){ctx.moveTo(x,0);ctx.lineTo(x,H)}
+  for(let y=oy;y<H;y+=g){ctx.moveTo(0,y);ctx.lineTo(W,y)}
+  ctx.stroke();
+
+  // links
+  LINKS.forEach(([a,b,kind])=>{
+    const A=toScreen(sys(a)),B=toScreen(sys(b));
+    const both=matches(sys(a))&&matches(sys(b));
+    ctx.strokeStyle=both&&activeTags.size?'rgba(240,180,78,.5)':'rgba(35,44,66,.9)';
+    ctx.lineWidth=both&&activeTags.size?1.8:1.2;
+    ctx.setLineDash(kind==='pub'||kind==='sub'?[5,4]:[]);
+    ctx.beginPath();ctx.moveTo(A.x,A.y);ctx.lineTo(B.x,B.y);ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // systems
+  SYSTEMS.forEach(s=>{
+    const p=toScreen(s),r=s.r*cam.z;
+    const hit=matches(s),fogged=s.fog;
+    const col=fogged?'#1E2638':KIND_COLOR[s.kind];
+    // glow for filter matches
+    if(hit&&activeTags.size&&!fogged){
+      const gr=ctx.createRadialGradient(p.x,p.y,r*.5,p.x,p.y,r*1.7);
+      gr.addColorStop(0,'rgba(240,180,78,.16)');gr.addColorStop(1,'rgba(240,180,78,0)');
+      ctx.fillStyle=gr;ctx.beginPath();ctx.arc(p.x,p.y,r*1.7,0,7);ctx.fill();
+    }
+    ctx.fillStyle=fogged?'rgba(20,26,42,.8)':'rgba(17,22,35,.94)';
+    ctx.strokeStyle=hover===s.id?'#DCE4F5':(hit&&activeTags.size&&!fogged?'#F0B44E':col);
+    ctx.lineWidth=hover===s.id?2:1.5;
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,7);ctx.fill();ctx.stroke();
+    if(fogged){ // fog hatching
+      ctx.save();ctx.clip();
+      ctx.strokeStyle='rgba(82,93,120,.25)';ctx.lineWidth=1;
+      for(let i=-r*2;i<r*2;i+=7*Math.max(cam.z,.6)){ctx.beginPath();ctx.moveTo(p.x+i-r,p.y-r);ctx.lineTo(p.x+i+r,p.y+r);ctx.stroke()}
+      ctx.restore();
+    }
+    // modules appear when zoomed (LOD)
+    if(cam.z>1.35&&!fogged){
+      s.mods.forEach(([m,dx,dy])=>{
+        const mx=p.x+dx*r*.52,my=p.y+dy*r*.52,mr=Math.min(11*cam.z,r*.24);
+        ctx.fillStyle='rgba(24,32,50,.95)';ctx.strokeStyle=col;ctx.lineWidth=1;
+        ctx.beginPath();ctx.arc(mx,my,mr,0,7);ctx.fill();ctx.stroke();
+        if(cam.z>1.9){ctx.fillStyle='#7C87A3';ctx.font='500 '+Math.min(10,5*cam.z)+'px '+getComputedStyle(document.body).getPropertyValue('--mono');ctx.textAlign='center';ctx.fillText(m,mx,my+mr+9)}
+      });
+    }
+    // label
+    ctx.fillStyle=fogged?'#525D78':'#DCE4F5';
+    ctx.font='600 '+Math.max(11,12*Math.min(cam.z,1.3))+'px '+getComputedStyle(document.body).getPropertyValue('--body');
+    ctx.textAlign='center';ctx.fillText(s.id,p.x,p.y-r-8);
+    if(fogged){ctx.fillStyle='#525D78';ctx.font='9px '+getComputedStyle(document.body).getPropertyValue('--hud');ctx.fillText('◇ NOT INDEXED',p.x,p.y+3)}
+    else if(s.lang){ctx.fillStyle='#525D78';ctx.font='9px '+getComputedStyle(document.body).getPropertyValue('--mono');ctx.fillText(s.lang,p.x,p.y+r+14)}
+  });
+}
+function sys(id){return SYSTEMS.find(s=>s.id===id)}
+function matches(s){return ![...activeTags].some(t=>!s.tags.includes(t))}
+
+function zoomBy(f,px,py){
+  const nz=Math.min(3.2,Math.max(.45,cam.z*f));
+  if(px!==undefined){ // zoom toward cursor
+    const wx=(px-W/2)/cam.z+cam.x, wy=(py-H/2)/cam.z+cam.y;
+    cam.x=wx-(px-W/2)/nz; cam.y=wy-(py-H/2)/nz;
+  }
+  cam.z=nz;
+  document.getElementById('zlvl').textContent=nz<0.9?'WORLD':nz<1.35?'REGION':nz<2.2?'DISTRICT':'STREET';
+  document.getElementById('zoomstat').textContent='zoom '+nz.toFixed(1)+'× · '+(nz<0.9?'world':nz<1.35?'region':nz<2.2?'district':'street')+' level';
+  draw();
+}
+cv.addEventListener('wheel',e=>{e.preventDefault();zoomBy(e.deltaY<0?1.08:0.93,e.offsetX,e.offsetY)},{passive:false});
+cv.addEventListener('mousedown',e=>{drag={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y};cv.classList.add('dragging')});
+window.addEventListener('mouseup',()=>{drag=null;cv.classList.remove('dragging')});
+window.addEventListener('mousemove',e=>{
+  if(drag){cam.x=drag.cx-(e.clientX-drag.x)/cam.z;cam.y=drag.cy-(e.clientY-drag.y)/cam.z;draw();return}
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  let found=null;
+  SYSTEMS.forEach(s=>{const p=toScreen(s);if(Math.hypot(p.x-mx,p.y-my)<s.r*cam.z)found=s});
+  if(found){
+    if(hover!==found.id){hover=found.id;draw()}
+    tt.style.display='block';
+    tt.style.left=Math.min(mx+16,W-280)+'px';tt.style.top=(my+16)+'px';
+    tt.innerHTML=`<div class="tt-kind">${found.kind}${found.fog?' · not indexed':''}</div>
+      <div class="tt-name">${found.id}</div>
+      <div class="tt-meta">${found.tags.map(t=>'#'+t).join(' ')||'—'}</div>
+      <div class="tt-desc">${found.desc}${found.fog?'<br><b style="color:var(--amber)">Run `farsight ingest` to reveal.</b>':''}</div>`;
+  } else { if(hover){hover=null;draw()} tt.style.display='none'; }
+});
+cv.addEventListener('click',e=>{
+  if(drag&&(Math.abs(e.clientX-drag.x)>4))return;
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  SYSTEMS.forEach(s=>{const p=toScreen(s);if(Math.hypot(p.x-mx,p.y-my)<s.r*cam.z&&!s.fog){
+    cam.x=s.x;cam.y=s.y;zoomBy(2.0/cam.z);
+  }});
+});
+function toggleTag(el){
+  const t=el.dataset.tag;
+  el.classList.toggle('on');
+  el.classList.contains('on')?activeTags.add(t):activeTags.delete(t);
+  draw();
+}
+window.addEventListener('resize',resize);
+resize();zoomBy(1);
+</script>

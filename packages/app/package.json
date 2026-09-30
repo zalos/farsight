@@ -1,0 +1,12 @@
+{
+  "name": "@farsight/app",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@farsight/core": "workspace:*"
+  }
+}

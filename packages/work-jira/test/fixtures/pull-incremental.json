@@ -1,0 +1,213 @@
+[
+ {
+  "method": "POST",
+  "path": "/rest/api/3/search/jql",
+  "body": {
+   "jql": "project in (\"KAN\", \"SAM1\") AND updated >= 1790807847978 ORDER BY updated ASC",
+   "fields": [
+    "summary",
+    "description",
+    "issuetype",
+    "status",
+    "statuscategorychangedate",
+    "priority",
+    "assignee",
+    "reporter",
+    "labels",
+    "components",
+    "parent",
+    "subtasks",
+    "issuelinks",
+    "created",
+    "updated",
+    "resolutiondate",
+    "project",
+    "customfield_10020",
+    "customfield_10016"
+   ],
+   "maxResults": 5,
+   "reconcileIssues": [
+    10011
+   ]
+  },
+  "status": 200,
+  "headers": {
+   "ratelimit": "\"jira-burst-based\";r=199;t=1",
+   "ratelimit-policy": "\"jira-burst-based\";q=100;w=1",
+   "x-ratelimit-limit": "200",
+   "x-ratelimit-remaining": "199"
+  },
+  "response": {
+   "issues": [
+    {
+     "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+     "id": "10011",
+     "self": "https://example.atlassian.net/rest/api/3/issue/10011",
+     "key": "KAN-2",
+     "fields": {
+      "summary": "Task 2",
+      "statuscategorychangedate": "2026-09-27T17:50:28.438-0400",
+      "issuetype": {
+       "self": "https://example.atlassian.net/rest/api/3/issuetype/10009",
+       "id": "10009",
+       "description": "Stories track functionality or features expressed as user goals.",
+       "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10315?size=medium",
+       "name": "Story",
+       "subtask": false,
+       "avatarId": 10315,
+       "entityId": "00000000-0000-4000-8000-000000000014",
+       "hierarchyLevel": 0
+      },
+      "parent": {
+       "id": "10013",
+       "key": "KAN-4",
+       "self": "https://example.atlassian.net/rest/api/3/issue/10013",
+       "fields": {
+        "summary": "Invoice submission",
+        "status": {
+         "self": "https://example.atlassian.net/rest/api/3/status/10004",
+         "description": "",
+         "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+         "name": "To Do",
+         "id": "10004",
+         "statusCategory": {
+          "self": "https://example.atlassian.net/rest/api/3/statuscategory/2",
+          "id": 2,
+          "key": "new",
+          "colorName": "blue-gray",
+          "name": "To Do"
+         }
+        },
+        "priority": {
+         "self": "https://example.atlassian.net/rest/api/3/priority/3",
+         "iconUrl": "https://example.atlassian.net/images/icons/priorities/medium_new.svg",
+         "name": "Medium",
+         "id": "3"
+        },
+        "issuetype": {
+         "self": "https://example.atlassian.net/rest/api/3/issuetype/10006",
+         "id": "10006",
+         "description": "Epics track collections of related bugs, stories, and tasks.",
+         "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10307?size=medium",
+         "name": "Epic",
+         "subtask": false,
+         "avatarId": 10307,
+         "entityId": "00000000-0000-4000-8000-000000000011",
+         "hierarchyLevel": 1
+        }
+       }
+      },
+      "components": [],
+      "subtasks": [],
+      "created": "2026-09-27T17:50:27.869-0400",
+      "description": {
+       "type": "doc",
+       "version": 1,
+       "content": []
+      },
+      "project": {
+       "self": "https://example.atlassian.net/rest/api/3/project/10001",
+       "id": "10001",
+       "key": "KAN",
+       "name": "My Software Team",
+       "projectTypeKey": "software",
+       "simplified": true,
+       "avatarUrls": {
+        "48x48": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425",
+        "24x24": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=small",
+        "16x16": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=xsmall",
+        "32x32": "https://example.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10425?size=medium"
+       }
+      },
+      "customfield_10020": null,
+      "reporter": {
+       "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020%3A00000000-0000-0000-0000-000000000001",
+       "accountId": "712020:00000000-0000-0000-0000-000000000001",
+       "emailAddress": "dev@example.com",
+       "avatarUrls": {
+        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+       },
+       "displayName": "Farsight Test",
+       "active": true,
+       "timeZone": "America/New_York",
+       "accountType": "atlassian"
+      },
+      "priority": null,
+      "labels": [
+       "invoices",
+       "recorded"
+      ],
+      "customfield_10016": 5,
+      "resolutiondate": null,
+      "issuelinks": [
+       {
+        "id": "10000",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/10000",
+        "type": {
+         "id": "10000",
+         "name": "Blocks",
+         "inward": "is blocked by",
+         "outward": "blocks",
+         "self": "https://example.atlassian.net/rest/api/3/issueLinkType/10000"
+        },
+        "inwardIssue": {
+         "id": "10010",
+         "key": "KAN-1",
+         "self": "https://example.atlassian.net/rest/api/3/issue/10010",
+         "fields": {
+          "summary": "Task 1",
+          "status": {
+           "self": "https://example.atlassian.net/rest/api/3/status/10005",
+           "description": "",
+           "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+           "name": "In Progress",
+           "id": "10005",
+           "statusCategory": {
+            "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+           }
+          },
+          "issuetype": {
+           "self": "https://example.atlassian.net/rest/api/3/issuetype/10008",
+           "id": "10008",
+           "description": "Tasks track small, distinct pieces of work.",
+           "iconUrl": "https://example.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+           "name": "Task",
+           "subtask": false,
+           "avatarId": 10318,
+           "entityId": "00000000-0000-4000-8000-000000000013",
+           "hierarchyLevel": 0
+          }
+         }
+        }
+       }
+      ],
+      "assignee": null,
+      "updated": "2026-09-30T18:41:02.275-0400",
+      "status": {
+       "self": "https://example.atlassian.net/rest/api/3/status/10005",
+       "description": "",
+       "iconUrl": "https://example.atlassian.net/images/icons/statuses/generic.png",
+       "name": "In Progress",
+       "id": "10005",
+       "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+       }
+      }
+     }
+    }
+   ],
+   "isLast": true
+  }
+ }
+]

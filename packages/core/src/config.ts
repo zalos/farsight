@@ -1,0 +1,342 @@
+import { readFileSync } from 'node:fs';
+import type { GraphNode, GraphEdge, ExternalKind } from './graph.js';
+import { humanizeName } from './query.js';
+
+/**
+ * Workspace config (farsight.config.json at the ingest root).
+ * Phase 1 supports tag rules, a business glossary, and declared guards /
+ * entry points; repos/lens/role presets land in Phase 2 (see docs/ROADMAP.md).
+ */
+export interface FarsightConfig {
+  /** tag → list of matchers. A node matches on substring of its path or name (case-insensitive). */
+  tags?: Record<string, string[]>;
+  /**
+   * node name (or `METHOD /path` for routes) → business-lens label/description. A class
+   * member (`PgBcOutboxRepository.claimNext`) matches, in order: its exact name, then its
+   * member part (`claimNext`), then its class part (`PgBcOutboxRepository` — labelled as the
+   * class's words plus the member, humanized). See `glossaryEntryFor`.
+   */
+  glossary?: Record<string, { label: string; description?: string }>;
+  /**
+   * guard label → matchers. A function matcher (substring of path or name) turns the
+   * function into a guard node (🔒) and flips calls into it to guards edges on the caller —
+   * for auth wrappers no adapter understands yet (withTenant…). A route matcher
+   * (`GET /api/v1/track/{token}`) declares a gate on that route — for capability URLs
+   * OpenAPI cannot express — as a `declared` guard node; api drift reports
+   * `security-declared-only` when the built handler enforces nothing the parser can see.
+   */
+  guards?: Record<string, string[]>;
+  /** entrypoint label → matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs…). */
+  entrypoints?: Record<string, string[]>;
+  /** OpenAPI/Swagger documents describing this repo's HTTP surface — a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself). */
+  openapi?: { path?: string; url?: string; name?: string }[];
+  /** Design manifests (docs/design/screens.json) describing this repo's screens — see docs/proposals/design-source.md. Discovery by filename still runs. */
+  design?: { manifest?: string; path?: string; url?: string; name?: string }[];
+  /** Test suites and the reports that observed them — see docs/proposals/tests-surface.md §3.2. Discovery by glob still runs; this adds report locations and extra spec globs. */
+  tests?: TestsConfigBlock;
+  /** third-party systems the parser cannot see by itself, or renames/kinds for ones it can */
+  externals?: ExternalDecl[];
+  /** glob(s) whose functions are plumbing regardless of @business: helpers in journeys, out of the coverable set, never entry points */
+  plumbing?: string[];
+  /** node ids (or name matchers, the guards shape) of the functions that build the process container — the setup closure's roots */
+  setup?: string[];
+  /**
+   * glob(s) of tooling — scripts a person runs by hand, not the running app. Their nodes are
+   * tagged `tooling`, a call from the app into one is demoted to LOW confidence, and a journey
+   * never walks into one. Default `DEFAULT_TOOLING` (`["scripts/**"]`); `[]` turns it off.
+   */
+  tooling?: string[];
+  /** the repo's Storybook(s) — where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command. */
+  storybook?: StorybookConfig | StorybookConfig[];
+}
+
+/** One Storybook, as `farsight.config.json → storybook` declares it. Farsight never starts it. */
+export interface StorybookConfig {
+  /** repo-relative `.storybook` directory; matched against the discovered ones (default: the only one found) */
+  configDir?: string;
+  /** where it is served when it runs (`http://localhost:6006`) — the only origin the viewer will frame */
+  url?: string;
+  /** repo-relative directory its `componentPath`s are relative to (default: the config dir's parent) */
+  root?: string;
+  /** what a person runs to start it (`npm run storybook`) — printed when it is not reached */
+  command?: string;
+  name?: string;
+}
+
+/** One declared third-party system: the client the calls go through, what to call it, and what kind of system it is. */
+export interface ExternalDecl {
+  /** a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through */
+  import: string;
+  name: string;
+  kind: ExternalKind;
+}
+
+/** Where one level's results/coverage reports live. Paths are repo-relative globs; the adapter never runs tests. */
+export interface TestReportConfig {
+  runner?: 'vitest' | 'jest' | 'node:test' | 'playwright' | 'cypress' | 'junit' | 'other';
+  /** per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML */
+  results?: string;
+  /** istanbul-shaped coverage-final.json — attributed at the run level unless the report names a test */
+  coverage?: string;
+  /** an html report to deep-link to */
+  report?: string;
+}
+
+export interface TestsConfigBlock {
+  /** extra globs that claim a file as a test (added to the defaults) */
+  include?: string[];
+  /** globs that un-claim a file the defaults would have taken */
+  exclude?: string[];
+  unit?: TestReportConfig;
+  integration?: TestReportConfig;
+  e2e?: TestReportConfig;
+}
+
+export function loadConfig(path: string): FarsightConfig | null {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as FarsightConfig;
+  } catch {
+    return null;
+  }
+}
+
+const ROUTE_MATCHER = /^([A-Z]+) (\/\S*)$/;
+
+/** `{token}` / `:token` / `${x}` → one shape, so a config matcher meets a route however the adapter spelled it. */
+function routeKey(name: string): string {
+  return name.replace(/\$\{[^}]*\}/g, ':p').replace(/:[A-Za-z_]+/g, ':p').replace(/\{[^}/]+\}/g, ':p').replace(/\/$/, '');
+}
+
+/**
+ * Glob → RegExp for config path globs (`plumbing: ["libs/api/http/**"]`).
+ * The same tokenizer as `testGlobToRegExp` in `parsers/src/tests/cases.ts`,
+ * duplicated here because core cannot import parsers: `shared/files.ts`'s
+ * rewrite order collapses a leading `**` + `/` into a single segment, which a
+ * `src/plumbing/**` claim cannot live with. Line comments only around it.
+ */
+export function globToRegExp(glob: string): RegExp {
+  let out = '';
+  const chars = [...glob];
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i]!;
+    if (c === '*') {
+      if (chars[i + 1] === '*') {
+        i++;
+        if (chars[i + 1] === '/') { i++; out += '(?:[^/]+/)*'; } else out += '.*';
+      } else out += '[^/]*';
+      continue;
+    }
+    if (c === '?') { out += '[^/]'; continue; }
+    out += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${out}(?:/.*)?$`);
+}
+
+/**
+ * Route-shaped guard matchers → a `declared` guard node per label + a guards
+ * edge onto every route it names. Idempotent (runs before the OpenAPI
+ * post-pass so drift sees the gate, and again after it for the routes the
+ * spec added). Config-declared gates are tagged `declared`: they are a
+ * statement about the system, not something the parser observed.
+ */
+export function applyRouteGuards(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[]): number {
+  let added = 0;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const [label, matchers] of Object.entries(config.guards ?? {})) {
+    const routes = matchers.map((m) => m.match(ROUTE_MATCHER)).filter((m): m is RegExpMatchArray => !!m).map((m) => `${m[1]} ${routeKey(m[2]!)}`);
+    if (!routes.length) continue;
+    for (const node of nodes) {
+      if (node.kind !== 'route') continue;
+      const mp = node.name.match(ROUTE_MATCHER);
+      if (!mp || !routes.includes(`${mp[1]} ${routeKey(mp[2]!)}`)) continue;
+      const repo = node.loc?.repo ?? node.id.split('::')[0]!;
+      const guardId = `${repo}::guard::config:${label}`;
+      if (!byId.has(guardId)) {
+        const guard: GraphNode = { id: guardId, kind: 'guard', name: label, tags: ['auth', 'declared'], facets: { business: { description: `Gate declared in farsight.config.json: ${label}.` } } };
+        nodes.push(guard);
+        byId.set(guardId, guard);
+      }
+      if (edges.some((e) => e.kind === 'guards' && e.from === guardId && e.to === node.id)) continue;
+      edges.push({ id: `cfg-guard-${edges.length}`, kind: 'guards', from: guardId, to: node.id, resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } });
+      added++;
+    }
+  }
+  return added;
+}
+
+/** Tooling roots when `farsight.config.json` names none: a repo's top-level `scripts/`. */
+export const DEFAULT_TOOLING: readonly string[] = ['scripts/**'];
+
+/**
+ * Tag tooling nodes and demote the app's edges into them, in place. A script and the
+ * running app can share a function name, and a heuristic (a hook bound at
+ * `new Worker({ log })` in a script, a name match) then draws the script on a production
+ * path with the confidence of a real call. A call *from* a script into the app is real and
+ * kept as it is; a call from the app *into* a script becomes LOW with a note saying why,
+ * and `journey()` does not follow it. Runs whether or not the repo has a config file.
+ * Returns how many edges it demoted.
+ */
+export function applyTooling(nodes: GraphNode[], edges: GraphEdge[], globs: readonly string[] = DEFAULT_TOOLING): number {
+  if (!globs.length) return 0;
+  const res = globs.map(globToRegExp);
+  const tooling = new Set<string>();
+  for (const node of nodes) {
+    const p = node.loc?.path;
+    if (!p || !res.some((re) => re.test(p))) continue;
+    if (!node.tags.includes('tooling')) node.tags.push('tooling');
+    tooling.add(node.id);
+  }
+  if (!tooling.size) return 0;
+  let demoted = 0;
+  for (const e of edges) {
+    if (!tooling.has(e.to) || tooling.has(e.from)) continue;
+    if (e.meta?.tooling) continue;
+    const r = e.resolution;
+    const note = `the target is tooling (${globs.join(', ')}) — a script, not the running app`;
+    e.resolution = {
+      status: r?.status === 'unresolved' ? 'unresolved' : 'heuristic',
+      technique: r?.technique ?? 'name-match',
+      confidence: 'LOW',
+      ...(r?.candidates ? { candidates: r.candidates } : {}),
+      ...(r?.alternatives ? { alternatives: r.alternatives } : {}),
+      note: r?.note ? `${r.note}; ${note}` : note,
+    };
+    e.meta = { ...e.meta, tooling: true };
+    demoted++;
+  }
+  return demoted;
+}
+
+/**
+ * The glossary entry for one node name. Exact name first; for a `Class.method` name,
+ * then the member part (`claimNext`), then the class part (`BcOutboxWorker`) — a class
+ * entry labels each member as the class's words and the member humanized
+ * (`Business Central outbox worker: drain once`), never the bare class label, and does
+ * not lend the class's description to a member it does not describe.
+ */
+export function glossaryEntryFor(name: string, glossary: FarsightConfig['glossary']): { label: string; description?: string } | undefined {
+  if (!glossary) return undefined;
+  const own = (k: string) => (Object.prototype.hasOwnProperty.call(glossary, k) ? glossary[k] : undefined);
+  const exact = own(name);
+  if (exact) return exact;
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0 || dot === name.length - 1 || name.includes(' ')) return undefined;
+  const member = name.slice(dot + 1);
+  const byMember = own(member);
+  if (byMember) return byMember;
+  const cls = name.slice(0, dot);
+  const byClass = own(cls) ?? (cls.includes('.') ? own(cls.slice(cls.lastIndexOf('.') + 1)) : undefined);
+  if (byClass) return { label: `${byClass.label}: ${humanizeName(member).toLowerCase()}` };
+  return undefined;
+}
+
+/** Apply tag rules, plumbing/setup tags, glossary facets, and declared guards/entrypoints to a fragment, in place. */
+export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[] = []): void {
+  const tagRules = Object.entries(config.tags ?? {});
+  // function-shaped matchers only here; route-shaped ones are applyRouteGuards()
+  const guardRules = Object.entries(config.guards ?? {}).map(([l, ms]) => [l, ms.filter((m) => !ROUTE_MATCHER.test(m))] as const).filter(([, ms]) => ms.length);
+  const entryRules = Object.entries(config.entrypoints ?? {});
+  // plumbing is a path glob (a whole directory of helpers); setup is the guards' matcher shape (an exact node id or a substring of `path name`)
+  const plumbingGlobs = (config.plumbing ?? []).map(globToRegExp);
+  const setupMatchers = config.setup ?? [];
+  for (const node of nodes) {
+    const hay = `${node.loc?.path ?? ''} ${node.name}`.toLowerCase();
+    for (const [tag, matchers] of tagRules) {
+      if (!node.tags.includes(tag) && matchers.some((m) => hay.includes(m.toLowerCase()))) {
+        node.tags.push(tag);
+      }
+    }
+    // helpers by declaration: plumbing folds in journeys and leaves the coverable set regardless of @business
+    if (!node.tags.includes('plumbing') && node.loc?.path && plumbingGlobs.some((re) => re.test(node.loc!.path))) {
+      node.tags.push('plumbing');
+    }
+    // the setup closure's roots — an exact node id, or (functions only) the guards' substring matcher
+    if (!node.tags.includes('setup') && setupMatchers.some((m) => node.id === m || (node.kind === 'function' && hay.includes(m.toLowerCase())))) {
+      node.tags.push('setup');
+    }
+    // before guard rules — they rename the node. A guard the adapter already found carries
+    // `name: label`; its glossary key is the identifier before the colon.
+    const colon = node.kind === 'guard' ? node.name.indexOf(': ') : -1;
+    const entry = glossaryEntryFor(colon > 0 ? node.name.slice(0, colon) : node.name, config.glossary);
+    if (entry) {
+      // the glossary's words win; a description the code wrote stays where the glossary gives none
+      node.facets = { ...node.facets, business: { ...node.facets?.business, ...entry } };
+    }
+    for (const [label, matchers] of guardRules) {
+      if (node.kind !== 'function' || !matchers.some((m) => hay.includes(m.toLowerCase()))) continue;
+      node.kind = 'guard';
+      node.name = `${node.name}: ${label}`;
+      if (!node.tags.includes('auth')) node.tags.push('auth');
+      // calls into the wrapper gain a guards edge pointing back at the caller; the calls edge stays,
+      // because the wrapper is also run — what it does inside (its reads, writes, calls) is part of the walk
+      for (const e of [...edges]) {
+        if (e.kind !== 'calls' || e.to !== node.id) continue;
+        if (edges.some((g) => g.kind === 'guards' && g.from === node.id && g.to === e.from)) continue;
+        edges.push({ id: `g${edges.length}`, kind: 'guards', from: node.id, to: e.from,
+          resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `declared a guard by farsight.config.json (${label})` } });
+        e.meta = { ...e.meta, via: 'guard' };
+      }
+    }
+    for (const [label, matchers] of entryRules) {
+      if (matchers.some((m) => hay.includes(m.toLowerCase()))) {
+        for (const t of ['entrypoint', label]) if (!node.tags.includes(t)) node.tags.push(t);
+      }
+    }
+  }
+  applyRouteGuards(nodes, config, edges);
+}
+
+/** Edge kinds that carry the setup origin outward from the closure — everything a container build actually does. */
+const SETUP_ORIGIN_KINDS = new Set<GraphEdge['kind']>(['calls', 'reads', 'writes', 'publishes', 'http', 'validates', 'renders']);
+
+/**
+ * The setup closure and its origin stamp (the clarity-phase plan §2.3.3).
+ *
+ * `C` starts as the nodes tagged `setup` — the container builders, declared in
+ * `farsight.config.json → setup` or found by the parser's `??=` heuristic. It grows
+ * until stable: a `function` called from `C` joins only when **every** `calls`
+ * in-edge it has comes from `C` (a function with another caller is real work that
+ * boot happens to reuse, and stays out). Then every out-edge of a member, and the
+ * `calls` in-edge into each setup **root** (`getContainer → build`), is stamped
+ * `meta.origin = 'setup'` so `journey()` can print the boot once instead of under
+ * every request and `impact_of` can report it separately.
+ *
+ * In place, additive on `meta`, and idempotent — membership is recomputed from the
+ * roots each time and an already-stamped edge is left alone. Returns the number of
+ * edges newly stamped.
+ */
+export function applySetupOrigin(nodes: GraphNode[], edges: GraphEdge[]): number {
+  const roots = new Set(nodes.filter((n) => n.tags.includes('setup')).map((n) => n.id));
+  if (!roots.size) return 0;
+  const kindOf = new Map(nodes.map((n) => [n.id, n.kind]));
+  const outOf = new Map<string, GraphEdge[]>();
+  const callsIn = new Map<string, GraphEdge[]>();
+  for (const e of edges) {
+    const out = outOf.get(e.from);
+    if (out) out.push(e); else outOf.set(e.from, [e]);
+    if (e.kind !== 'calls') continue;
+    const inc = callsIn.get(e.to);
+    if (inc) inc.push(e); else callsIn.set(e.to, [e]);
+  }
+  const closure = new Set(roots);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [to, ins] of callsIn) {
+      if (closure.has(to) || kindOf.get(to) !== 'function') continue;
+      // reached from the closure, and reached from nowhere else
+      if (!ins.some((e) => closure.has(e.from))) continue;
+      if (!ins.every((e) => closure.has(e.from))) continue;
+      closure.add(to);
+      grew = true;
+    }
+  }
+  let stamped = 0;
+  const stamp = (e: GraphEdge): void => {
+    if (e.meta?.origin === 'setup') return;
+    e.meta = { ...e.meta, origin: 'setup' };
+    stamped++;
+  };
+  for (const id of closure) for (const e of outOf.get(id) ?? []) if (SETUP_ORIGIN_KINDS.has(e.kind)) stamp(e);
+  for (const id of roots) for (const e of callsIn.get(id) ?? []) stamp(e);
+  return stamped;
+}

@@ -1,0 +1,27 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+*.sqlite
+graph.json
+.env
+build/
+.farsight/cache/
+.farsight/farsight.db*
+.farsight/work.db*
+.farsight/graph@sync-*.json
+
+# local scratch, never committed
+_to_delete/
+
+# e2e run output (pnpm e2e) — results.json is read by farsight.config.json → tests.e2e
+e2e/test-results/
+e2e/.playwright-report/
+
+# the fixture work tracker writes its clock and its applied writes beside the recording
+packages/work-fixture/fixtures/**/served.json
+packages/work-fixture/fixtures/**/applied.jsonl
+
+# local settings and machine state — see .farsight/settings.example.json
+.farsight/settings.json
+.claude/settings.local.json
