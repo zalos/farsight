@@ -61,6 +61,16 @@ test.describe('work surface', () => {
     await expect(page.locator('.wk-card[data-source="invoice-azdo"] .wk-mode')).toHaveText(/read-only/i);
   });
 
+  /** @covers packages/server/public/app/surfaces/work.js::mountWork */
+  test('every source card says who the tracker knows us as, in every lens', async ({ page }) => {
+    for (const lens of ['business', 'hybrid', 'code']) {
+      await page.goto('/#/work?lens=' + lens);
+      for (const src of ['invoice-jira', 'invoice-azdo']) {
+        await expect(page.locator('.wk-card[data-source="' + src + '"] .host').first(), lens + ' · ' + src).toContainText('as Ada Okafor');
+      }
+    }
+  });
+
   /** @covers packages/server/public/app/surfaces/work.js::cardTitle */
   test('a source card names its tracker once, then the site or org, then the source id', async ({ page }) => {
     await page.goto('/#/work');
