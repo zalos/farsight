@@ -194,7 +194,8 @@ rewrites the link in place (`history.replaceState`, no remount, focus kept) and 
 asks again; lens and register redraw from the answer in hand; the source scope (code repositories) moves nothing.
 
 **The list page.** A strip (title, standfirst, the items and trackers `Counted`s, LIST · BOARD · SOURCES, *sync
-now* → `POST /api/work/sync`), one card per source (provider and the workspace's name for it, mode chip, host, *as
+now* → `POST /api/work/sync`), one card per source (`cardTitle`: the tracker named once — the provider word, then the workspace's name for
+it unless that name already starts with the word — the mode chip, then host · source id (not in business), *as
 <user>*, the freshness sentence — `synced 3 minutes ago` · `source unreachable since 09:14 — showing the cache` ·
 `credential expired — showing the cache` · `never synced` — with the tracker's error outside the business lens, the
 items count with its by-state breakdown, what the tracker lets Farsight do in words from its declared

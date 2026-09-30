@@ -195,6 +195,20 @@ function hostOf(s) {
 }
 
 /**
+ * A card's title names the tracker once: the provider word, then the
+ * workspace's name for the source — unless that name already starts with the
+ * provider word (*Jira — invoice-app*), or is only the source id.
+ * @group Work
+ */
+export function cardTitle(s) {
+  const word = providerWord(s.provider);
+  const name = sourceName(s.id);
+  if (!name || name === s.id) return word;
+  if (word && name.toLowerCase().startsWith(word.toLowerCase())) return name;
+  return word + ' · ' + name;
+}
+
+/**
  * One tracker: its name and mode, where it lives, when it last agreed with the
  * tracker, what it holds, what it lets Farsight do, and its own *sync now*.
  * @group Work
@@ -204,10 +218,9 @@ function cardHtml(s) {
   const f = s.freshness || { state: 'never' };
   const mode = s.mode === 'edit' ? 'edit' : 'read-only';
   return '<div class="wk-card ' + esc(f.state || '') + '" data-source="' + esc(s.id) + '">'
-    + '<div class="t">' + esc(providerWord(s.provider)) + (sourceName(s.id) !== s.id ? ' · ' + esc(sourceName(s.id)) : '') + ' <span class="wk-mode ' + (mode === 'edit' ? 'edit' : '') + '"' + defAttrs(mode === 'edit' ? 'work.mode.edit' : 'work.mode.readOnly') + '>'
-    + esc(t(mode === 'edit' ? 'work.mode.edit' : 'work.mode.readOnly')) + '</span>'
-    + (biz ? '' : '<span class="host">' + esc(s.id) + '</span>') + '</div>'
-    + '<div class="host">' + esc(hostOf(s)) + (s.user && s.user.name ? ' · ' + esc(t('work.hud.src.as').replace('{name}', s.user.name)) : '') + '</div>'
+    + '<div class="t">' + esc(cardTitle(s)) + ' <span class="wk-mode ' + (mode === 'edit' ? 'edit' : '') + '"' + defAttrs(mode === 'edit' ? 'work.mode.edit' : 'work.mode.readOnly') + '>'
+    + esc(t(mode === 'edit' ? 'work.mode.edit' : 'work.mode.readOnly')) + '</span></div>'
+    + '<div class="host">' + esc(hostOf(s)) + (biz ? '' : ' · <span class="id">' + esc(s.id) + '</span>') + (s.user && s.user.name ? ' · ' + esc(t('work.hud.src.as').replace('{name}', s.user.name)) : '') + '</div>'
     + freshHtml(f)
     + (s.counts && s.counts.items ? '<div class="kv">' + countedHtml(s.counts.items, '/api/work') + '</div>' : '')
     + capsHtml(s)

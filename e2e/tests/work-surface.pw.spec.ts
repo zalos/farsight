@@ -61,6 +61,19 @@ test.describe('work surface', () => {
     await expect(page.locator('.wk-card[data-source="invoice-azdo"] .wk-mode')).toHaveText(/read-only/i);
   });
 
+  /** @covers packages/server/public/app/surfaces/work.js::cardTitle */
+  test('a source card names its tracker once, then the site or org, then the source id', async ({ page }) => {
+    await page.goto('/#/work');
+    const jira = page.locator('.wk-card[data-source="invoice-jira"]');
+    // the workspace calls it *Jira — invoice-app*: the provider word is not printed twice
+    await expect(jira.locator('.t')).toHaveText(/^Jira — invoice-app\s*edit/i);
+    await expect(jira.locator('.host').first()).toContainText('invoice-app.atlassian.net · invoice-jira');
+    // a name without the provider word keeps the provider in front
+    const ado = page.locator('.wk-card[data-source="invoice-azdo"]');
+    await expect(ado.locator('.t')).toHaveText(/^Azure DevOps · Invoicing board\s*read-only/i);
+    await expect(ado.locator('.host').first()).toContainText('dev.azure.com/invoice-app · invoice-azdo');
+  });
+
   /** @covers packages/server/public/app/surfaces/work.js::workFilter */
   test('filters ask the server again and the link carries them', async ({ page }) => {
     await page.goto('/#/work');

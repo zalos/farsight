@@ -47,7 +47,7 @@ test.describe('work chips', () => {
     await page.goto('/#/codemap?node=' + encodeURIComponent('invoice-app::src/server/taxEngine.ts::computeTax'));
     const sec = page.locator('#insp-work');
     await expect(sec).toBeVisible();
-    await expect(sec).toContainText('tracked by INV-6 Tax rounds the wrong way on multi-line invoices (done, invoice-jira)');
+    await expect(sec).toContainText('tracked by INV-6 Tax rounds the wrong way on multi-line invoices (done, Jira — invoice-app)');
     await sec.getByRole('link').first().click();
     await expect(page).toHaveURL(/#\/work\/work/);
   });
