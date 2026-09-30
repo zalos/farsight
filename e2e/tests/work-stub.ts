@@ -234,8 +234,8 @@ export async function routeWorkSettings(page: Page, theme?: string): Promise<voi
     const s = await res.json();
     if (theme) s.theme = theme;
     s.sources = [...(s.sources || []),
-      { id: 'invoice-jira', name: 'invoice-jira', type: 'work', provider: 'jira', site: 'https://invoice-app.atlassian.net', scope: { projects: ['INV'] }, mode: 'edit', enabled: true },
-      { id: 'invoice-azdo', name: 'invoice-azdo', type: 'work', provider: 'azure-devops', org: 'https://dev.azure.com/invoice-app', scope: { projects: ['Invoicing'] }, mode: 'read-only', enabled: true }];
+      { id: 'invoice-jira', name: 'Jira — invoice-app', type: 'work', provider: 'jira', site: 'https://invoice-app.atlassian.net', scope: { projects: ['INV'] }, mode: 'edit', enabled: true },
+      { id: 'invoice-azdo', name: 'Invoicing board', type: 'work', provider: 'azure-devops', org: 'https://dev.azure.com/invoice-app', scope: { projects: ['Invoicing'] }, mode: 'read-only', enabled: true }];
     return route.fulfill({ response: res, json: s });
   });
 }
