@@ -25,3 +25,6 @@ packages/work-fixture/fixtures/**/applied.jsonl
 # local settings and machine state — see .farsight/settings.example.json
 .farsight/settings.json
 .claude/settings.local.json
+
+# local, never committed: the commit → session map and other owner-only notes
+.private/
