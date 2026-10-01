@@ -48,6 +48,9 @@ FARSIGHT_LIVE=1 pnpm -r test        # also run the live tracker tests (Jira writ
 node scripts/pack.mjs               # build installable farsight-cli tarball into build/ (stamps version · built · commit into the bundle)
 npm install -g ./build/farsight-cli-*.tgz # the global `farsight` another workspace runs (serve + .mcp.json) — reinstall after every pass, then restart its server
 curl -X POST localhost:4477/api/sync # re-ingest all enabled sources via server
+node scripts/changelog.mjs --dry-run              # the next CHANGELOG section + release notes, from conventional commits since the last tag
+node scripts/release.mjs --dry-run --bump patch   # what a release would bump, write and tag (without --dry-run: commit + tag locally, never pushes)
+gh workflow run release.yml -f bump=patch         # cut a release on GitHub: gates, version commit + tag, pack, smoke test, GitHub Release with the tarball (docs/RELEASING.md)
 ```
 
 The Claude preview/dev server is defined in `.claude/launch.json` (name: `farsight-viewer`, port 4477). Codex can run the same CLI serve command from the workspace root; there is no `.codex/launch.json`.

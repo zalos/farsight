@@ -20,11 +20,26 @@ Farsight is a code-intelligence platform that parses your codebases (AST + seman
 4. **Configurable for the audience.** Workspaces define which lenses, labels, and vocabularies each role sees. The same node is `InvoiceService.finalize()` to a dev and "Finalize invoice" to an analyst.
 5. **Multi-repo, multi-language.** Language adapters (TypeScript/JavaScript first; Rust, Java, C# next) all emit the same graph schema, so one flow can span a React frontend, a Node API, and a database.
 
+## Install a release
+
+Every [GitHub Release](https://github.com/zalos/farsight/releases) carries the installable CLI. Copy the line from
+its notes — for a release `vX.Y.Z`:
+
+```sh
+npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz
+farsight --version   # farsight X.Y.Z · built … · commit …
+```
+
+Node 24 is the supported runtime. How releases are cut: [docs/RELEASING.md](docs/RELEASING.md); what changed:
+[CHANGELOG.md](CHANGELOG.md).
+
 ## Quickstart
+
+From a checkout instead of a release:
 
 ```sh
 pnpm install && pnpm build && node scripts/pack.mjs
-npm install -g ./build/farsight-cli-0.0.1.tgz
+npm install -g ./build/farsight-cli-*.tgz
 
 farsight ingest .        # parse this very repo (65 nodes in ~23ms)
 farsight serve           # explore it at http://localhost:4477
@@ -51,7 +66,7 @@ packages/
   mcp/           MCP server — the graph as agent context (trace_flow, list_rules…)
   cli/           The `farsight` binary: ingest / serve / mcp
   app/           Phase-2 canvas GUI (placeholder; current viewer is interim)
-scripts/         pack.mjs — builds the installable farsight-cli tarball
+scripts/         pack.mjs — builds the installable farsight-cli tarball; changelog.mjs + release.mjs — cut a release
 .farsight/       Workspace settings: sources (with exclude globs), collections, theme — `settings.json` is local; copy `settings.example.json` to start
 ```
 
