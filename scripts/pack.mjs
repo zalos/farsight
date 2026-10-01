@@ -15,7 +15,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'build', 'farsight-cli');
-const workspaceVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
+const workspacePkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const workspaceVersion = workspacePkg.version;
 // the git facts, by the rule the workspace build stamps with (core's gitIdentity:
 // HEAD, the last commit that touched the code, and whether the code is dirty) —
 // so a server run from the workspace and this tarball, built from one clean
@@ -70,6 +71,8 @@ writeFileSync(
       version: workspaceVersion,
       description: 'Parse codebases into a semantic graph; explore it in a game-inspired HUD or feed it to LLM agents via MCP.',
       license: 'MIT',
+      // npm's provenance check requires the package to name the repository it was built from
+      ...(workspacePkg.repository ? { repository: workspacePkg.repository } : {}),
       type: 'module',
       bin: { farsight: 'dist/farsight.mjs' },
       files: ['dist', 'public', 'README.md'],
