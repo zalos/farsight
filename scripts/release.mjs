@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { changelog, prependSection } from './changelog.mjs';
+import { changelog, prependSection, sinceLabel } from './changelog.mjs';
 
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
 
@@ -110,7 +110,7 @@ export function release(cwd, opts) {
   const plan = { current, version, tag, branch, prerelease: version.includes('-'), since: log.since, commits: log.commits.length, notesFile };
 
   if (opts.dryRun) {
-    console.log(`release (dry run): ${current} → ${version} on ${branch}, ${plural(log.commits.length)} since ${log.since ?? 'the first commit'}`);
+    console.log(`release (dry run): ${current} → ${version} on ${branch}, ${plural(log.commits.length)} since ${sinceLabel(log.since)}`);
     if (problems.length) console.log(`\nwould refuse:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
     console.log(`\nwould commit "chore(release): ${tag}" (package.json, CHANGELOG.md) and tag ${tag} (annotated, message = the notes below)\n`);
     console.log(log.section);
@@ -132,7 +132,7 @@ export function release(cwd, opts) {
   const commit = git(cwd, ['rev-parse', '--short', 'HEAD']);
   setOutputs({ version, tag, prerelease: String(plan.prerelease), notes: notesFile, commit });
 
-  console.log(`released ${tag} locally: commit ${commit}, ${plural(log.commits.length)} since ${log.since ?? 'the first commit'}`);
+  console.log(`released ${tag} locally: commit ${commit}, ${plural(log.commits.length)} since ${sinceLabel(log.since)}`);
   console.log(`release notes: ${notesFile}`);
   console.log('\nnext:');
   console.log('  node scripts/pack.mjs                 # the tarball, stamped with this commit');

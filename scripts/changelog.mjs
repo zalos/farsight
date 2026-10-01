@@ -172,6 +172,11 @@ export function prependSection(existing, section, version) {
   return `${before}${UNRELEASED_HEAD}\n\n${UNRELEASED_BODY}\n\n${section.trimEnd()}\n${after ? `\n${after}` : ''}`;
 }
 
+/** A tag as it is, a seed commit shortened, or the start of history. */
+export function sinceLabel(since) {
+  return !since ? 'the first commit' : /^[0-9a-f]{40}$/.test(since) ? since.slice(0, 7) : since;
+}
+
 export function today() { return new Date().toISOString().slice(0, 10); }
 
 /** Everything the CLI prints or writes, for one release. */
@@ -209,7 +214,7 @@ function main(argv) {
   const r = changelog(cwd, { version: values.version, since: values.since, repoUrl: values['repo-url'], date: values.date });
   const dry = values['dry-run'] || (!values.write && !values.notes);
   if (dry) {
-    console.log(`# CHANGELOG.md section (${plural(r.commits.length)} since ${r.since ?? 'the first commit'})\n`);
+    console.log(`# CHANGELOG.md section (${plural(r.commits.length)} since ${sinceLabel(r.since)})\n`);
     console.log(r.section);
     console.log('# Release notes\n');
     console.log(r.notes);
@@ -218,7 +223,7 @@ function main(argv) {
   if (values.write) {
     const file = join(cwd, 'CHANGELOG.md');
     writeFileSync(file, prependSection(existsSync(file) ? readFileSync(file, 'utf8') : null, r.section, r.version));
-    console.log(`CHANGELOG.md: added [${r.version}] (${plural(r.commits.length)} since ${r.since ?? 'the first commit'})`);
+    console.log(`CHANGELOG.md: added [${r.version}] (${plural(r.commits.length)} since ${sinceLabel(r.since)})`);
   }
   if (values.notes) {
     writeFileSync(values.notes, r.notes);
