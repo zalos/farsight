@@ -43,6 +43,7 @@ const CHANGELOG_PREAMBLE = [
 ].join('\n');
 const UNRELEASED_BODY = 'Changes on `main` since the last release: `node scripts/changelog.mjs --dry-run` lists them.';
 
+const plural = (n) => `${n} commit${n === 1 ? '' : 's'}`;
 const git = (cwd, args) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 }).toString();
 const tryGit = (cwd, args) => { try { return git(cwd, args).trim(); } catch { return ''; } };
 
@@ -208,7 +209,7 @@ function main(argv) {
   const r = changelog(cwd, { version: values.version, since: values.since, repoUrl: values['repo-url'], date: values.date });
   const dry = values['dry-run'] || (!values.write && !values.notes);
   if (dry) {
-    console.log(`# CHANGELOG.md section (${r.commits.length} commits since ${r.since ?? 'the first commit'})\n`);
+    console.log(`# CHANGELOG.md section (${plural(r.commits.length)} since ${r.since ?? 'the first commit'})\n`);
     console.log(r.section);
     console.log('# Release notes\n');
     console.log(r.notes);
@@ -217,7 +218,7 @@ function main(argv) {
   if (values.write) {
     const file = join(cwd, 'CHANGELOG.md');
     writeFileSync(file, prependSection(existsSync(file) ? readFileSync(file, 'utf8') : null, r.section, r.version));
-    console.log(`CHANGELOG.md: added [${r.version}] (${r.commits.length} commits since ${r.since ?? 'the first commit'})`);
+    console.log(`CHANGELOG.md: added [${r.version}] (${plural(r.commits.length)} since ${r.since ?? 'the first commit'})`);
   }
   if (values.notes) {
     writeFileSync(values.notes, r.notes);
