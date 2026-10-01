@@ -3,10 +3,15 @@
   "private": true,
   "version": "0.1.0",
   "description": "Parse codebases into a semantic graph and explore them through a game-inspired GUI",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zalos/farsight.git"
+  },
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck && pnpm e2e:typecheck",
-    "test": "pnpm -r test",
+    "test": "pnpm -r test && pnpm test:scripts",
+    "test:scripts": "node --test \"scripts/test/*.test.mjs\"",
     "lint:strings": "node scripts/lint-strings.mjs",
     "e2e": "node scripts/e2e.mjs",
     "e2e:typecheck": "tsc -p e2e/tsconfig.json"

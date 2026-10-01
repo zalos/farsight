@@ -1,0 +1,165 @@
+# Cuts a farsight-cli release on demand: gates, version commit + tag, pack,
+# smoke test, push, GitHub Release (and npm, once an NPM_TOKEN secret exists).
+# Run it from the Actions tab or `gh workflow run release.yml -f bump=minor`.
+# docs/RELEASING.md explains each input and what a consumer installs.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to bump (ignored when version is set)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Explicit version X.Y.Z (optional; overrides bump)
+        type: string
+        required: false
+      prerelease:
+        description: Prerelease tag such as beta.1 (optional; makes X.Y.Z-beta.1)
+        type: string
+        required: false
+      dry_run:
+        description: Run everything but the push, the GitHub Release and npm
+        type: boolean
+        default: false
+
+# contents: write pushes the release commit and tag and creates the Release;
+# id-token: write lets npm sign provenance for the optional publish.
+permissions:
+  contents: write
+  id-token: write
+
+# one release at a time: two runs bumping from the same version would collide on the tag
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # inputs reach the scripts through env, never pasted into shell text
+      BUMP: ${{ inputs.bump }}
+      VERSION: ${{ inputs.version }}
+      PRERELEASE: ${{ inputs.prerelease }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Check out with full history and tags
+        uses: actions/checkout@v4
+        with:
+          # the changelog reads <last tag>..HEAD, and the build stamp reads git
+          fetch-depth: 0
+
+      - name: Set up pnpm (version from packageManager)
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node (version from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      # live tracker tests are opt-in (FARSIGHT_LIVE=1) and skip here
+      - name: Test (packages + scripts)
+        run: pnpm test
+
+      - name: Lint strings
+        run: pnpm lint:strings
+
+      - name: Commit the version and tag it
+        id: release
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          args=()
+          if [ -n "$VERSION" ]; then args+=(--version "$VERSION"); else args+=(--bump "$BUMP"); fi
+          if [ -n "$PRERELEASE" ]; then args+=(--prerelease "$PRERELEASE"); fi
+          # a dry run may be dispatched from any branch; a real release only from main
+          if [ "$DRY_RUN" = "true" ]; then args+=(--allow-branch); fi
+          node scripts/release.mjs "${args[@]}" --notes-out "$RUNNER_TEMP/release-notes.md"
+
+      # after the version commit, so the bundle's stamp names the release commit
+      - name: Pack
+        run: node scripts/pack.mjs
+
+      - name: Smoke-test the tarball
+        env:
+          V: ${{ steps.release.outputs.version }}
+          COMMIT: ${{ steps.release.outputs.commit }}
+        run: |
+          prefix="$RUNNER_TEMP/npm-prefix"
+          npm install -g --prefix "$prefix" "./build/farsight-cli-$V.tgz"
+          line="$("$prefix/bin/farsight" --version)"
+          echo "$line"
+          case "$line" in *"farsight $V "*) ;; *) echo "::error::--version does not print $V"; exit 1 ;; esac
+          case "$line" in *"commit $COMMIT"*) ;; *) echo "::error::--version does not print commit $COMMIT"; exit 1 ;; esac
+          # ingest from a temporary cwd: snapshots are written relative to it
+          mkdir -p "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
+          "$prefix/bin/farsight" ingest "$GITHUB_WORKSPACE/examples/invoice-app" --repo invoice-app --out "$RUNNER_TEMP/smoke/g.json"
+          test -s "$RUNNER_TEMP/smoke/g.json"
+
+      - name: Push the release commit and tag
+        if: ${{ !inputs.dry_run }}
+        run: git push --follow-tags origin HEAD:main
+
+      - name: Create the GitHub Release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          V: ${{ steps.release.outputs.version }}
+          PRE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "build/farsight-cli-$V.tgz" --verify-tag \
+            --title "farsight-cli $TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${flags[@]}"
+
+      # optional: secrets cannot be tested in `if:`, so the step reads its own env
+      - name: Publish to npm (when NPM_TOKEN is set)
+        if: ${{ !inputs.dry_run }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          V: ${{ steps.release.outputs.version }}
+          PRE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then echo "npm publish skipped: no NPM_TOKEN"; exit 0; fi
+          # npm will not put a prerelease on `latest`
+          tag=latest; if [ "$PRE" = "true" ]; then tag=next; fi
+          npm publish "build/farsight-cli-$V.tgz" --access public --provenance --tag "$tag"
+
+      - name: Summary
+        if: ${{ always() && steps.release.outputs.version != '' }}
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          V: ${{ steps.release.outputs.version }}
+          URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          {
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "## farsight-cli $TAG — dry run (nothing pushed or published)"
+            else
+              echo "## farsight-cli $TAG"
+              echo
+              echo "Release: $URL/releases/tag/$TAG"
+            fi
+            echo
+            echo '```sh'
+            echo "npm install -g $URL/releases/download/$TAG/farsight-cli-$V.tgz"
+            echo 'farsight --version'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

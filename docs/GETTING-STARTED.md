@@ -4,13 +4,17 @@ Farsight parses your codebase into a semantic graph, then lets you explore it th
 
 ## Install
 
+**From a release (no checkout needed):** each [GitHub Release](https://github.com/zalos/farsight/releases) notes the
+install line, e.g. `npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz`,
+then `farsight --version` names the version and commit. See [RELEASING.md](RELEASING.md).
+
 **Option A — build the installable (recommended for trying it out):**
 
 ```sh
 git clone <this-repo> && cd farsight
 pnpm install && pnpm build
 node scripts/pack.mjs
-npm install -g ./build/farsight-cli-0.0.1.tgz
+npm install -g ./build/farsight-cli-*.tgz
 ```
 
 You now have a global `farsight` command. (Publishing to the npm registry as `farsight-cli` is planned — then this becomes `npm install -g farsight-cli`.)
@@ -273,8 +277,8 @@ Build once here, use everywhere:
 ```sh
 cd /path/to/farsight
 pnpm install && pnpm build
-node scripts/pack.mjs                          # → build/farsight-cli-0.0.1.tgz
-npm install -g ./build/farsight-cli-0.0.1.tgz
+node scripts/pack.mjs                          # → build/farsight-cli-*.tgz
+npm install -g ./build/farsight-cli-*.tgz
 ```
 
 Then in any app:
@@ -293,7 +297,7 @@ If you'd rather not pollute the global bin, install the tarball into the app:
 
 ```sh
 cd /path/to/other-app
-npm install --save-dev /path/to/farsight/build/farsight-cli-0.0.1.tgz
+npm install --save-dev /path/to/farsight/build/farsight-cli-*.tgz
 npx farsight ingest . --repo other-app
 ```
 
