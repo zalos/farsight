@@ -1,5 +1,7 @@
 # Farsight
 
+[![CI](https://github.com/zalos/farsight/actions/workflows/ci.yml/badge.svg)](https://github.com/zalos/farsight/actions/workflows/ci.yml)
+
 **See your software the way you think about it.**
 
 Farsight is a code-intelligence platform that parses your codebases (AST + semantic analysis), builds a unified knowledge graph, and renders it through a video-game-inspired GUI. Ask it *"show me the invoice process"* and get an explorable visual of that flow — then toggle between business-friendly and code-level views without losing your place, follow the flow across repos and languages, and deep-link any node straight into your IDE.
