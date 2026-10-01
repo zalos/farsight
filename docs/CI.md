@@ -13,8 +13,10 @@ Node from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm st
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm typecheck` (every package, then `e2e/`) → `pnpm -r test` → `pnpm lint:strings` | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` | 30 min |
 
-Expected wall time is a few minutes per job. Most of it is install and build. On a warm Mac the e2e suite takes
-about 13 s. On a runner the first run also downloads chromium, and later runs restore it from the cache.
+On the first runs (2026-10-01), **validate** took 1–1¼ min and **e2e** about 1½ min, of which the 109-test
+suite itself takes about 41 s on the runner (13 s on a warm Mac). The first run of a new `@playwright/test`
+version also downloads chromium; after that the browser comes from the cache, and only its system libraries are
+installed again.
 
 The live tracker tests (`packages/work-jira`, `packages/work-azdo`, `test/live.test.ts`) skip unless
 `FARSIGHT_LIVE=1`, which CI never sets. No test reads a keychain. Secret resolution is tested with an injected
