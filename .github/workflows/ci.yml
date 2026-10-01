@@ -1,0 +1,103 @@
+# CI validation: every push to main and every pull request.
+# Two independent jobs, run in parallel so each reports its own verdict:
+#   validate — install, build, typecheck (packages + e2e), unit tests, string/symbol lint
+#   e2e      — install, build, Playwright suite on the real `farsight serve` (see docs/CI.md)
+# Live tracker tests stay off: they run only with FARSIGHT_LIVE=1, which CI never sets.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6 # version from package.json "packageManager"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: pnpm typecheck (every package, then e2e/)
+        run: pnpm typecheck
+      - run: pnpm -r test
+      - run: pnpm lint:strings
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # the suite's own ports, stated so a reader sees them (these are the defaults)
+      FARSIGHT_E2E_PORT: '4510'
+      FARSIGHT_E2E_SYNC_PORT: '4511'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}-chromium
+
+      - name: Install chromium and its system libraries
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install chromium's system libraries (browser restored from cache)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      - run: pnpm e2e
+
+      - name: Upload results.json
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-results-json
+          path: e2e/test-results/results.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload report, traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            e2e/test-results/
+            e2e/.playwright-report/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
