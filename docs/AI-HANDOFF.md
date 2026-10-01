@@ -47,7 +47,7 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | `0.1.0 · d6dace1` (the work-items pass) |
+| build | `0.1.1 · 00b18dd` (GitHub Release v0.1.1), workspace main at `48db22f` (the work-items pass) |
 | tests | **761** — core 265 · work 57 · parsers 124 · work-fixture 18 · work-azdo 36 · work-jira 39 · mcp 42 · server 129 · cli 51, 0 failed · **e2e 107/107** · live tracker tests opt-in with `FARSIGHT_LIVE=1` (see below) |
 | string/symbol lint | **1505 entries · 32 sprite symbols · 24 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
 | servers | the dogfood server on **4478** (workspace CLI). Check `lsof` before restarting or measuring on any port. |
@@ -115,6 +115,22 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
      it*); chips on Portfolio and journey headers; ⌘K travels to work nodes. **MCP** — `work_items` (json = the frozen
      list), `work_item`, `work_links`, `work_changes`, `work_sync`, and `work_comment|assign|transition|edit|label|link`
      **registered only when a source grants agents the action**; `graph_overview` gains a work-items section.
+
+## Release and CI — 2026-10-01
+
+- **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
+  rehearses) runs the gates, bumps the root version, writes `CHANGELOG.md` and the release notes from conventional
+  commits (`scripts/changelog.mjs`), commits `chore(release): vX.Y.Z` as `github-actions[bot]`, tags, packs, smoke-tests
+  the tarball (`--version` must print the release commit; an ingest must succeed), pushes, and publishes a GitHub Release
+  with `farsight-cli-X.Y.Z.tgz`. npm publish runs only when an `NPM_TOKEN` secret exists. → `docs/RELEASING.md`.
+  **v0.1.1** is the first release (2026-10-01); a consumer install from the release URL into a clean prefix printed
+  `farsight 0.1.1 · commit 00b18dd` and ingested the invoice-app example (87 nodes). Do not squash-merge PRs: the
+  changelog reads `<last tag>..HEAD` by commit.
+- **CI on every push and PR** (`ci.yml`): validate (install, build, typecheck, tests, string lint, ~1 min) and e2e
+  (Playwright chromium, 109 specs, ~1.5 min) in parallel on Ubuntu; artifacts on failure; the live tracker tests skip
+  there. First run on `main` green. → `docs/CI.md`. Watch: `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19.
+- Small: `farsight work --help` from a non-git cwd prints the version banner and a *failed to run git* line instead of
+  the work usage — the `--help` form of a subcommand should not touch git.
 
 ## Next work, ranked
 
