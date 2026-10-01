@@ -7,6 +7,22 @@ Every release of `farsight-cli`, newest first. Generated from conventional commi
 
 Changes on `main` since the last release: `node scripts/changelog.mjs --dry-run` lists them.
 
+## [0.1.1] — 2026-10-01
+
+### Features
+
+- **release:** changelog and release notes from conventional commits ([6951fe8](https://github.com/zalos/farsight/commit/6951fe8a172077a8449d1f901ee0940f3a407132))
+- **release:** release.mjs bumps, writes the changelog, commits and tags ([852176d](https://github.com/zalos/farsight/commit/852176de2d4514739f55c5cd6776dc050ea11ef4))
+- **release:** on-demand release workflow with a smoke-tested tarball ([4fb4ff6](https://github.com/zalos/farsight/commit/4fb4ff650af7fc7467ccf62bbeac98c7672cd556))
+
+### Fixes
+
+- **release:** print a seed commit as a short sha ([fe53d90](https://github.com/zalos/farsight/commit/fe53d90bd652477a8c3a3b04f855571c11fac19e))
+
+### Docs
+
+- how to cut a release and install one ([bd58c3f](https://github.com/zalos/farsight/commit/bd58c3f2c65cd166c70684115628acb5cbd33cdf))
+
 ## [0.1.0] — 2026-10-01
 
 ### Chores
