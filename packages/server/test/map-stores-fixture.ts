@@ -8,9 +8,13 @@ export function withStores(src: AnyRec): { journey: AnyRec; nodes: AnyRec[] } {
   const c = JSON.parse(JSON.stringify(src));
   const db = { name: 'Invoice DB', kind: 'sql', engine: 'postgres', via: 'config', ref: 'stores[0]' };
   for (const n of c.nodes) if (n.kind === 'table') n.store = db;
-  const erp = c.nodes.find((n: AnyRec) => n.id === 'invoice-app::external::Example ERP');
+  let erp = c.nodes.find((n: AnyRec) => n.id === 'invoice-app::external::Example ERP');
+  if (!erp) {
+    erp = { id: 'invoice-app::external::Example ERP', kind: 'external', name: 'Example ERP', tags: ['external', 'erp'], external: { kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST' } };
+    c.nodes.push(erp);
+  }
   erp.store = { name: 'Example ERP', kind: 'erp', via: 'config', ref: 'ERP_HOST' };
-  erp.external.store = true;
+  erp.external = { ...(erp.external || { kind: 'erp' }), store: true };
   const seg = c.journey.summary.segments[1];
   for (const s of c.journey.summary.segments) for (const m of s.markers || []) if (m.kind === 'record') m.store = { name: 'Invoice DB', kind: 'sql' };
   const ext = (stepOrder: number, under: number, moment: number, op?: string) => ({
