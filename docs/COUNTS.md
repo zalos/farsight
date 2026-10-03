@@ -383,6 +383,22 @@ tab whose subject nothing types prints **no number**: Overview, UX, Route and Ch
 
 ---
 
+### Projects (`/api/projects` → core `projects.ts` `projectGraph()` / `appClosure()`; MCP `graph_overview`)
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| projects | `count.unit.projects` *n projects* (both) | `count.scope.workspace` | `projectGraph().counts.projects` over `meta.projects[repo].projects` | each project of every source listed (or the one `?repo=` names), once; breakdown by type — `count.part.projectsApp · projectsLib · projectsE2e · projectsUntyped`, a partition |
+| projects per dimension | `count.unit.projects` (both) | `count.scope.workspace` | `projectGraph().counts.byDimension[key]` | the same projects, split by the values they carry under one tag dimension (`count.part.withTag` labelled with the value's word; two values in one dimension join into one label) plus `count.part.noTag` — a partition |
+| project dependencies | `count.unit.projectDeps` *n project dependencies* (both) | `count.scope.workspace` | `projectGraph().counts.dependencies` over `meta.projects.imports` + `implicitDependencies` | ordered project pairs, each once; breakdown `count.part.depsImported` (an import shows it) · `count.part.depsDeclared` (only `implicitDependencies` says it) — a partition |
+| parts of a project | `count.unit.parts` *n parts of the code* (both) | `count.scope.project` | `ProjectRow.nodes` — nodes whose `project` names it | graph nodes stamped with the project, once each; breakdown by node kind (`count.part.ofKind`, labelled with the kind) |
+| import statements of a dependency | `count.unit.importStatements` (hybrid/code only) | `count.scope.project` | `ProjectDependency.count` = `meta.projects.imports[].imports` | import lines in the importing project's files that resolve to a file of the other project (0 for a dependency only declared) |
+| projects it depends on | `count.unit.projectsDependedOn` (both) | `count.scope.project` | `appClosure().count` | projects reached from this one over dependencies, directly or through another, each once; the project itself not counted |
+
+`count.scope.project` is new with this table: one workspace project — its own files, and for its dependencies the
+projects they import or it declares. `graph_overview` prints the projects line only when a source has a workspace
+tool (`nx` or `workspaces`): *nx · 8 projects (2 applications · 5 libraries · 1 e2e) · 10 project dependencies —
+Domain: Billing 5 · Shared 2 · Operations 1 — Type: …* (the `examples/nx-workspace` graph).
+
 ## 4. Open — found, not changed here
 
 - **The journey prints the typed counts** (`fix/journey-numbers-and-words`, 2026-09-25). The header

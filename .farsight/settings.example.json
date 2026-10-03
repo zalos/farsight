@@ -25,6 +25,13 @@
       "enabled": true
     },
     {
+      "id": "nx-workspace",
+      "name": "nx-workspace",
+      "type": "local",
+      "path": "examples/nx-workspace",
+      "enabled": true
+    },
+    {
       "id": "jira-example",
       "name": "Jira — example",
       "type": "work",

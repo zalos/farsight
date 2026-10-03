@@ -3,7 +3,7 @@ import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta } from './graph.js';
+import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta } from './graph.js';
 
 /** Freshness signals persisted with the snapshot — lets consumers (MCP agents
  * especially) detect a stale graph instead of getting confidently old answers. */
@@ -37,6 +37,8 @@ export interface GraphMeta {
   stores?: Record<string, StoresMeta>;
   /** per-repo import pass: the Node built-ins set aside, alias misses, undeclared packages (dependencies-and-nx.md §2.1) */
   packages?: Record<string, PackagesMeta>;
+  /** per-repo projects pass: the tool (nx · workspaces · none), its projects and tags, the tag dimensions, project → project imports */
+  projects?: Record<string, ProjectsMeta>;
 }
 
 /**
@@ -70,6 +72,9 @@ export class GraphStore {
     }
     if (fragment.meta?.packages) {
       this.meta.packages = { ...this.meta.packages, [fragment.repo]: fragment.meta.packages };
+    }
+    if (fragment.meta?.projects) {
+      this.meta.projects = { ...this.meta.projects, [fragment.repo]: fragment.meta.projects };
     }
     if (fragment.meta) {
       // a fragment with no content digest but the same sourceHash as the row already
