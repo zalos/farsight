@@ -737,9 +737,18 @@ export function buildChips() {
   // words (`deprecated`), never `runner:vitest` or `test:unit`
   const biz = currentLens() === 'business';
   const top = Object.entries(counts).filter(([tag]) => !biz || /^[a-z]+$/i.test(tag)).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  // a tag on tests counts the coverage reports beside the cases (each is a test node); the Tests page
+  // counts cases only, so the tip splits the two and the numbers can be reconciled (docs/COUNTS.md, Chrome)
+  const split = (tag, c) => {
+    const tests = S.GRAPH.nodes.filter((n) => n.kind === 'test' && inScope(n) && (n.tags || []).includes(tag));
+    const reports = tests.filter((n) => n.test && n.test.runLevel).length;
+    // only a split that adds up to the chip's number: a tag also carried by parts that are not tests is not split
+    if (!reports || tests.length !== c) return null;
+    return [[t('count.unit.cases').replace('{n}', '').trim(), tests.length - reports], [t('count.unit.runReports').replace('{n}', '').trim(), reports]];
+  };
   document.getElementById('chips').innerHTML = top.map(([tag, c]) =>
     '<button class="chip' + (S.activeTag === tag ? ' on' : '') + '" data-tag="' + esc(tag) + '" onclick="toggleTag(' + jsArg(tag) + ')">' + esc(biz ? humanize(tag) : tag)
-    + ' · <span class="cnt"' + plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', null, null, { tag }) + '>' + c + '</span></button>').join('');
+    + ' · <span class="cnt"' + plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', split(tag, c), null, { tag }) + '>' + c + '</span></button>').join('');
 }
 /**
  * @group Lens, theme & filters

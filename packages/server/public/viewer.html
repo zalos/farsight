@@ -2118,6 +2118,13 @@
   .map-chip.k-ok{border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
   .map-chip.k-warn{border-color:color-mix(in srgb,var(--warn) 70%,transparent);color:var(--warn)}
   .map-chip.k-absent{border-style:dashed}
+  /* lane N: the evidence word beside a count of tests, the owner, the ERP reach */
+  .map-chip.k-ev.ev-observed{border-color:color-mix(in srgb,var(--ok) 70%,transparent);color:var(--ok)}
+  .map-chip.k-ev.ev-stale{border-color:color-mix(in srgb,var(--warn) 60%,transparent);border-style:dashed;color:var(--warn)}
+  .map-chip.k-ev.ev-reached{border-color:color-mix(in srgb,var(--cyan) 55%,transparent);color:var(--cyan)}
+  .map-chip.k-ev.ev-declared{border-style:dashed;color:var(--dim)}
+  .map-chip.k-owner{color:var(--ink)}
+  .map-chip.k-erp{border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
   .map-chip.go{cursor:pointer;font:inherit;font-size:11px}
   .map-chip.go:hover{border-color:var(--accent);color:var(--ink)}
   .map-work:empty{display:none}
@@ -2343,6 +2350,8 @@
   .mp-step[disabled] .nm{color:var(--muted)}
   .mp-mid{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;text-align:center}
   .mp-where{font-size:10px}
+  .mp-where .n,.mp-declared .n{color:var(--ink)}
+  .mp-declared{font-size:10px;color:var(--dim);letter-spacing:.02em}
   .mp-dots{display:flex;gap:7px}
   .mp-dot{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--dim);padding:0}
   .mp-dot.planned{border-style:dashed}
