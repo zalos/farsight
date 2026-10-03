@@ -3,8 +3,9 @@
 // strings.ts like strings-work-hud.ts. Same rules as the rest of the catalog:
 // both registers, a define on every word a reader may not know, defines in
 // plain words (no backticks, no markdown, no dotted identifiers, no
-// placeholders). Two lanes write here: lane A's block (the surface, the canvas
-// and the street) and lane B's block (the property) below it.
+// placeholders). Lanes write here in blocks: lane A's (the surface, the canvas
+// and the street), lane L's (the legend, the links, the business words) and
+// lane B's (the property) below it.
 import type { StringEntry } from './strings.js';
 
 function same(word: string, define?: string): StringEntry {
@@ -133,10 +134,11 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   // the door from the Portfolio, and the switch
   'map.portfolio.view': same('View', 'The same journeys as a table, or drawn on the map.'),
   'map.portfolio.table': same('Table', 'One row per journey, with what is built, declared, tested and linked.'),
+  'map.portfolio.board': same('Board', 'The same journeys drawn side by side on the map: each journey a block you can zoom into, its screens in order with the calls and data under each.'),
 
   // Settings → Experiments
   'set.flagMap': same('Map of journeys'),
-  'set.flagMapSub': same('adds a MAP tab and a Map button on the Portfolio — every journey on one zoomable board, its screens in order with the calls and data under each; off by default, per workspace'),
+  'set.flagMapSub': same('adds a MAP tab and a Board button on the Portfolio — every journey on one zoomable board, its screens in order with the calls and data under each; off by default, per workspace'),
 
   // the keymap panel
   'key.mapPlumb': same('Map: show or hide the calls and data under each screen'),
@@ -150,6 +152,40 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.fold.lessCalls': same('fewer calls', 'Fold this screen’s calls back to its first four.'),
   'map.fold.scopeCall': same('this call', 'One call on one screen of this journey.'),
   'map.fold.scopeScreen': same('this screen', 'One screen of this journey.'),
+
+  // §L — the legend, the lines between journeys, whole words, and the business lens on the map (lane L)
+  'map.tool.legend': same('Legend', 'What the lines, colours, stripes and marks on the board mean. It opens by itself the first time you visit the map; this button brings it back.'),
+  'map.legend.title': same('What the board draws', 'Every line, colour, stripe and mark the map uses, with the word it stands for. Only what is on this board is listed.'),
+  'map.legend.close': same('Close the legend'),
+  'map.legend.between': same('Between journeys', 'The lines that join one journey to another. Each journey says which journeys it needs first, leads to, or is part of; the board draws what they say and infers nothing.'),
+  'map.legend.requires': same('the journey at the point needs the one at the tail first',
+    'A journey that requires another is drawn as the other leading to it, once. Read the arrow backwards for requires.'),
+  'map.legend.under': same('Under each screen', 'With the calls and data shown, each screen has its calls stacked below it, and beside each call what it reads and writes.'),
+  'map.legend.both': same('reads and writes', 'This call both looks up and saves to the record or the store. The line carries an arrowhead at each end.'),
+  'map.legend.screens': same('On a screen', 'The marks on a screen card and on its calls.'),
+  'map.legend.built': same('built', 'A screen the design names and a page in the code serves. Its left stripe is green.'),
+  'map.legend.againSay': same('made on an earlier screen too', 'The journey made this same call on a screen before this one; it is drawn again under every screen that makes it.'),
+  'map.legend.times': same('×n', 'A checkpoint met more than once on one screen is listed once, with the number of times beside it.'),
+  'map.legend.timesSay': same('met this many times on one screen', 'Shown beside a gate or rule in a screen’s list, instead of listing it again.'),
+  'map.legend.evidence': same('What proves a journey runs', 'The word each journey’s tests earned: a case a run named, a case that declares what it covers and passed, or a coverage run alone. The words are the Tests page’s.'),
+  'map.legend.hint': same('Shown once on your first visit; the Legend button brings it back.'),
+  'map.link.requires': same('requires', 'This journey needs the other one finished first. Drawn as the other journey leading to this one.'),
+  'map.link.both': same('lead to each other', 'Each of the two journeys says it leads to the other, so the line carries an arrowhead at each end and one label.'),
+  'map.cover.more': same('+{n}', 'More numbers about this journey, folded so the cover stays readable. Zoom in to see them all in the journey’s header.'),
+  'map.cover.moreOf': same('numbers on this cover', 'The numbers a journey’s cover would print if it had room.'),
+  'map.fold.scopeJourney': same('this journey', 'One journey on the board.'),
+  // the business lens: a data node’s kind in plain words, a checkpoint as a check or a rule
+  'map.biz.kind.sql': same('database record', 'Information the application keeps in a database, such as a table of invoices.'),
+  'map.biz.kind.document': same('stored document', 'Information the application keeps as a document in a database.'),
+  'map.biz.kind.files': same('file', 'A file the application keeps, such as an uploaded document.'),
+  'map.biz.kind.erp': same('ERP record', 'Information the application keeps in a business system outside it, such as an accounting system.'),
+  'map.biz.kind.other': same('stored record', 'Information the application keeps somewhere.'),
+  'map.biz.kind.record': same('stored record', 'Information the application keeps, such as a list of invoices.'),
+  'map.biz.kind.message': same('notice', 'A notice one part of the application sends and others act on, such as invoice finalized.'),
+  'map.biz.kind.external': same('outside system', 'A system outside the application that it asks for something, such as a document reader.'),
+  'map.biz.check': same('check', 'A check on who may get through: being signed in, or holding the right permission.'),
+  'map.biz.rule': same('rule', 'A rule about what may be sent: what a form must contain before it is accepted.'),
+  'map.prop.timesSame': same('×{n}', 'How many times this screen meets a checkpoint said in these words, added over every checkpoint the code names this way.'),
 
   // §B — property (lane B)
   'map.prop.level': {
