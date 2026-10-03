@@ -24,14 +24,14 @@ import { countedHtml } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts } from '../lib/map-model.js';
 import { createCanvas, LEVEL_NB, SNAP_RADIUS } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
 const SW = 260, SH = 214, COL = 400, HEAD = 118, SY = HEAD + 36, PAD = 60;
 const PL_TOP = SY + SH + 76, OPW = 200, DX = 230, ROW = 38, OPMIN = 68, OPGAP = 16;
-const DMIN = 880, COLGAP = 200, ROWGAP = 220, MARGIN = 80;
+const DMIN = 880;
 /** Where a street lands when it is entered or left: a district fits, never above this. */
 const STREET_FIT_MAX = 0.95;
 /** Leaving a property lands on the street at this scale, centred on the screen. */
@@ -136,6 +136,9 @@ export function mountMap(route, el) {
   });
   MAP.board.addEventListener('click', onBoardClick);
   MAP.board.addEventListener('keydown', onBoardKey);
+  MAP.board.addEventListener('pointerover', onDistrictHot);
+  MAP.board.addEventListener('focusin', onDistrictHot);
+  MAP.board.addEventListener('pointerleave', () => { MAP.hot = null; linkVisibility(); });
   MAP.stage.querySelector('.map-chrome').addEventListener('click', onChromeClick);
   const host = MAP.stage.querySelector('.map-prop-host');
   host.addEventListener('wheel', onPropWheel, { passive: false });
@@ -215,7 +218,7 @@ function start() {
     if (gen !== MAP.gen) return;
     const sources = design.designs || design.sources || (Array.isArray(design) ? design : []);
     MAP.designs = Array.isArray(sources) ? sources : [];
-    MAP.nb = neighbourhoodModel(MAP.designs, null, S.BYID);
+    MAP.nb = neighbourhoodModel(MAP.designs, null);
     layout();
     renderAll();
     fillWork(gen);
@@ -331,29 +334,18 @@ function districtSize(d) {
   return { w, h };
 }
 /**
- * Districts in rows: the model's order (the journeys that contain others on rows
- * of their own, then the rest in the order the design walks them), packed greedily into rows about as wide as the board is tall times
- * the stage's shape, so a fit uses the screen.
+ * Where the districts sit: `layoutDistricts()` (lib/map-model.js) — one band per
+ * source, rows that wrap at the width that brings the board's shape nearest the
+ * stage's, every district keeping its street's width.
  */
 function layout() {
   const ds = MAP.nb.districts;
-  const sizes = ds.map(districtSize);
-  const area = sizes.reduce((a, s) => a + (s.w + COLGAP) * (s.h + ROWGAP), 0);
-  const widest = Math.max(0, ...sizes.map((s) => s.w));
-  const rowW = Math.max(widest, Math.sqrt(area * 2.0));
-  MAP.geom = new Map();
-  let x = MARGIN, y = MARGIN, rowH = 0, maxX = 0;
-  ds.forEach((d, i) => {
-    const s = sizes[i];
-    // the containing journeys have rows of their own, above their parts
-    const afterContainers = i > 0 && ds[i - 1].container && !d.container;
-    if (x > MARGIN && (afterContainers || x + s.w > MARGIN + rowW)) { x = MARGIN; y += rowH + ROWGAP; rowH = 0; }
-    MAP.geom.set(d.id, { x, y, w: s.w, h: s.h });
-    x += s.w + COLGAP;
-    rowH = Math.max(rowH, s.h);
-    maxX = Math.max(maxX, x - COLGAP);
-  });
-  MAP.size = { w: maxX + MARGIN, h: y + rowH + MARGIN };
+  const items = ds.map((d) => ({ id: d.id, repo: d.repo || '', ...districtSize(d) }));
+  const bw = MAP.board ? MAP.board.clientWidth : 0, bh = MAP.board ? MAP.board.clientHeight - CHROME_H : 0;
+  const L = layoutDistricts(items, { aspect: bw > 0 && bh > 0 ? bw / bh : 1.6 });
+  MAP.geom = L.rects;
+  MAP.bands = L.bands;
+  MAP.size = L.size;
 }
 /** Re-lay the districts after one changed size, keeping the journey in view where it was on screen. */
 function relayoutKeeping(draw) {
@@ -370,6 +362,13 @@ function relayoutKeeping(draw) {
   }
 }
 function placeDistricts() {
+  if (MAP.world) {
+    // the band labels: the source each band of journeys comes from
+    MAP.world.querySelectorAll('.map-band').forEach((el) => el.remove());
+    const named = (MAP.bands || []).filter((b) => b.repo);
+    const html = named.map((b) => '<div class="map-band" style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px"><span>' + esc(b.repo) + '</span></div>').join('');
+    if (html && MAP.links) MAP.links.insertAdjacentHTML('afterend', html);
+  }
   for (const [id, g] of MAP.geom) {
     const el = districtEl(id);
     if (el) el.style.cssText = 'left:' + g.x + 'px;top:' + g.y + 'px;width:' + g.w + 'px;height:' + g.h + 'px';
@@ -436,6 +435,7 @@ function onCanvasChange(st) {
   }
   MAP.world.querySelectorAll('.map-district').forEach((d) => d.classList.toggle('focus', st.level === 'st' && d.dataset.flow === MAP.focus));
   markNear(st);
+  linkVisibility();
   drawCrumb();
   drawHint(st);
 }
@@ -550,7 +550,12 @@ function onFullscreen() {
 let resizeT = null;
 function onResize() {
   clearTimeout(resizeT);
-  resizeT = setTimeout(() => { if (MAP.cv && MAP.cv.level() === 'nb' && !MAP.prop) fitAll(false); }, 120);
+  resizeT = setTimeout(() => {
+    if (!MAP.cv || !MAP.designs) return;
+    // the board's shape follows the stage's
+    relayoutKeeping();
+    if (MAP.cv.level() === 'nb' && !MAP.prop) fitAll(false);
+  }, 120);
 }
 
 /**
@@ -611,11 +616,14 @@ function renderDistrict(id) {
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
     + '<div class="agg">' + agg + '</div></div>'
     + '<div class="map-dstreet">' + streetHtml(d, j, g) + '</div>'
-    + '<div class="map-dcover" role="button" tabindex="0" data-enter="' + esc(id) + '" aria-label="' + esc(t('map.cover.enter') + ' · ' + nameWords(d.name)) + '">'
+    // the cover is counter-scaled (--map-inv, set by the canvas) so its name reads at any zoom;
+    // its whole sentence is the cover's tip
+    + '<div class="map-dcover" role="button" tabindex="0" data-enter="' + esc(id) + '" aria-label="' + esc(t('map.cover.enter') + ' · ' + nameWords(d.name)) + '"'
+    + (desc ? tipAttrs({ text: desc, noFocus: true }) : '') + '><div class="map-dcover-in">'
     + '<div class="nm">' + esc(nameWords(d.name)) + '</div>'
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
     + '<div class="agg">' + agg + '</div>'
-    + '<div class="enter">' + esc(t('map.cover.enter')) + ' ' + sym('start') + '</div></div>';
+    + '<div class="enter">' + esc(t('map.cover.enter')) + ' ' + sym('start') + '</div></div></div>';
   el.classList.toggle('loaded', !!(j && j.model));
   sizeDistrict(id);
 }
@@ -758,7 +766,7 @@ function drawLinks() {
     const a = MAP.geom.get(from), b = MAP.geom.get(to);
     if (!a || !b) return;
     seen.add(key);
-    out += linkPath(a, b, kind);
+    out += linkPath(a, b, kind).replace('<g ', '<g data-from="' + esc(from) + '" data-to="' + esc(to) + '" ');
   };
   for (const [id, j] of MAP.journeys) {
     const l = j && j.model && j.model.links;
@@ -768,6 +776,33 @@ function drawLinks() {
     for (const r of l.partOf || []) edge(r.id, id, 'partOf');
   }
   MAP.links.innerHTML = out;
+  linkVisibility();
+}
+/**
+ * Which links show. *Leads to* is always drawn, dimmed. *Part of* is noise at
+ * the fit: it shows only for the district under the pointer or the focus, or
+ * at the street when both its ends are in view. The district under the pointer
+ * or the focus brings all of its links up, with their words.
+ */
+function linkVisibility() {
+  if (!MAP.links || !MAP.cv) return;
+  const st = MAP.cv.state();
+  const c = MAP.cv.viewCenter();
+  const view = { x: c.x - c.w / 2, y: c.y - c.h / 2, w: c.w, h: c.h };
+  const inView = (id) => { const g = MAP.geom.get(id); return !!g && g.x < view.x + view.w && view.x < g.x + g.w && g.y < view.y + view.h && view.y < g.y + g.h; };
+  MAP.links.querySelectorAll('g[data-link]').forEach((g) => {
+    const hot = !!MAP.hot && (g.dataset.from === MAP.hot || g.dataset.to === MAP.hot);
+    const show = g.dataset.link !== 'partOf' || hot || (st.level === 'st' && inView(g.dataset.from) && inView(g.dataset.to));
+    g.classList.toggle('off', !show);
+    g.classList.toggle('hot', hot);
+  });
+}
+function onDistrictHot(e) {
+  const d = e.target && e.target.closest ? e.target.closest('.map-district') : null;
+  const id = d ? d.dataset.flow : null;
+  if (id === MAP.hot) return;
+  MAP.hot = id;
+  linkVisibility();
 }
 function linkPath(a, b, kind) {
   const cls = kind === 'partOf' ? ' class="contains"' : '';
@@ -801,7 +836,8 @@ function linkPath(a, b, kind) {
 function onBoardClick(e) {
   const tgt = e.target;
   // a number or a word with a tip opens its tip, not what it sits on
-  if (tgt.closest(TIP_SELECTOR) && tgt.closest('.map-scr,.map-pl,.map-pd,.map-dcover,.map-lane')) return;
+  const trig = tgt.closest(TIP_SELECTOR);
+  if (trig && !trig.matches('.map-scr,.map-pl,.map-pd,.map-dcover') && tgt.closest('.map-scr,.map-pl,.map-pd,.map-dcover,.map-lane')) return;
   if (tgt.closest('a[href]')) return;
   const node = tgt.closest('.map-pl,.map-pd');
   if (node && MAP.cv && MAP.cv.level() === 'st') { showCard(node); return; }

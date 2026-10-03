@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
-const { streetModel, neighbourhoodModel, screensUsing } = await import(join(appDir, 'lib', 'map-model.js'));
+const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts } = await import(join(appDir, 'lib', 'map-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle.json'), 'utf8'));
 const byId = new Map(fx.nodes.map((n: { id: string }) => [n.id, n]));
 const model = streetModel(fx.journey, byId);
@@ -99,18 +99,72 @@ test('screensUsing names every screen a record is drawn under', () => {
   assert.deepEqual(screensUsing(model, 'call', 'invoice-app::route::GET /invoices').map((s: { name: string }) => s.name), ['Invoice list']);
 });
 
-test('the neighbourhood lays the containing journey first, then the rest in the order the design walks them', () => {
-  const nb = neighbourhoodModel(fx.design.designs, new Map([['invoice-app::flow::new-invoice', { counts: { items: { n: 2 } } }]]), byId);
-  // Billing cycle holds every screen of the other two; Start a new invoice leads to Draft and send
+test('the neighbourhood: inside a source the containing journey first, then by name', () => {
+  const nb = neighbourhoodModel(fx.design.designs, new Map([['invoice-app::flow::new-invoice', { counts: { items: { n: 2 } } }]]));
+  // Billing cycle holds every screen of the other two
   assert.deepEqual(nb.districts.map((d: { name: string; total: number; container: boolean }) => [d.name, d.total, d.container]), [
-    ['Billing cycle', 3, true], ['Start a new invoice', 1, false], ['Draft and send an invoice', 2, false],
+    ['Billing cycle', 3, true], ['Draft and send an invoice', 2, false], ['Start a new invoice', 1, false],
   ]);
-  assert.equal(nb.districts[1].work.counts.items.n, 2);
-  // without the graph the leads-to order is unknown: the larger journey comes first
-  assert.deepEqual(neighbourhoodModel(fx.design.designs).districts.map((d: { name: string }) => d.name),
-    ['Billing cycle', 'Draft and send an invoice', 'Start a new invoice']);
+  assert.equal(nb.districts[2].work.counts.items.n, 2);
   assert.equal(nb.districts[0].work, null);
   assert.deepEqual(nb.districts.map((d: { index: number }) => d.index), [0, 1, 2]);
+});
+
+test('the neighbourhood keeps each source together, in the order the design answer names the sources', () => {
+  const designs = [
+    { repo: 'beta', flows: [{ nodeId: 'b::flow::z', id: 'z', name: 'Zeta', screens: ['S1'] }] },
+    { repo: 'alpha', flows: [{ nodeId: 'a::flow::y', id: 'y', name: 'Yankee', screens: ['A1'] }, { nodeId: 'a::flow::x', id: 'x', name: 'Xray', screens: ['A1', 'A2'] }] },
+    { repo: 'beta', flows: [{ nodeId: 'b::flow::a', id: 'a', name: 'Alpha', screens: ['S2'] }] },
+  ];
+  assert.deepEqual(neighbourhoodModel(designs).districts.map((d: { name: string }) => d.name), ['Alpha', 'Zeta', 'Xray', 'Yankee']);
+});
+
+// ── the layout rule, on synthetic journeys (no real application's names) ──
+/** n districts over up to three sources, street widths from one to twelve screens, deterministic. */
+function synthetic(n: number) {
+  const repos = ['source-a', 'source-b', 'source-c'];
+  return Array.from({ length: n }, (_, i) => {
+    const screens = 1 + ((i * 7 + 3) % 12);
+    return { id: 'flow-' + i, repo: repos[(i * 5) % Math.min(3, Math.max(1, Math.ceil(n / 4)))], w: Math.max(880, 120 + screens * 400 - 140), h: 438 + ((i % 3) ? 0 : 200) };
+  });
+}
+function overlaps(a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+for (const n of [1, 3, 8, 21, 40]) {
+  test(`layout of ${n} journeys: no two districts overlap, bands stack, the board's shape stays near the viewport's`, () => {
+    const items = synthetic(n);
+    const aspect = 1440 / 760;
+    const L = layoutDistricts(items, { aspect });
+    assert.equal(L.rects.size, n);
+    const rs = [...L.rects.values()];
+    for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) assert.ok(!overlaps(rs[i], rs[j]), `districts ${i} and ${j} overlap`);
+    // every district keeps its street's width and sits inside the board
+    for (const it of items) {
+      const r = L.rects.get(it.id)!;
+      assert.equal(r.w, it.w);
+      assert.ok(r.h >= it.h);
+      assert.ok(r.x + r.w <= L.size.w && r.y + r.h <= L.size.h);
+    }
+    // bands do not overlap, and each holds exactly its source's districts
+    for (let i = 1; i < L.bands.length; i++) assert.ok(L.bands[i].y >= L.bands[i - 1].y + L.bands[i - 1].h);
+    for (const b of L.bands) {
+      for (const it of items.filter((x) => x.repo === b.repo)) {
+        const r = L.rects.get(it.id)!;
+        assert.ok(r.y >= b.y && r.y + r.h <= b.y + b.h, `${it.id} outside its band`);
+      }
+    }
+    const ratio = (L.size.w / L.size.h) / aspect;
+    if (n >= 8) assert.ok(ratio > 0.6 && ratio < 1.67, `aspect ${L.size.w}×${L.size.h} is ${ratio.toFixed(2)}× the viewport's`);
+  });
+}
+
+test('a band\'s districts share its height, so its rows line up', () => {
+  const L = layoutDistricts([{ id: 'a', repo: 'r', w: 880, h: 438 }, { id: 'b', repo: 'r', w: 880, h: 900 }, { id: 'c', repo: 's', w: 880, h: 438 }]);
+  assert.equal(L.rects.get('a')!.h, 900);
+  assert.equal(L.rects.get('c')!.h, 438);
+  assert.deepEqual(L.bands.map((b: { repo: string }) => b.repo), ['r', 's']);
+  assert.deepEqual(layoutDistricts([]).rects.size, 0);
 });
 
 test('the model survives an empty or older answer', () => {
