@@ -20,7 +20,7 @@ import type {
   GraphStore, GraphIndex, GraphNode, KeyDetectOptions, KeyDetector, DetectedKey, WorkLinkFact, WorkLinkVia, WorkItemFacts,
   ConfidenceTier, WorkSourceFacts,
 } from '@farsight/core';
-import { gitLog, gitKnows, gitShowPatch, gitPrefix, commitInputsOf, GIT_ABSENT_WORD } from '@farsight/parsers';
+import { gitLog, gitKnows, gitShowPatch, gitPrefix, gitUnreachable, commitInputsOf, GIT_ABSENT_WORD } from '@farsight/parsers';
 import {
   WorkCache, WorkCacheUnavailable, workDbPath, providerFor, registerProvider, syncSource, connectSource, freshness,
   applyIntent, detectWorkKeys, evaluatePolicy, decide, attributed, STATE_CATEGORIES, WORK_ACTIONS,
@@ -135,8 +135,13 @@ export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRea
     if (!log.available) return `history not indexed: ${GIT_ABSENT_WORD[log.reason]}${log.detail ? ` (${log.detail})` : ''}`;
     db.writeCommits(src.name, commitInputsOf(log.commits, { opts: keys, detect }));
     db.markSpineRead(src.name, sig, new Date().toISOString());
+    // a keyed commit git no longer has or reaches (a rewritten history) stops naming its work items
+    const keyed = db.keyedCommits().filter((c) => c.repo === src.name).map((c) => c.sha);
+    const unreachable = gitUnreachable(src.dir, keyed);
+    const forgot = unreachable.available ? db.forgetCommitKeys(src.name, unreachable.gone) : 0;
     const resolved = resolveCommitNodes(db, store, src);
     const parts = [`history ${log.commits.length} commit${log.commits.length === 1 ? '' : 's'} read${log.truncated ? ` (capped at ${log.max})` : ''}`];
+    if (forgot) parts.push(`${forgot} keyed commit${forgot === 1 ? '' : 's'} no longer in the history, forgotten`);
     if (resolved) parts.push(`${resolved} keyed commit${resolved === 1 ? '' : 's'} resolved to code`);
     return parts.join(' · ');
   } catch (err) {
@@ -590,18 +595,23 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
 
       const cached = linksOfItemFromCache(cache, id);
       const links = cached.length ? cached : graphLinks(index).filter((l) => l.work === id);
+      // one entry per commit: sources reading one checkout each record it under their own repo
+      // name, so the rows are grouped by sha alone and their nodes and files unioned (KAN-8)
       const bySha = new Map<string, typeof rows>();
-      for (const r of rows) bySha.set(`${r.repo} ${r.sha}`, [...(bySha.get(`${r.repo} ${r.sha}`) ?? []), r]);
+      for (const r of rows) bySha.set(r.sha, [...(bySha.get(r.sha) ?? []), r]);
       const rank = (v: string) => COMMIT_KEY_VIAS.indexOf(v as never);
       const commits = [...bySha.values()].map((rs) => {
         const r = [...rs].sort((a, b) => rank(a.via) - rank(b.via))[0]!;
-        const nodes = db?.commitNodes(r.repo, r.sha) ?? [];
-        const branch = rs.find((x) => x.ref)?.ref ?? db?.branchesForCommit(r.repo, r.sha)[0];
+        const repos = [...new Set(rs.map((x) => x.repo))];
+        const nodes = repos.flatMap((repo) => db?.commitNodes(repo, r.sha) ?? []);
+        const branch = rs.find((x) => x.ref)?.ref ?? repos.map((repo) => db?.branchesForCommit(repo, r.sha)[0]).find(Boolean);
+        const files = new Map<string, { path: string; status: string }>();
+        for (const repo of repos) for (const f of db?.filesForCommit(repo, r.sha) ?? []) if (!files.has(f.path)) files.set(f.path, { path: f.path, status: f.status });
         return {
           repo: r.repo, sha: r.sha, at: r.at, author: r.author, subject: r.subject,
           ...(branch ? { branch } : {}),
           via: r.via, vias: [...new Set(rs.map((x) => x.via))],
-          files: (db?.filesForCommit(r.repo, r.sha) ?? []).map((f) => ({ path: f.path, status: f.status })),
+          files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
           nodes: [...new Set(nodes.map((n) => n.node))],
           ...(nodes.length ? { resolved: nodes.some((n) => n.fileOnly) ? 'file' : 'hunk' } : {}),
         };
@@ -844,7 +854,9 @@ function diffAnswer(ctx: WorkRouteContext, db: SnapshotDb | undefined, rows: { r
   const root = rootOf(ctx, row.repo);
   if (!root) return { sha: row.sha, subject: row.subject, at: row.at, author: row.author, files: [], error: `the checkout of ${row.repo} is not on this machine` };
   const files = db?.filesForCommit(row.repo, row.sha) ?? [];
-  const nodes = db?.commitNodes(row.repo, row.sha) ?? [];
+  // the same commit recorded by every source reading this checkout: their nodes together (KAN-8)
+  const repos = [...new Set(rows.filter((r) => r.sha === row.sha).map((r) => r.repo))];
+  const nodes = repos.flatMap((repo) => db?.commitNodes(repo, row.sha) ?? []);
   const patch = gitShowPatch(root, row.sha, { context: 3 });
   if (!patch.available) return { sha: row.sha, subject: row.subject, at: row.at, author: row.author, files: [], error: `git could not show ${row.sha.slice(0, 7)}: ${GIT_ABSENT_WORD[patch.reason]}${patch.detail ? ` (${patch.detail})` : ''}` };
   const byFile = splitPatch(patch.patch);

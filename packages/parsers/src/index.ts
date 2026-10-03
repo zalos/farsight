@@ -17,7 +17,7 @@ export { javaAdapter, ingestJava } from './java/index.js';
 export { applySpecs, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, discoverSpecs } from './openapi/index.js';
 export type { SpecApplication } from './openapi/index.js';
 export { contentDigest } from './shared/files.js';
-export { gitLog, gitTags, gitShallow, gitHeadRef, gitHead, gitHeadAt, gitPrefix, gitShowPatch, gitKnows, commitInputsOf, GIT_STATUS_WORD, normalizeRepoPath, DEFAULT_MAX_COMMITS, GIT_ABSENT_WORD, headTitle, shallowFloorSentence } from './shared/git.js';
+export { gitLog, gitTags, gitShallow, gitHeadRef, gitHead, gitHeadAt, gitPrefix, gitShowPatch, gitKnows, gitUnreachable, commitInputsOf, GIT_STATUS_WORD, normalizeRepoPath, DEFAULT_MAX_COMMITS, GIT_ABSENT_WORD, headTitle, shallowFloorSentence } from './shared/git.js';
 export type {
   GitCommit, GitFileChange, GitFileStatus, GitTag, GitTagScheme, GitLogOptions, GitLogResult,
   GitHeadResult, GitFact, GitAbsent, GitAbsentReason,

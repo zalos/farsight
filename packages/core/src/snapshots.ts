@@ -557,10 +557,14 @@ export class SnapshotDb {
     });
   }
 
-  /** Every key → how many distinct commits name it, in one pass (the list surface's commit counts). */
+  /**
+   * Every key → how many distinct commits name it, in one pass (the list surface's commit counts).
+   * Distinct by sha alone: sources that read one checkout (a repository and an example folder inside
+   * it) each record the same commit under their own repo name, and it is still one commit.
+   */
   keyCommitCounts(): Map<string, number> {
     const out = new Map<string, number>();
-    for (const r of this.db.prepare('SELECT provider, key, COUNT(DISTINCT repo || \' \' || sha) AS n FROM commit_key GROUP BY provider, key').all() as { provider: string; key: string; n: number }[]) {
+    for (const r of this.db.prepare('SELECT provider, key, COUNT(DISTINCT sha) AS n FROM commit_key GROUP BY provider, key').all() as { provider: string; key: string; n: number }[]) {
       out.set(`${r.provider}|${r.key}`, r.n);
     }
     return out;
@@ -632,6 +636,28 @@ export class SnapshotDb {
 
   markSpineRead(repo: string, keysig: string, at: string): void {
     this.db.prepare('INSERT OR REPLACE INTO spine_read (repo, keysig, at) VALUES (?,?,?)').run(repo, keysig, at);
+  }
+
+  /**
+   * Forget what the spine says about commits git no longer has (a rewritten or re-cloned history):
+   * their keys, branches and touched nodes, so no work item lists a commit nobody can show. The
+   * commit row itself stays, as the history lens's record of what a past sync read.
+   */
+  forgetCommitKeys(repo: string, shas: readonly string[]): number {
+    if (!shas.length) return 0;
+    this.db.exec('BEGIN');
+    try {
+      let n = 0;
+      for (const sha of shas) {
+        n += Number(this.db.prepare('DELETE FROM commit_key WHERE repo = ? AND sha = ?').run(repo, sha).changes) > 0 ? 1 : 0;
+        for (const t of ['commit_branch', 'commit_node', 'commit_node_done']) this.db.prepare(`DELETE FROM ${t} WHERE repo = ? AND sha = ?`).run(repo, sha);
+      }
+      this.db.exec('COMMIT');
+      return n;
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   /** Every commit carrying at least one key, per repository — the set a work join walks. */

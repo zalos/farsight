@@ -242,26 +242,41 @@ export function registerWorkTools(ctx: WorkToolsContext): WorkTools {
       if (!rows.length && spine.keyCommitCounts && spine.keyCommitCounts().size === 0) {
         return 'history not indexed — the commit spine records no work-item key on any commit yet (keys are read when the workspace syncs its sources)';
       }
+      // one entry per commit (by sha alone): sources reading one checkout each record it under
+      // their own repo name, and their nodes are unioned below (KAN-8)
       const by = new Map<string, ItemCommit>();
+      const reposOf = new Map<string, string[]>();
       for (const r of rows) {
-        const k = `${r.repo} ${r.sha}`;
-        const had = by.get(k);
-        if (had) { if (!had.vias.includes(r.via)) had.vias.push(r.via); if (r.ref && !had.refs.includes(r.ref)) had.refs.push(r.ref); continue; }
-        by.set(k, { repo: r.repo, sha: r.sha, at: r.at, author: r.author, subject: r.subject, vias: [r.via], refs: r.ref ? [r.ref] : [], files: [], nodes: null, nodesFrom: 'none' });
+        const had = by.get(r.sha);
+        if (had) {
+          if (!had.vias.includes(r.via)) had.vias.push(r.via);
+          if (r.ref && !had.refs.includes(r.ref)) had.refs.push(r.ref);
+          if (!reposOf.get(r.sha)!.includes(r.repo)) reposOf.get(r.sha)!.push(r.repo);
+          continue;
+        }
+        by.set(r.sha, { repo: r.repo, sha: r.sha, at: r.at, author: r.author, subject: r.subject, vias: [r.via], refs: r.ref ? [r.ref] : [], files: [], nodes: null, nodesFrom: 'none' });
+        reposOf.set(r.sha, [r.repo]);
       }
       const index = ctx.index();
       for (const c of by.values()) {
-        c.files = spine.filesForCommit?.(c.repo, c.sha).map((f) => ({ path: f.path, status: f.status })) ?? [];
-        const recorded = spine.commitNodes?.(c.repo, c.sha) ?? null;
-        if (recorded) { c.nodes = [...new Set(recorded.map((x) => x.node))]; c.nodesFrom = 'spine'; continue; }
-        // never computed against this graph: compute now from the diff, with core's one rule for hunks → nodes
-        const root = ctx.roots()[c.repo];
-        const specs = root && existsSync(root) ? hunkSpecs(root, c.sha) : null;
-        if (specs) {
-          const nodesOfRepo = [...index.byId.values()].filter((n) => n.loc?.repo === c.repo);
-          c.nodes = [...new Set(nodesInHunks(nodesOfRepo, specs).seeds.map((s) => s.node.id))];
-          c.nodesFrom = 'diff-now';
+        const files = new Map<string, { path: string; status: string }>();
+        const nodes = new Set<string>();
+        let from: ItemCommit['nodesFrom'] = 'none';
+        for (const repo of reposOf.get(c.sha)!) {
+          for (const f of spine.filesForCommit?.(repo, c.sha) ?? []) if (!files.has(f.path)) files.set(f.path, { path: f.path, status: f.status });
+          const recorded = spine.commitNodes?.(repo, c.sha) ?? null;
+          if (recorded) { for (const x of recorded) nodes.add(x.node); if (from === 'none') from = 'spine'; continue; }
+          // never computed against this graph: compute now from the diff, with core's one rule for hunks → nodes
+          const root = ctx.roots()[repo];
+          const specs = root && existsSync(root) ? hunkSpecs(root, c.sha) : null;
+          if (specs) {
+            const nodesOfRepo = [...index.byId.values()].filter((n) => n.loc?.repo === repo);
+            for (const s of nodesInHunks(nodesOfRepo, specs).seeds) nodes.add(s.node.id);
+            from = 'diff-now';
+          }
         }
+        c.files = [...files.values()].sort((a, b) => a.path.localeCompare(b.path));
+        if (from !== 'none') { c.nodes = [...nodes]; c.nodesFrom = from; }
       }
       return [...by.values()].sort((a, b) => b.at.localeCompare(a.at));
     } finally {
