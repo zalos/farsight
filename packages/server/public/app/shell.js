@@ -782,7 +782,9 @@ export function searchNodes(q) {
   if (!terms.length) return [];
   // on a tie the product outranks the plumbing: a journey, then a screen
   const KIND_BONUS = { flow: 3, page: 2, route: 1, api: 1, work: 1 };
-  return S.GRAPH.nodes.filter((n) => inScope(n)).map((n) => {
+  // a module node is a file's import list and a package node has no place on a surface yet (the
+  // code map lane draws them): fast travel to either would arrive nowhere visible
+  return S.GRAPH.nodes.filter((n) => inScope(n) && n.kind !== 'module' && n.kind !== 'package').map((n) => {
     const name = String(n.name || '').toLowerCase();
     const ident = name.split(':')[0].trim();
     const tail = String(n.id || '').split('::').pop().toLowerCase();

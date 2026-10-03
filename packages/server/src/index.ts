@@ -11,7 +11,7 @@ import {
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
   testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
   impactOf, search, buildLine, projectGraph, appClosure, findProject,
-  packagesOf, importersOf, resolvePackage, counted, IMPACT_MAX_HOPS,
+  packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
   counted,
 } from '@farsight/core';
