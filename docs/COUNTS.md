@@ -351,6 +351,11 @@ The map computes no number of its own: every chip is a `Counted` the journey sum
 The plumbing prints no other number: a call, a record, a message and a third party are drawn once per screen that reaches
 them, so the same record appears under two screens while the journey's own counts still count it once.
 
+The stores (docs/proposals/data-stores.md) print **no number** on the map: the legend lists the stores the journey
+touches by name (`summary.system.stores`, else the street's own data), the property groups its data rows by store with
+no count per group, and *stores touched* (`summary.counted.stores`) is not printed until the summary types it as a
+`Counted` — the map does not count stores itself.
+
 
 #### Property (`surfaces/map-property.js`, `lib/map-property-model.js` → `counts`)
 

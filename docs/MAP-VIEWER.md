@@ -304,8 +304,19 @@ off — a click opens the screen — or a placeholder with the absence word; the
 order (`.map-pl`, a top bar in the service's colour `svc-<index % 6>` from `summary.systems` api rows, the
 evidence word when not spec-backed, *again* when the journey made the call on an earlier screen, the call's words,
 method and path as `.map-code`), and beside each call its records, messages and third parties (`.map-pd`, *reads*
-cool, *writes* warm, *reads · writes* both, arrowheads by direction). Planned and declared calls are dashed and
-carry nothing beside them. Nothing crosses; the legend lane names the services and the two colours.
+cool, *writes* warm, *reads · writes* both, arrowheads by direction; *reached* — the walk recorded no direction —
+a plain dim dotted line with no arrowhead, never a write by default). Planned and declared calls are dashed and
+carry nothing beside them. Nothing crosses; the legend lane names the services, the two colours, *reached* only when
+a node on the street uses it, and the **stores** the journey touches (`storesOf(model)`), each with its swatch.
+
+**Data stores** (`docs/proposals/data-stores.md`, 2026-10-03). A data node whose node or marker carries a `store`
+names it on its kind line in words — `Invoice DB · record` for a record, `Example ERP · ERP` for a third party used
+as a store (kind words `map.store.kind.*`: sql *database* · document *document store* · files *file store* · erp
+*ERP* · other *store*) — and its left bar takes the store kind's colour (`.st-<kind>` sets `--stc`: sql and document
+the record's violet `--tbl`, erp amber, files a cyan-grey, other dim). A store-like third party is drawn in the
+record anatomy (`.map-pd.rec`, `data-store`, `data-store-kind`) with its *reads* / *writes* from the marker's `op`, or
+*reached*; a third party that is not a store keeps the warm `.ext` bar. A store's name is a product name or a
+settings word, so every register prints it.
 
 **The folds** keep a long pathway short (the journey view's `▸ n inside` is the precedent for the words; the map keeps
 its own state, `MAP.open`, for as long as the board is mounted). Beside a call the first **3** data nodes are drawn —
@@ -317,14 +328,20 @@ folded height by default, so the neighbourhood packing stays tight, growing down
 re-lays, the journey in view stays put). The fold's number is that call's or screen's own markers beyond those drawn,
 with a `plainTip` (`map.fold.scopeCall` · `map.fold.scopeScreen`); no count of the journey moves. A data node is
 **210** wide (`DW`, the column `COL` is 480): its name keeps the node's whole width (about 27 characters at the
-street scale) and the kind line above it — kind · identifier, then *reads* / *writes* — is the one that truncates.
+street scale) and the kind line above it — store · kind (or kind) · identifier, then *reads* / *writes* /
+*reached* — is the one that truncates. The data order is writes, *reads · writes*, reads, then *reached*
+(`MODE_ORDER`).
 
 **The model** (`lib/map-model.js`, pure, `packages/server/test/map-model.test.ts` over a captured answer in
 `test/fixtures/map-billing-cycle.json`). `streetModel(data, graphById)` → `{ journey, services, screens, links }`;
 a `MapScreen` is `{ index, ordinal, node, id, name, business, designId, route, state, chips: { calls, gates, tests,
 work: null }, calls, gates, decisions, absent, segment }`; a `MapCall` is `{ nodeId, marker, moment, service,
 method, path, operationId, summary, label, business, evidence, repeat, data[] }`, data `{ kind, nodeId, name, node,
-mode }`. Measured on the fixture and different from the proposal's first draft: a call's data is what the call
+mode, store }` — `mode` one of `read` · `write` · `both` · `reached`, `store` the node's `StoreRef` (name, kind,
+engine, via, ref) else the marker's `{ name, kind }` else null. `mergeMode(a, b)`: the same node met twice on one
+call — a known direction wins over `reached`, and `both` comes only from a read and a write. `streetModel(...).stores`
+(read through `storesOf(model)`) is `summary.system.stores` when the answer carries it, else derived in the order the
+street meets them: `{ name, kind, ops }`. Measured on the fixture and different from the proposal's first draft: a call's data is what the call
 reached, found up the markers' `under` chain (falling back to its moment's call); a planned screen's calls are its
 **planned call markers** (`via: 'planned'`), not `segment.declaredOnly` — that field lists operations a *built*
 screen's design names and no code on it calls, kept as `evidence: 'declared'` rows. Evidence: `spec-backed`
@@ -332,7 +349,9 @@ screen's design names and no code on it calls, kept as `evidence: 'declared'` ro
 `screensUsing(model, kind, nodeId)` answers the card's *on* row.
 
 **The explore card** (`.map-xcard`, §5): kind and direction (the service and what the call reads or writes; a data
-node's kind and what this call does to it), the evidence word, the name in the register, the identifier line
+node's store and kind and what this call does to it), the evidence word, the name in the register, for a data node
+with a store its swatch, name and kind and — `.map-code`, so hybrid and code only — *known from* and the `via` in
+words (`map.store.via.*`) with the `ref`, the identifier line
 (`.map-code`: method path · operationId · handled by …; a data node's name and file), *on* — the screens of this
 journey it is drawn under, each opening that screen — and at most two doors: *Open on APIs*
 (`#/apis/<apiId>?op=<routeId>`) and *Open on the code map* (`#/codemap?node=`). `b` on the map asks *what uses
@@ -361,7 +380,11 @@ the journey-numbers identifier check.
 **e2e.** `e2e/tests/map-street.pw.spec.ts`: flag off → no tab and `#/map` lands on the Portfolio; flag on → the
 Portfolio switch, three districts, the links, entering Billing cycle → three screens in order; plumbing (service
 bar, a *writes* node, Discard draft's dashed *not built* call, `p`); the property through the hook, `[` `]`, Esc, a
-`?node=` deep link; snap by zooming in and leaving by ⌘-scroll out; the explore card; the business lens.
+`?node=` deep link; snap by zooming in and leaving by ⌘-scroll out; the explore card; the business lens; data stores
+(the store on a data node and its bar colour, the ERP *writes* from `op` and *reached* with no method, the legend's
+stores, the card's *known from* in hybrid and hidden in business, the business street with stores) over
+`e2e/tests/map-stores-stub.ts`, a `page.route` stub that adds stores in the proposal's shapes and skips what the real
+answer already carries.
 
 #### Property — `surfaces/map-property.js`, `lib/map-property-model.js` (lane B, 2026-10-03)
 
@@ -392,7 +415,7 @@ handlers its calls reach) and `counts` — the tab strip's numbers, each the sum
 |---|---|---|
 | Overview | the screen's sentence (`MapScreen.business`) in a quest-amber rule; at-a-glance chips; the calls (brief); the gates; the work rows | none |
 | Gates | `segment.gates` split guard / rule in walk order, named with `jrnGateLabel` (business: the words after the `@guard` colon, the rest counted as *N more that nobody put in plain words*); `segment.decisions`, `class: 'business'` only in the business register | `segment.counted.gates` |
-| APIs | `MapScreen.calls`: service (`SystemRow.label`, colour `svc-<index>`), what it is for, method + path outside business, the evidence chip (*spec-backed* · *implied* · *declared, never called* · *not built*), what it reads and writes; then every record, message and third party reached, once, with its modes | `counted.actions`; a screen not built: `counted.actionStops` |
+| APIs | `MapScreen.calls`: service (`SystemRow.label`, colour `svc-<index>`), what it is for, method + path outside business, the evidence chip (*spec-backed* · *implied* · *declared, never called* · *not built*), what it reads, writes or reaches; then *Data this screen reaches*: every record, message and third party reached, once, with its modes (*reached* only while nothing known says which way), grouped by store (`dataByStore`: named stores first in the order the screen meets them, headed by the store's name and kind word; what no store names last under its plain kind word, records · third parties · messages) | `counted.actions`; a screen not built: `counted.actionStops` |
 | UX | the page node, the components the walk met (`screenComponents`), story chips (`storyChipsHtml(screenStoryIds(…))`) | none |
 | Tests | `summary.coverage.segments[i]` through `jrnFoldFacts`: the evidence chip, the run behind it, the counts sentence, their own last run; the cases (not run-level) with how each is evidenced and its status; coverage runs that name no case apart | `coverage.segments[i].counted.tests` |
 | Route | the page name, built or planned, the design manifest that declares it, where the code routes it; the journey's `summary.links`; *other ways in* = edges into the page that are not `contains`, `covers`, `tracks` or a flow's `renders`; the design and `@see` links (`jrnRefAnchors`) | none |
