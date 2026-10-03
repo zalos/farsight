@@ -307,6 +307,18 @@ method and path as `.map-code`), and beside each call its records, messages and 
 cool, *writes* warm, *reads · writes* both, arrowheads by direction). Planned and declared calls are dashed and
 carry nothing beside them. Nothing crosses; the legend lane names the services and the two colours.
 
+**The folds** keep a long pathway short (the journey view's `▸ n inside` is the precedent for the words; the map keeps
+its own state, `MAP.open`, for as long as the board is mounted). Beside a call the first **3** data nodes are drawn —
+writes and *reads · writes* before reads, so the warm lines are never the folded ones — and the rest fold into one
+`▸ n more` row; under a screen the first **4** calls, the rest in one `▸ n more calls` row. A fold only appears when it
+saves a row (a call with 4 data nodes and a screen with 5 calls draw whole). Clicking a fold opens it in place (`▾
+fewer` / `▾ fewer calls` folds it back); the district redraws, and its height follows the pathway **as drawn** — the
+folded height by default, so the neighbourhood packing stays tight, growing downward when a fold opens (the band
+re-lays, the journey in view stays put). The fold's number is that call's or screen's own markers beyond those drawn,
+with a `plainTip` (`map.fold.scopeCall` · `map.fold.scopeScreen`); no count of the journey moves. A data node is
+**210** wide (`DW`, the column `COL` is 480): its name keeps the node's whole width (about 27 characters at the
+street scale) and the kind line above it — kind · identifier, then *reads* / *writes* — is the one that truncates.
+
 **The model** (`lib/map-model.js`, pure, `packages/server/test/map-model.test.ts` over a captured answer in
 `test/fixtures/map-billing-cycle.json`). `streetModel(data, graphById)` → `{ journey, services, screens, links }`;
 a `MapScreen` is `{ index, ordinal, node, id, name, business, designId, route, state, chips: { calls, gates, tests,
