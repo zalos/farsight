@@ -371,7 +371,7 @@ function changesHtml(pm, st) {
     body = c.list.map((x) => {
       const s = c.sentences[x.id] || x.kind;
       const sub = biz() ? '' : esc([x.kind, x.subject && x.subject.name, currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · '));
-      return row(esc(biz() ? unCode(s) : s), sub, '<span class="api-chip ' + (x.severity === 'breaking' ? 'warn' : '') + '">' + esc(x.severity) + '</span>', { kind: (x.subject && x.subject.kind) || 'node', id: x.subject && x.subject.id });
+      return row(esc(biz() ? unCode(s) : s), sub, '<span class="api-chip ' + (x.severity === 'breaking' ? 'warn' : '') + '"' + defAttrs('changes.sev.' + x.severity) + '>' + esc(t('changes.sev.' + x.severity)) + '</span>', { kind: (x.subject && x.subject.kind) || 'node', id: x.subject && x.subject.id });
     }).join('');
   }
   const range = c && c.base != null ? '<p class="mp-dim"' + defAttrs('map.prop.changes.range') + '>' + esc(t('map.prop.changes.range').replace('{base}', c.base).replace('{head}', c.head)) + '</p>' : '';
