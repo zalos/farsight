@@ -5,9 +5,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { ingestRepo, prismaProviders, springDatasourceJdbc } from '../dist/index.js';
-import { sanitizeStores } from '@farsight/core';
+import { sanitizeStores, buildIndex, journey, journeySummary, screensFor, opOfMethod } from '@farsight/core';
 
 function tempRepo(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-stores-'));
@@ -195,4 +195,76 @@ test('fetch: no init is a GET the code wrote; an init variable is unknown and ma
   assert.equal(http('b').to, 'r::route::GET /items', 'the only route at the path');
   assert.equal(http('b').resolution?.confidence, 'MEDIUM');
   assert.equal(http('c').to, 'r::unknown::? /orders', 'two routes at the path: no pick, and the stub says the method is unknown');
+});
+
+// ── the journey: store and op on the markers, the stores the journey touches ──
+
+test('invoice-app · billing cycle: the records live in Invoice DB through the config; the rows and their keys are unchanged', async () => {
+  const g = await ingestRepo(resolve(import.meta.dirname, '../../../examples/invoice-app'), { repoName: 'invoice-app' });
+  const flow = 'invoice-app::flow::billing-cycle';
+  const index = buildIndex(g.nodes, g.edges);
+  const sum = journeySummary(index, journey(index, flow), screensFor(index, index.byId.get(flow)!));
+  assert.deepEqual(sum.systems.map((r) => r.key), ['repo:invoice-app:ux', 'api:invoice-app::api::openapi.yaml', 'repo:invoice-app:server', 'records', 'messages'],
+    'the five rows the ladder pins');
+  assert.deepEqual(sum.systems.find((r) => r.key === 'records')!.store, { name: 'Invoice DB', kind: 'sql' }, 'every record lives in the one store');
+  for (const t of g.nodes.filter((n) => n.kind === 'table')) assert.equal(t.store?.via, 'config', `${t.name}: no driver in the fixture, so the config names it`);
+  const records = sum.segments.flatMap((sg) => sg.markers).filter((m) => m.kind === 'record');
+  assert.ok(records.length > 0 && records.every((m) => m.store?.name === 'Invoice DB' && m.op), 'each record marker names its store and its direction');
+  assert.deepEqual(sum.system.stores, [{ name: 'Invoice DB', kind: 'sql', records: 3, externals: 0, ops: ['reads', 'writes'] }]);
+  assert.equal(sum.counted.stores.n, 1);
+  assert.deepEqual(sum.counted.stores.breakdown!.map((p) => p.n), [1, 0]);
+  assert.deepEqual(sum.system.externals, [], 'nothing in this flow reaches the ERP');
+});
+
+test('a journey through a declared ERP client: reads for GET, writes for POST, nothing for a method the code does not name', async () => {
+  const g = await ingest({
+    'src/hosts.ts': "export const ERP_HOST = 'https://erp.example.com';",
+    'src/erpClient.ts': CLIENT,
+    'src/sync.ts': [
+      "import { ErpClient } from './erpClient';",
+      '/** @entrypoint nightly */',
+      'export async function nightlySync() {',
+      '  const erp = new ErpClient();',
+      '  await erp.getList();',
+      '  await erp.create();',
+      "  await erp.change('PATCH');",
+      '}',
+    ].join('\n'),
+    'farsight.config.json': JSON.stringify({ externals: [{ import: 'src/erpClient.ts::ErpClient', name: 'Example ERP', kind: 'erp' }] }),
+  });
+  const index = buildIndex(g.nodes, g.edges);
+  const entry = 'r::src/sync.ts::nightlySync';
+  const sum = journeySummary(index, journey(index, entry), screensFor(index, index.byId.get(entry)!));
+  const ext = sum.segments.flatMap((sg) => sg.markers).filter((m) => m.kind === 'external');
+  assert.deepEqual(ext.map((m) => m.op ?? null), ['reads', 'writes', null]);
+  assert.ok(ext.every((m) => m.store?.name === 'Example ERP' && m.store.kind === 'erp' && m.system === 'external:Example ERP'));
+  const row = sum.systems.find((r) => r.key === 'external:Example ERP')!;
+  assert.deepEqual([row.externalKind, row.store], ['erp', { name: 'Example ERP', kind: 'erp' }]);
+  assert.deepEqual(sum.system.externals[0]!.ops, ['reads', 'writes']);
+  assert.deepEqual(sum.system.stores, [{ name: 'Example ERP', kind: 'erp', records: 0, externals: 1, ops: ['reads', 'writes'] }]);
+  assert.deepEqual(sum.counted.stores.breakdown!.map((p) => p.n), [0, 1]);
+});
+
+test('records in two stores: each marker names its own, the records row names none', async () => {
+  const g = await ingest({
+    'src/schema.ts': "import { pgTable, text } from 'drizzle-orm/pg-core';\nexport const invoices = pgTable('invoices', { id: text('id') });",
+    'src/run.ts': [
+      "import { invoices } from './schema';",
+      '/** @entrypoint job */',
+      'export async function run(db: any) { await db.insert(invoices).values({}); return db.query("SELECT 1 FROM audit_log"); }',
+    ].join('\n'),
+    'farsight.config.json': JSON.stringify({ stores: [{ name: 'Audit DB', kind: 'sql' }] }),
+  });
+  const index = buildIndex(g.nodes, g.edges);
+  const entry = 'r::src/run.ts::run';
+  const sum = journeySummary(index, journey(index, entry), screensFor(index, index.byId.get(entry)!));
+  const recs = sum.segments.flatMap((sg) => sg.markers).filter((m) => m.kind === 'record');
+  assert.deepEqual(recs.map((m) => m.store?.name).sort(), ['Audit DB', 'Postgres']);
+  assert.equal(sum.systems.find((r) => r.key === 'records')!.store, undefined);
+  assert.equal(sum.counted.stores.n, 2);
+});
+
+test('opOfMethod: GET/HEAD read, POST/PUT/PATCH/DELETE write, anything else is no claim', () => {
+  assert.deepEqual(['GET', 'head', 'POST', 'put', 'PATCH', 'DELETE', 'OPTIONS', undefined, 7].map(opOfMethod),
+    ['reads', 'reads', 'writes', 'writes', 'writes', 'writes', undefined, undefined, undefined]);
 });

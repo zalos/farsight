@@ -95,6 +95,11 @@ function nodeDetail(n: GraphNode, full = false): string {
     const x = n.external;
     lines.push(`  external: ${x.kind}${x.via ? ` · via ${x.via}` : ''} · known from ${x.source}${x.ref ? ` (${x.ref})` : ''}`);
   }
+  // the data store a table (or a store-like external) lives in, and which rule named it (data-stores.md §3.1)
+  if (n.store) {
+    const st = n.store;
+    lines.push(`  store: ${st.name} · ${st.kind}${st.engine ? ` · ${st.engine}` : ''} · known from ${st.via}${st.ref ? ` (${st.ref})` : ''}`);
+  }
   // what verifies this — declared · reached · verified, never conflated
   const covers = verifiedBy(index, n.id);
   // a table is never covered directly: a test reaches it through the function that reads or writes it (01 §3.2)
