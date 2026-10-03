@@ -267,15 +267,34 @@ animate 450 ms (`.anim`, off under `prefers-reduced-motion`); gestures never do.
 at scale **1.0** centred on it; a ⌘/Ctrl scroll out past a small budget, or a two-finger pinch out, over the open
 screen leaves it (the rest of that scroll is swallowed for 400 ms so the street does not keep zooming).
 
-**The neighbourhood.** One `.map-district` per flow, laid out in rows: the journeys that contain another (every
-screen of a smaller one is theirs) on rows of their own, then the rest in the order the design's `leadsTo` walks
-them (`neighbourhoodModel(designs, workByFlow, graphById)`), rows about as wide as the stage's shape asks. Each has a
-poster cover (`.map-dcover`: name, sentence, the journey's Counteds at poster size, *Open this journey*) over its
-ghosted street (opacity .18). Links between districts are drawn from each journey's own `summary.links` as it lands
-(*leads to*, its mirror *requires* drawn once, *part of* dashed) — never inferred by the viewer. The journeys are
-read one at a time, the one the route names first, under a generation counter; answers are cached per entry per
-sync (`JOURNEY_CACHE`, the `FLOW_CACHE` pattern), so a register flip never refetches. A district grows when its
-walk lands or plumbing is switched; the re-layout shifts the board so the journey in view stays where it was.
+**The neighbourhood.** One `.map-district` per flow. The layout rule is `layoutDistricts(items, { aspect })` in
+`lib/map-model.js` (pure; tested on 1, 3, 8, 21 and 40 synthetic journeys for no overlap and the board's shape):
+- **bands by source** (`repo`), stacked top to bottom in the order the design answer names the sources, each headed
+  by a `.map-band` label with the source's name;
+- inside a band, `neighbourhoodModel` orders the journeys that contain another (every screen of a smaller one is
+  theirs) first, then by name, and they are packed left to right in **rows** that wrap at one maximum row width;
+- every district keeps its **street's world width** (so zooming in reveals the street where the cover was) and takes
+  its band's tallest height, so rows line up;
+- the row width is the one, among the widths a row could break at, that brings the board's aspect nearest the
+  stage's (width ÷ height under the chrome), so a fit uses the screen. Re-run on resize, on plumbing, and as each walk
+  lands (the re-layout shifts the board so the journey in view stays put).
+
+Each district has a poster **cover** (`.map-dcover`: name clamped to two lines, sentence to two, the journey's
+Counteds in one row; its whole sentence is the cover's tip) over its ghosted street (opacity .18). Covers are
+**counter-scaled**: the canvas sets `--map-inv = min(1/scale, 4)` on the world (`INV_MAX`), and `.map-dcover-in` is a
+box the district's size divided by `--map-inv`, scaled back up by it from its top-left corner — so its text keeps a
+steady size on screen down to scale 0.25 and shrinks no faster below, the name reading at ≥ 12 px at the fit of the
+21-journey dogfood graph (×0.16), and it can never draw outside its district. Without plumbing a district is
+`SY + SH + 130` tall, enough for that box at the cap to hold all three rows. The district under the pointer or the
+focus rises above its neighbours and brings its links up with their words.
+
+**Links** come from each journey's own `summary.links` as it lands, never inferred by the viewer: *leads to* (and its
+mirror *requires*, drawn once) always, dimmed; *part of* (dashed) only for the district under the pointer or the
+focus, or at the street when both its ends are in view — at the fit they are noise (`linkVisibility()`, run on every
+move). Link words show at the neighbourhood only on the hovered district's links.
+
+The journeys are read one at a time, the one the route names first, under a generation counter; answers are cached per
+entry per sync (`JOURNEY_CACHE`, the `FLOW_CACHE` pattern), so a register flip never refetches.
 
 **The street.** Screens in step order (`.map-scr`: `designThumbHtml(node, 'map')` with the lightbox click switched
 off — a click opens the screen — or a placeholder with the absence word; the ordinal; the name; the route as

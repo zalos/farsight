@@ -72,6 +72,7 @@ test.describe('map — neighbourhood and street', () => {
   /**
    * @covers packages/server/public/app/surfaces/map.js::mountMap
    * @covers packages/server/public/app/lib/map-model.js::neighbourhoodModel
+   * @covers packages/server/public/app/lib/map-model.js::layoutDistricts
    * @covers packages/server/public/app/lib/map-model.js::streetModel
    * @covers packages/server/public/app/lib/map-canvas.js::createCanvas
    * @covers packages/server/public/app/surfaces/portfolio.js::mapSwitchHtml
@@ -99,6 +100,30 @@ test.describe('map — neighbourhood and street', () => {
     // the containing journey draws its parts' links
     await expect(page.locator('.map-links [data-link="partOf"]')).toHaveCount(2);
     await expect(page.locator('.map-links [data-link="leadsTo"]')).toHaveCount(1);
+    // at the fit: one band for the one source, no two districts overlap, every cover's name reads at ≥ 12 px
+    // and draws inside its district; part-of links wait for a hover
+    await expect(page.locator('.map-band')).toHaveText(['invoice-app']);
+    const fit = await page.evaluate(() => {
+      const ds = [...document.querySelectorAll('.map-district')].map((d) => d.getBoundingClientRect());
+      let overlaps = 0;
+      for (let i = 0; i < ds.length; i++) for (let j = i + 1; j < ds.length; j++) {
+        const a = ds[i], b = ds[j];
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) overlaps++;
+      }
+      let spill = 0;
+      document.querySelectorAll('.map-district').forEach((d) => {
+        const r = d.getBoundingClientRect();
+        d.querySelectorAll('.map-dcover-in > *').forEach((c) => { const q = c.getBoundingClientRect(); if (q.right > r.right + 1 || q.bottom > r.bottom + 1) spill++; });
+      });
+      const names = [...document.querySelectorAll('.map-dcover .nm')].map((e) => parseFloat(getComputedStyle(e).fontSize) * e.getBoundingClientRect().height / (e as HTMLElement).offsetHeight);
+      return { overlaps, spill, minName: Math.min(...names) };
+    });
+    expect(fit.overlaps).toBe(0);
+    expect(fit.spill).toBe(0);
+    expect(fit.minName).toBeGreaterThanOrEqual(12);
+    await expect(page.locator('.map-links [data-link="partOf"].off')).toHaveCount(2);
+    await page.locator(`.map-dcover[data-enter="${FLOW}"]`).hover();
+    await expect(page.locator('.map-links [data-link="partOf"]:not(.off)')).toHaveCount(2);
 
     await page.locator(`.map-dcover[data-enter="${FLOW}"]`).click();
     await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);

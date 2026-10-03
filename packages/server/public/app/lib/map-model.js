@@ -21,18 +21,15 @@ function getter(graphById) {
 }
 
 /**
- * Every journey as a district, in the order the canvas lays them out:
- * first the journeys that **contain** another (every screen of a smaller one is
- * one of theirs), so a whole cycle sits above its parts; then the rest in the
- * order the design says a person walks them (`leadsTo` on the flow's design
- * reference, read from `graphById` when given), then by size, then by name.
- * `workByFlow` is optional — a Map or object of `/api/work/flow/<id>` answers
- * keyed by flow node id.
+ * Every journey as a district, in the order the canvas lays them out: grouped
+ * by source (`repo`, in the order the design answer names the sources); inside
+ * a source, first the journeys that **contain** another (every screen of a
+ * smaller one is one of theirs), then by name. `workByFlow` is optional — a Map
+ * or object of `/api/work/flow/<id>` answers keyed by flow node id.
  * @group Map
  */
-export function neighbourhoodModel(designs, workByFlow, graphById) {
+export function neighbourhoodModel(designs, workByFlow) {
   const work = getter(workByFlow);
-  const get = getter(graphById);
   const rows = [];
   const seen = new Set();
   for (const d of Array.isArray(designs) ? designs : []) {
@@ -58,26 +55,80 @@ export function neighbourhoodModel(designs, workByFlow, graphById) {
   // a container holds every screen of some other journey, and more
   const contains = (a, b) => b.screens.length > 0 && b.screens.length < a.screens.length && b.screens.every((x) => a.screens.includes(x));
   const isContainer = new Map(rows.map((r) => [r.id, rows.some((o) => o !== r && contains(r, o))]));
-  // how far down the design's leads-to chain a journey sits (0 = nobody leads to it)
-  const byDesignId = new Map(rows.map((r) => [r.flowId, r]));
-  const next = new Map(rows.map((r) => {
-    const n = get(r.id);
-    const ids = (n && n.design && n.design.leadsTo) || [];
-    return [r.id, ids.map((x) => byDesignId.get(x)).filter(Boolean).map((x) => x.id)];
-  }));
-  const depth = new Map();
-  const visit = (id, dpt, path) => {
-    if (path.has(id) || (depth.get(id) || 0) > dpt) return;
-    if (dpt > (depth.get(id) || 0) || !depth.has(id)) depth.set(id, dpt);
-    path.add(id);
-    for (const n of next.get(id) || []) visit(n, dpt + 1, path);
-    path.delete(id);
-  };
-  for (const r of rows) if (!depth.has(r.id)) visit(r.id, 0, new Set());
-  rows.sort((a, b) => (Number(isContainer.get(b.id)) - Number(isContainer.get(a.id)))
-    || (isContainer.get(a.id) ? 0 : (depth.get(a.id) || 0) - (depth.get(b.id) || 0))
-    || (b.total - a.total) || a.name.localeCompare(b.name));
+  // bands by source, in the order the design answer names them; inside a band the containers, then by name
+  const bandOrder = [...new Set(rows.map((r) => r.repo || ''))];
+  rows.sort((a, b) => (bandOrder.indexOf(a.repo || '') - bandOrder.indexOf(b.repo || ''))
+    || (Number(isContainer.get(b.id)) - Number(isContainer.get(a.id)))
+    || a.name.localeCompare(b.name));
   return { districts: rows.map((r, index) => ({ ...r, index, container: !!isContainer.get(r.id) })) };
+}
+
+/**
+ * Where every district sits on the board — the neighbourhood's layout rule,
+ * pure so a test can hold it to 40 journeys.
+ *
+ * `items` are the districts in model order, each `{ id, repo, w, h }` in world
+ * units: `w` is the street's own width (so zooming in reveals the street in
+ * place), `h` its height. The rule:
+ * - one **band** per source, stacked top to bottom, each headed by a label
+ *   strip of `labelH`;
+ * - inside a band, districts packed left to right in **rows** that wrap at one
+ *   maximum row width shared by every band; every district of a band takes the
+ *   band's tallest height, so rows line up;
+ * - the row width is chosen among the widths the rows could break at, to bring
+ *   the whole board's aspect nearest `aspect` (the viewport's width ÷ height) —
+ *   a fit then uses the screen instead of a strip of it.
+ * Returns `{ rects: Map(id → {x, y, w, h}), bands: [{ repo, x, y, w, h }], size: {w, h}, rowW }`.
+ * @group Map
+ */
+export function layoutDistricts(items, opts = {}) {
+  const o = { aspect: 1.6, colGap: 200, rowGap: 160, bandGap: 280, labelH: 120, margin: 80, ...opts };
+  const list = Array.isArray(items) ? items : [];
+  const bands = [];
+  for (const it of list) {
+    const key = it.repo || '';
+    let b = bands.find((x) => x.repo === key);
+    if (!b) { b = { repo: key, items: [] }; bands.push(b); }
+    b.items.push(it);
+  }
+  const widest = Math.max(0, ...list.map((i) => i.w));
+  // every width a row could end at: the running sums of each band's districts
+  const cands = new Set([widest]);
+  for (const b of bands) {
+    for (let i = 0; i < b.items.length; i++) {
+      let w = 0;
+      for (let j = i; j < b.items.length; j++) { w += b.items[j].w + (j > i ? o.colGap : 0); if (w >= widest) cands.add(w); }
+    }
+  }
+  const place = (rowW) => {
+    const rects = new Map();
+    const out = [];
+    let y = o.margin, maxW = 0;
+    for (const b of bands) {
+      const rowH = Math.max(0, ...b.items.map((i) => i.h));
+      const top = y;
+      let x = o.margin, rowY = y + o.labelH, bandW = 0;
+      for (const it of b.items) {
+        if (x > o.margin && x - o.margin + it.w > rowW) { x = o.margin; rowY += rowH + o.rowGap; }
+        rects.set(it.id, { x, y: rowY, w: it.w, h: rowH });
+        x += it.w + o.colGap;
+        bandW = Math.max(bandW, x - o.colGap - o.margin);
+      }
+      const h = rowY + rowH - top;
+      out.push({ repo: b.repo, x: o.margin, y: top, w: bandW, h });
+      maxW = Math.max(maxW, bandW);
+      y = top + h + o.bandGap;
+    }
+    const size = { w: maxW + o.margin * 2, h: (bands.length ? y - o.bandGap : o.margin) + o.margin };
+    return { rects, bands: out, size, rowW };
+  };
+  let best = null, bestScore = Infinity;
+  for (const w of [...cands].sort((a, b) => a - b)) {
+    const r = place(w);
+    const score = Math.abs(Math.log((r.size.w / r.size.h) / o.aspect));
+    if (score < bestScore - 1e-9) { best = r; bestScore = score; }
+  }
+  return best || place(widest);
 }
 
 /** The read/write word for one data marker. A message published is written, one listened to is read. */
