@@ -394,6 +394,18 @@ same placeholder with `design.noImage`. The placeholder: the design glyph, the s
 business), its sentence, *designed, not built* when it is, the parts found (or *no components found*), the design
 link. No paste or upload control is drawn (proposal §9).
 
+**A real screen (2026-10-03, second pass).** The dogfood graph showed three things the fixture hid. *The picture is
+whole*: each `.mp-frame` is a size container and the shot takes the image's own aspect (`--ar`, set from
+`naturalWidth / naturalHeight` when it loads and remembered per screen) up to the frame's box, with
+`object-fit: contain` — a 1:3 export is letterboxed, never cropped. *Free text is clamped*: `clampHtml(key, text)`
+prints the first two sentences (at most about 280 characters) and a catalog *more* / *less* that opens the rest in
+place — the Overview sentence, the placeholder's sentence, decisions, work findings and change sentences.
+*Lists are capped*: `capRows(key, rows, counted, api)` shows `MAP_PROP_CAP` (10) rows and a *show all n* row; n is
+the list's own `Counted` when it counts exactly those rows, else the rows on screen with a `plainTip`. The story
+chips above the hero fold past three parts into *n stories on m parts* (n's tip is the per-part breakdown), and the
+step bar's *also in* shows three journeys and *n more*. What the reader opened is kept per screen and forgotten on a
+step. Under 860px the step bar puts *screen n of N* on its own row and the chips truncate.
+
 **The lens.** The business register drops the route from the crumb and the placeholder, method + path, file
 lines, test runners and levels, change kinds, work keys and ids; it names components and records with `bizName()`
 and calls with `plainWords()`; the accent warms with the lens. Every row naming a call, record, gate, component,

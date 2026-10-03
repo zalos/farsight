@@ -73,6 +73,63 @@ async function visibleWords(page: Page): Promise<string> {
   });
 }
 
+/** A tall screenshot (1:3), the shape a real app's design export takes; served in place of the list's 16:10 design. */
+const TALL_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="2400" viewBox="0 0 800 2400"><rect width="800" height="2400" fill="#F6F8FB"/>'
+  + '<rect width="800" height="120" fill="#2B6CDF"/><rect y="2280" width="800" height="120" fill="#E0457B"/></svg>';
+const LONG_WORDS = 'The operator reviews the record and decides what happens next. '
+  + Array.from({ length: 30 }, (_, i) => `Clause ${i + 1} adds a detail about who may act on this screen and what it shows them.`).join(' ');
+
+/**
+ * A real application's screen, synthesised over the fixture's own answers (the
+ * suite's page.route pattern, never a bigger fixture): a 200-word description,
+ * 25 gates, 273 cases, stories on five parts and five more journeys through the
+ * screen. Counts move with the rows, so every number stays the answer's own.
+ */
+async function realShaped(page: Page) {
+  await page.route(/\/api\/design\/image\?node=invoice-app%3A%3Apage%3A%3A%2Finvoices$/, (r) => r.fulfill({ contentType: 'image/svg+xml', body: TALL_SVG }));
+  await page.route(/\/graph$/, async (r) => {
+    const g = await (await r.fetch()).json();
+    const parts = ['invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage', 'invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer', 'invoice-app::src/ui/fields.tsx::LineItemRow', PAGE.list];
+    for (const n of g.nodes) if (parts.includes(n.id)) n.stories = [1, 2, 3, 4].map((k) => ({ id: `${n.id}--s${k}`, name: `State ${k}`, title: 'Parts', file: 'x.stories.tsx', line: k }));
+    for (let i = 1; i <= 5; i++) {
+      const id = `invoice-app::flow::other-${i}`;
+      g.nodes.push({ id, kind: 'flow', name: `Another journey ${i} through the same screen`, repo: 'invoice-app', tags: [] });
+      g.edges.push({ id: `renders|${id}|${PAGE.list}`, kind: 'renders', from: id, to: PAGE.list });
+    }
+    await r.fulfill({ contentType: 'application/json', body: JSON.stringify(g) });
+  });
+  await page.route(/\/api\/journey\?/, async (r) => {
+    const d = await (await r.fetch()).json();
+    if (r.request().url().includes('billing-cycle')) {
+      const sg = d.summary.segments[1];
+      sg.screen.business = LONG_WORDS;
+      for (const sc of d.screens) if (sc.id === PAGE.list) sc.bizDescription = LONG_WORDS;
+      const g0 = sg.gates;
+      sg.gates = Array.from({ length: 25 }, (_, i) => ({ ...g0[i % g0.length], id: `${g0[i % g0.length].id}#${i}`, name: `requireScope: area ${i}`, kind: 'guard', stepOrder: i }));
+      sg.counted.gates = { ...sg.counted.gates, n: 25, breakdown: [{ key: 'count.part.guards', n: 25 }, { key: 'count.part.rules', n: 0 }] };
+      const cov = d.summary.coverage.segments[1];
+      const t0 = cov.tests.find((x: { runLevel?: boolean }) => !x.runLevel);
+      cov.tests = Array.from({ length: 273 }, (_, i) => ({ ...t0, id: `${t0.id} #${i}`, name: `case ${i + 1} of the screen` }));
+      cov.counted.tests = { ...cov.counted.tests, n: 273, breakdown: [{ key: 'journey.testsUnit', n: 0 }, { key: 'journey.testsIntegration', n: 0 }, { key: 'journey.testsE2e', n: 273 }] };
+    }
+    await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) });
+  });
+}
+
+/** The picture is shown whole: inside its frame, at its own aspect. */
+async function wholePicture(page: Page) {
+  const img = page.locator('.mp-frame.img img');
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => {
+    const i = document.querySelector('.mp-frame.img img') as HTMLImageElement;
+    const f = document.querySelector('.mp-frame.img')!.getBoundingClientRect();
+    const r = i.getBoundingClientRect();
+    const inside = r.top >= f.top - 1 && r.bottom <= f.bottom + 1 && r.left >= f.left - 1 && r.right <= f.right + 1;
+    const aspect = Math.abs(r.width / r.height - i.naturalWidth / i.naturalHeight) < 0.02;
+    return inside && aspect;
+  })).toBe(true);
+}
+
 test.describe('map property', () => {
   /**
    * @covers packages/server/public/app/surfaces/map-property.js::mountMapProperty
@@ -181,6 +238,67 @@ test.describe('map property', () => {
         const hits = [...new Set((await visibleWords(page)).match(IDENTIFIER) || [])];
         expect(hits, `identifier-shaped words on ${node} · ${tab}`).toEqual([]);
       }
+    }
+  });
+  /**
+   * @covers packages/server/public/app/surfaces/map-property.js::mountMapProperty
+   * @covers packages/server/public/app/surfaces/map-property.js::capRows
+   * @covers packages/server/public/app/surfaces/map-property.js::clampHtml
+   */
+  test('a real-sized screen: the tall picture whole, the description clamped, long lists capped with show all n', async ({ page }) => {
+    await realShaped(page);
+    await openProperty(page, PAGE.list);
+    await wholePicture(page);
+    expect(await tabCounts(page)).toMatchObject({ gates: '25', tests: '273' });
+
+    // two sentences and a more, the rest one click away
+    const what = page.locator('.mp-body .mp-biz .mp-clamp');
+    await expect(what.locator('.short')).toBeVisible();
+    await expect(what.locator('.full')).toBeHidden();
+    await expect(what.locator('.short')).toHaveText('The operator reviews the record and decides what happens next. Clause 1 adds a detail about who may act on this screen and what it shows them.');
+    await what.locator('.mp-more').click();
+    await expect(page.locator('.mp-body .mp-biz .mp-clamp .full')).toBeVisible();
+    await expect(page.locator('.mp-body .mp-biz .mp-clamp .full')).toContainText('Clause 30');
+    await page.locator('.mp-body .mp-biz .mp-more').click();
+    await expect(page.locator('.mp-body .mp-biz .mp-clamp .full')).toBeHidden();
+
+    // story chips past three fold into one, which opens in place
+    const fold = page.locator('.mp-hero-chips .mp-fold');
+    await expect(fold).toHaveText(/19 stories on 5 parts/i);
+    await fold.click();
+    await expect(page.locator('.mp-hero-chips .sb-chip:not(.mp-fold)')).toHaveCount(5);
+
+    // the other journeys: three chips and one for the rest
+    await expect(page.locator('.mp-foot .mp-alsochip')).toHaveCount(3);
+    await page.locator('.mp-foot .mp-fold').click();
+    await expect(page.locator('.mp-foot .mp-alsochip')).toHaveCount(6);
+    const foot = await page.locator('.mp-foot').boundingBox();
+    expect(foot!.y + foot!.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight));
+
+    // Gates: ten rows, then show all 25 — the tab's own count — and every row once opened
+    await openTab(page, 'gates');
+    const gateRows = page.locator('.mp-body section').first().locator('.mp-row[data-map-card="gate"]');
+    await expect(gateRows).toHaveCount(10);
+    const allGates = page.locator('.mp-body .mp-all[data-list="gates"]');
+    await expect(allGates).toHaveText(/show all 25/i);
+    await allGates.click();
+    await expect(gateRows).toHaveCount(25);
+
+    // Tests: 273 cases are ten rows until asked
+    await openTab(page, 'tests');
+    const cases = page.locator('.mp-body .mp-row[data-map-card="test"]');
+    await expect(cases).toHaveCount(10);
+    await expect(page.locator('.mp-body .mp-all[data-list="cases"]')).toHaveText(/show all 273/i);
+    await page.locator('.mp-body .mp-all[data-list="cases"]').click();
+    await expect(cases).toHaveCount(273);
+    await expect(page.locator('.mp-body .mp-all[data-list="cases"]')).toHaveText(/show the first 10 only/i);
+  });
+
+  /** @covers packages/server/public/app/surfaces/map-property.js::mountMapProperty */
+  test('the fixture\'s 16:10 pictures are shown whole too', async ({ page }) => {
+    for (const node of [PAGE.newInvoice, PAGE.list]) {
+      await openProperty(page, node);
+      await wholePicture(page);
     }
   });
 });
