@@ -1,0 +1,6 @@
+{
+  "name": "billing-ui",
+  "projectType": "library",
+  "sourceRoot": "libs/billing/ui/src",
+  "tags": ["scope:billing", "type:ui"]
+}
