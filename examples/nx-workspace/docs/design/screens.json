@@ -1,0 +1,31 @@
+{
+  "name": "NX example — screens",
+  "screens": [
+    {
+      "id": "BIL-01",
+      "name": "Open invoices",
+      "route": "/invoices",
+      "description": "The open invoices of the billing domain, with their amounts."
+    },
+    {
+      "id": "OPS-01",
+      "name": "Report runs",
+      "route": "/runs",
+      "description": "The operations team's report runs, with the money each one moved."
+    }
+  ],
+  "flows": [
+    {
+      "id": "review-open-invoices",
+      "name": "Review open invoices",
+      "description": "A billing user opens the list of open invoices and reads what is owed.",
+      "screens": ["BIL-01"]
+    },
+    {
+      "id": "check-report-runs",
+      "name": "Check the report runs",
+      "description": "An operations user checks the report runs and what each one moved.",
+      "screens": ["OPS-01"]
+    }
+  ]
+}

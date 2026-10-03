@@ -26,6 +26,7 @@ import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, storesOf, MODE_ORDER } from '../lib/map-model.js';
+import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import { shareLink } from '../share.js';
@@ -50,6 +51,8 @@ const ENTER_COVER = SNAP_COVER + 0.04;
 /** Leaving a property lands on the street at this scale, centred on the screen. */
 const STREET_SCALE = 1.0;
 const PLUMB_KEY = 'fs-map-plumb';
+/** What the districts band by: `source` (the default) or `domain` (docs/proposals/dependencies-and-nx.md §2.3). */
+const BAND_KEY = 'fs-map-band';
 
 /** The surface's own state. Nothing here is shared with the journey overlay. */
 const MAP = {
@@ -63,6 +66,7 @@ const MAP = {
   geom: new Map(),
   size: { w: 0, h: 0 },
   plumb: false,
+  band: 'source',                   // 'source' | 'domain' — what the neighbourhood's bands are (persisted fs-map-band)
   focus: null,                      // the journey the street is on
   autoFit: null,                    // a street entered from the route, refitted when its walk lands — until the reader moves
   prop: null,                       // { flow, index, host, handle }
@@ -149,6 +153,7 @@ export function mountMap(route, el) {
   MAP.el = el;
   MAP.route = route;
   MAP.plumb = route && /(?:^|[?&])plumb=1(?:&|$)/.test(String(route.raw || '')) ? true : readPlumb();
+  MAP.band = readBand();
   MAP.fitted = false;
   el.innerHTML = stageHtml();
   MAP.stage = el.querySelector('.map-stage');
@@ -247,6 +252,36 @@ export function unmountMap() {
   MAP.el = MAP.stage = MAP.board = MAP.world = MAP.links = MAP.cv = null;
 }
 
+/**
+ * True when the districts are banded by domain: the reader chose it and the graph can — some
+ * source names a domain dimension and some journey has a domain. Otherwise the bands are sources.
+ */
+function bandingByDomain() {
+  return MAP.band === 'domain' && canBandByDomain(MAP.nb.districts, S.GRAPH && S.GRAPH.nodes, S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.projects);
+}
+/** *Band by: source · domain* — drawn only when the graph has domains to band by. */
+function bandToolHtml() {
+  if (!canBandByDomain(MAP.nb.districts, S.GRAPH && S.GRAPH.nodes, S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.projects)) return '';
+  const on = bandingByDomain() ? 'domain' : 'source';
+  const opt = (v, key) => '<button type="button" class="map-tb' + (on === v ? ' on' : '') + '" data-act="band" data-band="' + v + '" aria-pressed="' + (on === v) + '"'
+    + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
+  return '<span class="map-band-pick" role="group" aria-label="' + esc(t('map.band.by')) + '"><span class="hud-label"' + tipAttrs({ key: 'map.band.by', noFocus: true }) + '>' + esc(t('map.band.by')) + '</span>'
+    + opt('source', 'map.band.source') + opt('domain', 'map.band.domain') + '</span>';
+}
+/** Band the districts by source or by domain, keep the choice, and lay the board out again. */
+function setBand(v) {
+  MAP.band = v === 'domain' ? 'domain' : 'source';
+  try { localStorage.setItem(BAND_KEY, MAP.band); } catch { /* private window: the choice holds for this visit */ }
+  layout();
+  placeDistricts();
+  drawLinks();
+  redrawChrome();
+  fitAll(false);
+}
+function readBand() {
+  try { return localStorage.getItem(BAND_KEY) === 'domain' ? 'domain' : 'source'; } catch { return 'source'; }
+}
+
 function readPlumb() {
   try { return localStorage.getItem(PLUMB_KEY) === '1'; } catch { return false; }
 }
@@ -270,6 +305,8 @@ function start() {
     MAP.nb = neighbourhoodModel(MAP.designs, null);
     layout();
     renderAll();
+    // the band choice is offered only once the districts say whether there are domains to band by
+    redrawChrome();
     fillWork(gen);
     applyRouteTarget(MAP.route, false);
     walk(gen);
@@ -503,9 +540,19 @@ function districtSize(d) {
  */
 function layout() {
   const ds = MAP.nb.districts;
-  const items = ds.map((d) => ({ id: d.id, repo: d.repo || '', ...districtSize(d) }));
+  // banded by domain: each journey's domain (its flow's project, else its screens' pages), the
+  // bands in word order with *no domain* last; banded by source, the model's order as it was
+  const byDomain = bandingByDomain();
+  const dom = new Map(byDomain ? ds.map((d) => [d.id, journeyDomain(d, S.GRAPH.nodes, S.GRAPH.meta && S.GRAPH.meta.projects)]) : []);
+  MAP.bandWords = new Map(byDomain ? [...dom.values()].map((v) => [v.key, v.word]) : []);
+  let items = ds.map((d) => ({ id: d.id, repo: d.repo || '', band: byDomain ? dom.get(d.id).key : (d.repo || ''), ...districtSize(d) }));
+  if (byDomain) {
+    const rank = (k) => (k ? 0 : 1);
+    items = items.slice().sort((a, b) => rank(a.band) - rank(b.band) || String(MAP.bandWords.get(a.band)).localeCompare(String(MAP.bandWords.get(b.band))));
+  }
   const bw = MAP.board ? MAP.board.clientWidth : 0, bh = MAP.board ? MAP.board.clientHeight : 0;
-  const L = layoutDistricts(items, { aspect: bw > 0 && bh > 0 ? bw / bh : 1.6 });
+  // the empty key is a band too when banding by domain (*no domain*), so it is never folded into the source default
+  const L = layoutDistricts(items, { aspect: bw > 0 && bh > 0 ? bw / bh : 1.6, bandKey: (it) => (byDomain ? (it.band || '\u0000') : it.band) });
   MAP.geom = L.rects;
   MAP.bands = L.bands;
   MAP.size = L.size;
@@ -528,8 +575,11 @@ function placeDistricts() {
   if (MAP.world) {
     // the band labels: the source each band of journeys comes from
     MAP.world.querySelectorAll('.map-band').forEach((el) => el.remove());
-    const named = (MAP.bands || []).filter((b) => b.repo);
-    const html = named.map((b) => '<div class="map-band" style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px"><span>' + esc(b.repo) + '</span></div>').join('');
+    // banded by domain, a band is named by the domain's word (the config's, else the tag in words), and *no domain* is named too
+    const byDomain = bandingByDomain();
+    const named = (MAP.bands || []).filter((b) => byDomain || b.repo);
+    const word = (b) => (byDomain ? (b.repo === '\u0000' ? t('map.band.noDomain') : (MAP.bandWords && MAP.bandWords.get(b.repo)) || b.repo) : b.repo);
+    const html = named.map((b) => '<div class="map-band' + (byDomain ? ' dom' : '') + '" style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px"><span>' + esc(word(b)) + '</span></div>').join('');
     if (html && MAP.links) MAP.links.insertAdjacentHTML('afterend', html);
   }
   for (const [id, g] of MAP.geom) {
@@ -779,6 +829,7 @@ function chromeHtml() {
     + '<div class="map-crumb"></div>'
     + '<span class="map-asof"></span>'
     + '<div class="map-tools">'
+    + bandToolHtml()
     + tool('plumb', 'map.tool.plumb', esc(t('map.tool.plumb')), MAP.plumb ? ' on' : '')
     + tool('lens', 'map.tool.lens', esc(t('map.tool.lens')) + ' · ' + esc(t(lensOn ? 'chrome.lensBusiness' : currentLens() === 'code' ? 'chrome.lensCode' : 'chrome.lensHybrid')), lensOn ? ' on' : '')
     + tool('in', 'map.tool.zoomIn', '+')
@@ -856,6 +907,7 @@ function onChromeClick(e) {
     case 'fit': mapFit(); break;
     case 'full': toggleFull(); break;
     case 'link': mapCopyLink(); break;
+    case 'band': setBand(b.dataset.band); break;
     default:
   }
 }
