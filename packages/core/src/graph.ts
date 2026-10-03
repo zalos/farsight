@@ -461,6 +461,71 @@ export interface StoresMeta {
   notes?: string[];
 }
 
+// ── projects: which workspace project a node belongs to (docs/proposals/dependencies-and-nx.md §2.2) ──
+// Read once per source by parsers/src/shared/projects.ts: NX (`nx.json` + every `project.json` and every
+// `package.json` with an `nx` key or inside the root `workspaces` globs), plain workspaces, or one project
+// per source. Tags are kept as written; a tag *dimension* (`scope:` → domain) is how a lens groups them.
+// The project graph is a fold over the one graph (core/projects.ts), never a second store.
+
+/** What kind of project NX says this is; `e2e` is an application project whose name or tags say it tests another. */
+export type ProjectType = 'application' | 'library' | 'e2e';
+
+/** On every node whose file lies under a project root (the longest root wins). */
+export interface ProjectRef {
+  name: string;
+  /** source-relative project root (`libs/billing/ui`; `.` for a whole source) */
+  root: string;
+  type?: ProjectType;
+  /** the project's tags as written (`scope:billing`, `type:ui`) — absent when it has none */
+  tags?: string[];
+}
+
+/** One project of a source, as discovery read it. */
+export interface ProjectDecl {
+  name: string;
+  root: string;
+  type?: ProjectType;
+  tags: string[];
+  /** NX `implicitDependencies` — project names, exclusions (`!x`) left out */
+  implicitDependencies?: string[];
+  /** NX `sourceRoot`, when written */
+  sourceRoot?: string;
+  /** where the project was read: a `project.json`, a `package.json` (an `nx` key or a workspaces glob), or the source itself */
+  via: 'project.json' | 'package.json' | 'source';
+}
+
+/** A tag dimension: the tags starting with `prefix` give the node a value under `key` (`scope:billing` → domain billing). */
+export interface TagDimension {
+  key: string;
+  prefix: string;
+  label: string;
+}
+
+/** Imports from one project's files into another's, read at ingest from the import statements themselves. */
+export interface ProjectImports {
+  from: string;
+  to: string;
+  /** import statements in `from`'s files that resolve to a file of `to` */
+  imports: number;
+  /** files of `from` carrying at least one of them */
+  files: number;
+  /** the files with the most such imports, most first (at most five) */
+  top: { path: string; imports: number }[];
+}
+
+/** What the projects pass read, per source — `GraphFragment.meta.projects`. */
+export interface ProjectsMeta {
+  tool: 'nx' | 'workspaces' | 'none';
+  projects: ProjectDecl[];
+  tagDimensions: TagDimension[];
+  /** words for tag values per dimension key (`type` → `data-access` → *Data access*), from farsight.config.json */
+  tagValues?: Record<string, Record<string, string>>;
+  /** project → project imports between their files (the project graph adds `implicitDependencies` on top) */
+  imports?: ProjectImports[];
+  /** one sentence per thing read and set aside (a project.json that is not JSON, two projects with one name) */
+  notes?: string[];
+}
+
 export interface GraphNode {
   id: string;
   kind: NodeKind;
@@ -490,6 +555,8 @@ export interface GraphNode {
   store?: StoreRef;
   /** component/page nodes: the stories that render this component on its own — see StoryRef */
   stories?: StoryRef[];
+  /** every node under a workspace project's root: which project, its type and its tags — see ProjectRef */
+  project?: ProjectRef;
   /** Lens-specific presentation data, e.g. business-friendly labels. */
   facets?: {
     /** label overrides the business-lens name (glossary); description is the plain-language summary (@business). */
@@ -574,7 +641,7 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; projects?: ProjectsMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json at the repo root was applied by ingestRepo */
