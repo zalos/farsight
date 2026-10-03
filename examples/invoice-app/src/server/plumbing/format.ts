@@ -1,3 +1,5 @@
+import { format } from 'date-fns';
+
 /**
  * Formats a timestamp the way the finance team reads it (local date, minutes).
  * @business Shows when the approval happened, in the format the finance team reads.
@@ -5,5 +7,5 @@
  * step of its own on a journey however it is annotated.
  */
 export function fmt(at: Date): string {
-  return at.toISOString().replace('T', ' ').slice(0, 16);
+  return format(at, 'yyyy-MM-dd HH:mm');
 }

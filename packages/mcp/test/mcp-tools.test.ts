@@ -208,6 +208,29 @@ describe('describe_node — what to know before changing it', () => {
   });
 });
 
+describe('dependencies — packages as nodes', () => {
+  test('describe_node on a package: scope · range · declared in · importers · journeys reached', async () => {
+    const out = await call('describe_node', { node_id: 'invoice-app::package::react' });
+    assert.match(out, /^\[package\] react — \(no source loc\)/);
+    assert.match(out, /package: third-party · declared \^18\.3\.1 in package\.json/);
+    assert.match(out, /4 files import it for this package · 3 journeys reach it for this package — /);
+    assert.match(out, /farsight deps where react/);
+    const ws = await call('describe_node', { node_id: 'invoice-app::package::@invoice/plumbing' });
+    assert.match(ws, /package: workspace · project @invoice\/plumbing · src\/server\/plumbing · resolved by alias or workspace name/);
+    const sdk = await call('describe_node', { node_id: 'invoice-app::package::@azure-rest/ai-document-intelligence' });
+    assert.match(sdk, /the SDK of Azure Document Intelligence/);
+  });
+
+  test('search_graph matches package names and filters by kind; graph_overview counts the dependencies', async () => {
+    const out = await call('search_graph', { query: 'date-fns' });
+    assert.match(out.split('\n')[0]!, /^\[package\] date-fns/);
+    const pk = await call('search_graph', { query: 'react', kind: 'package' });
+    assert.ok(pk.split('\n').every((l) => l.startsWith('[package]')), pk);
+    const overview = await call('graph_overview');
+    assert.match(overview, /dependencies: 8 packages \(7 third-party · 1 from this workspace\)/);
+  });
+});
+
 describe('stories — read from the story files, drawn by a Storybook nobody here starts', () => {
   const FORM = 'invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm';
   // the fixture's config names http://127.0.0.1:4539; nothing in this suite listens there, and the

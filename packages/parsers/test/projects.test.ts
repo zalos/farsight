@@ -166,8 +166,11 @@ test('tag dimensions: defaults, a rename by prefix, an added dimension, value wo
 
 test('the NX example: every node carries its project and tags; the project graph lists projects, tags and dependencies', async () => {
   const g = await ingestRepo(NX_EXAMPLE, { repoName: 'nx-workspace' });
-  const missing = g.nodes.filter((n) => !n.project).map((n) => n.id);
+  // a package node belongs to no one project: a third-party package is imported from several,
+  // and a workspace package names the project it resolves to on `package.project` instead
+  const missing = g.nodes.filter((n) => !n.project && n.kind !== 'package').map((n) => n.id);
   assert.deepEqual(missing, [], 'every node of the NX example carries its project');
+  assert.equal(g.nodes.find((n) => n.id === 'nx-workspace::package::@nxw/shared/util')?.package?.project, 'shared-util', 'a workspace package names the project it resolves to');
   const node = (name: string) => g.nodes.find((n) => n.name === name)!;
   assert.deepEqual(node('InvoiceList').project, { name: 'billing-feature-invoices', root: 'libs/billing/feature-invoices', type: 'library', tags: ['scope:billing', 'type:feature'] });
   assert.deepEqual(node('PageShell').project?.name, '@nxw/shared-ui', 'a package.json with an nx key names the project');

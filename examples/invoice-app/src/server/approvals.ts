@@ -1,5 +1,5 @@
 import { db as base } from './db';
-import { fmt } from './plumbing/format';
+import { fmt } from '@invoice/plumbing';
 
 /** `approvals` is written by migration 003; db.ts does not list it yet. */
 const db = base as typeof base & { approvals: (typeof base)['invoices'] };

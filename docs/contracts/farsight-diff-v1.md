@@ -70,7 +70,7 @@ Two honesty rules travel with them:
 - **`coverage_lost` is pure graph.** It says a surface no longer has any `covers` edge — declared, inferred or observed. It says nothing about whether a test passed; run status is not part of the diff contract.
 - **`uncovered_change` never fires on a graph with no tests indexed.** A repo that has not been ingested with its spec files would otherwise report every changed function as uncovered, which is noise, not a finding.
 
-The `nodeKind` enum also gained `api`, `design`, `flow` and `test` — the kinds the OpenAPI, design and tests passes emit. The work-items pass (2026-09-30) adds `work`: a work item from a tracker (`work::<sourceId>::<key>`, no `loc`). A `subject.kind` outside the original list was already possible in practice; the schema now says so.
+The `nodeKind` enum also gained `api`, `design`, `flow` and `test` — the kinds the OpenAPI, design and tests passes emit. The work-items pass (2026-09-30) adds `work`: a work item from a tracker (`work::<sourceId>::<key>`, no `loc`). The dependencies pass (2026-10-03, docs/proposals/dependencies-and-nx.md §2.1) adds `package`: a third-party package or a workspace library one source imports (`<repo>::package::<name>`, scoped names keep their `@scope/`, no `loc`). No existing id changed — table, route and function ids are untouched — and v1 gains no change kind for packages: a package added or removed is not a change this contract reports, so the enum grows only so that a `subject` naming a package node (an `edge_confidence_changed` on an `imports` edge, say) still validates. The golden fixture is unchanged. A `subject.kind` outside the original list was already possible in practice; the schema now says so.
 
 ## Per-change fields
 

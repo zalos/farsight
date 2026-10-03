@@ -11,7 +11,7 @@ import { applyDesigns } from './design/index.js';
 import { applyTests, testGlobsOf } from './tests/index.js';
 import { applyStories } from './stories/index.js';
 import { applyStores } from './stores.js';
-import { applyProjects } from './shared/projects.js';
+import { applyProjects, projectOfPath } from './shared/projects.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
@@ -80,6 +80,8 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   }
   // the SQL drivers the adapters saw — read now, because the spec and design passes rebuild meta
   const drivers = fragments.flatMap((f) => f.meta?.stores?.drivers ?? []);
+  // what the import pass set aside (builtins, alias misses) — read now for the same reason
+  const packagesMeta = fragments.map((f) => f.meta?.packages).find((p) => p);
   const merged = mergeFragments(repo, fragments);
   if (config) { applyConfig(merged.nodes, config, merged.edges); merged.configApplied = true; }
   // tooling (scripts a person runs) is tagged with or without a config file: the default is `scripts/**`
@@ -106,6 +108,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   else merged.meta = { files: 0, sourceHash: 'empty', sourceDigest: digest };
   if (Object.keys(storesMeta).length) merged.meta.stores = storesMeta;
   else delete merged.meta.stores;
+  if (packagesMeta) merged.meta.packages = packagesMeta;
   // tests last: `@covers SCR-07` resolves against design screens and `@covers POST /x`
   // against routes a spec may have added, so both passes must have run first
   if (options.tests !== false) {
@@ -120,6 +123,16 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   // projects last: every node is on the fragment by now (the tests and stories passes add theirs),
   // and each one under a project root carries its project and tags (shared/projects.ts)
   if (options.projects !== false) merged.meta!.projects = applyProjects(merged, repoRoot, opts, config?.projects);
+  // a workspace package resolves to a directory: name the project that directory belongs to
+  // (NX or workspaces), so `@acme/money` reads as the `money` lib rather than as its alias
+  const projects = merged.meta?.projects;
+  if (projects && projects.tool !== 'none') {
+    for (const n of merged.nodes) {
+      if (n.kind !== 'package' || n.package?.scope !== 'workspace' || !n.package.root) continue;
+      const p = projectOfPath(n.package.root, projects.projects);
+      if (p && p.root !== '.') n.package.project = p.name;
+    }
+  }
   return merged;
 }
 

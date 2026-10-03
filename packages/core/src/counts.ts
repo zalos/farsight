@@ -71,6 +71,7 @@ export const COUNT_SCOPES = [
   'count.scope.workSync',   // one sync of one tracker source
   'count.scope.workItem',   // one work item
   'count.scope.project',    // one workspace project (core projects.ts), and the projects it depends on
+  'count.scope.package',    // one package of one source: every file of it that imports the package
 ] as const;
 export type CountScope = typeof COUNT_SCOPES[number];
 

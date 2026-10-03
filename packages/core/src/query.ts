@@ -54,6 +54,8 @@ export function search(index: GraphIndex, query: string, options: SearchOptions 
   const scored: { node: GraphNode; score: number }[] = [];
   for (const node of index.byId.values()) {
     if (options.kind && node.kind !== options.kind) continue;
+    // a module node is a file's import list, not a thing a person looks for: asked for by kind only
+    if (node.kind === 'module' && options.kind !== 'module') continue;
     if (options.tag && !node.tags.includes(options.tag)) continue;
     if (options.repo && repoOf(node) !== options.repo) continue;
     if (options.group && node.group !== options.group) continue;
@@ -123,7 +125,9 @@ export function trace(index: GraphIndex, seedIds: string[], direction: Direction
         for (const other of [e.from, e.to]) {
           if (!nodeIds.has(other) && index.byId.has(other)) {
             nodeIds.add(other);
-            next.push(other);
+            // a package is where a slice stops, never a hub it crosses: `react` met on the way
+            // would otherwise pull in every component of the source (a seed package still expands)
+            if (index.byId.get(other)!.kind !== 'package') next.push(other);
           }
         }
       }
