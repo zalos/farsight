@@ -20,7 +20,7 @@ import { S, esc, expose, currentLens, humanize, bizName, unCode } from '../store
 import { t, def, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
-import { countedHtml } from '../lib/counted.js';
+import { countedHtml, plainTip } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
@@ -29,8 +29,11 @@ import { createCanvas, LEVEL_NB, SNAP_RADIUS } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
-const SW = 260, SH = 214, COL = 400, HEAD = 118, SY = HEAD + 36, PAD = 60;
-const PL_TOP = SY + SH + 76, OPW = 200, DX = 230, ROW = 38, OPMIN = 68, OPGAP = 16;
+const SW = 260, SH = 214, COL = 480, HEAD = 118, SY = HEAD + 36, PAD = 60;
+const PL_TOP = SY + SH + 76, OPW = 200, DX = 230, DW = 210, ROW = 40, OPMIN = 68, OPGAP = 16;
+/** The folds (map-view.md, street fold): a call draws its first DATA_SHOWN data nodes, a screen its first CALLS_SHOWN
+ * calls; the rest fold into one row — but only when that saves a row (a fold row standing in for one node does not). */
+const DATA_SHOWN = 3, CALLS_SHOWN = 4, FOLD_H = 34;
 const DMIN = 880;
 /** Where a street lands when it is entered or left: a district fits, never above this. */
 const STREET_FIT_MAX = 0.95;
@@ -58,6 +61,8 @@ const MAP = {
   card: null,                       // { kind, nodeId, flow, el }
   fitted: false,
   route: null,
+  /** the folds the reader opened while the board is mounted: `calls|<flow>|<si>`, `data|<flow>|<si>|<ci>` */
+  open: new Set(),
 };
 
 /** Per-sync cache of journey answers, keyed `flowId@sync` — a register flip never refetches. */
@@ -210,6 +215,7 @@ function writePlumb(v) {
 function start() {
   const gen = ++MAP.gen;
   MAP.journeys = new Map();
+  MAP.open = new Set();
   MAP.designs = null;
   MAP.failed = false;
   renderAll();
@@ -324,12 +330,41 @@ function screenCount(d) {
   const j = MAP.journeys.get(d.id);
   return Math.max(1, j && j.model ? j.model.screens.length : (d.total || (d.screens || []).length || 1));
 }
-function callRowH(c) { return Math.max(OPMIN, c.data.length * ROW - 4); }
-function stackH(s) { return s.calls.reduce((h, c) => h + callRowH(c), 0) + Math.max(0, s.calls.length - 1) * OPGAP; }
+/**
+ * What a call draws beside it: its data, writes before reads (so the warm lines are never the folded ones),
+ * the first DATA_SHOWN unless the reader opened it, and whether a fold row follows (`'more'` · `'less'` · null).
+ * Each entry keeps its index in the model, which the explore card reads.
+ */
+function callData(flow, si, ci, c) {
+  const rank = (m) => (m === 'read' ? 1 : 0);
+  const all = c.data.map((dd, k) => ({ dd, k })).sort((a, b) => rank(a.dd.mode) - rank(b.dd.mode) || a.k - b.k);
+  const foldable = all.length > DATA_SHOWN + 1;
+  const open = MAP.open.has('data|' + flow + '|' + si + '|' + ci);
+  if (!foldable) return { shown: all, fold: null, hidden: 0 };
+  return open ? { shown: all, fold: 'less', hidden: 0 } : { shown: all.slice(0, DATA_SHOWN), fold: 'more', hidden: all.length - DATA_SHOWN };
+}
+/** What a screen draws under it: its first CALLS_SHOWN calls unless the reader opened it, and its fold row. */
+function screenCalls(flow, si, s) {
+  const all = s.calls.map((c, ci) => ({ c, ci }));
+  const foldable = all.length > CALLS_SHOWN + 1;
+  const open = MAP.open.has('calls|' + flow + '|' + si);
+  if (!foldable) return { shown: all, fold: null, hidden: 0 };
+  return open ? { shown: all, fold: 'less', hidden: 0 } : { shown: all.slice(0, CALLS_SHOWN), fold: 'more', hidden: all.length - CALLS_SHOWN };
+}
+function callRowH(flow, si, ci, c) {
+  const cd = callData(flow, si, ci, c);
+  return Math.max(OPMIN, (cd.shown.length + (cd.fold ? 1 : 0)) * ROW - 4);
+}
+/** A screen's pathway height as drawn now — folded unless the reader opened it. */
+function stackH(flow, si, s) {
+  const sc = screenCalls(flow, si, s);
+  const h = sc.shown.reduce((a, { c, ci }) => a + callRowH(flow, si, ci, c), 0) + Math.max(0, sc.shown.length - 1) * OPGAP;
+  return sc.fold ? h + OPGAP + FOLD_H : h;
+}
 function districtSize(d) {
   const w = Math.max(DMIN, PAD * 2 + screenCount(d) * COL - (COL - SW));
   const j = MAP.journeys.get(d.id);
-  const deepest = j && j.model ? Math.max(0, ...j.model.screens.map(stackH)) : 0;
+  const deepest = j && j.model ? Math.max(0, ...j.model.screens.map((s, si) => stackH(d.id, si, s))) : 0;
   // without plumbing a district is its head, its screens and room below them: tall enough that a cover
   // divided by --map-inv's cap (4) still holds a two-line name, a two-line sentence and the chip row
   const h = MAP.plumb && deepest ? PL_TOP + deepest + 70 : SY + SH + 130;
@@ -688,20 +723,25 @@ function streetHtml(d, j, g) {
     const x = PAD + si * COL;
     let y = PL_TOP;
     const tx = x + 100;
-    s.calls.forEach((c, ci) => {
-      const h = callRowH(c);
+    const sc = screenCalls(d.id, si, s);
+    sc.shown.forEach(({ c, ci }) => {
+      const h = callRowH(d.id, si, ci, c);
+      const cd = callData(d.id, si, ci, c);
       html += callHtml(d, s, c, si, ci, x, y, h);
-      c.data.forEach((dd, k) => {
-        const dy = y + k * ROW;
+      const cls0 = (mode) => 'plumb ' + (mode === 'read' ? 'read' : 'write');
+      cd.shown.forEach(({ dd, k }, row) => {
+        const dy = y + row * ROW;
         html += dataHtml(d, s, c, dd, si, ci, k, x + DX, dy);
-        const my = dy + 17, x1 = x + OPW, x2 = x + DX;
-        const cls = 'plumb ' + (dd.mode === 'read' ? 'read' : 'write');
+        const my = dy + 18, x1 = x + OPW, x2 = x + DX;
+        const cls = cls0(dd.mode);
         paths += '<path class="' + cls + '" d="M' + x1 + ' ' + my + ' L' + x2 + ' ' + my + '"/>';
         if (dd.mode !== 'write') paths += '<path class="' + cls + '" d="M' + (x1 + 9) + ' ' + (my - 5) + ' L' + x1 + ' ' + my + ' L' + (x1 + 9) + ' ' + (my + 5) + '"/>';
         if (dd.mode !== 'read') paths += '<path class="' + cls + '" d="M' + (x2 - 9) + ' ' + (my - 5) + ' L' + x2 + ' ' + my + ' L' + (x2 - 9) + ' ' + (my + 5) + '"/>';
       });
+      if (cd.fold) html += foldHtml(d.id, 'data|' + d.id + '|' + si + '|' + ci, cd.fold, cd.hidden, 'data', x + DX, y + cd.shown.length * ROW);
       y += h + OPGAP;
     });
+    if (sc.fold) { html += foldHtml(d.id, 'calls|' + d.id + '|' + si, sc.fold, sc.hidden, 'calls', x, y); y += FOLD_H + OPGAP; }
     if (s.calls.length) {
       const allGhost = s.calls.every(ghost);
       paths = '<path class="plumb trunk' + (allGhost ? ' ghost' : '') + '" d="M' + tx + ' ' + (SY + SH) + ' L' + tx + ' ' + (y - OPGAP - 4) + '"/>' + paths;
@@ -743,13 +783,38 @@ function callHtml(d, s, c, si, ci, x, y, h) {
     + '<div class="sub map-code">' + esc((c.method + ' ' + c.path).trim()) + '</div></div>';
 }
 
+/**
+ * A fold row: `▸ n more` beside a call, `▸ n more calls` under a screen, or the way back (`▾ fewer`). The number
+ * is the call's (or the screen's) own markers beyond those drawn, with its tip; the walk's counts never move.
+ */
+function foldHtml(flow, key, state, hidden, kind, x, y) {
+  const w = kind === 'calls' ? OPW : DW;
+  let label;
+  if (state === 'more') {
+    const wk = kind === 'calls' ? 'map.fold.calls' : 'map.fold.data';
+    const words = t(wk).split('{n}');
+    label = '▸ ' + esc(words[0]) + '<span class="n"' + plainTip(hidden, wk, kind === 'calls' ? 'map.fold.scopeScreen' : 'map.fold.scopeCall', '/api/journey').replace(' tabindex="0"', '') + '>' + hidden + '</span>' + esc(words.slice(1).join(String(hidden)));
+  } else label = '▾ ' + esc(t(kind === 'calls' ? 'map.fold.lessCalls' : 'map.fold.less'));
+  return '<button type="button" class="map-fold ' + kind + (state === 'less' ? ' on' : '') + '" data-fold="' + esc(key) + '" data-flow="' + esc(flow) + '"'
+    + ' aria-expanded="' + (state === 'less' ? 'true' : 'false') + '" style="left:' + x + 'px;top:' + y + 'px;width:' + w + 'px">' + label + '</button>';
+}
+/** Open or close one fold; the district redraws and grows or shrinks downward. @group Map */
+function toggleFold(key, flow) {
+  if (MAP.open.has(key)) MAP.open.delete(key); else MAP.open.add(key);
+  relayoutKeeping(() => renderDistrict(flow));
+  const btn = MAP.world && MAP.world.querySelector('.map-fold[data-fold="' + cssAttr(key) + '"]');
+  if (btn) btn.focus({ preventScroll: true });
+}
+
 /** One record, message or third party beside a call, with what the call does to it. */
 function dataHtml(d, s, c, dd, si, ci, k, x, y) {
   const cls = dd.kind === 'message' ? 'msg' : dd.kind === 'external' ? 'ext' : 'rec';
   return '<div class="map-pd ' + cls + (ghost(c) ? ' absent' : '') + '" role="button" tabindex="0" data-kind="' + esc(dd.kind) + '" data-mode="' + esc(dd.mode) + '"'
     + ' data-flow="' + esc(d.id) + '" data-si="' + si + '" data-ci="' + ci + '" data-di="' + k + '" style="left:' + x + 'px;top:' + y + 'px">'
-    + '<span class="nm"><span class="kd">' + esc(kindWord(dd.kind)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>' + esc(dataWords(dd)) + '</span>'
-    + '<span class="rw ' + esc(dd.mode) + '"' + tipAttrs({ key: modeKey(dd.mode), noFocus: true }) + '>' + esc(modeWord(dd.mode)) + '</span></div>';
+    // the kind line truncates (kind · identifier, then what the call does to it); the name has the node's width
+    + '<span class="top"><span class="kd">' + esc(kindWord(dd.kind)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
+    + '<span class="rw ' + esc(dd.mode) + '"' + tipAttrs({ key: modeKey(dd.mode), noFocus: true }) + '>' + esc(modeWord(dd.mode)) + '</span></span>'
+    + '<span class="nm">' + esc(dataWords(dd)) + '</span></div>';
 }
 
 /**
@@ -838,8 +903,10 @@ function onBoardClick(e) {
   const tgt = e.target;
   // a number or a word with a tip opens its tip, not what it sits on
   const trig = tgt.closest(TIP_SELECTOR);
-  if (trig && !trig.matches('.map-scr,.map-pl,.map-pd,.map-dcover') && tgt.closest('.map-scr,.map-pl,.map-pd,.map-dcover,.map-lane')) return;
+  if (trig && !trig.matches('.map-scr,.map-pl,.map-pd,.map-dcover') && !tgt.closest('.map-fold') && tgt.closest('.map-scr,.map-pl,.map-pd,.map-dcover,.map-lane')) return;
   if (tgt.closest('a[href]')) return;
+  const fold = tgt.closest('.map-fold');
+  if (fold && MAP.cv && MAP.cv.level() === 'st') { closeCard(); toggleFold(fold.dataset.fold, fold.dataset.flow); return; }
   const node = tgt.closest('.map-pl,.map-pd');
   if (node && MAP.cv && MAP.cv.level() === 'st') { showCard(node); return; }
   const scr = tgt.closest('.map-scr');

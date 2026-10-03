@@ -345,8 +345,10 @@ The map computes no number of its own: every chip is a `Counted` the journey sum
 | `1 action` · `2 gates & rules` · `4 test cases` on a screen | C:`segment.counted.actions` · C:`segment.counted.gates` · C:`summary.coverage.segments[i].counted.tests` | as the journey's, over one screen | screen (`journey.scopeHere`) | screen card; the business lens leaves out a zero |
 | ordinal `1` `2` `3` | the screen's place in `summary.segments` | a position, not a count (`map.screen.ordinal`) | journey | screen card |
 | `×0.95` | the board's scale | not a count — the zoom (`map.zoom`) | the board | bottom right |
+| `▸ 5 more` beside a call | `plainTip(n, 'map.fold.data', 'map.fold.scopeCall', '/api/journey')`: the call's own data markers (`MapCall.data`, from the segment's record · message · external markers) beyond the 3 drawn | records, messages and third parties this call reaches that are folded | one call on one screen | the street's plumbing; drawn only when 2 or more are folded |
+| `▸ 2 more calls` under a screen | `plainTip(n, 'map.fold.calls', 'map.fold.scopeScreen', '/api/journey')`: the screen's own call rows (`MapScreen.calls`, the segment's call markers once each, plus declared rows) beyond the 4 drawn | calls this screen makes that are folded | one screen | the street's plumbing; drawn only when 2 or more are folded |
 
-The plumbing prints no number: a call, a record, a message and a third party are drawn once per screen that reaches
+The plumbing prints no other number: a call, a record, a message and a third party are drawn once per screen that reaches
 them, so the same record appears under two screens while the journey's own counts still count it once.
 
 
