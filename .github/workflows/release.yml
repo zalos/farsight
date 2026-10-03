@@ -1,7 +1,11 @@
-# Cuts a farsight-cli release on demand: gates, version commit + tag, pack,
-# smoke test, push, GitHub Release (and npm, once an NPM_TOKEN secret exists).
+# Opens a release PR on demand. `main` is protected (PRs only, CI required, no
+# bypass), so this workflow never pushes to it: it runs the gates, commits the
+# version bump + CHANGELOG.md + .github/release-notes/vX.Y.Z.md on a new branch
+# release/vX.Y.Z, smoke-tests the tarball, pushes the branch and opens the PR
+# `chore(release): vX.Y.Z`. Merging that PR (a merge commit) runs publish.yml,
+# which tags, packs and creates the GitHub Release.
 # Run it from the Actions tab or `gh workflow run release.yml -f bump=minor`.
-# docs/RELEASING.md explains each input and what a consumer installs.
+# docs/RELEASING.md explains each input, the RELEASE_TOKEN secret and the rehearsal.
 name: release
 
 on:
@@ -21,23 +25,23 @@ on:
         type: string
         required: false
       dry_run:
-        description: Run everything but the push, the GitHub Release and npm
+        description: Run the gates and print the version and notes; push nothing, open no PR
         type: boolean
         default: false
 
-# contents: write pushes the release commit and tag and creates the Release;
-# id-token: write lets npm sign provenance for the optional publish.
+# contents: write pushes the release/vX.Y.Z branch (never main);
+# pull-requests: write opens the PR and labels it.
 permissions:
   contents: write
-  id-token: write
+  pull-requests: write
 
-# one release at a time: two runs bumping from the same version would collide on the tag
+# one release at a time: two runs bumping from the same version would collide on the branch
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
+  release-pr:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -46,23 +50,35 @@ jobs:
       VERSION: ${{ inputs.version }}
       PRERELEASE: ${{ inputs.prerelease }}
       DRY_RUN: ${{ inputs.dry_run }}
+      # a PR opened with GITHUB_TOKEN does not start pull_request workflows (GitHub's
+      # recursion guard), so CI would not run on it; a RELEASE_TOKEN PAT avoids that
+      HAS_RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN != '' }}
     steps:
+      - name: Refuse a real release from a branch other than main
+        if: ${{ github.ref != 'refs/heads/main' && !inputs.dry_run }}
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          echo "::error::a release is cut from main, not $REF (a dry run may use any branch)"
+          exit 1
+
       - name: Check out with full history and tags
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # the changelog reads <last tag>..HEAD, and the build stamp reads git
           fetch-depth: 0
           lfs: true
+          # the token the branch is pushed with: RELEASE_TOKEN when set, else GITHUB_TOKEN
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
       - name: Set up pnpm (version from packageManager)
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node (version from .nvmrc)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          registry-url: https://registry.npmjs.org
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -70,8 +86,8 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Typecheck
-        run: pnpm -r typecheck
+      - name: Typecheck (packages + e2e)
+        run: pnpm typecheck
 
       # live tracker tests are opt-in (FARSIGHT_LIVE=1) and skip here
       - name: Test (packages + scripts)
@@ -80,7 +96,7 @@ jobs:
       - name: Lint strings
         run: pnpm lint:strings
 
-      - name: Commit the version and tag it
+      - name: Commit the version on release/vX.Y.Z (no tag)
         id: release
         run: |
           git config user.name 'github-actions[bot]'
@@ -90,9 +106,22 @@ jobs:
           if [ -n "$PRERELEASE" ]; then args+=(--prerelease "$PRERELEASE"); fi
           # a dry run may be dispatched from any branch; a real release only from main
           if [ "$DRY_RUN" = "true" ]; then args+=(--allow-branch); fi
-          node scripts/release.mjs "${args[@]}" --notes-out "$RUNNER_TEMP/release-notes.md"
+          node scripts/release.mjs "${args[@]}" --no-tag --branch 'release/v{version}' --commit-notes \
+            --notes-out "$RUNNER_TEMP/release-notes.md"
 
-      # after the version commit, so the bundle's stamp names the release commit
+      - name: Refuse a release branch or tag that already exists on the remote
+        env:
+          BRANCH: ${{ steps.release.outputs.branch }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if git ls-remote --exit-code --heads origin "refs/heads/$BRANCH" >/dev/null; then
+            echo "::error::$BRANCH already exists on origin — merge or close its PR and delete the branch first"; exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::$TAG is already released"; exit 1
+          fi
+
+      # after the version commit, so the bundle's stamp names it; publish.yml packs again after the merge
       - name: Pack
         run: node scripts/pack.mjs
 
@@ -112,55 +141,76 @@ jobs:
           "$prefix/bin/farsight" ingest "$GITHUB_WORKSPACE/examples/invoice-app" --repo invoice-app --out "$RUNNER_TEMP/smoke/g.json"
           test -s "$RUNNER_TEMP/smoke/g.json"
 
-      - name: Push the release commit and tag
-        if: ${{ !inputs.dry_run }}
-        run: git push --follow-tags origin HEAD:main
-
-      - name: Create the GitHub Release
-        if: ${{ !inputs.dry_run }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
-          V: ${{ steps.release.outputs.version }}
-          PRE: ${{ steps.release.outputs.prerelease }}
-        run: |
-          flags=()
-          if [ "$PRE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$TAG" "build/farsight-cli-$V.tgz" --verify-tag \
-            --title "farsight-cli $TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${flags[@]}"
-
-      # optional: secrets cannot be tested in `if:`, so the step reads its own env
-      - name: Publish to npm (when NPM_TOKEN is set)
-        if: ${{ !inputs.dry_run }}
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          V: ${{ steps.release.outputs.version }}
-          PRE: ${{ steps.release.outputs.prerelease }}
-        run: |
-          if [ -z "$NPM_TOKEN" ]; then echo "npm publish skipped: no NPM_TOKEN"; exit 0; fi
-          # npm will not put a prerelease on `latest`
-          tag=latest; if [ "$PRE" = "true" ]; then tag=next; fi
-          npm publish "build/farsight-cli-$V.tgz" --access public --provenance --tag "$tag"
-
-      - name: Summary
-        if: ${{ always() && steps.release.outputs.version != '' }}
+      - name: Write the PR body
         env:
           TAG: ${{ steps.release.outputs.tag }}
-          V: ${{ steps.release.outputs.version }}
-          URL: ${{ github.server_url }}/${{ github.repository }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            cat "$RUNNER_TEMP/release-notes.md"
+            echo
+            echo '---'
+            echo
+            echo "**Release PR.** Merge it with a merge commit (not squash); \`publish.yml\` then tags \`$TAG\` on the release commit, packs, smoke-tests and creates the GitHub Release."
+            echo
+            echo "**Gates already run** on this exact commit by the [release workflow]($RUN_URL): install, build, typecheck, test, lint:strings, pack and the tarball smoke test."
+            if [ "$HAS_RELEASE_TOKEN" != "true" ]; then
+              echo
+              echo "**CI has not started on this PR**: it was opened with \`GITHUB_TOKEN\`, which does not trigger \`pull_request\` workflows, and \`main\` requires the \`validate\` and \`e2e\` checks. To start them, close and reopen this PR, or push an empty commit to \`$BRANCH\` (\`git commit --allow-empty -m 'ci: run checks'\`). A \`RELEASE_TOKEN\` secret removes this step (docs/RELEASING.md)."
+            fi
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Release notes and plan (job summary)
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          BASE: ${{ github.ref_name }}
         run: |
           {
             if [ "$DRY_RUN" = "true" ]; then
-              echo "## farsight-cli $TAG — dry run (nothing pushed or published)"
+              echo "## farsight-cli $TAG — dry run (no branch pushed, no PR opened)"
             else
-              echo "## farsight-cli $TAG"
-              echo
-              echo "Release: $URL/releases/tag/$TAG"
+              echo "## farsight-cli $TAG — release PR $BRANCH → $BASE"
             fi
             echo
-            echo '```sh'
-            echo "npm install -g $URL/releases/download/$TAG/farsight-cli-$V.tgz"
-            echo 'farsight --version'
-            echo '```'
+            cat "$RUNNER_TEMP/release-notes.md"
           } >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/pr-body.md"
+
+      - name: Push the release branch
+        if: ${{ !inputs.dry_run }}
+        env:
+          BRANCH: ${{ steps.release.outputs.branch }}
+        run: git push -u origin "$BRANCH"
+
+      - name: Open the release PR
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          BASE: ${{ github.ref_name }}
+        run: |
+          # the label is a convenience: a token that cannot create labels does not stop the release
+          gh label create release --color 5BC8DD --description 'A release PR opened by the release workflow' 2>/dev/null \
+            || echo "label 'release' exists or cannot be created"
+          if ! url="$(gh pr create --base "$BASE" --head "$BRANCH" --title "chore(release): $TAG" --body-file "$RUNNER_TEMP/pr-body.md")"; then
+            {
+              echo
+              echo "### The PR could not be opened"
+              echo
+              echo "\`$BRANCH\` is pushed. Allow *Settings → Actions → General → Allow GitHub Actions to create and approve pull requests*, or add a \`RELEASE_TOKEN\` secret (docs/RELEASING.md), or open it by hand — a PR you open yourself starts CI:"
+              echo
+              echo '```sh'
+              echo "git fetch origin $BRANCH"
+              echo "git show origin/$BRANCH:.github/release-notes/$TAG.md > /tmp/notes.md"
+              echo "gh pr create --base $BASE --head $BRANCH --title \"chore(release): $TAG\" --label release --body-file /tmp/notes.md"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::could not open the release PR; $BRANCH is pushed — the job summary has the command to open it by hand"
+            exit 1
+          fi
+          gh pr edit "$url" --add-label release || echo "::warning::could not label $url"
+          echo "release PR: $url"
+          { echo; echo "Release PR: $url"; } >> "$GITHUB_STEP_SUMMARY"
