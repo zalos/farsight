@@ -2059,6 +2059,11 @@
   .map-links path{fill:none;stroke:var(--dim);stroke-width:2.5}
   .map-links path.contains{stroke-dasharray:8 8;opacity:.6}
   .map-links text{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;font-size:20px;fill:var(--muted)}
+  .map-links g{opacity:.45}
+  .map-links g.off{display:none}
+  .map-links g.hot{opacity:1}
+  .map-links g.hot path{stroke:var(--accent)}
+  .map-world.lvl-nb .map-links g:not(.hot) text{display:none}
   .map-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;pointer-events:none}
   .map-note>span{pointer-events:auto}
   /* a district: head (street), street, poster cover (neighbourhood) */
@@ -2068,16 +2073,26 @@
   .map-dhead .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:20px;color:var(--ink)}
   .map-dhead .desc{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .map-dhead .agg,.map-dcover .agg{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .map-dcover{position:absolute;inset:0;padding:40px 52px;display:flex;flex-direction:column;justify-content:flex-end;gap:14px;border-radius:10px;cursor:pointer;
-    background:linear-gradient(180deg,transparent 0%,color-mix(in srgb,var(--panel) 92%,transparent) 42%);transition:opacity .25s}
-  .map-dcover .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:54px;line-height:1.05;color:var(--ink)}
-  .map-dcover .desc{font-size:26px;color:var(--muted);max-width:38ch;line-height:1.35}
-  .map-dcover .agg{gap:14px}
-  .map-dcover .agg .map-chip,.map-dcover .agg .wk-chip{font-size:24px;padding:8px 18px;border-radius:24px}
-  .map-dcover .agg .wk-chip .sym{width:22px;height:22px}
-  .map-dcover .enter{font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:22px;color:var(--accent);display:flex;align-items:center;gap:10px}
-  .map-dcover .enter .sym{width:24px;height:24px}
+  /* the cover: counter-scaled by --map-inv (min(1/scale, 4), set by lib/map-canvas.js) so its name reads at any
+     zoom; the inner box is the district's size divided by --map-inv, scaled back up, so it never draws outside it */
+  .map-dcover{position:absolute;inset:0;border-radius:10px;cursor:pointer;overflow:hidden;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 55%,transparent) 0%,color-mix(in srgb,var(--panel) 94%,transparent) 55%);transition:opacity .25s}
+  .map-dcover-in{position:absolute;left:0;top:0;width:calc(100% / var(--map-inv, 1));height:calc(100% / var(--map-inv, 1));transform:scale(var(--map-inv, 1));transform-origin:0 0;
+    padding:8px 10px;display:flex;flex-direction:column;justify-content:flex-start;gap:4px;overflow:hidden}
+  .map-dcover .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:22px;line-height:1.05;color:var(--ink);flex:none;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  .map-dcover .desc{font-size:13px;line-height:1.25;color:var(--muted);flex:none;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .map-dcover .agg{display:flex;gap:5px;flex-wrap:nowrap;overflow:hidden;flex:none;min-width:0}
+  .map-dcover .agg .map-chip,.map-dcover .agg .wk-chip{font-size:11px;padding:1px 8px;flex:none}
   .map-dcover:focus-visible{outline:4px solid var(--accent);outline-offset:-4px}
+  /* the district under the pointer or the focus rises above its neighbours */
+  .map-district:hover,.map-district:focus-within{z-index:3}
+  .map-world.lvl-nb .map-district:hover,.map-world.lvl-nb .map-district:focus-within{border-color:var(--accent)}
+  /* a band of journeys from one source, its label counter-scaled like the covers */
+  .map-band{position:absolute;height:0;pointer-events:none}
+  .map-band span{position:absolute;left:0;bottom:calc(-100px);transform-origin:0 100%;transform:scale(var(--map-inv, 1));white-space:nowrap;
+    font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 2px 3px}
   .map-world.lvl-nb .map-dstreet{opacity:.18;pointer-events:none}
   .map-world.lvl-nb .map-dhead{opacity:0}
   .map-world.lvl-st .map-dcover{opacity:0;pointer-events:none;visibility:hidden}

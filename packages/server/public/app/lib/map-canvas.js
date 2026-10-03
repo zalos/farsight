@@ -23,6 +23,8 @@ export const LEVEL_SNAP = 1.6;
 export const SNAP_RADIUS = 320;
 export const MIN_SCALE = 0.08;
 export const MAX_SCALE = 2.6;
+/** The most `--map-inv` (1 ÷ scale) grows to — counter-scaled text stops growing past it. */
+export const INV_MAX = 4;
 const WHEEL_END_MS = 160;
 const ANIM_MS = 450;
 const DRAG_PX = 3;
@@ -57,6 +59,8 @@ export function createCanvas(stage, world, opts = {}) {
       animT = setTimeout(() => world.classList.remove('anim'), ANIM_MS + 30);
     } else world.classList.remove('anim');
     world.style.transform = 'translate(' + st.tx + 'px,' + st.ty + 'px) scale(' + st.s + ')';
+    // what an owner's counter-scaled content multiplies by to keep a steady size on screen (capped)
+    world.style.setProperty('--map-inv', String(Math.min(1 / st.s, INV_MAX)));
     const lvl = levelOf(st.s);
     const prev = st.level;
     st.level = lvl;
