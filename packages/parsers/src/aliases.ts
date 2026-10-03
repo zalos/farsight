@@ -225,14 +225,32 @@ function expandWorkspaceGlob(root: string, pattern: string): string[] {
   return isDir(dir) ? [dir] : [];
 }
 
-/** JSON-with-comments (tsconfig dialect): strip block/line comments + trailing commas. */
+// JSON-with-comments (tsconfig dialect): strip block/line comments and trailing commas, outside
+// strings only. A path pattern such as "@acme/<star>": ["libs/<star>/src/index.ts"] holds a slash-star
+// and a star-slash inside its strings; a regex that ignored strings read that span as a comment and
+// lost the whole `paths` block.
 function parseJsonc(text: string): unknown {
-  const cleaned = text
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '')
-    .replace(/,\s*([}\]])/g, '$1');
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i]!;
+    if (c === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      out += text.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === '/' && text[i + 1] === '/') {
+      while (i < text.length && text[i] !== '\n') i++;
+    } else if (c === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      i = end < 0 ? text.length : end + 2;
+    } else {
+      out += c;
+      i++;
+    }
+  }
   try {
-    return JSON.parse(cleaned);
+    return JSON.parse(out.replace(/,(\s*[}\]])/g, '$1'));
   } catch {
     return null;
   }

@@ -24,8 +24,8 @@ export function isBuiltin(spec: string): boolean {
   return NODE_BUILTINS.has(spec) || NODE_BUILTINS.has(spec.split('/')[0]!);
 }
 
-// one npm name segment: what `validate-npm-package-name` accepts, plus the upper case old packages still carry
-const NAME_SEGMENT = /^[A-Za-z0-9~-][A-Za-z0-9._~-]*$/;
+// one npm name segment: what `validate-npm-package-name` accepts (never a leading `.`, `_` or `~`), plus the upper case old packages still carry
+const NAME_SEGMENT = /^[A-Za-z0-9-][A-Za-z0-9._~-]*$/;
 
 /**
  * The package a bare specifier names, and the subpath after it: `lodash/fp` → `lodash` + `fp`,
