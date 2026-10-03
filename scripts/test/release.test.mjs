@@ -96,3 +96,49 @@ test('refuses a dirty tree, another branch, a used tag, and a version that does 
     assert.match(r.run('--bump', 'minor', '--allow-branch', '--notes-out', join(r.dir, '..', `${r.dir.split('/').pop()}-n.md`)), /released v0\.2\.0/);
   } finally { r.done(); }
 });
+
+test('--no-tag --branch --commit-notes: the release-PR shape — a new branch with the version commit and its notes, no tag', () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r.dir, 'a.txt'), 'a');
+    r.g('add', 'a.txt');
+    r.g('commit', '-q', '-m', 'fix(cli): a repair');
+    const main = r.g('rev-parse', 'HEAD');
+
+    const dry = r.run('--dry-run', '--bump', 'patch', '--no-tag', '--branch', 'release/v{version}', '--commit-notes');
+    assert.match(dry, /on a new branch release\/v0\.1\.1 and not tag it/);
+    assert.match(dry, /\.github\/release-notes\/v0\.1\.1\.md/);
+    assert.equal(r.g('rev-parse', '--abbrev-ref', 'HEAD'), 'main', 'a dry run switches nothing');
+    assert.equal(r.g('branch', '--list', 'release/*'), '');
+
+    const out = r.run('--bump', 'patch', '--no-tag', '--branch', 'release/v{version}', '--commit-notes');
+    assert.match(out, /released v0\.1\.1 locally: commit [0-9a-f]+ on release\/v0\.1\.1, not tagged/);
+    assert.match(out, /git push -u origin release\/v0\.1\.1/);
+    assert.match(out, /gh pr create --base main --head release\/v0\.1\.1 --title "chore\(release\): v0\.1\.1"/);
+    assert.equal(r.g('rev-parse', '--abbrev-ref', 'HEAD'), 'release/v0.1.1');
+    assert.equal(r.g('rev-parse', 'main'), main, 'main itself does not move');
+    assert.equal(r.g('rev-parse', 'HEAD~1'), main);
+    assert.equal(r.g('log', '-1', '--format=%s'), 'chore(release): v0.1.1');
+    assert.equal(r.g('tag', '-l'), '', 'no tag');
+    assert.deepEqual(r.g('show', '--name-only', '--format=', 'HEAD').split('\n').sort(), ['.github/release-notes/v0.1.1.md', 'CHANGELOG.md', 'package.json']);
+    const notes = readFileSync(join(r.dir, '.github/release-notes/v0.1.1.md'), 'utf8');
+    assert.match(notes, /### Fixes[\s\S]*a repair/);
+    assert.match(notes, /releases\/download\/v0\.1\.1\/farsight-cli-0\.1\.1\.tgz/);
+    assert.equal(r.g('status', '--porcelain'), '', 'everything it wrote is committed');
+
+    // after the PR merges, the tag goes on the release commit; the next release starts there
+    r.g('switch', '-q', 'main');
+    r.g('merge', '-q', '--no-ff', '-m', 'Merge pull request #9 from example/release/v0.1.1', 'release/v0.1.1');
+    r.g('tag', '-a', 'v0.1.1', '-m', 'v0.1.1', 'release/v0.1.1');
+    writeFileSync(join(r.dir, 'b.txt'), 'b');
+    r.g('add', 'b.txt');
+    r.g('commit', '-q', '-m', 'feat: next thing');
+    const next = r.run('--dry-run', '--bump', 'patch');
+    assert.match(next, /0\.1\.1 → 0\.1\.2 on main, 1 commit since v0\.1\.1/);
+
+    // a branch that already exists is refused before anything is written
+    r.g('branch', 'release/v0.1.2');
+    assert.throws(() => r.run('--bump', 'patch', '--no-tag', '--branch', 'release/v{version}'), /branch release\/v0\.1\.2 already exists/);
+    assert.equal(r.g('status', '--porcelain'), '');
+  } finally { r.done(); }
+});

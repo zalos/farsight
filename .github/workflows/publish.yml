@@ -1,0 +1,183 @@
+# Publishes a release once its release PR (opened by release.yml) is merged into
+# main: tags vX.Y.Z on the release commit, packs, smoke-tests, creates the GitHub
+# Release with the tarball (and publishes to npm once an NPM_TOKEN secret exists).
+# Every other push to main stops after the `detect` job, in seconds.
+# docs/RELEASING.md describes the whole flow.
+name: publish
+
+on:
+  push:
+    branches: [main]
+
+# contents: write creates the tag and the Release (tags are not branch pushes, so
+# main's protection does not apply to them); id-token: write lets npm sign
+# provenance for the optional publish.
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.find.outputs.release }}
+      version: ${{ steps.find.outputs.version }}
+      tag: ${{ steps.find.outputs.tag }}
+      sha: ${{ steps.find.outputs.sha }}
+      prerelease: ${{ steps.find.outputs.prerelease }}
+    steps:
+      - name: Check out with full history and tags
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      # The push is a release when it brings in the commit `chore(release): vX.Y.Z`
+      # for the version the root package.json now carries. That holds for the merge
+      # commit of a release PR (the expected way), and also for a squash or a rebase
+      # merge, whose subject gains ` (#N)` or stays as it was.
+      - name: Is this push a release?
+        id: find
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          tag="v$v"
+          # the pushed commits; without a usable `before`, what the merge brought in (or the commit alone)
+          if git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then range=("$BEFORE..$AFTER")
+          elif git rev-parse -q --verify "$AFTER^2" >/dev/null; then range=("$AFTER^1..$AFTER")
+          else range=(-1 "$AFTER"); fi
+          sha="$(git log --format='%H%x09%s' "${range[@]}" | awk -F '\t' -v want="chore(release): $tag" '$2 == want || index($2, want " (#") == 1 { print $1; exit }')"
+          if [ -z "$sha" ]; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "not a release: no commit 'chore(release): $tag' in ${range[*]}"
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$tag already exists — nothing to publish (a re-run is a no-op)"
+            exit 0
+          fi
+          pre=false; case "$v" in *-*) pre=true ;; esac
+          { echo "release=true"; echo "version=$v"; echo "tag=$tag"; echo "sha=$sha"; echo "prerelease=$pre"; } >> "$GITHUB_OUTPUT"
+          echo "release $tag: the release commit is $sha"
+
+  publish:
+    needs: detect
+    if: ${{ needs.detect.outputs.release == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      V: ${{ needs.detect.outputs.version }}
+      TAG: ${{ needs.detect.outputs.tag }}
+      SHA: ${{ needs.detect.outputs.sha }}
+      PRE: ${{ needs.detect.outputs.prerelease }}
+    steps:
+      # the release commit itself, not the merge commit: the tag, the tarball's build
+      # stamp and the CHANGELOG section all describe exactly that commit
+      - name: Check out the release commit with full history and tags
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.detect.outputs.sha }}
+          fetch-depth: 0
+          lfs: true
+
+      - name: Set up pnpm (version from packageManager)
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node (version from .nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck (packages + e2e)
+        run: pnpm typecheck
+
+      - name: Test (packages + scripts)
+        run: pnpm test
+
+      - name: Lint strings
+        run: pnpm lint:strings
+
+      - name: Read the release notes
+        run: |
+          notes=".github/release-notes/$TAG.md"
+          if [ ! -s "$notes" ]; then echo "::error::$notes is missing from the release commit"; exit 1; fi
+          cp "$notes" "$RUNNER_TEMP/release-notes.md"
+
+      - name: Pack
+        run: node scripts/pack.mjs
+
+      - name: Smoke-test the tarball
+        run: |
+          commit="$(git rev-parse --short HEAD)"
+          prefix="$RUNNER_TEMP/npm-prefix"
+          npm install -g --prefix "$prefix" "./build/farsight-cli-$V.tgz"
+          line="$("$prefix/bin/farsight" --version)"
+          echo "$line"
+          case "$line" in *"farsight $V "*) ;; *) echo "::error::--version does not print $V"; exit 1 ;; esac
+          case "$line" in *"commit $commit"*) ;; *) echo "::error::--version does not print commit $commit"; exit 1 ;; esac
+          # ingest from a temporary cwd: snapshots are written relative to it
+          mkdir -p "$RUNNER_TEMP/smoke" && cd "$RUNNER_TEMP/smoke"
+          "$prefix/bin/farsight" ingest "$GITHUB_WORKSPACE/examples/invoice-app" --repo invoice-app --out "$RUNNER_TEMP/smoke/g.json"
+          test -s "$RUNNER_TEMP/smoke/g.json"
+
+      - name: Tag the release commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # verbatim: the notes are Markdown, and git's default cleanup would strip every `### heading` as a comment
+          git tag -a "$TAG" --cleanup=verbatim -F "$RUNNER_TEMP/release-notes.md" "$SHA"
+          git push origin "refs/tags/$TAG"
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          if [ "$PRE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "build/farsight-cli-$V.tgz" --verify-tag \
+            --title "farsight-cli $TAG" --notes-file "$RUNNER_TEMP/release-notes.md" "${flags[@]}"
+
+      # optional: secrets cannot be tested in `if:`, so the step reads its own env
+      - name: Publish to npm (when NPM_TOKEN is set)
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then echo "npm publish skipped: no NPM_TOKEN"; exit 0; fi
+          # npm will not put a prerelease on `latest`
+          dist=latest; if [ "$PRE" = "true" ]; then dist=next; fi
+          npm publish "build/farsight-cli-$V.tgz" --access public --provenance --tag "$dist"
+
+      - name: Summary
+        if: ${{ always() }}
+        env:
+          URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          {
+            echo "## farsight-cli $TAG"
+            echo
+            echo "Release commit: $SHA"
+            echo
+            echo "Release: $URL/releases/tag/$TAG"
+            echo
+            echo '```sh'
+            echo "npm install -g $URL/releases/download/$TAG/farsight-cli-$V.tgz"
+            echo 'farsight --version'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
