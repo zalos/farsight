@@ -88,8 +88,11 @@ const LONG_WORDS = 'The operator reviews the record and decides what happens nex
  */
 async function realShaped(page: Page) {
   await page.route(/\/api\/design\/image\?node=invoice-app%3A%3Apage%3A%3A%2Finvoices$/, (r) => r.fulfill({ contentType: 'image/svg+xml', body: TALL_SVG }));
+  // A disposed response means the page moved on (the map keeps fetching in the
+  // background); the stub then steps aside instead of failing the test at teardown.
   await page.route(/\/graph$/, async (r) => {
-    const g = await (await r.fetch()).json();
+    let g: any;
+    try { g = await (await r.fetch()).json(); } catch { return; }
     const parts = ['invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage', 'invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer', 'invoice-app::src/ui/fields.tsx::LineItemRow', PAGE.list];
     for (const n of g.nodes) if (parts.includes(n.id)) n.stories = [1, 2, 3, 4].map((k) => ({ id: `${n.id}--s${k}`, name: `State ${k}`, title: 'Parts', file: 'x.stories.tsx', line: k }));
     for (let i = 1; i <= 5; i++) {
@@ -100,8 +103,10 @@ async function realShaped(page: Page) {
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(g) });
   });
   await page.route(/\/api\/journey\?/, async (r) => {
-    const d = await (await r.fetch()).json();
-    if (r.request().url().includes('billing-cycle')) {
+    if (!r.request().url().includes('billing-cycle')) return r.continue();
+    let d: any;
+    try { d = await (await r.fetch()).json(); } catch { return; }
+    {
       const sg = d.summary.segments[1];
       sg.screen.business = LONG_WORDS;
       for (const sc of d.screens) if (sc.id === PAGE.list) sc.bizDescription = LONG_WORDS;
@@ -113,7 +118,7 @@ async function realShaped(page: Page) {
       cov.tests = Array.from({ length: 273 }, (_, i) => ({ ...t0, id: `${t0.id} #${i}`, name: `case ${i + 1} of the screen` }));
       cov.counted.tests = { ...cov.counted.tests, n: 273, breakdown: [{ key: 'journey.testsUnit', n: 0 }, { key: 'journey.testsIntegration', n: 0 }, { key: 'journey.testsE2e', n: 273 }] };
     }
-    await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) });
+    await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) }).catch(() => {});
   });
 }
 

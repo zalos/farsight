@@ -47,10 +47,10 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | `0.1.2` (GitHub Release v0.1.2), workspace main at `9a1e3da` (the map-view pass, PRs #8–#13) |
-| tests | **808** — core 265 · work 59 · parsers 124 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 42 · server 168 · cli 52, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 124/124** |
-| string/symbol lint | **1658 entries · 32 sprite symbols · 29 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings); the Recall session's global `farsight` on **4477**. Check `lsof` before restarting or measuring on any port. |
+| build | `0.1.2` (GitHub Release v0.1.2), workspace main after the map-view and data-stores passes (PRs #8–#19; `d1fee10` is the last feature merge) |
+| tests | **841** — core 265 · work 59 · parsers 148 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 42 · server 168 · cli 52 and the rest, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 129/129** |
+| string/symbol lint | **1679 entries · 32 sprite symbols · 29 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings, sync 57) and the reference app's own `farsight` on **4477** (the Node 24 global install, started from that workspace, sync 93, `flags.map` on in its local settings). Both `status` up to date on `d1fee10`. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -134,6 +134,24 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
    graph (21 journeys, a screen with 10 calls and 273 cases): zero page errors. What the real graph still shows:
    *leads to* curves cross between bands; names fall under 12 px past ~30 journeys at the cap; per-screen work chips
    are not fetched; the explore card has no Impact yet.
+8. **Data stores — which store a record lives in, and externals the app uses as stores** (2026-10-03, later the same
+   day; proposal `docs/proposals/data-stores.md`, PRs #15–#18). `GraphNode.store: StoreRef { name, kind: sql · document
+   · files · erp · other, engine?, via: factory · sdk · datasource · jpa · config, ref? }` on table nodes and on
+   store-like externals (`erp`, `db`, `files` by default; `ExternalDecl.store` overrides); rules in that order, never a
+   guess (two SQL drivers → no store, with a note in `meta.stores`); `farsight.config.json` `stores[]` fills what code
+   left unnamed and never overrides it. A declared client class gets **one `http` edge per public method** with
+   `meta.method` from the literal on the path to `fetch`; `fetchMethod` no longer defaults to GET for a non-literal.
+   **Fetch wrappers** (`apiFetch(path, init)`, two levels deep) resolve to their callers' paths and literal methods;
+   an unknown method on a path served by several routes takes the GET route with `meta.methodAssumed` (MEDIUM, the
+   seam card says *method assumed*, candidates recorded) instead of a stub. Journey markers carry `op` for externals
+   (GET/HEAD reads, POST/PUT/PATCH/DELETE writes, else none) and `store`; `system.stores[]` and `counted.stores` are
+   new. The map's street prints `<store> · record` / `<store> · ERP`, bars by store kind, `reached` (new mode, plain
+   dim line) when no direction was recorded, stores in the legend, the store on the explore card, and the property's
+   *Data this screen reaches* grouped by store; `describe_node` prints the store line. Measured on the reference app
+   (read-only, in a scratchpad): all 21 tables named Postgres from the `pg` driver, the ERP an `erp` store with 14
+   edges split GET · POST · PATCH · DELETE, Blob Storage a `files` store; http edges to routes 61 → 69, unknown
+   stubs 3 → 3 (a mid-pass regression to 49 / 9 was caught by that measurement and fixed in #18). Row keys and table
+   ids are unchanged; the fixture graph is byte-identical apart from its `stores` config.
 
 ## Release and CI — 2026-10-01
 
@@ -157,6 +175,22 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   the work usage — the `--help` form of a subcommand should not touch git.
 
 ## Next work, ranked
+
+**Left open by the map-view and data-stores passes (2026-10-03), in order:**
+
+1. **Run the pass swarm** on the dogfood server with the map on (one build, one sync): can a reader new to the
+   reference app find a screen from the neighbourhood, say what it does and which stores it touches from the street,
+   and act from the property?
+2. **Image paste / upload** from the property placeholder, written into the source's design manifest (the bonus
+   stream agreed on 2026-10-03).
+3. **Map polish the real graph asked for:** route *leads to* curves between bands; raise the cover cap or base size
+   past 30 journeys; per-screen work chips (one `/api/work/links?node=` per screen, cached); Impact in the explore
+   card; the explore card for gates and tests; `⌘K` arriving on the map; export of the street as PNG.
+4. **Data stores, next steps:** the journey band and ladder could split the *records* row per store once a journey
+   touches two (today the row key stays `records` and only the map groups); `stitch.ts` cannot match a `? path` stub
+   across sources (a call with no method on a shared path whose routes come from a spec in another source stays a
+   stub); the three `unknown` stubs left on the reference app, and `/api/work/*` on Farsight itself, are routes the
+   parser does not read as routes — a route-table reader for that shape.
 
 **Left open by the work-items pass (2026-09-30), in order:**
 

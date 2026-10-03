@@ -13,8 +13,10 @@ const ERP_STORE = { name: 'Example ERP', kind: 'erp', via: 'config', ref: 'ERP_H
 type AnyRec = Record<string, any>;
 
 export async function stubStores(page: Page) {
+  // a disposed response means the page moved on; the stub steps aside rather than fail the test at teardown
   await page.route(/\/graph$/, async (r) => {
-    const g = await (await r.fetch()).json();
+    let g: AnyRec;
+    try { g = await (await r.fetch()).json(); } catch { return; }
     for (const n of g.nodes) {
       if (n.kind === 'table' && n.id.startsWith('invoice-app::table::')) n.store = n.store || DB;
       if (n.id === ERP_ID) { n.store = n.store || ERP_STORE; n.external = { ...(n.external || { kind: 'erp' }), store: true }; }
@@ -22,7 +24,8 @@ export async function stubStores(page: Page) {
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(g) });
   });
   await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle$/, async (r) => {
-    const d = await (await r.fetch()).json();
+    let d: AnyRec;
+    try { d = await (await r.fetch()).json(); } catch { return; }
     for (const s of d.summary.segments) for (const m of s.markers || []) if (m.kind === 'record' && !m.store) m.store = { name: DB.name, kind: DB.kind };
     const seg = d.summary.segments[1];
     const calls = (seg.markers as AnyRec[]).filter((m) => m.kind === 'call');
