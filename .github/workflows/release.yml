@@ -67,6 +67,7 @@ jobs:
         with:
           # the changelog reads <last tag>..HEAD, and the build stamp reads git
           fetch-depth: 0
+          lfs: true
           # the token the branch is pushed with: RELEASE_TOKEN when set, else GITHUB_TOKEN
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
