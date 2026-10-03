@@ -27,6 +27,7 @@ import {
   type GraphIndex, type GraphNode, type GraphEdge, type Subgraph, type Direction, type JourneyStep,
   storybookLive, type StoriesAnswer, type StorybookStatus,
   type ModelHubState, type Activity, buildLine, buildInfo, installState, currencyAdvice,
+  projectFacets, projectGraph, projectsSummaryLine,
 } from '@farsight/core';
 
 /** `changed` said as what moved: a working tree that differs from HEAD is not a new commit (the Changes spine agrees). */
@@ -99,6 +100,16 @@ function nodeDetail(n: GraphNode, full = false): string {
   if (n.store) {
     const st = n.store;
     lines.push(`  store: ${st.name} · ${st.kind}${st.engine ? ` · ${st.engine}` : ''} · known from ${st.via}${st.ref ? ` (${st.ref})` : ''}`);
+  }
+  // the workspace project the node sits in, its type and its tags by dimension (dependencies-and-nx.md §2.2)
+  const projRepo = n.loc?.repo ?? n.id.split('::')[0]!;
+  if (n.project && store.meta.projects?.[projRepo]?.tool !== 'none') {
+    const repo = projRepo;
+    const f = projectFacets(n, store.meta.projects?.[repo]);
+    const dims = store.meta.projects?.[repo]?.tagDimensions ?? [];
+    const words = Object.entries(f?.byDimension ?? {}).map(([k, vs]) => `${dims.find((d) => d.key === k)?.label ?? k} ${vs.map((v) => v.word).join(', ')}`);
+    if (f?.other.length) words.push(`other ${f.other.join(', ')}`);
+    lines.push(`  project: ${n.project.name}${n.project.type ? ` · ${n.project.type}` : ''} · ${n.project.root}${words.length ? ` · ${words.join(' · ')}` : ''}`);
   }
   // what verifies this — declared · reached · verified, never conflated
   const covers = verifiedBy(index, n.id);
@@ -480,7 +491,7 @@ server.registerTool('graph_overview', {
     `repos: ${[...repos].join(', ')}`,
     `kinds: ${Object.entries(byKind).map(([k, v]) => `${k}:${v}`).join('  ')}`,
     `tags: ${topTags.map(([t, c]) => `${t}(${c})`).join(', ')}`,
-    ...testsLines(), ...storiesOverviewLines(),
+    ...testsLines(), ...storiesOverviewLines(), ...projectsOverviewLines(),
     '',
     '## what is in it',
     ...flowLines(),
@@ -495,6 +506,14 @@ server.registerTool('graph_overview', {
   ];
   return text(lines.join('\n'));
 });
+
+/** One line when a source recorded its projects: the tool, projects by type, dependencies, and projects per tag value of each dimension. */
+function projectsOverviewLines(): string[] {
+  // a source with no workspace tool is one project, itself — nothing to say beyond its name
+  if (!Object.values(store.meta.projects ?? {}).some((m) => m.tool !== 'none')) return [];
+  const line = projectsSummaryLine(projectGraph(index, store.meta.projects));
+  return line ? [`projects: ${line}`] : [];
+}
 
 /**
  * The named features a manifest declares, each with the one status word the HUD

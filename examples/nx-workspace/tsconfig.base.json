@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@nxw/billing/data-access": ["libs/billing/data-access/src/index.ts"],
+      "@nxw/billing/feature-invoices": ["libs/billing/feature-invoices/src/index.ts"],
+      "@nxw/billing/ui": ["libs/billing/ui/src/index.ts"],
+      "@nxw/shared/ui": ["libs/shared/ui/src/index.ts"],
+      "@nxw/shared/util": ["libs/shared/util/src/index.ts"]
+    }
+  }
+}

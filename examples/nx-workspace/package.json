@@ -1,0 +1,16 @@
+{
+  "name": "nx-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": ["apps/*", "libs/*/*"],
+  "dependencies": {
+    "date-fns": "^3.6.0",
+    "react": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "nx": "19.8.0",
+    "typescript": "~5.5.0"
+  }
+}

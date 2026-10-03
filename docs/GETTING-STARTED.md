@@ -194,6 +194,22 @@ Drop a `farsight.config.json` at the repo root — applied automatically during 
 - **plumbing** / **setup**: globs of helper directories that fold into their caller in journeys (`["libs/api/http/**"]`), and the node ids of the functions that build the process container (named once as the boot, never walked under every request).
 - **openapi**: `[{ "path": "docs/api.yaml" }, { "url": "http://localhost:3000/openapi.json", "name": "Billing API" }]` — spec documents to reconcile against this repo's routes beyond the ones discovery finds by name (`openapi.*`, `swagger.*`, `api*.yaml`, anything under `openapi/`).
 
+**An NX or workspaces monorepo.** Ingest reads the workspace's projects on its own: with `nx.json` at the source
+root, every `project.json` (its `name`, `projectType`, `tags`, `implicitDependencies`) and every `package.json` that
+carries an `nx` key or sits in a root `workspaces` glob; without NX, one project per workspace package; without
+either, the source itself is one project. Every node under a project folder carries its project, type and tags
+(MCP `describe_node` prints them), and `GET /api/projects` (or MCP `graph_overview`'s `projects:` line) lists the
+projects with the dependencies between them — read from the imports between their files, plus NX
+`implicitDependencies`. Tags group by dimension: `scope:` is *Domain*, `type:` is *Type*, `platform:` is *Platform*;
+rename or add dimensions and give tag values their words in `farsight.config.json`:
+
+```json
+{ "projects": { "tagDimensions": [ { "key": "team", "prefix": "team:", "label": "Team" } ],
+                "tagValues": { "type": { "feature": "Feature", "ui": "UI", "util": "Utility", "data-access": "Data access" } } } }
+```
+
+`examples/nx-workspace` is a small NX workspace to try it on.
+
 ## 5. APIs: spec ↔ code
 
 If a source ships an OpenAPI/Swagger document, ingest reconciles it with the routes it found. The **APIs** tab in the viewer (`#/apis`) lists every API — spec-backed, or *implied* when a source serves routes with no spec on file — with operations, gates, consumers (the client function and its call site), and drift in words: *not implemented*, *undocumented*, *security mismatch*, *gate not declared in spec*, *request body not declared / not validated*, *deprecated in spec only*. Every route that carries a contract links there from Journeys and the Code map inspector, and back out to the source line and the spec line.
