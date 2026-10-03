@@ -1,4 +1,4 @@
-import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier } from './graph.js';
+import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind } from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
 import { withJourneyCounted, type JourneyCounted, type SegmentCounted, type SegmentAbsence, type AbsenceKind, type AbsenceWord } from './journey-counted.js';
 
@@ -708,6 +708,34 @@ export interface SystemRow {
   planned: boolean;
   /** external rows: the system's kind, so a consumer can say "the ERP" without reading the name (R4) */
   externalKind?: ExternalKind;
+  /**
+   * the data store this row is (docs/proposals/data-stores.md §3.2): on a store-like external's row, that
+   * system; on the `records` row, the one store every record marker of the journey lives in — absent when
+   * the records live in several stores or in none the graph names (then each marker says its own).
+   */
+  store?: MarkerStore;
+}
+
+/** A data store as a journey surface prints it: the name and the kind. How it was known stays on the node (`GraphNode.store`). */
+export interface MarkerStore {
+  name: string;
+  kind: StoreKind;
+}
+
+/** The store words of a table, or of an external used as a store — undefined when the graph names none. */
+export function markerStoreOf(n: GraphNode | undefined): MarkerStore | undefined {
+  return n?.store ? { name: n.store.name, kind: n.store.kind } : undefined;
+}
+
+/**
+ * The direction an HTTP method moves data, read from the store's side: GET/HEAD read from it,
+ * POST/PUT/PATCH/DELETE write to it. Anything else, or no method recorded, is no claim.
+ */
+export function opOfMethod(method: unknown): 'reads' | 'writes' | undefined {
+  const m = typeof method === 'string' ? method.toUpperCase() : '';
+  if (m === 'GET' || m === 'HEAD') return 'reads';
+  if (m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE') return 'writes';
+  return undefined;
 }
 
 /** One end of the HTTP seam a call crosses: where the UX made it, or where the API starts. */
@@ -982,7 +1010,14 @@ export interface SegmentMarker {
   /** for a route: the HTTP method + path the contract or the code names */
   method?: string;
   path?: string;
+  /**
+   * which way data moved: a record marker from its reads/writes edge; an external marker from the
+   * HTTP method on the edge that reached it (`opOfMethod`) — absent when the method was not recorded,
+   * never a default
+   */
   op?: 'reads' | 'writes';
+  /** record markers and store-like external markers: the data store, when the graph names it */
+  store?: MarkerStore;
 }
 
 /**
@@ -1105,9 +1140,17 @@ export interface JourneySummary {
   /** band 3 — the system timeline in execution order, plus what it produces */
   system: {
     timeline: TimelineItem[];
-    records: { id: string; name: string; ops: ('reads' | 'writes')[] }[];
+    /** `store` when the graph names the store the record lives in */
+    records: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore }[];
     messages: { id: string; name: string }[];
-    externals: { id: string; name: string }[];
+    /** `ops` from the HTTP methods of the edges that reached it (`opOfMethod`); `store` when it is used as a data store */
+    externals: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore }[];
+    /**
+     * the data stores the journey touches, each once by name, first-seen order: `records` = distinct
+     * record nodes that live in it, `externals` = store-like external nodes that are it (an ERP is 1),
+     * `ops` = the union of their directions. Records with no named store are not here.
+     */
+    stores: { name: string; kind: StoreKind; records: number; externals: number; ops: ('reads' | 'writes')[] }[];
     /** work registered on this journey that runs later, on its own — named, never walked (R2) */
     afterwards: { id: string; name: string }[];
     repos: string[];
@@ -1258,7 +1301,8 @@ function systemOf(index: GraphIndex, n: GraphNode, kind: TimelineItem['kind'], s
     // every other third party keeps its own row, and says what kind of system it is
     const ext = n.external?.kind;
     if (ext === 'email' || ext === 'queue') return { key: 'messages', kind: 'messages', label: 'messages' };
-    return { key: `external:${n.name}`, kind: 'external', label: n.name, ...(ext ? { externalKind: ext } : {}) };
+    const store = markerStoreOf(n);
+    return { key: `external:${n.name}`, kind: 'external', label: n.name, ...(ext ? { externalKind: ext } : {}), ...(store ? { store } : {}) };
   }
   // the boot belongs to the process that runs it, never to the browser that waited for it
   if (kind === 'setup') { const repo = repoOf(n); return { key: `repo:${repo}:server`, kind: 'repo', side: 'server', label: repo }; }
@@ -1273,6 +1317,34 @@ function systemOf(index: GraphIndex, n: GraphNode, kind: TimelineItem['kind'], s
   }
   const repo = repoOf(n);
   return { key: `repo:${repo}:${side}`, kind: 'repo', side, label: repo };
+}
+
+/** The stores a journey touches, each once by name, in first-seen order (records first, then externals). */
+function storesOf(
+  records: Map<string, JourneySummary['system']['records'][number]>,
+  externals: Map<string, JourneySummary['system']['externals'][number]>,
+): JourneySummary['system']['stores'] {
+  const out = new Map<string, JourneySummary['system']['stores'][number]>();
+  const add = (store: MarkerStore | undefined, ops: ('reads' | 'writes')[], field: 'records' | 'externals') => {
+    if (!store) return;
+    const have = out.get(store.name) ?? { name: store.name, kind: store.kind, records: 0, externals: 0, ops: [] };
+    have[field]++;
+    for (const op of ops) if (!have.ops.includes(op)) have.ops.push(op);
+    out.set(store.name, have);
+  };
+  for (const r of records.values()) add(r.store, r.ops, 'records');
+  for (const x of externals.values()) add(x.store, x.ops, 'externals');
+  return [...out.values()];
+}
+
+/** The `records` row names a store only when every record marker of the journey lives in that one store. */
+function withRecordsStore(rows: SystemRow[], segments: JourneySegment[]): SystemRow[] {
+  const row = rows.find((r) => r.key === 'records');
+  if (!row) return rows;
+  const marks = segments.flatMap((sg) => sg.markers).filter((m) => m.system === 'records');
+  const names = new Set(marks.map((m) => m.store?.name ?? ''));
+  if (marks.length && names.size === 1 && !names.has('')) row.store = marks[0]!.store!;
+  return rows;
 }
 
 /** The request path read downward: what the screen asks → the contract → what the service does → what it touched. */
@@ -1320,7 +1392,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   const untranslated: UntranslatedCondition[] = [];
   const records = new Map<string, JourneySummary['system']['records'][number]>();
   const messages = new Map<string, { id: string; name: string }>();
-  const externals = new Map<string, { id: string; name: string }>();
+  const externals = new Map<string, JourneySummary['system']['externals'][number]>();
+  /** the edge a step arrived over — its meta carries the HTTP method an external marker reads its direction from */
+  const edgeOfStep = (s: JourneyStep, n: GraphNode): GraphEdge | undefined =>
+    s.edgeId ? (index.in.get(n.id) ?? []).find((e) => e.id === s.edgeId) : undefined;
   /** deferred work: named where it was registered, never walked */
   const afterwards = new Map<string, { id: string; name: string }>();
   const repos = new Set<string>();
@@ -1429,9 +1504,22 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     if (s.setup) kind = 'setup';
     else if (s.deferred) { kind = 'deferred'; afterwards.set(n.id, { id: n.id, name: nameOf(n) }); }
     else if (n.kind === 'page' || n.kind === 'component' || n.kind === 'flow') kind = 'screen';
-    else if (n.kind === 'table') { kind = 'record'; const r = records.get(n.id) ?? { id: n.id, name: nameOf(n), ops: [] }; if ((s.via === 'reads' || s.via === 'writes') && !r.ops.includes(s.via)) r.ops.push(s.via); records.set(n.id, r); }
+    else if (n.kind === 'table') {
+      kind = 'record';
+      const store = markerStoreOf(n);
+      const r = records.get(n.id) ?? { id: n.id, name: nameOf(n), ops: [], ...(store ? { store } : {}) };
+      if ((s.via === 'reads' || s.via === 'writes') && !r.ops.includes(s.via)) r.ops.push(s.via);
+      records.set(n.id, r);
+    }
     else if (n.kind === 'queue') { kind = 'message'; messages.set(n.id, { id: n.id, name: nameOf(n) }); }
-    else if (n.kind === 'external' || n.kind === 'unknown') { kind = 'external'; externals.set(n.id, { id: n.id, name: nameOf(n) }); }
+    else if (n.kind === 'external' || n.kind === 'unknown') {
+      kind = 'external';
+      const store = markerStoreOf(n);
+      const x = externals.get(n.id) ?? { id: n.id, name: nameOf(n), ops: [], ...(store ? { store } : {}) };
+      const op = s.via === 'http' ? opOfMethod(edgeOfStep(s, n)?.meta?.method) : undefined;
+      if (op && !x.ops.includes(op)) x.ops.push(op);
+      externals.set(n.id, x);
+    }
     else if (s.via === 'http' || n.kind === 'route') kind = 'call';
     timeline.push({ ...base, kind, name: nameOf(n), ...(s.planned ? { planned: s.planned } : {}) });
   }
@@ -1537,6 +1625,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       ...(row.business && !choice ? { business: row.business } : {}),
       ...(n.kind === 'route' && routeMethodPath(n.name) ? routeMethodPath(n.name) : {}),
       ...(st && (st.via === 'reads' || st.via === 'writes') ? { op: st.via } : {}),
+      // an external's direction is the HTTP method on the edge that reached it — unknown stays unsaid
+      ...(kind === 'external' && st?.via === 'http' && opOfMethod(edgeOfStep(st, n)?.meta?.method)
+        ? { op: opOfMethod(edgeOfStep(st, n)?.meta?.method)! } : {}),
+      ...((kind === 'record' || kind === 'external') && markerStoreOf(n) ? { store: markerStoreOf(n)! } : {}),
     };
     seg.markers.push(m);
     seg.counts.markers++;
@@ -1763,10 +1855,10 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
         items: untranslated,
       },
     },
-    system: { timeline, records: [...records.values()], messages: [...messages.values()], externals: [...externals.values()], afterwards: [...afterwards.values()], repos: [...repos] },
+    system: { timeline, records: [...records.values()], messages: [...messages.values()], externals: [...externals.values()], stores: storesOf(records, externals), afterwards: [...afterwards.values()], repos: [...repos] },
     segments,
     // rank first (the request path read downward), first-seen inside a rank
-    systems: [...systemRows.values()].sort((a, b) => systemRank(a) - systemRank(b)),
+    systems: withRecordsStore([...systemRows.values()], segments).sort((a, b) => systemRank(a) - systemRank(b)),
     links: journeyLinks(index, j.entryId),
     txKnown: tx.known,
     counts: {

@@ -41,6 +41,8 @@ export interface JourneyCounted {
   declaredNotCalled: Counted;
   actionStops: Counted;
   systems: Counted;
+  /** the data stores the journey touches (`summary.system.stores`): stores holding records + outside systems used as stores */
+  stores: Counted;
   setup: Counted;
   deferred: Counted;
   repeats: Counted;
@@ -135,6 +137,22 @@ function segmentCounted(j: Journey, sg: JourneySegment, entryBusiness: string | 
 }
 
 /**
+ * The data stores a journey touches, each once by name: the ones its records live in, and the
+ * outside systems it uses as stores. A store that both holds records and is an external counts
+ * with the records — the breakdown sums to the whole. Records with no named store are not counted.
+ */
+function storesCounted(stores: JourneySummary['system']['stores']): Counted {
+  const ofRecords = stores.filter((st) => st.records > 0).length;
+  return counted(stores.length, 'journey.countStores', 'journey.scopeAll', `${SRC}.system.stores.length`, {
+    bizUnit: 'journey.countStores',
+    breakdown: [
+      { key: 'count.part.storesOfRecords', n: ofRecords },
+      { key: 'count.part.storesOutside', n: stores.length - ofRecords },
+    ],
+  });
+}
+
+/**
  * Every number the journey header, the lane's tabs and the drill print, typed.
  * `built` follows the header's rule: a screen with a design row is built when
  * the design reconciled it to code, one without is built when the walk found
@@ -192,6 +210,7 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
       ],
     }),
     systems: counted(summary.systems.length, 'journey.countSystems', all, `${SRC}.systems.length`),
+    stores: storesCounted(summary.system.stores ?? []),
     setup: counted(k.setup, 'journey.countSetup', all, c('setup')),
     deferred: counted(k.deferred, 'journey.countAfterwards', all, c('deferred'), { bizUnit: 'journey.countAfterwards' }),
     repeats: counted(k.repeats, 'journey.countRepeats', all, c('repeats')),

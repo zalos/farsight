@@ -145,7 +145,8 @@ function fold(g = threeScreens()): JourneySummary {
 test('every count the journey fold hands out is sound: known words, a define, a listed scope, a partition', () => {
   const sum = fold();
   const n = assertSound(sum.counted, 'journey') + sum.segments.reduce((a, sg) => a + assertSound(sg.counted, `segment ${sg.index}`), 0);
-  assert.equal(n, 19 + 7 * sum.segments.length, 'every header count and every screen count is typed');
+  // 20 since the data-stores pass: `stores` joined the header counts
+  assert.equal(n, 20 + 7 * sum.segments.length, 'every header count and every screen count is typed');
   for (const sg of sum.segments) assert.ok(sg.counted, `segment ${sg.index} carries no typed counts`);
 });
 
