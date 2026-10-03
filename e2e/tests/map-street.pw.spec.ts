@@ -244,7 +244,8 @@ test.describe('map — neighbourhood and street', () => {
     // Esc backs out to every journey
     await page.keyboard.press('Escape');
     await expect(world).toHaveClass(/lvl-nb/);
-    await expect(page).toHaveURL(/#\/map$/);
+    // the neighbourhood names no journey; the link carries where the board is (§K)
+    await expect(page).toHaveURL(/#\/map(\?z=[\d.]+&x=-?\d+&y=-?\d+)?$/);
   });
 
   /**

@@ -1,0 +1,7 @@
+{
+  "name": "ops-admin",
+  "projectType": "application",
+  "sourceRoot": "apps/ops-admin/src",
+  "tags": ["type:app", "scope:ops"],
+  "implicitDependencies": ["billing-data-access"]
+}
