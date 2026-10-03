@@ -24,7 +24,7 @@ import { countedHtml, plainTip } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, storesOf, MODE_ORDER } from '../lib/map-model.js';
 import { createCanvas, LEVEL_NB, SNAP_RADIUS } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 
@@ -102,13 +102,30 @@ function dataWords(d) {
   const n = d.node || { name: d.name, kind: d.kind };
   const own = (n.facets && n.facets.business && n.facets.business.label) || n.bizLabel;
   if (own) return bizName(n);
+  // a third party's name is the product's own (Example ERP): said as written unless it is code-shaped
+  if (d.kind === 'external' && !/[a-z][A-Z]|_|\/|\.[a-z]/.test(String(d.name || ''))) return String(d.name);
   return humanize(String(d.name || '').replace(/\./g, ' '));
 }
 function kindWord(kind) {
   return t(kind === 'record' ? 'map.kind.record' : kind === 'message' ? 'map.kind.message' : kind === 'external' ? 'map.kind.external' : 'map.kind.call');
 }
-function modeWord(mode) { return t(mode === 'both' ? 'map.lane.both' : mode === 'read' ? 'map.lane.reads' : 'map.lane.writes'); }
-function modeKey(mode) { return mode === 'both' ? 'map.lane.both' : mode === 'read' ? 'map.lane.reads' : 'map.lane.writes'; }
+function modeKey(mode) {
+  return mode === 'both' ? 'map.lane.both' : mode === 'read' ? 'map.lane.reads' : mode === 'reached' ? 'map.mode.reached' : 'map.lane.writes';
+}
+function modeWord(mode) { return t(modeKey(mode)); }
+/** The kinds of store the map colours; anything else is drawn as `other`. */
+const STORE_KINDS = ['sql', 'document', 'files', 'erp', 'other'];
+function storeKind(st) { return st && STORE_KINDS.includes(st.kind) ? st.kind : 'other'; }
+function storeKindKey(st) { return 'map.store.kind.' + storeKind(st); }
+/**
+ * A data node's kind line, in words: the store it lives in with what it is there — `Invoice DB · record` for a
+ * record, `Example ERP · ERP` for an outside system used as a store — else the plain kind word. A store's name is
+ * a product name or a word somebody wrote in the settings, so every register prints it.
+ */
+function dataKindWords(dd) {
+  if (!dd.store) return kindWord(dd.kind);
+  return dd.store.name + ' · ' + (dd.kind === 'record' ? kindWord('record') : t(storeKindKey(dd.store)));
+}
 function evKey(ev) {
   return ev === 'spec-backed' ? 'map.ev.specBacked' : ev === 'implied' ? 'map.ev.implied' : ev === 'declared' ? 'map.ev.declared' : 'journey.absent.notBuilt';
 }
@@ -336,7 +353,7 @@ function screenCount(d) {
  * Each entry keeps its index in the model, which the explore card reads.
  */
 function callData(flow, si, ci, c) {
-  const rank = (m) => (m === 'read' ? 1 : 0);
+  const rank = (m) => { const i = MODE_ORDER.indexOf(m); return i < 0 ? MODE_ORDER.length : i; };
   const all = c.data.map((dd, k) => ({ dd, k })).sort((a, b) => rank(a.dd.mode) - rank(b.dd.mode) || a.k - b.k);
   const foldable = all.length > DATA_SHOWN + 1;
   const open = MAP.open.has('data|' + flow + '|' + si + '|' + ci);
@@ -689,6 +706,8 @@ function aggHtml(d, j) {
     k.built && k.built.of != null && k.built.n < k.built.of ? chip(k.built, 'k-warn') : chip(k.built, 'k-ok'),
     chip(k.actions, 'k-api'),
     chip(k.gates, 'k-gate'),
+    // the stores the journey touches — the summary's own Counted (data-stores §5); not drawn at 0
+    k.stores && k.stores.n ? chip(k.stores, 'k-store') : '',
     cov ? chip(cov.tests, 'k-test') : '',
     k.declaredNotCalled && k.declaredNotCalled.n ? chip(k.declaredNotCalled, 'k-absent') : '',
   ].join('') + work;
@@ -713,11 +732,18 @@ function streetHtml(d, j, g) {
   });
   // the plumbing: one pathway per screen, its calls stacked beneath it, what each reads and writes beside it
   if (m.screens.some((s) => s.calls.length)) {
+    const stores = storesOf(m);
+    const reached = m.screens.some((s) => s.calls.some((c) => c.data.some((x) => x.mode === 'reached')));
     html += '<div class="map-lane" style="top:' + (PL_TOP - 40) + 'px"><span class="lbl"' + tipAttrs({ key: 'map.lane.title', noFocus: true }) + '>' + esc(t('map.lane.title')) + '</span>'
       + '<span class="leg">' + m.services.map((sv) => '<span class="svc-' + (sv.index % 6) + '"><i></i>' + esc(sv.label) + '</span>').join('')
       + (m.screens.some((s) => s.calls.some((c) => !c.service)) ? '<span class="svc-none"' + tipAttrs({ key: 'map.lane.noService', noFocus: true }) + '><i></i>' + esc(t('map.lane.noService')) + '</span>' : '')
       + '<span class="rw"' + tipAttrs({ key: 'map.lane.reads', noFocus: true }) + '><b></b>' + esc(t('map.lane.reads')) + '</span>'
-      + '<span class="rw"' + tipAttrs({ key: 'map.lane.writes', noFocus: true }) + '><b class="w"></b>' + esc(t('map.lane.writes')) + '</span></span></div>';
+      + '<span class="rw"' + tipAttrs({ key: 'map.lane.writes', noFocus: true }) + '><b class="w"></b>' + esc(t('map.lane.writes')) + '</span>'
+      + (reached ? '<span class="rw"' + tipAttrs({ key: 'map.mode.reached', noFocus: true }) + '><b class="r"></b>' + esc(t('map.mode.reached')) + '</span>' : '')
+      + (stores.length ? '<span class="stores"><span class="sl"' + tipAttrs({ key: 'map.store.legend', noFocus: true }) + '>' + esc(t('map.store.legend')) + '</span>'
+        + stores.map((st) => '<span class="mst st-' + storeKind(st) + '" data-store="' + esc(st.name) + '"' + tipAttrs({ key: storeKindKey(st), noFocus: true }) + '><i></i>'
+          + esc(st.name) + ' · ' + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
+      + '</span></div>';
   }
   m.screens.forEach((s, si) => {
     const x = PAD + si * COL;
@@ -728,13 +754,14 @@ function streetHtml(d, j, g) {
       const h = callRowH(d.id, si, ci, c);
       const cd = callData(d.id, si, ci, c);
       html += callHtml(d, s, c, si, ci, x, y, h);
-      const cls0 = (mode) => 'plumb ' + (mode === 'read' ? 'read' : 'write');
+      const cls0 = (mode) => 'plumb ' + (mode === 'read' ? 'read' : mode === 'reached' ? 'reached' : 'write');
       cd.shown.forEach(({ dd, k }, row) => {
         const dy = y + row * ROW;
         html += dataHtml(d, s, c, dd, si, ci, k, x + DX, dy);
         const my = dy + 18, x1 = x + OPW, x2 = x + DX;
         const cls = cls0(dd.mode);
         paths += '<path class="' + cls + '" d="M' + x1 + ' ' + my + ' L' + x2 + ' ' + my + '"/>';
+        if (dd.mode === 'reached') return;          // the direction was not recorded: a plain line, no arrowhead
         if (dd.mode !== 'write') paths += '<path class="' + cls + '" d="M' + (x1 + 9) + ' ' + (my - 5) + ' L' + x1 + ' ' + my + ' L' + (x1 + 9) + ' ' + (my + 5) + '"/>';
         if (dd.mode !== 'read') paths += '<path class="' + cls + '" d="M' + (x2 - 9) + ' ' + (my - 5) + ' L' + x2 + ' ' + my + ' L' + (x2 - 9) + ' ' + (my + 5) + '"/>';
       });
@@ -808,11 +835,13 @@ function toggleFold(key, flow) {
 
 /** One record, message or third party beside a call, with what the call does to it. */
 function dataHtml(d, s, c, dd, si, ci, k, x, y) {
-  const cls = dd.kind === 'message' ? 'msg' : dd.kind === 'external' ? 'ext' : 'rec';
+  // a store-like third party is drawn in the record anatomy; the left bar takes the colour of the store's kind
+  const cls = dd.kind === 'message' ? 'msg' : dd.kind === 'external' && !dd.store ? 'ext' : 'rec' + (dd.store ? ' st-' + storeKind(dd.store) : '');
   return '<div class="map-pd ' + cls + (ghost(c) ? ' absent' : '') + '" role="button" tabindex="0" data-kind="' + esc(dd.kind) + '" data-mode="' + esc(dd.mode) + '"'
+    + (dd.store ? ' data-store="' + esc(dd.store.name) + '" data-store-kind="' + esc(storeKind(dd.store)) + '"' : '')
     + ' data-flow="' + esc(d.id) + '" data-si="' + si + '" data-ci="' + ci + '" data-di="' + k + '" style="left:' + x + 'px;top:' + y + 'px">'
     // the kind line truncates (kind · identifier, then what the call does to it); the name has the node's width
-    + '<span class="top"><span class="kd">' + esc(kindWord(dd.kind)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
+    + '<span class="top"><span class="kd">' + esc(dataKindWords(dd)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
     + '<span class="rw ' + esc(dd.mode) + '"' + tipAttrs({ key: modeKey(dd.mode), noFocus: true }) + '>' + esc(modeWord(dd.mode)) + '</span></span>'
     + '<span class="nm">' + esc(dataWords(dd)) + '</span></div>';
 }
@@ -968,10 +997,10 @@ function drawCard() {
   if (!box || !MAP.card || !MAP.card.tg) return;
   const tg = MAP.card.tg;
   const nodeId = tg.kind === 'call' ? tg.call.nodeId : tg.data.nodeId;
-  let head, ev = '', name, code, links = [];
+  let head, ev = '', name, code, store = '', links = [];
   if (tg.kind === 'call') {
     const c = tg.call;
-    const modes = [...new Set(c.data.map((x) => x.mode))];
+    const modes = [...new Set(c.data.map((x) => x.mode).filter((x) => x !== 'reached'))];
     const dir = modes.length ? (modes.includes('both') || (modes.includes('read') && modes.includes('write')) ? t('map.lane.both') : modeWord(modes[0])) : '';
     head = esc(c.service ? c.service.label : t('map.lane.noService')) + (dir ? ' · ' + esc(dir) : '');
     ev = '<span class="map-ev"' + tipAttrs({ key: evKey(c.evidence) }) + '>' + esc(t(evKey(c.evidence))) + '</span>';
@@ -984,16 +1013,26 @@ function drawCard() {
     if (route) links.push(['#/codemap?node=' + encodeURIComponent(nodeId), t('map.card.openCode')]);
   } else {
     const dd = tg.data;
-    head = esc(kindWord(dd.kind)) + ' · ' + esc(modeWord(dd.mode));
+    head = esc(dataKindWords(dd)) + ' · ' + esc(modeWord(dd.mode));
     name = dataWords(dd);
     const n = dd.node;
     code = [dd.name, n && n.loc ? n.loc.path + (n.loc.line ? ':' + n.loc.line : '') : ''].filter(Boolean).join(' · ');
+    // the store, and — outside the business register — how it is known
+    if (dd.store) {
+      const via = dd.store.via ? 'map.store.via.' + dd.store.via : '';
+      store = '<div class="store"><span class="mst st-' + storeKind(dd.store) + '"' + tipAttrs({ key: storeKindKey(dd.store) }) + '><i></i>'
+        + esc(dd.store.name) + ' · ' + esc(t(storeKindKey(dd.store))) + '</span>'
+        + (via && t(via) !== via ? '<span class="map-code via"><span class="hud-label"' + tipAttrs({ key: 'map.store.known', noFocus: true }) + '>' + esc(t('map.store.known')) + '</span> '
+          + '<span' + tipAttrs({ key: via, noFocus: true }) + '>' + esc(t(via)) + '</span>' + (dd.store.ref ? ' · <code>' + esc(dd.store.ref) + '</code>' : '') + '</span>' : '')
+        + '</div>';
+    }
     if (n) links.push(['#/codemap?node=' + encodeURIComponent(dd.nodeId), t('map.card.openCode')]);
   }
   const on = screensUsing(tg.model, tg.kind === 'call' ? 'call' : tg.kind, nodeId);
   box.innerHTML = '<div class="k"><span class="hud-label">' + head + '</span>' + ev
     + '<button type="button" class="x" data-act="close" aria-label="' + esc(t('map.card.close')) + '">✕</button></div>'
     + '<div class="nm">' + esc(name) + '</div>'
+    + store
     + (code ? '<div class="sent map-code">' + esc(code) + '</div>' : '')
     + '<div class="where"><span class="hud-label"' + tipAttrs({ key: 'map.card.on', noFocus: true }) + '>' + esc(t('map.card.on')) + '</span>'
     + (on.length ? on.map((s) => '<button type="button" class="map-chip go" data-go="' + s.index + '" data-flow="' + esc(tg.flow) + '">' + esc(s.name) + '</button>').join('')

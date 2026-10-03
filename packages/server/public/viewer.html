@@ -2103,6 +2103,8 @@
   .map-edges path.trunk{stroke:var(--line);stroke-width:3}
   .map-edges path.read{stroke:var(--cyan);stroke-width:2}
   .map-edges path.write{stroke:var(--amber);stroke-width:2}
+  /* a direction the walk did not record: plain and dim, never an arrowhead */
+  .map-edges path.reached{stroke:var(--dim);stroke-width:1.5;stroke-dasharray:2 4}
   .map-edges path.ghost{stroke-dasharray:6 6;opacity:.6}
   .map-edges .then{font-family:var(--hud);font-size:12px;letter-spacing:.1em;text-transform:uppercase;fill:var(--accent)}
   .map-world.no-plumb .map-lane,.map-world.no-plumb .map-pl,.map-world.no-plumb .map-pd,.map-world.no-plumb .map-edges path.plumb{display:none}
@@ -2110,6 +2112,7 @@
   .map-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:2px 9px;border-radius:12px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;background:var(--panel)}
   .map-chip .sym{width:12px;height:12px}
   .map-chip.k-api{border-color:color-mix(in srgb,var(--cyan) 50%,transparent)}
+  .map-chip.k-store{border-color:color-mix(in srgb,var(--tbl) 50%,transparent)}
   .map-chip.k-gate{border-color:color-mix(in srgb,var(--auth) 60%,transparent)}
   .map-chip.k-test{border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
   .map-chip.k-ok{border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
@@ -2147,6 +2150,13 @@
   .map-lane .leg .rw{display:inline-flex;align-items:center;gap:5px}
   .map-lane .leg .rw b{display:inline-block;width:14px;height:2px;background:var(--cyan)}
   .map-lane .leg .rw b.w{background:var(--amber)}
+  .map-lane .leg .rw b.r{background:var(--dim)}
+  /* data stores (docs/proposals/data-stores.md): one colour per kind of store, the record's violet for a database */
+  .st-sql,.st-document{--stc:var(--tbl)} .st-erp{--stc:var(--amber)} .st-files{--stc:color-mix(in srgb,var(--cyan) 50%,var(--muted))} .st-other{--stc:var(--dim)}
+  .map-lane .leg .stores{display:inline-flex;gap:10px;align-items:center;padding-left:12px;border-left:1px solid var(--line)}
+  .map-lane .leg .stores .sl{color:var(--dim)}
+  .map-lane .leg .mst{text-transform:none;letter-spacing:.02em;font-family:var(--body);font-size:11px;color:var(--ink)}
+  .map-lane .leg .mst i{background:var(--stc)}
   .svc-0{--svc:var(--svc-0)} .svc-1{--svc:var(--svc-1)} .svc-2{--svc:var(--svc-2)} .svc-3{--svc:var(--svc-3)} .svc-4{--svc:var(--svc-4)} .svc-5{--svc:var(--svc-5)} .svc-none{--svc:var(--dim)}
   .map-pl{position:absolute;width:200px;border:1px solid var(--line);border-top:4px solid var(--svc,var(--cyan));border-radius:6px;background:var(--panel);padding:6px 9px 7px;display:flex;flex-direction:column;gap:3px;cursor:pointer;transition:border-color .15s;overflow:hidden}
   .map-pl:hover{border-color:var(--accent);border-top-color:var(--svc,var(--cyan))}
@@ -2162,6 +2172,7 @@
   .map-pd:hover{border-color:var(--accent);border-left-color:var(--tbl)}
   .map-pd.msg,.map-pd.msg:hover{border-left-color:var(--fn)}
   .map-pd.ext,.map-pd.ext:hover{border-left-color:var(--warn)}
+  .map-pd.rec[class*=" st-"],.map-pd.rec[class*=" st-"]:hover{border-left-color:var(--stc)}
   .map-pd.absent{border-style:dashed;border-left-style:solid}
   /* the kind line (kind · identifier, then reads / writes) is the one that truncates; the name keeps the node's width */
   .map-pd .top{display:flex;align-items:baseline;gap:6px;min-width:0;line-height:1.1}
@@ -2170,6 +2181,7 @@
   .map-pd .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.2}
   .map-pd .rw{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:8.5px;flex-shrink:0}
   .map-pd .rw.read{color:var(--cyan)} .map-pd .rw.write,.map-pd .rw.both{color:var(--amber)}
+  .map-pd .rw.reached{color:var(--dim)}
   /* a fold row: the rest of a call's data, or of a screen's calls */
   .map-fold{position:absolute;height:34px;display:flex;align-items:center;gap:4px;padding:0 10px;border:1px dashed var(--line);border-radius:5px;background:transparent;
     font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:var(--muted);cursor:pointer;text-align:left}
@@ -2204,6 +2216,11 @@
   .map-xcard .k .x{color:var(--muted);font-size:13px;padding:0 2px}
   .map-xcard .nm{font-size:15px;color:var(--ink);font-weight:500}
   .map-xcard .sent{font-family:var(--mono);font-size:11px;color:var(--dim);word-break:break-all}
+  .map-xcard .store{display:flex;flex-direction:column;gap:3px}
+  .map-xcard .store .mst{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink)}
+  .map-xcard .store .mst i{display:inline-block;width:14px;height:4px;border-radius:2px;background:var(--stc)}
+  .map-xcard .store .via{font-size:11px;color:var(--muted)} .map-xcard .store .via .hud-label{font-size:9.5px;color:var(--dim)}
+  .map-xcard .store .via code{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
   .map-xcard .where{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .map-xcard .where .hud-label{font-size:9.5px}
   .map-xcard .acts{display:flex;gap:6px;flex-wrap:wrap}
@@ -2267,6 +2284,12 @@
   .mp-body{padding:12px 14px 18px;overflow:auto;display:flex;flex-direction:column;gap:16px;font-size:13px;min-height:0}
   .mp-sec{display:flex;flex-direction:column;gap:2px}
   .mp-sec h3{margin:0 0 4px;font-size:10px;font-weight:normal;display:flex;align-items:center;gap:6px}
+  /* Data this screen reaches, one group per store (docs/proposals/data-stores.md §3.3) */
+  .mp-store{display:flex;flex-direction:column;gap:2px;margin:2px 0 8px}
+  .mp-grp{margin:2px 0 2px;display:flex;align-items:center;gap:6px;font-family:var(--body);font-weight:500;font-size:12px;color:var(--ink)}
+  .mp-grp i{display:inline-block;width:14px;height:4px;border-radius:2px;background:var(--stc)}
+  .mp-grp > span + span,.mp-grp.plain{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--muted);font-weight:normal}
+  .mp-mode.read{color:var(--cyan)} .mp-mode.write,.mp-mode.both{color:var(--amber)} .mp-mode.reached{color:var(--dim)}
   .mp-hcount .n{font-family:var(--mono);letter-spacing:0;color:var(--ink);font-size:11px}
   .mp-biz{font-size:13.5px;line-height:1.5;border-left:2px solid var(--amber);padding-left:10px;color:var(--ink)}
   .mp-chips{display:flex;flex-wrap:wrap;gap:5px}

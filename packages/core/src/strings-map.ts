@@ -82,9 +82,9 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   // the plumbing under each screen
   'map.lane.title': same('What each screen does · its calls, then what they read and write',
     'Each screen owns the path straight below it. The same record is drawn under every screen that uses it, so nothing crosses; the journey’s own numbers still count it once.'),
-  'map.lane.reads': same('reads', 'This call reads the record, or listens to the message. Drawn in the cool colour.'),
-  'map.lane.writes': same('writes', 'This call writes the record, publishes the message or sends a request to the third party. Drawn in the warm colour.'),
-  'map.lane.both': same('reads · writes', 'This call both reads and writes the record.'),
+  'map.lane.reads': same('reads', 'This call looks up the record or the store, or listens to the message. Drawn in the cool colour.'),
+  'map.lane.writes': same('writes', 'This call saves to the record or the store, or publishes the message. Drawn in the warm colour.'),
+  'map.lane.both': same('reads · writes', 'This call both looks up and saves to the record or the store.'),
   'map.lane.noService': same('no service named', 'The walk reached this call without an API the workspace names, so it has no service colour.'),
   'map.call.again': same('again', 'The journey already made this call on an earlier screen. It is drawn here too because this screen makes it as well.'),
 
@@ -96,8 +96,23 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   // kinds, as the plumbing and the explore card name them
   'map.kind.call': same('call'),
   'map.kind.record': same('record', 'A table or collection the application keeps.'),
+  'map.mode.reached': same('reached', 'The code reaches this, but which way the data flows was not recorded: the call does not say in plain code whether it looks something up or saves it. Drawn as a plain dim line.'),
   'map.kind.message': same('message', 'An event or a queue message: one part publishes it, others listen.'),
-  'map.kind.external': same('third party', 'A system outside the application that the code calls, such as an ERP or a document reader.'),
+  'map.kind.external': same('third party', 'A system outside the application that the code calls, such as a document reader. One the application keeps its data in, such as an ERP, is drawn as a store instead.'),
+
+  // data stores (docs/proposals/data-stores.md): which store a record lives in, and outside systems used as stores
+  'map.store.legend': same('stores', 'The data stores this journey’s calls reach: the databases its records live in and the outside systems it keeps data in, each with its colour.'),
+  'map.store.kind.sql': same('database', 'A database the application keeps its records in as tables.'),
+  'map.store.kind.document': same('document store', 'A database that keeps records as documents rather than tables.'),
+  'map.store.kind.files': same('file store', 'A place the application keeps files, such as uploaded documents.'),
+  'map.store.kind.erp': same('ERP', 'A business system outside the application, such as an accounting or resource planning system, that the application reads from and saves to as its own store of record.'),
+  'map.store.kind.other': same('store', 'Somewhere the application keeps data, of a kind not named more precisely.'),
+  'map.store.known': same('known from', 'How the store was found: the code first, the workspace settings only where the code says nothing.'),
+  'map.store.via.factory': same('the table’s own declaration', 'The table was declared with a helper that belongs to one database engine, so the code itself names the store.'),
+  'map.store.via.sdk': same('the package the code uses', 'The code uses a package that belongs to this store: the one database driver in this source, so every table in it lives in that database, or an outside system’s own client library.'),
+  'map.store.via.datasource': same('the schema file’s data source', 'The data source block of the schema file names the database engine.'),
+  'map.store.via.jpa': same('the application’s data source setting', 'The application’s settings name the database connection, and the engine is read from it.'),
+  'map.store.via.config': same('the workspace settings', 'The code does not name this store; the workspace’s Farsight settings do.'),
 
   // links between districts
   'map.link.leadsTo': same('leads to', 'A person who finishes this journey goes on to the next one, as the design says or as their shared screens show.'),
@@ -185,9 +200,10 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
 
   // apis
   'map.prop.apis.head': same('Calls this screen makes', 'Every call to a service on this screen, in the order the user meets them.'),
-  'map.prop.apis.records': same('Records this screen reaches', 'The stored records the calls on this screen read or write, each named once.'),
+  'map.prop.apis.records': same('Data this screen reaches', 'The records and stores the calls on this screen look up or save to, each named once and grouped by the store it lives in.'),
   'map.prop.apis.reads': same('reads {list}', 'The records this call looks up.'),
   'map.prop.apis.writes': same('writes {list}', 'The records this call saves to.'),
+  'map.prop.apis.reached': same('reaches {list}', 'The records and stores this call reaches without the code saying which way the data flows.'),
   'map.prop.apis.readsWrites': same('reads and writes', 'The calls on this screen both look this record up and save to it.'),
   'map.prop.apis.noData': same('reaches no record', 'The walk found no stored record behind this call.'),
   'map.prop.apis.notBuilt': same('Not built: the design declares these calls and no code makes them yet.', 'The screen is designed and not built, so its calls are what the design says it will ask for.'),

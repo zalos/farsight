@@ -7,6 +7,7 @@
 // journey summary carries, and a tab nothing types prints no number.
 import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
+import { stubStores } from './map-stores-stub';
 
 const FLOW = 'invoice-app::flow::billing-cycle';
 const PAGE = {
@@ -300,5 +301,37 @@ test.describe('map property', () => {
       await openProperty(page, node);
       await wholePicture(page);
     }
+  });
+});
+
+test.describe('map property — data stores', () => {
+  /**
+   * @covers packages/server/public/app/surfaces/map-property.js::storeGroupHtml
+   * @covers packages/server/public/app/lib/map-property-model.js::dataByStore
+   */
+  test('APIs: Data this screen reaches, grouped by store, the ERP with its mode, unnamed data last; the tab count unchanged', async ({ page }) => {
+    await stubStores(page);
+    await openProperty(page, PAGE.list);
+    expect((await tabCounts(page)).apis).toBe('5');
+    await openTab(page, 'apis');
+    const body = page.locator('.mp-body');
+    await expect(body).toContainText('Data this screen reaches');
+    // named stores in the order the screen meets them (the list read reaches the ERP first), then the unnamed message
+    await expect(body.locator('.mp-grp')).toHaveText(['Example ERP · ERP', 'Invoice DB · database', 'message']);
+    const erp = body.locator('.mp-store', { has: page.locator('.mp-grp[data-store="Example ERP"]') });
+    await expect(erp.locator('.mp-row')).toHaveCount(1);
+    await expect(erp.locator('.mp-mode')).toHaveText('writes');
+    await expect(body.locator('.mp-store', { has: page.locator('.mp-grp[data-store="Invoice DB"]') }).locator('.mp-row')).toHaveCount(3);
+  });
+
+  /** @covers packages/server/public/app/surfaces/map-property.js::storeGroupHtml */
+  test('the business lens: store names print, no identifier on the APIs tab', async ({ page }) => {
+    await stubStores(page);
+    await openProperty(page, PAGE.list, 'business');
+    await openTab(page, 'apis');
+    const text = await visibleWords(page);
+    expect(text).toContain('Invoice DB');
+    expect(text).toContain('Example ERP');
+    expect([...new Set(text.match(IDENTIFIER) || [])], 'identifier-shaped words on the business APIs tab').toEqual([]);
   });
 });

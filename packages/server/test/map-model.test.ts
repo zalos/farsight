@@ -10,8 +10,9 @@ import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
-const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts } = await import(join(appDir, 'lib', 'map-model.js'));
+const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, storesOf, mergeMode, MODE_ORDER } = await import(join(appDir, 'lib', 'map-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle.json'), 'utf8'));
+import { withStores, type AnyRec } from './map-stores-fixture.ts';
 const byId = new Map(fx.nodes.map((n: { id: string }) => [n.id, n]));
 const model = streetModel(fx.journey, byId);
 
@@ -172,4 +173,79 @@ test('the model survives an empty or older answer', () => {
   assert.deepEqual(m.screens, []);
   assert.deepEqual(m.services, []);
   assert.deepEqual(neighbourhoodModel(undefined).districts, []);
+});
+
+// ── data stores (docs/proposals/data-stores.md §3) ─────────────────────────
+const sfx = withStores(fx);
+const smodel = streetModel(sfx.journey, new Map(sfx.nodes.map((n: AnyRec) => [n.id, n])));
+
+test('a record names the store it lives in, with how the store is known', () => {
+  const create = smodel.screens[0].calls[0];
+  const inv = create.data.find((d: AnyRec) => d.name === 'invoices');
+  assert.deepEqual(inv.store, { name: 'Invoice DB', kind: 'sql', engine: 'postgres', via: 'config', ref: 'stores[0]' });
+  // the captured answer carries no store: nothing is guessed
+  assert.equal(model.screens[0].calls[0].data[0].store, null);
+});
+
+test('a store-like external is a data node with its mode: writes from op, reached with no op, never write by default', () => {
+  const list = smodel.screens[1];
+  const get = list.calls.find((c: AnyRec) => c.method === 'GET' && c.path === '/invoices');
+  const erpGet = get.data.find((d: AnyRec) => d.kind === 'external');
+  assert.equal(erpGet.mode, 'reached');
+  assert.deepEqual(erpGet.store && [erpGet.store.name, erpGet.store.kind], ['Example ERP', 'erp']);
+  const fin = list.calls.find((c: AnyRec) => c.path.endsWith('/finalize'));
+  const erpFin = fin.data.filter((d: AnyRec) => d.kind === 'external');
+  assert.equal(erpFin.length, 1, 'the same node met twice on one call is drawn once');
+  assert.equal(erpFin[0].mode, 'write', 'a known direction wins over reached, and never makes both');
+});
+
+test('mergeMode: both only from a read and a write; reached yields to either', () => {
+  assert.equal(mergeMode('read', 'write'), 'both');
+  assert.equal(mergeMode('reached', 'read'), 'read');
+  assert.equal(mergeMode('write', 'reached'), 'write');
+  assert.equal(mergeMode('reached', 'reached'), 'reached');
+  assert.equal(mergeMode('both', 'reached'), 'both');
+  assert.deepEqual(MODE_ORDER, ['write', 'both', 'read', 'reached']);
+});
+
+test('storesOf: derived from the data when the summary lists none, in the order the street meets them', () => {
+  assert.deepEqual(storesOf(smodel), [
+    { name: 'Invoice DB', kind: 'sql', ops: ['reads', 'writes'] },
+    { name: 'Example ERP', kind: 'erp', ops: ['writes'] },
+  ]);
+  assert.deepEqual(storesOf(model), [], 'no store on the captured answer: the legend lists none');
+  assert.deepEqual(storesOf(null), []);
+});
+
+test('storesOf: the summary\'s own list first when it is there, then any store drawn that it does not name', () => {
+  const j = JSON.parse(JSON.stringify(sfx.journey));
+  j.summary.system = { stores: [{ name: 'Example ERP', kind: 'erp', records: 1, ops: ['writes'] }, { name: 'Invoice DB', kind: 'sql', records: 3, ops: ['reads', 'writes'] }] };
+  assert.deepEqual(storesOf(streetModel(j, null)).map((s: AnyRec) => s.name), ['Example ERP', 'Invoice DB']);
+  j.summary.system = { stores: [{ name: 'Invoice DB', kind: 'sql', records: 3, ops: ['reads', 'writes'] }] };
+  assert.deepEqual(storesOf(streetModel(j, null)).map((s: AnyRec) => s.name + ' ' + s.ops.join('+')), ['Invoice DB reads+writes', 'Example ERP writes']);
+});
+
+// ── the same, on the answers lane P captured (core: store and op on markers, system.stores, counted.stores) ──
+const real = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle-stores.json'), 'utf8'));
+const realModel = streetModel(real.journey, new Map(real.nodes.map((n: AnyRec) => [n.id, n])));
+const erpFx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle-erp.json'), 'utf8'));
+const erpModel = streetModel(erpFx.journey, new Map(erpFx.nodes.map((n: AnyRec) => [n.id, n])));
+
+test('captured: every record names Invoice DB, known from the config, and the journey lists one store', () => {
+  for (const s of realModel.screens) for (const c of s.calls) for (const d of c.data) {
+    if (d.kind !== 'record') continue;
+    assert.equal(d.store && d.store.name, 'Invoice DB');
+    assert.equal(d.store.via, 'config', 'the node\'s StoreRef wins over the marker\'s name and kind');
+  }
+  assert.deepEqual(storesOf(realModel), [{ name: 'Invoice DB', kind: 'sql', ops: ['reads', 'writes'] }]);
+  assert.equal(real.journey.summary.counted.stores.n, 1);
+});
+
+test('captured: the ERP read, written and reached on finalize is one data node that reads · writes; the store list names it', () => {
+  const fin = erpModel.screens[1].calls.find((c: AnyRec) => c.path.endsWith('/finalize'));
+  const erp = fin.data.filter((d: AnyRec) => d.kind === 'external');
+  assert.equal(erp.length, 1);
+  assert.equal(erp[0].mode, 'both', 'reads + writes make both; the marker with no op yields');
+  assert.deepEqual([erp[0].store.name, erp[0].store.kind], ['Example ERP', 'erp']);
+  assert.deepEqual(storesOf(erpModel).map((s: AnyRec) => s.name + ' · ' + s.kind), ['Invoice DB · sql', 'Example ERP · erp']);
 });
