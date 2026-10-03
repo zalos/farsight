@@ -67,6 +67,9 @@ export function evaluatePolicy(
   const grants = (permissions?.grants ?? []).filter((g) => g.actions.includes(intent.action));
   if (!grants.length) return { verdict: { allowed: false, reason: `no grant allows ${intent.action}` }, requiresConfirmation: false };
   let closest: string | null = null;
+  // grants are additive: of the grants that allow it, one that needs no confirmation wins over one that
+  // does, whatever order settings lists them in
+  let best: PolicyDecision | null = null;
   for (const g of grants) {
     // a grant names its principals; one that names none is for people only — an agent needs an explicit grant
     const principals = g.principals ?? ['human'];
@@ -76,8 +79,11 @@ export function evaluatePolicy(
     const confirm = g.confirm;
     const agentConfirm = who === 'agent' && (permissions?.agentWrites ?? 'confirm') === 'confirm' && confirm !== 'never';
     const requiresConfirmation = confirm === 'always' || (confirm === 'agent' && who === 'agent') || agentConfirm;
-    return { verdict: { allowed: true, reason: `granted: ${g.actions.join(', ')} for ${principals.join(' and ')}` }, grant: g, requiresConfirmation };
+    const d: PolicyDecision = { verdict: { allowed: true, reason: `granted: ${g.actions.join(', ')} for ${principals.join(' and ')}` }, grant: g, requiresConfirmation };
+    if (!requiresConfirmation) return d;
+    best ??= d;
   }
+  if (best) return best;
   return { verdict: { allowed: false, reason: closest ?? `no grant allows ${intent.action}` }, requiresConfirmation: false };
 }
 
