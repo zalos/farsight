@@ -135,6 +135,7 @@ test('transition: the one whose target category matches, only screen fields, req
     [PRE('KAN-1', U), TR],
     withReread([PRE('KAN-1', U), TR, rec('POST', '/rest/api/3/issue/KAN-1/transitions', 204, null)], 'KAN-1', U),
     [PRE('KAN-1', U, { status: { name: 'Done' } }), { ...TR, response: { transitions: [] } }],
+    [PRE('KAN-1', U), TR],
   );
   assert.equal((await p.apply(s, intent('KAN-1', 'transition', { to: 'in-progress' }, U))).ok, true);
   assert.equal((await p.apply(s, intent('KAN-1', 'transition', { to: 'in-progress', toName: 'In Review' }, U))).ok, true);
@@ -143,6 +144,9 @@ test('transition: the one whose target category matches, only screen fields, req
   assert.equal((await p.apply(s, intent('KAN-1', 'transition', { to: 'done', fields: { resolution: { name: 'Done' }, notOnScreen: 1 } }, U))).ok, true);
   const none = await p.apply(s, intent('KAN-1', 'transition', { to: 'todo' }, U));
   assert.deepEqual(none, { ok: false, error: 'Jira says: no transition from Done to todo' });
+  // the policy's `to` grant checked the category; a name of another category must not slip past it
+  const smuggled = await p.apply(s, intent('KAN-1', 'transition', { to: 'in-progress', toName: 'Done' }, U));
+  assert.deepEqual(smuggled, { ok: false, error: 'Jira says: no transition from To Do to Done (in-progress)' });
   const posts = r.calls.filter((c) => c.method === 'POST').map((c) => c.body);
   assert.deepEqual(posts, [{ transition: { id: '21' } }, { transition: { id: '31' } }, { transition: { id: '41' }, fields: { resolution: { name: 'Done' } } }]);
 });
