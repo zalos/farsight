@@ -284,3 +284,89 @@ test.describe('map — neighbourhood and street', () => {
     expect([...new Set(cardText.match(IDENTIFIER) || [])], 'identifier-shaped words on the business card').toEqual([]);
   });
 });
+
+/**
+ * A street longer than the fixture's: the real Billing cycle answer with one
+ * call made on Invoice list and given eight records (five read, three written),
+ * so the screen makes six calls — the suite's own pattern of shaping an answer
+ * with `page.route` (ADR 8), never a second fixture.
+ */
+async function stubLongStreet(page: Page) {
+  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle$/, async (route) => {
+    const res = await route.fetch();
+    const data = await res.json();
+    const seg = data.summary.segments[1];
+    const api = data.summary.systems.find((r: { kind: string }) => r.kind === 'api').key;
+    let order = 9000;
+    const call = { stepOrder: ++order, depth: 4, nodeId: 'invoice-app::route::POST /invoices/:id/remind', name: 'POST /invoices/:id/remind', kind: 'call', via: 'http', system: api, moment: 0, title: 'Remind the customer about an open invoice.', business: 'Remind the customer about an open invoice.', method: 'POST', path: '/invoices/:id/remind', tier: 0 };
+    const records = Array.from({ length: 8 }, (_, i) => ({ stepOrder: ++order, depth: 5, nodeId: 'invoice-app::table::customer_reminder_log_' + i, name: 'customer_reminder_log_' + i, kind: 'record', via: i < 5 ? 'reads' : 'writes', op: i < 5 ? 'reads' : 'writes', system: 'records', moment: 0, under: call.stepOrder, tier: 0 }));
+    seg.markers = [...seg.markers, call, ...records];
+    await route.fulfill({ response: res, json: data });
+  });
+}
+
+test.describe('map — the street folds a long pathway', () => {
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::toggleFold
+   * @covers packages/server/public/app/surfaces/map.js::streetHtml
+   */
+  test('a screen draws its first four calls and a call its first three data nodes, writes first; each fold opens in place without overlap', async ({ page }) => {
+    await stubLongStreet(page);
+    await mapOn(page);
+    await openStreet(page, true);
+    const calls = page.locator(`.map-pl[data-flow="${FLOW}"][data-si="1"]`);
+    await expect(calls).toHaveCount(4);
+    const moreCalls = page.locator(`.map-fold.calls[data-fold="calls|${FLOW}|1"]`);
+    await expect(moreCalls).toHaveText(/2 more calls/);
+    await expect(moreCalls.locator('.n')).toHaveAttribute('data-tip-id', 'number');
+    // the other screens are short enough to draw whole
+    await expect(page.locator('.map-fold.calls')).toHaveCount(1);
+
+    await moreCalls.click();
+    await expect(calls).toHaveCount(6);
+    await expect(page.locator(`.map-fold.calls[data-fold="calls|${FLOW}|1"]`)).toHaveText(/fewer calls/);
+    // the sixth call: three of its eight records drawn — the three it writes — and five folded
+    const data = page.locator(`.map-pd[data-flow="${FLOW}"][data-si="1"][data-ci="5"]`);
+    await expect(data).toHaveCount(3);
+    await expect(data.locator('.rw')).toHaveText(['writes', 'writes', 'writes']);
+    const moreData = page.locator(`.map-fold.data[data-fold="data|${FLOW}|1|5"]`);
+    await expect(moreData).toHaveText(/5 more/);
+    await moreData.click();
+    await expect(data).toHaveCount(8);
+    // the data node's name reads whole at the street (23 characters: Customer reminder log 0)
+    const clipped = await data.locator('.nm').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth + 1).length);
+    expect(clipped).toBe(0);
+
+    // nothing on the street overlaps after both folds opened, and the district holds it all
+    const report = await page.evaluate((flow) => {
+      const dist = document.querySelector(`.map-district[data-flow="${flow}"]`)!.getBoundingClientRect();
+      const boxes = [...document.querySelectorAll(`.map-district[data-flow="${flow}"] :is(.map-scr,.map-pl,.map-pd,.map-fold)`)].map((e) => e.getBoundingClientRect());
+      let overlaps = 0, outside = 0;
+      for (let i = 0; i < boxes.length; i++) {
+        const a = boxes[i];
+        if (a.right > dist.right + 1 || a.bottom > dist.bottom + 1) outside++;
+        for (let j = i + 1; j < boxes.length; j++) {
+          const b = boxes[j];
+          if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) overlaps++;
+        }
+      }
+      return { overlaps, outside, n: boxes.length };
+    }, FLOW);
+    expect(report.overlaps).toBe(0);
+    expect(report.outside).toBe(0);
+    // no district overlaps its neighbours either, though this one grew
+    const districts = await page.evaluate(() => {
+      const ds = [...document.querySelectorAll('.map-district')].map((d) => d.getBoundingClientRect());
+      let n = 0;
+      for (let i = 0; i < ds.length; i++) for (let j = i + 1; j < ds.length; j++) {
+        const a = ds[i], b = ds[j];
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) n++;
+      }
+      return n;
+    });
+    expect(districts).toBe(0);
+    // and folding back returns to three
+    await page.locator(`.map-fold.data[data-fold="data|${FLOW}|1|5"]`).click();
+    await expect(data).toHaveCount(3);
+  });
+});
