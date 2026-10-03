@@ -149,3 +149,14 @@ test('cursor and JQL: epoch-ms bound, quoted keys, bare ISO accepted', () => {
   assert.equal(buildJql(['KAN'], { since: 1790807566656.7, areas: ['Portal "x"'] }), 'project in ("KAN") AND component in ("Portal \\"x\\"") AND updated >= 1790807566656 ORDER BY updated ASC');
   assert.equal(keyOf('work::acme-jira::ACME-12'), 'ACME-12');
 });
+
+test('markdown → ADF edges: snake_case is not emphasis, a list may follow a line, code takes no other mark', () => {
+  const snake = markdownToAdf('rename foo_bar_baz to qux, keep _this_');
+  const inline = snake.content[0]!.content!;
+  assert.equal(inline[0]!.text, 'rename foo_bar_baz to qux, keep ');
+  assert.deepEqual(inline[1], { type: 'text', text: 'this', marks: [{ type: 'em' }] });
+  assert.deepEqual(markdownToAdf('Steps:\n- one\n- two').content.map((n) => n.type), ['paragraph', 'bulletList']);
+  assert.deepEqual(markdownToAdf('in 2026\n3. not a list').content.map((n) => n.type), ['paragraph'], 'an ordered list interrupts a paragraph only from 1');
+  assert.deepEqual(markdownToAdf('**`x`**').content[0]!.content![0]!.marks, [{ type: 'code' }]);
+  assert.deepEqual(markdownToAdf('[`x`](https://x.test)').content[0]!.content![0]!.marks, [{ type: 'code' }, { type: 'link', attrs: { href: 'https://x.test' } }]);
+});
