@@ -327,6 +327,28 @@ scope, endpoint and breakdown — and computes none of its own: a filter asks `/
 The e2e stub (`e2e/tests/work-stub.ts`) builds the same shapes with the same keys where they exist, and
 `work.hud.count.*` / `work.hud.scope.flow|node` stand-ins where it predates them.
 
+### Map (`surfaces/map.js`, `lib/map-model.js`: `/api/design` flows, one `/api/journey` per journey)
+
+The map computes no number of its own: every chip is a `Counted` the journey summary typed, printed with
+`countedHtml(c, '/api/journey')` and its tip. Before a journey's walk lands, its cover says *reading this journey…*
+(`map.cover.loading`) — the design rows' `built/total` are not typed and are not printed here.
+
+| printed | source | counts | scope | where |
+|---|---|---|---|---|
+| `3 screens` | C:`summary.counted.screens` | screens the journey's design names, in order | journey | district cover and street head |
+| `2 of 3 built` | C:`summary.counted.built` | named screens a page in the code serves, of how many | journey | cover and head; warm when not all are built |
+| `5 actions` | C:`summary.counted.actions` | distinct operations the code calls | journey | cover and head |
+| `6 gates & rules` | C:`summary.counted.gates` (breakdown guards · rules) | checkpoints on the walk | journey | cover and head |
+| `7 test cases` | C:`summary.coverage.journey.counted.tests` (breakdown unit · integration · e2e) | distinct cases reaching the journey | journey | cover and head |
+| `1 declared, not called` | C:`summary.counted.declaredNotCalled` | operations named and not called | journey | cover and head; not drawn at 0 |
+| work chip | C:`/api/work/flow/<id>` `counts.items` | as the Portfolio's | flow | cover and head; not drawn at 0 or without a work source |
+| `1 action` · `2 gates & rules` · `4 test cases` on a screen | C:`segment.counted.actions` · C:`segment.counted.gates` · C:`summary.coverage.segments[i].counted.tests` | as the journey's, over one screen | screen (`journey.scopeHere`) | screen card; the business lens leaves out a zero |
+| ordinal `1` `2` `3` | the screen's place in `summary.segments` | a position, not a count (`map.screen.ordinal`) | journey | screen card |
+| `×0.95` | the board's scale | not a count — the zoom (`map.zoom`) | the board | bottom right |
+
+The plumbing prints no number: a call, a record, a message and a third party are drawn once per screen that reaches
+them, so the same record appears under two screens while the journey's own counts still count it once.
+
 
 ---
 
