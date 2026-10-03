@@ -227,6 +227,12 @@ export function currentLens() {
 /** @group Shell */
 export function cssId(s) { return s.replace(/[^a-zA-Z0-9_-]/g, '_'); }
 /** @group Shell */
+/**
+ * A value as a JS string argument inside an HTML event-handler attribute: `onclick="f(' + jsArg(x) + ')"`.
+ * `esc()` alone is not enough there — the HTML parser decodes `&#39;` back to `'` before the handler runs.
+ * @group Shell
+ */
+export function jsArg(s) { return esc(JSON.stringify(String(s))); }
 export function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 /**

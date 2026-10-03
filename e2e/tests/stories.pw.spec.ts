@@ -117,7 +117,7 @@ test('/api/stories maps the index — by story id, the docs page by its title, t
     'invoices-createinvoiceform--empty', 'invoices-createinvoiceform--with-line-items', 'invoices-createinvoiceform--invalid', 'invoices-createinvoiceform--docs',
   ]);
   const page0 = await request.get('/');
-  expect(page0.headers()['content-security-policy']).toBe(`frame-src 'self' ${SB_URL}`);
+  expect(page0.headers()['content-security-policy']).toBe(`object-src 'none'; base-uri 'self'; frame-src 'self' ${SB_URL}`);
   void page;
 });
 

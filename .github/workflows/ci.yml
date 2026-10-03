@@ -1,7 +1,8 @@
 # CI validation: every push to main and every pull request.
-# Two independent jobs, run in parallel so each reports its own verdict:
+# Three independent jobs, run in parallel so each reports its own verdict:
 #   validate — install, build, typecheck (packages + e2e), unit tests, string/symbol lint
 #   e2e      — install, build, Playwright suite on the real `farsight serve` (see docs/CI.md)
+#   secrets  — gitleaks over the pushed / PR commits, with .gitleaks.toml (see docs/SECURITY.md)
 # Live tracker tests stay off: they run only with FARSIGHT_LIVE=1, which CI never sets.
 name: CI
 
@@ -18,6 +19,27 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # the action lists a PR's commits; it posts no comments (below)
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # gitleaks reads the commits, not only the tree
+
+      # a personal-account repo needs no GITLEAKS_LICENSE (gitleaks-action README);
+      # v3 is the Node 24 release, v2 stopped running when Node 20 left the runners
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_VERSION: 8.30.1 # the config's [[allowlists]] syntax; bump deliberately
+          GITLEAKS_ENABLE_COMMENTS: false
+
   validate:
     name: validate
     runs-on: ubuntu-latest

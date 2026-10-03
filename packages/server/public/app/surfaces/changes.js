@@ -26,7 +26,7 @@
 // (`changes.hiddenInBusiness`). The code register adds the file, its ⧉ link and
 // the commits that touched it.
 
-import { S, esc, expose, currentLens } from '../store.js';
+import { S, esc, jsArg, expose, currentLens } from '../store.js';
 import { t, def } from '../strings.js';
 import { sym, symWord } from '../sym.js';
 import { vsl } from '../lib/graph-render.js';
@@ -228,7 +228,7 @@ function headHtml() {
   const repos = knownRepos();
   const picker = repos.length > 1
     ? '<div class="ch-repos"><span class="hud-label">' + term('changes.repo') + '</span>'
-      + repos.map((r) => '<button class="ch-repo' + (r === ST.repo ? ' on' : '') + '" onclick="chSetRepo(\'' + esc(r) + '\')">' + esc(r) + '</button>').join('')
+      + repos.map((r) => '<button class="ch-repo' + (r === ST.repo ? ' on' : '') + '" onclick="chSetRepo(' + jsArg(r) + ')">' + esc(r) + '</button>').join('')
       + '</div>'
     : '<p class="set-note">' + term('changes.repo') + ': <b>' + esc(ST.repo || none) + '</b></p>';
   // the business lens reads which sync; the commit and the build are a developer's
@@ -377,7 +377,7 @@ function foldRuns(rows) {
 function runRowHtml(f) {
   const first = f.rows[f.rows.length - 1].sync;
   const last = f.rows[0].sync;
-  return '<tr class="ch-run"><td colspan="4"><button class="rel ch-more" onclick="chOpenRun(\'' + esc(f.key) + '\')"'
+  return '<tr class="ch-run"><td colspan="4"><button class="rel ch-more" onclick="chOpenRun(' + jsArg(f.key) + ')"'
     + plainTip(f.rows.length, 'surf.changes.reindexRun', 'surf.scope.spine', '/api/history', null, 'changes.reindexed') + '>'
     + esc(t('surf.changes.reindexRun').replace('{n}', f.rows.length).replace('{a}', first).replace('{b}', last)) + '</button></td></tr>';
 }

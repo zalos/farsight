@@ -5,6 +5,7 @@ dist/
 *.sqlite
 graph.json
 .env
+.env.*
 build/
 .farsight/cache/
 .farsight/farsight.db*
