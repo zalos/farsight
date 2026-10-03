@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine } from './graph.js';
+import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -50,6 +50,18 @@ export interface FarsightConfig {
   tooling?: string[];
   /** the repo's Storybook(s) — where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command. */
   storybook?: StorybookConfig | StorybookConfig[];
+  /** how the workspace's project tags group: dimensions added or renamed, and words for tag values (docs/proposals/dependencies-and-nx.md §2.2) */
+  projects?: ProjectsConfig;
+}
+
+/**
+ * `farsight.config.json → projects`. A dimension with the prefix or the key of a default
+ * (`scope:` → domain, `type:` → type, `platform:` → platform) replaces it; any other is added.
+ * `tagValues[key][value]` is the word a lens prints for a tag value (`type` → `data-access` → *Data access*).
+ */
+export interface ProjectsConfig {
+  tagDimensions?: TagDimension[];
+  tagValues?: Record<string, Record<string, string>>;
 }
 
 /** One Storybook, as `farsight.config.json → storybook` declares it. Farsight never starts it. */
@@ -110,7 +122,7 @@ export interface TestsConfigBlock {
 export function loadConfig(path: string): FarsightConfig | null {
   try {
     const config = JSON.parse(readFileSync(path, 'utf8')) as FarsightConfig;
-    if (config && typeof config === 'object') sanitizeStores(config);
+    if (config && typeof config === 'object') { sanitizeStores(config); sanitizeProjects(config); }
     return config;
   } catch {
     return null;
@@ -148,6 +160,41 @@ export function sanitizeStores(config: FarsightConfig): FarsightConfig {
       if (e && typeof e === 'object' && 'store' in e && typeof e.store !== 'boolean') delete (e as { store?: unknown }).store;
     }
   }
+  return config;
+}
+
+/**
+ * Soft validation of `projects` (docs/proposals/dependencies-and-nx.md §2.2): a dimension without a
+ * string key, prefix and label is dropped, a tag value word that is not a non-empty string is left out,
+ * and a block of the wrong shape becomes empty. Never throws — a config mistake leaves the default
+ * dimensions and the humanized values in place.
+ */
+export function sanitizeProjects(config: FarsightConfig): FarsightConfig {
+  if (config.projects === undefined) return config;
+  const raw = config.projects as unknown;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { delete config.projects; return config; }
+  const r = raw as Record<string, unknown>;
+  const out: ProjectsConfig = {};
+  if (Array.isArray(r.tagDimensions)) {
+    const dims: TagDimension[] = [];
+    for (const d of r.tagDimensions) {
+      if (!d || typeof d !== 'object') continue;
+      const { key, prefix, label } = d as Record<string, unknown>;
+      if (typeof key !== 'string' || !key.trim() || typeof prefix !== 'string' || !prefix.trim()) continue;
+      dims.push({ key: key.trim(), prefix: prefix.trim(), label: typeof label === 'string' && label.trim() ? label.trim() : key.trim() });
+    }
+    if (dims.length) out.tagDimensions = dims;
+  }
+  if (r.tagValues && typeof r.tagValues === 'object' && !Array.isArray(r.tagValues)) {
+    const values: Record<string, Record<string, string>> = {};
+    for (const [key, words] of Object.entries(r.tagValues as Record<string, unknown>)) {
+      if (!words || typeof words !== 'object' || Array.isArray(words)) continue;
+      const kept = Object.entries(words as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string' && !!e[1].trim());
+      if (kept.length) values[key] = Object.fromEntries(kept.map(([v, w]) => [v, w.trim()]));
+    }
+    if (Object.keys(values).length) out.tagValues = values;
+  }
+  config.projects = out;
   return config;
 }
 

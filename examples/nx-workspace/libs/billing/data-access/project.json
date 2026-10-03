@@ -1,0 +1,6 @@
+{
+  "name": "billing-data-access",
+  "projectType": "library",
+  "sourceRoot": "libs/billing/data-access/src",
+  "tags": ["scope:billing", "type:data-access"]
+}
