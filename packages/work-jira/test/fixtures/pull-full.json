@@ -161,10 +161,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -318,10 +318,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -462,10 +462,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -606,10 +606,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -750,10 +750,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -970,10 +970,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -1147,10 +1147,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -1337,10 +1337,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -1514,10 +1514,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -1691,10 +1691,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -1813,10 +1813,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -2125,10 +2125,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -2263,10 +2263,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -2331,10 +2331,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,
@@ -2444,10 +2444,10 @@
        "accountId": "712020:00000000-0000-0000-0000-000000000001",
        "emailAddress": "dev@example.com",
        "avatarUrls": {
-        "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-        "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+        "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+        "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
        },
        "displayName": "Farsight Test",
        "active": true,

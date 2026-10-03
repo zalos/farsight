@@ -1,6 +1,6 @@
 // lib/tooltip.js — one tip primitive for every number and every detail.
 //
-// Jared's brief (2026-09-25): "every number or detail should have a hover tool
+// The owner's brief (2026-09-25): "every number or detail should have a hover tool
 // tip — simple details of text, or complex details such as tables, links… Show
 // on click or hover for more than say 2 seconds." The 2026-09-25 swarm's top
 // complaint was the same fact from the other side: a count on screen with no

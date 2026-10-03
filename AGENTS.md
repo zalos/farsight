@@ -49,8 +49,8 @@ node scripts/pack.mjs               # build installable farsight-cli tarball int
 npm install -g ./build/farsight-cli-*.tgz # the global `farsight` another workspace runs (serve + .mcp.json) — reinstall after every pass, then restart its server
 curl -X POST localhost:4477/api/sync # re-ingest all enabled sources via server
 node scripts/changelog.mjs --dry-run              # the next CHANGELOG section + release notes, from conventional commits since the last tag
-node scripts/release.mjs --dry-run --bump patch   # what a release would bump, write and tag (without --dry-run: commit + tag locally, never pushes)
-gh workflow run release.yml -f bump=patch         # cut a release on GitHub: gates, version commit + tag, pack, smoke test, GitHub Release with the tarball (docs/RELEASING.md)
+node scripts/release.mjs --dry-run --bump patch   # what a release would bump and write (the workflow adds --no-tag --branch 'release/v{version}' --commit-notes; never pushes)
+gh workflow run release.yml -f bump=patch         # open a release PR (main is protected): gates, version commit on release/vX.Y.Z, smoke test, PR; merging it runs publish.yml → tag, GitHub Release with the tarball (docs/RELEASING.md)
 ```
 
 The Claude preview/dev server is defined in `.claude/launch.json` (name: `farsight-viewer`, port 4477). Codex can run the same CLI serve command from the workspace root; there is no `.codex/launch.json`.
@@ -68,7 +68,7 @@ The Claude preview/dev server is defined in `.claude/launch.json` (name: `farsig
 - **esbuild preserves the entry file's shebang** — don't also add a `banner` in `scripts/pack.mjs` (caused a double-shebang crash).
 - oxc-parser's `result.program` may be an object or a JSON string depending on version — `tsjs.ts` handles both; keep that guard.
 - **This repo is public.** Client material, session handoffs and review evidence live outside it (a private folder the owner keeps); never add a client name, a site/org URL, an email, a keychain account name or an absolute home path here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@example.com`, `keychain:farsight/jira-example`, and "the reference app" for the application Farsight was dogfooded on.
-- **`.farsight/settings.json` is local, not tracked** — copy `.farsight/settings.example.json` to start; the server falls back to a one-source workspace without it.
+- **Local config is never tracked; each file has a scrubbed `.example` twin** (CONTRIBUTING.md § Local config): `.farsight/settings.json` ← `.farsight/settings.example.json`, `.claude/settings.local.json` ← `.claude/settings.local.example.json`. Copy the example, never commit a value from the local file; a new local config gets its twin in the same change. The server falls back to a one-source workspace without settings.
 - **Secrets live in the keychain only** (2026-09-30): `keychain:farsight/<provider>-<instance>` references in settings, read in-process by `packages/work/src/secrets.ts`, never an env var or a value in a file; the auto-mode classifier refuses a bare `security find-generic-password` in a shell, so a live check runs the tool or a probe script that prints only the outcome. `GET /api/settings` serves the settings file back and the viewer rewrites it wholesale — a value there would leak.
 - **Work keys only count for configured projects.** `detectWorkKeys` reads `INV-01` (a screen name) as a Jira key; the join (`joinWork`) links only keys whose project is in a work source's scope, and a leading-zero key never links.
 - **`farsight.config.json` is applied inside `ingestRepo()`** (function guards/tags/glossary before the OpenAPI pass, route-shaped guards after it). Never call `applyConfig` again on the result — guard renames are not idempotent.

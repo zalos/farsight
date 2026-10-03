@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,4 +77,17 @@ test('work status and the write verbs print the three verdicts, the dry run and 
   assert.equal(tr.status, 1);
   assert.match(tr.stdout, /the tracker: no — the workflow has no transition out of Done/);
   assert.match(w('show', 'INV-5').stdout, /In Progress · in progress/);
+});
+
+test('work --help, work help and a bare work print the work usage only, outside any git checkout, and write nothing', () => {
+  const bare = mkdtempSync(join(tmpdir(), 'work-cli-help-'));
+  const w = (...args: string[]) => spawnSync(process.execPath, [cli, 'work', ...args], { cwd: bare, encoding: 'utf8' });
+  for (const args of [['--help'], ['help'], ['-h'], ['sync', '--help'], []]) {
+    const r = w(...args);
+    assert.equal(r.status, args.length ? 0 : 1, args.join(' '));
+    assert.match(r.stdout, /^usage:\n {2}farsight work sync/);
+    assert.doesNotMatch(r.stdout, /see your software|farsight design|farsight ingest/);
+    assert.equal(r.stderr, '');
+  }
+  assert.equal(existsSync(join(bare, '.farsight')), false);
 });

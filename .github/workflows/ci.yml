@@ -46,6 +46,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
 
       - uses: pnpm/action-setup@v6 # version from package.json "packageManager"
 
@@ -71,6 +73,8 @@ jobs:
       FARSIGHT_E2E_SYNC_PORT: '4511'
     steps:
       - uses: actions/checkout@v7
+        with:
+          lfs: true
 
       - uses: pnpm/action-setup@v6
 

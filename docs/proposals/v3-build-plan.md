@@ -79,7 +79,7 @@ export interface GraphFragment {
 }
 ```
 
-**Why `BlindSpot` is the keystone:** the boards' honesty ("at least 64% — true value 64–100%", "app-b: routes not yet indexed — shown as fog, never as zero") is currently a sentence a human typed into Figma. To render it from the product, the adapter that *knows* it skipped `SecurityFilterChain` config must say so in a machine-readable way. Every uncertainty range, fog region, and "not yet indexed" chip derives from this array. Without it we would be hand-maintaining the honesty — exactly the failure mode `docs/design-concepts-2026-07.md` prohibits.
+**Why `BlindSpot` is the keystone:** the boards' honesty ("at least 64% — true value 64–100%", "app-b: routes not yet indexed — shown as fog, never as zero") is currently a sentence a human typed into Figma. To render it from the product, the adapter that *knows* it skipped `SecurityFilterChain` config must say so in a machine-readable way. Every uncertainty range, fog region, and "not yet indexed" chip derives from this array. Without it we would be hand-maintaining the honesty — exactly the failure mode `docs/proposals/design-concepts-2026-07.md` prohibits.
 
 ### 2.2 Scope — `packages/core/src/scope.ts` (new)
 

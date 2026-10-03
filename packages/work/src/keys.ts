@@ -29,7 +29,7 @@ export interface DetectedKey {
 }
 
 export interface DetectOptions {
-  /** hosts of configured Jira sites (`acme.atlassian.net`, `jira.acme.com`) */
+  /** hosts of configured Jira sites (`example.atlassian.net`, `jira.example.com`) */
   jiraHosts?: string[];
   /** configured Azure DevOps orgs (names or URLs); non-empty turns on bare `#4711` */
   adoOrgs?: string[];

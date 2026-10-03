@@ -2,7 +2,7 @@
 
 2026-09-23 · branch `feat/change-history`, cut from `main` `f95a03c` · parallel with lane B2 (`feat/front-door`) · spine: [`snapshots.ts`](../../packages/core/src/snapshots.ts) · contract: [`farsight-diff v1`](../contracts/farsight-diff-v1.md) · surface: v3 plan P6 · vocabulary: the clarity phase README
 
-Jared's ask: read git history into the graph, relate it to the releases/changes tab, get point-in-time screenshots and better change management. Line numbers are today's on `main`; the reference app facts at `0a88031`.
+The owner's ask: read git history into the graph, relate it to the releases/changes tab, get point-in-time screenshots and better change management. Line numbers are today's on `main`; the reference app facts at `0a88031`.
 
 **In short:** history becomes four tables beside the snapshot spine, not graph content; releases are declared and tags proposed; point-in-time is the HUD re-rendered at `--as-of sync:N`, which already works, plus design images per sync. Farsight does not grow a browser.
 

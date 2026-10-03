@@ -126,6 +126,11 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   **v0.1.1** is the first release (2026-10-01); a consumer install from the release URL into a clean prefix printed
   `farsight 0.1.1 · commit 00b18dd` and ingested the invoice-app example (87 nodes). Do not squash-merge PRs: the
   changelog reads `<last tag>..HEAD` by commit.
+- **Since 2026-10-03 a release is a release PR** (`main` is protected, no bypass): `release.yml` opens
+  `chore(release): vX.Y.Z` from `release/vX.Y.Z` (version commit + `CHANGELOG.md` + `.github/release-notes/vX.Y.Z.md`,
+  gates and smoke test already run); merging it runs `publish.yml`, which tags the release commit, packs, smoke-tests
+  and creates the GitHub Release. A PR opened with `GITHUB_TOKEN` does not start CI — close/reopen it, or add a
+  `RELEASE_TOKEN` PAT (`docs/RELEASING.md`). First release under this flow not yet rehearsed.
 - **CI on every push and PR** (`ci.yml`): validate (install, build, typecheck, tests, string lint, ~1 min) and e2e
   (Playwright chromium, 109 specs, ~1.5 min) in parallel on Ubuntu; artifacts on failure; the live tracker tests skip
   there. First run on `main` green. → `docs/CI.md`. Watch: `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19.
