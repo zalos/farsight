@@ -131,12 +131,18 @@ export function mountMap(route, el) {
     snapTargets: () => (MAP.prop ? [] : [...MAP.world.querySelectorAll('.map-scr')]),
     onSnap: (scr) => openScreenEl(scr),
     onGestureEnd: () => { MAP.autoFit = null; syncHashToBoard(); },
+    // the rest of a pinch out that just left a screen does not keep zooming the street
+    holdWheel: () => Date.now() < (MAP.holdWheelUntil || 0),
   });
   MAP.board.addEventListener('click', onBoardClick);
   MAP.board.addEventListener('keydown', onBoardKey);
   MAP.stage.querySelector('.map-chrome').addEventListener('click', onChromeClick);
   const host = MAP.stage.querySelector('.map-prop-host');
   host.addEventListener('wheel', onPropWheel, { passive: false });
+  host.addEventListener('pointerdown', onPropPointer);
+  host.addEventListener('pointermove', onPropPointer);
+  host.addEventListener('pointerup', onPropPointer);
+  host.addEventListener('pointercancel', onPropPointer);
   window.addEventListener('resize', onResize);
   document.addEventListener('fullscreenchange', onFullscreen);
   document.addEventListener('click', onDocClick, true);
@@ -1050,8 +1056,30 @@ function onPropWheel(e) {
   if (!MAP.prop || !(e.ctrlKey || e.metaKey)) return;
   e.preventDefault();
   outBudget += e.deltaY > 0 ? e.deltaY : e.deltaY * 0.5;
-  if (outBudget > 140) { outBudget = 0; closeProperty(); }
+  if (outBudget > 140) { outBudget = 0; MAP.holdWheelUntil = Date.now() + 400; closeProperty(); }
   if (outBudget < 0) outBudget = 0;
+}
+
+/** A two-finger pinch out over the property leaves it too (touch screens). */
+const propPtrs = new Map();
+let propPinch = null;
+function onPropPointer(e) {
+  if (e.type === 'pointerdown') {
+    propPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (propPtrs.size === 2) { const [a, b] = [...propPtrs.values()]; propPinch = Math.hypot(a.x - b.x, a.y - b.y); }
+    return;
+  }
+  if (e.type === 'pointermove') {
+    if (!propPtrs.has(e.pointerId)) return;
+    propPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (propPtrs.size === 2 && propPinch) {
+      const [a, b] = [...propPtrs.values()];
+      if (Math.hypot(a.x - b.x, a.y - b.y) / propPinch < 0.78) { propPinch = null; propPtrs.clear(); closeProperty(); }
+    }
+    return;
+  }
+  propPtrs.delete(e.pointerId);
+  if (propPtrs.size < 2) propPinch = null;
 }
 
 // ── keys (keymap.js asks these, only on #/map) ────────────────────────────
