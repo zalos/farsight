@@ -12,6 +12,14 @@ function same(word: string, define?: string): StringEntry {
   return define ? { hud: word, professional: word, define } : { hud: word, professional: word };
 }
 
+// §N — defines shared by a plural and its singular, word for word
+const SCREENS_REACHED = 'Of the screens this journey names, how many the walk through the code reached, starting at its first screen and following what each screen leads to. A screen met twice is one screen. The ones it did not reach are still named; they are counted apart, as not reached.';
+const PART_REACHED = 'Named screens the walk through the code reached. With the ones not reached, they add up to the screens the journey names.';
+const PART_NOT_REACHED = 'Named screens the walk through the code did not get to: a screen nothing on the way leads to, or one not built yet.';
+const COMMITS = 'The application’s commits, each once, that changed this screen’s page, a component it draws or a handler its calls reach, among the commits read for this source. A count of commits, not of lines or files.';
+const PART_LINES = 'Commits whose diff changed lines inside one of these parts.';
+const PART_FILE = 'Commits that changed the file one of these parts lives in, where the lines were not resolved to parts.';
+
 export const MAP_STRINGS: Record<string, StringEntry> = {
   // §A — surface, canvas, street (lane A)
   'nav.map': {
@@ -209,7 +217,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.tab.tests': same('Tests', 'What proves this screen runs: the cases that reach it, whether a run named them, and when that run was.'),
   'map.prop.tab.route': same('Route', 'Where this screen lives: its address in the app, whether it is built or only designed, where it is declared, and the other ways a user arrives at it.'),
   'map.prop.tab.work': same('Work', 'Work items from the connected trackers that name this screen, and what the trackers and the code disagree about.'),
-  'map.prop.tab.changes': same('Changes', 'What changed in the parts of this screen between the latest sync and the one before it.'),
+  'map.prop.tab.changes': same('Changes', 'The application’s commits that changed this screen’s parts, newest first; then, labelled apart, what the index measured between the latest sync and the one before it.'),
 
   // hero
   'map.prop.hero.open': same('open the picture larger', 'Show the design picture of this screen at full size.'),
@@ -282,7 +290,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.work.failed': same('The trackers’ cache did not answer.', 'The request for this screen’s work items failed. Nothing here is a fact about the work.'),
 
   // changes
-  'map.prop.changes.head': same('What changed in this screen’s parts', 'Changes the latest sync measured against the one before it, kept to the page, its components and the handlers its calls reach.'),
+  'map.prop.changes.head': same('What the index changed', 'Not commits: what the latest sync’s reading of the code measured against the sync before it — a part added, removed or moved, an edge whose confidence changed — kept to the page, its components and the handlers its calls reach.'),
   'map.prop.changes.range': same('sync {base} to sync {head}', 'The two syncs compared: the older one first.'),
   'map.prop.changes.noEarlier': same('no earlier sync to compare against', 'Only one sync of this source has been recorded, so there is nothing to measure a change against.'),
   'map.prop.changes.noHistory': same('history is not kept on this server', 'This server has no snapshot store, so no change can be measured.'),
@@ -295,7 +303,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.foot.after': same('After this', 'The screen the user sees next in the journey.'),
   'map.prop.foot.start': same('start of the journey', 'Nothing comes before this screen in the journey.'),
   'map.prop.foot.end': same('end of the journey', 'Nothing comes after this screen in the journey.'),
-  'map.prop.foot.step': same('screen {n} of {m} in {journey}', 'Where this screen sits in the journey, counting its screens in order.'),
+  'map.prop.foot.step': same('screen {n} of {m} reached · {journey}', 'Where this screen sits among the screens the walk through the code reached, in the order a person meets them. The journey’s design may name more screens than the walk reached; when it does, the line below says how many.'),
   'map.prop.foot.alsoIn': same('also in', 'Other journeys that show this same screen. Open one to see the screen in that journey.'),
   // long lists and long texts on a real screen
   'map.prop.more': same('more', 'Show the rest of what was written here, in place.'),
@@ -310,6 +318,34 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.alsoMore': same('{n} more', 'More journeys show this same screen; this opens them in place.'),
   'map.prop.alsoN': same('{n} journeys', 'Other journeys whose screens include this one, beyond the three shown.'),
   'map.prop.foot.go': same('open this screen', 'Go to this screen of the journey.'),
+
+  // §N — one number, one word (lane N, docs/proposals/map-pass-2026-10-03.md): every count on the
+  // Map says its unit and its scope, tests travel with their evidence word, the cover names the owner
+  // and the ERP reach, and the Changes tab reads the application's commits before the index's facts.
+  'count.unit.screensReached': same('{n} reached', SCREENS_REACHED),
+  'count.unit.screensReachedOne': same('1 reached', SCREENS_REACHED),
+  'count.part.screensReached': same('{n} reached by the walk through the code', PART_REACHED),
+  'count.part.screensReachedOne': same('1 reached by the walk through the code', PART_REACHED),
+  'count.part.screensNotReached': same('{n} not reached', PART_NOT_REACHED),
+  'count.part.screensNotReachedOne': same('1 not reached', PART_NOT_REACHED),
+  'map.prop.foot.declared': same('{n} declared, {k} not reached', 'The screens this journey’s design names, reached or not, and how many of them the walk through the code did not reach. The tip on the second number names each one with why: not reached, or not built.'),
+  'map.cover.owner': same('owner · {owner}', 'Who owns this journey, as its design manifest says — the same name the Portfolio prints in its Owner column. Absent when the manifest names nobody.'),
+  'map.cover.erp': same('reaches the ERP · {via}', 'The walk of this journey reaches an outside system the code or the settings name as an ERP. The Portfolio’s column of the same name says the same.'),
+  'map.cover.erpDeclared': same('ERP hand-off declared, not built', 'The contract declares an approval or a posting step for this journey that no code implements yet — the hand-off to the ERP is planned, not built. The Portfolio says declared in the spec, not built.'),
+  'map.prop.changes.commits': same('Commits that touched this screen’s parts', 'The application’s own commits, newest first, that changed the page, one of its components or a handler its calls reach — read from the commit history Farsight keeps for this source.'),
+  'map.prop.changes.countCommits': same('{n} commits', COMMITS),
+  'map.prop.changes.countCommitsOne': same('1 commit', COMMITS),
+  'count.part.commitLines': same('{n} changed lines inside a part', PART_LINES),
+  'count.part.commitLinesOne': same('1 changed lines inside a part', PART_LINES),
+  'count.part.commitFile': same('{n} changed a part’s file', PART_FILE),
+  'count.part.commitFileOne': same('1 changed a part’s file', PART_FILE),
+  'map.prop.changes.how.lines': same('these lines', 'The commit changed lines inside this part, read from its diff.'),
+  'map.prop.changes.how.file': same('its file', 'The commit changed the file this part lives in. Which lines it changed is resolved to parts only for commits that name a work item, so this one is matched by its file.'),
+  'map.prop.changes.notRead': same('no commit history has been read for this source', 'A sync reads the source’s commits when it is a git checkout. None has been read for this one, so no commit can be shown — not that none exists.'),
+  'map.prop.changes.noCommit': same('no commit read touched these parts', 'The commits read for this source were searched, and none changed the page, its components or the handlers its calls reach.'),
+  'map.prop.changes.commitsFailed': same('The commit history did not answer.', 'The request for this screen’s commits failed. Nothing here is a fact about the code.'),
+  'map.prop.changes.by': same('by {author}', 'Who made the commit, as git recorded it.'),
+  'map.prop.changes.partsMore': same('{n} more parts', 'Other parts of this screen the same commit changed, beyond the three named.'),
 
   // §K — keyboard reach, fast travel and stable links (lane K)
   'map.asOf': same('as of sync {n}', 'The sync this board is drawn from, with the day it was taken and, outside the business words, the source commit it read. Every number on the map is as of this sync, so a picture of the map says when it was true.'),

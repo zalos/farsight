@@ -62,7 +62,7 @@ rules) · …` (the scope said once per run of counts that share it); `breakdown
 
 | endpoint / fold | typed counts |
 |---|---|
-| `GET /api/journey?entry=` · `journeySummary()` | `summary.counted.{screens, built, steps, planned, gates, checks, decisions, notInWords, inWords, actions, again, declaredNotCalled, actionStops, systems, setup, deferred, repeats, cutPoints, choices}` |
+| `GET /api/journey?entry=` · `journeySummary()` | `summary.counted.{screens, screensReached, built, steps, planned, gates, checks, decisions, notInWords, inWords, actions, again, declaredNotCalled, actionStops, systems, setup, deferred, repeats, cutPoints, choices}` |
 | | `summary.segments[i].counted.{actionStops, actions, gates, checks, decisions, notInWords, inWords}` (scope *on this screen*) |
 | | `summary.coverage.journey` and `summary.coverage.segments[i]`: `.counted.{tests, e2e, unit, integration, observed, runReports}`, `.observation`, `.evidenceWord.{cls, key, biz}` |
 | | `summary.coverage.moments[i][k]` — **new**, one slim entry per action (`segments[i].moments[k]`): `{chip, observedBy?, evidenceWord, counted, observation?, run?}`, scope *in this action* |
@@ -222,6 +222,10 @@ reads `tree-changed` (*same commit — the working tree differs from HEAD*) and 
 re-indexes; the notes' `n re-indexed on a newer build` adds `(k of them read a working tree that differs from HEAD)`
 (§2 #14).
 
+`GET /api/history/touching?repo=&nodes=` (the Map's Changes tab) answers the commits that changed a set of parts with
+`counted.commits` — scope *on this screen*, split by how each was matched (lines · file) — and `read`, the commits the
+history holds for the repository (see `### Map`, Property).
+
 ### Tests (`/api/tests`)
 
 | printed | source | counts | scope | siblings |
@@ -244,6 +248,13 @@ re-indexes; the notes' `n re-indexed on a newer build` adds `(k of them read a w
 `122 shown of 1678` (`chrome.shownOf`, `graph-render.js`: the Code map's filtered node count over the scoped
 graph), `sync 64` (`meta.sync`), `type to search n nodes…` (`palette.hint`: every node loaded), `synced: n
 nodes, e edges` (settings, the last sync's totals). Not contradictory; not typed.
+
+**Tag chips** (`buildChips()` in `shell.js`): `test · 1439` counts the **nodes tagged** `test` in scope, and every
+test node is tagged — the cases *and* the run-level coverage reports (`test.runLevel`). The Tests page's
+*tests indexed* `1429` counts **cases** (`counts.cases`, coverage reports apart). On the reference app the 10 between
+them are its 10 coverage reports. Both now say their unit: the chip's tip splits it `1429 test cases · 10 coverage
+reports` (only when every tagged node is a test, so the split adds up), and the *tests indexed* define says a report
+is not a case (lane N, 2026-10-03).
 
 ### MCP and CLI
 
@@ -335,15 +346,17 @@ The map computes no number of its own: every chip is a `Counted` the journey sum
 
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
-| `3 screens` | C:`summary.counted.screens` | screens the journey's design names, in order | journey | district cover and street head |
+| `3 screens` | C:`summary.counted.screens` (breakdown `count.part.screensReached` · `count.part.screensNotReached`) | screens the journey names — its design's, else the walk's — in order, each once | journey | district cover and street head; the tip splits it into reached by the walk / not reached |
+| `10 reached` | C:`summary.counted.screensReached` | named screens a segment of the walk opens on, each once — the street's screens | journey | cover and head beside `14 screens`, drawn only when fewer than the screens named (lane N, 2026-10-03; on the reference app's POC journey 14 named · 10 reached · 23 stops, the drill's unit) |
 | `2 of 3 built` | C:`summary.counted.built` | named screens a page in the code serves, of how many | journey | cover and head; warm when not all are built |
 | `5 actions` | C:`summary.counted.actions` | distinct operations the code calls | journey | cover and head |
 | `6 gates & rules` | C:`summary.counted.gates` (breakdown guards · rules) | checkpoints on the walk | journey | cover and head |
-| `7 test cases` | C:`summary.coverage.journey.counted.tests` (breakdown unit · integration · e2e) | distinct cases reaching the journey | journey | cover and head |
+| `7 test cases` + its evidence word | C:`summary.coverage.journey.counted.tests` (breakdown unit · integration · e2e) beside `summary.coverage.journey.evidenceWord` (`lib/map-chips.js` `mapTestsChips`) | distinct cases reaching the journey, and the class of the strongest evidence | journey | cover and head; the word is the Portfolio's for the same fold (`/api/tests?flow=` and `/api/journey` agree on all 18 of the reference app's journeys), *not built* on `sharedEvidence`; never a count of tests without its class |
+| `owner · Billing team` · `reaches the ERP · Example ERP` | `/api/design` flow `owner`; `summary.systems[].externalKind === 'erp'` (else a declared approve/post/sync operation: *ERP hand-off declared, not built*) | not counts — the Portfolio's Owner and Reaches-the-ERP columns, same rule | journey | cover and head; absent when the manifest names nobody or nothing reaches an ERP |
 | `1 declared, not called` | C:`summary.counted.declaredNotCalled` | operations named and not called | journey | cover and head; not drawn at 0 |
 | `1 data store` | C:`summary.counted.stores` (breakdown holding records · outside systems) | data stores the journey touches, each once by name — a database its records live in (named by the code or the settings), an outside system it uses as a store; a record whose store nobody named is not counted | journey | cover and head; not drawn at 0 |
 | work chip | C:`/api/work/flow/<id>` `counts.items` | as the Portfolio's | flow | cover and head; not drawn at 0 or without a work source |
-| `1 action` · `2 gates & rules` · `4 test cases` on a screen | C:`segment.counted.actions` · C:`segment.counted.gates` · C:`summary.coverage.segments[i].counted.tests` | as the journey's, over one screen | screen (`journey.scopeHere`) | screen card; the business lens leaves out a zero |
+| `1 action` · `2 gates & rules` · `4 test cases` + evidence word on a screen | C:`segment.counted.actions` · C:`segment.counted.gates` · C:`summary.coverage.segments[i].counted.tests` beside `coverage.segments[i].evidenceWord` (`MapScreen.chips.evidence`) | as the journey's, over one screen | screen (`journey.scopeHere`) | screen card; the business lens leaves out a zero; a non-zero tests count always carries its word |
 | ordinal `1` `2` `3` | the screen's place in `summary.segments` | a position, not a count (`map.screen.ordinal`) | journey | screen card |
 | `×0.95` | the board's scale | not a count — the zoom (`map.zoom`) | the board | bottom right |
 | `▸ 5 more` beside a call | `plainTip(n, 'map.fold.data', 'map.fold.scopeCall', '/api/journey')`: the call's own data markers (`MapCall.data`, from the segment's record · message · external markers) beyond the 3 drawn | records, messages and third parties this call reaches that are folded | one call on one screen | the street's plumbing; drawn only when 2 or more are folded |
@@ -362,7 +375,7 @@ stores itself.
 
 Every number the property prints is a `Counted` the `/api/journey` answer (or `/api/work/links`) already carries,
 handed on as the same object — `packages/server/test/map-property-model.test.ts` asserts identity, not equality. A
-tab whose subject nothing types prints **no number**: Overview, UX, Route and Changes.
+tab whose subject nothing types prints **no number**: Overview, UX, Route and Changes (the Changes tab's commit group prints its own `Counted` on its head once it has loaded, never on the tab).
 
 | printed | source | counts | scope | siblings |
 |---|---|---|---|---|
@@ -376,7 +389,10 @@ tab whose subject nothing types prints **no number**: Overview, UX, Route and Ch
 | Work tab `N` · Work head | `/api/work/links?node=<page>` → `counts.items` | work items linked to the screen's page node, by state | node (`count.scope.node`) | the journey header's work chip counts the whole flow (`/api/work/flow`); asked only when a work source is configured |
 | `×2` beside a gate | `segments[i].gates[].count` (viewer, `plainTip` → `map.prop.times`) | times the walk of this screen met that checkpoint | screen | Σ over the rows is the screen's `counted.checks` |
 | `2 more that nobody put in plain words` (business) | `jrnGatesShown(rows).mute` (viewer, `plainTip` → `map.prop.gates.mute`) | gates on the screen whose only name is the code's | screen | drawn + mute = `counted.gates` |
-| `screen 2 of 3 in Billing cycle` | the screen's position in `model.screens` | a position, not a count | journey | — |
+| `screen 2 of 3 reached · Billing cycle` | the position in `model.screens`; the `3` is C:`summary.counted.screensReached` (same object, `placeOf()`) when it counts the street's rows, else the rows with a plain tip | a position among the screens the walk reached | journey | the cover's `screens` counts the named ones; the drill's `stop n of t` counts stops — three units, three names |
+| `14 declared, 4 not reached` (only when the design names screens the walk missed) | C:`summary.counted.screens` · `summary.user` minus the segments' screens (`placeOf().notReached`, `plainTip` → `count.part.screensNotReached`, rows: each screen with `journey.absent.notReached` or `.notBuilt`) | named screens; named screens no segment opens on | journey | the second number's rows are the not-reached part of the screens breakdown |
+| Changes · *Commits that touched this screen's parts* head `12` | C:`/api/history/touching` `counted.commits` (breakdown `count.part.commitLines` · `count.part.commitFile`) | distinct commits that changed the page, a component it draws or a handler its calls reach, among the commits read for the source (`read`) | screen (`journey.scopeHere`) | matched by lines where a keyed commit's hunks were resolved (`commit_node`), else by file (`commit_file`, whole-path suffix); `read: 0` prints *no commit history has been read*, not *none* |
+| `3 more parts` on a commit row | viewer: the commit's `parts` beyond the three named (`plainTip` → `map.prop.changes.partsMore`) | parts of this screen the commit changed | screen | — |
 | `show all 273` under a capped list | the list's own `Counted` (`counted.tests`, `counted.gates`, `counted.decisions`, `counted.runReports`, `counts.items`) when it counts exactly the rows; else the rows on screen (viewer, `plainTip` → `map.prop.listRows`) | the rows the list holds | screen | the tab's number when the list is the tab's subject; never a number of its own |
 | `19 stories on 5 parts` (more than three parts with stories) | viewer over `node.stories` of `screenStoryIds()` (`plainTip` → `map.prop.storiesN` with the per-part breakdown; `map.prop.storyParts`) | stories on the parts of the screen that have any · those parts | screen | opened, each part's chip prints its own `n stories` |
 | `3 more` in *also in* | viewer: other flows rendering the page beyond the three shown (`plainTip` → `map.prop.alsoN`) | journeys | the graph | — |

@@ -628,6 +628,41 @@ export class SnapshotDb {
     }[]).map((r) => ({ node: r.node, path: r.path, fileOnly: r.file_only === 1 }));
   }
 
+  /**
+   * The commits that changed any of `parts` — the Map's Changes tab (map-pass-2026-10-03 §3 lane N).
+   * A part is `{ node, path }`, its path relative to the **source** root; recorded file paths are
+   * relative to the **repository** root, so a file matches when it is the path or ends in `/path`.
+   * A part is credited `lines` when the commit's hunks were resolved to it (`commit_node`, done for
+   * keyed commits), else `file`. Newest first; each commit once, every part it touched listed.
+   */
+  commitsTouching(repo: string, parts: readonly { node: string; path?: string }[]): {
+    sha: string; at: string; author: string; subject: string; parts: { node: string; how: 'lines' | 'file' }[];
+  }[] {
+    const by = new Map<string, Map<string, 'lines' | 'file'>>();
+    const credit = (sha: string, node: string, how: 'lines' | 'file') => {
+      const m = by.get(sha) ?? new Map<string, 'lines' | 'file'>();
+      if (m.get(node) !== 'lines') m.set(node, how);
+      by.set(sha, m);
+    };
+    const nodeQ = this.db.prepare('SELECT sha, file_only FROM commit_node WHERE repo = ? AND node = ?');
+    const fileQ = this.db.prepare('SELECT DISTINCT sha FROM commit_file WHERE repo = ? AND (path = ? OR substr(path, ?) = ?)');
+    for (const p of parts) {
+      for (const r of nodeQ.all(repo, p.node) as { sha: string; file_only: number }[]) credit(r.sha, p.node, r.file_only === 1 ? 'file' : 'lines');
+      if (!p.path) continue;
+      const tail = '/' + p.path;
+      for (const r of fileQ.all(repo, p.path, -tail.length, tail) as { sha: string }[]) credit(r.sha, p.node, 'file');
+    }
+    if (!by.size) return [];
+    const rowQ = this.db.prepare('SELECT sha, at, author, subject FROM "commit" WHERE repo = ? AND sha = ?');
+    const out: { sha: string; at: string; author: string; subject: string; parts: { node: string; how: 'lines' | 'file' }[] }[] = [];
+    for (const [sha, m] of by) {
+      const r = rowQ.get(repo, sha) as { sha: string; at: string; author: string; subject: string } | undefined;
+      if (!r) continue;
+      out.push({ sha: r.sha, at: r.at, author: r.author, subject: r.subject, parts: [...m].map(([node, how]) => ({ node, how })) });
+    }
+    return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.sha.localeCompare(b.sha)));
+  }
+
   /** The key rules the last spine read of `repo` applied, or undefined when none was recorded. */
   spineReadSig(repo: string): string | undefined {
     const r = this.db.prepare('SELECT keysig FROM spine_read WHERE repo = ?').get(repo) as { keysig: string } | undefined;
