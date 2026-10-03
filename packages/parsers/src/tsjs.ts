@@ -138,6 +138,8 @@ interface HttpCallSite {
   method?: string;
   path: string;
   line?: number;
+  /** the fetch wrapper this call goes through, when the caller is not the one that runs `fetch` */
+  wrapper?: string;
   deferred: boolean;
   tx: boolean;
 }
@@ -163,16 +165,21 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const resolveAlias = createAliasResolver(repoRoot);
   // call-site `line` (1-based, in the caller's file) orders callees so a
   // journey can replay them in the order the code runs
-  const pendingCalls: { fromId: string; file: string; callee: string; line?: number; deferred: boolean; tx: boolean }[] = [];
+  const pendingCalls: { fromId: string; file: string; callee: string; line?: number; deferred: boolean; tx: boolean; argsKey?: string }[] = [];
   const pendingRenders: { fromId: string; file: string; callee: string; line?: number; jsx?: true; deferred: boolean; tx: boolean }[] = [];
   const httpCalls: HttpCallSite[] = [];
+  // functions whose `fetch` takes its URL from a parameter (see FetchWrapper), by node id
+  const fetchWrappers = new Map<string, FetchWrapper>();
+  // calls with their arguments summarised, resolved in pass 2 — wrapper callers become fetch sites
+  const wrapperCallArgs = new Map<string, (ArgInfo | undefined)[]>();
+  const resolvedCalls: { fromId: string; toId: string; key: string; line?: number; deferred: boolean; tx: boolean }[] = [];
   // SQL driver specifier → the files that import it (the `sdk` store rule)
   const sqlDrivers = new Map<string, string[]>();
   // Drizzle-style ops name the table via an identifier argument — resolution
   // (imports, barrels, pgTable declarations) has to wait for pass 2
   const pendingDbOps: { fromId: string; file: string; tableName: string; op: string; write: boolean; code: string; line?: number; sql?: boolean; deferred: boolean; tx: boolean }[] = [];
   // a.b.method(…) — resolved in pass 2 to the one class method of that name (DI by name, not by type)
-  const pendingMethodCalls: { fromId: string; file: string; method: string; receiver: string; line?: number; deferred: boolean; tx: boolean }[] = [];
+  const pendingMethodCalls: { fromId: string; file: string; method: string; receiver: string; line?: number; deferred: boolean; tx: boolean; argsKey?: string }[] = [];
   const methodIndex = new Map<string, { nodeId: string; cls: string; file: string }[]>();
   // `this.<field>.<…>.<fn>()` inside a class — a callback the constructor was handed;
   // pass 2 matches it against the object literal of a `new Class({ … })` somewhere else
@@ -594,7 +601,16 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       // Runs once per declared function and again, recursively, for every callback
       // it stores as an object-literal property (01 §2.3.1).
       const walkedCallbacks = new Set<string>();
+      // the declared function's own parameters — a callback body has its own, and is not a wrapper here
+      const ownParams = paramMapOf(d.node);
       const walkBody = (bodyNode: AstNode | null, fromId: string, hostPath: string, hostGroup?: string): void => {
+        const pm = fromId === id ? ownParams : new Map<string, ParamRef>();
+        // a call's arguments, summarised once and kept under a key the pass-2 resolution carries back
+        const keepArgs = (b: AstNode): string => {
+          const key = `${fromId}@${b.start ?? 0}`;
+          wrapperCallArgs.set(key, ((b.arguments as AstNode[]) ?? []).map((a) => argInfoOf(a, pm)));
+          return key;
+        };
         // queue clients bound inside this body: `const q = svc.getQueueClient(NAME)` → q → NAME
         const queueVars = new Map<string, { literal?: string; ref?: string }>();
         walk(bodyNode, (b, bodyParents) => {
@@ -671,7 +687,15 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             const url = stringValue(args[0]);
             const at = line(b.start ?? 0);
             const verb = fetchMethod(args[1]);
-            if (url) httpCalls.push({ fromId, method: verb, path: normalizePath(url), line: at, ...f });
+            const urlInfo = argInfoOf(args[0], pm);
+            // a URL built from this function's own parameter: the function is a fetch wrapper, and
+            // its callers are the fetch sites (pass 2). A class whose calls reach a known host or a
+            // declared system keeps the externals path below.
+            const hostBound = !!d.cls && (classHosts.has(d.cls) || declaredClassExternals.has(`${file}::${d.cls}`));
+            if (urlInfo?.url && isWrapperUrl(urlInfo.url, url) && !hostBound) {
+              if (!fetchWrappers.has(fromId)) fetchWrappers.set(fromId, { url: urlInfo.url, method: fetchMethodSpec(argInfoOf(args[1], pm), args.length > 1) });
+            }
+            else if (url) httpCalls.push({ fromId, method: verb, path: normalizePath(url), line: at, ...f });
             // a class that keeps its base URL in a constant is talking to that host even
             // when the URL itself is assembled somewhere else (01 §2.3.4 R4b)
             else if (d.cls && classHosts.has(d.cls)) {
@@ -742,7 +766,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
           }
           // this.method() inside a class — the sibling method in the same file
           if (chain.length === 2 && chain[0] === 'this' && d.cls) {
-            pendingCalls.push({ fromId, file, callee: `${d.cls}.${chain[1]}`, line: line(b.start ?? 0), ...f });
+            pendingCalls.push({ fromId, file, callee: `${d.cls}.${chain[1]}`, line: line(b.start ?? 0), argsKey: keepArgs(b), ...f });
             const ck = `${file}::${d.cls}`;
             classThisCalls.set(ck, [...(classThisCalls.get(ck) ?? []), { fromId, callee: chain[1]!, method: methodLiteral(args[0]), line: line(b.start ?? 0) }]);
             return;
@@ -763,7 +787,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
           }
           // plain calls to local/imported symbols
           if (chain.length === 1 && /^[a-zA-Z_$]/.test(chain[0]!)) {
-            pendingCalls.push({ fromId, file, callee: chain[0]!, line: line(b.start ?? 0), ...f });
+            pendingCalls.push({ fromId, file, callee: chain[0]!, line: line(b.start ?? 0), argsKey: keepArgs(b), ...f });
           }
           // a.b.method(…) — when the receiver's type is declared, pass 2 follows the type
           // to its production implementers, whatever the method is called: a typed receiver
@@ -778,7 +802,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
               pendingTypedCalls.push({ fromId, file, root: rootType, path: chain.slice(1, -1), method: tail, line: line(b.start ?? 0), ...f,
                 fallback: { kind: 'method', receiver: chain[chain.length - 2]! } });
             } else if (!BUILTIN_METHODS.has(tail)) {
-              pendingMethodCalls.push({ fromId, file, method: tail, receiver: chain[chain.length - 2]!, line: line(b.start ?? 0), ...f });
+              pendingMethodCalls.push({ fromId, file, method: tail, receiver: chain[chain.length - 2]!, line: line(b.start ?? 0), argsKey: keepArgs(b), ...f });
             }
           }
           // schema.parse / schema.safeParse → validates
@@ -1138,6 +1162,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     const targetId = hit?.id;
     if (!targetId || targetId === call.fromId) continue;
     const target = nodes.get(targetId);
+    if (call.argsKey) resolvedCalls.push({ fromId: call.fromId, toId: targetId, key: call.argsKey, line: call.line, deferred: call.deferred, tx: call.tx });
     const kind: GraphEdge['kind'] =
       target?.kind === 'rule' ? 'validates' : target?.kind === 'guard' ? 'guards' : 'calls';
     const key = `${kind}|${call.fromId}|${targetId}`;
@@ -1338,6 +1363,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     }
     if (pool.length !== 1) continue;
     const target = pool[0]!;
+    if (mc.argsKey) resolvedCalls.push({ fromId: mc.fromId, toId: target.nodeId, key: mc.argsKey, line: mc.line, deferred: mc.deferred, tx: mc.tx });
     const key = `calls|${mc.fromId}|${target.nodeId}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
@@ -1414,6 +1440,34 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     else addEdge('consumes', qId, qo.fromId, withFlags({ line: qo.line ?? 0 }, qo));
   }
 
+  // ── fetch wrappers: each caller of a wrapper is a fetch site ───────
+  // Innermost first: a caller whose URL is still one of its own parameters becomes a wrapper in
+  // turn (`post(path) → apiFetch(path, { method: 'POST' })`), and its callers are resolved on the
+  // next round — the outer wrapper's literal method wins. Four rounds bound the chain.
+  {
+    let frontier = new Set(fetchWrappers.keys());
+    const done = new Set<string>();
+    for (let round = 0; round < 4 && frontier.size; round++) {
+      const next = new Set<string>();
+      for (const rc of resolvedCalls) {
+        if (!frontier.has(rc.toId) || rc.fromId === rc.toId) continue;
+        const siteKey = `${rc.key}→${rc.toId}`;
+        if (done.has(siteKey)) continue;
+        done.add(siteKey);
+        const seen = throughWrapper(fetchWrappers.get(rc.toId)!, wrapperCallArgs.get(rc.key) ?? []);
+        if (hasParam(seen.url)) {
+          if (!fetchWrappers.has(rc.fromId)) { fetchWrappers.set(rc.fromId, seen); next.add(rc.fromId); }
+          continue;
+        }
+        const path = normalizePath(renderUrl(seen.url));
+        // a URL that is nothing but holes says nothing about where the call goes
+        if (!/[A-Za-z0-9]/.test(path.replace(/:param/g, ''))) continue;
+        httpCalls.push({ fromId: rc.fromId, ...('lit' in seen.method ? { method: seen.method.lit } : {}), path, line: rc.line, deferred: rc.deferred, tx: rc.tx, wrapper: rc.toId });
+      }
+      frontier = next;
+    }
+  }
+
   // ── pass 3: stitch fetch() call sites to routes ─────────────────
   // Unmatched calls are never dropped: another host → an `external` node
   // named by host; a relative path no local route serves → an `unknown` "?"
@@ -1421,7 +1475,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   // declares the route. Every http edge carries its resolution.
   const routes = [...nodes.values()].filter((n) => n.kind === 'route');
   for (const hc of httpCalls) {
-    const meta = withFlags({ ...(hc.method ? { method: hc.method } : {}), path: hc.path, ...(hc.line != null ? { line: hc.line } : {}) }, hc)!;
+    const meta = withFlags({ ...(hc.method ? { method: hc.method } : {}), path: hc.path, ...(hc.line != null ? { line: hc.line } : {}), ...(hc.wrapper ? { wrapper: hc.wrapper } : {}) }, hc)!;
     const abs = hc.path.match(/^(https?:\/\/[^/]+)(\/.*)?$/);
     if (abs) {
       const host = abs[1]!.replace(/^https?:\/\//, '');
@@ -1450,6 +1504,16 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     if (!hc.method && atPath.length === 1) {
       edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: atPath[0]!.id, meta,
         resolution: { status: 'heuristic', technique: 'fetch→route', confidence: 'MEDIUM', note: 'the method is not a literal; the only route at this path' } });
+      continue;
+    }
+    // several routes at the path and no method the code names: the GET route is assumed — fetch's
+    // own default — and said so on the edge (`meta.methodAssumed`), the others kept as candidates
+    const assumed = !hc.method && atPath.length > 1 ? atPath.find((r) => r.name.split(' ')[0] === 'GET') : undefined;
+    if (assumed) {
+      const others = atPath.filter((r) => r !== assumed).map((r) => r.id);
+      edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: assumed.id, meta: { ...meta, methodAssumed: 'GET', candidates: others.join(', ') },
+        resolution: { status: 'heuristic', technique: 'fetch→route', confidence: 'MEDIUM', candidates: others,
+          note: `the method is not a literal; ${atPath.length} routes serve this path and the GET one is assumed` } });
       continue;
     }
     // an unknown method stays unknown in the stub's name (`? /x`) — stitching needs a method to match on
@@ -1708,6 +1772,192 @@ function hasDirective(node: AstNode | null | undefined, directive: string): bool
   }
   return false;
 }
+
+// ── fetch wrappers: a function whose `fetch` takes its URL (and maybe its method) from a parameter ──
+// `apiFetch(path, init)` → `fetch(BASE + path, { method: init.method, … })`. Its callers are the
+// fetch sites: the path comes from the caller's argument, the method from the caller's literal.
+
+/** A parameter of the function being walked, or one property of a destructured / object parameter. */
+interface ParamRef { index: number; prop?: string }
+/** A URL as the code builds it: literal text, a parameter, or something else (`:param`). */
+type UrlPart = string | ParamRef | null;
+/** What a call argument is, as far as wrapper propagation needs to know. */
+interface ArgInfo {
+  /** a string, template or `+` concatenation, or a parameter passed straight through */
+  url?: UrlPart[];
+  /** the argument is (a member of) one of the caller's parameters */
+  param?: ParamRef;
+  /** an object literal: its own properties, and the parameters it spreads */
+  props?: Record<string, ArgInfo>;
+  spreads?: ParamRef[];
+}
+/** Where a wrapper's method comes from: a literal it writes, a parameter, or nowhere it can say. */
+type MethodSpec = { lit: string } | { unknown: true } | { from: ParamRef; how: 'obj' | 'value' };
+interface FetchWrapper { url: UrlPart[]; method: MethodSpec }
+
+/** name → the parameter it is: plain, defaulted, a TS parameter property, or a destructured field. */
+function paramMapOf(decl: AstNode): Map<string, ParamRef> {
+  const out = new Map<string, ParamRef>();
+  paramsOf(decl).forEach((p0, index) => {
+    let p = p0.type === 'TSParameterProperty' && isNode(p0.parameter) ? (p0.parameter as AstNode) : p0;
+    if (p.type === 'AssignmentPattern' && isNode(p.left)) p = p.left as AstNode;
+    if (p.type === 'Identifier' && typeof p.name === 'string') out.set(p.name, { index });
+    else if (p.type === 'ObjectPattern') {
+      for (const prop of ((p.properties as AstNode[]) ?? [])) {
+        const key = prop.key as AstNode | undefined;
+        const keyName = key && typeof (key.name ?? key.value) === 'string' ? String(key.name ?? key.value) : undefined;
+        let val = prop.value as AstNode | undefined;
+        if (isNode(val) && val.type === 'AssignmentPattern') val = val.left as AstNode;
+        if (keyName && isNode(val) && val.type === 'Identifier') out.set(String(val.name), { index, prop: keyName });
+      }
+    }
+  });
+  return out;
+}
+
+/** The parameter an expression is — `path`, `init`, `init.method`, `opts.url` — or undefined. */
+function paramRefOf(n: unknown, pm: Map<string, ParamRef>): ParamRef | undefined {
+  if (!isNode(n)) return undefined;
+  if (n.type === 'Identifier') return pm.get(String(n.name));
+  if ((n.type === 'MemberExpression' || n.type === 'StaticMemberExpression') && !n.computed && isNode(n.object) && isNode(n.property)) {
+    const base = paramRefOf(n.object, pm);
+    if (base && !base.prop) return { index: base.index, prop: String((n.property as AstNode).name) };
+  }
+  if (n.type === 'ChainExpression' || n.type === 'TSAsExpression' || n.type === 'TSNonNullExpression') return paramRefOf(n.expression, pm);
+  return undefined;
+}
+
+/** Summarise a call argument against the caller's parameters (see ArgInfo). */
+function argInfoOf(n: unknown, pm: Map<string, ParamRef>, depth = 0): ArgInfo | undefined {
+  if (!isNode(n) || depth > 3) return undefined;
+  const ref = paramRefOf(n, pm);
+  if (ref) return { param: ref, url: [ref] };
+  if ((n.type === 'Literal' || n.type === 'StringLiteral') && typeof n.value === 'string') return { url: [n.value] };
+  if (n.type === 'TemplateLiteral') {
+    const quasis = (n.quasis as AstNode[]) ?? [];
+    const exprs = (n.expressions as AstNode[]) ?? [];
+    const url: UrlPart[] = [];
+    quasis.forEach((q, i) => {
+      url.push((q.value as { cooked?: string })?.cooked ?? '');
+      if (i < exprs.length) url.push(paramRefOf(exprs[i], pm) ?? null);
+    });
+    return { url };
+  }
+  if (n.type === 'BinaryExpression' && n.operator === '+') {
+    const l = argInfoOf(n.left, pm, depth + 1)?.url ?? [null];
+    const r = argInfoOf(n.right, pm, depth + 1)?.url ?? [null];
+    return { url: [...l, ...r] };
+  }
+  if (n.type === 'ObjectExpression') {
+    const props: Record<string, ArgInfo> = {};
+    const spreads: ParamRef[] = [];
+    for (const p of ((n.properties as AstNode[]) ?? [])) {
+      if (p.type === 'SpreadElement') { const r = paramRefOf(p.argument, pm); if (r) spreads.push(r); continue; }
+      if (p.type !== 'Property' && p.type !== 'ObjectProperty') continue;
+      const key = p.key as AstNode | undefined;
+      const keyName = key && !p.computed ? String(key.name ?? key.value) : undefined;
+      if (!keyName) continue;
+      props[keyName] = argInfoOf(p.value, pm, depth + 1) ?? {};
+    }
+    return { props, spreads };
+  }
+  return undefined;
+}
+
+/**
+ * Whether a URL still waits on a parameter for where it goes: a parameter comes before any literal
+ * text (`${BASE}${path}`, `path`, `opts.url`). A parameter after literal text (`/invoices/${id}`)
+ * is a path parameter — the call's destination is already known.
+ */
+const hasParam = (url: UrlPart[]): boolean => {
+  for (const x of url) {
+    if (x === null) continue;
+    if (typeof x === 'string') { if (x) return false; continue; }
+    return true;
+  }
+  return false;
+};
+/**
+ * A `fetch` URL that makes its function a wrapper: a parameter supplies the path's tail
+ * (`path`, `${BASE}${path}`, `/api${path}`), or leads a URL the direct case cannot read at all
+ * (`path + '?x'`). A parameter followed by a literal path (`${base}/healthz`) is a host, and one
+ * after a `/` or `=` (`/claims/${id}`) fills a known path: the direct case keeps those, as before.
+ */
+function isWrapperUrl(url: UrlPart[], direct: string | null): boolean {
+  const parts = url.filter((x) => x !== '');
+  const last = parts[parts.length - 1];
+  if (last && typeof last === 'object') {
+    // `/api/claims/${id}` and `?id=${id}`: the parameter fills a segment or a value of a known path
+    const before = parts[parts.length - 2];
+    return !(typeof before === 'string' && /[/=&?:.\-_]$/.test(before));
+  }
+  return direct == null && hasParam(url);
+}
+
+/** The one literal string a URL is, when it has no hole: `'POST'` → POST. */
+const literalOf = (a: ArgInfo | undefined): string | undefined =>
+  a?.url && a.url.length === 1 && typeof a.url[0] === 'string' ? a.url[0] : undefined;
+
+/** How a `fetch(url, init)` inside a wrapper picks its method (fetch's own default is GET). */
+function fetchMethodSpec(init: ArgInfo | undefined, given: boolean): MethodSpec {
+  if (!given) return { lit: 'GET' };
+  if (!init) return { unknown: true };
+  if (init.param) return { from: init.param, how: 'obj' };
+  if (init.props) return methodOfObject(init) ?? { lit: 'GET' };
+  return { unknown: true };
+}
+
+/** An object literal's method: its `method:` literal or parameter, else a spread parameter's; undefined = it says nothing. */
+function methodOfObject(obj: ArgInfo): MethodSpec | undefined {
+  const m = obj.props?.method;
+  if (m) {
+    const lit = literalOf(m);
+    if (lit) return { lit: lit.toUpperCase() };
+    if (m.param) return { from: m.param, how: 'value' };
+    return { unknown: true };
+  }
+  if (obj.spreads?.length) return { from: obj.spreads[0]!, how: 'obj' };
+  return undefined;
+}
+
+/** A wrapper's parameter, read off one call's arguments: the argument, or one property of an object argument. */
+function argAt(args: (ArgInfo | undefined)[], ref: ParamRef): ArgInfo | undefined {
+  const a = args[ref.index];
+  if (!a || !ref.prop) return a;
+  if (a.param && !a.param.prop) return { param: { index: a.param.index, prop: ref.prop }, url: [{ index: a.param.index, prop: ref.prop }] };
+  return a.props?.[ref.prop];
+}
+
+/**
+ * One call to a wrapper, seen from the caller: the URL with the caller's arguments put in, and the
+ * method — the wrapper's own literal, else the first literal the caller's argument carries (an outer
+ * wrapper's literal wins over the inner one's parameter), else a parameter of the caller, else unknown.
+ */
+function throughWrapper(w: FetchWrapper, args: (ArgInfo | undefined)[]): FetchWrapper {
+  const url: UrlPart[] = [];
+  for (const part of w.url) {
+    if (part === null || typeof part === 'string') { url.push(part); continue; }
+    const a = argAt(args, part);
+    if (a?.url) url.push(...a.url);
+    else url.push(null);
+  }
+  let method: MethodSpec = { unknown: true };
+  if ('lit' in w.method) method = w.method;
+  else if ('from' in w.method) {
+    const a = argAt(args, w.method.from);
+    if (a) {
+      if (w.method.how === 'value') {
+        const lit = literalOf(a);
+        method = lit ? { lit: lit.toUpperCase() } : a.param ? { from: a.param, how: 'value' } : { unknown: true };
+      } else if (a.param) method = { from: a.param, how: 'obj' };
+      else if (a.props) method = methodOfObject(a) ?? { unknown: true };
+    }
+  }
+  return { url, method };
+}
+
+/** A wrapper URL with every hole as `:param` — the text the direct `fetch` case reads (`stringValue`). */
+const renderUrl = (url: UrlPart[]): string => url.map((x) => (typeof x === 'string' ? x : ':param')).join('');
 
 /**
  * Which external kinds are data stores by default (docs/proposals/data-stores.md §3.1): the app reads
