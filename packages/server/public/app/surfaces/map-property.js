@@ -234,9 +234,15 @@ function callWords(c) {
   if (biz()) return plainWords(c.summary) || plainWords(c.business) || plainWords(c.label) || plainWords(mo.business) || t('journey.biz.noWords');
   return String(c.summary || c.label || mo.label || c.operationId || '');
 }
+/** A record's, message's or third party's name in the lens; a third party's product name (Example ERP) is said as written. */
+function dataName(d) {
+  const n = S.BYID[d.nodeId];
+  if (d.kind === 'external' && !/[a-z][A-Z]|_|\/|\.[a-z]/.test(String(d.name || ''))) return String(d.name || '');
+  return nameOf(n, d.name);
+}
 function dataWords(data) {
   const lower = (w) => (biz() ? w.replace(/^./, (ch) => ch.toLowerCase()) : w);
-  const byMode = (mode) => data.filter((d) => d.mode === mode || d.mode === 'both').map((d) => lower(nameOf(S.BYID[d.nodeId], d.name)));
+  const byMode = (mode) => data.filter((d) => d.mode === mode || (d.mode === 'both' && mode !== 'reached')).map((d) => (d.kind === 'external' ? dataName(d) : lower(dataName(d))));
   const r = byMode('read'), w = byMode('write'), u = byMode('reached');
   return [r.length ? t('map.prop.apis.reads').replace('{list}', r.join(', ')) : '', w.length ? t('map.prop.apis.writes').replace('{list}', w.join(', ')) : '',
     u.length ? t('map.prop.apis.reached').replace('{list}', u.join(', ')) : ''].filter(Boolean).join(' · ');
@@ -321,10 +327,9 @@ function storeGroupHtml(g, gi) {
     ? '<h4 class="mp-grp st-' + sk + '" data-store="' + esc(g.store.name) + '"><i></i><span>' + esc(g.store.name) + '</span> · <span' + defAttrs('map.store.kind.' + sk) + '>' + esc(t('map.store.kind.' + sk)) + '</span></h4>'
     : '<h4 class="mp-grp plain"><span' + defAttrs(plainKey) + '>' + esc(t(plainKey)) + '</span></h4>';
   const rows = g.rows.map((r) => {
-    const n = S.BYID[r.nodeId];
     const kindKey = r.kind === 'message' ? 'sym.message' : r.kind === 'external' ? 'sym.external' : 'sym.record';
     const m = modesWords(r.modes);
-    return row(sym(r.kind === 'message' ? 'message' : r.kind === 'external' ? 'external' : 'record') + esc(nameOf(n, r.name)),
+    return row(sym(r.kind === 'message' ? 'message' : r.kind === 'external' ? 'external' : 'record') + esc(dataName(r)),
       '<span' + defAttrs(kindKey) + '>' + esc(t(kindKey)) + '</span> · <span class="mp-mode ' + esc(r.modes.length > 1 ? 'both' : r.modes[0] || '') + '"' + defAttrs(m.key) + '>' + esc(m.words) + '</span>', '', { kind: r.kind || 'record', id: r.nodeId });
   });
   return '<div class="mp-store">' + head + capRows('records-' + gi, rows) + '</div>';

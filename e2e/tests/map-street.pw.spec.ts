@@ -407,7 +407,7 @@ test.describe('map — data stores on the street', () => {
     await expect(erpReached.locator('.rw')).toHaveText('reached');
     // the legend: the stores this journey touches, and the reached swatch because a node uses it
     const leg = page.locator(`.map-district[data-flow="${FLOW}"] .map-lane .leg`);
-    await expect(leg.locator('.st')).toHaveText(['Invoice DB · database', 'Example ERP · ERP']);
+    await expect(leg.locator('.mst')).toHaveText(['Invoice DB · database', 'Example ERP · ERP']);
     await expect(leg).toContainText('reached');
   });
 
@@ -422,7 +422,7 @@ test.describe('map — data stores on the street', () => {
     await page.locator(`.map-pd[data-flow="${FLOW}"][data-si="0"][data-store="Invoice DB"]`).first().click();
     const card = page.locator('.map-xcard');
     await expect(card).toBeVisible();
-    await expect(card.locator('.store .st')).toHaveText('Invoice DB · database');
+    await expect(card.locator('.store .mst')).toHaveText('Invoice DB · database');
     await expect(card.locator('.store .via')).toBeVisible();
     await expect(card.locator('.store .via')).toContainText('known from the workspace settings');
   });
@@ -441,7 +441,7 @@ test.describe('map — data stores on the street', () => {
     expect([...new Set(text.match(IDENTIFIER) || [])], 'identifier-shaped words on the business street').toEqual([]);
     await page.locator(`.map-pd[data-flow="${FLOW}"][data-si="1"][data-store="Example ERP"]`).first().click();
     const card = page.locator('.map-xcard');
-    await expect(card.locator('.store .st')).toBeVisible();
+    await expect(card.locator('.store .mst')).toBeVisible();
     await expect(card.locator('.store .via')).toBeHidden();
     const words = await card.evaluate((el) => (el as HTMLElement).innerText);
     expect(words).toContain('Example ERP');

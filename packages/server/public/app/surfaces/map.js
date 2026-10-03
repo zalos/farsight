@@ -102,6 +102,8 @@ function dataWords(d) {
   const n = d.node || { name: d.name, kind: d.kind };
   const own = (n.facets && n.facets.business && n.facets.business.label) || n.bizLabel;
   if (own) return bizName(n);
+  // a third party's name is the product's own (Example ERP): said as written unless it is code-shaped
+  if (d.kind === 'external' && !/[a-z][A-Z]|_|\/|\.[a-z]/.test(String(d.name || ''))) return String(d.name);
   return humanize(String(d.name || '').replace(/\./g, ' '));
 }
 function kindWord(kind) {
@@ -737,7 +739,7 @@ function streetHtml(d, j, g) {
       + '<span class="rw"' + tipAttrs({ key: 'map.lane.writes', noFocus: true }) + '><b class="w"></b>' + esc(t('map.lane.writes')) + '</span>'
       + (reached ? '<span class="rw"' + tipAttrs({ key: 'map.mode.reached', noFocus: true }) + '><b class="r"></b>' + esc(t('map.mode.reached')) + '</span>' : '')
       + (stores.length ? '<span class="stores"><span class="sl"' + tipAttrs({ key: 'map.store.legend', noFocus: true }) + '>' + esc(t('map.store.legend')) + '</span>'
-        + stores.map((st) => '<span class="st st-' + storeKind(st) + '" data-store="' + esc(st.name) + '"' + tipAttrs({ key: storeKindKey(st), noFocus: true }) + '><i></i>'
+        + stores.map((st) => '<span class="mst st-' + storeKind(st) + '" data-store="' + esc(st.name) + '"' + tipAttrs({ key: storeKindKey(st), noFocus: true }) + '><i></i>'
           + esc(st.name) + ' · ' + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
       + '</span></div>';
   }
@@ -1016,7 +1018,7 @@ function drawCard() {
     // the store, and — outside the business register — how it is known
     if (dd.store) {
       const via = dd.store.via ? 'map.store.via.' + dd.store.via : '';
-      store = '<div class="store"><span class="st st-' + storeKind(dd.store) + '"' + tipAttrs({ key: storeKindKey(dd.store) }) + '><i></i>'
+      store = '<div class="store"><span class="mst st-' + storeKind(dd.store) + '"' + tipAttrs({ key: storeKindKey(dd.store) }) + '><i></i>'
         + esc(dd.store.name) + ' · ' + esc(t(storeKindKey(dd.store))) + '</span>'
         + (via && t(via) !== via ? '<span class="map-code via"><span class="hud-label"' + tipAttrs({ key: 'map.store.known', noFocus: true }) + '>' + esc(t('map.store.known')) + '</span> '
           + '<span' + tipAttrs({ key: via, noFocus: true }) + '>' + esc(t(via)) + '</span>' + (dd.store.ref ? ' · <code>' + esc(dd.store.ref) + '</code>' : '') + '</span>' : '')
