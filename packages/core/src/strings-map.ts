@@ -11,6 +11,10 @@ function same(word: string, define?: string): StringEntry {
   return define ? { hud: word, professional: word, define } : { hud: word, professional: word };
 }
 
+function one(word: string, pluralKey: string): StringEntry {
+  return { hud: word, professional: word, singularOf: pluralKey };
+}
+
 // §N — defines shared by a plural and its singular, word for word
 const SCREENS_REACHED = 'Of the screens this journey names, how many the walk through the code reached, starting at its first screen and following what each screen leads to. A screen met twice is one screen. The ones it did not reach are still named; they are counted apart, as not reached.';
 const PART_REACHED = 'Named screens the walk through the code reached. With the ones not reached, they add up to the screens the journey names.';
@@ -321,6 +325,68 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'key.mapHl': same('Map: previous or next journey'),
   'key.mapArrows': same('Map: move the board; with Shift, further'),
   'key.mapLink': same('Map: copy the link to this picture'),
+  // §I — the Affected mode (lane I, map pass 2, docs/proposals/map-pass-2026-10-03.md §4): pick a thing and
+  // the board dims to what reaches it, at every altitude. The numbers are core affectedReach()'s Counteds over
+  // one impact answer; the distance words are the impact panel's own, and the business words count no links.
+  'count.scope.affected': same('on what reaches it',
+    'What the number counts over: the thing picked on the Map, the parts that use it as far out as the distance chosen, and the journeys and screens whose own path meets either. Each thing once.'),
+  'count.unit.affectedJourneys': same('{n} journeys reach it',
+    'Journeys whose path through the code meets the thing picked, or meets something that uses it within the distance chosen. A journey is counted once, however many of its screens do.'),
+  'count.unit.affectedJourneysOne': one('1 journey reaches it', 'count.unit.affectedJourneys'),
+  'count.unit.affectedScreens': same('{n} screens reach it',
+    'Screens whose own part of a journey’s path meets the thing picked, or something that uses it within the distance chosen. A screen two journeys share is counted in each, the way the Map draws it.'),
+  'count.unit.affectedScreensOne': one('1 screen reaches it', 'count.unit.affectedScreens'),
+  'count.unit.affectedCalls': same('{n} calls reach it',
+    'Calls to a service, each once, that use the thing picked within the distance chosen — and the thing itself when it is a call.'),
+  'count.unit.affectedCallsOne': one('1 call reaches it', 'count.unit.affectedCalls'),
+  'count.unit.affectedTests': same('{n} tests reach what uses it',
+    'Distinct tests that reach anything using the thing picked, from what uses it directly out to the distance chosen, each test once. The same set the impact panel, the command line and the agent tool print.'),
+  'count.unit.affectedTestsOne': one('1 test reaches what uses it', 'count.unit.affectedTests'),
+  'count.part.reachSelf': same('{n} meet it on their own path',
+    'Their path through the code meets the thing picked itself. That says they use it, however much code lies between; it is not a distance.'),
+  'count.part.reachSelfOne': one('1 meets it on its own path', 'count.part.reachSelf'),
+  'count.part.reachDirect': same('{n} through what uses it directly',
+    'First met through something that uses the thing picked with nothing in between.'),
+  'count.part.reachDirectOne': one('1 through what uses it directly', 'count.part.reachDirect'),
+  'count.part.reachThrough': same('{n} through what uses those',
+    'First met one link further out: through something that uses what uses the thing picked.'),
+  'count.part.reachThroughOne': one('1 through what uses those', 'count.part.reachThrough'),
+  'count.part.reachFar': same('{n} further out',
+    'First met further out again, within the distance chosen.'),
+  'count.part.reachFarOne': one('1 further out', 'count.part.reachFar'),
+  'map.affected.title': {
+    hud: 'Blast radius',
+    professional: 'Affected',
+    define: 'What reaches the thing you picked: the journeys, screens, calls and tests whose path meets it or meets something that uses it. Everything else on the board is dimmed, not hidden. Read one distance at a time; nothing here is added up.',
+  },
+  'map.affected.action': same('What’s affected', 'Dim the whole board to what reaches this: every journey, screen and call whose path meets it, at every zoom. Esc or clear leaves the mode.'),
+  'map.affected.actionShort': same('Affected', 'Dim the whole board to what reaches the parts this change touched, at every zoom. Esc or clear leaves the mode.'),
+  'map.affected.on': same('what reaches', 'The thing the board is dimmed around. Everything that reaches it stays lit, with how it reaches it.'),
+  'map.affected.clear': same('clear', 'Leave the Affected mode and light the whole board again. Esc does the same.'),
+  'map.affected.reading': same('reading what reaches it…', 'The answer is asked once per distance and kept until the next sync.'),
+  'map.affected.failed': same('The answer about what reaches this did not come back.', 'The request failed, so the board is not dimmed. Nothing here is a fact about the code.'),
+  'map.affected.unknown': same('Nothing on the board matches this link.', 'The link names something this graph does not hold — an old link, or a part of a source not in scope. The board is left lit.'),
+  'map.affected.noParts': same('no part of the code is known to be touched by this', 'Neither the commits naming this item nor its links name a part of the indexed code, so there is nothing to dim the board around.'),
+  'map.affected.partsMore': same('{n} more parts not asked', 'The change touched more parts than the board asks about at once. The first ones are drawn; these are not, so the picture is a floor.'),
+  'map.affected.partsScope': same('the parts this change touched', 'Parts of the indexed code the commits changed, or the work item names.'),
+  'map.affected.seed': same('the thing picked', 'Ringed: what the board is dimmed around.'),
+  'map.affected.self': same('its path meets it', 'This one’s own path through the code meets the thing picked. It uses it, however much code lies between; this is not a distance.'),
+  'map.affected.at': same('reached at hop {n}', 'Hops are links in the code. The fewest links between the thing picked and something on this one’s path: one is what uses it directly, two what uses those.'),
+  'map.affected.bizAt1': same('through what uses it directly', 'Something on this one’s path uses the thing picked with nothing in between.'),
+  'map.affected.bizAt2': same('through what uses those', 'Something on this one’s path uses what uses the thing picked.'),
+  'map.affected.bizFar': same('further out', 'Something on this one’s path reaches the thing picked further out again.'),
+  'map.affected.not': same('not reached', 'Nothing on this one’s path meets the thing picked or anything using it, within the distance chosen.'),
+  'map.affected.bySeeds': same('reached by these parts', 'The change touched several parts. Each was asked about on its own, and this is how each one reaches here; they are never added together.'),
+  'map.affected.tab': same('Affected', 'What reaches the thing the board is dimmed around — journeys, screens, calls and tests, one distance at a time, with where the answer stopped.'),
+  'map.affected.tabOff': same('Pick something and choose What’s affected to see what reaches it.', 'The Affected tab answers once the board is dimmed around something.'),
+  'map.affected.journeys': same('journeys', 'Journeys whose path meets it at this distance.'),
+  'map.affected.screens': same('screens', 'Screens whose own part of the path meets it at this distance.'),
+  'map.affected.calls': same('calls', 'Calls to a service that use it at this distance — or the thing itself, when it is a call.'),
+  'map.affected.tests': same('tests first met here', 'Tests that reach something listed at this distance and nothing nearer. Each test is listed once, at the nearest distance it reaches.'),
+  'map.affected.testsBiz': same('{n} tests first met here', 'Tests that reach something at this distance and nothing nearer, each once.'),
+  'map.affected.stop': same('not followed past {name}', 'The answer stopped here: a part used all over the code, or the end of the distance chosen. More may stand behind it.'),
+  'map.affected.seedFor': same('asked about', 'With several parts, the tab answers for one at a time. Pick the part whose answer to read.'),
+  'map.affected.alsoIn': same('also in — reach', 'The other journeys this screen is in, each marked with whether its path reaches the thing picked.'),
   // §Z — zoom and frame (lane Z, map pass 2)
   'map.edge.more': same('{n} more', 'Screens of this journey past this edge of the board. Click to slide the board to them; the journey’s own counts never change.'),
   'map.edge.scope': same('this journey, past the edge of the board', 'The screens of the journey in view whose middle is outside the board on this side.'),

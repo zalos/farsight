@@ -72,6 +72,7 @@ export const COUNT_SCOPES = [
   'count.scope.workItem',   // one work item
   'count.scope.project',    // one workspace project (core projects.ts), and the projects it depends on
   'count.scope.package',    // one package of one source: every file of it that imports the package
+  'count.scope.affected',   // one impact answer placed on the journeys (core affected.ts): the seed, what uses it as far out as asked
 ] as const;
 export type CountScope = typeof COUNT_SCOPES[number];
 

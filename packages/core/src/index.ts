@@ -13,6 +13,7 @@ export * from './design.js';
 export * from './metrics.js';
 export * from './coverage.js';
 export * from './impact.js';
+export * from './affected.js';
 export * from './tests.js';
 export * from './version.js';
 export * from './storybook.js';
