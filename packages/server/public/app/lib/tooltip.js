@@ -46,6 +46,13 @@ export const TIP_WARM_MS = 200;
 /** Grace between the pointer leaving a trigger and its tip closing, so the
  *  pointer can travel into a rich tip to click its links. */
 export const TIP_LEAVE_MS = 280;
+/** Inside a `[data-tip-mode="hover"]` container (the Map) a tip opens after only
+ *  this, a click does what the trigger sits on instead of pinning the tip, and the
+ *  tip stands TIP_HOVER_GAP px clear of its trigger. Elsewhere nothing changes. */
+export const TIP_QUICK_MS = 450;
+export const TIP_HOVER_GAP = 14;
+/** True when a trigger sits in a hover-mode container. */
+function hoverMode(el) { return !!(el && el.closest && el.closest('[data-tip-mode="hover"]')); }
 
 /** What makes an element a trigger. */
 export const TIP_SELECTOR = '[data-tip],[data-tip-text],[data-tip-id]';
@@ -329,10 +336,10 @@ function position() {
   layer.style.left = '0px'; layer.style.top = '0px';
   const r = st.el.getBoundingClientRect();
   const s = { width: layer.offsetWidth, height: layer.offsetHeight };
-  const p = placeTip(r, s, { width: window.innerWidth, height: window.innerHeight });
+  const p = placeTip(r, s, { width: window.innerWidth, height: window.innerHeight }, hoverMode(st.el) ? { gap: TIP_HOVER_GAP } : {});
   if (p.maxHeight != null && body) body.style.maxHeight = Math.max(60, p.maxHeight - 20) + 'px';
   layer.style.left = p.left + 'px';
-  layer.style.top = (p.side === 'top' ? r.top - 8 - layer.offsetHeight : p.top) + 'px';
+  layer.style.top = (p.side === 'top' ? r.top - (hoverMode(st.el) ? TIP_HOVER_GAP : 8) - layer.offsetHeight : p.top) + 'px';
   layer.dataset.side = p.side;
   layer.style.setProperty('--tip-arrow', p.arrow + 'px');
 }
@@ -455,7 +462,7 @@ function onPointerOver(e) {
       el = again && sigOf(again) === sigOf(el) ? again : null;
     }
     if (el && el.getAttribute('aria-expanded') !== 'true') openFor(el, { via: 'hover' });
-  }, warm ? TIP_WARM_MS : TIP_HOVER_MS);
+  }, warm ? TIP_WARM_MS : hoverMode(trg) ? TIP_QUICK_MS : TIP_HOVER_MS);
 }
 
 function onPointerOut(e) {
@@ -479,6 +486,8 @@ function onClick(e) {
     return;
   }
   const trg = tgt.closest && tgt.closest(TIP_SELECTOR);
+  // in a hover-mode container a click is for what the trigger sits on; the tip already showed on hover
+  if (trg && hoverMode(trg)) { cancelPending(); if (st.el) hideTip(); return; }
   if (trg && !isInteractive(trg)) {
     cancelPending();
     if (st.el === trg && st.pinned) hideTip();

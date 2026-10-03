@@ -108,8 +108,8 @@ test.describe('map — one number, one word', () => {
     // all three named screens are reached: one screens chip, no second number to reconcile
     await expect(head.locator('.map-chip').first()).toHaveText('3 screens');
     await expect(head.locator('.map-chip', { hasText: /reached$/ })).toHaveCount(0);
-    // the head can sit under the toolbar at the opening frame (lane Z's), so the tip is asked for directly
-    await head.locator('.map-chip').first().dispatchEvent('click');
+    // the journey opens with its head at the top of the board (lane Z); a map tip opens on hover
+    await head.locator('.map-chip').first().hover();
     await expect(page.locator('#fs-tip')).toContainText(/reached by the walk through the code/i);
     await expect(page.locator('#fs-tip')).toContainText(/across this journey/i);
     // the evidence chip is the Portfolio's word, right after the tests count
@@ -145,7 +145,7 @@ test.describe('map — one number, one word', () => {
     await expect(page.locator('.mp-where')).toHaveText(/^screen 2 of 3 reached · billing cycle$/i);
     await expect(page.locator('.mp-declared')).toHaveText('4 declared, 1 not reached');
     // the second number names the screen and why: designed, never built
-    await page.locator('.mp-declared .n').nth(1).click();
+    await page.locator('.mp-declared .n').nth(1).hover();
     await expect(page.locator('#fs-tip')).toContainText(/Approve invoice · not built/);
   });
 
@@ -156,7 +156,7 @@ test.describe('map — one number, one word', () => {
     await expect(page.locator('.mp')).toHaveAttribute('data-screen', LIST_PAGE);
     await expect(page.locator('.mp-where')).toHaveText(/^screen 2 of 3 reached · billing cycle$/i);
     await expect(page.locator('.mp-declared')).toHaveCount(0);
-    await page.locator('.mp-where .n').click();
+    await page.locator('.mp-where .n').hover();
     await expect(page.locator('#fs-tip')).toContainText(/walk through the code reached/i);
   });
 

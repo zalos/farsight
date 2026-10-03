@@ -271,14 +271,61 @@ from `/api/version`'s graph sync (else the graph meta) and the graph's `generate
 (a link, the back button, the nav tab) goes through the surface's `update(route)` — `applyRoute` calls it instead of
 re-mounting when the surface on screen is the one routed to — so the board keeps its place.
 
-**Levels.** One continuous scale (`lib/map-canvas.js`): below **0.5** the neighbourhood, from 0.5 the street; a
-gesture that **ends** (pointer up, or 160 ms after the last wheel event) above **1.6** with a screen within **320**
-world units of the viewport's centre opens that screen (`snapTargets` → `onSnap`); the screen that would open is
-ringed (`.near`) from 1.1. Pan: drag, plain wheel. Zoom: pinch, ⌘/Ctrl + wheel, Safari's gesture events, `+` `-`,
-the ± tools; `0` and *Fit* fit every journey (never above 0.45, so it stays the neighbourhood). Programmatic moves
-animate 450 ms (`.anim`, off under `prefers-reduced-motion`); gestures never do. Leaving a screen lands on the street
-at scale **1.0** centred on it; a ⌘/Ctrl scroll out past a small budget, or a two-finger pinch out, over the open
-screen leaves it (the rest of that scroll is swallowed for 400 ms so the street does not keep zooming).
+**Levels and stops** (map pass 2, lane Z). One continuous scale; below **0.5** (`LEVEL_NB`) the board draws
+covers (the neighbourhood), from 0.5 the street. Along it the board has four **stops** (`mapStops(anchor)` in
+`surfaces/map.js`, computed every time they are asked, never hardcoded):
+
+| stop | scale | frame when reached |
+|---|---|---|
+| `board` | every journey fitted, never above 0.45 (`boardScale`) | `fitAll` |
+| `journey` | the journey under the zoom (or the one the street is on) fitted to its width, and its height with plumbing; clamped to **[0.52, 0.95]** (`journeyScale`) | `enterJourney` — the head at the top of the board, nothing above it, centred across when it fits, else from its first screen |
+| `calls` | the smallest scale at which a data node's name reads at **11 px** (`callsScale` = 11 ÷ the computed font size of `.map-pd .nm`, else a call's, else a screen's name); dropped when not 4 % above the journey stop (a short journey reads fitted) | by `+`: the world point at the centre stays across, the head at the top (`frameCalls`); by a gesture: none |
+| `enter` | a screen **64 %** of the board's height (`enterScale`, so the engine's 60 % rule arms) | the screen nearest the zoom's point centred (`frameEnter`), ringed `.near`, and the hint says *Zoom in again to enter …* in the accent |
+
+A wheel, pinch or Safari gesture zooms continuously between stops, but the first stop it crosses holds it for the rest
+of that gesture (160 ms after its last wheel event, or the pointers lifting; reversing releases it), and the stop's
+frame runs when the gesture ends. `+` / `−` and the ± tools (`mapZoom` → `zoomStep(±1)`) jump stop to stop; past
+the last stop `+` zooms by 1.25. So from a journey `−` goes calls → journey → board and never leaves the journey
+before its fitted stop. **Zoom-to-enter is earned:** a screen opens (`onSnap`) only when a zoom-in gesture ends
+with the same screen armed as when it began — the hint was on screen first — or on `+` while one is armed; it arms
+only from the calls stop on, on the journey the street is on. **Fit / `0`** (`mapFit`) fits the journey in view
+(the one the street is on, or the open screen's) with plumbing when on; only from the board does it fit every
+journey; the crumb keeps the journey until the reader leaves it (the board, or another journey). Esc from the
+street is the board. Programmatic moves animate 450 ms (`.anim`, off under `prefers-reduced-motion`); gestures never
+do. Leaving a screen lands on the street at scale **1.0** centred on it; a ⌘/Ctrl scroll out past a small budget,
+or a two-finger pinch out, over the open screen leaves it (the rest of that scroll is swallowed for 400 ms).
+
+**The opening frame and the edge cues.** `#/map/<flow>` opens at the journey stop (refitted once its walk lands,
+unless the link names `z/x/y`). When screens run past an edge, `.map-edgecue.l` / `.r` (on the stage, in the gap
+under the screens' row so it never sits on a name) prints *◂ n more* / *n more ▸* (`map.edge.more`, the number a
+`plainTip` over `map.edge.scope`): n is the screens of the journey whose middle is past that edge
+(`edgeCounts`). A click slides the board about one board's width toward that side, never past the journey's end, and
+the link follows.
+
+**The chrome.** `.map-chrome` is an opaque band (`--panel`, a bottom rule); the board starts under it
+(`top: var(--map-chrome-h)`, measured by a ResizeObserver), so nothing on the board draws under the toolbar and
+the frames need no chrome offset. Tips inside `.map-surface` (`data-tip-mode="hover"`, `lib/tooltip.js`) open on
+hover after `TIP_QUICK_MS` (450 ms), stand `TIP_HOVER_GAP` (14 px) clear of their trigger, and a click does what the
+trigger sits on (a chip on a screen opens the screen); `?` on a focused trigger still opens its tip. Elsewhere in the
+viewer tips are unchanged.
+
+**The engine — `lib/map-canvas.js`.** `attachCanvas(stage, world, opts)` (alias `createCanvas`) knows no map data.
+It moves `world` under `translate(tx,ty) scale(s)` inside `stage`, sets `--map-inv` (`min(1/s, 4)`), and asks its
+owner for: `stops(anchor)` → `[{ id, s, frame?(anchor, via) }]`, `min` / `max` (numbers or functions), `level(s)`
+(default `levelOf`), `snapTargets()` + `armFrom()` + `snapCover` (0.6); it tells `onChange`, `onLevel`,
+`onStop(stop, via)`, `onArm(el|null)`, `onSnap(el)`, `onGestureEnd`; `holdWheel()` swallows wheels while the owner
+finishes a gesture of its own. Its handle: `state`, `level`, `armed`, `stops`, `stopAt`, `inGesture`, `set`, `shift`,
+`rearm`, `zoomAt`, `zoomTo`, `zoomBy` (no stops), `zoomStep(±1)` (stops), `centerOn`, `fit`, `viewCenter`, `toWorld`,
+`worldCenter`, `destroy`. **Input normalisation:** `normaliseWheel` turns `deltaMode` 1 into 16 px a line and 2 into
+the stage's height, and reads shift + a vertical wheel as sideways; a ⌘/Ctrl wheel event zooms by
+`wheelFactor(dy)` = exp(−dy × 0.012), clamped to one 1.25× notch — so a mouse notch (100 px, or 3 lines) is one
+1.25× step and a trackpad keeps the rate per pixel it had (18.6 px of travel is one notch); a plain wheel pans.
+`settle(stops, from, to, skip)` and `nextStop(stops, s, dir)` are the pure detent rules
+(`packages/server/test/map-canvas.test.ts`). **Adopting it on the code map:** give the graph's pan/zoom layer a
+stage and a world element, pass `stops` for its own altitudes (say, every file fitted, one module fitted, the
+names readable — computed from its own stylesheet the way `callsScale` is), `level` for its classes, and
+`snapTargets` / `onSnap` only if a zoom should open something; replace its wheel and pinch handlers with the
+engine's, and its `+ − 0` with `zoomStep` and its own fit.
 
 **The neighbourhood.** One `.map-district` per flow. The layout rule is `layoutDistricts(items, { aspect })` in
 `lib/map-model.js` (pure; tested on 1, 3, 8, 21 and 40 synthetic journeys for no overlap and the board's shape):
@@ -390,7 +437,7 @@ lens or register change calls `update(ctx)` with the new `lens`; closing calls `
 | `h` / `l` | both | previous / next journey: the cover takes the focus on the neighbourhood, the board walks to its street on the street |
 | arrows | outside the property and card | pan 80 px (Shift: 240) |
 | `[` / `]` | property | previous / next screen |
-| `p` · `+ − 0` · `b` · `y` | | plumbing · zoom, fit · what uses the card's node · copy the link |
+| `p` · `+ − 0` · `b` · `y` | | plumbing · the next stop in or out, fit what is in view · what uses the card's node · copy the link |
 | `?` | | the legend when lane L's exists (`mapToggleLegend`, a TODO until then), else the keymap panel |
 
 What a level does not show is `inert` (`applyTabbing`, redone when the level or the property changes): the ghosted
@@ -409,11 +456,17 @@ the journey-numbers identifier check.
 **e2e.** `e2e/tests/map-street.pw.spec.ts`: flag off → no tab and `#/map` lands on the Portfolio; flag on → the
 Portfolio switch, three districts, the links, entering Billing cycle → three screens in order; plumbing (service
 bar, a *writes* node, Discard draft's dashed *not built* call, `p`); the property through the hook, `[` `]`, Esc, a
-`?node=` deep link; snap by zooming in and leaving by ⌘-scroll out; the explore card; the business lens; data stores
+`?node=` deep link; `+` stop to stop, entering only after the hint, leaving by ⌘-scroll out, `0` fitting the journey
+and Esc the board; the explore card; the business lens; data stores
 (the store on a data node and its bar colour, the ERP *writes* from `op` and *reached* with no method, the legend's
 stores, the card's *known from* in hybrid and hidden in business, the business street with stores) over
 `e2e/tests/map-stores-stub.ts`, a `page.route` stub that adds stores in the proposal's shapes and skips what the real
-answer already carries.
+answer already carries. `e2e/tests/map-zoom.pw.spec.ts` (over a `page.route` stub repeating Billing cycle's screens
+to fourteen): mouse notches, trackpad steps, a ctrlKey pinch and `deltaMode` lines each settle on the calls stop
+(a data node's name ≥ 11 px), then the enter stop with the hint, and only the next gesture enters; `+ −` stop to stop
+and Fit keep the journey, `−` from it is the board; a journey opens centred with its head at the top and nothing
+above it; the edge cue counts the screens past the edge and slides to them; nothing draws under the toolbar at any
+zoom; a tip opens on hover and a click on its chip opens the screen.
 
 #### Property — `surfaces/map-property.js`, `lib/map-property-model.js` (lane B, 2026-10-03)
 
