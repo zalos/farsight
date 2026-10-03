@@ -21,14 +21,18 @@ function getter(graphById) {
 }
 
 /**
- * Every journey as a district, in the order the canvas lays them out: the
- * journeys that hold the most screens first (a containing journey sits above
- * its parts), then by name. `workByFlow` is optional — a Map or object of
- * `/api/work/flow/<id>` answers keyed by flow node id.
+ * Every journey as a district, in the order the canvas lays them out:
+ * first the journeys that **contain** another (every screen of a smaller one is
+ * one of theirs), so a whole cycle sits above its parts; then the rest in the
+ * order the design says a person walks them (`leadsTo` on the flow's design
+ * reference, read from `graphById` when given), then by size, then by name.
+ * `workByFlow` is optional — a Map or object of `/api/work/flow/<id>` answers
+ * keyed by flow node id.
  * @group Map
  */
-export function neighbourhoodModel(designs, workByFlow) {
+export function neighbourhoodModel(designs, workByFlow, graphById) {
   const work = getter(workByFlow);
+  const get = getter(graphById);
   const rows = [];
   const seen = new Set();
   for (const d of Array.isArray(designs) ? designs : []) {
@@ -51,8 +55,29 @@ export function neighbourhoodModel(designs, workByFlow) {
       });
     }
   }
-  rows.sort((a, b) => (b.total - a.total) || a.name.localeCompare(b.name));
-  return { districts: rows.map((r, index) => ({ ...r, index })) };
+  // a container holds every screen of some other journey, and more
+  const contains = (a, b) => b.screens.length > 0 && b.screens.length < a.screens.length && b.screens.every((x) => a.screens.includes(x));
+  const isContainer = new Map(rows.map((r) => [r.id, rows.some((o) => o !== r && contains(r, o))]));
+  // how far down the design's leads-to chain a journey sits (0 = nobody leads to it)
+  const byDesignId = new Map(rows.map((r) => [r.flowId, r]));
+  const next = new Map(rows.map((r) => {
+    const n = get(r.id);
+    const ids = (n && n.design && n.design.leadsTo) || [];
+    return [r.id, ids.map((x) => byDesignId.get(x)).filter(Boolean).map((x) => x.id)];
+  }));
+  const depth = new Map();
+  const visit = (id, dpt, path) => {
+    if (path.has(id) || (depth.get(id) || 0) > dpt) return;
+    if (dpt > (depth.get(id) || 0) || !depth.has(id)) depth.set(id, dpt);
+    path.add(id);
+    for (const n of next.get(id) || []) visit(n, dpt + 1, path);
+    path.delete(id);
+  };
+  for (const r of rows) if (!depth.has(r.id)) visit(r.id, 0, new Set());
+  rows.sort((a, b) => (Number(isContainer.get(b.id)) - Number(isContainer.get(a.id)))
+    || (isContainer.get(a.id) ? 0 : (depth.get(a.id) || 0) - (depth.get(b.id) || 0))
+    || (b.total - a.total) || a.name.localeCompare(b.name));
+  return { districts: rows.map((r, index) => ({ ...r, index, container: !!isContainer.get(r.id) })) };
 }
 
 /** The read/write word for one data marker. A message published is written, one listened to is read. */

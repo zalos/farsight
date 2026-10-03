@@ -71,5 +71,5 @@
     { "name": "Invoice systems", "sourceIds": ["invoice-app", "spring-invoice-api"] }
   ],
   "defaultSurface": "codemap",
-  "flags": { "journeyDrill": true }
+  "flags": { "journeyDrill": true, "map": true }
 }

@@ -74,9 +74,10 @@ export interface Settings {
    * switch; `designShots` retains each screen's **design** image per sync under
    * `.farsight/cache/shots/` so a past sync can be looked at rather than described. `designShots`
    * writes files, which is why it is opt in — with it unset, the shot pass never runs and the sync
-   * writes no bytes beyond the ones it already wrote.
+   * writes no bytes beyond the ones it already wrote. `map` adds the `#/map` surface (every journey
+   * on one zoomable board) — a nav tab and a Portfolio button; read by the viewer only.
    */
-  flags?: { journeyDrill?: boolean; designShots?: boolean };
+  flags?: { journeyDrill?: boolean; designShots?: boolean; map?: boolean };
 }
 
 function settingsPath(ws: string) { return join(ws, '.farsight', 'settings.json'); }

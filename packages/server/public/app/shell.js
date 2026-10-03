@@ -15,6 +15,7 @@ import { mountStewardship } from './surfaces/stewardship.js';
 import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
+import { mountMap, mapRefresh, mapUpdate, unmountMap, mapEnabled } from './surfaces/map.js';
 import { closeShare } from './share.js';
 import { initKeymap } from './keymap.js';
 import { impactFromRoute } from './impact.js';
@@ -23,7 +24,10 @@ import { initTips, registerTip, tableTip, linksTip, setTip, grammarHref, tipAttr
 import { plainTip } from './lib/counted.js';
 
 // ── router ──────────────────────────────────────────────────────
-const NAV = ['portfolio', 'journeys', 'codemap', 'apis', 'tests', 'changes', 'work'];
+// `map` is behind the workspace's `flags.map` (Settings → Experiments): `navTabs()` leaves it out when off
+const NAV = ['portfolio', 'journeys', 'map', 'codemap', 'apis', 'tests', 'changes', 'work'];
+/** The tabs the bar draws: NAV without the surfaces a workspace flag keeps off. @group Shell */
+export function navTabs() { return NAV.filter((s) => s !== 'map' || mapEnabled()); }
 /**
  * The surfaces, each with how it is mounted, unmounted, and — the contract the
  * filters run on — how it is **refreshed in place**.
@@ -50,6 +54,9 @@ const SURFACES = {
   tests: { mount: mountTests, refresh: testsRefresh },
   changes: { mount: mountChanges, refresh: changesRefresh },
   work: { mount: mountWork, refresh: workRefresh },
+  // `update(route)`: the route moved inside the surface (another journey, a screen
+  // opened, the back button) — the board keeps its place instead of re-mounting
+  map: { mount: mountMap, unmount: unmountMap, refresh: mapRefresh, update: mapUpdate },
   stewardship: { mount: mountStewardship },
   grammar: { mount: mountGrammar, refresh: refreshGrammar },
 };
@@ -188,6 +195,11 @@ export function applyRoute() {
     history.replaceState(null, '', '#/' + dflt);
     r = parseRoute();
   }
+  // the map is a workspace experiment: with its flag off a #/map link reads as the Portfolio
+  if (r.surface === 'map' && !mapEnabled()) {
+    history.replaceState(null, '', '#/portfolio');
+    r = parseRoute();
+  }
   S.route = r;
   // a shared link may name the register and the journey band's shape it was written in
   if (r.lens && /^(business|hybrid|code)$/.test(r.lens) && currentLens() !== r.lens) setLens(r.lens, true);
@@ -196,6 +208,13 @@ export function applyRoute() {
   if (r.surface === 'journeys' && /^(storyboard|timeline|sheet|drill)$/.test(r.view || '')) S.jrnLayout = r.view;
   if (r.surface === 'journeys' && /^(inline|bottom|right)$/.test(r.dock || '')) S.jrnDock = r.dock;
   if (r.surface === 'journeys' && /^(words|gates|decisions)$/.test(r.biz || '')) S.jrnBiz = r.biz;
+  // the same surface, a new place inside it: a surface that can follow its own route keeps its state
+  if (currentSurface === r.surface && SURFACES[r.surface].update && document.getElementById('surface').childElementCount) {
+    SURFACES[r.surface].update(r);
+    renderChrome();
+    impactFromRoute(r);
+    return;
+  }
   if (currentSurface && currentSurface !== r.surface) {
     const u = SURFACES[currentSurface].unmount;
     if (u) u();
@@ -364,7 +383,7 @@ export function renderChrome() {
   // switched — and a reader who clicks by position landed on another page (pass
   // swarm 2026-09-25, three reviewers). Where each register *lands* still
   // differs (defaultSurface); where each tab *sits* does not.
-  if (nav) nav.innerHTML = NAV.map((s) => '<button class="navtab' + (cur === s ? ' on' : '') + '"'
+  if (nav) nav.innerHTML = navTabs().map((s) => '<button class="navtab' + (cur === s ? ' on' : '') + '"'
     + tipAttrs({ key: 'nav.' + s, noFocus: true })
     + ' onclick="location.hash=\'#/' + s + '\'">' + esc(t('nav.' + s)) + '</button>').join('');
   const sc = document.getElementById('syncchipwrap');
@@ -1030,6 +1049,10 @@ export function renderSettings() {
   // experiments: workspace flags, off unless the settings file says so
   const fd = document.getElementById('set-flag-drill');
   if (fd) fd.checked = !!(S.SETTINGS.flags && S.SETTINGS.flags.journeyDrill);
+  const fm = document.getElementById('set-flag-map');
+  if (fm) fm.checked = mapEnabled();
+  const fmn = document.getElementById('set-flag-map-name'); if (fmn) fmn.textContent = t('set.flagMap');
+  const fms = document.getElementById('set-flag-map-sub'); if (fms) fms.textContent = t('set.flagMapSub');
   const fl = document.getElementById('set-flags-label'); if (fl) fl.textContent = t('set.flags');
   const fn = document.getElementById('set-flag-drill-name'); if (fn) fn.textContent = t('set.flagDrill');
   const fs = document.getElementById('set-flag-drill-sub'); if (fs) fs.textContent = t('set.flagDrillSub');
@@ -1076,6 +1099,8 @@ export async function saveSettings() {
   if (surf) { if (surf.value) S.SETTINGS.defaultSurface = surf.value; else delete S.SETTINGS.defaultSurface; }
   const fd = document.getElementById('set-flag-drill');
   if (fd) { S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { journeyDrill: fd.checked }); }
+  const fm = document.getElementById('set-flag-map');
+  if (fm) { S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { map: fm.checked }); }
   const fh = document.getElementById('set-flag-shots');
   if (fh) { S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { designShots: fh.checked }); }
   applyTheme(S.SETTINGS.theme);
@@ -1085,6 +1110,8 @@ export async function saveSettings() {
   const r = await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(S.SETTINGS) });
   document.getElementById('savenote').textContent = r.ok ? t('set.saved') : t('set.saveFailed');
   buildScope();
+  // a flag may have added or taken away a tab
+  renderChrome();
   setTimeout(() => (document.getElementById('savenote').textContent = ''), 2500);
 }
 /** @group Settings page */
