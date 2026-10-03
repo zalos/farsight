@@ -19,3 +19,4 @@ export * from './storybook.js';
 export * from './counts.js';
 export * from './journey-counted.js';
 export * from './work-graph.js';
+export * from './deps.js';
