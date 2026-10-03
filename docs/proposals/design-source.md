@@ -17,10 +17,10 @@ reviewable, diffable, independent of Figma access. The design analogue of `opena
 ```json
 {
   "name": "the reference app's POC — Phase 1 Journeys",
-  "figma": { "file": "https://www.figma.com/design/N2ha2Cj4GyRbb4x93E78TI", "token": "env:FIGMA_TOKEN" },
+  "figma": { "file": "https://www.figma.com/design/EXAMPLEFILEKEY0000000", "token": "env:FIGMA_TOKEN" },
   "screens": [
     { "id": "SCR-07", "name": "Quick submit", "route": "/submit",
-      "url": "https://www.figma.com/design/N2ha2Cj4GyRbb4x93E78TI?node-id=26-9",
+      "url": "https://www.figma.com/design/EXAMPLEFILEKEY0000000?node-id=26-9",
       "image": "docs/design/scr-07.png",
       "operations": ["lookupContractorByVendorId", "createSubmission"],
       "phase": "1", "description": "No login: vendor lookup, upload with OCR confirm, submit." }

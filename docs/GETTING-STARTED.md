@@ -214,10 +214,10 @@ The point of Farsight is business and developers walking the **same** journey �
 ```json
 {
   "name": "Acme — Phase 1 screens",
-  "figma": { "file": "https://www.figma.com/design/N2ha2Cj4GyRbb4x93E78TI", "token": "env:FIGMA_TOKEN" },
+  "figma": { "file": "https://www.figma.com/design/EXAMPLEFILEKEY0000000", "token": "env:FIGMA_TOKEN" },
   "screens": [
     { "id": "SCR-07", "name": "Quick submit", "route": "/submit",
-      "url": "https://www.figma.com/design/N2ha2Cj4GyRbb4x93E78TI?node-id=26-9",
+      "url": "https://www.figma.com/design/EXAMPLEFILEKEY0000000?node-id=26-9",
       "image": "docs/design/scr-07.png",
       "operations": ["lookupContractorByVendorId", "createSubmission"], "phase": "1",
       "description": "No login: vendor lookup, upload with OCR confirm, submit." }
@@ -242,9 +242,9 @@ A feature the business names — *vendor (contractor) validation* — spans seve
 ```json
 {
   "screens": [
-    { "id": "SCR-06", "name": "Find your vendor record", "route": "/validate", "url": "https://www.figma.com/design/N2ha2Cj4GyRbb4x93E78TI?node-id=24-2", "operations": ["lookupContractorByVendorId"] },
-    { "id": "SCR-07", "name": "Confirm identity signals", "route": "/validate/confirm", "url": "https://www.figma.com/design/N2ha2Cj4GyRbb4x93E78TI?node-id=26-9", "operations": ["verifyContractor"] },
-    { "id": "SCR-08", "name": "Validated — continue to submit", "route": "/submit", "url": "https://www.figma.com/design/N2ha2Cj4GyRbb4x93E78TI?node-id=30-1", "operations": ["createSubmission"] }
+    { "id": "SCR-06", "name": "Find your vendor record", "route": "/validate", "url": "https://www.figma.com/design/EXAMPLEFILEKEY0000000?node-id=24-2", "operations": ["lookupContractorByVendorId"] },
+    { "id": "SCR-07", "name": "Confirm identity signals", "route": "/validate/confirm", "url": "https://www.figma.com/design/EXAMPLEFILEKEY0000000?node-id=26-9", "operations": ["verifyContractor"] },
+    { "id": "SCR-08", "name": "Validated — continue to submit", "route": "/submit", "url": "https://www.figma.com/design/EXAMPLEFILEKEY0000000?node-id=30-1", "operations": ["createSubmission"] }
   ],
   "flows": [
     { "id": "contractor-validation", "name": "Vendor (contractor) validation",

@@ -139,7 +139,7 @@ sources are.
 **Manifest schema (v1, frozen once published):**
 
 ```json
-{ "file": "https://www.figma.com/design/N2ha…", "screens": [
+{ "file": "https://www.figma.com/design/EXAMPLE…", "screens": [
   { "id": "SCR-07", "name": "Quick submit", "nodeId": "26-9", "route": "/submit",
     "operations": ["lookupContractorByVendorId", "createSubmission"], "phase": "1" } ] }
 ```

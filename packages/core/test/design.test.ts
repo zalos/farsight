@@ -58,9 +58,9 @@ test('manifest helpers: route spellings normalize, Figma keys/nodes parse, shape
   assert.equal(screenRouteKey('/track/[token]'), '/track/:param');
   assert.equal(screenRouteKey('track/{token}/'), '/track/:param');
   assert.equal(screenRouteKey('/(ops)/ops/invoices/:id'), '/ops/invoices/:param');
-  assert.equal(figmaFileKey('https://www.figma.com/design/N2ha2Cj4/File?node-id=1-2'), 'N2ha2Cj4');
-  assert.equal(figmaNodeId('https://www.figma.com/design/N2ha2Cj4/File?node-id=26-9'), '26-9');
-  assert.equal(figmaNodeId('https://www.figma.com/design/N2ha2Cj4/File?node-id=26%3A9'), '26-9');
+  assert.equal(figmaFileKey('https://www.figma.com/design/EXAMPLE1/File?node-id=1-2'), 'EXAMPLE1');
+  assert.equal(figmaNodeId('https://www.figma.com/design/EXAMPLE1/File?node-id=26-9'), '26-9');
+  assert.equal(figmaNodeId('https://www.figma.com/design/EXAMPLE1/File?node-id=26%3A9'), '26-9');
   assert.equal(isDesignManifest({ screens: [] }), false);
   assert.equal(isDesignManifest({ screens: [{ id: 'A' }] }), true);
 });
