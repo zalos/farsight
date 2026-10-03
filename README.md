@@ -43,7 +43,7 @@ From a checkout instead of a release:
 pnpm install && pnpm build && node scripts/pack.mjs
 npm install -g ./build/farsight-cli-*.tgz
 
-farsight ingest .        # parse this very repo (65 nodes in ~23ms)
+farsight ingest .        # parse this very repo into graph.json
 farsight serve           # explore it at http://localhost:4477
 farsight mcp             # feed it to LLM agents over MCP
 ```
@@ -57,23 +57,32 @@ Click any node for docs, tags, rules, and connections; toggle **Business / Hybri
 ## Repository layout
 
 ```
-docs/            Vision, architecture, roadmap, getting started
+docs/            Vision, architecture, roadmap, getting started, contracts, proposals
 prototypes/      Self-contained HTML UX prototypes (the design-language reference)
 examples/
-  invoice-app/   Canonical demo repo, ingested as its own source
+  invoice-app/         Canonical demo repo (TS), ingested as its own source and used by the e2e suite
+  spring-invoice-api/  A small Java/Spring API for the Java adapter
+  claims-mini/         A small Next.js monorepo (route handlers, server actions, middleware)
 packages/
-  core/          Semantic Graph schema, store, queries (search/trace/impact), config
-  parsers/       Language adapters (ts-js via oxc-parser; tree-sitter next)
-  server/        App server: viewer + graph + settings/sources/sync API
-  mcp/           MCP server — the graph as agent context (trace_flow, list_rules…)
-  cli/           The `farsight` binary: ingest / serve / mcp
-  app/           Phase-2 canvas GUI (placeholder; current viewer is interim)
-scripts/         pack.mjs — builds the installable farsight-cli tarball; changelog.mjs + release.mjs — cut a release
+  core/          Semantic Graph schema, store, queries (search/trace/journey/impact), config, string catalog
+  parsers/       Language adapters (TS/JS via oxc-parser, Java), OpenAPI, design manifests, git history, test reports
+  server/        App server: the HUD viewer + graph + settings/sources/sync API
+  mcp/           MCP server — the graph as agent context (trace_flow, journey, impact_of, test_coverage…)
+  cli/           The `farsight` binary: ingest / serve / mcp / status / api / tests / impact / stories / work
+  work/          Work items (Jira / Azure DevOps) as a source: the common record, cache and policy
+  work-jira/     Jira Cloud provider
+  work-azdo/     Azure DevOps provider
+  work-fixture/  A recorded fake tracker for tests and e2e
+  app/           Phase-2 canvas GUI (placeholder; the current viewer lives in server/public)
+e2e/             Playwright e2e suite against a real `farsight serve` on a fixture graph
+schemas/         JSON Schemas of the frozen machine-readable contracts (farsight-diff v1, …)
+scripts/         pack.mjs (installable tarball), changelog.mjs + release.mjs (releases), lint-strings.mjs, e2e.mjs
+tools/recap-md/  A local-LLM markdown recap tool, the Model Hub's dogfood emitter
 .farsight/       Workspace settings: sources (with exclude globs), collections, theme — `settings.json` is local; copy `settings.example.json` to start
 ```
 
 ## Status
 
-Phase 1 complete, plus a settings/usability pass. Working today: multi-source ingest with glob exclusions (local folders + git URLs), the lens-switching HUD viewer (⌘K search, focus mode, in-place expandable groups, guard/rule badges, right-click actions, dark/light themes, source collections), JSDoc augmentation (`@business` / `@group` / `@tag`), the six-tool MCP agent surface, and a globally installable CLI. This repo dogfoods itself — `farsight` and `invoice-app` are its own configured sources.
+Working today: multi-source ingest with glob exclusions (local folders + git URLs), the lens-switching HUD viewer (⌘K search, focus mode, in-place expandable groups, guard/rule badges, right-click actions, dark/light themes, source collections), JSDoc augmentation (`@business` / `@group` / `@tag`), journeys (timeline, sheet, ladder, storyboard), impact and test-selection output, API and design drift, tests and coverage linked to journeys, change history, Storybook stories, work items from Jira and Azure DevOps, the MCP agent surface, and an installable CLI. This repo dogfoods itself — `farsight` and `invoice-app` are its own configured sources.
 
-Start with [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md); design rationale in [docs/VISION.md](docs/VISION.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); what's next in [docs/ROADMAP.md](docs/ROADMAP.md). AI sessions: see [CLAUDE.md](CLAUDE.md).
+Start with [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md); design rationale in [docs/VISION.md](docs/VISION.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); what's next in [docs/ROADMAP.md](docs/ROADMAP.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). AI sessions: see [AGENTS.md](AGENTS.md).
