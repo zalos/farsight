@@ -112,6 +112,8 @@ test('key detection: known projects, merge subjects, URLs, branches — and SHA-
   assert.equal(mergeSubjectBranch('Merge pull request #12 from org/KAN-4-y'), 'org/KAN-4-y');
   const merge = commitKeysOf({ subject: 'Merge pull request #12 from org/KAN-4-y', merge: true }, [], { projects: ['KAN'], ado: true });
   assert.deepEqual(merge, [{ key: 'KAN-4', provider: 'jira', via: 'merge-subject', ref: 'org/KAN-4-y' }], 'the PR number is never a work item');
+  const squash = commitKeysOf({ subject: 'chore(e2e): retire the old suite AB#7 (#58)' }, [], { projects: ['KAN'], ado: true });
+  assert.deepEqual(squash.map((k) => k.key), ['7'], 'a squash merge\'s trailing (#58) is the PR number, not work item 58');
   const both = commitKeysOf({ subject: 'KAN-1 tidy', body: 'Refs https://x.atlassian.net/browse/KAN-5' }, ['feature/KAN-2-x'], opts);
   assert.deepEqual(both.map((k) => `${k.key}:${k.via}`), ['KAN-1:subject', 'KAN-5:url', 'KAN-2:branch']);
 });

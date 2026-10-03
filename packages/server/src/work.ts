@@ -126,7 +126,9 @@ export interface CodeSourceRead { name: string; dir: string }
 export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRead, keys: ReturnType<typeof keyOptionsOf>): string {
   try {
     const detect = keyDetector(keys.orgs);
-    const sig = JSON.stringify({ p: keys.projects, a: keys.ado });
+    // `r` is the detection rules' revision: bumping it re-reads the window once, so keys an older rule
+    // recorded wrongly (a squash merge's PR number as an ADO item, r2) are rewritten
+    const sig = JSON.stringify({ p: keys.projects, a: keys.ado, r: 2 });
     const newest = db.newestCommit(src.name);
     const incremental = newest && db.spineReadSig(src.name) === sig && gitKnows(src.dir, newest.sha);
     const wantKeys = (keys.projects?.length ?? 0) > 0 || keys.ado;
