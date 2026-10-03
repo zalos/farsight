@@ -3037,7 +3037,7 @@ function jrnTestFacts(refs) {
  * journey, a screen, an action (`coverage.moments`) or one step.
  * @group Journey view
  */
-function jrnFoldFacts(cov) {
+export function jrnFoldFacts(cov) {
   if (!cov) return null;
   const k = cov.counted || {};
   const c = (cov.counts && cov.counts.tests) || {};
@@ -3101,7 +3101,7 @@ export function jrnStepActionFacts(i) {
 }
 /** The scope a foot's numbers count over, as a label in front of them — the `Counted`'s own scope, never a guess.
  * @group Journey view */
-function jrnFootScopeHtml(facts) {
+export function jrnFootScopeHtml(facts) {
   const scope = facts && facts.counted && facts.counted.tests && facts.counted.tests.scope;
   if (!scope) return '';
   return '<div class="line"><span class="hud-label jrn-tscope" data-scope="' + esc(scope) + '"' + tipAttrs({ key: scope }) + '>' + esc(t(scope)) + '</span></div>';
@@ -3121,7 +3121,7 @@ function jrnFootWiderHtml(wider) {
 /** The covering tests' own last run as a line of its own — what it said, when, and whether the code has moved since.
  * It is **their** run, labelled so: the run behind the evidence word is the observation, printed beside the word.
  * @group Journey view */
-function jrnRunLineHtml(run) {
+export function jrnRunLineHtml(run) {
   if (!run) return '';
   // the verdict keeps its chip (a shape and a word), so the line beside it is
   // the other two facts of `tests.run.line` and never repeats the first
@@ -3175,7 +3175,7 @@ function jrnEvidenceTip(el, a) {
 registerTip('jrnEvidence', jrnEvidenceTip);
 /** The evidence chip: the core's word, its class for the shape, and its tip.
  * @group Journey view */
-function jrnEvChipHtml(facts) {
+export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
