@@ -245,5 +245,17 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.foot.end': same('end of the journey', 'Nothing comes after this screen in the journey.'),
   'map.prop.foot.step': same('screen {n} of {m} in {journey}', 'Where this screen sits in the journey, counting its screens in order.'),
   'map.prop.foot.alsoIn': same('also in', 'Other journeys that show this same screen. Open one to see the screen in that journey.'),
+  // long lists and long texts on a real screen
+  'map.prop.more': same('more', 'Show the rest of what was written here, in place.'),
+  'map.prop.less': same('less', 'Show only the first sentences again.'),
+  'map.prop.showAll': same('show all {n}', 'The list shows its first ten rows; this opens every row in place.'),
+  'map.prop.showFewer': same('show the first {n} only', 'Fold the list back to its first rows.'),
+  'map.prop.listRows': same('{n} rows', 'The rows of this list for this screen, each one shown once it is opened.'),
+  'map.prop.storiesFold': same('{n} stories on {m} parts', 'The parts of this screen that have stories of their own, folded into one chip. Open it to see each part with its stories.'),
+  'map.prop.storiesN': same('{n} stories', 'Stories that draw a part of this screen on its own, added up over the parts that have any.'),
+  'map.prop.storyParts': same('{n} parts', 'Parts of this screen, the page or a component it draws, that have at least one story.'),
+  'map.prop.storiesLess': same('fewer', 'Fold the parts with stories back into one chip.'),
+  'map.prop.alsoMore': same('{n} more', 'More journeys show this same screen; this opens them in place.'),
+  'map.prop.alsoN': same('{n} journeys', 'Other journeys whose screens include this one, beyond the three shown.'),
   'map.prop.foot.go': same('open this screen', 'Go to this screen of the journey.'),
 };

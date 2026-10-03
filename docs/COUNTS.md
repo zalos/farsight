@@ -371,6 +371,9 @@ tab whose subject nothing types prints **no number**: Overview, UX, Route and Ch
 | `×2` beside a gate | `segments[i].gates[].count` (viewer, `plainTip` → `map.prop.times`) | times the walk of this screen met that checkpoint | screen | Σ over the rows is the screen's `counted.checks` |
 | `2 more that nobody put in plain words` (business) | `jrnGatesShown(rows).mute` (viewer, `plainTip` → `map.prop.gates.mute`) | gates on the screen whose only name is the code's | screen | drawn + mute = `counted.gates` |
 | `screen 2 of 3 in Billing cycle` | the screen's position in `model.screens` | a position, not a count | journey | — |
+| `show all 273` under a capped list | the list's own `Counted` (`counted.tests`, `counted.gates`, `counted.decisions`, `counted.runReports`, `counts.items`) when it counts exactly the rows; else the rows on screen (viewer, `plainTip` → `map.prop.listRows`) | the rows the list holds | screen | the tab's number when the list is the tab's subject; never a number of its own |
+| `19 stories on 5 parts` (more than three parts with stories) | viewer over `node.stories` of `screenStoryIds()` (`plainTip` → `map.prop.storiesN` with the per-part breakdown; `map.prop.storyParts`) | stories on the parts of the screen that have any · those parts | screen | opened, each part's chip prints its own `n stories` |
+| `3 more` in *also in* | viewer: other flows rendering the page beyond the three shown (`plainTip` → `map.prop.alsoN`) | journeys | the graph | — |
 
 ---
 
