@@ -41,16 +41,17 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
-## Current state — 2026-09-30
+## Current state — 2026-10-03
 
 `main` is green.
 
 | | |
 |---|---|
-| build | `0.1.1 · 00b18dd` (GitHub Release v0.1.1), workspace main at `48db22f` (the work-items pass) |
-| tests | **761** — core 265 · work 57 · parsers 124 · work-fixture 18 · work-azdo 36 · work-jira 39 · mcp 42 · server 129 · cli 51, 0 failed · **e2e 107/107** · live tracker tests opt-in with `FARSIGHT_LIVE=1` (see below) |
-| string/symbol lint | **1505 entries · 32 sprite symbols · 24 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI). Check `lsof` before restarting or measuring on any port. |
+| build | `0.1.2` (GitHub Release v0.1.2), workspace main at `9a1e3da` (the map-view pass, PRs #8–#13) |
+| tests | **808** — core 265 · work 59 · parsers 124 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 42 · server 168 · cli 52, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 124/124** |
+| string/symbol lint | **1658 entries · 32 sprite symbols · 29 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings); the Recall session's global `farsight` on **4477**. Check `lsof` before restarting or measuring on any port. |
+| runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
 **Live tracker tests** run only with `FARSIGHT_LIVE=1` and read their target from the environment:
@@ -115,6 +116,24 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
      it*); chips on Portfolio and journey headers; ⌘K travels to work nodes. **MCP** — `work_items` (json = the frozen
      list), `work_item`, `work_links`, `work_changes`, `work_sync`, and `work_comment|assign|transition|edit|label|link`
      **registered only when a source grants agents the action**; `graph_overview` gains a work-items section.
+7. **The Map view — Neighbourhood · Street · Property** (2026-10-03, proposal `docs/proposals/map-view.md`, prototype
+   `prototypes/map-view/`, two lanes plus two follow-ups each, PRs #8–#13). A flag-gated surface (`flags.map`,
+   Settings → Experiments; a *Map* door on the Portfolio and a nav tab when on) that draws the journeys as one
+   whiteboard with three altitudes: **neighbourhood** — every journey as a district in bands by source, row-packed,
+   covers counter-scaled so names read at the fit, *leads to* / *requires* dimmed and *part of* on hover;
+   **street** — one journey's screens in step order with a lean chip row, and with plumbing on (`p`) a **pathway per
+   screen**: its calls stacked with a service colour bar (the spec title), beside each call the records, messages and
+   third parties it reads (cool) or writes (warm), folds past four calls or four data nodes, declared-not-called and
+   not-built drawn dashed; **property** — the screenshot whole as the hero (letterboxed, lightbox on click), a rail
+   of eight tabs with the summary's own counts (Overview · Gates & rules · APIs · UX · Tests · Route · Work · Changes),
+   clamped text, capped lists, a step bar with before / after / also-in, and a deterministic placeholder for a screen
+   without a picture. Pan, pinch, ⌘-scroll and keys; snap into a screen past ×1.6 near the centre; one explore card
+   for calls and data nodes. Everything reads `/api/design` and `/api/journey` (no server change; `lib/map-model.js`
+   and `lib/map-property-model.js` are pure and unit-tested); every number is a `Counted` with a tip (`docs/COUNTS.md`
+   § Map); ADR 10 (DOM in a transformed world, not a canvas). Verified on the fixture and, read-only, on the dogfood
+   graph (21 journeys, a screen with 10 calls and 273 cases): zero page errors. What the real graph still shows:
+   *leads to* curves cross between bands; names fall under 12 px past ~30 journeys at the cap; per-screen work chips
+   are not fetched; the explore card has no Impact yet.
 
 ## Release and CI — 2026-10-01
 
@@ -141,8 +160,9 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 **Left open by the work-items pass (2026-09-30), in order:**
 
-1. **Run the pass swarm** on the dogfood server against real tracker items (one build, one sync): does a reader see
-   what work changed what code, and can they act on a story from the pane?
+1. **Run the work-items swarm** on the dogfood server against real tracker items: does a reader see
+   what work changed what code, and can they act on a story from the pane? (Can share the build and sync with the
+   map swarm above.)
 2. **A real key in a real repo.** Put `KAN-…` keys in Farsight's own branch names and subjects from now on (the
    detector needs the project in a work source's scope), and give the reference app a `@work` / `screens.json work[]`
    declaration for one flow.
