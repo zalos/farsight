@@ -396,7 +396,8 @@ function uxHtml(pm) {
 function caseWords(name) {
   const v = String(name || '');
   const said = /\/|[a-z][A-Z]|_|\.[a-z]{2,4}\b/.test(v) ? unCode(v) : v;
-  return plainWords(said) || said;
+  // a path left in the words (a test named for the route it visits) is dropped, never printed
+  return (plainWords(said) || said).replace(/(^|[\s(])\/[\w.:{}\-/]*/g, '$1').replace(/\s{2,}/g, ' ').trim() || unCode(v);
 }
 function caseRow(x) {
   const how = x.observedVia === 'declaration' && x.status === 'passed' ? 'map.prop.tests.byDeclaration'
