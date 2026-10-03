@@ -557,6 +557,8 @@ function placeDistricts() {
     if (el) el.style.cssText = 'left:' + g.x + 'px;top:' + g.y + 'px;width:' + g.w + 'px;height:' + g.h + 'px';
   }
   if (MAP.links) { MAP.links.setAttribute('width', MAP.size.w); MAP.links.setAttribute('height', MAP.size.h); }
+  // the covers' boxes follow their districts' sizes: their chip rows fold again
+  foldCoverChips();
 }
 function districtEl(id) {
   return MAP.world ? MAP.world.querySelector('.map-district[data-flow="' + cssAttr(id) + '"]') : null;
@@ -684,7 +686,10 @@ function drawCrumb() {
     const sc = propScreen();
     if (sc) html += sep + '<b>' + esc(sc.name) + '</b>';
   }
-  el.innerHTML = html;
+  // on a narrow stage the journey's name may ellipsize: the trail is whole in its tip
+  const whole = el.ownerDocument.createElement('div');
+  whole.innerHTML = html;
+  el.innerHTML = '<span' + tipAttrs({ text: whole.textContent.replace(/›/g, ' › '), noFocus: true }) + '>' + html + '</span>';
   drawAsOf();
 }
 /**
@@ -974,7 +979,8 @@ function renderDistrict(id) {
   el.classList.toggle('loaded', !!(j && j.model));
   sizeDistrict(id);
   tabDistrict(el);
-  foldCoverChips(el);
+  // a district drawn before it is placed has no size yet: placeDistricts() folds it once it has one
+  if (el.style.width) foldCoverChips(el);
   if (had) focusQuiet(el.querySelector(had));
 }
 /** A selector that finds the same board element after a redraw. */

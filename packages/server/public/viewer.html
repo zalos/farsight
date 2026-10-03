@@ -2291,7 +2291,19 @@
   .pf-headrow h1{margin-right:auto}
   .pf-headrow .pf-viewsw{margin-left:0}
   .pf-headrow .jrn-viewbtn{font-size:10px;padding:5px 13px}
-  @media (max-width:860px){ .map-chrome{flex-wrap:wrap} .map-crumb{max-width:100%} }
+  /* a narrow stage (lane L, measured at 1024): the chrome tightens before anything clips — the tools stay on one
+     row, and the crumb takes a row of its own under them rather than cut the journey's name (whole in its tip) */
+  .map-crumb{flex:0 1 auto;min-width:96px}
+  .map-tools{flex-wrap:nowrap}
+  @media (max-width:1280px){
+    .map-chrome{gap:6px;flex-wrap:wrap}
+    .map-crumb{order:9;max-width:calc(100% - 8px);flex:0 1 auto}
+    .map-lvls button{padding:7px 8px;letter-spacing:.08em}
+    .map-tb{padding:6px 7px;letter-spacing:.06em}
+    .map-tools{flex-wrap:nowrap;gap:4px}
+    .map-asof{padding:6px 7px}
+  }
+  @media (max-width:860px){ .map-chrome{flex-wrap:wrap} .map-crumb{max-width:100%} .map-tools{flex-wrap:wrap} }
   /* ── MAP property — surfaces/map-property.js ─────────────────────────────
      One screen up close: the picture is the hero (left), a 352px rail of eight
      tabs (right, two rows of tabs), the step bar below. Under 860px the rail

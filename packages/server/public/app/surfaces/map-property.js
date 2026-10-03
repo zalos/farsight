@@ -392,10 +392,16 @@ function uxHtml(pm) {
   return sec('map.prop.ux.page', page) + sec('map.prop.ux.components', comps) + sec('map.prop.ux.stories', stories || absentRow('noneIndexed'));
 }
 
+/** A test's name in the business lens: said as words, without the document references its authors cross-file it by. */
+function caseWords(name) {
+  const v = String(name || '');
+  const said = /\/|[a-z][A-Z]|_|\.[a-z]{2,4}\b/.test(v) ? unCode(v) : v;
+  return plainWords(said) || said;
+}
 function caseRow(x) {
   const how = x.observedVia === 'declaration' && x.status === 'passed' ? 'map.prop.tests.byDeclaration'
     : x.evidence === 'observed' ? 'map.prop.tests.byRun' : 'map.prop.tests.reached';
-  const name = biz() ? (/\/|[a-z][A-Z]|_|\.[a-z]{2,4}\b/.test(x.name || '') ? unCode(x.name) : String(x.name || '')) : String(x.name || '');
+  const name = biz() ? caseWords(x.name) : String(x.name || '');
   const sub = biz() ? '' : [x.level ? t('tests.level.' + x.level) : '', x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).map(esc).join(' · ');
   const status = x.status ? '<span class="st ' + esc(x.status) + '"' + defAttrs('tests.run.' + x.status) + '>' + esc(t('tests.run.' + x.status)) + '</span>' : '';
   return row(esc(name), sub, '<span class="mp-ev ' + esc(how.split('.').pop()) + '"' + defAttrs(how) + '>' + esc(t(how)) + '</span>' + status, { kind: 'test', id: x.id });
@@ -424,7 +430,7 @@ function testsHtml(pm) {
       + jrnRunLineHtml(facts.run);
   }
   const { cases, reports } = pm.tabs.tests;
-  const reportRow = (x) => row(esc(biz() ? unCode(x.name || '') : String(x.name || '')), biz() ? '' : esc([x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · ')),
+  const reportRow = (x) => row(esc(biz() ? caseWords(x.name) : String(x.name || '')), biz() ? '' : esc([x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · ')),
     '<span class="mp-ev reached"' + defAttrs('tests.evidence.runSeen') + '>' + esc(t('tests.evidence.runSeen')) + '</span>', { kind: 'test', id: x.id });
   return '<section class="mp-sec"><h3 class="hud-label"' + defAttrs('map.prop.tests.head') + '>' + esc(t('map.prop.tests.head')) + '</h3><div class="jrn-tfoot mp-tfoot">' + foot + '</div></section>'
     + '<section class="mp-sec">' + secHead('map.prop.tests.cases', countNum(k.tests)) + (cases.length ? capRows('cases', cases.map(caseRow), k.tests) : absentRow('noneIndexed')) + '</section>'
