@@ -15,7 +15,7 @@
 // (node.branches, step.conditions, top-level forkCount) is all optional.
 // Everything from the server is untrusted display data → esc().
 
-import { S, expose, esc, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens } from '../store.js';
+import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens } from '../store.js';
 import { t, def, evidenceWord, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { nodeCardHtml, vsl, linkHtml, designChipHtml, designThumbHtml } from '../lib/graph-render.js';
@@ -104,7 +104,7 @@ function renderPicker(el) {
   repos.forEach((repo) => {
     html += '<div class="set-sec"><h2>' + esc(repo) + '</h2>';
     byRepo[repo].slice(0, 60).forEach((n) => {
-      html += '<button class="rel" onclick="openJourney(\'' + esc(n.id) + '\')"><span class="rk">' + esc(n.kind) + '</span>'
+      html += '<button class="rel" onclick="openJourney(' + jsArg(n.id) + ')"><span class="rk">' + esc(n.kind) + '</span>'
         + esc(bizLabel(n)) + ' <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + esc(n.name) + '</span>'
         + (n.loc ? '<span style="float:right;font-family:var(--mono);font-size:9.5px;color:var(--dim)">' + esc(n.loc.path) + ':' + n.loc.line + vsl(repoOf(n), n.loc.path, n.loc.line) + '</span>' : '')
         + '</button>';
@@ -264,7 +264,7 @@ function jrnFlowCardHtml(f, rows, repo, pinned) {
     + (f.description ? '<p class="dsg-flow-desc">' + esc(f.description) + '</p>' : '')
     + (chips ? '<div class="dsg-chips">' + chips + '</div>' : '')
     + (docs ? '<div class="dsg-docs">' + docs + '</div>' : '')
-    + (f.nodeId ? '<button class="rel" onclick="openJourney(\'' + esc(f.nodeId) + '\')">' + sym('start') + ' ' + esc(t('journey.openJourney')) + '</button>' : '')
+    + (f.nodeId ? '<button class="rel" onclick="openJourney(' + jsArg(f.nodeId) + ')">' + sym('start') + ' ' + esc(t('journey.openJourney')) + '</button>' : '')
     + '</div>';
 }
 /**
@@ -308,7 +308,7 @@ function designDriftRows(rows) {
  */
 function jrnDesignRowHtml(s) {
   const drift = (s.drift || []).length;
-  return '<button class="rel" onclick="openJourney(\'' + esc(s.nodeId) + '\')">'
+  return '<button class="rel" onclick="openJourney(' + jsArg(s.nodeId) + ')">'
     + (s.designId ? '<span class="dsg-id">' + esc(s.designId) + '</span>' : '')
     + esc(s.name || '')
     + (s.route ? '<span class="dsg-sub">' + esc(s.route) + '</span>' : '')
@@ -1021,7 +1021,7 @@ function jrnSkipToChrome() {
 function jrnStateHtml(word, reason, retryId) {
   return '<div class="jrn-emk">' + esc(t('nav.journeys')) + '</div>' + esc(word)
     + (reason ? '<div class="jrn-emreason">' + esc(reason) + '</div>' : '')
-    + (retryId ? '<button class="rel jrn-retry" onclick="openJourney(\'' + esc(retryId) + '\')">' + esc(t('journey.retry')) + '</button>' : '');
+    + (retryId ? '<button class="rel jrn-retry" onclick="openJourney(' + jsArg(retryId) + ')">' + esc(t('journey.retry')) + '</button>' : '');
 }
 /**
  * Close the overlay and land the graph focused on the journey's nodes with
@@ -1232,7 +1232,7 @@ function jrnTimelineLinksHtml(sum) {
 function jrnPartOfHtml(sum) {
   if (!sum.links.partOf.length) return '';
   return '<span class="hud-label">' + esc(t('journey.partOf')) + '</span>' + sum.links.partOf.map((l) =>
-    '<span class="jrn-chip go" onclick="openJourney(\'' + esc(l.id) + '\')" title="' + esc(l.id) + '">' + sym('interchange') + esc(l.name) + '</span>').join('');
+    '<span class="jrn-chip go" onclick="openJourney(' + jsArg(l.id) + ')" title="' + esc(l.id) + '">' + sym('interchange') + esc(l.name) + '</span>').join('');
 }
 /** The graph node behind a segment's screen — from the journey's `screens`
  * (full design reference), the loaded graph, or the summary row itself.
@@ -1917,7 +1917,7 @@ function jrnCompSpanHtml(mo) {
 function jrnCompStoryHtml(id) {
   const c = id && S.BYID[id];
   if (!c || !(c.stories || []).length) return '';
-  return '<button class="sb-compspan" onclick="event.stopPropagation();openStoryLightbox(\'' + esc(id) + '\')" title="' + esc(t('stories.openLarge') + ' · ' + t('stories.title')) + '" aria-label="' + esc(t('stories.openLarge') + ' · ' + t('stories.title')) + '">' + sym('story') + '</button>';
+  return '<button class="sb-compspan" onclick="event.stopPropagation();openStoryLightbox(' + jsArg(id) + ')" title="' + esc(t('stories.openLarge') + ' · ' + t('stories.title')) + '" aria-label="' + esc(t('stories.openLarge') + ' · ' + t('stories.title')) + '">' + sym('story') + '</button>';
 }
 /** Label + sub-line for a system row by its kind — a repo row names the side of the seam it is.
  * @group Journey view */
@@ -3534,7 +3534,7 @@ function jrnStorySceneHtml(sum, sg, sel) {
  */
 function jrnStoryLinksHtml(sum) {
   const ls = sum.links || {};
-  const row = (list, word, mark) => (list || []).map((l) => '<span class="jrn-chip go" onclick="openJourney(\'' + esc(l.id) + '\')"'
+  const row = (list, word, mark) => (list || []).map((l) => '<span class="jrn-chip go" onclick="openJourney(' + jsArg(l.id) + ')"'
     + ' title="' + esc(t('journey.linkHow.' + (l.how || 'declared'))) + '">' + sym('interchange')
     + esc(mark === 'l' ? '◀ ' + word + ' · ' + l.name : word + ' · ' + l.name + ' ▶')
     + (l.screens != null ? '<i>' + esc(t('journey.countBuilt').replace('{n}', l.built || 0).replace('{m}', l.screens)) + '</i>' : '') + '</span>').join('');

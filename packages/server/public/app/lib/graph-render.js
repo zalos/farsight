@@ -3,7 +3,7 @@
 // graph) and supplies nodeCardHtml/vsl to the Journeys surface so both speak
 // one visual language. All chrome glyphs are drawn sprite symbols — no emoji.
 
-import { S, expose, esc, cssId, repoOf, bizLabel, bizName, humanize, effectiveGroup, inScope, collSourceNames, currentLens } from '../store.js';
+import { S, expose, esc, jsArg, cssId, repoOf, bizLabel, bizName, humanize, effectiveGroup, inScope, collSourceNames, currentLens } from '../store.js';
 import { sym } from '../sym.js';
 import { t, def } from '../strings.js';
 import { setTip, tipSource, tipAttrs } from './tooltip.js';
@@ -205,7 +205,7 @@ export function renderNode(n, mini) {
   el.innerHTML = isGroup
     ? '<div class="kind k-group"' + kindTip('group') + '>' + esc(kindWord('group')) + ' · ' + esc(repoOf(n)) + '</div><div class="name">' + esc(groupWords(n.name)) + '</div><div class="codename">' + esc(n.codename) + '</div>'
       + '<div class="count"><span' + membersTip(n) + '>⊞ ' + esc(t(n.members.length === 1 ? 'surf.membersOne' : 'surf.members').replace('{n}', n.members.length)) + '</span></div>'
-      + '<span class="expander"' + tipAttrs({ key: 'surf.group.expand' }) + ' onclick="event.stopPropagation();toggleGroup(\'' + esc(groupKeyOfDisplay(n)) + '\')">⊕</span>'
+      + '<span class="expander"' + tipAttrs({ key: 'surf.group.expand' }) + ' onclick="event.stopPropagation();toggleGroup(' + jsArg(groupKeyOfDisplay(n)) + ')">⊕</span>'
     : nodeCardHtml(n, mini, bizName(n));
   el.onclick = () => select(n.id);
   el.ondblclick = () => { if (isGroup) toggleGroup(groupKeyOfDisplay(n)); };
@@ -283,15 +283,15 @@ export function openCtx(e, n) {
   const eg = !isGroup && effectiveGroup(n);
   const key = isGroup ? groupKeyOfDisplay(n) : (eg ? eg.key : null);
   const items = [];
-  items.push('<button onclick="ctxDo(()=>focusOn(\'' + esc(n.id) + '\'))"><span class="ic">◎</span>Focus here</button>');
-  if (!isGroup) items.push('<button onclick="ctxDo(()=>select(\'' + esc(n.id) + '\'))"><span class="ic">☰</span>Inspect</button>');
+  items.push('<button onclick="ctxDo(()=>focusOn(' + jsArg(n.id) + '))"><span class="ic">◎</span>Focus here</button>');
+  if (!isGroup) items.push('<button onclick="ctxDo(()=>select(' + jsArg(n.id) + '))"><span class="ic">☰</span>Inspect</button>');
   if (!isGroup && ['function', 'component', 'route', 'page'].includes(n.kind))
-    items.push('<button onclick="ctxDo(()=>openJourney(\'' + esc(n.id) + '\'))"><span class="ic">▶</span>Run journey</button>');
-  if (!isGroup) items.push('<button onclick="ctxDo(()=>openImpact(\'' + esc(n.id) + '\'))"><span class="ic">' + sym('fork') + '</span>What does changing this affect?</button>');
+    items.push('<button onclick="ctxDo(()=>openJourney(' + jsArg(n.id) + '))"><span class="ic">▶</span>Run journey</button>');
+  if (!isGroup) items.push('<button onclick="ctxDo(()=>openImpact(' + jsArg(n.id) + '))"><span class="ic">' + sym('fork') + '</span>What does changing this affect?</button>');
   const href = !isGroup && vscodeHref(n);
-  if (href) items.push('<button onclick="ctxDo(()=>window.location.href=\'' + href + '\')"><span class="ic">' + sym('open') + '</span>Open in VS Code</button>');
-  if (key) items.push('<button onclick="ctxDo(()=>toggleGroup(\'' + esc(key) + '\'))"><span class="ic">' + (S.expandedGroups.has(key) ? '⊖' : '⊕') + '</span>' + (S.expandedGroups.has(key) ? 'Collapse' : 'Expand') + ' group</button>');
-  items.push('<button onclick="ctxDo(()=>navigator.clipboard.writeText(\'' + esc(n.id) + '\'))"><span class="ic">⌗</span>Copy node id</button>');
+  if (href) items.push('<button onclick="ctxDo(()=>window.location.href=' + jsArg(href) + ')"><span class="ic">' + sym('open') + '</span>Open in VS Code</button>');
+  if (key) items.push('<button onclick="ctxDo(()=>toggleGroup(' + jsArg(key) + '))"><span class="ic">' + (S.expandedGroups.has(key) ? '⊖' : '⊕') + '</span>' + (S.expandedGroups.has(key) ? 'Collapse' : 'Expand') + ' group</button>');
+  items.push('<button onclick="ctxDo(()=>navigator.clipboard.writeText(' + jsArg(n.id) + '))"><span class="ic">⌗</span>Copy node id</button>');
   menu.innerHTML = items.join('');
   menu.classList.add('open');
   const mw = 210, mh = items.length * 34;
@@ -423,12 +423,12 @@ export function select(id) {
     insp.innerHTML = '<div class="insp-head"><span class="kind k-group hud-label"' + kindTip('group') + '>' + esc(kindWord('group')) + ' · ' + esc(repoOf(n)) + '</span>'
       + '<h2>' + esc(groupWords(n.name)) + '</h2><div class="codename">' + esc(n.codename) + '</div>'
       + '<div class="rd"><span' + membersTip(n) + '>' + esc(t(n.members.length === 1 ? 'surf.membersOne' : 'surf.members').replace('{n}', n.members.length)) + '</span></div></div>'
-      + '<div class="actions"><button class="btn primary" onclick="toggleGroup(\'' + esc(key) + '\')">' + (n.expanded ? '⊖ Collapse' : '⊕ Expand') + '</button>'
-      + '<button class="btn" onclick="focusOn(\'' + esc(n.members[0].id) + '\')">◎ Focus</button></div>'
+      + '<div class="actions"><button class="btn primary" onclick="toggleGroup(' + jsArg(key) + ')">' + (n.expanded ? '⊖ Collapse' : '⊕ Expand') + '</button>'
+      + '<button class="btn" onclick="focusOn(' + jsArg(n.members[0].id) + ')">◎ Focus</button></div>'
       + '<div class="insp-sec"><span class="hud-label">What this group does</span>'
       + '<p>' + esc(n.members.map((m) => m.docs || (m.facets && m.facets.business && m.facets.business.description) || '').filter(Boolean).slice(0, 3).map((d) => d.split(/[.!?]\s/)[0]).join('. ') || 'No docs found — add JSDoc to the members.') + '.</p></div>'
       + '<div class="insp-sec"><span class="hud-label">Members</span>'
-      + n.members.map((m) => '<button class="rel" onclick="expandAndSelect(\'' + esc(groupKeyOfDisplay(n)) + '\',\'' + esc(m.id) + '\')"><span class="rk">' + esc(kindWord(m.kind)) + '</span>' + esc(bizName(m))
+      + n.members.map((m) => '<button class="rel" onclick="expandAndSelect(' + jsArg(groupKeyOfDisplay(n)) + ',' + jsArg(m.id) + ')"><span class="rk">' + esc(kindWord(m.kind)) + '</span>' + esc(bizName(m))
         + (biz() ? '' : ' <span style="font-family:var(--mono);font-size:10px;color:var(--dim)">' + esc(m.name) + '</span>') + '</button>').join('') + '</div>';
     return;
   }
@@ -445,7 +445,7 @@ export function select(id) {
     const dir = e.from === n.id ? '→' : '←';
     // the edge's kind is the graph's word; the business lens says which way it points
     const rk = business ? t(e.kind === 'guards' ? 'surf.rel.guards' : e.from === n.id ? 'surf.rel.uses' : 'surf.rel.usedBy') : e.kind + ' ' + dir;
-    return other ? '<button class="rel" onclick="select(\'' + esc(otherId) + '\')"><span class="rk">' + esc(rk) + '</span>' + esc(bizName(other)) + '</button>' : '';
+    return other ? '<button class="rel" onclick="select(' + jsArg(otherId) + ')"><span class="rk">' + esc(rk) + '</span>' + esc(bizName(other)) + '</button>' : '';
   }).join('');
   const bizText = (n.facets && n.facets.business && n.facets.business.description) || (n.docs ? n.docs.split(/[.!?]\s/)[0] : '');
   const lens = currentLens();
@@ -464,13 +464,13 @@ export function select(id) {
     '<div class="insp-head"><span class="kind k-' + n.kind + ' hud-label" style="color:inherit"' + kindTip(n.kind) + '>' + esc(kindWord(n.kind)) + ' · ' + esc(repoOf(n)) + '</span>'
     + '<h2>' + esc(bizName(n)) + '</h2><div class="codename">' + esc(n.name) + (n.signature ? '' : '') + '</div>'
     + (n.loc ? '<div class="path">' + esc(n.loc.path) + ':' + n.loc.line + vsl(repoOf(n), n.loc.path, n.loc.line) + '</div>' : '') + '</div>'
-    + '<div class="actions"><button class="btn primary" onclick="focusOn(\'' + esc(n.id) + '\')">◎ Focus</button>'
-    + (['function', 'component', 'route', 'page'].includes(n.kind) && n.loc ? '<button class="btn" onclick="openJourney(\'' + esc(n.id) + '\')">▶ Journey</button>' : '')
+    + '<div class="actions"><button class="btn primary" onclick="focusOn(' + jsArg(n.id) + ')">◎ Focus</button>'
+    + (['function', 'component', 'route', 'page'].includes(n.kind) && n.loc ? '<button class="btn" onclick="openJourney(' + jsArg(n.id) + ')">▶ Journey</button>' : '')
     + (n.kind === 'api' ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="#/apis/' + encodeURIComponent(n.id) + '">' + sym('api') + ' ' + esc(t('nav.apis')) + '</a>' : '')
     + (n.contract ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="#/apis/' + encodeURIComponent(n.contract.apiId) + '?op=' + encodeURIComponent(n.id) + '">' + sym('api') + ' ' + esc(t('apis.contractLink')) + '</a>' : '')
-    + '<button class="btn" onclick="openImpact(\'' + esc(n.id) + '\')"' + tipAttrs({ key: 'surf.insp.impact', noFocus: true }) + '>' + sym('fork') + ' ' + esc(t('surf.insp.impactBtn')) + '</button>'
+    + '<button class="btn" onclick="openImpact(' + jsArg(n.id) + ')"' + tipAttrs({ key: 'surf.insp.impact', noFocus: true }) + '>' + sym('fork') + ' ' + esc(t('surf.insp.impactBtn')) + '</button>'
     // the editor is a developer's door; the business lens has no use for it
-    + (href && !business ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="' + href + '">' + sym('open') + ' VS Code</a>' : '') + '</div>'
+    + (href && !business ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="' + esc(href) + '">' + sym('open') + ' VS Code</a>' : '') + '</div>'
     + (bizText ? '<div class="insp-sec"><span class="hud-label">' + esc(t('surf.insp.summary')) + '</span><p>' + esc(business ? unCode(bizText) : bizText) + '</p></div>' : '')
     + storiesSecHtml(n)
     + (n.design ? designSecHtml(n) : '')
@@ -486,7 +486,7 @@ export function select(id) {
       + dataEdges.map((e) => {
         const me = e.from === n.id, other = S.BYID[me ? e.to : e.from];
         const rk = business ? t(e.kind === 'writes' ? (me ? 'surf.rel.writes' : 'surf.rel.writtenBy') : (me ? 'surf.rel.reads' : 'surf.rel.readBy')) : e.kind + (me ? ' →' : ' ←');
-        return '<button class="rel" onclick="select(\'' + esc(me ? e.to : e.from) + '\')"><span class="rk">' + esc(rk) + '</span>' + esc(other ? (business ? bizName(other) : other.name) : '')
+        return '<button class="rel" onclick="select(' + jsArg(me ? e.to : e.from) + ')"><span class="rk">' + esc(rk) + '</span>' + esc(other ? (business ? bizName(other) : other.name) : '')
           + (e.meta && e.meta.code && !business ? '<span class="qcode">' + esc(e.meta.code) + '</span>' : '') + '</button>';
       }).join('') + '</div>' : '')
     + (n.snippet && lens !== 'business' ? '<div class="insp-sec"><span class="hud-label">Source (truth)</span><div class="code snippet">' + esc(n.snippet) + '</div></div>' : '')
@@ -562,7 +562,7 @@ export function designSecHtml(n) {
     + (d.lastModified ? '<div class="rd">' + esc(t('design.modified')) + ' ' + esc(d.lastModified) + ' · ' + esc(d.freshness === 'figma' ? t('design.freshFigma') : t('design.freshManifest')) + '</div>' : '')
     + (d.operations && d.operations.length ? '<div class="rd">' + esc(t('design.uses')) + ' ' + esc(biz() ? d.operations.map(unCode).join(', ') : d.operations.join(', ')) + '</div>' : '')
     + (screens.length ? '<div class="rd" style="margin-top:6px">' + esc(t('design.flowScreens')) + '</div>'
-      + screens.map((s, i) => '<button class="rel" onclick="select(\'' + esc(s.id) + '\')"><span class="rk">' + (i + 1) + '</span>' + esc(bizLabel(s)) + '</button>').join('') : '')
+      + screens.map((s, i) => '<button class="rel" onclick="select(' + jsArg(s.id) + ')"><span class="rk">' + (i + 1) + '</span>' + esc(bizLabel(s)) + '</button>').join('') : '')
     + (docs.length ? '<div class="rd" style="margin-top:6px">' + esc(t('design.docs')) + ' '
       + docs.map((l) => l.url ? linkHtml(l.url) : (esc(String(l.ref || '').split('/').pop()) + vsl(repoOf(n), l.ref, 1))).join(' ') + '</div>' : '')
     + (d.drift || []).map((x) => '<div class="api-drift" style="margin-top:6px">' + sym('warning') + '<div><b>' + esc(t('design.drift.' + x.kind)) + '</b>' + esc(biz() ? unCode(x.message) : x.message) + '</div></div>').join('')
@@ -611,7 +611,7 @@ export function designThumbHtml(n, cls) {
       + (d.url ? '<br>' + linkHtml(d.url, t('insp.designOpen')) : '') + '</div></div>';
   }
   DESIGN_REFS[n.id] = n;
-  return '<div class="dsg-thumb' + (cls ? ' ' + cls : '') + '" onclick="event.stopPropagation();openDesignLightbox(\'' + esc(n.id) + '\')" title="' + esc(t('insp.designOpen')) + '">'
+  return '<div class="dsg-thumb' + (cls ? ' ' + cls : '') + '" onclick="event.stopPropagation();openDesignLightbox(' + jsArg(n.id) + ')" title="' + esc(t('insp.designOpen')) + '">'
     + '<img src="/api/design/image?node=' + encodeURIComponent(n.id) + '" alt="' + esc(d.name || bizLabel(n)) + '" onerror="designImgFail(this)"/>'
     + '<div class="dsg-thumb-fail" style="display:none">' + sym('design') + '<span class="w">' + esc(t('design.noImage')) + '</span>'
     + (d.url ? '<br>' + linkHtml(d.url, t('insp.designOpen')) : '') + '</div></div>';
