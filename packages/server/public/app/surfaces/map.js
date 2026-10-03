@@ -26,7 +26,7 @@ import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, storesOf, MODE_ORDER } from '../lib/map-model.js';
-import { createCanvas, LEVEL_NB, SNAP_RADIUS } from '../lib/map-canvas.js';
+import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import { shareLink } from '../share.js';
 
@@ -39,11 +39,17 @@ const DATA_SHOWN = 3, CALLS_SHOWN = 4, FOLD_H = 34;
 const DMIN = 880;
 /** Where a street lands when it is entered or left: a district fits, never above this. */
 const STREET_FIT_MAX = 0.95;
+/** …and never below this: under LEVEL_NB the board draws covers, so a journey stop below it would not be a street. */
+const STREET_FIT_MIN = LEVEL_NB + 0.02;
+/** Screen px kept clear around a framed journey. */
+const FRAME_PAD = 24;
+/** The size, in px on screen, a data node's name reads at from the calls stop on. */
+const READ_PX = 11;
+/** The enter stop puts a screen at this share of the stage's height — a little over the engine's SNAP_COVER, so it arms. */
+const ENTER_COVER = SNAP_COVER + 0.04;
 /** Leaving a property lands on the street at this scale, centred on the screen. */
 const STREET_SCALE = 1.0;
 const PLUMB_KEY = 'fs-map-plumb';
-/** Screen px the stage's chrome row takes at the top — a fit leaves it clear. */
-const CHROME_H = 52;
 
 /** The surface's own state. Nothing here is shared with the journey overlay. */
 const MAP = {
@@ -150,14 +156,27 @@ export function mountMap(route, el) {
   MAP.world = el.querySelector('.map-world');
   MAP.links = el.querySelector('.map-links');
   MAP.world.classList.toggle('no-plumb', !MAP.plumb);
-  MAP.cv = createCanvas(MAP.board, MAP.world, {
+  MAP.cv = attachCanvas(MAP.board, MAP.world, {
     onChange: onCanvasChange,
-    snapTargets: () => (MAP.prop ? [] : [...MAP.world.querySelectorAll('.map-scr')]),
+    stops: mapStops,
+    max: () => Math.max(MAX_SCALE, enterScale() * 1.25),
+    // zoom-to-enter arms only past the calls stop, on the journey the street is on
+    armFrom: () => callsScale(),
+    snapTargets: () => (MAP.prop || !MAP.focus ? [] : [...MAP.world.querySelectorAll('.map-scr[data-flow="' + cssAttr(MAP.focus) + '"]')]),
+    onArm: onArm,
     onSnap: (scr) => openScreenEl(scr),
     onGestureEnd: () => { MAP.autoFit = null; syncHashToBoard(); },
     // the rest of a pinch out that just left a screen does not keep zooming the street
     holdWheel: () => Date.now() < (MAP.holdWheelUntil || 0),
   });
+  // the board starts under the chrome row, so nothing draws beneath the toolbar
+  const chrome = MAP.stage.querySelector('.map-chrome');
+  if (typeof ResizeObserver === 'function') {
+    MAP.chromeRO = new ResizeObserver(() => { if (MAP.stage) MAP.stage.style.setProperty('--map-chrome-h', chrome.offsetHeight + 'px'); });
+    MAP.chromeRO.observe(chrome);
+  }
+  MAP.stage.style.setProperty('--map-chrome-h', chrome.offsetHeight + 'px');
+  MAP.stage.addEventListener('click', onEdgeClick);
   MAP.board.addEventListener('click', onBoardClick);
   MAP.board.addEventListener('keydown', onBoardKey);
   MAP.board.addEventListener('pointerover', onDistrictHot);
@@ -220,6 +239,7 @@ export function unmountMap() {
   closeCard();
   closeProperty({ keepHash: true });
   if (MAP.cv) MAP.cv.destroy();
+  if (MAP.chromeRO) { MAP.chromeRO.disconnect(); MAP.chromeRO = null; }
   window.removeEventListener('resize', onResize);
   document.removeEventListener('fullscreenchange', onFullscreen);
   document.removeEventListener('click', onDocClick, true);
@@ -484,7 +504,7 @@ function districtSize(d) {
 function layout() {
   const ds = MAP.nb.districts;
   const items = ds.map((d) => ({ id: d.id, repo: d.repo || '', ...districtSize(d) }));
-  const bw = MAP.board ? MAP.board.clientWidth : 0, bh = MAP.board ? MAP.board.clientHeight - CHROME_H : 0;
+  const bw = MAP.board ? MAP.board.clientWidth : 0, bh = MAP.board ? MAP.board.clientHeight : 0;
   const L = layoutDistricts(items, { aspect: bw > 0 && bh > 0 ? bw / bh : 1.6 });
   MAP.geom = L.rects;
   MAP.bands = L.bands;
@@ -523,21 +543,109 @@ function districtEl(id) {
 }
 
 // ── moving the board ─────────────────────────────────────────────────────
+// The board's stops (docs/MAP-VIEWER.md § MAP, "Levels and stops"): every journey fitted (the board), one
+// journey fitted (the journey), its calls readable (calls), one screen large enough to enter (enter). The
+// engine (lib/map-canvas.js) holds a gesture at the first stop it crosses; + and − go stop to stop.
+function boardSize() {
+  return { w: MAP.board ? MAP.board.clientWidth : 0, h: MAP.board ? MAP.board.clientHeight : 0 };
+}
+/** The scale at which every journey fits — the board stop. */
+function boardScale() {
+  const b = boardSize();
+  if (!MAP.size.w || !b.w || !b.h) return 0;
+  return Math.min(LEVEL_NB * 0.9, (b.w - FRAME_PAD * 2) / MAP.size.w, (b.h - FRAME_PAD * 2) / MAP.size.h);
+}
 function fitAll(anim) {
   if (!MAP.cv || !MAP.size.w) return;
-  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: 24, top: CHROME_H, max: LEVEL_NB * 0.9, anim });
+  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: FRAME_PAD, max: LEVEL_NB * 0.9, anim });
 }
-/** Zoom to one journey's street: the district fits, plumbing included when it is on. */
+/** The height a journey's frame holds: its head and screens, and its pathways when plumbing is on. */
+function frameH(g) { return MAP.plumb ? g.h : SY + SH + 70; }
+/**
+ * One journey fitted — its stop: fitted to its width (and its height with plumbing), never above
+ * STREET_FIT_MAX and never below STREET_FIT_MIN, so a long journey keeps the street and scrolls, with an
+ * edge cue saying how many screens are past the edge.
+ */
+function journeyScale(id) {
+  const g = MAP.geom.get(id);
+  const b = boardSize();
+  if (!g || !b.w || !b.h) return 0;
+  const s = Math.min(STREET_FIT_MAX, (b.w - FRAME_PAD * 2) / g.w, (b.h - FRAME_PAD * 2) / frameH(g));
+  return Math.max(STREET_FIT_MIN, s);
+}
+/**
+ * Calls readable — the smallest scale at which a data node's name reads at READ_PX on screen, measured from
+ * the stylesheet (a data node's name, else a call's, else a screen's), so a change of type size moves it.
+ */
+function callsScale() {
+  const el = MAP.world && (MAP.world.querySelector('.map-pd .nm') || MAP.world.querySelector('.map-pl .nm') || MAP.world.querySelector('.map-scr .nm'));
+  const px = el ? parseFloat(getComputedStyle(el).fontSize) : 12;
+  return READ_PX / (px > 0 ? px : 12);
+}
+/** The enter stop: a screen ENTER_COVER of the stage's height, so it arms and the hint shows. */
+function enterScale() {
+  const b = boardSize();
+  return b.h ? (b.h * ENTER_COVER) / SH : 2.4;
+}
+/** The journey a zoom about the stage point `anchor` is going into: the district under it, else the nearest. */
+function journeyAt(anchor) {
+  if (!MAP.cv || !MAP.geom.size) return MAP.focus;
+  const w = MAP.cv.toWorld(anchor.x, anchor.y);
+  let best = null, bd = Infinity;
+  for (const [id, g] of MAP.geom) {
+    const dx = Math.max(g.x - w.x, 0, w.x - (g.x + g.w)), dy = Math.max(g.y - w.y, 0, w.y - (g.y + g.h));
+    const d = Math.hypot(dx, dy);
+    if (d < bd) { bd = d; best = id; }
+  }
+  return best || MAP.focus;
+}
+/** The stops about a stage point, for the engine. None while a screen is open. */
+function mapStops(anchor) {
+  if (!MAP.cv || MAP.prop || !MAP.size.w) return [];
+  const id = MAP.cv.level() === 'st' && MAP.focus ? MAP.focus : journeyAt(anchor);
+  const js = journeyScale(id), cs = callsScale(), es = enterScale();
+  const out = [{ id: 'board', s: boardScale(), frame: () => { fitAll(true); writeHash(null, null); } }];
+  if (id && js) out.push({ id: 'journey', s: js, frame: () => enterJourney(id, true) });
+  // a short journey is readable fitted: the calls stop folds into the journey's
+  if (id && cs > js * 1.04) out.push({ id: 'calls', s: cs, frame: (a, via) => { if (via === 'step') frameCalls(id, cs); } });
+  if (id && es > Math.max(js, cs) * 1.04) out.push({ id: 'enter', s: es, frame: (a) => frameEnter(id, a, es) });
+  return out;
+}
+/**
+ * Zoom to one journey — its frame, and where `#/map/<flow>` opens: at its stop, its head at the top of the
+ * board (nothing above it), centred across when it fits, else starting at its first screen.
+ */
 function enterJourney(id, anim) {
   const g = MAP.geom.get(id);
   if (!g || !MAP.cv) return;
   MAP.focus = id;
-  const h = MAP.plumb ? g.h : SY + SH + 70;
-  MAP.cv.fit({ x: g.x, y: g.y, w: g.w, h }, { pad: 24, top: CHROME_H, max: STREET_FIT_MAX, anim });
-  // never land below the street threshold: a long journey scrolls instead
-  const s = MAP.cv.state().s;
-  if (s < LEVEL_NB) MAP.cv.centerOn(g.x + Math.min(g.w, 1600) / 2, g.y + h / 2, LEVEL_NB + 0.02, anim);
+  const s = journeyScale(id);
+  const b = boardSize();
+  const tx = g.w * s <= b.w - FRAME_PAD * 2 ? (b.w - g.w * s) / 2 - g.x * s : FRAME_PAD - g.x * s;
+  MAP.cv.set(tx, FRAME_PAD - g.y * s, s, anim);
   writeHash(id, null);
+}
+/** The calls stop by key or button: the world point at the centre stays across, the journey's head at the top. */
+function frameCalls(id, s) {
+  const g = MAP.geom.get(id);
+  if (!g || !MAP.cv) return;
+  const c = MAP.cv.viewCenter();
+  const b = boardSize();
+  MAP.cv.set(b.w / 2 - c.x * s, FRAME_PAD - g.y * s, s, true);
+}
+/** The enter stop: the screen nearest the zoom's point centred, large enough to arm, its hint on screen. */
+function frameEnter(id, anchor, s) {
+  const j = MAP.journeys.get(id);
+  if (!j || !j.model || !MAP.cv) return;
+  const w = MAP.cv.toWorld(anchor.x, anchor.y);
+  let best = -1, bd = Infinity;
+  j.model.screens.forEach((_, i) => {
+    const p = screenPos(id, i);
+    const d = p ? Math.hypot(p.x - w.x, p.y - w.y) : Infinity;
+    if (d < bd) { bd = d; best = i; }
+  });
+  const p = best >= 0 && screenPos(id, best);
+  if (p) MAP.cv.centerOn(p.x, p.y, s, true);
 }
 function screenPos(flow, index) {
   const g = MAP.geom.get(flow);
@@ -577,30 +685,86 @@ function onCanvasChange(st) {
     }
   }
   MAP.world.querySelectorAll('.map-district').forEach((d) => d.classList.toggle('focus', st.level === 'st' && d.dataset.flow === MAP.focus));
-  markNear(st);
   linkVisibility();
   drawCrumb();
   drawHint(st);
   applyTabbing();
+  drawEdges(st);
 }
-/** The screen a zoom would open, ringed so the snap is never a surprise. */
-function markNear(st) {
-  let near = null;
-  if (!MAP.prop && st.s >= 1.1 && MAP.cv) {
-    const n = MAP.cv.nearest();
-    if (n.el && n.d < SNAP_RADIUS) near = n.el;
+/** The screen a zoom in would enter, ringed and named in the hint first, so the snap is never a surprise. */
+function onArm(el) {
+  MAP.world.querySelectorAll('.map-scr.near').forEach((n) => { if (n !== el) n.classList.remove('near'); });
+  if (el) el.classList.add('near');
+  MAP.near = el;
+  if (MAP.cv) drawHint(MAP.cv.state());
+}
+
+/**
+ * The edge cues: screens of the journey in view that are past the left or right edge of the board, counted,
+ * each cue a button that slides the board to them.
+ */
+function edgeCounts(st) {
+  if (!MAP.cv || MAP.prop || st.level === 'nb' || !MAP.focus) return null;
+  const g = MAP.geom.get(MAP.focus);
+  const d = MAP.nb.districts.find((x) => x.id === MAP.focus);
+  if (!g || !d) return null;
+  const b = boardSize();
+  const v0 = MAP.cv.toWorld(0, 0), v1 = MAP.cv.toWorld(b.w, b.h);
+  // only while the screens' row is on the board
+  if (g.y + SY + SH < v0.y || g.y + SY > v1.y) return null;
+  const n = screenCount(d);
+  let left = 0, right = 0;
+  for (let i = 0; i < n; i++) {
+    const cx = g.x + PAD + i * COL + SW / 2;
+    if (cx < v0.x) left++; else if (cx > v1.x) right++;
   }
-  MAP.world.querySelectorAll('.map-scr.near').forEach((el) => { if (el !== near) el.classList.remove('near'); });
-  if (near) near.classList.add('near');
-  MAP.near = near;
+  // in the gap under the screens' row (above the pathways), so the cue never sits on a screen's name
+  const y = Math.max(40, Math.min(b.h - 40, st.ty + (g.y + SY + SH + (PL_TOP - SY - SH) / 2) * st.s));
+  return { left, right, y };
+}
+function edgeHtml(side, n) {
+  const words = t('map.edge.more').split('{n}');
+  const num = '<span class="n"' + plainTip(n, 'map.edge.more', 'map.edge.scope', '/api/journey').replace(' tabindex="0"', '') + '>' + n + '</span>';
+  return (side === 'l' ? '◂ ' : '') + esc(words[0]) + num + esc(words.slice(1).join(String(n))) + (side === 'r' ? ' ▸' : '');
+}
+function drawEdges(st) {
+  const ec = edgeCounts(st);
+  for (const side of ['l', 'r']) {
+    const el = MAP.stage.querySelector('.map-edgecue.' + side);
+    if (!el) continue;
+    const n = ec ? (side === 'l' ? ec.left : ec.right) : 0;
+    el.hidden = !n;
+    if (!n) continue;
+    if (el.dataset.n !== String(n)) { el.innerHTML = edgeHtml(side, n); el.dataset.n = String(n); }
+    el.style.top = (ec.y + (MAP.board ? MAP.board.offsetTop : 0)) + 'px';
+  }
+}
+/** A cue slides the board about one board's width toward its side, never past the journey's end. */
+function onEdgeClick(e) {
+  const cue = e.target.closest && e.target.closest('.map-edgecue');
+  if (!cue || !MAP.cv || !MAP.focus) return;
+  e.stopPropagation();
+  const g = MAP.geom.get(MAP.focus);
+  if (!g) return;
+  const st = MAP.cv.state();
+  const b = boardSize();
+  const page = Math.max(COL * st.s, b.w - FRAME_PAD * 2 - COL * st.s);
+  let tx = st.tx;
+  if (cue.classList.contains('r')) tx -= Math.min(page, (g.x + g.w) * st.s + st.tx - (b.w - FRAME_PAD));
+  else tx += Math.min(page, FRAME_PAD - (g.x * st.s + st.tx));
+  MAP.autoFit = null;
+  MAP.cv.set(tx, st.ty, st.s, true);
+  syncHashSoon();
 }
 
 // ── the stage and its chrome ─────────────────────────────────────────────
 function stageHtml() {
-  // the chrome comes first in the page so Tab meets the level pills and the tools before the board (§K)
-  return '<div class="map-surface"><div class="map-stage">'
+  // the chrome comes first in the page so Tab meets the level pills and the tools before the board (§K);
+  // tips on the map open on hover and stand clear of what they describe (lib/tooltip.js, data-tip-mode)
+  return '<div class="map-surface" data-tip-mode="hover"><div class="map-stage">'
     + '<div class="map-chrome">' + chromeHtml() + '</div>'
     + '<div class="map-board"><div class="map-world lvl-nb"><svg class="map-links" aria-hidden="true"></svg></div></div>'
+    + '<button type="button" class="map-edgecue l" hidden></button><button type="button" class="map-edgecue r" hidden></button>'
     + '<div class="map-hint" aria-live="polite"></div>'
     + '<div class="map-zoomro"' + tipAttrs({ key: 'map.zoom', noFocus: true }) + '></div>'
     + '<div class="map-prop-host" hidden></div>'
@@ -676,6 +840,8 @@ function drawHint(st) {
   else if (MAP.near) text = t('map.hint.near').replace('{name}', MAP.near.dataset.name || '');
   else text = t('map.hint.st');
   el.textContent = text;
+  // the snap is about to be possible: the hint says so in the accent before any zoom can enter
+  el.classList.toggle('enter', !MAP.prop && st.level !== 'nb' && !!MAP.near);
 }
 
 function onChromeClick(e) {
@@ -783,10 +949,26 @@ export function mapCopyLink() {
     else fallback();
   } catch { fallback(); }
 }
-/** Zoom about the middle (the ± tools and keys). @group Map */
-export function mapZoom(f) { if (MAP.cv && !MAP.prop) MAP.cv.zoomBy(f); }
-/** Fit every journey (the Fit tool and `0`). @group Map */
-export function mapFit() { if (!MAP.cv) return; closeCard(); closeProperty(); fitAll(true); writeHash(null, null); }
+/**
+ * The ± tools and keys: a factor above 1 goes to the next stop in (or enters the armed screen), below 1 to
+ * the next stop out — from a journey, its own fitted stop before the board.
+ * @group Map
+ */
+export function mapZoom(f) { if (MAP.cv && !MAP.prop) { MAP.autoFit = null; MAP.cv.zoomStep(f > 1 ? 1 : -1); } }
+/**
+ * Fit what is in view (the Fit tool and `0`): the journey the street is on, plumbing included when it is on;
+ * every journey only from the board. A screen that is open closes onto its journey.
+ * @group Map
+ */
+export function mapFit() {
+  if (!MAP.cv) return;
+  closeCard();
+  const flow = MAP.prop ? MAP.prop.flow : MAP.cv.level() === 'st' ? MAP.focus : null;
+  closeProperty({ keepHash: true });
+  if (flow && MAP.geom.has(flow)) { enterJourney(flow, true); return; }
+  fitAll(true);
+  writeHash(null, null);
+}
 
 // ── drawing ──────────────────────────────────────────────────────────────
 function renderAll() {
@@ -1107,9 +1289,7 @@ function linkPath(a, b, kind) {
 // ── clicks on the board ──────────────────────────────────────────────────
 function onBoardClick(e) {
   const tgt = e.target;
-  // a number or a word with a tip opens its tip, not what it sits on
-  const trig = tgt.closest(TIP_SELECTOR);
-  if (trig && !trig.matches('.map-scr,.map-pl,.map-pd,.map-dcover') && !tgt.closest('.map-fold') && tgt.closest('.map-scr,.map-pl,.map-pd,.map-dcover,.map-lane')) return;
+  // a number or a word with a tip shows it on hover (data-tip-mode="hover"); a click is for what it sits on
   if (tgt.closest('a[href]')) return;
   const fold = tgt.closest('.map-fold');
   if (fold && MAP.cv && MAP.cv.level() === 'st') { closeCard(); toggleFold(fold.dataset.fold, fold.dataset.flow); return; }
@@ -1463,7 +1643,7 @@ function onBoardFocus(e) {
 function revealEl(el) {
   if (!MAP.cv || !MAP.board) return;
   const b = MAP.board.getBoundingClientRect(), r = el.getBoundingClientRect();
-  const m = 32, top = b.top + CHROME_H + m, bottom = b.bottom - m - 24, left = b.left + m, right = b.right - m;
+  const m = 32, top = b.top + m, bottom = b.bottom - m - 24, left = b.left + m, right = b.right - m;
   let dx = 0, dy = 0;
   if (r.width > right - left || r.left < left) dx = left - r.left; else if (r.right > right) dx = right - r.right;
   if (r.height > bottom - top || r.top < top) dy = top - r.top; else if (r.bottom > bottom) dy = bottom - r.bottom;
