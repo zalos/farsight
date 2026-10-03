@@ -18,7 +18,8 @@ test.describe('front door', () => {
     }
     // the fixture's design manifest reaches the picker: its flows, with the start-here one first
     await expect(page.getByText('Billing cycle', { exact: true }).first()).toBeVisible();
-    await expect(page.locator('#stats')).toContainText('of 87');
+    // 87 parts + 8 packages + 12 module nodes (a file's import list) since the dependencies pass
+    await expect(page.locator('#stats')).toContainText('of 107');
   });
 
   /**
@@ -93,7 +94,7 @@ test.describe('front door', () => {
   /** @covers GET /graph */
   test('/graph serves the fixture graph the viewer draws', async ({ request }) => {
     const graph = await (await request.get('/graph')).json();
-    expect(graph.nodes.length).toBe(87);
+    expect(graph.nodes.length).toBe(107); // 87 parts + 8 packages + 12 module nodes
     expect(graph.nodes.some((n: { id: string }) => n.id === 'invoice-app::src/server/taxEngine.ts::computeTax')).toBe(true);
   });
 });
