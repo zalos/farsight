@@ -350,6 +350,26 @@ The plumbing prints no number: a call, a record, a message and a third party are
 them, so the same record appears under two screens while the journey's own counts still count it once.
 
 
+#### Property (`surfaces/map-property.js`, `lib/map-property-model.js` → `counts`)
+
+Every number the property prints is a `Counted` the `/api/journey` answer (or `/api/work/links`) already carries,
+handed on as the same object — `packages/server/test/map-property-model.test.ts` asserts identity, not equality. A
+tab whose subject nothing types prints **no number**: Overview, UX, Route and Changes.
+
+| printed | source | counts | scope | siblings |
+|---|---|---|---|---|
+| Gates tab `5` · Gates head · Overview chip `5 gates & rules` | `summary.segments[i].counted.gates` | distinct guards + rules by name on this screen (3 · 2 on Invoice list) | screen | the journey header's `gates & rules` is the journey's; the rows under the head are the same list (`jrnGatesShown`), so rows and number agree |
+| APIs tab `5` · APIs head · Overview chip `5 actions` | `segments[i].counted.actions` | distinct operations code calls on this screen | screen | the street's call chip (same object); New invoice prints `1` above **two** rows — the second is a *declared, never called* row (`MapCall.evidence: 'declared'`), which the number does not count, and its chip says so |
+| APIs tab `1` on a screen not built · Overview chip `1 stop` | `segments[i].counted.actionStops` | the stops the design declares (breakdown: 0 called · 1 declared · 0 no call) | screen | Discard draft; never `actions`, which is 0 there |
+| Gates · Decisions head `3` · Overview chip `3 decisions` | `segments[i].counted.decisions` | decisions drawn on this screen | screen | not printed in the business register when some decisions are guard-class (the rows then are fewer than the number) |
+| Tests tab `5` · Cases head · Overview chip `5 test cases` | `coverage.segments[i].counted.tests` | cases (unit + integration + e2e) whose walk reaches the screen | screen | the case rows listed are the cases counted; coverage runs that name no case are listed apart under `counted.runReports` |
+| Coverage runs head `1` | `coverage.segments[i].counted.runReports` | coverage reports that touched the screen's code and name no case | screen | not a case; never in the tab's number |
+| the tests foot (`… e2e · … unit · … integration · … observed`, the evidence chip, *their own last run*) | `coverage.segments[i]` through `jrnFoldFacts` | as the journey's tests foot | screen (`journey.scopeHere`, printed above the counts) | the same fold the journey's foot reads; never recomputed |
+| Work tab `N` · Work head | `/api/work/links?node=<page>` → `counts.items` | work items linked to the screen's page node, by state | node (`count.scope.node`) | the journey header's work chip counts the whole flow (`/api/work/flow`); asked only when a work source is configured |
+| `×2` beside a gate | `segments[i].gates[].count` (viewer, `plainTip` → `map.prop.times`) | times the walk of this screen met that checkpoint | screen | Σ over the rows is the screen's `counted.checks` |
+| `2 more that nobody put in plain words` (business) | `jrnGatesShown(rows).mute` (viewer, `plainTip` → `map.prop.gates.mute`) | gates on the screen whose only name is the code's | screen | drawn + mute = `counted.gates` |
+| `screen 2 of 3 in Billing cycle` | the screen's position in `model.screens` | a position, not a count | journey | — |
+
 ---
 
 ## 4. Open — found, not changed here
