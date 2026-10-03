@@ -18,6 +18,8 @@ export const DEPS_STRINGS: Record<string, StringEntry> = {
     'A package the code is built on: one somebody else publishes, or a library of this workspace that other parts import by name.'),
   'surf.kind.module': same('file',
     'One source file, as the list of packages it imports.'),
+  'count.scope.package': same('for this package',
+    'What the number beside it counts over: one package as one source imports it, every file of that source that imports it, wherever the file sits.'),
   'count.unit.packages': same('{n} packages',
     'Dependencies the code imports, each counted once per source: packages somebody else publishes and libraries of this workspace imported by name. The runtime’s own modules are not counted.'),
   'count.unit.packagesOne': one('1 package', 'count.unit.packages'),

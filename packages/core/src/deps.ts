@@ -142,8 +142,8 @@ export function depsRowOf(index: GraphIndex, n: GraphNode, hops = 2): DepsRow {
     ...(p.externalId ? { externalId: p.externalId } : {}),
     ...(p.note ? { note: p.note } : {}),
     versions: versionsOf(n, index),
-    importers: counted(modules.length, 'count.unit.importers', 'count.scope.node', 'core deps.ts depsRowOf → module nodes with an imports edge to the package'),
-    journeys: counted(journeys.length, 'count.unit.journeysReached', 'count.scope.node', `core deps.ts journeysReaching → impactOf(package, ${hops} hops) met by each journey's walk`,
+    importers: counted(modules.length, 'count.unit.importers', 'count.scope.package', 'core deps.ts depsRowOf → module nodes with an imports edge to the package'),
+    journeys: counted(journeys.length, 'count.unit.journeysReached', 'count.scope.package', `core deps.ts journeysReaching → impactOf(package, ${hops} hops) met by each journey's walk`,
       { bizUnit: 'count.unit.journeysReached' }),
     journeyRefs: journeys,
   };
@@ -235,12 +235,12 @@ export function importersOf(index: GraphIndex, packageId: string, opts: { hops?:
   const groups = [...grouped].sort(([a], [b]) => a.localeCompare(b)).map(([key, g]) => {
     g.importers.sort((a, b) => a.path.localeCompare(b.path));
     return { key, by: g.by, importers: g.importers,
-      count: counted(g.importers.length, 'count.unit.importers', 'count.scope.node', 'core deps.ts importersOf → module nodes of this group') };
+      count: counted(g.importers.length, 'count.unit.importers', 'count.scope.package', 'core deps.ts importersOf → module nodes of this group') };
   });
   return {
     package: depsRowOf(index, pkg, opts.hops),
     groups,
-    importers: counted(rows.length, 'count.unit.importers', 'count.scope.node', 'core deps.ts importersOf → module nodes with an imports edge to the package',
+    importers: counted(rows.length, 'count.unit.importers', 'count.scope.package', 'core deps.ts importersOf → module nodes with an imports edge to the package',
       { breakdown: groups.map((g) => ({ key: 'count.unit.importers', n: g.importers.length, label: g.key })) }),
   };
 }
