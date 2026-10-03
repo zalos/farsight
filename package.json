@@ -1,7 +1,7 @@
 {
   "name": "farsight",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Parse codebases into a semantic graph and explore them through a game-inspired GUI",
   "repository": {
     "type": "git",
