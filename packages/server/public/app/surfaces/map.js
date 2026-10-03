@@ -1423,7 +1423,9 @@ function tabDistrict(el) {
   const street = el.querySelector('.map-dstreet'), head = el.querySelector('.map-dhead');
   if (street) street.inert = nb;
   if (head) head.inert = nb;
-  el.querySelectorAll('.map-dcover-in [tabindex],.map-dcover-in a,.map-dcover-in button').forEach((x) => { x.tabIndex = -1; });
+  // a tip trigger without a tabindex gets one from the tooltip's observer: set it first, so it is never a stop here
+  const cover = el.querySelector('.map-dcover-in');
+  if (cover) cover.querySelectorAll('[tabindex],a,button,' + TIP_SELECTOR).forEach((x) => { x.tabIndex = -1; });
 }
 /** The stops follow the level and the open screen; redone only when either changed. */
 function applyTabbing() {
