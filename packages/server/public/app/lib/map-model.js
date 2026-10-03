@@ -274,6 +274,8 @@ export function streetModel(data, graphById) {
         calls: (seg.counted && seg.counted.actions) || null,
         gates: (seg.counted && seg.counted.gates) || null,
         tests: (cov && cov.counted && cov.counted.tests) || null,
+        // the screen's coverage fold — its evidence word travels with its tests count
+        evidence: cov,
         work: null,
       },
       calls,

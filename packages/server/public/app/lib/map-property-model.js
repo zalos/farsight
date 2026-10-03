@@ -181,6 +181,8 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
       overview: {
         business: screen.business || (seg.screen && seg.screen.business) || '',
         glance: [apisCount(screen, seg), c.gates, c.decisions, testsCount].filter(Boolean),
+        // the screen's coverage fold: its evidence word is printed beside the tests count, never apart (lane N)
+        evidence: testsCount && testsCount.n ? cov : null,
         calls,
         gates,
         work: 'lazy',
@@ -213,10 +215,29 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
       work: 'lazy',
       changes: 'lazy',
     },
+    // the footer's units (lane N): the screens the walk reached — the street's screens — and the ones the
+    // journey names that it did not reach, each with the absence word that says why
+    place: placeOf(sum, screens.length),
     // the parts the Changes tab keeps a change for: the page, its components, the handlers its calls reach
     changeIds: [pageId].concat(components.map((x) => x.id), handlerIds(seg)).filter(Boolean),
     counts: { gates: c.gates || null, apis: apisCount(screen, seg), ux: null, tests: testsCount, work: null, changes: null },
   };
+}
+
+/**
+ * Where a screen sits, in typed units: `reached` is the summary's `counted.screensReached` (the street's
+ * screens, distinct) when it counts the street's rows, `declared` its `counted.screens`, and `notReached`
+ * the named screens no segment opens on, each `{ id, name, word }` — `notBuilt` for a screen the design
+ * names and the code does not serve, else `notReached` (two of the six absence words, never a seventh).
+ */
+export function placeOf(sum, streetLength) {
+  const k = (sum && sum.counted) || {};
+  const reachedIds = new Set(((sum && sum.segments) || []).map((sg) => sg && sg.screen && sg.screen.id).filter(Boolean));
+  const notReached = ((sum && sum.user) || []).filter((u) => u && !reachedIds.has(u.id)).map((u) => ({
+    id: u.id, name: u.name, word: u.designStatus === 'design-only' || (!u.designStatus && !u.loc) ? 'notBuilt' : 'notReached',
+  }));
+  const reached = k.screensReached && k.screensReached.n === streetLength ? k.screensReached : null;
+  return { reached, declared: k.screens || null, notReached };
 }
 
 /** The handler of each call on the screen (`marker.handler.nodeId`) and the route itself. */

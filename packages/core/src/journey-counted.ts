@@ -26,7 +26,10 @@ import { counted, type Counted } from './counts.js';
 
 /** The journey header's numbers and their siblings, each with its scope. */
 export interface JourneyCounted {
+  /** the screens the journey names (its design's, else the walk's), split into reached by the walk / not reached */
   screens: Counted;
+  /** the named screens the walk reached — the unit the Map's street and footer count in; `screens` is how many are named */
+  screensReached: Counted;
   built: Counted;
   /** code lens only (no `bizUnit`): the walk's own unit */
   steps: Counted;
@@ -165,6 +168,9 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
   const moments = summary.segments.flatMap((sg) => sg.moments);
   const split = stopSplit(j, moments);
   const built = summary.user.filter((u) => (u.designStatus ? u.designStatus === 'both' : !!u.loc)).length;
+  // a named screen is reached when a segment opens on it; a screen met twice is one screen
+  const named = new Set(summary.user.map((u) => u.id));
+  const reached = new Set(summary.segments.map((sg) => sg.screen?.id).filter((id): id is string => !!id && named.has(id))).size;
   const guardNames = new Set(summary.business.gates.map((g) => g.name)).size;
   const ruleNames = new Set(summary.business.rules.map((r) => r.name)).size;
   const guardDecisions = summary.business.untranslated.guardsUnlabelled;
@@ -174,7 +180,16 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
     return { sentences: acc.sentences + w.sentences, names: acc.names + w.names, decisions: acc.decisions + w.decisions };
   }, { sentences: 0, names: 0, decisions: 0 });
   return {
-    screens: counted(k.screens, 'journey.countScreens', all, c('screens'), { bizUnit: 'journey.biz.countScreens' }),
+    screens: counted(k.screens, 'journey.countScreens', all, c('screens'), {
+      bizUnit: 'journey.biz.countScreens',
+      breakdown: [
+        { key: 'count.part.screensReached', n: reached },
+        { key: 'count.part.screensNotReached', n: k.screens - reached },
+      ],
+    }),
+    screensReached: counted(reached, 'count.unit.screensReached', all, `${SRC}.segments[].screen — distinct named screens a segment opens on`, {
+      bizUnit: 'count.unit.screensReached',
+    }),
     built: counted(built, 'journey.countBuilt', all, `${SRC}.user — designStatus 'both', else a source location`, { of: summary.user.length, bizUnit: 'journey.biz.countBuilt' }),
     steps: counted(k.steps, 'journey.countSteps', all, c('steps')),
     planned: counted(k.planned, 'journey.plannedCount', all, c('planned')),

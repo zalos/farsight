@@ -24,6 +24,7 @@ import { countedHtml, plainTip } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
+import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, storesOf, MODE_ORDER } from '../lib/map-model.js';
 import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
@@ -1049,16 +1050,23 @@ function aggHtml(d, j) {
   if (j.error) return '<span class="map-chip k-absent"' + tipAttrs({ key: 'map.cover.failed', noFocus: true }) + '>' + esc(t('map.cover.failed')) + '</span>' + work;
   const sum = j.data.summary || {};
   const k = sum.counted || {};
-  const cov = sum.coverage && sum.coverage.journey && sum.coverage.journey.counted;
-  const chip = (c, cls) => countedHtml(c, '/api/journey', { cls: 'map-chip ' + cls });
+  const cov = sum.coverage && sum.coverage.journey;
+  const chip = mapCountChip;
+  // the order is the poster's: what it is and how far built, what proves it runs, who owns it and
+  // whether it reaches the ERP, then the code's numbers (a narrow cover clips from the end)
   return [
-    chip(k.screens, ''),
+    // screens the journey names, and — when the walk reached fewer — how many it reached (lane N, one number one word)
+    mapScreensChips(k),
     k.built && k.built.of != null && k.built.n < k.built.of ? chip(k.built, 'k-warn') : chip(k.built, 'k-ok'),
+    // a count of tests never travels without its evidence word — the Portfolio's word for the same fold
+    cov && cov.counted ? mapTestsChips(cov.counted.tests, cov) : '',
+    // whether it reaches the ERP and who owns it — the Portfolio's columns, in its words
+    mapErpChip(sum, k.built ? k.built.n : null),
+    mapOwnerChip(d.owner),
     chip(k.actions, 'k-api'),
     chip(k.gates, 'k-gate'),
     // the stores the journey touches — the summary's own Counted (data-stores §5); not drawn at 0
     k.stores && k.stores.n ? chip(k.stores, 'k-store') : '',
-    cov ? chip(cov.tests, 'k-test') : '',
     k.declaredNotCalled && k.declaredNotCalled.n ? chip(k.declaredNotCalled, 'k-absent') : '',
   ].join('') + work;
 }
@@ -1134,7 +1142,8 @@ function screenHtml(d, m, s, x, y, n) {
   const ph = '<div class="map-thumb ph">' + sym('screen') + '<span>' + esc(t('journey.absent.notIndexed')) + '</span></div>';
   const c = s.chips;
   const chip = (cn, cls) => (cn && (cn.n || biz() === false) ? countedHtml(cn, '/api/journey', { cls: 'map-chip ' + cls }) : '');
-  const chips = [chip(c.calls, 'k-api'), chip(c.gates, 'k-gate'), chip(c.tests, 'k-test')].join('');
+  // the screen's tests travel with the screen's own evidence word (lane N)
+  const chips = [chip(c.calls, 'k-api'), chip(c.gates, 'k-gate'), mapTestsChips(c.tests, c.evidence, { hideZero: biz() })].join('');
   return '<div class="map-scr' + (s.state === 'planned' ? ' planned' : '') + '" role="button" tabindex="0"'
     + ' data-flow="' + esc(d.id) + '" data-index="' + s.index + '" data-node="' + esc(s.id) + '" data-name="' + esc(s.name) + '"'
     + ' aria-label="' + esc(t('map.screen.open') + ' · ' + s.name) + '" style="left:' + x + 'px;top:' + y + 'px">'

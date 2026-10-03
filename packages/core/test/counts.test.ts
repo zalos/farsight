@@ -145,9 +145,31 @@ function fold(g = threeScreens()): JourneySummary {
 test('every count the journey fold hands out is sound: known words, a define, a listed scope, a partition', () => {
   const sum = fold();
   const n = assertSound(sum.counted, 'journey') + sum.segments.reduce((a, sg) => a + assertSound(sg.counted, `segment ${sg.index}`), 0);
-  // 20 since the data-stores pass: `stores` joined the header counts
-  assert.equal(n, 20 + 7 * sum.segments.length, 'every header count and every screen count is typed');
+  // 20 since the data-stores pass: `stores` joined the header counts; 21 since the map pass: `screensReached`
+  assert.equal(n, 21 + 7 * sum.segments.length, 'every header count and every screen count is typed');
   for (const sg of sum.segments) assert.ok(sg.counted, `segment ${sg.index} carries no typed counts`);
+});
+
+test('screens declared and screens reached are two numbers with two names, and the split adds up', () => {
+  // the map pass (2026-10-03): one journey printed 14 (the design's screens), 10 (the street's) and
+  // 23 (the drill's stops) with nothing saying which unit each was
+  const sum = fold();
+  const q = sum.counted!;
+  assert.equal(q.screens.n, sum.user.length, 'screens are the ones the journey names');
+  assert.equal(q.screensReached.n, 3, 'the walk reaches all three');
+  assert.deepEqual(q.screens.breakdown!.map((p) => [p.key, p.n]), [['count.part.screensReached', 3], ['count.part.screensNotReached', 0]]);
+  assert.notEqual(q.screens.unit, q.screensReached.unit, 'two numbers must carry two names');
+  // a fourth screen the journey names and nothing on the walk leads to: named, not reached
+  const g = threeScreens();
+  g.nodes.push(page('/orphan', 11, []));
+  const index = buildIndex(g.nodes, g.edges);
+  const named = [...screensFor(index, FLOW), index.byId.get(`${R}::page::/orphan`)!];
+  const s2 = journeySummary(index, journey(index, FLOW), named);
+  assert.equal(s2.counted!.screens.n, 4);
+  assert.equal(s2.counted!.screensReached.n, 3);
+  assert.deepEqual(s2.counted!.screens.breakdown!.map((p) => p.n), [3, 1]);
+  assert.deepEqual(countedProblems(s2.counted!.screens), []);
+  assert.deepEqual(countedProblems(s2.counted!.screensReached), []);
 });
 
 test('actions and stops are two numbers with two names — and the stops contain the actions', () => {
