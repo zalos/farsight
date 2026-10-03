@@ -7,10 +7,6 @@
 import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
 
-// Until lane B's surfaces/map-property.js lands, opening a screen asks for it and
-// gets a 404, and the map draws its own stand-in. Once it exists this never matches.
-test.use({ expectedHttpErrors: [/\/app\/surfaces\/map-property\.js$/] });
-
 const FLOW = 'invoice-app::flow::billing-cycle';
 const STREET = '#/map/' + encodeURIComponent(FLOW);
 const LIST_PAGE = 'invoice-app::page::/invoices';

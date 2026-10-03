@@ -91,7 +91,16 @@ test.describe('map property', () => {
     await page.locator('#mp-tab-gates .mp-tabn [data-tip-id]').click();
     await expect(page.locator('#fs-tip')).toContainText(/gates/i);
 
+    // the hero sizes from its own box, never from the rail: the same on every tab, and below its chip row
+    const box = () => page.evaluate(() => {
+      const r = (s: string) => document.querySelector(s)!.getBoundingClientRect();
+      return { chipsBottom: r('.mp-hero-chips').bottom, shot: [r('.mp-shot').top, r('.mp-shot').width, r('.mp-shot').height].map(Math.round) };
+    });
+    const onOverview = await box();
+    expect(onOverview.shot[0]).toBeGreaterThanOrEqual(onOverview.chipsBottom);
+
     await openTab(page, 'apis');
+    expect(await box()).toEqual(onOverview);
     const calls = page.locator('.mp-body .mp-row[data-map-card="call"]');
     await expect(calls).toHaveCount(5);
     await expect(calls.locator('.mp-svc')).toHaveText(Array(5).fill(/billing api/i));
