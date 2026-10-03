@@ -8,6 +8,7 @@ import { openPalette, closePalette, paletteNav, clearFocus, focusOn, closeSettin
 import { journeyOpen, forksOpen, closeForks, cutsOpen, closeCuts, closeJourney, jrnNav, jrnToggleView, jrnCycleLayout, jrnCycleDock, expandedOpen, closeExpanded, jrnActionStep } from './surfaces/journeys.js';
 import { jrnOpenTests, jrnOpenImpact } from './surfaces/journey-drill.js';
 import { openImpact, closeImpact, impactOpen } from './impact.js';
+import { mapOpen, mapEscape, mapKey, mapSelected } from './surfaces/map.js';
 import { copyLiveLink, closeShare } from './share.js';
 import { trapTab } from './lib/focus-trap.js';
 import { tipKeydown } from './lib/tooltip.js';
@@ -22,6 +23,9 @@ const KEYS = [
   { keys: 't', desc: 'key.t' },
   { keys: '[ / ]', desc: 'key.brackets' },
   { keys: 'b', desc: 'key.b' },
+  { keys: 'p', desc: 'key.mapPlumb' },
+  { keys: '+ / − / 0', desc: 'key.mapZoom' },
+  { keys: '[ / ]', desc: 'key.mapStep' },
   { keys: 'f', desc: 'key.f' },
   { keys: 'y', desc: 'key.y' },
   { keys: '?', desc: 'key.help' },
@@ -92,6 +96,8 @@ function onKeydown(e) {
     // the cut list sits above the forks drawer, so it leaves first — Esc unwinds
     // what is on top, never the overlay while something is still covering it
     else if (jOpen) { if (cutsOpen()) closeCuts(); else if (forksOpen()) closeForks(); else if (expandedOpen()) closeExpanded(); else closeJourney(); }
+    // on the map Esc backs out one level: the explore card, the screen, the street
+    else if (mapOpen() && mapEscape()) { /* used */ }
     else if (S.focusSet) clearFocus();
     return;
   }
@@ -99,6 +105,8 @@ function onKeydown(e) {
   const tag = (e.target && e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // the map's own keys — p plumbing, + − 0 zoom, [ ] the screens of an open screen's journey
+  if (mapOpen() && mapKey(e)) { e.preventDefault(); return; }
   if (jOpen && S.JOURNEY && (e.key === 'j' || e.key === 'k')) { e.preventDefault(); jrnNav(e.key === 'j' ? 1 : -1); return; }
   if (jOpen && S.JOURNEY && e.key === 'l') { e.preventDefault(); jrnToggleView(); return; }
   if (jOpen && S.JOURNEY && e.key === 'v') { e.preventDefault(); jrnCycleLayout(); return; }
@@ -116,7 +124,8 @@ function onKeydown(e) {
   // key, two contexts: the proposal's key `i` is declined (§10.1), because two
   // names for one question is the fault an earlier review told us to stop.
   if (jOpen && S.JOURNEY && e.key === 'b') { e.preventDefault(); jrnOpenImpact(); return; }
-  if (e.key === 'b') { openImpact(S.selected); return; }
+  // on the map, the thing whose explore card is open is the one asked about
+  if (e.key === 'b') { openImpact((mapOpen() && mapSelected()) || S.selected); return; }
   if (e.key === 'f') { if (S.focusSet) clearFocus(); else if (S.selected) focusOn(S.selected); return; }
 }
 

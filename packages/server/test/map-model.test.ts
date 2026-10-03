@@ -99,12 +99,16 @@ test('screensUsing names every screen a record is drawn under', () => {
   assert.deepEqual(screensUsing(model, 'call', 'invoice-app::route::GET /invoices').map((s: { name: string }) => s.name), ['Invoice list']);
 });
 
-test('the neighbourhood lays the containing journey first, then the rest by name', () => {
-  const nb = neighbourhoodModel(fx.design.designs, new Map([['invoice-app::flow::new-invoice', { counts: { items: { n: 2 } } }]]));
-  assert.deepEqual(nb.districts.map((d: { name: string; total: number }) => [d.name, d.total]), [
-    ['Billing cycle', 3], ['Draft and send an invoice', 2], ['Start a new invoice', 1],
+test('the neighbourhood lays the containing journey first, then the rest in the order the design walks them', () => {
+  const nb = neighbourhoodModel(fx.design.designs, new Map([['invoice-app::flow::new-invoice', { counts: { items: { n: 2 } } }]]), byId);
+  // Billing cycle holds every screen of the other two; Start a new invoice leads to Draft and send
+  assert.deepEqual(nb.districts.map((d: { name: string; total: number; container: boolean }) => [d.name, d.total, d.container]), [
+    ['Billing cycle', 3, true], ['Start a new invoice', 1, false], ['Draft and send an invoice', 2, false],
   ]);
-  assert.equal(nb.districts[2].work.counts.items.n, 2);
+  assert.equal(nb.districts[1].work.counts.items.n, 2);
+  // without the graph the leads-to order is unknown: the larger journey comes first
+  assert.deepEqual(neighbourhoodModel(fx.design.designs).districts.map((d: { name: string }) => d.name),
+    ['Billing cycle', 'Draft and send an invoice', 'Start a new invoice']);
   assert.equal(nb.districts[0].work, null);
   assert.deepEqual(nb.districts.map((d: { index: number }) => d.index), [0, 1, 2]);
 });

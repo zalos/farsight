@@ -87,7 +87,7 @@ export const STRINGS: Record<string, StringEntry> = {
   },
   // the WORK surface's words live in strings-work-hud.ts (nav.work, sys.workFailed, work.hud.*)
   ...WORK_HUD_STRINGS,
-  // the MAP surface's words live in strings-map.ts (map.*)
+  // the MAP surface's words live in strings-map.ts (nav.map, map.*, set.flagMap, key.map*)
   ...MAP_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),

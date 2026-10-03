@@ -64,6 +64,9 @@ const CHROME_FILES = [
   'surfaces/portfolio.js', 'surfaces/codemap.js', 'surfaces/changes.js',
   'surfaces/stewardship.js', 'surfaces/journeys.js', 'surfaces/journey-drill.js', 'surfaces/apis.js',
   'surfaces/tests.js', 'surfaces/work.js', 'work-chips.js', 'stories.js', 'lib/tooltip.js',
+  // the MAP surface (docs/proposals/map-view.md): lane A's three modules
+  'surfaces/map.js', 'lib/map-canvas.js', 'lib/map-model.js',
+  // lane B's two
   'surfaces/map-property.js', 'lib/map-property-model.js',
 ];
 // journeys.js: only its NEW surface chrome is expected to use t(); its legacy
