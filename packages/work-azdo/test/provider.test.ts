@@ -170,8 +170,23 @@ test('pull: when the feed cannot answer, WIQL on ChangedDate with timePrecision 
   assert.match(q.body.query, /\[System\.AreaPath\] UNDER 'ExampleProject'/);
   assert.match(q.body.query, /\[System\.ChangedDate\] > '2026-05-10T00:00:00\.000Z'/);
   assert.equal(pages.flatMap((x) => x.items).length, 4);
-  assert.deepEqual(JSON.parse(pages.at(-1)!.cursor!).p.ExampleProject, { since: '2026-09-30T22:31:39.617Z' });
+  assert.deepEqual(JSON.parse(pages.at(-1)!.cursor!).p.ExampleProject, { since: '2026-09-30T22:31:39.617Z' }, 'a feed that refuses the token retires it');
   await assert.rejects(drain(p.pull(s, 'not-a-cursor', c.scope)), /not one this provider wrote/);
+});
+
+test('pull: a feed that fails for a moment keeps its watermark, so the next pull reads the feed again', async () => {
+  let down = true;
+  const handlers = [(r: any) => (r.path === '/ExampleProject/_apis/wit/reporting/workitemrevisions' && down ? { status: 500, body: { message: 'busy' } } : undefined)];
+  const { fake, p, cfg: c } = setup({ handlers });
+  const s = await p.connect(c, FAKE_PAT);
+  const pages = await drain(p.pull(s, JSON.stringify({ v: 1, p: { ExampleProject: { t: 'W1', since: '2026-05-10T00:00:00.000Z' } } }), c.scope));
+  const cur = JSON.parse(pages.at(-1)!.cursor!).p.ExampleProject;
+  assert.equal(cur.t, 'W1', 'the watermark survives a 500');
+  assert.ok(cur.since);
+  down = false;
+  await drain(p.pull(s, pages.at(-1)!.cursor!, c.scope));
+  const feed = fake.seen.filter((r) => r.path === '/ExampleProject/_apis/wit/reporting/workitemrevisions').at(-1)!;
+  assert.equal(feed.query.get('continuationToken'), 'W1');
 });
 
 test('hydrate: history from updates and comments from the 7.2-preview comments API', async () => {

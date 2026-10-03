@@ -193,12 +193,13 @@ interface GitRun {
  * stderr. stdin/stderr are piped rather than inherited so a probe cannot print
  * `fatal:` noise into a CLI's output.
  */
-function run(root: string, args: string[], timeout: number, maxBuffer = 1024 * 1024): GitRun {
+function run(root: string, args: string[], timeout: number, maxBuffer = 1024 * 1024, input?: string): GitRun {
   try {
     const out = execFileSync('git', ['-C', root, ...args], {
       timeout,
       maxBuffer,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'],
+      ...(input === undefined ? {} : { input: Buffer.from(input, 'utf8') }),
       encoding: 'buffer',
     });
     return { ok: true, stdout: out.toString('utf8'), stderr: '' };
@@ -404,6 +405,37 @@ export function gitShowPatch(root: string, sha: string, opts: { paths?: string[]
 /** The last commit `after` can start from, when it is still in the history (a rewritten history makes it unknown). */
 export function gitKnows(root: string, sha: string): boolean {
   return run(root, ['cat-file', '-e', `${sha}^{commit}`], REV_TIMEOUT_MS).ok;
+}
+
+/**
+ * Of these commits, the ones this repository no longer has: objects git cannot
+ * find (a re-cloned or squashed history), and commits no branch, tag or remote
+ * reaches (a rebase, an amend, a deleted unmerged branch — the objects linger
+ * until gc, but nobody can reach them). Two git calls, whatever the count.
+ * Unavailable when git cannot answer — then forget nothing.
+ */
+export function gitUnreachable(root: string, shas: readonly string[]): GitFact<{ gone: string[] }> {
+  const asked = [...new Set(shas.filter((s) => SHA.test(s)))];
+  if (!asked.length) return { available: true, gone: [] };
+  const bad = repoCheck(root);
+  if (bad) return bad;
+  const check = run(root, ['cat-file', '--batch-check=%(objectname) %(objecttype)'], REV_TIMEOUT_MS, LOG_MAX_BUFFER, asked.join('\n') + '\n');
+  if (!check.ok) return absent(check);
+  const present = new Set<string>();
+  for (const line of check.stdout.split('\n')) {
+    const [name, type] = line.trim().split(' ');
+    if (name && type === 'commit') present.add(name);
+  }
+  const gone = asked.filter((s) => !present.has(s));
+  const known = asked.filter((s) => present.has(s));
+  // commits reachable from the asked ones and from no ref: exactly the unreachable part
+  for (let i = 0; i < known.length; i += 500) {
+    const r = run(root, ['rev-list', ...known.slice(i, i + 500), '--not', '--all'], LOG_TIMEOUT_MS, LOG_MAX_BUFFER);
+    if (!r.ok) return absent(r);
+    const unreached = new Set(r.stdout.split('\n').map((l) => l.trim()).filter(Boolean));
+    for (const s of known.slice(i, i + 500)) if (unreached.has(s)) gone.push(s);
+  }
+  return { available: true, gone };
 }
 
 /** A token that opens a commit record: the marker plus a full object name. */

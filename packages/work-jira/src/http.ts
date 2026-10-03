@@ -82,7 +82,7 @@ export function retryDelay(headers: Headers, attempt: number, now: number, rando
   const ra = headers.get('retry-after');
   if (ra) {
     const secs = Number(ra);
-    if (Number.isFinite(secs)) return Math.min(MAX_WAIT_MS, secs * 1000 + jitter);
+    if (Number.isFinite(secs)) return Math.min(MAX_WAIT_MS, Math.max(0, secs) * 1000 + jitter);
     const at = Date.parse(ra);
     if (Number.isFinite(at)) return Math.min(MAX_WAIT_MS, Math.max(0, at - now) + jitter);
   }
@@ -182,7 +182,8 @@ export function createJiraClient(opts: ClientOptions): JiraClient {
         throw out;
       }
       lastRate = readRateLimit(res.headers);
-      const retryable = res.status === 429 || (res.status === 503 && idempotent);
+      // a gateway error is as transient as a 503; a 500 is Jira's own answer and is not retried
+      const retryable = res.status === 429 || ([502, 503, 504].includes(res.status) && idempotent);
       if (retryable && attempt < maxRetries) {
         await res.body?.cancel().catch(() => undefined);
         await sleep(retryDelay(res.headers, attempt, now(), random));

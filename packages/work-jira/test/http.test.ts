@@ -105,3 +105,17 @@ test('anonymous calls send no Authorization header', async () => {
   await c.get('/_edge/tenant_info', { anonymous: true });
   assert.equal((seen[0]!.init.headers as Record<string, string>).Authorization, undefined);
 });
+
+test('a gateway error (502, 504) is retried for reads, not for writes; a negative Retry-After waits nothing', async () => {
+  for (const status of [502, 504]) {
+    const r = scripted([() => new Response('', { status }), () => new Response('{"ok":true}', { status: 200 })]);
+    const c = createJiraClient({ site: 'https://x.atlassian.net', user: USER, secret: SECRET, fetcher: r.fetcher, sleep: async () => {}, random: () => 0 });
+    assert.deepEqual(await c.get('/rest/api/3/myself'), { ok: true });
+    assert.equal(r.seen.length, 2, `${status} on a read is retried`);
+    const w = scripted([() => new Response('', { status }), () => new Response('{"ok":true}', { status: 200 })]);
+    const cw = createJiraClient({ site: 'https://x.atlassian.net', user: USER, secret: SECRET, fetcher: w.fetcher, sleep: async () => {}, random: () => 0 });
+    await assert.rejects(cw.post('/rest/api/3/issue/KAN-1/comment', {}));
+    assert.equal(w.seen.length, 1, `${status} on a write is not replayed`);
+  }
+  assert.equal(retryDelay(new Headers({ 'Retry-After': '-5' }), 0, 0, () => 0), 0);
+});

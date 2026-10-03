@@ -31,3 +31,9 @@ test('html: markdown → HTML for description edits, and back', () => {
   assert.equal(htmlToText(html), md);
   assert.equal(markdownToHtml('<script>x</script>'), '<p>&lt;script&gt;x&lt;/script&gt;</p>');
 });
+
+test('htmlToText: a <p> or <div> inside an <li> stays on the bullet, and items stay one per line', () => {
+  const h = htmlToText;
+  assert.equal(h('<ul><li><p>one</p></li><li><div>two</div></li></ul>'), '- one\n- two');
+  assert.equal(h('<ol><li><p>a</p><p>b</p></li><li>c</li></ol><p>after</p>'), '1. a\nb\n2. c\n\nafter');
+});

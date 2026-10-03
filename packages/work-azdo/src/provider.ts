@@ -152,7 +152,7 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     const p = i.projects[0]!;
     let ids: number[];
     try {
-      const r = await i.http.request({ method: 'POST', path: `/${encodeURIComponent(p)}/_apis/wit/wiql`, apiVersion: i.apiVersion, query: { $top: 5 },
+      const r = await i.http.request({ idempotent: true, method: 'POST', path: `/${encodeURIComponent(p)}/_apis/wit/wiql`, apiVersion: i.apiVersion, query: { $top: 5 },
         body: { query: 'SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC' } });
       ids = (r.body?.workItems ?? []).map((x: any) => x.id);
     } catch (err) {
@@ -163,7 +163,7 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     for (const id of ids) {
       try {
         const cur = (await i.http.request({ path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion, query: { fields: 'System.Title' } })).body;
-        await i.http.request({ method: 'PATCH', path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion, query: { validateOnly: true },
+        await i.http.request({ idempotent: true, method: 'PATCH', path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion, query: { validateOnly: true },
           contentType: 'application/json-patch+json',
           body: [{ op: 'test', path: '/rev', value: cur.rev }, { op: 'replace', path: '/fields/System.Title', value: cur.fields?.['System.Title'] ?? '' }] });
         return { read: true, write: true, detail: w('work.azdo.cred.canWrite', { key: id }) };
@@ -273,7 +273,7 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     const missing: number[] = [];
     for (let k = 0; k < ids.length; k += BATCH) {
       const chunk = ids.slice(k, k + BATCH);
-      const r = await i.http.request({ method: 'POST', path: '/_apis/wit/workitemsbatch', apiVersion: i.apiVersion,
+      const r = await i.http.request({ idempotent: true, method: 'POST', path: '/_apis/wit/workitemsbatch', apiVersion: i.apiVersion,
         body: { ids: chunk, $expand: 'relations', errorPolicy: 'omit' } });
       const vals: any[] = r.body?.value ?? [];
       vals.forEach((v, n) => { if (v) found.push(v); else missing.push(chunk[n]!); });
@@ -307,7 +307,7 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     let last = 0;
     let asOf: string | undefined;
     for (;;) {
-      const r = await i.http.request({ method: 'POST', path: `/${encodeURIComponent(project)}/_apis/wit/wiql`, apiVersion: i.apiVersion,
+      const r = await i.http.request({ idempotent: true, method: 'POST', path: `/${encodeURIComponent(project)}/_apis/wit/wiql`, apiVersion: i.apiVersion,
         query: { $top: WIQL_TOP, timePrecision: timePrecision || undefined },
         body: { query: `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project${where} AND [System.Id] > ${last} ORDER BY [System.Id] ASC` } });
       asOf ??= r.body?.asOf;
@@ -345,19 +345,28 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
         next.p[project] = { t: token, since };
       } else {
         let fedBy = 'feed';
+        // a transient failure (no answer, a server error, throttling) keeps the feed's watermark for the next
+        // pull; only the feed refusing the token (a 4xx) retires it — otherwise one bad minute would leave the
+        // source on WIQL for good, and WIQL never sees a hard delete
+        let keepToken: string | undefined;
         if (was.t) {
           try {
             const f = await drainFeed(i, project, was.t);
             ids = [...f.changed];
             for (const d of f.deleted) deletedAll.push(`work::${s.sourceId}::${d}`);
             next.p[project] = { t: f.token, since };
-          } catch (err) { if (isAuth(err)) throw err; fedBy = 'wiql'; }
+          } catch (err) {
+            if (isAuth(err)) throw err;
+            fedBy = 'wiql';
+            const status = err instanceof AzdoHttpError ? err.status : 0;
+            if (status === 0 || status === 429 || status >= 500) keepToken = was.t;
+          }
         } else fedBy = 'wiql';
         if (fedBy === 'wiql') {
           // fallback: no hard deletes seen this way, and a query is the rate-limit trigger Microsoft names
           const q = await wiqlIds(i, project, `${areaClause(scope)} AND [System.ChangedDate] > ${wiqlString(was.since)}`, true);
           ids = q.ids;
-          next.p[project] = { since: q.asOf ?? since };
+          next.p[project] = { ...(keepToken ? { t: keepToken } : {}), since: q.asOf ?? since };
         }
       }
       for (let k = 0; k < ids.length; k += BATCH) {
@@ -448,7 +457,7 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     if (action === 'label' && pid) evaluations.push({ securityNamespaceId: TAGGING_NAMESPACE, token: `/${pid}`, permissions: TAGGING_CREATE });
     let values: boolean[];
     try {
-      const r = await i.http.request({ method: 'POST', path: '/_apis/security/permissionevaluationbatch', apiVersion: i.apiVersion,
+      const r = await i.http.request({ idempotent: true, method: 'POST', path: '/_apis/security/permissionevaluationbatch', apiVersion: i.apiVersion,
         body: { alwaysAllowAdministrators: false, evaluations } });
       values = (r.body?.evaluations ?? []).map((e: any) => e.value === true);
     } catch (err) {
@@ -497,7 +506,7 @@ export function createAzdoProvider(opts: AzdoProviderOptions = {}): WorkProvider
     });
     if ('error' in built) return { ok: false, error: built.error };
     try {
-      const r = await i.http.request({ method: 'PATCH', path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion,
+      const r = await i.http.request({ idempotent: validateOnly, method: 'PATCH', path: `/_apis/wit/workitems/${id}`, apiVersion: i.apiVersion,
         query: validateOnly ? { validateOnly: true } : {}, contentType: 'application/json-patch+json', body: built.ops });
       if (validateOnly) return { ok: true, revision: String(cur.rev), raw: { validateOnly: true, ops: built.ops } };
       // re-read after the write: the engine replaces the cached item with what the tracker now says

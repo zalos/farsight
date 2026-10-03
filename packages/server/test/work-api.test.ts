@@ -375,6 +375,15 @@ test('intents: applied, pending then confirmed, denied with three verdicts, conf
   const dropped = (await post(`/api/work/intent/${again.intent.id}/drop`)).body;
   assert.equal(dropped.status, 'failed');
   assert.match(dropped.error, /dropped/);
+  // the outbox's state machine: a dropped request is not confirmed later, an applied one is not applied twice
+  const late = await post(`/api/work/intent/${again.intent.id}/confirm`);
+  assert.equal(late.status, 409, JSON.stringify(late.body));
+  assert.match(late.body.error, /is dropped/);
+  const twice = await post(`/api/work/intent/${pending.intent.id}/confirm`);
+  assert.equal(twice.status, 409, JSON.stringify(twice.body));
+  assert.equal((await post(`/api/work/intent/${pending.intent.id}/rebase`)).status, 409);
+  const writes = (await get(`/api/work/audit?item=${encodeURIComponent(id('INV-2'))}`)).body.rows.filter((r: any) => r.intent === pending.intent.id && r.outcome === 'confirmed');
+  assert.equal(writes.length, 1, 'written once');
 
   const outbox = (await get('/api/work/outbox')).body;
   assert.ok(outbox.intents.length >= 5);

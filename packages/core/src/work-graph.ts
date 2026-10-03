@@ -308,7 +308,9 @@ export function commitKeysOf(
     // the PR number in "Merge pull request #12" is GitHub's, never a work item
     for (const d of detect(mergeRef, 'branch', opts)) add(d, 'merge-subject', mergeRef);
   } else {
-    for (const d of detect(commit.subject, 'subject', opts)) add(d, 'subject');
+    // a trailing "(#58)" is the PR number GitHub appends to a squash merge, never a work item —
+    // with an Azure DevOps source configured it would otherwise read as work item 58
+    for (const d of detect(commit.subject.replace(/\s*\(#\d+\)\s*$/, ''), 'subject', opts)) add(d, 'subject');
   }
   if (commit.body) for (const d of detect(commit.body, 'body', opts)) add(d, 'subject');
   for (const r of refs) {

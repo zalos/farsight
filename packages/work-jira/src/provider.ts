@@ -557,7 +557,10 @@ export function createJiraProvider(opts: JiraProviderOptions = {}): WorkProvider
               const pick = wantName
                 ? list.find((x) => x.to?.name?.toLowerCase() === wantName) ?? list.find((x) => x.name.toLowerCase() === wantName)
                 : list.find((x) => stateCategory(x.to?.statusCategory?.key) === (p.to as StateCategory) && x.to?.name !== fromName);
-              if (!pick) return { ok: false, error: say('work.jira.says.noTransitionTo', { from: fromName, to: p.toName ?? p.to ?? '' }) };
+              // a named target must also be the category asked for: the gate's `to` grant checked the category,
+              // so `{ to: 'in-progress', toName: 'Done' }` must not move the item to Done
+              const off = pick && p.toName && p.to && stateCategory(pick.to?.statusCategory?.key) !== p.to;
+              if (!pick || off) return { ok: false, error: say('work.jira.says.noTransitionTo', { from: fromName, to: off ? `${p.toName} (${p.to})` : p.toName ?? p.to ?? '' }) };
               const screen = pick.fields ?? {};
               const given = (p.fields ?? {}) as Record<string, unknown>;
               const missing = Object.entries(screen).filter(([id, f]) => f.required && !f.hasDefaultValue && given[id] === undefined).map(([id, f]) => f.name ?? id);

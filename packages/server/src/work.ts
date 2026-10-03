@@ -20,7 +20,7 @@ import type {
   GraphStore, GraphIndex, GraphNode, KeyDetectOptions, KeyDetector, DetectedKey, WorkLinkFact, WorkLinkVia, WorkItemFacts,
   ConfidenceTier, WorkSourceFacts,
 } from '@farsight/core';
-import { gitLog, gitKnows, gitShowPatch, gitPrefix, commitInputsOf, GIT_ABSENT_WORD } from '@farsight/parsers';
+import { gitLog, gitKnows, gitShowPatch, gitPrefix, gitUnreachable, commitInputsOf, GIT_ABSENT_WORD } from '@farsight/parsers';
 import {
   WorkCache, WorkCacheUnavailable, workDbPath, providerFor, registerProvider, syncSource, connectSource, freshness,
   applyIntent, detectWorkKeys, evaluatePolicy, decide, attributed, STATE_CATEGORIES, WORK_ACTIONS,
@@ -126,7 +126,9 @@ export interface CodeSourceRead { name: string; dir: string }
 export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRead, keys: ReturnType<typeof keyOptionsOf>): string {
   try {
     const detect = keyDetector(keys.orgs);
-    const sig = JSON.stringify({ p: keys.projects, a: keys.ado });
+    // `r` is the detection rules' revision: bumping it re-reads the window once, so keys an older rule
+    // recorded wrongly (a squash merge's PR number as an ADO item, r2) are rewritten
+    const sig = JSON.stringify({ p: keys.projects, a: keys.ado, r: 2 });
     const newest = db.newestCommit(src.name);
     const incremental = newest && db.spineReadSig(src.name) === sig && gitKnows(src.dir, newest.sha);
     const wantKeys = (keys.projects?.length ?? 0) > 0 || keys.ado;
@@ -135,8 +137,13 @@ export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRea
     if (!log.available) return `history not indexed: ${GIT_ABSENT_WORD[log.reason]}${log.detail ? ` (${log.detail})` : ''}`;
     db.writeCommits(src.name, commitInputsOf(log.commits, { opts: keys, detect }));
     db.markSpineRead(src.name, sig, new Date().toISOString());
+    // a keyed commit git no longer has or reaches (a rewritten history) stops naming its work items
+    const keyed = db.keyedCommits().filter((c) => c.repo === src.name).map((c) => c.sha);
+    const unreachable = gitUnreachable(src.dir, keyed);
+    const forgot = unreachable.available ? db.forgetCommitKeys(src.name, unreachable.gone) : 0;
     const resolved = resolveCommitNodes(db, store, src);
     const parts = [`history ${log.commits.length} commit${log.commits.length === 1 ? '' : 's'} read${log.truncated ? ` (capped at ${log.max})` : ''}`];
+    if (forgot) parts.push(`${forgot} keyed commit${forgot === 1 ? '' : 's'} no longer in the history, forgotten`);
     if (resolved) parts.push(`${resolved} keyed commit${resolved === 1 ? '' : 's'} resolved to code`);
     return parts.join(' · ');
   } catch (err) {
@@ -469,7 +476,11 @@ function toPayload(action: WorkAction, p: Record<string, unknown>): IntentPayloa
   switch (action) {
     case 'transition': {
       const to = String(p.to ?? '');
-      return (STATE_CATEGORIES as readonly string[]).includes(to) ? { to: to as StateCategory } : { toName: to };
+      if ((STATE_CATEGORIES as readonly string[]).includes(to)) return { to: to as StateCategory };
+      // a state named by the tracker, with its category when the caller knows it (the HUD's state menu
+      // does): a grant's `to` allow-lists categories, so a name alone never passes one
+      const cat = String(p.category ?? '');
+      return { toName: to, ...((STATE_CATEGORIES as readonly string[]).includes(cat) ? { to: cat as StateCategory } : {}) };
     }
     case 'edit': {
       const fields: Record<string, unknown> = {};
@@ -590,18 +601,23 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
 
       const cached = linksOfItemFromCache(cache, id);
       const links = cached.length ? cached : graphLinks(index).filter((l) => l.work === id);
+      // one entry per commit: sources reading one checkout each record it under their own repo
+      // name, so the rows are grouped by sha alone and their nodes and files unioned (KAN-8)
       const bySha = new Map<string, typeof rows>();
-      for (const r of rows) bySha.set(`${r.repo} ${r.sha}`, [...(bySha.get(`${r.repo} ${r.sha}`) ?? []), r]);
+      for (const r of rows) bySha.set(r.sha, [...(bySha.get(r.sha) ?? []), r]);
       const rank = (v: string) => COMMIT_KEY_VIAS.indexOf(v as never);
       const commits = [...bySha.values()].map((rs) => {
         const r = [...rs].sort((a, b) => rank(a.via) - rank(b.via))[0]!;
-        const nodes = db?.commitNodes(r.repo, r.sha) ?? [];
-        const branch = rs.find((x) => x.ref)?.ref ?? db?.branchesForCommit(r.repo, r.sha)[0];
+        const repos = [...new Set(rs.map((x) => x.repo))];
+        const nodes = repos.flatMap((repo) => db?.commitNodes(repo, r.sha) ?? []);
+        const branch = rs.find((x) => x.ref)?.ref ?? repos.map((repo) => db?.branchesForCommit(repo, r.sha)[0]).find(Boolean);
+        const files = new Map<string, { path: string; status: string }>();
+        for (const repo of repos) for (const f of db?.filesForCommit(repo, r.sha) ?? []) if (!files.has(f.path)) files.set(f.path, { path: f.path, status: f.status });
         return {
           repo: r.repo, sha: r.sha, at: r.at, author: r.author, subject: r.subject,
           ...(branch ? { branch } : {}),
           via: r.via, vias: [...new Set(rs.map((x) => x.via))],
-          files: (db?.filesForCommit(r.repo, r.sha) ?? []).map((f) => ({ path: f.path, status: f.status })),
+          files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)),
           nodes: [...new Set(nodes.map((n) => n.node))],
           ...(nodes.length ? { resolved: nodes.some((n) => n.fileOnly) ? 'file' : 'hunk' } : {}),
         };
@@ -687,6 +703,13 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const cfg = cfgOf(row.source);
       if (!cfg) return J(404, { error: `the intent's source ${row.source} is no longer in settings` });
       const at = (ctx.now?.() ?? new Date()).toISOString();
+      // the outbox's state machine: confirm a queued request, re-base a conflict, drop either — nothing else.
+      // A confirm after a drop, or a second confirm of an applied comment, would write to the tracker again
+      const may: Record<string, readonly string[]> = { confirm: ['queued'], rebase: ['conflict'], drop: ['queued', 'conflict'] };
+      if (!may[im[2]!]!.includes(row.state)) {
+        const dropped = row.state === 'failed' && row.result?.error === 'dropped by a person';
+        return J(409, { error: `intent ${row.intent.id} is ${dropped ? 'dropped' : row.state}; ${im[2]} applies only to a ${may[im[2]!]!.join(' or ')} intent`, state: row.state });
+      }
       if (im[2] === 'drop') {
         cache.updateIntent(row.intent.id, { state: 'failed', result: { ok: false, error: 'dropped by a person' }, at });
         cache.audit({ at, source: row.source, intent: row.intent.id, item: row.intent.item, action: row.intent.action, requestedBy: row.intent.requestedBy, outcome: 'dropped' });
@@ -844,7 +867,9 @@ function diffAnswer(ctx: WorkRouteContext, db: SnapshotDb | undefined, rows: { r
   const root = rootOf(ctx, row.repo);
   if (!root) return { sha: row.sha, subject: row.subject, at: row.at, author: row.author, files: [], error: `the checkout of ${row.repo} is not on this machine` };
   const files = db?.filesForCommit(row.repo, row.sha) ?? [];
-  const nodes = db?.commitNodes(row.repo, row.sha) ?? [];
+  // the same commit recorded by every source reading this checkout: their nodes together (KAN-8)
+  const repos = [...new Set(rows.filter((r) => r.sha === row.sha).map((r) => r.repo))];
+  const nodes = repos.flatMap((repo) => db?.commitNodes(repo, row.sha) ?? []);
   const patch = gitShowPatch(root, row.sha, { context: 3 });
   if (!patch.available) return { sha: row.sha, subject: row.subject, at: row.at, author: row.author, files: [], error: `git could not show ${row.sha.slice(0, 7)}: ${GIT_ABSENT_WORD[patch.reason]}${patch.detail ? ` (${patch.detail})` : ''}` };
   const byFile = splitPatch(patch.patch);

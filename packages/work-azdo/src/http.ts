@@ -49,6 +49,12 @@ export interface AzdoRequest {
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
   contentType?: string;
+  /**
+   * Safe to send twice: a dropped connection or a 503 is retried only then. Default: GET only — a
+   * replayed comment POST posts the comment twice, a replayed PATCH answers a false 412 conflict.
+   * Reads that POST (WIQL, workitemsbatch, permission evaluation) and validateOnly patches set it.
+   */
+  idempotent?: boolean;
 }
 
 export interface AzdoResponse<T = any> {
@@ -105,6 +111,7 @@ export function createAzdoHttp(opts: AzdoHttpOptions): AzdoHttp {
     for (const [k, v] of Object.entries(req.query ?? {})) if (v !== undefined) q.set(k, String(v));
     q.set('api-version', req.apiVersion);
     const url = `${base}${req.path}?${q.toString()}`;
+    const idempotent = req.idempotent ?? (req.method ?? 'GET') === 'GET';
     for (let attempt = 0; ; attempt++) {
       const hold = holdUntil - now();
       if (hold > 0) await sleep(hold);
@@ -121,10 +128,11 @@ export function createAzdoHttp(opts: AzdoHttpOptions): AzdoHttp {
       } catch (err) {
         const name = (err as Error)?.name;
         if (name === 'TimeoutError' || name === 'AbortError') throw new AzdoHttpError(0, 'timeout');
-        if (attempt + 1 < attempts) { await sleep(Math.round(500 * 2 ** attempt * (0.5 + random()))); continue; }
+        if (idempotent && attempt + 1 < attempts) { await sleep(Math.round(500 * 2 ** attempt * (0.5 + random()))); continue; }
         throw new AzdoHttpError(0, 'unreachable');
       }
-      if (RETRYABLE.has(res.status) && attempt + 1 < attempts) {
+      // a 429 was refused before it was processed, so even a write may be re-sent; a 503 may not have been
+      if ((res.status === 429 || (RETRYABLE.has(res.status) && idempotent)) && attempt + 1 < attempts) {
         const ms = waitFor(res, attempt);
         await res.body?.cancel().catch(() => {});
         await sleep(Math.round(ms * (1 + 0.25 * random())));

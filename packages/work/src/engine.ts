@@ -137,7 +137,12 @@ export async function syncSource(cfg: SourceConfig, provider: WorkProvider, cach
       for (const it of await provider.hydrate(session, moved.slice(i, i + 100))) full.set(it.id, it);
     }
     pulled = fromPages.size;
+    // an item at the revision the cache already holds is left alone: the page carries a summary (no
+    // comments, no history), and replacing the hydrated record with it would strip both and open a
+    // spurious interval — an overlap window or a re-read after a write-back sends exactly that
+    const movedIds = new Set(moved);
     for (const it of fromPages.values()) {
+      if (!movedIds.has(it.id)) continue;
       if (cache.replaceItem(cfg.id, full.get(it.id) ?? it, syncNo)) changed++;
     }
     for (const id of gone) if (cache.markDeleted(id, syncNo)) deleted++;

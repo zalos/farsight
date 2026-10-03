@@ -589,7 +589,8 @@ function settleEntry(entry, a) {
 
 /** @group Work */ export function workAssign(personId) { postIntent('assign', { assignee: personId || null }); }
 /** A state picked by its tracker name — two states can share a category (In Progress, In Review). @group Work */
-export function workMove(name, category) { postIntent('transition', { to: name || category }); }
+// the category rides with the name: a grant's `to` allow-lists categories, and the tracker checks the name is one
+export function workMove(name, category) { postIntent('transition', { to: name || category, ...(category ? { category } : {}) }); }
 /** @group Work */ export function workComment(preview) {
   const el = document.getElementById('wk-comment-in');
   const body = el ? el.value.trim() : '';
@@ -616,7 +617,8 @@ export function workSettle(intentId, verb, idx) {
   fetch('/api/work/intent/' + encodeURIComponent(intentId) + '/' + verb, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
     .then((r) => r.json().catch(() => null)).then((a) => {
       if (!entry) { load(); return; }
-      if (verb === 'drop') { entry.status = 'dropped'; entry.answer = a || entry.answer; draw(); return; }
+      // dropped only when the server says so: a refused drop (an intent already applied) is not shown dropped
+      if (verb === 'drop' && a && a.status === 'failed' && /dropped/.test(a.error || '')) { entry.status = 'dropped'; entry.answer = a; draw(); return; }
       settleEntry(entry, a || { status: 'failed' });
     }).catch(() => { if (entry) { entry.status = 'failed'; draw(); } });
 }

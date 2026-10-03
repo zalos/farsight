@@ -172,10 +172,15 @@ export function adfBody(raw: unknown): Body | undefined {
 
 // ── markdown → ADF ─────────────────────────────────────────────────────────
 
-const INLINE = /(`[^`]+`)|(\[([^\]]+)\]\(([^)\s]+)\))|(\*\*([^*]+)\*\*)|(~~([^~]+)~~)|(\*([^*\s][^*]*)\*)|(_([^_\s][^_]*)_)/;
+const INLINE = /(`[^`]+`)|(\[([^\]]+)\]\(([^)\s]+)\))|(\*\*([^*]+)\*\*)|(~~([^~]+)~~)|(\*([^*\s][^*]*)\*)|((?<![A-Za-z0-9_])_([^_\s][^_]*)_(?![A-Za-z0-9_]))/;
 
+// ADF lets the code mark combine with link only: `**\`x\`**` stays code, never code + strong (Jira refuses that body)
 function withMark(nodes: AdfNode[], mark: AdfMark): AdfNode[] {
-  return nodes.map((n) => (n.type === 'text' ? { ...n, marks: [...(n.marks ?? []), mark] } : n));
+  return nodes.map((n) => {
+    if (n.type !== 'text') return n;
+    if (mark.type !== 'link' && n.marks?.some((m) => m.type === 'code')) return n;
+    return { ...n, marks: [...(n.marks ?? []), mark] };
+  });
 }
 
 function parseInline(s: string): AdfNode[] {
@@ -281,7 +286,10 @@ export function markdownToAdf(md: string): AdfDoc {
       continue;
     }
     if (/^\s*(---|\*\*\*|___)\s*$/.test(line) && !para.length) { content.push({ type: 'rule' }); continue; }
-    if (LIST_ITEM.test(line) && !para.length) {
+    // a list may interrupt a paragraph (CommonMark: a bullet, or an ordered list starting at 1)
+    const li = LIST_ITEM.exec(line);
+    if (li && (!para.length || !/\d/.test(li[2]!) || /^1[.)]$/.test(li[2]!))) {
+      flush();
       const { node, next } = parseList(lines, i);
       content.push(node);
       i = next - 1;
