@@ -15,7 +15,7 @@ import { mountStewardship } from './surfaces/stewardship.js';
 import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
-import { mountMap, mapRefresh, mapUpdate, unmountMap, mapEnabled } from './surfaces/map.js';
+import { mountMap, mapRefresh, mapUpdate, unmountMap, mapEnabled, mapOpen, mapTravel } from './surfaces/map.js';
 import { closeShare } from './share.js';
 import { initKeymap } from './keymap.js';
 import { impactFromRoute } from './impact.js';
@@ -120,7 +120,7 @@ export function parseRange(param) {
 
 /**
  * Parse the location hash into {surface, param, range, sync, scope, view, lens, band, repo, node, op, line}.
- * Grammar: #/<surface>[/<param>][@sync:N][?scope=…&view=…&lens=…&band=…&dock=…&biz=…&repo=…&node=…&op=…&line=N&impact=<id>&hops=N]
+ * Grammar: #/<surface>[/<param>][@sync:N][?scope=…&view=…&lens=…&band=…&dock=…&biz=…&repo=…&node=…&op=…&line=N&impact=<id>&hops=N&z=…&x=…&y=…&card=<kind>:<id>]
  * — sync and scope are parsed and carried in the store even where not yet
  * consumed (P1 snapshots / P3 scope model consume them: nothing re-renders from
  * `@sync:N` yet — `farsight serve --as-of sync:N` is what serves an older
@@ -177,6 +177,11 @@ export function parseRoute() {
     assignee: q.get('assignee'),
     q: q.get('q'),
     flow: q.get('flow'),
+    // the Map's picture (§K): its scale and the world point at the middle, and the explore card open (`<kind>:<nodeId>`)
+    z: q.get('z'),
+    x: q.get('x'),
+    y: q.get('y'),
+    card: q.get('card'),
     raw: location.hash,
   };
 }
@@ -737,9 +742,18 @@ export function buildChips() {
   // words (`deprecated`), never `runner:vitest` or `test:unit`
   const biz = currentLens() === 'business';
   const top = Object.entries(counts).filter(([tag]) => !biz || /^[a-z]+$/i.test(tag)).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  // a tag on tests counts the coverage reports beside the cases (each is a test node); the Tests page
+  // counts cases only, so the tip splits the two and the numbers can be reconciled (docs/COUNTS.md, Chrome)
+  const split = (tag, c) => {
+    const tests = S.GRAPH.nodes.filter((n) => n.kind === 'test' && inScope(n) && (n.tags || []).includes(tag));
+    const reports = tests.filter((n) => n.test && n.test.runLevel).length;
+    // only a split that adds up to the chip's number: a tag also carried by parts that are not tests is not split
+    if (!reports || tests.length !== c) return null;
+    return [[t('count.unit.cases').replace('{n}', '').trim(), tests.length - reports], [t('count.unit.runReports').replace('{n}', '').trim(), reports]];
+  };
   document.getElementById('chips').innerHTML = top.map(([tag, c]) =>
     '<button class="chip' + (S.activeTag === tag ? ' on' : '') + '" data-tag="' + esc(tag) + '" onclick="toggleTag(' + jsArg(tag) + ')">' + esc(biz ? humanize(tag) : tag)
-    + ' · <span class="cnt"' + plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', null, null, { tag }) + '>' + c + '</span></button>').join('');
+    + ' · <span class="cnt"' + plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', split(tag, c), null, { tag }) + '>' + c + '</span></button>').join('');
 }
 /**
  * @group Lens, theme & filters
@@ -965,6 +979,8 @@ export function pick(id) {
  *   reads it as that journey (since B2.2 it reads the product before the map),
  *   hybrid and code land on the code map with it in focus;
  * - a **gate** is a badge on what it guards: travel goes to that;
+ * - **on the Map** (the surface on screen, so a pick made inside it) a flow is its
+ *   street, a page or route a journey's screen (or the call's card) — `mapTravel`;
  * - anything else — a function, a table, a component — is one card on the code
  *   map, focused, with the inspector open. The map draws business names in the
  *   business register and the inspector leads with the business summary, so it
@@ -972,6 +988,13 @@ export function pick(id) {
  * @group Search & navigation
  */
 export function travelTarget(n) {
+  // ⌘K from the Map stays on the Map (§K): a journey is its street, a screen that
+  // journey's street with the screen open, a call its street with its card open.
+  // Anything the board does not draw travels as it does from everywhere else.
+  if (mapOpen()) {
+    const m = mapTravel(n);
+    if (m) return { surface: 'map', hash: m, id: n.id };
+  }
   // a gate is drawn as a badge on what it guards, never as a card: travel to the
   // surface that card lives on, but keep the gate as the node arrived at — the
   // inspector (and `b`) answer for the thing picked, not for what it protects

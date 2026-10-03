@@ -187,7 +187,8 @@ before(async () => {
   // a graph on disk, so /graph answers and roots[app] names the checkout
   const store = new GraphStore();
   store.roots.app = app;
-  store.addFragment({ repo: 'app', nodes: [], edges: [] });
+  // one part, so the Map's /api/history/touching has something to find commits for
+  store.addFragment({ repo: 'app', nodes: [{ id: 'app::src/two.ts::GET /two', kind: 'route', name: 'GET /two', tags: [], loc: { repo: 'app', path: 'src/two.ts', line: 1 } }], edges: [] });
   store.save(join(work, 'graph.json'));
 
   port = await freePort();
@@ -737,5 +738,23 @@ describe('/api/history — a history nobody has read (absent is not empty)', () 
       'the unread warning must go away once a history is there');
     // the unindexed count is now sayable, and says a real number
     assert.ok(body.notes.some((n: any) => /commits were never ingested by any sync — not indexed/.test(n.text)));
+  });
+});
+
+describe('/api/history/touching — the Map\'s Changes tab', () => {
+  test('the commits that changed a part, newest first, with a typed count and how each was matched', async () => {
+    const body = await api('/api/history/touching?repo=app&nodes=' + encodeURIComponent('app::src/two.ts::GET /two'));
+    same('commits read for the repository', body.read, 5);
+    same('the one commit that touched src/two.ts', body.commits.map((c: { sha: string }) => c.sha), [sha.c2]);
+    same('its subject', body.commits[0].subject, 'two');
+    same('matched by its file', body.commits[0].parts, [{ node: 'app::src/two.ts::GET /two', how: 'file' }]);
+    same('the typed count', [body.counted.commits.n, body.counted.commits.unit, body.counted.commits.scope], [1, 'map.prop.changes.countCommits', 'journey.scopeHere']);
+    same('its split adds up', body.counted.commits.breakdown.map((p: { n: number }) => p.n), [0, 1]);
+  });
+  test('a part no commit touched is none touched, not never read; without the query it is a 400', async () => {
+    const none = await api('/api/history/touching?repo=app&nodes=app::nowhere');
+    same('read', none.read, 5);
+    same('commits', none.commits, []);
+    assert.equal((await get('/api/history/touching?repo=app')).status, 400);
   });
 });

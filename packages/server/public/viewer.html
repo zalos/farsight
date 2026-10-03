@@ -2118,6 +2118,13 @@
   .map-chip.k-ok{border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
   .map-chip.k-warn{border-color:color-mix(in srgb,var(--warn) 70%,transparent);color:var(--warn)}
   .map-chip.k-absent{border-style:dashed}
+  /* lane N: the evidence word beside a count of tests, the owner, the ERP reach */
+  .map-chip.k-ev.ev-observed{border-color:color-mix(in srgb,var(--ok) 70%,transparent);color:var(--ok)}
+  .map-chip.k-ev.ev-stale{border-color:color-mix(in srgb,var(--warn) 60%,transparent);border-style:dashed;color:var(--warn)}
+  .map-chip.k-ev.ev-reached{border-color:color-mix(in srgb,var(--cyan) 55%,transparent);color:var(--cyan)}
+  .map-chip.k-ev.ev-declared{border-style:dashed;color:var(--dim)}
+  .map-chip.k-owner{color:var(--ink)}
+  .map-chip.k-erp{border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
   .map-chip.go{cursor:pointer;font:inherit;font-size:11px}
   .map-chip.go:hover{border-color:var(--accent);color:var(--ink)}
   .map-work:empty{display:none}
@@ -2125,6 +2132,10 @@
   .map-scr{position:absolute;width:260px;height:214px;border:1.5px solid var(--line);border-radius:8px;background:var(--raised);box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
   .map-scr:hover,.map-scr.near{border-color:var(--accent);transform:translateY(-2px)}
   .map-scr:focus-visible,.map-pl:focus-visible,.map-pd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  /* §K: the board's focus ring keeps a steady width on screen at any zoom (--map-inv), with a glow in the lens accent */
+  .map-world .map-scr:focus-visible,.map-world .map-pl:focus-visible,.map-world .map-pd:focus-visible,.map-world .map-fold:focus-visible{
+    outline:calc(2px * var(--map-inv, 1)) solid var(--accent);outline-offset:calc(3px * var(--map-inv, 1));box-shadow:0 0 0 calc(6px * var(--map-inv, 1)) var(--accent-dim)}
+  .map-world .map-dcover:focus-visible{outline:calc(3px * var(--map-inv, 1)) solid var(--accent);outline-offset:calc(-3px * var(--map-inv, 1));box-shadow:inset 0 0 0 calc(8px * var(--map-inv, 1)) var(--accent-dim)}
   .map-scr .stripe{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ok);z-index:1}
   .map-scr.planned .stripe{background:var(--warn)}
   .map-thumbwrap{height:112px;flex:none;border-bottom:1px solid var(--line);overflow:hidden;background:var(--ground)}
@@ -2197,6 +2208,10 @@
   .map-lvls button.on{color:var(--accent);background:var(--accent-dim)}
   .map-crumb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:40%}
   .map-crumb b{color:var(--ink);font-weight:500}
+  /* §K: the as-of stamp beside the crumb, so a screenshot of the map carries when it was true */
+  .map-asof{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 9px;white-space:nowrap;flex:none}
+  .map-asof:empty{display:none}
+  .map-linkfield{font-family:var(--mono);font-size:11px;width:260px;background:var(--bg);color:var(--ink);border:1px solid var(--accent);border-radius:4px;padding:5px 8px}
   .map-crumb .sep{opacity:.5;margin:0 6px}
   .map-tools{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .map-tb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}
@@ -2343,6 +2358,8 @@
   .mp-step[disabled] .nm{color:var(--muted)}
   .mp-mid{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;text-align:center}
   .mp-where{font-size:10px}
+  .mp-where .n,.mp-declared .n{color:var(--ink)}
+  .mp-declared{font-size:10px;color:var(--dim);letter-spacing:.02em}
   .mp-dots{display:flex;gap:7px}
   .mp-dot{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--dim);padding:0}
   .mp-dot.planned{border-style:dashed}
