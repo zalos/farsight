@@ -52,6 +52,7 @@ jobs:
         with:
           # the changelog reads <last tag>..HEAD, and the build stamp reads git
           fetch-depth: 0
+          lfs: true
 
       - name: Set up pnpm (version from packageManager)
         uses: pnpm/action-setup@v4
