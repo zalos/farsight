@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind } from './graph.js';
+import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -36,6 +36,8 @@ export interface FarsightConfig {
   tests?: TestsConfigBlock;
   /** third-party systems the parser cannot see by itself, or renames/kinds for ones it can */
   externals?: ExternalDecl[];
+  /** the data stores the repo's tables live in, when the code does not say — fills the gap, never overrides code (`via: 'config'`) */
+  stores?: StoreDecl[];
   /** glob(s) whose functions are plumbing regardless of @business: helpers in journeys, out of the coverable set, never entry points */
   plumbing?: string[];
   /** node ids (or name matchers, the guards shape) of the functions that build the process container — the setup closure's roots */
@@ -69,6 +71,19 @@ export interface ExternalDecl {
   import: string;
   name: string;
   kind: ExternalKind;
+  /** this external is (true) or is not (false) used as a data store — overrides the default from the kind (`erp` · `db` · `files` are) */
+  store?: boolean;
+}
+
+/**
+ * One declared data store (`farsight.config.json → stores[]`). Without `tables` it names the store of every
+ * table the code left unnamed; with `tables` it names only those (by table name). Code always wins.
+ */
+export interface StoreDecl {
+  name: string;
+  kind: StoreKind;
+  engine?: StoreEngine;
+  tables?: string[];
 }
 
 /** Where one level's results/coverage reports live. Paths are repo-relative globs; the adapter never runs tests. */
