@@ -2049,7 +2049,7 @@
   .map-surface{position:absolute;inset:0}
   .map-stage{position:absolute;inset:0;background:var(--panel);overflow:hidden;user-select:none;-webkit-user-select:none}
   .map-stage:fullscreen{background:var(--panel)}
-  .map-board{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;
+  .map-board{position:absolute;left:0;right:0;bottom:0;top:var(--map-chrome-h,52px);overflow:hidden;touch-action:none;cursor:grab;
     background-image:radial-gradient(var(--line-soft) 1px,transparent 1px);background-size:28px 28px}
   .map-board.drag{cursor:grabbing}
   .map-world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
@@ -2104,7 +2104,9 @@
   .map-band span{position:absolute;left:0;bottom:calc(-100px);transform-origin:0 100%;transform:scale(var(--map-inv, 1));white-space:nowrap;
     font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 2px 3px}
   .map-world.lvl-nb .map-dstreet{opacity:.18;pointer-events:none}
-  .map-world.lvl-nb .map-dhead{opacity:0}
+  .map-world.lvl-nb .map-dhead{opacity:0;pointer-events:none}
+  /* on the street the head's chips are above the street layer, so their tips open on hover */
+  .map-world.lvl-st .map-dhead{z-index:2}
   .map-world.lvl-st .map-dcover{opacity:0;pointer-events:none;visibility:hidden}
   .map-dstreet{position:absolute;inset:0;transition:opacity .25s}
   .map-edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
@@ -2159,7 +2161,7 @@
   .map-scr .ttl{display:flex;align-items:baseline;gap:8px;min-width:0}
   .map-scr .ord{font-family:var(--hud);font-size:12px;letter-spacing:.12em;color:var(--accent)}
   /* a screen's name wraps (three lines hold the longest measured) and its route shows whole */
-  .map-scr .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:12px;line-height:1.2;color:var(--ink);min-width:0;overflow-wrap:anywhere;
+  .map-scr .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:13px;line-height:1.2;color:var(--ink);min-width:0;overflow-wrap:anywhere;
     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .map-scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim);overflow-wrap:anywhere;line-height:1.25}
   .map-scr .route:empty{display:none}
@@ -2214,8 +2216,9 @@
   .map-world.no-plumb .map-fold{display:none}
   body.lens-business .map-surface .map-code{display:none !important}
   /* chrome on the stage */
-  .map-chrome{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:10px;padding:10px 12px;pointer-events:none;z-index:6}
-  .map-chrome>*{pointer-events:auto}
+  .map-chrome{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:10px;padding:10px 12px;z-index:6;
+    background:var(--panel);border-bottom:1px solid var(--line-soft)}
+  /* the toolbar is a band of its own: the board starts under it (--map-chrome-h, measured), so nothing draws through */
   .map-lvls{display:flex;border:1px solid var(--line);border-radius:4px;background:var(--panel);overflow:hidden;flex:none}
   .map-lvls button{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;color:var(--muted);padding:7px 12px}
   .map-lvls button.on{color:var(--accent);background:var(--accent-dim)}
@@ -2234,7 +2237,15 @@
   .map-tb:focus-visible,.map-lvls button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .map-hint{position:absolute;left:12px;bottom:10px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;z-index:6;max-width:calc(100% - 120px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .map-zoomro{position:absolute;right:12px;bottom:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;z-index:6}
-  .map-stage.in-prop .map-hint,.map-stage.in-prop .map-zoomro{display:none}
+  .map-hint.enter{color:var(--accent);border-color:var(--accent)}
+  .map-stage.in-prop .map-hint,.map-stage.in-prop .map-zoomro,.map-stage.in-prop .map-edgecue{display:none}
+  /* the edge cues: screens of the journey in view past the board's edge, counted; a click slides to them */
+  .map-edgecue{position:absolute;z-index:5;transform:translateY(-50%);font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;
+    color:var(--ink);background:var(--panel);border:1px solid var(--accent);border-radius:4px;padding:7px 10px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.3);white-space:nowrap}
+  .map-edgecue[hidden]{display:none}
+  .map-edgecue.l{left:10px} .map-edgecue.r{right:10px}
+  .map-edgecue .n{font-family:var(--mono);letter-spacing:0;color:var(--accent)}
+  .map-edgecue:hover,.map-edgecue:focus-visible{background:var(--accent-dim);outline:none}
   /* the legend (lane L): the board's own classes draw each swatch, so a swatch cannot describe a line the board does not draw */
   .map-legend[hidden]{display:none}
   .map-legend{position:absolute;right:12px;top:56px;z-index:7;width:340px;max-width:calc(100% - 24px);max-height:calc(100% - 110px);overflow:auto;

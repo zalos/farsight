@@ -61,16 +61,16 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
     define: 'Show under each screen the calls it makes, stacked in order with the colour of the service each one reaches, and beside each call the records, messages and third parties it reads and writes. Press p to switch.',
   },
   'map.tool.lens': same('Lens', 'Switch the words between the business register, which shows only what people wrote and never an identifier, and hybrid, which adds the code’s names. Press the lens buttons in the top bar for the code lens.'),
-  'map.tool.zoomIn': same('Zoom in', 'Zoom in about the middle of the board. The plus key does the same.'),
-  'map.tool.zoomOut': same('Zoom out', 'Zoom out about the middle of the board. The minus key does the same.'),
-  'map.tool.fit': same('Fit', 'Zoom out until every journey fits on the screen. The zero key does the same.'),
+  'map.tool.zoomIn': same('Zoom in', 'Zoom in to the next stop: from all journeys to one journey fitted, then to where its calls and data read, then to one screen large enough to enter. When the hint says a screen can be entered, this enters it. The plus key does the same.'),
+  'map.tool.zoomOut': same('Zoom out', 'Zoom out to the previous stop. From inside a journey it stops at that journey fitted before it goes out to all journeys. The minus key does the same.'),
+  'map.tool.fit': same('Fit', 'Fit what is in view: the journey you are on, with its calls and data when they are shown, or every journey when you are looking at all of them. The zero key does the same.'),
   'map.tool.full': same('Full screen', 'Give the board the whole screen. The controls stay; Esc or this button gives it back.'),
-  'map.zoom': same('zoom', 'How far the board is zoomed in: 1 is the size a screen is drawn at on its street. Below 0.5 the board shows all journeys; from 1.6 a screen near the middle opens when a zoom ends. This is the board’s scale, not a count of anything.'),
+  'map.zoom': same('zoom', 'How far the board is zoomed in: 1 is the size a screen is drawn at on its street. Below 0.5 the board shows all journeys. Zooming stops at all journeys, one journey fitted, its calls readable and one screen large; a screen opens only when the hint has said so and you zoom in again. This is the board’s scale, not a count of anything.'),
 
   // hints along the bottom edge
   'map.hint.nb': same('Click a journey, or zoom in, to walk its screens'),
   'map.hint.st': same('Click a screen to open it · p shows the calls and data under each screen'),
-  'map.hint.near': same('Zoom in to open {name}'),
+  'map.hint.near': same('Zoom in again to enter {name}'),
   'map.hint.pr': same('Esc or zoom out to go back to the journey'),
 
   // a district at the neighbourhood level
@@ -150,7 +150,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
 
   // the keymap panel
   'key.mapPlumb': same('Map: show or hide the calls and data under each screen'),
-  'key.mapZoom': same('Map: zoom in, zoom out, fit every journey'),
+  'key.mapZoom': same('Map: zoom in or out to the next stop; fit the journey in view, or every journey from the board'),
   'key.mapStep': same('Map: previous or next screen of the open screen’s journey'),
 
   // the street's folds: a call's data beyond its first three, a screen's calls beyond its first four
@@ -357,4 +357,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'key.mapHl': same('Map: previous or next journey'),
   'key.mapArrows': same('Map: move the board; with Shift, further'),
   'key.mapLink': same('Map: copy the link to this picture'),
+  // §Z — zoom and frame (lane Z, map pass 2)
+  'map.edge.more': same('{n} more', 'Screens of this journey past this edge of the board. Click to slide the board to them; the journey’s own counts never change.'),
+  'map.edge.scope': same('this journey, past the edge of the board', 'The screens of the journey in view whose middle is outside the board on this side.'),
 };

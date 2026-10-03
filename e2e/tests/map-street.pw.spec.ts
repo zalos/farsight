@@ -75,7 +75,7 @@ test.describe('map — neighbourhood and street', () => {
    * @covers packages/server/public/app/lib/map-model.js::neighbourhoodModel
    * @covers packages/server/public/app/lib/map-model.js::layoutDistricts
    * @covers packages/server/public/app/lib/map-model.js::streetModel
-   * @covers packages/server/public/app/lib/map-canvas.js::createCanvas
+   * @covers packages/server/public/app/lib/map-canvas.js::attachCanvas
    * @covers packages/server/public/app/surfaces/portfolio.js::mapSwitchHtml
    * @covers GET /api/design
    * @covers GET /api/journey
@@ -207,11 +207,11 @@ test.describe('map — neighbourhood and street', () => {
   });
 
   /**
-   * @covers packages/server/public/app/lib/map-canvas.js::createCanvas
+   * @covers packages/server/public/app/lib/map-canvas.js::attachCanvas
    * @covers packages/server/public/app/surfaces/map.js::mapZoom
    * @covers packages/server/public/app/surfaces/map.js::mapFit
    */
-  test('zooming in past the screen nearest the middle opens it; zooming out of it lands back on the street; 0 fits every journey', async ({ page }) => {
+  test('+ goes stop to stop and enters only after the hint; zooming out of a screen lands on the street; 0 fits the journey, Esc the board', async ({ page }) => {
     await mapOn(page);
     await openStreet(page);
     const world = page.locator('.map-world');
@@ -221,18 +221,34 @@ test.describe('map — neighbourhood and street', () => {
     await page.mouse.wheel(120, 0);
     await expect.poll(() => world.evaluate((el) => el.style.transform)).not.toBe(before);
     await page.mouse.wheel(-120, 0);
-    // + zooms about the middle; past 1.6 the screen there opens when the zoom ends
-    for (let i = 0; i < 3; i++) await page.keyboard.press('+');
+    // + from the journey goes stop to stop — the calls stop when the fitted journey is below it (lane L's wider
+    // column puts Billing cycle there at this viewport), then one screen large, named first
     const host = page.locator('.map-prop-host');
+    const hint = page.locator('.map-hint');
+    await page.keyboard.press('+');
+    await page.waitForTimeout(500);
+    if (!/\benter\b/.test((await hint.getAttribute('class')) || '')) {
+      await expect(host).toBeHidden();
+      await page.keyboard.press('+');
+    }
+    await expect(hint).toHaveClass(/enter/);
+    await expect(hint).toContainText(/Zoom in again to enter/);
+    await expect(host).toBeHidden();
+    await page.keyboard.press('+');
     await expect(host).toBeVisible();
-    await expect(host).toContainText('Invoice list');
     // a pinch out (⌘/Ctrl + scroll out) over the screen leaves it
     await page.keyboard.down('Control');
     for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 60);
     await page.keyboard.up('Control');
     await expect(host).toBeHidden();
     await expect(page.locator('.map-zoomro')).toHaveText('×1.00');
+    // 0 fits the journey the street is on, and keeps it
     await page.keyboard.press('0');
+    await expect(world).toHaveClass(/lvl-st/);
+    await expect(page.locator('.map-crumb')).toContainText('Billing cycle');
+    await expect(page).toHaveURL(new RegExp('#/map/' + encodeURIComponent(FLOW)));
+    // Esc backs out to every journey
+    await page.keyboard.press('Escape');
     await expect(world).toHaveClass(/lvl-nb/);
     // the neighbourhood names no journey; the link carries where the board is (§K)
     await expect(page).toHaveURL(/#\/map(\?z=[\d.]+&x=-?\d+&y=-?\d+)?$/);
