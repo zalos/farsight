@@ -510,6 +510,9 @@ export function mountMapProperty(host, ctx) {
   host.addEventListener('click', onClick);
   host.addEventListener('keydown', onKey);
   render();
+  // the property opens with the keyboard on its way out, as the prototype does; a redraw never moves focus
+  const back = host.querySelector('.mp-back');
+  if (back && !host.contains(document.activeElement)) back.focus({ preventScroll: true });
   return {
     update(next) { st.ctx = Object.assign({}, st.ctx, next || {}); render(); },
     /** The tab on screen, and a way to choose one (the e2e spec and lane A's deep links use it). */
