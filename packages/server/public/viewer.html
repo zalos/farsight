@@ -2125,6 +2125,10 @@
   .map-scr{position:absolute;width:260px;height:214px;border:1.5px solid var(--line);border-radius:8px;background:var(--raised);box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
   .map-scr:hover,.map-scr.near{border-color:var(--accent);transform:translateY(-2px)}
   .map-scr:focus-visible,.map-pl:focus-visible,.map-pd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  /* §K: the board's focus ring keeps a steady width on screen at any zoom (--map-inv), with a glow in the lens accent */
+  .map-world .map-scr:focus-visible,.map-world .map-pl:focus-visible,.map-world .map-pd:focus-visible,.map-world .map-fold:focus-visible{
+    outline:calc(2px * var(--map-inv, 1)) solid var(--accent);outline-offset:calc(3px * var(--map-inv, 1));box-shadow:0 0 0 calc(6px * var(--map-inv, 1)) var(--accent-dim)}
+  .map-world .map-dcover:focus-visible{outline:calc(3px * var(--map-inv, 1)) solid var(--accent);outline-offset:calc(-3px * var(--map-inv, 1));box-shadow:inset 0 0 0 calc(8px * var(--map-inv, 1)) var(--accent-dim)}
   .map-scr .stripe{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ok);z-index:1}
   .map-scr.planned .stripe{background:var(--warn)}
   .map-thumbwrap{height:112px;flex:none;border-bottom:1px solid var(--line);overflow:hidden;background:var(--ground)}
@@ -2197,6 +2201,10 @@
   .map-lvls button.on{color:var(--accent);background:var(--accent-dim)}
   .map-crumb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:40%}
   .map-crumb b{color:var(--ink);font-weight:500}
+  /* §K: the as-of stamp beside the crumb, so a screenshot of the map carries when it was true */
+  .map-asof{font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 9px;white-space:nowrap;flex:none}
+  .map-asof:empty{display:none}
+  .map-linkfield{font-family:var(--mono);font-size:11px;width:260px;background:var(--bg);color:var(--ink);border:1px solid var(--accent);border-radius:4px;padding:5px 8px}
   .map-crumb .sep{opacity:.5;margin:0 6px}
   .map-tools{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
   .map-tb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;white-space:nowrap}

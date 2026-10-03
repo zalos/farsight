@@ -6,6 +6,7 @@
 import { S, expose, esc, currentLens } from './store.js';
 import { t } from './strings.js';
 import { sym } from './sym.js';
+import { withParams } from './lib/route-url.js';
 
 /**
  * The link this view is shared as. Everywhere but a journey that is the URL in
@@ -18,6 +19,8 @@ import { sym } from './sym.js';
  */
 export function shareLink() {
   const hash = location.hash || '';
+  // the Map writes its picture into the address as it moves (zoom, place, the open card); the link adds the words it was read in
+  if (/^#\/map(?:[/?@]|$)/.test(hash)) return location.origin + location.pathname + withParams(hash, { lens: currentLens() });
   if (!/^#\/journeys\/./.test(hash)) return location.href;
   let h = hash.slice(1), query = '';
   const qi = h.indexOf('?');
