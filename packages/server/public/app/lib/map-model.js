@@ -131,14 +131,46 @@ export function layoutDistricts(items, opts = {}) {
   return best || place(widest);
 }
 
-/** The read/write word for one data marker. A message published is written, one listened to is read. */
+/**
+ * The read/write word for one data marker. A message published is written, one listened to is read.
+ * When the walk recorded no direction (a third party reached through a call whose method is not a literal),
+ * the word is `reached` — never *write* by default (docs/proposals/data-stores.md §3.3).
+ */
 function dataMode(m) {
   const op = m.op || m.via || '';
   if (/read|subscribe|listen|consume|receive/.test(op)) return 'read';
   if (/write|publish|send|emit|enqueue/.test(op)) return 'write';
-  // a third party reached with no direction recorded is a request sent to it
-  return 'write';
+  return 'reached';
 }
+
+/**
+ * Two ways one call uses the same node, as one word: a known direction wins over `reached`,
+ * and `both` comes only from a read and a write.
+ * @group Map
+ */
+export function mergeMode(a, b) {
+  if (!a || a === b) return b || a;
+  if (a === 'reached') return b;
+  if (b === 'reached') return a;
+  return 'both';
+}
+
+/**
+ * The store a data marker lives in: the node's own `store` (name, kind, engine, how it is known) when the graph
+ * carries it, else the marker's `{ name, kind }`, else null. Nothing is guessed from a name.
+ */
+function storeOf(m, node) {
+  const s = (node && node.store) || m.store || null;
+  if (!s || !s.name) return null;
+  const out = { name: String(s.name), kind: s.kind || 'other' };
+  if (s.engine) out.engine = s.engine;
+  if (s.via) out.via = s.via;
+  if (s.ref) out.ref = s.ref;
+  return out;
+}
+
+/** The order the street draws a call's data in, and the property lists its modes: writes, both, reads, reached. */
+export const MODE_ORDER = ['write', 'both', 'read', 'reached'];
 
 /** Method and path of a call: the marker's own fields, else read off its name (`GET /invoices`). */
 function methodPath(m) {
@@ -300,9 +332,9 @@ export function streetModel(data, graphById) {
       if (!call || call.evidence === 'not built') continue;
       const mode = dataMode(m);
       const have = call.data.find((d) => d.nodeId === m.nodeId);
-      if (have) { if (have.mode !== mode) have.mode = 'both'; continue; }
+      if (have) { have.mode = mergeMode(have.mode, mode); if (!have.store) have.store = storeOf(m, have.node); continue; }
       const node = get(m.nodeId);
-      call.data.push({ kind: m.kind, nodeId: m.nodeId, name: m.name || (node && node.name) || m.nodeId, node, mode });
+      call.data.push({ kind: m.kind, nodeId: m.nodeId, name: m.name || (node && node.name) || m.nodeId, node, mode, store: storeOf(m, node) });
     }
   }
 
@@ -310,8 +342,41 @@ export function streetModel(data, graphById) {
     journey: { id: entry.id || null, name: entry.name || '', business: entry.business || '' },
     services,
     screens,
+    stores: journeyStores(summary, screens),
     links: summary.links || { requires: [], leadsTo: [], partOf: [] },
   };
+}
+
+/**
+ * The stores the journey touches, in the order the summary lists them (`summary.system.stores`) — else, for an
+ * answer from before that field, in the order the street meets them on its data. Each `{ name, kind, ops }`;
+ * `ops` holds `'reads'` / `'writes'` as the summary does. The surface draws them; it never counts them — a number
+ * of stores is the summary's own `counted.stores` or nothing.
+ */
+function journeyStores(summary, screens) {
+  const listed = summary && summary.system && Array.isArray(summary.system.stores) ? summary.system.stores : null;
+  if (listed) return listed.filter((s) => s && s.name).map((s) => ({ name: String(s.name), kind: s.kind || 'other', ops: (s.ops || []).slice() }));
+  const out = [];
+  for (const sc of screens) {
+    for (const c of sc.calls) {
+      for (const d of c.data) {
+        if (!d.store) continue;
+        let row = out.find((r) => r.name === d.store.name && r.kind === d.store.kind);
+        if (!row) { row = { name: d.store.name, kind: d.store.kind, ops: [] }; out.push(row); }
+        const ops = d.mode === 'both' ? ['reads', 'writes'] : d.mode === 'read' ? ['reads'] : d.mode === 'write' ? ['writes'] : [];
+        for (const o of ops) if (!row.ops.includes(o)) row.ops.push(o);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The stores a street touches — `streetModel(...).stores`, for the legend and the property.
+ * @group Map
+ */
+export function storesOf(model) {
+  return (model && Array.isArray(model.stores)) ? model.stores : [];
 }
 
 /**
