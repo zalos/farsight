@@ -1,20 +1,23 @@
 #!/usr/bin/env node
 // The local half of a release: bump the version, write the changelog, commit,
-// and tag. Usable by hand and by .github/workflows/release.yml. It never
-// pushes, packs or publishes — it prints those steps instead.
+// and (by default) tag. Usable by hand and by .github/workflows/release.yml. It
+// never pushes, packs or publishes — it prints those steps instead.
 //
 //   node scripts/release.mjs --dry-run --bump patch     # show what would happen
-//   node scripts/release.mjs --bump minor               # 0.1.0 → 0.2.0
+//   node scripts/release.mjs --bump minor               # 0.1.0 → 0.2.0, committed and tagged here
 //   node scripts/release.mjs --version 1.0.0 --prerelease beta.1   # → 1.0.0-beta.1
+//   node scripts/release.mjs --bump patch --no-tag --branch 'release/v{version}' --commit-notes
+//       # the release-PR shape the workflow uses: a new branch holding the version
+//       # commit and .github/release-notes/vX.Y.Z.md, no tag (publish.yml tags after merge)
 //
 // Only the root package.json carries the release version: scripts/pack.mjs
 // gives it to the farsight-cli tarball and core's buildInfo() reads it in a
 // workspace build. The packages/*/package.json versions are private workspace
 // versions (linked with workspace:*), never published, so they are left alone.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdtempSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 import { changelog, prependSection, sinceLabel } from './changelog.mjs';
@@ -73,10 +76,14 @@ const plural = (n) => `${n} commit${n === 1 ? '' : 's'}`;
 const git = (cwd, args, opts = {}) => execFileSync('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], ...opts }).toString().trim();
 
 /** Everything that would stop a release, as sentences; empty when it can go. */
-export function preflight(cwd, { tag, allowBranch }) {
+export function preflight(cwd, { tag, allowBranch, newBranch }) {
   const problems = [];
   const branch = git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
   if (branch !== 'main' && !allowBranch) problems.push(`on branch ${branch}, not main (pass --allow-branch to release from it)`);
+  if (newBranch) {
+    try { git(cwd, ['check-ref-format', '--branch', newBranch]); } catch { problems.push(`${newBranch} is not a valid branch name`); }
+    try { git(cwd, ['rev-parse', '--verify', '--quiet', `refs/heads/${newBranch}`]); problems.push(`branch ${newBranch} already exists`); } catch { /* free */ }
+  }
   const dirty = git(cwd, ['status', '--porcelain']);
   if (dirty) problems.push(`the working tree has changes:\n${dirty.split('\n').map((l) => `    ${l}`).join('\n')}`);
   try { git(cwd, ['rev-parse', '--verify', '--quiet', `refs/tags/${tag}`]); problems.push(`tag ${tag} already exists`); } catch { /* free */ }
@@ -99,20 +106,33 @@ function setOutputs(values) {
   writeFileSync(out, Object.entries(values).map(([k, v]) => `${k}=${v}\n`).join(''), { flag: 'a' });
 }
 
+/** Where --commit-notes puts the notes: in the release commit, for publish.yml to read after the merge. */
+export const notesPath = (tag) => `.github/release-notes/${tag}.md`;
+
+/** `release/v{version}` → `release/v1.2.3`; `{tag}` works too. */
+export const branchName = (template, version) => template.replaceAll('{version}', version).replaceAll('{tag}', `v${version}`);
+
 export function release(cwd, opts) {
   const current = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')).version;
   const version = nextVersion(current, opts);
   if (compareVersions(version, current) <= 0) throw new Error(`${version} is not after the current version ${current}`);
   const tag = `v${version}`;
-  const { branch, problems } = preflight(cwd, { tag, allowBranch: opts.allowBranch });
+  const tagIt = opts.tag !== false;
+  const newBranch = opts.branch ? branchName(opts.branch, version) : null;
+  const { branch, problems } = preflight(cwd, { tag, allowBranch: opts.allowBranch, newBranch });
   const log = changelog(cwd, { version, repoUrl: opts.repoUrl });
-  const notesFile = opts.notesOut ?? join(mkdtempSync(join(tmpdir(), 'farsight-release-')), 'release-notes.md');
-  const plan = { current, version, tag, branch, prerelease: version.includes('-'), since: log.since, commits: log.commits.length, notesFile };
+  const committedNotes = opts.commitNotes ? notesPath(tag) : null;
+  const notesFile = opts.notesOut ?? (committedNotes ? join(cwd, committedNotes) : join(mkdtempSync(join(tmpdir(), 'farsight-release-')), 'release-notes.md'));
+  const releaseBranch = newBranch ?? branch;
+  const files = ['package.json', 'CHANGELOG.md', ...(committedNotes ? [committedNotes] : [])];
+  const plan = { current, version, tag, branch: releaseBranch, from: branch, tagged: tagIt, prerelease: version.includes('-'), since: log.since, commits: log.commits.length, notesFile };
 
   if (opts.dryRun) {
     console.log(`release (dry run): ${current} → ${version} on ${branch}, ${plural(log.commits.length)} since ${sinceLabel(log.since)}`);
     if (problems.length) console.log(`\nwould refuse:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
-    console.log(`\nwould commit "chore(release): ${tag}" (package.json, CHANGELOG.md) and tag ${tag} (annotated, message = the notes below)\n`);
+    const where = newBranch ? ` on a new branch ${newBranch}` : '';
+    const tagging = tagIt ? ` and tag ${tag} (annotated, message = the notes below)` : ` and not tag it (${tag} is created after the release PR merges)`;
+    console.log(`\nwould commit "chore(release): ${tag}" (${files.join(', ')})${where}${tagging}\n`);
     console.log(log.section);
     console.log('# Release notes\n');
     console.log(log.notes);
@@ -120,24 +140,35 @@ export function release(cwd, opts) {
   }
   if (problems.length) throw new Error(`refusing to release:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
 
+  if (newBranch) git(cwd, ['switch', '-q', '-c', newBranch]);
   setRootVersion(cwd, version);
   const changelogFile = join(cwd, 'CHANGELOG.md');
   writeFileSync(changelogFile, prependSection(existsSync(changelogFile) ? readFileSync(changelogFile, 'utf8') : null, log.section, version));
+  if (committedNotes) {
+    mkdirSync(dirname(join(cwd, committedNotes)), { recursive: true });
+    writeFileSync(join(cwd, committedNotes), log.notes);
+  }
   writeFileSync(notesFile, log.notes);
 
-  git(cwd, ['add', '--', 'package.json', 'CHANGELOG.md']);
+  git(cwd, ['add', '--', ...files]);
   git(cwd, ['commit', '-q', '-m', `chore(release): ${tag}`, ...trailerArgs(opts.trailers)]);
   // verbatim: the notes are Markdown, and git's default cleanup would strip every `### heading` as a comment
-  git(cwd, ['tag', '-a', tag, '--cleanup=verbatim', '-F', notesFile]);
+  if (tagIt) git(cwd, ['tag', '-a', tag, '--cleanup=verbatim', '-F', notesFile]);
   const commit = git(cwd, ['rev-parse', '--short', 'HEAD']);
-  setOutputs({ version, tag, prerelease: String(plan.prerelease), notes: notesFile, commit });
+  setOutputs({ version, tag, prerelease: String(plan.prerelease), notes: notesFile, commit, branch: releaseBranch, tagged: String(tagIt) });
 
-  console.log(`released ${tag} locally: commit ${commit}, ${plural(log.commits.length)} since ${sinceLabel(log.since)}`);
+  console.log(`released ${tag} locally: commit ${commit}${newBranch ? ` on ${newBranch}` : ''}${tagIt ? '' : ', not tagged'}, ${plural(log.commits.length)} since ${sinceLabel(log.since)}`);
   console.log(`release notes: ${notesFile}`);
   console.log('\nnext:');
-  console.log('  node scripts/pack.mjs                 # the tarball, stamped with this commit');
-  console.log(`  git push --follow-tags origin ${branch}`);
-  console.log(`  gh release create ${tag} build/farsight-cli-${version}.tgz --title "farsight-cli ${tag}" --notes-file ${notesFile}${plan.prerelease ? ' --prerelease' : ''} --verify-tag`);
+  if (tagIt) {
+    console.log('  node scripts/pack.mjs                 # the tarball, stamped with this commit');
+    console.log(`  git push --follow-tags origin ${releaseBranch}`);
+    console.log(`  gh release create ${tag} build/farsight-cli-${version}.tgz --title "farsight-cli ${tag}" --notes-file ${notesFile}${plan.prerelease ? ' --prerelease' : ''} --verify-tag`);
+  } else {
+    console.log(`  git push -u origin ${releaseBranch}`);
+    console.log(`  gh pr create --base ${branch} --head ${releaseBranch} --title "chore(release): ${tag}" --body-file ${notesFile} --label release`);
+    console.log(`  # merge it (a merge commit, not squash); publish.yml then tags ${tag}, packs and creates the GitHub Release`);
+  }
   return { ...plan, commit, problems: [] };
 }
 
@@ -149,12 +180,16 @@ function trailerArgs(trailers = []) {
 function main(argv) {
   const { values } = parseArgs({
     args: argv,
+    allowNegative: true, // --no-tag
     options: {
       bump: { type: 'string' },
       version: { type: 'string' },
       prerelease: { type: 'string' },
       'dry-run': { type: 'boolean', default: false },
       'allow-branch': { type: 'boolean', default: false },
+      tag: { type: 'boolean', default: true },
+      branch: { type: 'string' },
+      'commit-notes': { type: 'boolean', default: false },
       'notes-out': { type: 'string' },
       'repo-url': { type: 'string' },
       trailer: { type: 'string', multiple: true },
@@ -162,7 +197,7 @@ function main(argv) {
     },
   });
   if (values.help) {
-    console.log('usage: node scripts/release.mjs (--bump patch|minor|major | --version X.Y.Z) [--prerelease beta.1] [--dry-run] [--allow-branch] [--notes-out <file>] [--trailer "Key: value"]...');
+    console.log('usage: node scripts/release.mjs (--bump patch|minor|major | --version X.Y.Z) [--prerelease beta.1] [--dry-run] [--allow-branch] [--no-tag] [--branch release/v{version}] [--commit-notes] [--notes-out <file>] [--trailer "Key: value"]...');
     return;
   }
   if (values.bump && values.version) throw new Error('pass --bump or --version, not both');
@@ -171,6 +206,7 @@ function main(argv) {
     bump: values.bump, version: values.version || undefined, prerelease: values.prerelease || undefined,
     dryRun: values['dry-run'], allowBranch: values['allow-branch'], notesOut: values['notes-out'],
     repoUrl: values['repo-url'], trailers: values.trailer ?? [],
+    tag: values.tag, branch: values.branch || undefined, commitNotes: values['commit-notes'],
   });
 }
 
