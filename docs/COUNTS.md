@@ -341,6 +341,7 @@ The map computes no number of its own: every chip is a `Counted` the journey sum
 | `6 gates & rules` | C:`summary.counted.gates` (breakdown guards · rules) | checkpoints on the walk | journey | cover and head |
 | `7 test cases` | C:`summary.coverage.journey.counted.tests` (breakdown unit · integration · e2e) | distinct cases reaching the journey | journey | cover and head |
 | `1 declared, not called` | C:`summary.counted.declaredNotCalled` | operations named and not called | journey | cover and head; not drawn at 0 |
+| `1 data store` | C:`summary.counted.stores` (breakdown holding records · outside systems) | data stores the journey touches, each once by name — a database its records live in (named by the code or the settings), an outside system it uses as a store; a record whose store nobody named is not counted | journey | cover and head; not drawn at 0 |
 | work chip | C:`/api/work/flow/<id>` `counts.items` | as the Portfolio's | flow | cover and head; not drawn at 0 or without a work source |
 | `1 action` · `2 gates & rules` · `4 test cases` on a screen | C:`segment.counted.actions` · C:`segment.counted.gates` · C:`summary.coverage.segments[i].counted.tests` | as the journey's, over one screen | screen (`journey.scopeHere`) | screen card; the business lens leaves out a zero |
 | ordinal `1` `2` `3` | the screen's place in `summary.segments` | a position, not a count (`map.screen.ordinal`) | journey | screen card |
@@ -351,10 +352,10 @@ The map computes no number of its own: every chip is a `Counted` the journey sum
 The plumbing prints no other number: a call, a record, a message and a third party are drawn once per screen that reaches
 them, so the same record appears under two screens while the journey's own counts still count it once.
 
-The stores (docs/proposals/data-stores.md) print **no number** on the map: the legend lists the stores the journey
-touches by name (`summary.system.stores`, else the street's own data), the property groups its data rows by store with
-no count per group, and *stores touched* (`summary.counted.stores`) is not printed until the summary types it as a
-`Counted` — the map does not count stores itself.
+The stores (docs/proposals/data-stores.md) print one number on the map, *n data stores* on the cover and head
+(`summary.counted.stores`, above, with its tip); the legend lists the stores by name (`summary.system.stores`, else
+the street's own data) and the property groups its data rows by store, neither with a count — the map does not count
+stores itself.
 
 
 #### Property (`surfaces/map-property.js`, `lib/map-property-model.js` → `counts`)

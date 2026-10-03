@@ -316,7 +316,7 @@ as a store (kind words `map.store.kind.*`: sql *database* · document *document 
 the record's violet `--tbl`, erp amber, files a cyan-grey, other dim). A store-like third party is drawn in the
 record anatomy (`.map-pd.rec`, `data-store`, `data-store-kind`) with its *reads* / *writes* from the marker's `op`, or
 *reached*; a third party that is not a store keeps the warm `.ext` bar. A store's name is a product name or a
-settings word, so every register prints it.
+settings word, so every register prints it. The cover and head carry *n data stores* — the summary's own `counted.stores`, not drawn at 0.
 
 **The folds** keep a long pathway short (the journey view's `▸ n inside` is the precedent for the words; the map keeps
 its own state, `MAP.open`, for as long as the board is mounted). Beside a call the first **3** data nodes are drawn —
@@ -340,8 +340,8 @@ method, path, operationId, summary, label, business, evidence, repeat, data[] }`
 mode, store }` — `mode` one of `read` · `write` · `both` · `reached`, `store` the node's `StoreRef` (name, kind,
 engine, via, ref) else the marker's `{ name, kind }` else null. `mergeMode(a, b)`: the same node met twice on one
 call — a known direction wins over `reached`, and `both` comes only from a read and a write. `streetModel(...).stores`
-(read through `storesOf(model)`) is `summary.system.stores` when the answer carries it, else derived in the order the
-street meets them: `{ name, kind, ops }`. Measured on the fixture and different from the proposal's first draft: a call's data is what the call
+(read through `storesOf(model)`) is `summary.system.stores` in its order, then any store a drawn data node names that
+the summary does not, in the order the street meets them — so the legend explains every swatch: `{ name, kind, ops }`. Measured on the fixture and different from the proposal's first draft: a call's data is what the call
 reached, found up the markers' `under` chain (falling back to its moment's call); a planned screen's calls are its
 **planned call markers** (`via: 'planned'`), not `segment.declaredOnly` — that field lists operations a *built*
 screen's design names and no code on it calls, kept as `evidence: 'declared'` rows. Evidence: `spec-backed`

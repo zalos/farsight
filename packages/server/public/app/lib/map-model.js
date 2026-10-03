@@ -348,21 +348,24 @@ export function streetModel(data, graphById) {
 }
 
 /**
- * The stores the journey touches, in the order the summary lists them (`summary.system.stores`) — else, for an
- * answer from before that field, in the order the street meets them on its data. Each `{ name, kind, ops }`;
- * `ops` holds `'reads'` / `'writes'` as the summary does. The surface draws them; it never counts them — a number
- * of stores is the summary's own `counted.stores` or nothing.
+ * The stores the journey touches, in the order the summary lists them (`summary.system.stores`), then any store a
+ * data node on the street names that the summary does not (an answer from before that field lists none) — in the
+ * order the street meets them, so the legend explains every swatch drawn. Each `{ name, kind, ops }`; `ops` holds
+ * `'reads'` / `'writes'` as the summary does. The surface draws them; it never counts them — a number of stores is
+ * the summary's own `counted.stores` or nothing.
  */
 function journeyStores(summary, screens) {
-  const listed = summary && summary.system && Array.isArray(summary.system.stores) ? summary.system.stores : null;
-  if (listed) return listed.filter((s) => s && s.name).map((s) => ({ name: String(s.name), kind: s.kind || 'other', ops: (s.ops || []).slice() }));
-  const out = [];
+  const listed = summary && summary.system && Array.isArray(summary.system.stores) ? summary.system.stores : [];
+  const out = listed.filter((s) => s && s.name).map((s) => ({ name: String(s.name), kind: s.kind || 'other', ops: (s.ops || []).slice() }));
+  const fromSummary = new Set(out.map((r) => r.name + '|' + r.kind));
   for (const sc of screens) {
     for (const c of sc.calls) {
       for (const d of c.data) {
         if (!d.store) continue;
-        let row = out.find((r) => r.name === d.store.name && r.kind === d.store.kind);
+        const key = d.store.name + '|' + d.store.kind;
+        let row = out.find((r) => r.name + '|' + r.kind === key);
         if (!row) { row = { name: d.store.name, kind: d.store.kind, ops: [] }; out.push(row); }
+        if (fromSummary.has(key)) continue;   // the summary's own ops stand
         const ops = d.mode === 'both' ? ['reads', 'writes'] : d.mode === 'read' ? ['reads'] : d.mode === 'write' ? ['writes'] : [];
         for (const o of ops) if (!row.ops.includes(o)) row.ops.push(o);
       }

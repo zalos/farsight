@@ -1,8 +1,9 @@
 // Data stores on the map (docs/proposals/data-stores.md), shaped over the fixture's own answers with page.route
-// (ADR 8, the suite's fault pattern) for what the fixture's answer does not carry: the tables' store (the
-// fixture config names it Invoice DB once the parser lane lands; until then this adds it in the same shape) and
-// the ERP used as a store — written on finalize (a literal POST), and reached on the list read with no method
-// recorded, which no fixture call produces. Every addition is skipped when the real answer already carries it.
+// (ADR 8, the suite's fault pattern) for what the fixture's answer does not carry. The tables' store comes from the
+// fixture config (Invoice DB, via config) and the stub leaves it alone; the ERP used as a store is not reached by
+// Billing cycle (calling it would add a sixth system to the pinned journey), so the stub adds it — written on
+// finalize, and reached on the list read with no method recorded. Every addition is skipped when the real answer
+// already carries it.
 import type { Page } from '@playwright/test';
 
 export const ERP_ID = 'invoice-app::external::Example ERP';

@@ -1,7 +1,8 @@
 // A hand-edited copy of a captured map fixture in the shapes docs/proposals/data-stores.md §3 names, shared by
 // the map model and property tests. Not a test file itself (no `.test.ts`).
-// The captured answer predates `store` and `op` on externals, so these tests carry a hand-edited copy in the
-// proposal's shapes: the tables live in `Invoice DB` (config), the ERP is a store-like external written on
+// The captured answers (map-billing-cycle-stores.json, map-billing-cycle-erp.json) cover the store and the ERP's
+// reads and writes; a third party reached with no direction recorded on its own call is a shape no capture has, so
+// these tests also carry a hand-edited copy in the proposal's shapes: the tables live in `Invoice DB` (config), the ERP is a store-like external written on
 // finalize, and the list read reaches it once with no method recorded.
 export type AnyRec = Record<string, any>;
 export function withStores(src: AnyRec): { journey: AnyRec; nodes: AnyRec[] } {

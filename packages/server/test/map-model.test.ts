@@ -217,8 +217,35 @@ test('storesOf: derived from the data when the summary lists none, in the order 
   assert.deepEqual(storesOf(null), []);
 });
 
-test('storesOf: the summary\'s own list wins when it is there', () => {
+test('storesOf: the summary\'s own list first when it is there, then any store drawn that it does not name', () => {
   const j = JSON.parse(JSON.stringify(sfx.journey));
   j.summary.system = { stores: [{ name: 'Example ERP', kind: 'erp', records: 1, ops: ['writes'] }, { name: 'Invoice DB', kind: 'sql', records: 3, ops: ['reads', 'writes'] }] };
   assert.deepEqual(storesOf(streetModel(j, null)).map((s: AnyRec) => s.name), ['Example ERP', 'Invoice DB']);
+  j.summary.system = { stores: [{ name: 'Invoice DB', kind: 'sql', records: 3, ops: ['reads', 'writes'] }] };
+  assert.deepEqual(storesOf(streetModel(j, null)).map((s: AnyRec) => s.name + ' ' + s.ops.join('+')), ['Invoice DB reads+writes', 'Example ERP writes']);
+});
+
+// ── the same, on the answers lane P captured (core: store and op on markers, system.stores, counted.stores) ──
+const real = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle-stores.json'), 'utf8'));
+const realModel = streetModel(real.journey, new Map(real.nodes.map((n: AnyRec) => [n.id, n])));
+const erpFx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle-erp.json'), 'utf8'));
+const erpModel = streetModel(erpFx.journey, new Map(erpFx.nodes.map((n: AnyRec) => [n.id, n])));
+
+test('captured: every record names Invoice DB, known from the config, and the journey lists one store', () => {
+  for (const s of realModel.screens) for (const c of s.calls) for (const d of c.data) {
+    if (d.kind !== 'record') continue;
+    assert.equal(d.store && d.store.name, 'Invoice DB');
+    assert.equal(d.store.via, 'config', 'the node\'s StoreRef wins over the marker\'s name and kind');
+  }
+  assert.deepEqual(storesOf(realModel), [{ name: 'Invoice DB', kind: 'sql', ops: ['reads', 'writes'] }]);
+  assert.equal(real.journey.summary.counted.stores.n, 1);
+});
+
+test('captured: the ERP read, written and reached on finalize is one data node that reads · writes; the store list names it', () => {
+  const fin = erpModel.screens[1].calls.find((c: AnyRec) => c.path.endsWith('/finalize'));
+  const erp = fin.data.filter((d: AnyRec) => d.kind === 'external');
+  assert.equal(erp.length, 1);
+  assert.equal(erp[0].mode, 'both', 'reads + writes make both; the marker with no op yields');
+  assert.deepEqual([erp[0].store.name, erp[0].store.kind], ['Example ERP', 'erp']);
+  assert.deepEqual(storesOf(erpModel).map((s: AnyRec) => s.name + ' · ' + s.kind), ['Invoice DB · sql', 'Example ERP · erp']);
 });

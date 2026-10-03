@@ -706,6 +706,8 @@ function aggHtml(d, j) {
     k.built && k.built.of != null && k.built.n < k.built.of ? chip(k.built, 'k-warn') : chip(k.built, 'k-ok'),
     chip(k.actions, 'k-api'),
     chip(k.gates, 'k-gate'),
+    // the stores the journey touches — the summary's own Counted (data-stores §5); not drawn at 0
+    k.stores && k.stores.n ? chip(k.stores, 'k-store') : '',
     cov ? chip(cov.tests, 'k-test') : '',
     k.declaredNotCalled && k.declaredNotCalled.n ? chip(k.declaredNotCalled, 'k-absent') : '',
   ].join('') + work;

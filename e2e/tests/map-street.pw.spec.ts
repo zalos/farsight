@@ -409,6 +409,11 @@ test.describe('map — data stores on the street', () => {
     const leg = page.locator(`.map-district[data-flow="${FLOW}"] .map-lane .leg`);
     await expect(leg.locator('.mst')).toHaveText(['Invoice DB · database', 'Example ERP · ERP']);
     await expect(leg).toContainText('reached');
+    // the head's stores chip is the summary's own Counted (one store from the fixture's config; the stub's ERP is not
+    // in the server's count), with its tip
+    const chip = page.locator(`.map-district[data-flow="${FLOW}"] .map-dhead .map-chip.k-store`);
+    await expect(chip).toHaveText(/1 data store/);
+    await expect(chip).toHaveAttribute('data-tip-id', 'number');
   });
 
   /**
