@@ -12,6 +12,7 @@ import {
   testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
   impactOf, search, buildLine,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
+  counted,
 } from '@farsight/core';
 import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest } from './guard.js';
@@ -1195,6 +1196,44 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       } catch (err) {
         // a refused budget is a sentence with a 400, not a 500 (§8)
         return send(400, JSON.stringify({ error: (err as Error).message }));
+      }
+    }
+    // ── the commits that touched a set of parts (the Map's Changes tab, map-pass-2026-10-03 §3 N) ──
+    if (url.startsWith('/api/history/touching') && req.method === 'GET') {
+      const u = new URL(url, 'http://localhost');
+      const repo = u.searchParams.get('repo');
+      const ids = (u.searchParams.get('nodes') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+      if (!repo || !ids.length) return send(400, JSON.stringify({ error: 'missing ?repo=<source name>&nodes=<node id>,<node id>' }));
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      let db: SnapshotDb;
+      try {
+        db = openHistory(ws);
+      } catch (err) {
+        return send(503, JSON.stringify({ error: (err as Error).message }));
+      }
+      try {
+        const g = loadJourneyGraph(graphPath);
+        // a part's file, from the graph — only parts of this repository
+        const parts = ids.map((id) => g.index.byId.get(id)).filter((n): n is GraphNode => !!n && (n.loc?.repo ?? repo) === repo)
+          .map((n) => ({ node: n.id, ...(n.loc?.path ? { path: n.loc.path } : {}) }));
+        const read = db.commitCount(repo);
+        const commits = read ? db.commitsTouching(repo, parts) : [];
+        const lines = commits.filter((c) => c.parts.some((p) => p.how === 'lines')).length;
+        return send(200, JSON.stringify({
+          repo,
+          // how many commits the history holds for this repository: 0 = never read, which is not "none touched"
+          read,
+          parts: parts.map((p) => p.node),
+          commits: commits.map((c) => ({ ...c, keys: db.keysForCommit(repo, c.sha).map((k) => k.key).filter((k, i, a) => a.indexOf(k) === i) })),
+          counted: {
+            commits: counted(commits.length, 'map.prop.changes.countCommits', 'journey.scopeHere', 'server /api/history/touching · commit_node + commit_file', {
+              bizUnit: 'map.prop.changes.countCommits',
+              breakdown: [{ key: 'count.part.commitLines', n: lines }, { key: 'count.part.commitFile', n: commits.length - lines }],
+            }),
+          },
+        }));
+      } finally {
+        db.close();
       }
     }
     // ── Change history (docs/proposals/change-history-2026-09.md §7, chunk H5) ──
