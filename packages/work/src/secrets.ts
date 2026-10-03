@@ -1,4 +1,4 @@
-// Secret references → values, in this process only (Jared, 2026-09-30:
+// Secret references → values, in this process only (the owner, 2026-09-30:
 // secrets live in the keychain; the tool reads them itself and prints only
 // outcomes). A resolved value is returned to the caller and nowhere else: it
 // is never logged, never put in an error message, never written to disk.

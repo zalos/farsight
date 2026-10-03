@@ -42,7 +42,7 @@ Options:
 Form controls associated via `<label>`, `aria-label`, or `aria-labelledby`.
 
 ```ts
-await page.getByLabel('Email').fill('a@b.com');
+await page.getByLabel('Email').fill('a@example.com');
 await page.getByLabel(/password/i).fill('secret');
 ```
 

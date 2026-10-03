@@ -177,7 +177,7 @@ Use Entra delegated auth through MSAL Node: the CLI uses the device-code flow; t
 
 - **Tags:** `{"op":"add","path":"/fields/System.Tags","value":"Tag1; Tag2"}`, semicolon-separated. 100 tags per work item.
 - **Link:** `{"op":"add","path":"/relations/-","value":{"rel":"System.LinkTypes.Dependency-forward","url":"…/_apis/wit/workItems/300","attributes":{"comment":"…"}}}`. Removing a link targets `/relations/{index}`.
-- **Assign:** `System.AssignedTo` accepts a display name, a distinct display name (`"Jamal Hartnett<fabrikamfiber4@hotmail.com>"`), or a full IdentityRef object with `id` and `descriptor`. A plain display name is ambiguous, so prefer the distinct form or the IdentityRef.
+- **Assign:** `System.AssignedTo` accepts a display name, a distinct display name (`"Jamal Hartnett<jamal@example.com>"`), or a full IdentityRef object with `id` and `descriptor`. A plain display name is ambiguous, so prefer the distinct form or the IdentityRef.
 - **bypassRules example:** writes `"Invalid Value"` into `System.AssignedTo` and succeeds.
 
 ### bypassRules and suppressNotifications permissions

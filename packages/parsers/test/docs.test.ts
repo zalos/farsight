@@ -21,14 +21,14 @@ function tempRepo(files: Record<string, string>): string {
 test('parseDoc: @see URLs are links, non-URL @see refs stay prose; @design joins a node to its design', () => {
   const d = parseDoc([
     'Quick submit — no login: vendor lookup, upload, submit.',
-    '@see https://www.figma.com/design/N2ha?node-id=26-9',
+    '@see https://www.figma.com/design/EXAMPLE?node-id=26-9',
     '@see field-inventory SCR-07.6',
     '@design SCR-07 Quick submit',
     '@group contractor',
   ].join('\n'));
   assert.equal(d.docs, 'Quick submit — no login: vendor lookup, upload, submit. See: field-inventory SCR-07.6.');
   assert.deepEqual(d.links, [
-    { kind: 'see', url: 'https://www.figma.com/design/N2ha?node-id=26-9' },
+    { kind: 'see', url: 'https://www.figma.com/design/EXAMPLE?node-id=26-9' },
     { kind: 'design', ref: 'SCR-07' },
   ]);
   assert.deepEqual(d.design, { status: 'both', origin: 'annotation', id: 'SCR-07', name: 'Quick submit' });
@@ -37,7 +37,7 @@ test('parseDoc: @see URLs are links, non-URL @see refs stay prose; @design joins
 });
 
 test('parseDesignTag: a Figma URL keeps its node id; a bare id is the docs name', () => {
-  assert.deepEqual(parseDesignTag('https://www.figma.com/design/N2ha/File?node-id=26-9&t=abc'), { status: 'both', origin: 'annotation', url: 'https://www.figma.com/design/N2ha/File?node-id=26-9&t=abc', nodeId: '26-9' });
+  assert.deepEqual(parseDesignTag('https://www.figma.com/design/EXAMPLE/File?node-id=26-9&t=abc'), { status: 'both', origin: 'annotation', url: 'https://www.figma.com/design/EXAMPLE/File?node-id=26-9&t=abc', nodeId: '26-9' });
   assert.deepEqual(parseDesignTag('SCR-14a'), { status: 'both', origin: 'annotation', id: 'SCR-14a' });
   assert.equal(parseDesignTag(''), undefined);
 });
@@ -50,7 +50,7 @@ test('ingestRepo carries links/design onto TS nodes and applies farsight.config.
       '/**',
       ' * Tracking page for a contractor.',
       ' * @see https://example.com/docs/tracking',
-      ' * @design https://www.figma.com/design/N2ha?node-id=40-2 Tracking',
+      ' * @design https://www.figma.com/design/EXAMPLE?node-id=40-2 Tracking',
       ' */',
       'export function TrackingPage() { return <div/>; }',
     ].join('\n'),
@@ -58,7 +58,7 @@ test('ingestRepo carries links/design onto TS nodes and applies farsight.config.
   const f = await ingestRepo(dir, { repoName: 'app' });
   assert.equal(f.configApplied, true);
   const page = f.nodes.find((n) => n.name === 'TrackingPage')!;
-  assert.deepEqual(page.links, [{ kind: 'see', url: 'https://example.com/docs/tracking' }, { kind: 'design', url: 'https://www.figma.com/design/N2ha?node-id=40-2' }]);
+  assert.deepEqual(page.links, [{ kind: 'see', url: 'https://example.com/docs/tracking' }, { kind: 'design', url: 'https://www.figma.com/design/EXAMPLE?node-id=40-2' }]);
   assert.equal(page.design?.nodeId, '40-2');
   assert.equal(page.design?.name, 'Tracking');
   const route = f.nodes.find((n) => n.kind === 'route')!;

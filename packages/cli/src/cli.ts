@@ -127,6 +127,15 @@ if (['version', '--version', '-v'].includes(command ?? '') || rest.includes('--v
   console.log(buildLine());
   process.exit(0);
 }
+// `work --help`, `work help` and a bare `work` print only the work section of
+// the usage — no banner, no settings read, no work.db created, no git
+if (command === 'work' && (!rest[0] || ['help', '--help', '-h'].includes(rest[0]) || rest.includes('--help') || rest.includes('-h'))) {
+  const lines = USAGE.split('\n');
+  const from = lines.findIndex((l) => l.startsWith('  farsight work '));
+  const to = lines.findIndex((l, i) => i > from && /^ {2}farsight (?!work )/.test(l));
+  console.log(['usage:', ...lines.slice(from, to)].join('\n'));
+  process.exit(rest[0] ? 0 : 1);
+}
 // --help must never mutate: bail before any command dispatch (an
 // `ingest --help` once wrote graph.json into a consumer's repo root)
 if (!command || ['help', '--help', '-h'].includes(command) || rest.includes('--help') || rest.includes('-h')) {

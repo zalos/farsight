@@ -6,7 +6,7 @@ Proposal · 2026-09-08 · branch `feat/journey-action-proposals` (documentation 
 
 The four boards in a design reference are the acceptance pictures. They are HTML in the product's own tokens and sprite, rendered to PNG; every name on them is a real the reference app or invoice-app test, screen, flow, or symbol, and every number is illustrative until the adapter exists.
 
-This document accelerates F11 (*Test ⇄ journey linkage*, [FEATURES.md](../FEATURES.md)) from the P9 "declared `@covers` degraded cut" in the [v3 build plan](v3-build-plan.md) to a full pass, and it sits after the journey-action work in [journey-action-timeline-2026-09.md](journey-action-timeline-2026-09.md): coverage rides on whichever journey projection ships (segments today, actions later), because it hangs off node ids, not off layout.
+This document accelerates F11 (*Test ⇄ journey linkage*, [FEATURES.md](../FEATURES.md)) from the P9 "declared `@covers` degraded cut" in the [v3 build plan](v3-build-plan.md) to a full pass, and it sits after the journey-action work in the journey action-timeline pass (2026-09): coverage rides on whichever journey projection ships (segments today, actions later), because it hangs off node ids, not off layout.
 
 ## 1. What exists today
 

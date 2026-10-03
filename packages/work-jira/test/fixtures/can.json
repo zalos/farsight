@@ -173,14 +173,14 @@
           "id": "action_id_11",
           "styleClass": "issueaction-workflow-transition",
           "label": "To Do",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=607b852734aa5e39516c0f9b77dfcf92d8dd7063_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 10
          },
          {
           "id": "action_id_21",
           "styleClass": "issueaction-workflow-transition",
           "label": "In Progress",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=607b852734aa5e39516c0f9b77dfcf92d8dd7063_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 20
          }
         ],
@@ -200,14 +200,14 @@
               "id": "action_id_31",
               "styleClass": "issueaction-workflow-transition",
               "label": "In Review",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=607b852734aa5e39516c0f9b77dfcf92d8dd7063_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 30
              },
              {
               "id": "action_id_41",
               "styleClass": "issueaction-workflow-transition",
               "label": "Done",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=607b852734aa5e39516c0f9b77dfcf92d8dd7063_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 40
              }
             ],
@@ -362,7 +362,7 @@
             "styleClass": "issueaction-unwatch-issue",
             "label": "Stop watching",
             "title": "Stop watching this issue",
-            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=607b852734aa5e39516c0f9b77dfcf92d8dd7063_lin&id=10010&watch=unwatch",
+            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=0000000000000000000000000000000000000000_lin&id=10010&watch=unwatch",
             "weight": 50
            },
            {
@@ -740,14 +740,14 @@
           "id": "action_id_11",
           "styleClass": "issueaction-workflow-transition",
           "label": "To Do",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=2efea1549c40ea8347162a5d70a87ecf9fbd2742_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 10
          },
          {
           "id": "action_id_21",
           "styleClass": "issueaction-workflow-transition",
           "label": "In Progress",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=2efea1549c40ea8347162a5d70a87ecf9fbd2742_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 20
          }
         ],
@@ -767,14 +767,14 @@
               "id": "action_id_31",
               "styleClass": "issueaction-workflow-transition",
               "label": "In Review",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=2efea1549c40ea8347162a5d70a87ecf9fbd2742_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 30
              },
              {
               "id": "action_id_41",
               "styleClass": "issueaction-workflow-transition",
               "label": "Done",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=2efea1549c40ea8347162a5d70a87ecf9fbd2742_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 40
              }
             ],
@@ -929,7 +929,7 @@
             "styleClass": "issueaction-unwatch-issue",
             "label": "Stop watching",
             "title": "Stop watching this issue",
-            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=2efea1549c40ea8347162a5d70a87ecf9fbd2742_lin&id=10010&watch=unwatch",
+            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=0000000000000000000000000000000000000000_lin&id=10010&watch=unwatch",
             "weight": 50
            },
            {
@@ -1307,14 +1307,14 @@
           "id": "action_id_11",
           "styleClass": "issueaction-workflow-transition",
           "label": "To Do",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=5cac875bb41d4a1df70cc3c8ca2410264f2092e8_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 10
          },
          {
           "id": "action_id_21",
           "styleClass": "issueaction-workflow-transition",
           "label": "In Progress",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=5cac875bb41d4a1df70cc3c8ca2410264f2092e8_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 20
          }
         ],
@@ -1334,14 +1334,14 @@
               "id": "action_id_31",
               "styleClass": "issueaction-workflow-transition",
               "label": "In Review",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=5cac875bb41d4a1df70cc3c8ca2410264f2092e8_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 30
              },
              {
               "id": "action_id_41",
               "styleClass": "issueaction-workflow-transition",
               "label": "Done",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=5cac875bb41d4a1df70cc3c8ca2410264f2092e8_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 40
              }
             ],
@@ -1496,7 +1496,7 @@
             "styleClass": "issueaction-unwatch-issue",
             "label": "Stop watching",
             "title": "Stop watching this issue",
-            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=5cac875bb41d4a1df70cc3c8ca2410264f2092e8_lin&id=10010&watch=unwatch",
+            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=0000000000000000000000000000000000000000_lin&id=10010&watch=unwatch",
             "weight": 50
            },
            {
@@ -1874,14 +1874,14 @@
           "id": "action_id_11",
           "styleClass": "issueaction-workflow-transition",
           "label": "To Do",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=9cb396440beb397911f9b75d119fabe1dd0fb075_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 10
          },
          {
           "id": "action_id_21",
           "styleClass": "issueaction-workflow-transition",
           "label": "In Progress",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=9cb396440beb397911f9b75d119fabe1dd0fb075_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 20
          }
         ],
@@ -1901,14 +1901,14 @@
               "id": "action_id_31",
               "styleClass": "issueaction-workflow-transition",
               "label": "In Review",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=9cb396440beb397911f9b75d119fabe1dd0fb075_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 30
              },
              {
               "id": "action_id_41",
               "styleClass": "issueaction-workflow-transition",
               "label": "Done",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=9cb396440beb397911f9b75d119fabe1dd0fb075_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 40
              }
             ],
@@ -2063,7 +2063,7 @@
             "styleClass": "issueaction-unwatch-issue",
             "label": "Stop watching",
             "title": "Stop watching this issue",
-            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=9cb396440beb397911f9b75d119fabe1dd0fb075_lin&id=10010&watch=unwatch",
+            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=0000000000000000000000000000000000000000_lin&id=10010&watch=unwatch",
             "weight": 50
            },
            {
@@ -2441,14 +2441,14 @@
           "id": "action_id_11",
           "styleClass": "issueaction-workflow-transition",
           "label": "To Do",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=0b88d3e6340b6b39b065c99cdcc004f5dc9c5afb_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 10
          },
          {
           "id": "action_id_21",
           "styleClass": "issueaction-workflow-transition",
           "label": "In Progress",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=0b88d3e6340b6b39b065c99cdcc004f5dc9c5afb_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 20
          }
         ],
@@ -2468,14 +2468,14 @@
               "id": "action_id_31",
               "styleClass": "issueaction-workflow-transition",
               "label": "In Review",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=0b88d3e6340b6b39b065c99cdcc004f5dc9c5afb_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 30
              },
              {
               "id": "action_id_41",
               "styleClass": "issueaction-workflow-transition",
               "label": "Done",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=0b88d3e6340b6b39b065c99cdcc004f5dc9c5afb_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 40
              }
             ],
@@ -2630,7 +2630,7 @@
             "styleClass": "issueaction-unwatch-issue",
             "label": "Stop watching",
             "title": "Stop watching this issue",
-            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=0b88d3e6340b6b39b065c99cdcc004f5dc9c5afb_lin&id=10010&watch=unwatch",
+            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=0000000000000000000000000000000000000000_lin&id=10010&watch=unwatch",
             "weight": 50
            },
            {
@@ -3008,14 +3008,14 @@
           "id": "action_id_11",
           "styleClass": "issueaction-workflow-transition",
           "label": "To Do",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=468b59b47f87c53c5a11db48daa55543da288b6e_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=11&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 10
          },
          {
           "id": "action_id_21",
           "styleClass": "issueaction-workflow-transition",
           "label": "In Progress",
-          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=468b59b47f87c53c5a11db48daa55543da288b6e_lin",
+          "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=21&atl_token=0000000000000000000000000000000000000000_lin",
           "weight": 20
          }
         ],
@@ -3035,14 +3035,14 @@
               "id": "action_id_31",
               "styleClass": "issueaction-workflow-transition",
               "label": "In Review",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=468b59b47f87c53c5a11db48daa55543da288b6e_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=31&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 30
              },
              {
               "id": "action_id_41",
               "styleClass": "issueaction-workflow-transition",
               "label": "Done",
-              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=468b59b47f87c53c5a11db48daa55543da288b6e_lin",
+              "href": "/secure/WorkflowUIDispatcher.jspa?id=10010&action=41&atl_token=0000000000000000000000000000000000000000_lin",
               "weight": 40
              }
             ],
@@ -3197,7 +3197,7 @@
             "styleClass": "issueaction-unwatch-issue",
             "label": "Stop watching",
             "title": "Stop watching this issue",
-            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=468b59b47f87c53c5a11db48daa55543da288b6e_lin&id=10010&watch=unwatch",
+            "href": "/secure/VoteOrWatchIssue.jspa?atl_token=0000000000000000000000000000000000000000_lin&id=10010&watch=unwatch",
             "weight": 50
            },
            {
