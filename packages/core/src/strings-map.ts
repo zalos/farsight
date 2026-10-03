@@ -128,6 +128,14 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'key.mapZoom': same('Map: zoom in, zoom out, fit every journey'),
   'key.mapStep': same('Map: previous or next screen of the open screen’s journey'),
 
+  // the street's folds: a call's data beyond its first three, a screen's calls beyond its first four
+  'map.fold.data': same('{n} more', 'The rest of what this call reads and writes, folded so the pathway stays short. Writes are drawn first, so what is folded is reads. Open it to draw them all here; the journey’s own counts never change.'),
+  'map.fold.calls': same('{n} more calls', 'The rest of the calls this screen makes, folded so its pathway stays short. Open it to draw them all here, in order.'),
+  'map.fold.less': same('fewer', 'Fold this call’s records, messages and third parties back to its first three.'),
+  'map.fold.lessCalls': same('fewer calls', 'Fold this screen’s calls back to its first four.'),
+  'map.fold.scopeCall': same('this call', 'One call on one screen of this journey.'),
+  'map.fold.scopeScreen': same('this screen', 'One screen of this journey.'),
+
   // §B — property (lane B)
   'map.prop.level': {
     hud: 'Property',
