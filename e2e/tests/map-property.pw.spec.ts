@@ -217,7 +217,7 @@ test.describe('map property', () => {
     const after = page.locator('.mp-step.next');
     const before = page.locator('.mp-step.prev');
     await expect(before).toBeDisabled();
-    await expect(page.locator('.mp-where')).toHaveText(/screen 1 of 3 in billing cycle/i);
+    await expect(page.locator('.mp-where')).toHaveText(/screen 1 of 3 reached · billing cycle/i);
     await expect(after).toContainText('Invoice list');
     await after.click();
     await expect(page.locator('.mp')).toHaveAttribute('data-screen', PAGE.list);

@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
 const { streetModel } = await import(join(appDir, 'lib', 'map-model.js'));
-const { propertyModel, heroKind, reachedData, alsoInFlows, otherWaysIn } = await import(join(appDir, 'lib', 'map-property-model.js'));
+const { propertyModel, heroKind, reachedData, alsoInFlows, otherWaysIn, placeOf } = await import(join(appDir, 'lib', 'map-property-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-property-billing-cycle.json'), 'utf8'));
 const byId: Record<string, any> = Object.fromEntries(fx.nodes.map((n: { id: string }) => [n.id, n]));
 const data = fx.journey;
@@ -152,4 +152,32 @@ test('dataByStore: unnamed data last under its plain kind, records before outsid
   ]);
   assert.deepEqual(g.map((x: any) => x.store ? x.store.name : x.kind), ['S', 'record', 'external', 'message']);
   assert.deepEqual(reachedData([{ data: [{ nodeId: 'e', name: 'e', kind: 'external', mode: 'reached' }] }, { data: [{ nodeId: 'e', name: 'e', kind: 'external', mode: 'read' }] }])[0].modes, ['read']);
+});
+
+test('the footer\'s units: reached is the summary\'s own count when it counts the street, the rest named with their absence word', () => {
+  const reached = { n: 2, unit: 'count.unit.screensReached', scope: 'journey.scopeAll', source: 's' };
+  const screens = { n: 4, unit: 'journey.countScreens', scope: 'journey.scopeAll', source: 's', breakdown: [{ key: 'count.part.screensReached', n: 2 }, { key: 'count.part.screensNotReached', n: 2 }] };
+  const sum = {
+    counted: { screens, screensReached: reached },
+    user: [
+      { id: 'a', name: 'A', designStatus: 'both' }, { id: 'b', name: 'B', designStatus: 'both' },
+      { id: 'c', name: 'C', designStatus: 'both', loc: { path: 'x' } }, { id: 'd', name: 'D', designStatus: 'design-only' },
+    ],
+    segments: [{ screen: { id: 'a' } }, { screen: null }, { screen: { id: 'b' } }],
+  };
+  const p = placeOf(sum, 2);
+  assert.equal(p.reached, reached, 'the same object, never a copy');
+  assert.equal(p.declared, screens);
+  assert.deepEqual(p.notReached, [{ id: 'c', name: 'C', word: 'notReached' }, { id: 'd', name: 'D', word: 'notBuilt' }]);
+  // a street with a screen met twice has more rows than distinct screens: the count is not handed out for it
+  assert.equal(placeOf(sum, 3).reached, null);
+  // the captured fixture: every named screen reached
+  assert.deepEqual(prop(1).place.notReached, []);
+});
+
+test('a screen\'s chip row carries its coverage fold, so its tests count travels with its evidence word', () => {
+  const cov = data.summary.coverage.segments;
+  model.screens.forEach((s: any) => assert.equal(s.chips.evidence, cov[s.segment.index] || null));
+  const ov = prop(1).tabs.overview;
+  assert.equal(ov.evidence, cov[model.screens[1].segment.index], 'the overview prints the screen\'s own evidence beside its tests');
 });

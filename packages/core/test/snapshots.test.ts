@@ -165,3 +165,27 @@ test('degraded mode is reported, not crashed', () => {
     });
   }
 });
+
+test("commitsTouching: a part's commits by its file and, where resolved, by its lines — newest first, each once", opts, () => {
+  const db = new SnapshotDb(tempDb());
+  db.writeCommits('r', [
+    { sha: 'c1', at: '2026-09-01T00:00:00.000Z', author: 'A', email: 'a@example.com', subject: 'feat: the page', parents: [],
+      files: [{ path: 'app/src/ui/Page.tsx', status: 'added' }, { path: 'app/src/api/client.ts', status: 'added' }] },
+    { sha: 'c2', at: '2026-09-02T00:00:00.000Z', author: 'B', email: 'b@example.com', subject: 'fix: the client', parents: ['c1'],
+      files: [{ path: 'app/src/api/client.ts', status: 'modified' }] },
+    { sha: 'c3', at: '2026-09-03T00:00:00.000Z', author: 'B', email: 'b@example.com', subject: 'docs: elsewhere', parents: ['c2'],
+      files: [{ path: 'app/src/other_ui/Page.tsx', status: 'modified' }, { path: 'xsrc/ui/Page.tsx', status: 'modified' }] },
+  ] as never);
+  db.writeCommitNodes('r', 'c2', 'g', [{ node: 'r::src/api/client.ts::list', path: 'app/src/api/client.ts', fileOnly: false }]);
+  const got = db.commitsTouching('r', [
+    { node: 'r::src/ui/Page.tsx::Page', path: 'src/ui/Page.tsx' },
+    { node: 'r::src/api/client.ts::list', path: 'src/api/client.ts' },
+  ]);
+  // c3 changed a file whose path only ends in the same letters (other_ui, xsrc): not this part
+  assert.deepEqual(got.map((c) => c.sha), ['c2', 'c1']);
+  assert.deepEqual(got[0]!.parts, [{ node: 'r::src/api/client.ts::list', how: 'lines' }]);
+  assert.deepEqual(got[1]!.parts.map((p) => p.how), ['file', 'file']);
+  assert.equal(got[1]!.subject, 'feat: the page');
+  assert.deepEqual(db.commitsTouching('r', [{ node: 'r::nowhere' }]), []);
+  db.close();
+});

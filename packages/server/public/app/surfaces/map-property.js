@@ -20,7 +20,8 @@
 import { S, esc, currentLens, bizName, repoOf } from '../store.js';
 import { t, plainWords, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
-import { countedHtml, countedUnit, defAttrs, plainTip, unCode } from '../lib/counted.js';
+import { countedHtml, countedUnit, countedAttrs, defAttrs, plainTip, unCode } from '../lib/counted.js';
+import { mapEvidenceChip } from '../lib/map-chips.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { designThumbHtml, linkHtml } from '../lib/graph-render.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
@@ -273,7 +274,7 @@ function gateList(rows, key) {
 
 function overviewHtml(pm, st) {
   const o = pm.tabs.overview;
-  const glance = o.glance.map((c) => countWords(c)).filter(Boolean).join('')
+  const glance = o.glance.map((c) => countWords(c) + (c === pm.counts.tests ? mapEvidenceChip(o.evidence) : '')).filter(Boolean).join('')
     + (pm.hero.planned ? '<span class="api-chip stub"' + defAttrs('design.status.designOnly') + '>' + esc(t('design.status.designOnly')) + '</span>' : '');
   const calls = o.calls.length ? capRows('ov-calls', o.calls.map((c) => callRow(c, true))) : (pm.tabs.apis.planned ? absentRow('notBuilt') : absentRow('noneIndexed'));
   COUNTED_GATES = pm.counts.gates;
@@ -454,10 +455,9 @@ function workHtml(pm, st) {
     + (findings ? sec('map.prop.work.findings', findings) : '');
 }
 
-/** The changes the latest sync measured against the one before it, kept to this screen's parts. */
-function loadChanges(pm) {
-  const repo = pm.node ? repoOf(pm.node) : '';
-  return lazy('changes|' + repo + '|' + pm.changeIds.join(','), async () => {
+/** The changes the latest sync measured against the one before it, kept to this screen's parts — what the index changed. */
+function loadIndexChanges(pm, repo) {
+  return (async () => {
     const h = await fetch('/api/history?repo=' + encodeURIComponent(repo)).catch(() => null);
     if (!h) return { failed: true };
     if (h.status === 503) return { off: true };
@@ -468,34 +468,91 @@ function loadChanges(pm) {
     const older = rows.find((x) => x.sync < head);
     if (head == null || !older) return { noEarlier: true };
     const r = await fetch('/api/changes?from=sync:' + older.sync + '&to=sync:' + head).catch(() => null);
-    if (!r) return { failed: true };
-    if (r.status === 503) return { off: true };
-    if (r.status === 400) return { noEarlier: true };
-    const body = await r.json().catch(() => null);
-    if (!r.ok || !body || !body.diff) return { failed: true };
+    const body = r && r.ok ? await r.json().catch(() => null) : null;
+    if (!body || !body.diff) return { failed: true };
     const ids = new Set(pm.changeIds);
     const list = (body.diff.changes || []).filter((c) => c.subject && ids.has(c.subject.id));
     return { base: body.baseSync, head: body.headSync, list, sentences: body.sentences || {} };
+  })();
+}
+
+/** The application's commits that changed this screen's parts, newest first (`/api/history/touching`). */
+function loadCommits(pm, repo) {
+  return fetch('/api/history/touching?repo=' + encodeURIComponent(repo) + '&nodes=' + encodeURIComponent(pm.changeIds.join(',')))
+    .then(async (r) => {
+      if (r.status === 503) return { off: true };
+      const body = r.ok ? await r.json().catch(() => null) : null;
+      if (!body || !Array.isArray(body.commits)) return { failed: true };
+      return { read: body.read || 0, list: body.commits, counted: (body.counted && body.counted.commits) || null };
+    })
+    .catch(() => ({ failed: true }));
+}
+
+/** Both groups of the Changes tab: the commits first, the index's facts second. */
+function loadChanges(pm) {
+  const repo = pm.node ? repoOf(pm.node) : '';
+  return lazy('changes|' + repo + '|' + pm.changeIds.join(','), () => Promise.all([loadCommits(pm, repo), loadIndexChanges(pm, repo)])
+    .then(([commits, index]) => ({ commits, index })));
+}
+
+/** A commit's date as the reader reads dates: the day, not the time. */
+function dayOf(at) {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
+function commitRow(x) {
+  const parts = (x.parts || []).map((p) => {
+    const n = S.BYID[p.node];
+    return { name: nameOf(n, String(p.node).split('::').pop()), how: p.how };
   });
+  // the business register reads the sentence, not its conventional-commit type and scope
+  const subject = biz() ? unCode(String(x.subject || '').replace(/^\w+(?:\([^)]*\))?!?:\s*/, '')) : String(x.subject || '');
+  const sub = [
+    esc(dayOf(x.at)),
+    biz() ? '' : '<span' + defAttrs('map.prop.changes.by') + '>' + esc(t('map.prop.changes.by').split('{author}').join(x.author || '')) + '</span>',
+    esc(parts.slice(0, 3).map((p) => p.name).join(', '))
+      + (parts.length > 3 ? ' <span' + plainTip(parts.length - 3, 'map.prop.changes.partsMore', 'journey.scopeHere', '/api/history/touching') + '>'
+        + esc(t('map.prop.changes.partsMore').split('{n}').join(String(parts.length - 3))) + '</span>' : ''),
+    biz() ? '' : '<code>' + esc(String(x.sha || '').slice(0, 7)) + '</code>',
+    biz() ? '' : (x.keys || []).map((k) => '<b class="mp-key">' + esc(k) + '</b>').join(' '),
+  ].filter(Boolean).join(' · ');
+  const how = parts.some((p) => p.how === 'lines') ? 'lines' : 'file';
+  return row(clampHtml('commit-' + x.sha, subject), sub,
+    '<span class="api-chip"' + defAttrs('map.prop.changes.how.' + how) + '>' + esc(t('map.prop.changes.how.' + how)) + '</span>',
+    { kind: 'node', id: (x.parts && x.parts[0] && x.parts[0].node) || '' });
+}
+
+function commitsHtml(c) {
+  if (!c) return '<div class="mp-row none mp-loading">' + esc(t('map.prop.loading')) + '</div>';
+  if (c.off) return lineRow('map.prop.changes.noHistory');
+  if (c.failed) return lineRow('map.prop.changes.commitsFailed');
+  if (!c.read) return lineRow('map.prop.changes.notRead');
+  if (!c.list.length) return lineRow('map.prop.changes.noCommit');
+  return capRows('commits', c.list.map(commitRow), c.counted, '/api/history/touching');
+}
+
+function indexChangesHtml(c) {
+  if (!c) return '<div class="mp-row none mp-loading">' + esc(t('map.prop.loading')) + '</div>';
+  if (c.off) return lineRow('map.prop.changes.noHistory');
+  if (c.failed) return lineRow('map.prop.changes.failed');
+  if (c.noEarlier) return lineRow('map.prop.changes.noEarlier');
+  if (!c.list.length) return lineRow('map.prop.changes.none');
+  return capRows('changes', c.list.map((x) => {
+    const s = c.sentences[x.id] || x.kind;
+    const sub = biz() ? '' : esc([x.kind, x.subject && x.subject.name, currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · '));
+    return row(clampHtml('change-' + x.id, biz() ? unCode(s) : s), sub, '<span class="api-chip ' + (x.severity === 'breaking' ? 'warn' : '') + '"' + defAttrs('changes.sev.' + x.severity) + '>' + esc(t('changes.sev.' + x.severity)) + '</span>', { kind: (x.subject && x.subject.kind) || 'node', id: x.subject && x.subject.id });
+  }), null, '/api/changes');
 }
 
 function changesHtml(pm, st) {
-  const c = st.changes;
-  let body;
-  if (!c) body = '<div class="mp-row none mp-loading">' + esc(t('map.prop.loading')) + '</div>';
-  else if (c.off) body = lineRow('map.prop.changes.noHistory');
-  else if (c.failed) body = lineRow('map.prop.changes.failed');
-  else if (c.noEarlier) body = lineRow('map.prop.changes.noEarlier');
-  else if (!c.list.length) body = lineRow('map.prop.changes.none');
-  else {
-    body = capRows('changes', c.list.map((x) => {
-      const s = c.sentences[x.id] || x.kind;
-      const sub = biz() ? '' : esc([x.kind, x.subject && x.subject.name, currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · '));
-      return row(clampHtml('change-' + x.id, biz() ? unCode(s) : s), sub, '<span class="api-chip ' + (x.severity === 'breaking' ? 'warn' : '') + '"' + defAttrs('changes.sev.' + x.severity) + '>' + esc(t('changes.sev.' + x.severity)) + '</span>', { kind: (x.subject && x.subject.kind) || 'node', id: x.subject && x.subject.id });
-    }), null, '/api/changes');
-  }
-  const range = c && c.base != null ? '<p class="mp-dim"' + defAttrs('map.prop.changes.range') + '>' + esc(t('map.prop.changes.range').replace('{base}', c.base).replace('{head}', c.head)) + '</p>' : '';
-  return sec('map.prop.changes.head', range + body);
+  const c = st.changes || {};
+  const commits = c.commits || (st.changes ? { failed: true } : null);
+  const index = c.index || (st.changes ? { failed: true } : null);
+  const range = index && index.base != null ? '<p class="mp-dim"' + defAttrs('map.prop.changes.range') + '>' + esc(t('map.prop.changes.range').replace('{base}', index.base).replace('{head}', index.head)) + '</p>' : '';
+  const n = commits && commits.counted && commits.list && commits.list.length ? countNum(commits.counted, '/api/history/touching') : '';
+  return '<section class="mp-sec mp-commits">' + secHead('map.prop.changes.commits', n) + commitsHtml(commits) + '</section>'
+    + '<section class="mp-sec mp-indexed">' + secHead('map.prop.changes.head', '') + range + indexChangesHtml(index) + '</section>';
 }
 
 // ── the frame ───────────────────────────────────────────────────────────────
@@ -537,6 +594,28 @@ function alsoChipsHtml(pm) {
   return all.slice(0, 3).map(chip).join('') + '<button class="api-chip mp-fold" data-act="more" data-key="also" aria-expanded="false">'
     + esc(t('map.prop.alsoMore')).replace('{n}', () => '<span class="n"' + plainTip(more, 'map.prop.alsoN', 'journey.scopeHere', '/graph') + '>' + more + '</span>') + '</button>';
 }
+/**
+ * Where the screen sits, in units (lane N): *screen 4 of 10 reached* — the 10 is the summary's
+ * `counted.screensReached` with its tip (else the street's rows, with a plain tip) — and, when the
+ * journey names more screens than the walk reached, a second line *14 declared, 4 not reached*
+ * whose second number lists each screen with its absence word.
+ */
+function whereHtml(pm, j) {
+  const p = pm.place || {};
+  const m = p.reached
+    ? '<span class="n"' + countedAttrs(p.reached, '/api/journey') + '>' + pm.total + '</span>'
+    : '<span class="n"' + plainTip(pm.total, 'count.unit.screensReached', 'journey.scopeAll', '/api/journey') + '>' + pm.total + '</span>';
+  const line = esc(t('map.prop.foot.step')).replace('{n}', String(pm.index + 1)).replace('{m}', () => m).replace('{journey}', () => esc(j.name || ''));
+  let more = '';
+  const miss = p.notReached || [];
+  if (p.declared && miss.length) {
+    const rows = miss.map((x) => [(biz() ? plainWords(x.name) || x.name : x.name) + ' · ' + t('journey.absent.' + x.word), 1]);
+    const k = '<span class="n"' + plainTip(miss.length, 'count.part.screensNotReached', 'journey.scopeAll', '/api/journey', rows, 'journey.absent.notReached') + '>' + miss.length + '</span>';
+    const n = '<span class="n"' + countedAttrs(p.declared, '/api/journey') + '>' + p.declared.n + '</span>';
+    more = '<span class="mp-declared"' + defAttrs('map.prop.foot.declared') + '>' + esc(t('map.prop.foot.declared')).replace('{n}', () => n).replace('{k}', () => k) + '</span>';
+  }
+  return '<span class="hud-label mp-where"' + tipAttrs({ key: 'map.prop.foot.step' }) + '>' + line + '</span>' + more;
+}
 function footHtml(pm, ctx) {
   const j = (ctx.model && ctx.model.journey) || {};
   const step = (dir, s) => {
@@ -549,9 +628,8 @@ function footHtml(pm, ctx) {
     + ' aria-label="' + esc(s.name) + '" title="' + esc(s.name) + '"' + (i === pm.index ? ' aria-current="step"' : '') + '></button>').join('');
   const also = pm.alsoIn.length ? '<div class="mp-also"><span class="hud-label"' + defAttrs('map.prop.foot.alsoIn') + '>' + esc(t('map.prop.foot.alsoIn')) + '</span>'
     + alsoChipsHtml(pm) + '</div>' : '';
-  const where = t('map.prop.foot.step').replace('{n}', pm.index + 1).replace('{m}', pm.total).replace('{journey}', j.name || '');
   return step(-1, pm.prev)
-    + '<div class="mp-mid"><span class="hud-label mp-where"' + tipAttrs({ key: 'map.prop.foot.step' }) + '>' + esc(where) + '</span><div class="mp-dots">' + dots + '</div>' + also + '</div>'
+    + '<div class="mp-mid">' + whereHtml(pm, j) + '<div class="mp-dots">' + dots + '</div>' + also + '</div>'
     + step(1, pm.next);
 }
 

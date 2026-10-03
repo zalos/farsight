@@ -449,7 +449,22 @@ handlers its calls reach) and `counts` — the tab strip's numbers, each the sum
 | Tests | `summary.coverage.segments[i]` through `jrnFoldFacts`: the evidence chip, the run behind it, the counts sentence, their own last run; the cases (not run-level) with how each is evidenced and its status; coverage runs that name no case apart | `coverage.segments[i].counted.tests` |
 | Route | the page name, built or planned, the design manifest that declares it, where the code routes it; the journey's `summary.links`; *other ways in* = edges into the page that are not `contains`, `covers`, `tracks` or a flow's `renders`; the design and `@see` links (`jrnRefAnchors`) | none |
 | Work | lazy, cached per sync: `GET /api/work/links?node=<page>` and the flow's `findings` (`flowWork`) kept to those items. With no work source configured nothing is asked and the tab says so | `counts.items` of the links answer, once it arrives |
-| Changes | lazy, cached per sync: `/api/history?repo=` for the spine, then `/api/changes?from=sync:<previous>&to=sync:<latest>`, kept to `changeIds`. 503 → *history is not kept on this server*; one sync → *no earlier sync to compare against*; nothing matched → *nothing on this screen changed between these syncs*; never blank | none |
+| Changes | lazy, cached per sync, two groups (lane N, 2026-10-03). **Commits that touched this screen's parts** first: `GET /api/history/touching?repo=&nodes=<changeIds>` — the application's commits, newest first, each with its subject (business: the sentence without its conventional type and scope, through `unCode`), day, author, the first three parts it touched (*n more parts*), short sha and work keys (not in business), and *these lines* / *its file* for how it was matched; the group's head prints `counted.commits`. `read: 0` → *no commit history has been read for this source*; none matched → *no commit read touched these parts*; 503 → *history is not kept on this server*. Then **What the index changed**, labelled as such: `/api/history?repo=` for the spine, `/api/changes?from=sync:<previous>&to=sync:<latest>` kept to `changeIds` (one sync → *no earlier sync to compare against*; nothing matched → *nothing on this screen changed between these syncs*). Never blank | none |
+
+**One number, one word (lane N, 2026-10-03; `lib/map-chips.js`).** The swarm read 14, 10 and 23 for one journey's
+screens with nothing naming the unit. Now: the cover and street head print `counted.screens` (*14 screens*, its tip
+split *reached by the walk* / *not reached*) and, only when the walk reached fewer, `counted.screensReached` (*10
+reached*) beside it (`mapScreensChips`); the footer says *screen 4 of 10 reached · journey* — its 10 the summary's
+`screensReached` with its tip (`placeOf()` hands the same object on, only when it counts the street's rows) — and,
+when the design names more, *14 declared, 4 not reached*, the 4's tip naming each screen with its absence word
+(*not reached*, or *not built* for a design-only screen). The drill keeps *stop n of t*, whose define says it counts
+stops. Every count of tests carries its evidence word right after it (`mapTestsChips` → `mapEvidenceChip`: the
+fold's `evidenceWord`, *not built* on `sharedEvidence` — the Portfolio's word for the same fold) on the cover, the
+head, each screen card (`MapScreen.chips.evidence`) and the property's Overview (`tabs.overview.evidence`). The cover
+also prints `reaches the ERP · <system>` (Portfolio's rule over `summary.systems`, else *ERP hand-off declared, not
+built*) and `owner · <name>` from the manifest. Cover order: screens, reached, built, tests + evidence, ERP, owner,
+then actions, gates, stores, declared-not-called — a narrow cover clips from the end until its row wraps or folds.
+e2e: `e2e/tests/map-numbers.pw.spec.ts`.
 
 **The hero.** A design image (`designThumbHtml(node, 'mp-shot')`, the lightbox on click) sized to the stage, kept in
 the code lens too. A screen with no image declared gets the placeholder with `journey.absent.notIndexed`; a
