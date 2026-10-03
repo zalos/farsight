@@ -415,6 +415,18 @@ projects they import or it declares. `graph_overview` prints the projects line o
 tool (`nx` or `workspaces`): *nx · 8 projects (2 applications · 5 libraries · 1 e2e) · 10 project dependencies —
 Domain: Billing 5 · Shared 2 · Operations 1 — Type: …* (the `examples/nx-workspace` graph).
 
+### Dependencies (`/api/deps` → core `deps.ts` `packagesOf()` / `importersOf()`; CLI `farsight deps`; MCP `describe_node`, `graph_overview`)
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| packages | `count.unit.packages` *n packages* (hybrid/code only) | `count.scope.workspace` | `packagesOf().packages` over the `package` nodes the filters let through (`/api/deps` recounts after `?scope=`; `graph_overview` counts every package node) | each package node once — one package per source that imports it, so `react` in two sources is two; breakdown `count.part.packagesThirdParty` · `count.part.packagesWorkspace` — a partition. Node built-ins are never counted (`meta.packages[repo].builtins` lists them apart) |
+| files that import it | `count.unit.importers` *n files import it* (hybrid/code only) | `count.scope.package` | `DepsRow.importers` / `importersOf().importers` — `module` nodes with an `imports` edge to the package | source files of that source that import the package, each once however many times they name it; on `where` the breakdown is by project (when the graph carries projects) else by source, labelled — a partition. Test and story files are not read for this |
+| journeys it reaches | `count.unit.journeysReached` *n journeys reach it* (both) | `count.scope.package` | `DepsRow.journeys` = `journeysReaching()`: `impactOf(package, 2 hops)` and every flow whose `journey()` walk (steps, their gates, its screens) meets a listed node | journeys, each once. A floor: plumbing and rendered primitives are listed by the walk and not opened, so a package only plumbing uses (the invoice example's `date-fns` in its formatter) reaches 0 |
+
+`count.scope.package` is new with this table (*for this package*): one package as one source imports it — every
+file of that source that imports it, wherever it sits. The ranges (`DepsRow.versions`: where · range · declaring
+package.json) are facts, not counts, and print beside the row.
+
 ## 4. Open — found, not changed here
 
 - **The journey prints the typed counts** (`fix/journey-numbers-and-words`, 2026-09-25). The header
