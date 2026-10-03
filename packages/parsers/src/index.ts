@@ -10,9 +10,11 @@ import { applySpecs } from './openapi/index.js';
 import { applyDesigns } from './design/index.js';
 import { applyTests, testGlobsOf } from './tests/index.js';
 import { applyStories } from './stories/index.js';
+import { applyStores } from './stores.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
-export { tsJsAdapter, ingestTsJs } from './tsjs.js';
+export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
+export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js';
 export { javaAdapter, ingestJava } from './java/index.js';
 export { applySpecs, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, discoverSpecs } from './openapi/index.js';
 export type { SpecApplication } from './openapi/index.js';
@@ -74,6 +76,8 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
     const fragment = await adapter.ingest(repoRoot, opts);
     if ((fragment.meta?.files ?? 0) > 0 || fragment.nodes.length > 0) fragments.push(fragment);
   }
+  // the SQL drivers the adapters saw — read now, because the spec and design passes rebuild meta
+  const drivers = fragments.flatMap((f) => f.meta?.stores?.drivers ?? []);
   const merged = mergeFragments(repo, fragments);
   if (config) { applyConfig(merged.nodes, config, merged.edges); merged.configApplied = true; }
   // tooling (scripts a person runs) is tagged with or without a config file: the default is `scripts/**`
@@ -90,12 +94,16 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
     const { errors } = await applyDesigns(merged, repoRoot, opts);
     if (errors.length) merged.specErrors = [...(merged.specErrors ?? []), ...errors];
   }
+  // which data store each table lives in: code rules first, the config's `stores` last (stores.ts)
+  const storesMeta = applyStores(merged, repoRoot, opts, config?.stores, drivers);
   // the content digest goes on after the spec and design passes (both rebuild meta from
   // scratch — openapi/index.ts:38, design/index.ts:144) and before the tests pass, whose
   // freshnessOf() compares a report's recorded digest against it
   const digest = repoContentDigest(repoRoot, opts);
   if (merged.meta) merged.meta.sourceDigest = digest;
   else merged.meta = { files: 0, sourceHash: 'empty', sourceDigest: digest };
+  if (Object.keys(storesMeta).length) merged.meta.stores = storesMeta;
+  else delete merged.meta.stores;
   // tests last: `@covers SCR-07` resolves against design screens and `@covers POST /x`
   // against routes a spec may have added, so both passes must have run first
   if (options.tests !== false) {

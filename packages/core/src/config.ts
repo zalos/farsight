@@ -109,10 +109,46 @@ export interface TestsConfigBlock {
 
 export function loadConfig(path: string): FarsightConfig | null {
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as FarsightConfig;
+    const config = JSON.parse(readFileSync(path, 'utf8')) as FarsightConfig;
+    if (config && typeof config === 'object') sanitizeStores(config);
+    return config;
   } catch {
     return null;
   }
+}
+
+const STORE_KINDS: readonly StoreKind[] = ['sql', 'document', 'files', 'erp', 'other'];
+const STORE_ENGINES: readonly StoreEngine[] = ['postgres', 'mysql', 'sqlite', 'mssql', 'mongodb'];
+
+/**
+ * Soft validation of the data-store fields (docs/proposals/data-stores.md §3.1): a `stores[]`
+ * entry without a name or with an unknown kind is dropped, an unknown engine or a non-string
+ * table is left out, a non-boolean `externals[].store` is ignored. Never throws — a config
+ * mistake leaves the store unnamed, which the graph says, rather than failing the ingest.
+ */
+export function sanitizeStores(config: FarsightConfig): FarsightConfig {
+  if (config.stores !== undefined) {
+    const raw: unknown[] = Array.isArray(config.stores) ? config.stores : [];
+    const out: StoreDecl[] = [];
+    for (const r of raw) {
+      if (!r || typeof r !== 'object') continue;
+      const d = r as Record<string, unknown>;
+      if (typeof d.name !== 'string' || !d.name.trim() || !STORE_KINDS.includes(d.kind as StoreKind)) continue;
+      const tables = Array.isArray(d.tables) ? d.tables.filter((t): t is string => typeof t === 'string' && !!t) : undefined;
+      out.push({
+        name: d.name.trim(), kind: d.kind as StoreKind,
+        ...(STORE_ENGINES.includes(d.engine as StoreEngine) ? { engine: d.engine as StoreEngine } : {}),
+        ...(tables ? { tables } : {}),
+      });
+    }
+    config.stores = out;
+  }
+  if (Array.isArray(config.externals)) {
+    for (const e of config.externals) {
+      if (e && typeof e === 'object' && 'store' in e && typeof e.store !== 'boolean') delete (e as { store?: unknown }).store;
+    }
+  }
+  return config;
 }
 
 const ROUTE_MATCHER = /^([A-Z]+) (\/\S*)$/;

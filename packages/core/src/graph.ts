@@ -449,6 +449,18 @@ export interface StoriesMeta {
   unresolved: { file: string; reason: 'no-component' | 'component-unresolved' | 'unparsed'; component?: string; stories: number }[];
 }
 
+/** What the store pass read, per repo (parsers/src/stores.ts) — the evidence behind each table's `store`, and what named nothing. */
+export interface StoresMeta {
+  /** SQL driver packages the code imports, with how many files import each — the `sdk` rule's evidence */
+  drivers?: { spec: string; files: number }[];
+  /** how many table nodes got a store from each rule */
+  named?: Partial<Record<StoreVia, number>>;
+  /** table nodes no rule named a store for */
+  unnamed?: number;
+  /** one sentence per rule that read something and named nothing on purpose (two drivers, an env() provider…) */
+  notes?: string[];
+}
+
 export interface GraphNode {
   id: string;
   kind: NodeKind;
@@ -562,7 +574,7 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json at the repo root was applied by ingestRepo */

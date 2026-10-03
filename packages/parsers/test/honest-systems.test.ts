@@ -368,8 +368,8 @@ test('a `<path>::<Class>` declaration renames and re-kinds the external the pars
   const externals = g.nodes.filter((n) => n.kind === 'external');
   assert.deepEqual(externals.map((n) => n.name), ['Example ERP'], 'still one node — renamed, not doubled');
   assert.deepEqual(externals[0]!.external, {
-    kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST',
-  }, 'the declaration says what it is; the constant is still how it was found');
+    kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST', store: true,
+  }, 'the declaration says what it is; the constant is still how it was found; an ERP is a store by its kind');
   assert.deepEqual(externals[0]!.tags, ['external', 'erp']);
   const e = g.edges.find((x) => x.kind === 'http' && x.to === externals[0]!.id);
   assert.ok(e, 'the edge the parser detected is still there');
@@ -688,8 +688,8 @@ test('invoice-app · R4/R5: the SDK, the constant host renamed by config, and th
 
   // R4b — a non-literal fetch behind a constant host, named and re-kinded by the declaration
   const erp = externals.find((n) => n.name === 'Example ERP')!;
-  assert.deepEqual(erp.external, { kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST' },
-    'farsight.config.json says what it is; the constant is still how it was found');
+  assert.deepEqual(erp.external, { kind: 'erp', source: 'config', via: 'ErpClient', ref: 'ERP_HOST', store: true },
+    'farsight.config.json says what it is; the constant is still how it was found; an ERP is a store by its kind');
   assert.deepEqual(erp.tags, ['external', 'erp']);
   const toErp = g.edges.find((e) => e.kind === 'http' && e.to === erp.id)!;
   assert.equal(toErp.from, S('erpClient.ts::ErpClient.request'));
