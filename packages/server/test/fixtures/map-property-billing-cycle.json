@@ -1,0 +1,5971 @@
+{
+ "_about": "Captured from the examples/invoice-app fixture on 2026-10-03 for the map property model: GET /api/journey?entry=invoice-app::flow::billing-cycle (steps, the coverage metric and per-action coverage dropped), the graph nodes (code snippets dropped) and its renders/contains/covers edges.",
+ "journey": {
+  "entry": {
+   "id": "invoice-app::flow::billing-cycle",
+   "kind": "flow",
+   "name": "Billing cycle",
+   "repo": "invoice-app",
+   "tags": [
+    "entrypoint",
+    "flow",
+    "design:billing-cycle",
+    "phase:1"
+   ],
+   "docs": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent.",
+   "bizLabel": "Billing cycle",
+   "bizDescription": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent.",
+   "links": [
+    {
+     "kind": "doc",
+     "ref": "docs/design/flows.md",
+     "title": "Invoice app — flows"
+    }
+   ],
+   "design": {
+    "status": "design-only",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "id": "billing-cycle",
+    "name": "Billing cycle",
+    "phase": "1",
+    "lastModified": "2026-10-03T17:42:13.131Z",
+    "freshness": "manifest"
+   }
+  },
+  "generatedAt": "2026-10-03T00:00:00.000Z",
+  "truncated": false,
+  "forkCount": 11,
+  "plannedCount": 2,
+  "cutPoints": [
+   {
+    "reason": "repeat",
+    "parentStep": 32,
+    "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+    "edgeId": "calls|invoice-app::src/server/invoiceService.ts::updateInvoice|invoice-app::src/server/taxEngine.ts::computeTax",
+    "depth": 7
+   },
+   {
+    "reason": "repeat",
+    "parentStep": 48,
+    "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+    "edgeId": "calls|invoice-app::src/server/invoiceService.ts::updateInvoice|invoice-app::src/server/taxEngine.ts::computeTax",
+    "depth": 8
+   }
+  ],
+  "screens": [
+   {
+    "id": "invoice-app::page::/invoices/new",
+    "kind": "page",
+    "name": "/invoices/new",
+    "repo": "invoice-app",
+    "tags": [
+     "invoice",
+     "ux",
+     "design:inv-02"
+    ],
+    "bizLabel": "New invoice",
+    "bizDescription": "Draft a new invoice for a customer: pick the customer, add line items, save.",
+    "loc": {
+     "repo": "invoice-app",
+     "path": "src/ui/router.tsx",
+     "line": 9
+    },
+    "design": {
+     "status": "both",
+     "origin": "manifest",
+     "designId": "invoice-app::design::docs/design/screens.json",
+     "id": "INV-02",
+     "name": "New invoice",
+     "nodeId": "1-3",
+     "url": "https://www.figma.com/design/INVOICEAPPDEMO0000/Invoice-app?node-id=1-3",
+     "image": {
+      "kind": "file",
+      "path": "docs/design/inv-02.svg"
+     },
+     "lastModified": "2026-10-03T17:42:13.131Z",
+     "freshness": "manifest",
+     "operations": [
+      "createInvoice",
+      "getInvoice"
+     ],
+     "phase": "1",
+     "drift": [
+      {
+       "kind": "operation-unreached",
+       "message": "the design says this screen uses getInvoice (GET /invoices/:id); the built page never reaches it"
+      }
+     ]
+    }
+   },
+   {
+    "id": "invoice-app::page::/invoices",
+    "kind": "page",
+    "name": "/invoices",
+    "repo": "invoice-app",
+    "tags": [
+     "invoice",
+     "ux",
+     "design:inv-01"
+    ],
+    "bizLabel": "Invoice list",
+    "bizDescription": "Every invoice, newest first, with its status and a way into the draft editor.",
+    "loc": {
+     "repo": "invoice-app",
+     "path": "src/ui/router.tsx",
+     "line": 8
+    },
+    "design": {
+     "status": "both",
+     "origin": "manifest",
+     "designId": "invoice-app::design::docs/design/screens.json",
+     "id": "INV-01",
+     "name": "Invoice list",
+     "nodeId": "1-2",
+     "url": "https://www.figma.com/design/INVOICEAPPDEMO0000/Invoice-app?node-id=1-2",
+     "image": {
+      "kind": "file",
+      "path": "docs/design/inv-01.svg"
+     },
+     "lastModified": "2026-10-03T17:42:13.131Z",
+     "freshness": "manifest",
+     "operations": [
+      "listInvoices",
+      "createInvoice",
+      "getInvoice",
+      "updateInvoice"
+     ],
+     "phase": "1"
+    }
+   },
+   {
+    "id": "invoice-app::page::/invoices/:param/discard",
+    "kind": "page",
+    "name": "/invoices/:param/discard",
+    "repo": "invoice-app",
+    "tags": [
+     "design-only",
+     "design:inv-03"
+    ],
+    "docs": "Confirm and discard a draft invoice that will never be sent.",
+    "bizLabel": "Discard draft",
+    "bizDescription": "Confirm and discard a draft invoice that will never be sent.",
+    "design": {
+     "status": "design-only",
+     "origin": "manifest",
+     "designId": "invoice-app::design::docs/design/screens.json",
+     "id": "INV-03",
+     "name": "Discard draft",
+     "nodeId": "1-4",
+     "url": "https://www.figma.com/design/INVOICEAPPDEMO0000/Invoice-app?node-id=1-4",
+     "image": {
+      "kind": "figma"
+     },
+     "lastModified": "2026-10-03T17:42:13.131Z",
+     "freshness": "manifest",
+     "operations": [
+      "deleteInvoice"
+     ],
+     "phase": "2",
+     "drift": [
+      {
+       "kind": "design-only",
+       "message": "designed; no page or component at this route in the indexed code"
+      }
+     ]
+    }
+   }
+  ],
+  "summary": {
+   "entry": {
+    "id": "invoice-app::flow::billing-cycle",
+    "kind": "flow",
+    "name": "Billing cycle",
+    "business": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent."
+   },
+   "user": [
+    {
+     "id": "invoice-app::page::/invoices/new",
+     "name": "New invoice",
+     "kind": "page",
+     "business": "Draft a new invoice for a customer: pick the customer, add line items, save.",
+     "designId": "INV-02",
+     "designStatus": "both",
+     "hasImage": true,
+     "links": [],
+     "components": [
+      "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm"
+     ],
+     "loc": {
+      "repo": "invoice-app",
+      "path": "src/ui/router.tsx",
+      "line": 9
+     }
+    },
+    {
+     "id": "invoice-app::page::/invoices",
+     "name": "Invoice list",
+     "kind": "page",
+     "business": "Every invoice, newest first, with its status and a way into the draft editor.",
+     "designId": "INV-01",
+     "designStatus": "both",
+     "hasImage": true,
+     "links": [],
+     "components": [
+      "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage"
+     ],
+     "loc": {
+      "repo": "invoice-app",
+      "path": "src/ui/router.tsx",
+      "line": 8
+     }
+    },
+    {
+     "id": "invoice-app::page::/invoices/:param/discard",
+     "name": "Discard draft",
+     "kind": "page",
+     "business": "Confirm and discard a draft invoice that will never be sent.",
+     "designId": "INV-03",
+     "designStatus": "design-only",
+     "hasImage": true,
+     "links": [],
+     "components": []
+    }
+   ],
+   "business": {
+    "description": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent.",
+    "docs": [
+     {
+      "kind": "doc",
+      "ref": "docs/design/flows.md",
+      "title": "Invoice app — flows"
+     }
+    ],
+    "gates": [
+     {
+      "id": "invoice-app::guard::requireScope(billing:write)",
+      "name": "requireScope: billing:write",
+      "appliesTo": "invoice-app::route::PATCH /invoices/:id"
+     },
+     {
+      "id": "invoice-app::guard::requireScope(billing:read)",
+      "name": "requireScope: billing:read",
+      "appliesTo": "invoice-app::route::GET /invoices/:id"
+     },
+     {
+      "id": "invoice-app::guard::requireScope(billing:admin)",
+      "name": "requireScope: billing:admin",
+      "appliesTo": "invoice-app::route::POST /invoices/:id/finalize"
+     },
+     {
+      "id": "invoice-app::route::DELETE /invoices/{id}#security:billingAuth: billing:admin",
+      "name": "billingAuth: billing:admin",
+      "planned": true,
+      "appliesTo": "invoice-app::route::DELETE /invoices/{id}"
+     }
+    ],
+    "rules": [
+     {
+      "id": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+      "name": "draftInvoiceSchema",
+      "appliesTo": "invoice-app::route::POST /invoices"
+     },
+     {
+      "id": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+      "name": "updateInvoiceSchema",
+      "appliesTo": "invoice-app::route::PATCH /invoices/:id"
+     }
+    ],
+    "decisions": [
+     {
+      "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+      "line": 17,
+      "label": "Draft is still editable — persist the line-item changes",
+      "arm": "else",
+      "class": "business",
+      "stepOrder": 28
+     },
+     {
+      "nodeId": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+      "line": 64,
+      "label": "Assign the number, post the ledger entry, and notify the customer",
+      "arm": "try",
+      "class": "business",
+      "stepOrder": 38
+     },
+     {
+      "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+      "line": 17,
+      "label": "Draft is still editable — persist the line-item changes",
+      "arm": "else",
+      "class": "business",
+      "stepOrder": 44
+     }
+    ],
+    "untranslated": {
+     "count": 2,
+     "byCategory": {
+      "branch": 2
+     },
+     "guardsUnlabelled": 0,
+     "items": [
+      {
+       "stepOrder": 16,
+       "category": "branch",
+       "nodeId": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+       "name": "InvoiceListPage",
+       "line": 26,
+       "requires": "creating"
+      },
+      {
+       "stepOrder": 23,
+       "category": "branch",
+       "nodeId": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+       "name": "InvoiceListPage",
+       "line": 27,
+       "requires": "editing"
+      }
+     ]
+    }
+   },
+   "system": {
+    "timeline": [
+     {
+      "order": 0,
+      "depth": 0,
+      "nodeId": "invoice-app::flow::billing-cycle",
+      "via": "entry",
+      "stepOrder": 0,
+      "business": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "Billing cycle"
+     },
+     {
+      "order": 1,
+      "depth": 1,
+      "nodeId": "invoice-app::page::/invoices/new",
+      "via": "renders",
+      "stepOrder": 1,
+      "business": "Draft a new invoice for a customer: pick the customer, add line items, save.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "New invoice"
+     },
+     {
+      "order": 2,
+      "depth": 2,
+      "kind": "gate",
+      "nodeId": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+      "name": "draftInvoiceSchema",
+      "via": "renders",
+      "stepOrder": 2
+     },
+     {
+      "order": 2,
+      "depth": 2,
+      "nodeId": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+      "via": "renders",
+      "stepOrder": 2,
+      "business": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "CreateInvoiceForm"
+     },
+     {
+      "order": 3,
+      "depth": 3,
+      "nodeId": "invoice-app::src/api/client.ts::createInvoice",
+      "via": "calls",
+      "stepOrder": 3,
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "createInvoice"
+     },
+     {
+      "order": 4,
+      "depth": 4,
+      "kind": "gate",
+      "nodeId": "invoice-app::guard::requireScope(billing:write)",
+      "name": "requireScope: billing:write",
+      "via": "http",
+      "stepOrder": 4
+     },
+     {
+      "order": 4,
+      "depth": 4,
+      "kind": "gate",
+      "nodeId": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+      "name": "draftInvoiceSchema",
+      "via": "http",
+      "stepOrder": 4
+     },
+     {
+      "order": 4,
+      "depth": 4,
+      "nodeId": "invoice-app::route::POST /invoices",
+      "via": "http",
+      "stepOrder": 4,
+      "business": "Draft a new invoice for a customer.",
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "POST /invoices"
+     },
+     {
+      "order": 5,
+      "depth": 5,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+      "via": "calls",
+      "stepOrder": 5,
+      "business": "Creates a draft invoice and computes initial totals.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "createInvoice"
+     },
+     {
+      "order": 6,
+      "depth": 6,
+      "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+      "via": "calls",
+      "stepOrder": 6,
+      "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "computeTax"
+     },
+     {
+      "order": 7,
+      "depth": 7,
+      "nodeId": "invoice-app::table::customers",
+      "via": "reads",
+      "stepOrder": 7,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "customers"
+     },
+     {
+      "order": 8,
+      "depth": 6,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "writes",
+      "stepOrder": 8,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 9,
+      "depth": 3,
+      "nodeId": "invoice-app::src/ui/fields.tsx::LineItemRow",
+      "via": "renders",
+      "stepOrder": 9,
+      "business": "A single line on the invoice — what was sold and for how much.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "LineItemRow"
+     },
+     {
+      "order": 10,
+      "depth": 1,
+      "nodeId": "invoice-app::page::/invoices",
+      "via": "renders",
+      "stepOrder": 10,
+      "business": "Every invoice, newest first, with its status and a way into the draft editor.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "Invoice list"
+     },
+     {
+      "order": 11,
+      "depth": 2,
+      "nodeId": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+      "via": "renders",
+      "stepOrder": 11,
+      "business": "Lists invoices with status filters; entry point of the invoice UX.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "InvoiceListPage"
+     },
+     {
+      "order": 12,
+      "depth": 3,
+      "nodeId": "invoice-app::src/api/client.ts::listInvoices",
+      "via": "calls",
+      "stepOrder": 12,
+      "business": "Fetches every invoice for the list view.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "listInvoices"
+     },
+     {
+      "order": 13,
+      "depth": 4,
+      "kind": "gate",
+      "nodeId": "invoice-app::guard::requireScope(billing:read)",
+      "name": "requireScope: billing:read",
+      "via": "http",
+      "stepOrder": 13
+     },
+     {
+      "order": 13,
+      "depth": 4,
+      "nodeId": "invoice-app::route::GET /invoices",
+      "via": "http",
+      "stepOrder": 13,
+      "business": "List every invoice, newest first.",
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "GET /invoices"
+     },
+     {
+      "order": 14,
+      "depth": 5,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::listInvoices",
+      "via": "calls",
+      "stepOrder": 14,
+      "business": "Lists invoices, newest first.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "listInvoices"
+     },
+     {
+      "order": 15,
+      "depth": 6,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "reads",
+      "stepOrder": 15,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 16,
+      "depth": 3,
+      "kind": "gate",
+      "nodeId": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+      "name": "draftInvoiceSchema",
+      "via": "renders",
+      "stepOrder": 16
+     },
+     {
+      "order": 16,
+      "depth": 3,
+      "nodeId": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+      "via": "renders",
+      "stepOrder": 16,
+      "business": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "CreateInvoiceForm"
+     },
+     {
+      "order": 17,
+      "depth": 4,
+      "nodeId": "invoice-app::src/api/client.ts::createInvoice",
+      "via": "calls",
+      "stepOrder": 17,
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "createInvoice"
+     },
+     {
+      "order": 18,
+      "depth": 5,
+      "kind": "gate",
+      "nodeId": "invoice-app::guard::requireScope(billing:write)",
+      "name": "requireScope: billing:write",
+      "via": "http",
+      "stepOrder": 18
+     },
+     {
+      "order": 18,
+      "depth": 5,
+      "kind": "gate",
+      "nodeId": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+      "name": "draftInvoiceSchema",
+      "via": "http",
+      "stepOrder": 18
+     },
+     {
+      "order": 18,
+      "depth": 5,
+      "nodeId": "invoice-app::route::POST /invoices",
+      "via": "http",
+      "stepOrder": 18,
+      "business": "Draft a new invoice for a customer.",
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "POST /invoices"
+     },
+     {
+      "order": 19,
+      "depth": 6,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+      "via": "calls",
+      "stepOrder": 19,
+      "business": "Creates a draft invoice and computes initial totals.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "createInvoice"
+     },
+     {
+      "order": 20,
+      "depth": 7,
+      "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+      "via": "calls",
+      "stepOrder": 20,
+      "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "computeTax"
+     },
+     {
+      "order": 21,
+      "depth": 8,
+      "nodeId": "invoice-app::table::customers",
+      "via": "reads",
+      "stepOrder": 21,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "customers"
+     },
+     {
+      "order": 22,
+      "depth": 7,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "writes",
+      "stepOrder": 22,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 23,
+      "depth": 3,
+      "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+      "via": "renders",
+      "stepOrder": 23,
+      "business": "Lets a user change a draft invoice before it is sent. Sent invoices are shown but can no longer be edited.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "EditInvoiceDrawer"
+     },
+     {
+      "order": 24,
+      "depth": 4,
+      "nodeId": "invoice-app::src/api/client.ts::getInvoice",
+      "via": "calls",
+      "stepOrder": 24,
+      "business": "Fetches one invoice by id.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "getInvoice"
+     },
+     {
+      "order": 25,
+      "depth": 5,
+      "kind": "gate",
+      "nodeId": "invoice-app::guard::requireScope(billing:read)",
+      "name": "requireScope: billing:read",
+      "via": "http",
+      "stepOrder": 25
+     },
+     {
+      "order": 25,
+      "depth": 5,
+      "nodeId": "invoice-app::route::GET /invoices/:id",
+      "via": "http",
+      "stepOrder": 25,
+      "business": "Fetch one invoice by id.",
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "GET /invoices/:id"
+     },
+     {
+      "order": 26,
+      "depth": 6,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::getInvoice",
+      "via": "calls",
+      "stepOrder": 26,
+      "business": "Fetches a single invoice by id.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "getInvoice"
+     },
+     {
+      "order": 27,
+      "depth": 7,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "reads",
+      "stepOrder": 27,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 28,
+      "depth": 4,
+      "kind": "decision",
+      "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+      "name": "Draft is still editable — persist the line-item changes",
+      "via": "calls",
+      "stepOrder": 28,
+      "business": "Draft is still editable — persist the line-item changes"
+     },
+     {
+      "order": 28,
+      "depth": 4,
+      "nodeId": "invoice-app::src/api/client.ts::updateInvoice",
+      "via": "calls",
+      "stepOrder": 28,
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "updateInvoice"
+     },
+     {
+      "order": 29,
+      "depth": 5,
+      "kind": "gate",
+      "nodeId": "invoice-app::guard::requireScope(billing:write)",
+      "name": "requireScope: billing:write",
+      "via": "http",
+      "stepOrder": 29
+     },
+     {
+      "order": 29,
+      "depth": 5,
+      "kind": "gate",
+      "nodeId": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+      "name": "updateInvoiceSchema",
+      "via": "http",
+      "stepOrder": 29
+     },
+     {
+      "order": 29,
+      "depth": 5,
+      "nodeId": "invoice-app::route::PATCH /invoices/:id",
+      "via": "http",
+      "stepOrder": 29,
+      "business": "Change the line items of a draft invoice.",
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "PATCH /invoices/:id"
+     },
+     {
+      "order": 30,
+      "depth": 6,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+      "via": "calls",
+      "stepOrder": 30,
+      "business": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "updateInvoice"
+     },
+     {
+      "order": 31,
+      "depth": 7,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "reads",
+      "stepOrder": 31,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 32,
+      "depth": 7,
+      "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+      "via": "calls",
+      "stepOrder": 32,
+      "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "computeTax"
+     },
+     {
+      "order": 33,
+      "depth": 7,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "writes",
+      "stepOrder": 33,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 34,
+      "depth": 4,
+      "nodeId": "invoice-app::src/api/client.ts::finalizeInvoice",
+      "via": "calls",
+      "stepOrder": 34,
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "finalizeInvoice"
+     },
+     {
+      "order": 35,
+      "depth": 5,
+      "kind": "gate",
+      "nodeId": "invoice-app::guard::requireScope(billing:admin)",
+      "name": "requireScope: billing:admin",
+      "via": "http",
+      "stepOrder": 35
+     },
+     {
+      "order": 35,
+      "depth": 5,
+      "nodeId": "invoice-app::route::POST /invoices/:id/finalize",
+      "via": "http",
+      "stepOrder": 35,
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "POST /invoices/:id/finalize"
+     },
+     {
+      "order": 36,
+      "depth": 6,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+      "via": "calls",
+      "stepOrder": 36,
+      "business": "When an invoice is sent, we verify it is complete, assign the next official invoice number, record it permanently in the accounting ledger, and email it to the customer.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "finalizeInvoice"
+     },
+     {
+      "order": 37,
+      "depth": 7,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "reads",
+      "stepOrder": 37,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 38,
+      "depth": 7,
+      "kind": "decision",
+      "nodeId": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+      "name": "Assign the number, post the ledger entry, and notify the customer",
+      "via": "calls",
+      "stepOrder": 38,
+      "business": "Assign the number, post the ledger entry, and notify the customer"
+     },
+     {
+      "order": 38,
+      "depth": 7,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+      "via": "calls",
+      "stepOrder": 38,
+      "business": "Sequential, gap-free numbering under an advisory lock.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "nextInvoiceNumber"
+     },
+     {
+      "order": 39,
+      "depth": 8,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "reads",
+      "stepOrder": 39,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 40,
+      "depth": 7,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "writes",
+      "stepOrder": 40,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 41,
+      "depth": 7,
+      "nodeId": "invoice-app::table::ledger_entries",
+      "via": "writes",
+      "stepOrder": 41,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "ledger_entries"
+     },
+     {
+      "order": 42,
+      "depth": 7,
+      "nodeId": "invoice-app::queue::invoice.finalized",
+      "via": "publishes",
+      "stepOrder": 42,
+      "repo": "invoice-app",
+      "kind": "message",
+      "name": "invoice.finalized"
+     },
+     {
+      "order": 43,
+      "depth": 4,
+      "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+      "via": "calls",
+      "stepOrder": 43,
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "onSave"
+     },
+     {
+      "order": 44,
+      "depth": 5,
+      "kind": "decision",
+      "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+      "name": "Draft is still editable — persist the line-item changes",
+      "via": "calls",
+      "stepOrder": 44,
+      "business": "Draft is still editable — persist the line-item changes"
+     },
+     {
+      "order": 44,
+      "depth": 5,
+      "nodeId": "invoice-app::src/api/client.ts::updateInvoice",
+      "via": "calls",
+      "stepOrder": 44,
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "updateInvoice"
+     },
+     {
+      "order": 45,
+      "depth": 6,
+      "kind": "gate",
+      "nodeId": "invoice-app::guard::requireScope(billing:write)",
+      "name": "requireScope: billing:write",
+      "via": "http",
+      "stepOrder": 45
+     },
+     {
+      "order": 45,
+      "depth": 6,
+      "kind": "gate",
+      "nodeId": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+      "name": "updateInvoiceSchema",
+      "via": "http",
+      "stepOrder": 45
+     },
+     {
+      "order": 45,
+      "depth": 6,
+      "nodeId": "invoice-app::route::PATCH /invoices/:id",
+      "via": "http",
+      "stepOrder": 45,
+      "business": "Change the line items of a draft invoice.",
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "PATCH /invoices/:id"
+     },
+     {
+      "order": 46,
+      "depth": 7,
+      "nodeId": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+      "via": "calls",
+      "stepOrder": 46,
+      "business": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit.",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "updateInvoice"
+     },
+     {
+      "order": 47,
+      "depth": 8,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "reads",
+      "stepOrder": 47,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 48,
+      "depth": 8,
+      "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+      "via": "calls",
+      "stepOrder": 48,
+      "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+      "repo": "invoice-app",
+      "kind": "step",
+      "name": "computeTax"
+     },
+     {
+      "order": 49,
+      "depth": 8,
+      "nodeId": "invoice-app::table::invoices",
+      "via": "writes",
+      "stepOrder": 49,
+      "repo": "invoice-app",
+      "kind": "record",
+      "name": "invoices"
+     },
+     {
+      "order": 50,
+      "depth": 1,
+      "nodeId": "invoice-app::page::/invoices/:param/discard",
+      "via": "renders",
+      "stepOrder": 50,
+      "business": "Confirm and discard a draft invoice that will never be sent.",
+      "repo": "invoice-app",
+      "kind": "screen",
+      "name": "Discard draft"
+     },
+     {
+      "order": 51,
+      "depth": 2,
+      "kind": "gate",
+      "nodeId": "invoice-app::route::DELETE /invoices/{id}#security:billingAuth: billing:admin",
+      "name": "billingAuth: billing:admin",
+      "via": "planned",
+      "stepOrder": 51,
+      "planned": true
+     },
+     {
+      "order": 51,
+      "depth": 2,
+      "nodeId": "invoice-app::route::DELETE /invoices/{id}",
+      "via": "planned",
+      "stepOrder": 51,
+      "business": "Discard a draft invoice.",
+      "repo": "invoice-app",
+      "kind": "call",
+      "name": "DELETE /invoices/{id}",
+      "planned": {
+       "kind": "calls",
+       "label": "deleteInvoice"
+      }
+     },
+     {
+      "order": 52,
+      "depth": 3,
+      "nodeId": "invoice-app::route::DELETE /invoices/{id}",
+      "via": "planned",
+      "stepOrder": 52,
+      "business": "Discard a draft invoice.",
+      "repo": "invoice-app",
+      "kind": "planned",
+      "name": "Discard a draft invoice.",
+      "planned": {
+       "kind": "step",
+       "label": "Discard a draft invoice."
+      }
+     }
+    ],
+    "records": [
+     {
+      "id": "invoice-app::table::customers",
+      "name": "customers",
+      "ops": [
+       "reads"
+      ]
+     },
+     {
+      "id": "invoice-app::table::invoices",
+      "name": "invoices",
+      "ops": [
+       "writes",
+       "reads"
+      ]
+     },
+     {
+      "id": "invoice-app::table::ledger_entries",
+      "name": "ledger_entries",
+      "ops": [
+       "writes"
+      ]
+     }
+    ],
+    "messages": [
+     {
+      "id": "invoice-app::queue::invoice.finalized",
+      "name": "invoice.finalized"
+     }
+    ],
+    "externals": [],
+    "afterwards": [],
+    "repos": [
+     "invoice-app"
+    ]
+   },
+   "segments": [
+    {
+     "index": 0,
+     "screen": {
+      "id": "invoice-app::page::/invoices/new",
+      "name": "New invoice",
+      "kind": "page",
+      "business": "Draft a new invoice for a customer: pick the customer, add line items, save.",
+      "designId": "INV-02",
+      "designStatus": "both",
+      "hasImage": true,
+      "links": [],
+      "components": [
+       "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm"
+      ],
+      "loc": {
+       "repo": "invoice-app",
+       "path": "src/ui/router.tsx",
+       "line": 9
+      }
+     },
+     "from": 1,
+     "to": 9,
+     "markers": [
+      {
+       "stepOrder": 2,
+       "depth": 2,
+       "nodeId": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+       "name": "CreateInvoiceForm",
+       "kind": "step",
+       "via": "renders",
+       "system": "repo:invoice-app:ux",
+       "moment": 0,
+       "title": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+       "titleFrom": "docs",
+       "business": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+       "tier": 0
+      },
+      {
+       "stepOrder": 3,
+       "depth": 3,
+       "nodeId": "invoice-app::src/api/client.ts::createInvoice",
+       "name": "createInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 0,
+       "under": 2,
+       "tier": 0
+      },
+      {
+       "stepOrder": 4,
+       "depth": 4,
+       "nodeId": "invoice-app::route::POST /invoices",
+       "name": "POST /invoices",
+       "kind": "call",
+       "via": "http",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 0,
+       "title": "Draft a new invoice for a customer.",
+       "titleFrom": "docs",
+       "caller": {
+        "nodeId": "invoice-app::src/api/client.ts::createInvoice",
+        "name": "createInvoice",
+        "repo": "invoice-app",
+        "path": "src/api/client.ts",
+        "line": 19
+       },
+       "handler": {
+        "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+        "name": "createInvoice",
+        "repo": "invoice-app",
+        "path": "src/server/routes.ts",
+        "line": 18
+       },
+       "business": "Draft a new invoice for a customer.",
+       "method": "POST",
+       "path": "/invoices",
+       "under": 3,
+       "tier": 0
+      },
+      {
+       "stepOrder": 5,
+       "depth": 5,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+       "name": "createInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 0,
+       "title": "Creates a draft invoice and computes initial totals.",
+       "titleFrom": "docs",
+       "business": "Creates a draft invoice and computes initial totals.",
+       "under": 4,
+       "tier": 0
+      },
+      {
+       "stepOrder": 6,
+       "depth": 6,
+       "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+       "name": "computeTax",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 0,
+       "title": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "titleFrom": "docs",
+       "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "under": 5,
+       "tier": 1
+      },
+      {
+       "stepOrder": 7,
+       "depth": 7,
+       "nodeId": "invoice-app::table::customers",
+       "name": "customers",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 0,
+       "op": "reads",
+       "under": 6,
+       "tier": 0
+      },
+      {
+       "stepOrder": 8,
+       "depth": 6,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "writes",
+       "system": "records",
+       "moment": 0,
+       "op": "writes",
+       "under": 5,
+       "tier": 0
+      },
+      {
+       "stepOrder": 9,
+       "depth": 3,
+       "nodeId": "invoice-app::src/ui/fields.tsx::LineItemRow",
+       "name": "LineItemRow",
+       "kind": "step",
+       "via": "renders",
+       "system": "repo:invoice-app:ux",
+       "moment": 0,
+       "title": "A single line on the invoice — what was sold and for how much.",
+       "titleFrom": "docs",
+       "business": "A single line on the invoice — what was sold and for how much.",
+       "under": 2,
+       "tier": 0
+      }
+     ],
+     "moments": [
+      {
+       "index": 0,
+       "label": "Draft a new invoice for a customer.",
+       "from": 1,
+       "to": 9,
+       "actionStep": 3,
+       "callStep": 4,
+       "component": {
+        "id": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+        "name": "CreateInvoiceForm",
+        "label": "Create invoice form",
+        "stepOrder": 2
+       },
+       "repeat": false,
+       "rank": 0,
+       "declared": true,
+       "afterwards": [],
+       "counts": {
+        "markers": 8,
+        "calls": 1,
+        "planned": 0,
+        "records": 2,
+        "messages": 0,
+        "helpers": 0
+       }
+      }
+     ],
+     "gates": [
+      {
+       "id": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+       "kind": "rule",
+       "name": "draftInvoiceSchema",
+       "count": 2,
+       "stepOrder": 2
+      },
+      {
+       "id": "invoice-app::guard::requireScope(billing:write)",
+       "kind": "guard",
+       "name": "requireScope: billing:write",
+       "count": 1,
+       "stepOrder": 4
+      }
+     ],
+     "decisions": [],
+     "untranslated": 0,
+     "systems": [
+      "repo:invoice-app:ux",
+      "api:invoice-app::api::openapi.yaml",
+      "repo:invoice-app:server",
+      "records"
+     ],
+     "declaredOnly": [
+      {
+       "op": "getInvoice",
+       "routeId": "invoice-app::route::GET /invoices/:id",
+       "label": "Fetch one invoice by id."
+      }
+     ],
+     "cutPoints": [],
+     "counts": {
+      "markers": 8,
+      "calls": 1,
+      "planned": 0,
+      "gates": 2,
+      "checks": 3,
+      "decisions": 0,
+      "records": 2,
+      "messages": 0,
+      "cutPoints": 0,
+      "repeats": 0,
+      "setup": 0,
+      "deferred": 0
+     },
+     "counted": {
+      "actionStops": {
+       "n": 1,
+       "unit": "count.unit.actionStops",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[0].moments.length",
+       "bizUnit": "count.unit.actionStops",
+       "breakdown": [
+        {
+         "key": "count.part.stopsCalled",
+         "n": 1
+        },
+        {
+         "key": "count.part.stopsDeclared",
+         "n": 0
+        },
+        {
+         "key": "count.part.stopsNoCall",
+         "n": 0
+        }
+       ]
+      },
+      "actions": {
+       "n": 1,
+       "unit": "journey.countActions",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[0].moments — distinct operations code calls",
+       "bizUnit": "journey.biz.countActions"
+      },
+      "gates": {
+       "n": 2,
+       "unit": "journey.countGates",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[0].counts.gates",
+       "bizUnit": "journey.countGates",
+       "breakdown": [
+        {
+         "key": "count.part.guards",
+         "n": 1
+        },
+        {
+         "key": "count.part.rules",
+         "n": 1
+        }
+       ]
+      },
+      "checks": {
+       "n": 3,
+       "unit": "journey.countChecks",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[0].counts.checks",
+       "bizUnit": "journey.countChecks"
+      },
+      "decisions": {
+       "n": 0,
+       "unit": "journey.countDecisions",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[0].counts.decisions",
+       "bizUnit": "journey.countDecisions",
+       "breakdown": [
+        {
+         "key": "count.part.decisionsInWords",
+         "n": 0
+        },
+        {
+         "key": "count.part.gateConditions",
+         "n": 0
+        }
+       ]
+      },
+      "notInWords": {
+       "n": 0,
+       "unit": "count.unit.notInWords",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[0].untranslated + guard-class decisions",
+       "bizUnit": "journey.biz.untranslated",
+       "breakdown": [
+        {
+         "key": "journey.untranslated",
+         "n": 0
+        },
+        {
+         "key": "count.part.gateConditions",
+         "n": 0
+        }
+       ]
+      },
+      "inWords": {
+       "n": 1,
+       "unit": "count.unit.inWords",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[0].screen + decisions",
+       "bizUnit": "count.unit.inWords",
+       "breakdown": [
+        {
+         "key": "count.part.sentences",
+         "n": 1
+        },
+        {
+         "key": "count.part.namesOnly",
+         "n": 0
+        },
+        {
+         "key": "count.part.decisionsInWords",
+         "n": 0
+        }
+       ]
+      }
+     },
+     "absent": {
+      "moments": {
+       "0": {
+        "messages": "notInvolved"
+       }
+      },
+      "kinds": {
+       "0": {
+        "messages": "notInvolved",
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       }
+      },
+      "screen": {
+       "messages": "notInvolved"
+      }
+     }
+    },
+    {
+     "index": 1,
+     "screen": {
+      "id": "invoice-app::page::/invoices",
+      "name": "Invoice list",
+      "kind": "page",
+      "business": "Every invoice, newest first, with its status and a way into the draft editor.",
+      "designId": "INV-01",
+      "designStatus": "both",
+      "hasImage": true,
+      "links": [],
+      "components": [
+       "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage"
+      ],
+      "loc": {
+       "repo": "invoice-app",
+       "path": "src/ui/router.tsx",
+       "line": 8
+      }
+     },
+     "from": 10,
+     "to": 49,
+     "markers": [
+      {
+       "stepOrder": 11,
+       "depth": 2,
+       "nodeId": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+       "name": "InvoiceListPage",
+       "kind": "step",
+       "via": "renders",
+       "system": "repo:invoice-app:ux",
+       "moment": 0,
+       "title": "Lists invoices with status filters; entry point of the invoice UX.",
+       "titleFrom": "docs",
+       "business": "Lists invoices with status filters; entry point of the invoice UX.",
+       "tier": 0
+      },
+      {
+       "stepOrder": 12,
+       "depth": 3,
+       "nodeId": "invoice-app::src/api/client.ts::listInvoices",
+       "name": "listInvoices",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 0,
+       "title": "Fetches every invoice for the list view.",
+       "titleFrom": "docs",
+       "business": "Fetches every invoice for the list view.",
+       "under": 11,
+       "tier": 0
+      },
+      {
+       "stepOrder": 13,
+       "depth": 4,
+       "nodeId": "invoice-app::route::GET /invoices",
+       "name": "GET /invoices",
+       "kind": "call",
+       "via": "http",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 0,
+       "title": "List every invoice, newest first.",
+       "titleFrom": "docs",
+       "caller": {
+        "nodeId": "invoice-app::src/api/client.ts::listInvoices",
+        "name": "listInvoices",
+        "repo": "invoice-app",
+        "path": "src/api/client.ts",
+        "line": 5
+       },
+       "handler": {
+        "nodeId": "invoice-app::src/server/invoiceService.ts::listInvoices",
+        "name": "listInvoices",
+        "repo": "invoice-app",
+        "path": "src/server/routes.ts",
+        "line": 9
+       },
+       "business": "List every invoice, newest first.",
+       "method": "GET",
+       "path": "/invoices",
+       "under": 12,
+       "tier": 0
+      },
+      {
+       "stepOrder": 14,
+       "depth": 5,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::listInvoices",
+       "name": "listInvoices",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 0,
+       "title": "Lists invoices, newest first.",
+       "titleFrom": "docs",
+       "business": "Lists invoices, newest first.",
+       "under": 13,
+       "tier": 0
+      },
+      {
+       "stepOrder": 15,
+       "depth": 6,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 0,
+       "repeat": true,
+       "op": "reads",
+       "under": 14,
+       "tier": 0
+      },
+      {
+       "stepOrder": 16,
+       "depth": 3,
+       "nodeId": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+       "name": "CreateInvoiceForm",
+       "kind": "step",
+       "via": "renders",
+       "system": "repo:invoice-app:ux",
+       "moment": 1,
+       "title": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+       "titleFrom": "docs",
+       "repeat": true,
+       "business": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+       "under": 11,
+       "tier": 0
+      },
+      {
+       "stepOrder": 17,
+       "depth": 4,
+       "nodeId": "invoice-app::src/api/client.ts::createInvoice",
+       "name": "createInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 1,
+       "repeat": true,
+       "under": 16,
+       "tier": 0
+      },
+      {
+       "stepOrder": 18,
+       "depth": 5,
+       "nodeId": "invoice-app::route::POST /invoices",
+       "name": "POST /invoices",
+       "kind": "call",
+       "via": "http",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 1,
+       "title": "Draft a new invoice for a customer.",
+       "titleFrom": "docs",
+       "repeat": true,
+       "caller": {
+        "nodeId": "invoice-app::src/api/client.ts::createInvoice",
+        "name": "createInvoice",
+        "repo": "invoice-app",
+        "path": "src/api/client.ts",
+        "line": 19
+       },
+       "handler": {
+        "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+        "name": "createInvoice",
+        "repo": "invoice-app",
+        "path": "src/server/routes.ts",
+        "line": 18
+       },
+       "business": "Draft a new invoice for a customer.",
+       "method": "POST",
+       "path": "/invoices",
+       "under": 17,
+       "tier": 0
+      },
+      {
+       "stepOrder": 19,
+       "depth": 6,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+       "name": "createInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 1,
+       "title": "Creates a draft invoice and computes initial totals.",
+       "titleFrom": "docs",
+       "repeat": true,
+       "business": "Creates a draft invoice and computes initial totals.",
+       "under": 18,
+       "tier": 0
+      },
+      {
+       "stepOrder": 20,
+       "depth": 7,
+       "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+       "name": "computeTax",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 1,
+       "title": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "titleFrom": "docs",
+       "repeat": true,
+       "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "under": 19,
+       "tier": 1
+      },
+      {
+       "stepOrder": 21,
+       "depth": 8,
+       "nodeId": "invoice-app::table::customers",
+       "name": "customers",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 1,
+       "repeat": true,
+       "op": "reads",
+       "under": 20,
+       "tier": 0
+      },
+      {
+       "stepOrder": 22,
+       "depth": 7,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "writes",
+       "system": "records",
+       "moment": 1,
+       "repeat": true,
+       "op": "writes",
+       "under": 19,
+       "tier": 0
+      },
+      {
+       "stepOrder": 23,
+       "depth": 3,
+       "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+       "name": "EditInvoiceDrawer",
+       "kind": "step",
+       "via": "renders",
+       "system": "repo:invoice-app:ux",
+       "moment": 2,
+       "title": "Lets a user change a draft invoice before it is sent. Sent invoices are shown but can no longer be edited.",
+       "titleFrom": "docs",
+       "business": "Lets a user change a draft invoice before it is sent. Sent invoices are shown but can no longer be edited.",
+       "under": 11,
+       "tier": 0
+      },
+      {
+       "stepOrder": 24,
+       "depth": 4,
+       "nodeId": "invoice-app::src/api/client.ts::getInvoice",
+       "name": "getInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 2,
+       "title": "Fetches one invoice by id.",
+       "titleFrom": "docs",
+       "business": "Fetches one invoice by id.",
+       "under": 23,
+       "tier": 0
+      },
+      {
+       "stepOrder": 25,
+       "depth": 5,
+       "nodeId": "invoice-app::route::GET /invoices/:id",
+       "name": "GET /invoices/:id",
+       "kind": "call",
+       "via": "http",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 2,
+       "title": "Fetch one invoice by id.",
+       "titleFrom": "docs",
+       "caller": {
+        "nodeId": "invoice-app::src/api/client.ts::getInvoice",
+        "name": "getInvoice",
+        "repo": "invoice-app",
+        "path": "src/api/client.ts",
+        "line": 14
+       },
+       "handler": {
+        "nodeId": "invoice-app::src/server/invoiceService.ts::getInvoice",
+        "name": "getInvoice",
+        "repo": "invoice-app",
+        "path": "src/server/routes.ts",
+        "line": 13
+       },
+       "business": "Fetch one invoice by id.",
+       "method": "GET",
+       "path": "/invoices/:id",
+       "under": 24,
+       "tier": 0
+      },
+      {
+       "stepOrder": 26,
+       "depth": 6,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::getInvoice",
+       "name": "getInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 2,
+       "title": "Fetches a single invoice by id.",
+       "titleFrom": "docs",
+       "business": "Fetches a single invoice by id.",
+       "under": 25,
+       "tier": 0
+      },
+      {
+       "stepOrder": 27,
+       "depth": 7,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 2,
+       "repeat": true,
+       "op": "reads",
+       "under": 26,
+       "tier": 0
+      },
+      {
+       "stepOrder": 28,
+       "depth": 4,
+       "nodeId": "invoice-app::src/api/client.ts::updateInvoice",
+       "name": "updateInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 3,
+       "under": 23,
+       "tier": 0
+      },
+      {
+       "stepOrder": 29,
+       "depth": 5,
+       "nodeId": "invoice-app::route::PATCH /invoices/:id",
+       "name": "PATCH /invoices/:id",
+       "kind": "call",
+       "via": "http",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 3,
+       "title": "Change the line items of a draft invoice.",
+       "titleFrom": "docs",
+       "caller": {
+        "nodeId": "invoice-app::src/api/client.ts::updateInvoice",
+        "name": "updateInvoice",
+        "repo": "invoice-app",
+        "path": "src/api/client.ts",
+        "line": 24
+       },
+       "handler": {
+        "nodeId": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+        "name": "updateInvoice",
+        "repo": "invoice-app",
+        "path": "src/server/routes.ts",
+        "line": 23
+       },
+       "business": "Change the line items of a draft invoice.",
+       "method": "PATCH",
+       "path": "/invoices/:id",
+       "under": 28,
+       "tier": 0
+      },
+      {
+       "stepOrder": 30,
+       "depth": 6,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+       "name": "updateInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 3,
+       "title": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit.",
+       "titleFrom": "docs",
+       "business": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit.",
+       "under": 29,
+       "tier": 0
+      },
+      {
+       "stepOrder": 31,
+       "depth": 7,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 3,
+       "repeat": true,
+       "op": "reads",
+       "under": 30,
+       "tier": 0
+      },
+      {
+       "stepOrder": 32,
+       "depth": 7,
+       "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+       "name": "computeTax",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 3,
+       "title": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "titleFrom": "docs",
+       "repeat": true,
+       "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "under": 30,
+       "tier": 1
+      },
+      {
+       "stepOrder": 33,
+       "depth": 7,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "writes",
+       "system": "records",
+       "moment": 3,
+       "repeat": true,
+       "op": "writes",
+       "under": 30,
+       "tier": 0
+      },
+      {
+       "stepOrder": 34,
+       "depth": 4,
+       "nodeId": "invoice-app::src/api/client.ts::finalizeInvoice",
+       "name": "finalizeInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 4,
+       "under": 23,
+       "tier": 0
+      },
+      {
+       "stepOrder": 35,
+       "depth": 5,
+       "nodeId": "invoice-app::route::POST /invoices/:id/finalize",
+       "name": "POST /invoices/:id/finalize",
+       "kind": "call",
+       "via": "http",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 4,
+       "caller": {
+        "nodeId": "invoice-app::src/api/client.ts::finalizeInvoice",
+        "name": "finalizeInvoice",
+        "repo": "invoice-app",
+        "path": "src/api/client.ts",
+        "line": 29
+       },
+       "handler": {
+        "nodeId": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+        "name": "finalizeInvoice",
+        "repo": "invoice-app",
+        "path": "src/server/routes.ts",
+        "line": 27
+       },
+       "method": "POST",
+       "path": "/invoices/:id/finalize",
+       "under": 34,
+       "tier": 0
+      },
+      {
+       "stepOrder": 36,
+       "depth": 6,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+       "name": "finalizeInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 4,
+       "title": "When an invoice is sent, we verify it is complete, assign the next official invoice number, record it permanently in the accounting ledger, and email it to the customer.",
+       "titleFrom": "docs",
+       "business": "When an invoice is sent, we verify it is complete, assign the next official invoice number, record it permanently in the accounting ledger, and email it to the customer.",
+       "under": 35,
+       "tier": 0
+      },
+      {
+       "stepOrder": 37,
+       "depth": 7,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 4,
+       "repeat": true,
+       "op": "reads",
+       "under": 36,
+       "tier": 0
+      },
+      {
+       "stepOrder": 38,
+       "depth": 7,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+       "name": "nextInvoiceNumber",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 4,
+       "title": "Sequential, gap-free numbering under an advisory lock.",
+       "titleFrom": "docs",
+       "business": "Sequential, gap-free numbering under an advisory lock.",
+       "under": 36,
+       "tier": 1
+      },
+      {
+       "stepOrder": 39,
+       "depth": 8,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 4,
+       "repeat": true,
+       "op": "reads",
+       "under": 38,
+       "tier": 0
+      },
+      {
+       "stepOrder": 40,
+       "depth": 7,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "writes",
+       "system": "records",
+       "moment": 4,
+       "repeat": true,
+       "op": "writes",
+       "under": 36,
+       "tier": 0
+      },
+      {
+       "stepOrder": 41,
+       "depth": 7,
+       "nodeId": "invoice-app::table::ledger_entries",
+       "name": "ledger_entries",
+       "kind": "record",
+       "via": "writes",
+       "system": "records",
+       "moment": 4,
+       "op": "writes",
+       "under": 36,
+       "tier": 0
+      },
+      {
+       "stepOrder": 42,
+       "depth": 7,
+       "nodeId": "invoice-app::queue::invoice.finalized",
+       "name": "invoice.finalized",
+       "kind": "message",
+       "via": "publishes",
+       "system": "messages",
+       "moment": 4,
+       "under": 36,
+       "tier": 0
+      },
+      {
+       "stepOrder": 43,
+       "depth": 4,
+       "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+       "name": "onSave",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 5,
+       "under": 23,
+       "tier": 0
+      },
+      {
+       "stepOrder": 44,
+       "depth": 5,
+       "nodeId": "invoice-app::src/api/client.ts::updateInvoice",
+       "name": "updateInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:ux",
+       "moment": 5,
+       "repeat": true,
+       "under": 43,
+       "tier": 1
+      },
+      {
+       "stepOrder": 45,
+       "depth": 6,
+       "nodeId": "invoice-app::route::PATCH /invoices/:id",
+       "name": "PATCH /invoices/:id",
+       "kind": "call",
+       "via": "http",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 5,
+       "title": "Change the line items of a draft invoice.",
+       "titleFrom": "docs",
+       "repeat": true,
+       "caller": {
+        "nodeId": "invoice-app::src/api/client.ts::updateInvoice",
+        "name": "updateInvoice",
+        "repo": "invoice-app",
+        "path": "src/api/client.ts",
+        "line": 24
+       },
+       "handler": {
+        "nodeId": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+        "name": "updateInvoice",
+        "repo": "invoice-app",
+        "path": "src/server/routes.ts",
+        "line": 23
+       },
+       "business": "Change the line items of a draft invoice.",
+       "method": "PATCH",
+       "path": "/invoices/:id",
+       "under": 44,
+       "tier": 0
+      },
+      {
+       "stepOrder": 46,
+       "depth": 7,
+       "nodeId": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+       "name": "updateInvoice",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 5,
+       "title": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit.",
+       "titleFrom": "docs",
+       "repeat": true,
+       "business": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit.",
+       "under": 45,
+       "tier": 0
+      },
+      {
+       "stepOrder": 47,
+       "depth": 8,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "reads",
+       "system": "records",
+       "moment": 5,
+       "repeat": true,
+       "op": "reads",
+       "under": 46,
+       "tier": 0
+      },
+      {
+       "stepOrder": 48,
+       "depth": 8,
+       "nodeId": "invoice-app::src/server/taxEngine.ts::computeTax",
+       "name": "computeTax",
+       "kind": "step",
+       "via": "calls",
+       "system": "repo:invoice-app:server",
+       "moment": 5,
+       "title": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "titleFrom": "docs",
+       "repeat": true,
+       "business": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream).",
+       "under": 46,
+       "tier": 1
+      },
+      {
+       "stepOrder": 49,
+       "depth": 8,
+       "nodeId": "invoice-app::table::invoices",
+       "name": "invoices",
+       "kind": "record",
+       "via": "writes",
+       "system": "records",
+       "moment": 5,
+       "repeat": true,
+       "op": "writes",
+       "under": 46,
+       "tier": 0
+      }
+     ],
+     "moments": [
+      {
+       "index": 0,
+       "label": "List every invoice, newest first.",
+       "from": 10,
+       "to": 15,
+       "actionStep": 12,
+       "callStep": 13,
+       "component": {
+        "id": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+        "name": "InvoiceListPage",
+        "label": "Invoice list page",
+        "stepOrder": 11
+       },
+       "business": "Fetches every invoice for the list view.",
+       "repeat": false,
+       "rank": 0,
+       "declared": true,
+       "afterwards": [],
+       "counts": {
+        "markers": 5,
+        "calls": 1,
+        "planned": 0,
+        "records": 1,
+        "messages": 0,
+        "helpers": 0
+       }
+      },
+      {
+       "index": 1,
+       "label": "Draft a new invoice for a customer.",
+       "from": 16,
+       "to": 22,
+       "actionStep": 17,
+       "callStep": 18,
+       "component": {
+        "id": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+        "name": "CreateInvoiceForm",
+        "label": "Create invoice form",
+        "stepOrder": 16
+       },
+       "repeat": true,
+       "rank": 1,
+       "declared": true,
+       "afterwards": [],
+       "counts": {
+        "markers": 7,
+        "calls": 1,
+        "planned": 0,
+        "records": 2,
+        "messages": 0,
+        "helpers": 0
+       }
+      },
+      {
+       "index": 2,
+       "label": "Fetch one invoice by id.",
+       "from": 23,
+       "to": 27,
+       "actionStep": 24,
+       "callStep": 25,
+       "component": {
+        "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+        "name": "EditInvoiceDrawer",
+        "label": "Edit invoice drawer",
+        "stepOrder": 23
+       },
+       "business": "Fetches one invoice by id.",
+       "repeat": false,
+       "rank": 2,
+       "declared": true,
+       "afterwards": [],
+       "counts": {
+        "markers": 5,
+        "calls": 1,
+        "planned": 0,
+        "records": 1,
+        "messages": 0,
+        "helpers": 0
+       }
+      },
+      {
+       "index": 3,
+       "label": "Change the line items of a draft invoice.",
+       "from": 28,
+       "to": 33,
+       "actionStep": 28,
+       "callStep": 29,
+       "component": {
+        "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+        "name": "EditInvoiceDrawer",
+        "label": "Edit invoice drawer",
+        "stepOrder": 23
+       },
+       "repeat": false,
+       "rank": 3,
+       "declared": true,
+       "afterwards": [],
+       "counts": {
+        "markers": 6,
+        "calls": 1,
+        "planned": 0,
+        "records": 2,
+        "messages": 0,
+        "helpers": 0
+       }
+      },
+      {
+       "index": 4,
+       "label": "Finalize invoice",
+       "from": 34,
+       "to": 42,
+       "actionStep": 34,
+       "callStep": 35,
+       "component": {
+        "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+        "name": "EditInvoiceDrawer",
+        "label": "Edit invoice drawer",
+        "stepOrder": 23
+       },
+       "repeat": false,
+       "rank": 8,
+       "declared": false,
+       "afterwards": [],
+       "counts": {
+        "markers": 9,
+        "calls": 1,
+        "planned": 0,
+        "records": 4,
+        "messages": 1,
+        "helpers": 0
+       }
+      },
+      {
+       "index": 5,
+       "label": "Change the line items of a draft invoice.",
+       "from": 43,
+       "to": 49,
+       "actionStep": 43,
+       "callStep": 45,
+       "component": {
+        "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+        "name": "EditInvoiceDrawer",
+        "label": "Edit invoice drawer",
+        "stepOrder": 23
+       },
+       "repeat": true,
+       "rank": 3,
+       "declared": true,
+       "afterwards": [],
+       "counts": {
+        "markers": 7,
+        "calls": 1,
+        "planned": 0,
+        "records": 2,
+        "messages": 0,
+        "helpers": 0
+       }
+      }
+     ],
+     "gates": [
+      {
+       "id": "invoice-app::guard::requireScope(billing:read)",
+       "kind": "guard",
+       "name": "requireScope: billing:read",
+       "count": 2,
+       "stepOrder": 13
+      },
+      {
+       "id": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+       "kind": "rule",
+       "name": "draftInvoiceSchema",
+       "count": 2,
+       "stepOrder": 16
+      },
+      {
+       "id": "invoice-app::guard::requireScope(billing:write)",
+       "kind": "guard",
+       "name": "requireScope: billing:write",
+       "count": 3,
+       "stepOrder": 18
+      },
+      {
+       "id": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+       "kind": "rule",
+       "name": "updateInvoiceSchema",
+       "count": 2,
+       "stepOrder": 29
+      },
+      {
+       "id": "invoice-app::guard::requireScope(billing:admin)",
+       "kind": "guard",
+       "name": "requireScope: billing:admin",
+       "count": 1,
+       "stepOrder": 35
+      }
+     ],
+     "decisions": [
+      {
+       "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+       "line": 17,
+       "label": "Draft is still editable — persist the line-item changes",
+       "arm": "else",
+       "class": "business",
+       "stepOrder": 28
+      },
+      {
+       "nodeId": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+       "line": 64,
+       "label": "Assign the number, post the ledger entry, and notify the customer",
+       "arm": "try",
+       "class": "business",
+       "stepOrder": 38
+      },
+      {
+       "nodeId": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+       "line": 17,
+       "label": "Draft is still editable — persist the line-item changes",
+       "arm": "else",
+       "class": "business",
+       "stepOrder": 44
+      }
+     ],
+     "untranslated": 2,
+     "systems": [
+      "repo:invoice-app:ux",
+      "api:invoice-app::api::openapi.yaml",
+      "repo:invoice-app:server",
+      "records",
+      "messages"
+     ],
+     "declaredOnly": [],
+     "cutPoints": [],
+     "counts": {
+      "markers": 39,
+      "calls": 6,
+      "planned": 0,
+      "gates": 5,
+      "checks": 10,
+      "decisions": 3,
+      "records": 12,
+      "messages": 1,
+      "cutPoints": 0,
+      "repeats": 2,
+      "setup": 0,
+      "deferred": 0
+     },
+     "counted": {
+      "actionStops": {
+       "n": 6,
+       "unit": "count.unit.actionStops",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[1].moments.length",
+       "bizUnit": "count.unit.actionStops",
+       "breakdown": [
+        {
+         "key": "count.part.stopsCalled",
+         "n": 6
+        },
+        {
+         "key": "count.part.stopsDeclared",
+         "n": 0
+        },
+        {
+         "key": "count.part.stopsNoCall",
+         "n": 0
+        }
+       ]
+      },
+      "actions": {
+       "n": 5,
+       "unit": "journey.countActions",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[1].moments — distinct operations code calls",
+       "bizUnit": "journey.biz.countActions"
+      },
+      "gates": {
+       "n": 5,
+       "unit": "journey.countGates",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[1].counts.gates",
+       "bizUnit": "journey.countGates",
+       "breakdown": [
+        {
+         "key": "count.part.guards",
+         "n": 3
+        },
+        {
+         "key": "count.part.rules",
+         "n": 2
+        }
+       ]
+      },
+      "checks": {
+       "n": 10,
+       "unit": "journey.countChecks",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[1].counts.checks",
+       "bizUnit": "journey.countChecks"
+      },
+      "decisions": {
+       "n": 3,
+       "unit": "journey.countDecisions",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[1].counts.decisions",
+       "bizUnit": "journey.countDecisions",
+       "breakdown": [
+        {
+         "key": "count.part.decisionsInWords",
+         "n": 3
+        },
+        {
+         "key": "count.part.gateConditions",
+         "n": 0
+        }
+       ]
+      },
+      "notInWords": {
+       "n": 2,
+       "unit": "count.unit.notInWords",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[1].untranslated + guard-class decisions",
+       "bizUnit": "journey.biz.untranslated",
+       "breakdown": [
+        {
+         "key": "journey.untranslated",
+         "n": 2
+        },
+        {
+         "key": "count.part.gateConditions",
+         "n": 0
+        }
+       ]
+      },
+      "inWords": {
+       "n": 4,
+       "unit": "count.unit.inWords",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[1].screen + decisions",
+       "bizUnit": "count.unit.inWords",
+       "breakdown": [
+        {
+         "key": "count.part.sentences",
+         "n": 1
+        },
+        {
+         "key": "count.part.namesOnly",
+         "n": 0
+        },
+        {
+         "key": "count.part.decisionsInWords",
+         "n": 3
+        }
+       ]
+      }
+     },
+     "absent": {
+      "moments": {
+       "0": {
+        "messages": "notInvolved"
+       },
+       "1": {
+        "messages": "notInvolved"
+       },
+       "2": {
+        "messages": "notInvolved"
+       },
+       "3": {
+        "messages": "notInvolved"
+       },
+       "4": {},
+       "5": {
+        "messages": "notInvolved"
+       }
+      },
+      "kinds": {
+       "0": {
+        "messages": "notInvolved",
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       },
+       "1": {
+        "messages": "notInvolved",
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       },
+       "2": {
+        "messages": "notInvolved",
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       },
+       "3": {
+        "messages": "notInvolved",
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       },
+       "4": {
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       },
+       "5": {
+        "messages": "notInvolved",
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       }
+      },
+      "screen": {}
+     }
+    },
+    {
+     "index": 2,
+     "screen": {
+      "id": "invoice-app::page::/invoices/:param/discard",
+      "name": "Discard draft",
+      "kind": "page",
+      "business": "Confirm and discard a draft invoice that will never be sent.",
+      "designId": "INV-03",
+      "designStatus": "design-only",
+      "hasImage": true,
+      "links": [],
+      "components": []
+     },
+     "from": 50,
+     "to": 52,
+     "markers": [
+      {
+       "stepOrder": 51,
+       "depth": 2,
+       "nodeId": "invoice-app::route::DELETE /invoices/{id}",
+       "name": "DELETE /invoices/{id}",
+       "kind": "call",
+       "via": "planned",
+       "system": "api:invoice-app::api::openapi.yaml",
+       "moment": 0,
+       "title": "Discard a draft invoice.",
+       "titleFrom": "docs",
+       "planned": true,
+       "business": "Discard a draft invoice.",
+       "method": "DELETE",
+       "path": "/invoices/{id}",
+       "tier": 0
+      }
+     ],
+     "moments": [
+      {
+       "index": 0,
+       "label": "Discard a draft invoice.",
+       "from": 50,
+       "to": 52,
+       "actionStep": 51,
+       "callStep": 51,
+       "repeat": false,
+       "rank": 0,
+       "declared": true,
+       "afterwards": [],
+       "counts": {
+        "markers": 1,
+        "calls": 1,
+        "planned": 1,
+        "records": 0,
+        "messages": 0,
+        "helpers": 0
+       }
+      }
+     ],
+     "gates": [
+      {
+       "id": "invoice-app::route::DELETE /invoices/{id}#security:billingAuth: billing:admin",
+       "kind": "guard",
+       "name": "billingAuth: billing:admin",
+       "planned": true,
+       "count": 1,
+       "stepOrder": 51
+      }
+     ],
+     "decisions": [],
+     "untranslated": 0,
+     "systems": [
+      "api:invoice-app::api::openapi.yaml"
+     ],
+     "declaredOnly": [],
+     "cutPoints": [],
+     "counts": {
+      "markers": 1,
+      "calls": 1,
+      "planned": 1,
+      "gates": 1,
+      "checks": 1,
+      "decisions": 0,
+      "records": 0,
+      "messages": 0,
+      "cutPoints": 0,
+      "repeats": 0,
+      "setup": 0,
+      "deferred": 0
+     },
+     "counted": {
+      "actionStops": {
+       "n": 1,
+       "unit": "count.unit.actionStops",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[2].moments.length",
+       "bizUnit": "count.unit.actionStops",
+       "breakdown": [
+        {
+         "key": "count.part.stopsCalled",
+         "n": 0
+        },
+        {
+         "key": "count.part.stopsDeclared",
+         "n": 1
+        },
+        {
+         "key": "count.part.stopsNoCall",
+         "n": 0
+        }
+       ]
+      },
+      "actions": {
+       "n": 0,
+       "unit": "journey.countActions",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[2].moments — distinct operations code calls",
+       "bizUnit": "journey.biz.countActions"
+      },
+      "gates": {
+       "n": 1,
+       "unit": "journey.countGates",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[2].counts.gates",
+       "bizUnit": "journey.countGates",
+       "breakdown": [
+        {
+         "key": "count.part.guards",
+         "n": 1
+        },
+        {
+         "key": "count.part.rules",
+         "n": 0
+        }
+       ]
+      },
+      "checks": {
+       "n": 1,
+       "unit": "journey.countChecks",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[2].counts.checks",
+       "bizUnit": "journey.countChecks"
+      },
+      "decisions": {
+       "n": 0,
+       "unit": "journey.countDecisions",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[2].counts.decisions",
+       "bizUnit": "journey.countDecisions",
+       "breakdown": [
+        {
+         "key": "count.part.decisionsInWords",
+         "n": 0
+        },
+        {
+         "key": "count.part.gateConditions",
+         "n": 0
+        }
+       ]
+      },
+      "notInWords": {
+       "n": 0,
+       "unit": "count.unit.notInWords",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[2].untranslated + guard-class decisions",
+       "bizUnit": "journey.biz.untranslated",
+       "breakdown": [
+        {
+         "key": "journey.untranslated",
+         "n": 0
+        },
+        {
+         "key": "count.part.gateConditions",
+         "n": 0
+        }
+       ]
+      },
+      "inWords": {
+       "n": 1,
+       "unit": "count.unit.inWords",
+       "scope": "journey.scopeHere",
+       "source": "journeySummary().segments[2].screen + decisions",
+       "bizUnit": "count.unit.inWords",
+       "breakdown": [
+        {
+         "key": "count.part.sentences",
+         "n": 1
+        },
+        {
+         "key": "count.part.namesOnly",
+         "n": 0
+        },
+        {
+         "key": "count.part.decisionsInWords",
+         "n": 0
+        }
+       ]
+      }
+     },
+     "absent": {
+      "moments": {
+       "0": {
+        "repo:invoice-app:ux": "notInvolved",
+        "repo:invoice-app:server": "notInvolved",
+        "records": "notInvolved",
+        "messages": "notInvolved"
+       }
+      },
+      "kinds": {
+       "0": {
+        "records": "notInvolved",
+        "messages": "notInvolved",
+        "external": "noneIndexed",
+        "afterwards": "noneIndexed"
+       }
+      },
+      "screen": {
+       "repo:invoice-app:ux": "notInvolved",
+       "repo:invoice-app:server": "notInvolved",
+       "records": "notInvolved",
+       "messages": "notInvolved"
+      }
+     }
+    }
+   ],
+   "systems": [
+    {
+     "key": "repo:invoice-app:ux",
+     "kind": "repo",
+     "side": "ux",
+     "label": "invoice-app",
+     "planned": false
+    },
+    {
+     "key": "api:invoice-app::api::openapi.yaml",
+     "kind": "api",
+     "label": "Billing API",
+     "planned": false
+    },
+    {
+     "key": "repo:invoice-app:server",
+     "kind": "repo",
+     "side": "server",
+     "label": "invoice-app",
+     "planned": false
+    },
+    {
+     "key": "records",
+     "kind": "records",
+     "label": "records",
+     "planned": false
+    },
+    {
+     "key": "messages",
+     "kind": "messages",
+     "label": "messages",
+     "planned": false
+    }
+   ],
+   "links": {
+    "requires": [],
+    "leadsTo": [],
+    "partOf": []
+   },
+   "txKnown": true,
+   "counts": {
+    "screens": 3,
+    "steps": 51,
+    "planned": 2,
+    "gates": 6,
+    "checks": 14,
+    "decisions": 3,
+    "records": 3,
+    "messages": 1,
+    "segments": 3,
+    "cutPoints": 0,
+    "repeats": 2,
+    "choices": 0,
+    "setup": 0,
+    "deferred": 0,
+    "called": 5,
+    "again": 2,
+    "declaredNotCalled": 1
+   },
+   "counted": {
+    "screens": {
+     "n": 3,
+     "unit": "journey.countScreens",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.screens",
+     "bizUnit": "journey.biz.countScreens"
+    },
+    "built": {
+     "n": 2,
+     "unit": "journey.countBuilt",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().user — designStatus 'both', else a source location",
+     "of": 3,
+     "bizUnit": "journey.biz.countBuilt"
+    },
+    "steps": {
+     "n": 51,
+     "unit": "journey.countSteps",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.steps"
+    },
+    "planned": {
+     "n": 2,
+     "unit": "journey.plannedCount",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.planned"
+    },
+    "gates": {
+     "n": 6,
+     "unit": "journey.countGates",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.gates",
+     "bizUnit": "journey.countGates",
+     "breakdown": [
+      {
+       "key": "count.part.guards",
+       "n": 4
+      },
+      {
+       "key": "count.part.rules",
+       "n": 2
+      }
+     ]
+    },
+    "checks": {
+     "n": 14,
+     "unit": "journey.countChecks",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.checks",
+     "bizUnit": "journey.countChecks"
+    },
+    "decisions": {
+     "n": 3,
+     "unit": "journey.countDecisions",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.decisions",
+     "bizUnit": "journey.countDecisions",
+     "breakdown": [
+      {
+       "key": "count.part.decisionsInWords",
+       "n": 3
+      },
+      {
+       "key": "count.part.gateConditions",
+       "n": 0
+      }
+     ]
+    },
+    "notInWords": {
+     "n": 2,
+     "unit": "count.unit.notInWords",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().business.untranslated.count + .guardsUnlabelled",
+     "bizUnit": "journey.biz.untranslated",
+     "breakdown": [
+      {
+       "key": "journey.untranslated",
+       "n": 2
+      },
+      {
+       "key": "count.part.gateConditions",
+       "n": 0
+      }
+     ]
+    },
+    "inWords": {
+     "n": 6,
+     "unit": "count.unit.inWords",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().segments[].screen + business.decisions (class business)",
+     "bizUnit": "count.unit.inWords",
+     "breakdown": [
+      {
+       "key": "count.part.sentences",
+       "n": 3
+      },
+      {
+       "key": "count.part.namesOnly",
+       "n": 0
+      },
+      {
+       "key": "count.part.decisionsInWords",
+       "n": 3
+      }
+     ]
+    },
+    "actions": {
+     "n": 5,
+     "unit": "journey.countActions",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.called",
+     "bizUnit": "journey.biz.countActions"
+    },
+    "again": {
+     "n": 2,
+     "unit": "journey.countAgain",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.again",
+     "bizUnit": "journey.countAgain"
+    },
+    "declaredNotCalled": {
+     "n": 1,
+     "unit": "journey.countDeclaredOnly",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.declaredNotCalled",
+     "bizUnit": "journey.countDeclaredOnly"
+    },
+    "actionStops": {
+     "n": 8,
+     "unit": "count.unit.actionStops",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().segments[].moments.length",
+     "bizUnit": "count.unit.actionStops",
+     "breakdown": [
+      {
+       "key": "count.part.stopsCalled",
+       "n": 7
+      },
+      {
+       "key": "count.part.stopsDeclared",
+       "n": 1
+      },
+      {
+       "key": "count.part.stopsNoCall",
+       "n": 0
+      }
+     ]
+    },
+    "systems": {
+     "n": 5,
+     "unit": "journey.countSystems",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().systems.length"
+    },
+    "setup": {
+     "n": 0,
+     "unit": "journey.countSetup",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.setup"
+    },
+    "deferred": {
+     "n": 0,
+     "unit": "journey.countAfterwards",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.deferred",
+     "bizUnit": "journey.countAfterwards"
+    },
+    "repeats": {
+     "n": 2,
+     "unit": "journey.countRepeats",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.repeats"
+    },
+    "cutPoints": {
+     "n": 0,
+     "unit": "journey.cutPoints",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.cutPoints"
+    },
+    "choices": {
+     "n": 0,
+     "unit": "journey.countChoices",
+     "scope": "journey.scopeAll",
+     "source": "journeySummary().counts.choices",
+     "bizUnit": "journey.countChoices"
+    }
+   },
+   "absentKinds": {
+    "external": "noneIndexed",
+    "afterwards": "noneIndexed"
+   },
+   "coverage": {
+    "journey": {
+     "counted": {
+      "tests": {
+       "n": 7,
+       "unit": "count.unit.cases",
+       "scope": "journey.scopeAll",
+       "source": "coverageFor(flow).counts.tests (unit + integration + e2e)",
+       "bizUnit": "journey.biz.countTests",
+       "breakdown": [
+        {
+         "key": "journey.testsUnit",
+         "n": 3
+        },
+        {
+         "key": "journey.testsIntegration",
+         "n": 0
+        },
+        {
+         "key": "journey.testsE2e",
+         "n": 4
+        }
+       ]
+      },
+      "e2e": {
+       "n": 4,
+       "unit": "journey.testsE2e",
+       "scope": "journey.scopeAll",
+       "source": "coverageFor(flow).counts.tests.e2e",
+       "bizUnit": "journey.biz.countE2e",
+       "breakdown": [
+        {
+         "key": "count.part.declared",
+         "n": 2
+        },
+        {
+         "key": "count.part.reached",
+         "n": 1
+        },
+        {
+         "key": "count.part.observed",
+         "n": 0
+        },
+        {
+         "key": "count.part.declaredPassed",
+         "n": 1
+        }
+       ]
+      },
+      "unit": {
+       "n": 3,
+       "unit": "journey.testsUnit",
+       "scope": "journey.scopeAll",
+       "source": "coverageFor(flow).counts.tests.unit",
+       "breakdown": [
+        {
+         "key": "count.part.declared",
+         "n": 0
+        },
+        {
+         "key": "count.part.reached",
+         "n": 3
+        },
+        {
+         "key": "count.part.observed",
+         "n": 0
+        }
+       ]
+      },
+      "integration": {
+       "n": 0,
+       "unit": "journey.testsIntegration",
+       "scope": "journey.scopeAll",
+       "source": "coverageFor(flow).counts.tests.integration",
+       "breakdown": [
+        {
+         "key": "count.part.declared",
+         "n": 0
+        },
+        {
+         "key": "count.part.reached",
+         "n": 0
+        },
+        {
+         "key": "count.part.observed",
+         "n": 0
+        }
+       ]
+      },
+      "observed": {
+       "n": 1,
+       "unit": "journey.testsObserved",
+       "scope": "journey.scopeAll",
+       "source": "coverageFor(flow).counts.tests.observed",
+       "breakdown": [
+        {
+         "key": "count.part.observed",
+         "n": 0
+        },
+        {
+         "key": "count.part.declaredPassed",
+         "n": 1
+        }
+       ]
+      },
+      "runReports": {
+       "n": 1,
+       "unit": "count.unit.runReports",
+       "scope": "journey.scopeAll",
+       "source": "coverageFor(flow).counts.tests.runLevel"
+      }
+     },
+     "evidenceWord": {
+      "cls": "observed",
+      "key": "tests.evidence.declaredPassed",
+      "biz": "journey.biz.testsRun.declaredPassed"
+     }
+    },
+    "segments": [
+     {
+      "counts": {
+       "nodes": 8,
+       "covered": 3,
+       "unit": 1,
+       "integration": 0,
+       "e2e": 2,
+       "declared": 1,
+       "observed": 2,
+       "observedTests": 1,
+       "tests": {
+        "unit": 1,
+        "integration": 0,
+        "e2e": 3,
+        "observed": 1,
+        "runLevel": 1,
+        "declaredPassed": 1
+       }
+      },
+      "e2e": "observed",
+      "e2eVia": {
+       "nodeId": "invoice-app::page::/invoices/new",
+       "name": "/invoices/new",
+       "testId": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft is saved for the picked customer",
+       "testName": "a draft is saved for the picked customer",
+       "file": "e2e/new-invoice.pw.spec.ts",
+       "line": 15,
+       "via": "declaration",
+       "sharedWith": []
+      },
+      "verifiedEndToEnd": true,
+      "chip": "observed",
+      "observedBy": "declaration",
+      "evidenceWord": {
+       "cls": "observed",
+       "key": "tests.evidence.declaredPassed",
+       "biz": "journey.biz.testsRun.declaredPassed"
+      },
+      "counted": {
+       "tests": {
+        "n": 4,
+        "unit": "count.unit.cases",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests (unit + integration + e2e)",
+        "bizUnit": "journey.biz.countTests",
+        "breakdown": [
+         {
+          "key": "journey.testsUnit",
+          "n": 1
+         },
+         {
+          "key": "journey.testsIntegration",
+          "n": 0
+         },
+         {
+          "key": "journey.testsE2e",
+          "n": 3
+         }
+        ]
+       },
+       "e2e": {
+        "n": 3,
+        "unit": "journey.testsE2e",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.e2e",
+        "bizUnit": "journey.biz.countE2e",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 1
+         },
+         {
+          "key": "count.part.reached",
+          "n": 1
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         },
+         {
+          "key": "count.part.declaredPassed",
+          "n": 1
+         }
+        ]
+       },
+       "unit": {
+        "n": 1,
+        "unit": "journey.testsUnit",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.unit",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 0
+         },
+         {
+          "key": "count.part.reached",
+          "n": 1
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "integration": {
+        "n": 0,
+        "unit": "journey.testsIntegration",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.integration",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 0
+         },
+         {
+          "key": "count.part.reached",
+          "n": 0
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "observed": {
+        "n": 1,
+        "unit": "journey.testsObserved",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.observed",
+        "breakdown": [
+         {
+          "key": "count.part.observed",
+          "n": 0
+         },
+         {
+          "key": "count.part.declaredPassed",
+          "n": 1
+         }
+        ]
+       },
+       "runReports": {
+        "n": 1,
+        "unit": "count.unit.runReports",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.runLevel"
+       }
+      },
+      "observation": {
+       "by": "declaration",
+       "at": "2026-10-03T17:42:13.134Z",
+       "status": "unknown",
+       "freshness": "unchanged",
+       "cases": 1,
+       "reports": 1,
+       "declared": 1
+      },
+      "run": {
+       "status": "failed",
+       "freshness": "unchanged",
+       "at": "2026-10-03T17:42:13.134Z",
+       "projects": [
+        "default",
+        "mobile-390"
+       ]
+      },
+      "tests": [
+       {
+        "id": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft is saved for the picked customer",
+        "name": "a draft is saved for the picked customer",
+        "level": "e2e",
+        "runner": "playwright",
+        "evidence": "observed",
+        "runLevel": false,
+        "observedVia": "declaration",
+        "project": "mobile-390",
+        "reaches": {
+         "nodeId": "invoice-app::page::/invoices/new",
+         "name": "/invoices/new",
+         "kind": "page"
+        },
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@covers INV-02",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "e2e/new-invoice.pw.spec.ts",
+         "line": 15,
+         "endLine": 18
+        },
+        "status": "passed",
+        "at": "2026-09-21T09:14:03.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft with no line items is refused",
+        "name": "a draft with no line items is refused",
+        "level": "e2e",
+        "runner": "playwright",
+        "evidence": "declared",
+        "runLevel": false,
+        "project": "mobile-390",
+        "reaches": {
+         "nodeId": "invoice-app::page::/invoices/new",
+         "name": "/invoices/new",
+         "kind": "page"
+        },
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@covers INV-02",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "e2e/new-invoice.pw.spec.ts",
+         "line": 20,
+         "endLine": 23
+        },
+        "status": "failed",
+        "at": "2026-09-21T09:14:03.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::e2e/billing.pw.spec.ts::billing › a new invoice is created and appears in the list",
+        "name": "a new invoice is created and appears in the list",
+        "level": "e2e",
+        "runner": "playwright",
+        "evidence": "static",
+        "runLevel": false,
+        "project": "mobile-390",
+        "reaches": {
+         "nodeId": "invoice-app::route::POST /invoices",
+         "name": "POST /invoices",
+         "kind": "route"
+        },
+        "technique": "route-literal",
+        "confidence": "MEDIUM",
+        "note": "a URL literal in the test",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "e2e/billing.pw.spec.ts",
+         "line": 19,
+         "endLine": 23
+        },
+        "status": "skipped",
+        "at": "2026-09-21T09:14:03.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::test/invoiceService.test.ts::createInvoice computes a subtotal, tax and total from the draft lines",
+        "name": "createInvoice computes a subtotal, tax and total from the draft lines",
+        "level": "unit",
+        "runner": "node:test",
+        "evidence": "static",
+        "runLevel": false,
+        "project": "default",
+        "reaches": {
+         "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+         "name": "createInvoice",
+         "kind": "function"
+        },
+        "technique": "import-resolution",
+        "confidence": "HIGH",
+        "note": "imported and called by the test",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "test/invoiceService.test.ts",
+         "line": 12,
+         "endLine": 15
+        },
+        "status": "passed",
+        "at": "2025-09-10T00:00:00.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::run:unit:invoice-app",
+        "name": "unit run · invoice-app · 2026-10-03",
+        "level": "unit",
+        "runner": "vitest",
+        "evidence": "observed",
+        "runLevel": true,
+        "reaches": {
+         "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+         "name": "createInvoice",
+         "kind": "function"
+        },
+        "technique": "coverage-report",
+        "confidence": "HIGH",
+        "note": "reached by the run; source unchanged since",
+        "status": "unknown",
+        "at": "2026-10-03T17:42:13.134Z",
+        "freshness": "unchanged",
+        "stale": false
+       }
+      ],
+      "lastRun": {
+       "at": "2026-10-03T17:42:13.134Z",
+       "status": "unknown",
+       "freshness": "unchanged",
+       "stale": false
+      },
+      "note": "3 of 8 things in New invoice are covered by 3 end-to-end tests, 1 unit test and 1 run-level coverage report — declared by its author, inferred from what the test imports or opens, reached by an observed run, passed in a results report, by its own declaration. Segments overlap the journey and each other: they do not add up."
+     },
+     {
+      "counts": {
+       "nodes": 27,
+       "covered": 6,
+       "unit": 4,
+       "integration": 0,
+       "e2e": 2,
+       "declared": 2,
+       "observed": 2,
+       "observedTests": 0,
+       "tests": {
+        "unit": 3,
+        "integration": 0,
+        "e2e": 2,
+        "observed": 0,
+        "runLevel": 1,
+        "declaredPassed": 0
+       }
+      },
+      "e2e": "reached",
+      "e2eVia": {
+       "nodeId": "invoice-app::route::POST /invoices",
+       "name": "POST /invoices",
+       "testId": "invoice-app::test::e2e/billing.pw.spec.ts::billing › a new invoice is created and appears in the list",
+       "testName": "a new invoice is created and appears in the list",
+       "file": "e2e/billing.pw.spec.ts",
+       "line": 19,
+       "sharedWith": []
+      },
+      "verifiedEndToEnd": false,
+      "chip": "observed",
+      "observedBy": "runs",
+      "evidenceWord": {
+       "cls": "observed",
+       "key": "tests.evidence.runSeen",
+       "biz": "journey.biz.testsRun.runOnly"
+      },
+      "counted": {
+       "tests": {
+        "n": 5,
+        "unit": "count.unit.cases",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests (unit + integration + e2e)",
+        "bizUnit": "journey.biz.countTests",
+        "breakdown": [
+         {
+          "key": "journey.testsUnit",
+          "n": 3
+         },
+         {
+          "key": "journey.testsIntegration",
+          "n": 0
+         },
+         {
+          "key": "journey.testsE2e",
+          "n": 2
+         }
+        ]
+       },
+       "e2e": {
+        "n": 2,
+        "unit": "journey.testsE2e",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.e2e",
+        "bizUnit": "journey.biz.countE2e",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 1
+         },
+         {
+          "key": "count.part.reached",
+          "n": 1
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "unit": {
+        "n": 3,
+        "unit": "journey.testsUnit",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.unit",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 0
+         },
+         {
+          "key": "count.part.reached",
+          "n": 3
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "integration": {
+        "n": 0,
+        "unit": "journey.testsIntegration",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.integration",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 0
+         },
+         {
+          "key": "count.part.reached",
+          "n": 0
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "observed": {
+        "n": 0,
+        "unit": "journey.testsObserved",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.observed"
+       },
+       "runReports": {
+        "n": 1,
+        "unit": "count.unit.runReports",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.runLevel"
+       }
+      },
+      "observation": {
+       "by": "runs",
+       "at": "2026-10-03T17:42:13.134Z",
+       "status": "unknown",
+       "freshness": "unchanged",
+       "cases": 0,
+       "reports": 1
+      },
+      "run": {
+       "status": "flaky",
+       "freshness": "unchanged",
+       "at": "2026-10-03T17:42:13.134Z",
+       "projects": [
+        "default",
+        "mobile-390"
+       ]
+      },
+      "tests": [
+       {
+        "id": "invoice-app::test::e2e/billing.pw.spec.ts::billing › a new invoice is created and appears in the list",
+        "name": "a new invoice is created and appears in the list",
+        "level": "e2e",
+        "runner": "playwright",
+        "evidence": "static",
+        "runLevel": false,
+        "project": "mobile-390",
+        "reaches": {
+         "nodeId": "invoice-app::route::POST /invoices",
+         "name": "POST /invoices",
+         "kind": "route"
+        },
+        "technique": "route-literal",
+        "confidence": "MEDIUM",
+        "note": "a URL literal in the test",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "e2e/billing.pw.spec.ts",
+         "line": 19,
+         "endLine": 23
+        },
+        "status": "skipped",
+        "at": "2026-09-21T09:14:03.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::e2e/billing.pw.spec.ts::billing › the invoice list shows every invoice newest first",
+        "name": "the invoice list shows every invoice newest first",
+        "level": "e2e",
+        "runner": "playwright",
+        "evidence": "declared",
+        "runLevel": false,
+        "project": "mobile-390",
+        "retries": 1,
+        "reaches": {
+         "nodeId": "invoice-app::page::/invoices",
+         "name": "/invoices",
+         "kind": "page"
+        },
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@covers INV-01",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "e2e/billing.pw.spec.ts",
+         "line": 14,
+         "endLine": 17
+        },
+        "status": "flaky",
+        "at": "2026-09-21T09:14:03.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::test/invoiceService.test.ts::createInvoice computes a subtotal, tax and total from the draft lines",
+        "name": "createInvoice computes a subtotal, tax and total from the draft lines",
+        "level": "unit",
+        "runner": "node:test",
+        "evidence": "static",
+        "runLevel": false,
+        "project": "default",
+        "reaches": {
+         "nodeId": "invoice-app::src/server/invoiceService.ts::createInvoice",
+         "name": "createInvoice",
+         "kind": "function"
+        },
+        "technique": "import-resolution",
+        "confidence": "HIGH",
+        "note": "imported and called by the test",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "test/invoiceService.test.ts",
+         "line": 12,
+         "endLine": 15
+        },
+        "status": "passed",
+        "at": "2025-09-10T00:00:00.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::test/invoiceService.test.ts::finalizeInvoice assigns a number and records a ledger entry",
+        "name": "finalizeInvoice assigns a number and records a ledger entry",
+        "level": "unit",
+        "runner": "node:test",
+        "evidence": "static",
+        "runLevel": false,
+        "project": "default",
+        "reaches": {
+         "nodeId": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+         "name": "finalizeInvoice",
+         "kind": "function"
+        },
+        "technique": "import-resolution",
+        "confidence": "HIGH",
+        "note": "imported and called by the test",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "test/invoiceService.test.ts",
+         "line": 21,
+         "endLine": 24
+        },
+        "status": "skipped",
+        "at": "2025-09-10T00:00:00.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::run:unit:invoice-app",
+        "name": "unit run · invoice-app · 2026-10-03",
+        "level": "unit",
+        "runner": "vitest",
+        "evidence": "observed",
+        "runLevel": true,
+        "reaches": {
+         "nodeId": "invoice-app::src/server/invoiceService.ts::listInvoices",
+         "name": "listInvoices",
+         "kind": "function"
+        },
+        "technique": "coverage-report",
+        "confidence": "HIGH",
+        "note": "reached by the run; source unchanged since",
+        "status": "unknown",
+        "at": "2026-10-03T17:42:13.134Z",
+        "freshness": "unchanged",
+        "stale": false
+       },
+       {
+        "id": "invoice-app::test::test/invoiceService.test.ts::updateInvoice refuses an invoice that has left draft",
+        "name": "updateInvoice refuses an invoice that has left draft",
+        "level": "unit",
+        "runner": "node:test",
+        "evidence": "static",
+        "runLevel": false,
+        "project": "default",
+        "reaches": {
+         "nodeId": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+         "name": "updateInvoice",
+         "kind": "function"
+        },
+        "technique": "import-resolution",
+        "confidence": "HIGH",
+        "note": "imported and called by the test",
+        "loc": {
+         "repo": "invoice-app",
+         "path": "test/invoiceService.test.ts",
+         "line": 17,
+         "endLine": 19
+        },
+        "status": "passed",
+        "at": "2025-09-10T00:00:00.000Z",
+        "freshness": "unchanged",
+        "stale": false
+       }
+      ],
+      "lastRun": {
+       "at": "2026-10-03T17:42:13.134Z",
+       "status": "unknown",
+       "freshness": "unchanged",
+       "stale": false
+      },
+      "note": "6 of 27 things in Invoice list are covered by 2 end-to-end tests, 3 unit tests and 1 run-level coverage report — declared by its author, inferred from what the test imports or opens, reached by an observed run. Segments overlap the journey and each other: they do not add up."
+     },
+     {
+      "counts": {
+       "nodes": 0,
+       "covered": 0,
+       "unit": 0,
+       "integration": 0,
+       "e2e": 0,
+       "declared": 0,
+       "observed": 0,
+       "observedTests": 0,
+       "tests": {
+        "unit": 0,
+        "integration": 0,
+        "e2e": 0,
+        "observed": 0,
+        "runLevel": 0,
+        "declaredPassed": 0
+       }
+      },
+      "e2e": "none",
+      "verifiedEndToEnd": false,
+      "chip": "none",
+      "evidenceWord": {
+       "cls": "none",
+       "key": "journey.absent.noneIndexed"
+      },
+      "counted": {
+       "tests": {
+        "n": 0,
+        "unit": "count.unit.cases",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests (unit + integration + e2e)",
+        "bizUnit": "journey.biz.countTests",
+        "breakdown": [
+         {
+          "key": "journey.testsUnit",
+          "n": 0
+         },
+         {
+          "key": "journey.testsIntegration",
+          "n": 0
+         },
+         {
+          "key": "journey.testsE2e",
+          "n": 0
+         }
+        ]
+       },
+       "e2e": {
+        "n": 0,
+        "unit": "journey.testsE2e",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.e2e",
+        "bizUnit": "journey.biz.countE2e",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 0
+         },
+         {
+          "key": "count.part.reached",
+          "n": 0
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "unit": {
+        "n": 0,
+        "unit": "journey.testsUnit",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.unit",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 0
+         },
+         {
+          "key": "count.part.reached",
+          "n": 0
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "integration": {
+        "n": 0,
+        "unit": "journey.testsIntegration",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.integration",
+        "breakdown": [
+         {
+          "key": "count.part.declared",
+          "n": 0
+         },
+         {
+          "key": "count.part.reached",
+          "n": 0
+         },
+         {
+          "key": "count.part.observed",
+          "n": 0
+         }
+        ]
+       },
+       "observed": {
+        "n": 0,
+        "unit": "journey.testsObserved",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.observed"
+       },
+       "runReports": {
+        "n": 0,
+        "unit": "count.unit.runReports",
+        "scope": "journey.scopeHere",
+        "source": "coverageFor(segment).counts.tests.runLevel"
+       }
+      },
+      "tests": [],
+      "note": "Nothing in Discard draft can carry a test. Segments overlap the journey and each other: they do not add up."
+     }
+    ]
+   }
+  },
+  "edges": [
+   {
+    "from": "invoice-app::flow::billing-cycle",
+    "to": "invoice-app::page::/invoices/new",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::flow::billing-cycle",
+    "to": "invoice-app::page::/invoices",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::flow::billing-cycle",
+    "to": "invoice-app::page::/invoices/:param/discard",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::page::/invoices/new",
+    "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+    "to": "invoice-app::src/api/client.ts::createInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+    "to": "invoice-app::src/ui/fields.tsx::LineItemRow",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::src/api/client.ts::createInvoice",
+    "to": "invoice-app::route::POST /invoices",
+    "kind": "http"
+   },
+   {
+    "from": "invoice-app::route::POST /invoices",
+    "to": "invoice-app::src/server/invoiceService.ts::createInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::createInvoice",
+    "to": "invoice-app::table::invoices",
+    "kind": "writes"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::createInvoice",
+    "to": "invoice-app::src/server/taxEngine.ts::computeTax",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/server/taxEngine.ts::computeTax",
+    "to": "invoice-app::table::customers",
+    "kind": "reads"
+   },
+   {
+    "from": "invoice-app::page::/invoices",
+    "to": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+    "to": "invoice-app::src/api/client.ts::listInvoices",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+    "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+    "to": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+    "kind": "renders"
+   },
+   {
+    "from": "invoice-app::src/api/client.ts::listInvoices",
+    "to": "invoice-app::route::GET /invoices",
+    "kind": "http"
+   },
+   {
+    "from": "invoice-app::route::GET /invoices",
+    "to": "invoice-app::src/server/invoiceService.ts::listInvoices",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::listInvoices",
+    "to": "invoice-app::table::invoices",
+    "kind": "reads"
+   },
+   {
+    "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+    "to": "invoice-app::src/api/client.ts::getInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+    "to": "invoice-app::src/api/client.ts::updateInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+    "to": "invoice-app::src/api/client.ts::finalizeInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+    "to": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/api/client.ts::getInvoice",
+    "to": "invoice-app::route::GET /invoices/:id",
+    "kind": "http"
+   },
+   {
+    "from": "invoice-app::route::GET /invoices/:id",
+    "to": "invoice-app::src/server/invoiceService.ts::getInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::getInvoice",
+    "to": "invoice-app::table::invoices",
+    "kind": "reads"
+   },
+   {
+    "from": "invoice-app::src/api/client.ts::updateInvoice",
+    "to": "invoice-app::route::PATCH /invoices/:id",
+    "kind": "http"
+   },
+   {
+    "from": "invoice-app::route::PATCH /invoices/:id",
+    "to": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+    "to": "invoice-app::table::invoices",
+    "kind": "reads"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+    "to": "invoice-app::table::invoices",
+    "kind": "writes"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+    "to": "invoice-app::src/server/taxEngine.ts::computeTax",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/api/client.ts::finalizeInvoice",
+    "to": "invoice-app::route::POST /invoices/:id/finalize",
+    "kind": "http"
+   },
+   {
+    "from": "invoice-app::route::POST /invoices/:id/finalize",
+    "to": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+    "to": "invoice-app::table::invoices",
+    "kind": "reads"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+    "to": "invoice-app::table::invoices",
+    "kind": "writes"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+    "to": "invoice-app::table::ledger_entries",
+    "kind": "writes"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+    "to": "invoice-app::queue::invoice.finalized",
+    "kind": "publishes"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+    "to": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+    "kind": "calls"
+   },
+   {
+    "from": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+    "to": "invoice-app::table::invoices",
+    "kind": "reads"
+   },
+   {
+    "from": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+    "to": "invoice-app::src/api/client.ts::updateInvoice",
+    "kind": "calls"
+   }
+  ]
+ },
+ "nodes": [
+  {
+   "id": "invoice-app::src/api/client.ts::listInvoices",
+   "kind": "function",
+   "name": "listInvoices",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 4,
+    "endLine": 7
+   },
+   "tags": [
+    "invoice"
+   ],
+   "docs": "Fetches every invoice for the list view."
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::getInvoice",
+   "kind": "function",
+   "name": "getInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 13,
+    "endLine": 16
+   },
+   "tags": [
+    "invoice"
+   ],
+   "docs": "Fetches one invoice by id. Pass the id from the list row."
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::createInvoice",
+   "kind": "function",
+   "name": "createInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 18,
+    "endLine": 21
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::updateInvoice",
+   "kind": "function",
+   "name": "updateInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 23,
+    "endLine": 26
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/api/client.ts::finalizeInvoice",
+   "kind": "function",
+   "name": "finalizeInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/api/client.ts",
+    "line": 28,
+    "endLine": 31
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/approvals.ts::approveInvoice",
+   "kind": "guard",
+   "name": "approveInvoice: approver role",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/approvals.ts",
+    "line": 14,
+    "endLine": 20
+   },
+   "tags": [
+    "invoice",
+    "auth"
+   ],
+   "facets": {
+    "business": {
+     "description": "Only an approver can approve an invoice. The approval and the invoice's new state are written together, or neither is written."
+    }
+   },
+   "docs": "Approves an invoice: records who approved it and moves the invoice to approved, both inside one transaction."
+  },
+  {
+   "id": "invoice-app::table::approvals",
+   "kind": "table",
+   "name": "approvals",
+   "tags": [
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::table::invoices",
+   "kind": "table",
+   "name": "invoices",
+   "tags": [
+    "invoice",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/approvals.ts::receiptFor",
+   "kind": "function",
+   "name": "receiptFor",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/approvals.ts",
+    "line": 23,
+    "endLine": 25
+   },
+   "tags": [],
+   "docs": "The receipt the caller gets back once the approval committed."
+  },
+  {
+   "id": "invoice-app::src/server/approvals.ts::withTx",
+   "kind": "function",
+   "name": "withTx",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/approvals.ts",
+    "line": 31,
+    "endLine": 33
+   },
+   "tags": [
+    "internal"
+   ],
+   "docs": "Runs `fn` inside one database transaction — everything it writes commits together."
+  },
+  {
+   "id": "invoice-app::src/server/auth.ts::requireScope",
+   "kind": "function",
+   "name": "requireScope",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/auth.ts",
+    "line": 10,
+    "endLine": 19
+   },
+   "tags": [
+    "auth"
+   ],
+   "facets": {
+    "business": {
+     "description": "Checks the caller is allowed to perform this billing action before the request reaches the handler."
+    }
+   },
+   "docs": "Scope-based authorization middleware. Rejects with 403 when the caller's token lacks the required scope. Applied per-route in router; admin actions require billing:admin."
+  },
+  {
+   "id": "invoice-app::src/server/config/env.ts::appEnvSchema",
+   "kind": "rule",
+   "name": "appEnvSchema",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/config/env.ts",
+    "line": 7,
+    "endLine": 7
+   },
+   "tags": [
+    "env-schema"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/config/env.ts::loadEnv",
+   "kind": "function",
+   "name": "loadEnv",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/config/env.ts",
+    "line": 10,
+    "endLine": 12
+   },
+   "tags": [],
+   "docs": "Reads and checks the process environment; throws at start-up when a variable is missing."
+  },
+  {
+   "id": "invoice-app::src/server/container.ts::holder",
+   "kind": "function",
+   "name": "holder",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/container.ts",
+    "line": 7,
+    "endLine": 9
+   },
+   "tags": [],
+   "docs": "The process-wide slot the container is parked on, so a reload reuses it."
+  },
+  {
+   "id": "invoice-app::src/server/container.ts::buildContainer",
+   "kind": "function",
+   "name": "buildContainer",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/container.ts",
+    "line": 15,
+    "endLine": 26
+   },
+   "tags": [
+    "setup"
+   ],
+   "docs": "Builds the process container once: checks the environment and wires the outbox worker with the hooks the rest of the app hangs off."
+  },
+  {
+   "id": "invoice-app::src/server/container.ts::buildContainer.hooks.invoiceApproved",
+   "kind": "function",
+   "name": "invoiceApproved",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/container.ts",
+    "line": 20,
+    "endLine": 22
+   },
+   "tags": [
+    "invoice",
+    "callback"
+   ],
+   "docs": "Marks the invoice synced once the approval reached the ledger."
+  },
+  {
+   "id": "invoice-app::src/server/container.ts::buildContainer.log",
+   "kind": "function",
+   "name": "log",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/container.ts",
+    "line": 24,
+    "endLine": 24
+   },
+   "tags": [
+    "callback"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/container.ts::getContainer",
+   "kind": "function",
+   "name": "getContainer",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/container.ts",
+    "line": 29,
+    "endLine": 31
+   },
+   "tags": [],
+   "docs": "The container, built on first use and reused for the life of the process."
+  },
+  {
+   "id": "invoice-app::src/server/container.ts::OutboxWorker.drain",
+   "kind": "function",
+   "name": "OutboxWorker.drain",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/container.ts",
+    "line": 37,
+    "endLine": 39
+   },
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/db.ts::table",
+   "kind": "function",
+   "name": "table",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/db.ts",
+    "line": 8,
+    "endLine": 15
+   },
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/db.ts::table.findMany",
+   "kind": "function",
+   "name": "findMany",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/db.ts",
+    "line": 10,
+    "endLine": 10
+   },
+   "tags": [
+    "callback"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/db.ts::table.findOne",
+   "kind": "function",
+   "name": "findOne",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/db.ts",
+    "line": 11,
+    "endLine": 11
+   },
+   "tags": [
+    "callback"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/db.ts::table.insert",
+   "kind": "function",
+   "name": "insert",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/db.ts",
+    "line": 12,
+    "endLine": 12
+   },
+   "tags": [
+    "callback"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/db.ts::table.update",
+   "kind": "function",
+   "name": "update",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/db.ts",
+    "line": 13,
+    "endLine": 13
+   },
+   "tags": [
+    "callback"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/erpClient.ts::ErpClient.request",
+   "kind": "function",
+   "name": "ErpClient.request",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/erpClient.ts",
+    "line": 19,
+    "endLine": 21
+   },
+   "tags": [],
+   "facets": {
+    "business": {
+     "description": "Files the finalized invoice with the accounting system."
+    }
+   },
+   "docs": "Sends one document to the accounting system."
+  },
+  {
+   "id": "invoice-app::src/server/events.ts::publish",
+   "kind": "function",
+   "name": "publish",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/events.ts",
+    "line": 2,
+    "endLine": 4
+   },
+   "tags": [],
+   "docs": "Publishes a domain event to the message bus (NATS in production)."
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::listInvoices",
+   "kind": "function",
+   "name": "listInvoices",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 6,
+    "endLine": 8
+   },
+   "tags": [
+    "invoice"
+   ],
+   "docs": "Lists invoices, newest first."
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::getInvoice",
+   "kind": "function",
+   "name": "getInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 15,
+    "endLine": 17
+   },
+   "tags": [
+    "invoice"
+   ],
+   "docs": "Fetches a single invoice by id. Resolves to null when id matches no row — callers must null-check. See: listInvoices."
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::createInvoice",
+   "kind": "function",
+   "name": "createInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 24,
+    "endLine": 28
+   },
+   "tags": [
+    "invoice"
+   ],
+   "docs": "Creates a draft invoice and computes initial totals. Totals are recomputed on every edit; see finalizing an invoice for the irreversible step. Since 1.0."
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::updateInvoice",
+   "kind": "function",
+   "name": "updateInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 35,
+    "endLine": 44
+   },
+   "tags": [
+    "invoice"
+   ],
+   "facets": {
+    "business": {
+     "description": "Only draft invoices can be changed. Once an invoice has been sent to the customer its amounts are locked, so we refuse the edit."
+    }
+   },
+   "docs": "Saves edits to a draft; rejects when the invoice is no longer editable."
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::finalizeInvoice",
+   "kind": "function",
+   "name": "finalizeInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 58,
+    "endLine": 74
+   },
+   "tags": [
+    "invoice"
+   ],
+   "facets": {
+    "business": {
+     "description": "When an invoice is sent, we verify it is complete, assign the next official invoice number, record it permanently in the accounting ledger, and email it to the customer."
+    }
+   },
+   "docs": "Finalizes a draft: completeness check, sequential number, ledger entry, then emits invoice.finalized for the notifier to send the email. Finalizing is irreversible — the number is consumed even if the email later bounces. See: computeTax, requireScope. Since 1.0."
+  },
+  {
+   "id": "invoice-app::table::ledger_entries",
+   "kind": "table",
+   "name": "ledger_entries",
+   "tags": [
+    "ledger",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::queue::invoice.finalized",
+   "kind": "queue",
+   "name": "invoice.finalized",
+   "tags": [
+    "invoice",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/invoiceService.ts::nextInvoiceNumber",
+   "kind": "function",
+   "name": "nextInvoiceNumber",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/invoiceService.ts",
+    "line": 80,
+    "endLine": 83
+   },
+   "tags": [
+    "invoice",
+    "internal"
+   ],
+   "docs": "Sequential, gap-free numbering under an advisory lock."
+  },
+  {
+   "id": "invoice-app::src/server/notify.ts::EmailNotifier.send",
+   "kind": "function",
+   "name": "EmailNotifier.send",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/notify.ts",
+    "line": 8,
+    "endLine": 10
+   },
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/notify.ts::FakeNotifier.send",
+   "kind": "function",
+   "name": "FakeNotifier.send",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/notify.ts",
+    "line": 15,
+    "endLine": 17
+   },
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/notify.ts::notifyApproved",
+   "kind": "function",
+   "name": "notifyApproved",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/notify.ts",
+    "line": 24,
+    "endLine": 26
+   },
+   "tags": [],
+   "facets": {
+    "business": {
+     "description": "Lets the customer know their invoice was approved."
+    }
+   },
+   "docs": "Tells the customer their invoice was approved."
+  },
+  {
+   "id": "invoice-app::src/server/ocr.ts::AzureOcr.extract",
+   "kind": "function",
+   "name": "AzureOcr.extract",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/ocr.ts",
+    "line": 10,
+    "endLine": 12
+   },
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/ocr.ts::MockOcr.extract",
+   "kind": "function",
+   "name": "MockOcr.extract",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/ocr.ts",
+    "line": 17,
+    "endLine": 19
+   },
+   "tags": []
+  },
+  {
+   "id": "invoice-app::src/server/ocr.ts::readInvoice",
+   "kind": "function",
+   "name": "readInvoice",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/ocr.ts",
+    "line": 26,
+    "endLine": 28
+   },
+   "tags": [
+    "invoice"
+   ],
+   "facets": {
+    "business": {
+     "description": "Pulls the amounts off a scanned invoice so the draft starts filled in."
+    }
+   },
+   "docs": "Reads an uploaded invoice through whichever provider was handed in."
+  },
+  {
+   "id": "invoice-app::src/server/plumbing/format.ts::fmt",
+   "kind": "function",
+   "name": "fmt",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/plumbing/format.ts",
+    "line": 7,
+    "endLine": 9
+   },
+   "tags": [
+    "plumbing"
+   ],
+   "facets": {
+    "business": {
+     "description": "Shows when the approval happened, in the format the finance team reads."
+    }
+   },
+   "docs": "Formats a timestamp the way the finance team reads it (local date, minutes). Declared plumbing in farsight.config.json — presentation only, never a step of its own on a journey however it is annotated."
+  },
+  {
+   "id": "invoice-app::route::GET /invoices",
+   "kind": "route",
+   "name": "GET /invoices",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 8
+   },
+   "tags": [
+    "invoice",
+    "api:invoices"
+   ],
+   "contract": {
+    "status": "both",
+    "apiId": "invoice-app::api::openapi.yaml",
+    "spec": {
+     "path": "openapi.yaml",
+     "line": 19,
+     "operationId": "listInvoices"
+    },
+    "summary": "List every invoice, newest first.",
+    "tags": [
+     "Invoices"
+    ],
+    "params": [
+     {
+      "name": "status",
+      "in": "query",
+      "type": "string",
+      "description": "Only invoices in this state."
+     }
+    ],
+    "responses": [
+     {
+      "status": "200",
+      "description": "The invoices the caller may see.",
+      "schema": "Invoice[]"
+     }
+    ],
+    "security": [
+     "billingAuth: billing:read"
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::guard::requireScope(billing:read)",
+   "kind": "guard",
+   "name": "requireScope: billing:read",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 8
+   },
+   "tags": [
+    "auth"
+   ]
+  },
+  {
+   "id": "invoice-app::route::GET /invoices/:id",
+   "kind": "route",
+   "name": "GET /invoices/:id",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 12
+   },
+   "tags": [
+    "invoice",
+    "api:invoices"
+   ],
+   "contract": {
+    "status": "both",
+    "apiId": "invoice-app::api::openapi.yaml",
+    "spec": {
+     "path": "openapi.yaml",
+     "line": 62,
+     "operationId": "getInvoice"
+    },
+    "summary": "Fetch one invoice by id.",
+    "tags": [
+     "Invoices"
+    ],
+    "params": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "type": "string"
+     }
+    ],
+    "responses": [
+     {
+      "status": "200",
+      "description": "The invoice.",
+      "schema": "Invoice"
+     },
+     {
+      "status": "404",
+      "description": "No invoice with that id."
+     }
+    ],
+    "security": [
+     "billingAuth: billing:read"
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::route::POST /invoices",
+   "kind": "route",
+   "name": "POST /invoices",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 16
+   },
+   "tags": [
+    "invoice",
+    "api:invoices"
+   ],
+   "contract": {
+    "status": "both",
+    "apiId": "invoice-app::api::openapi.yaml",
+    "spec": {
+     "path": "openapi.yaml",
+     "line": 38,
+     "operationId": "createInvoice"
+    },
+    "summary": "Draft a new invoice for a customer.",
+    "description": "Totals are computed on creation; nothing reaches the customer until the invoice is finalized.",
+    "tags": [
+     "Invoices"
+    ],
+    "requestBody": {
+     "contentType": "application/json",
+     "schema": "DraftInvoice",
+     "required": true,
+     "fields": [
+      "customerId",
+      "lines"
+     ]
+    },
+    "responses": [
+     {
+      "status": "201",
+      "description": "The draft as stored.",
+      "schema": "Invoice"
+     }
+    ],
+    "security": [
+     "billingAuth: billing:write"
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::guard::requireScope(billing:write)",
+   "kind": "guard",
+   "name": "requireScope: billing:write",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 16
+   },
+   "tags": [
+    "auth"
+   ]
+  },
+  {
+   "id": "invoice-app::route::PATCH /invoices/:id",
+   "kind": "route",
+   "name": "PATCH /invoices/:id",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 21
+   },
+   "tags": [
+    "invoice",
+    "api:invoices"
+   ],
+   "contract": {
+    "status": "both",
+    "apiId": "invoice-app::api::openapi.yaml",
+    "spec": {
+     "path": "openapi.yaml",
+     "line": 76,
+     "operationId": "updateInvoice"
+    },
+    "summary": "Change the line items of a draft invoice.",
+    "description": "Only drafts can change; a sent invoice is locked.",
+    "tags": [
+     "Invoices"
+    ],
+    "params": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "type": "string"
+     }
+    ],
+    "requestBody": {
+     "contentType": "application/json",
+     "schema": "InvoicePatch",
+     "required": true,
+     "fields": [
+      "lines"
+     ]
+    },
+    "responses": [
+     {
+      "status": "200",
+      "description": "The updated invoice."
+     },
+     {
+      "status": "409",
+      "description": "The invoice is no longer a draft."
+     }
+    ],
+    "security": [
+     "billingAuth: billing:admin"
+    ],
+    "drift": [
+     {
+      "kind": "security-mismatch",
+      "message": "spec requires billing:admin; code enforces requireScope: billing:write"
+     }
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::route::POST /invoices/:id/finalize",
+   "kind": "route",
+   "name": "POST /invoices/:id/finalize",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 26
+   },
+   "tags": [
+    "invoice",
+    "undocumented"
+   ],
+   "contract": {
+    "status": "code-only",
+    "apiId": "invoice-app::api::openapi.yaml",
+    "drift": [
+     {
+      "kind": "code-only",
+      "message": "implemented in the code; not declared in the spec"
+     }
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::guard::requireScope(billing:admin)",
+   "kind": "guard",
+   "name": "requireScope: billing:admin",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 26
+   },
+   "tags": [
+    "auth"
+   ]
+  },
+  {
+   "id": "invoice-app::route::POST /invoices/:id/approve",
+   "kind": "route",
+   "name": "POST /invoices/:id/approve",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/routes.ts",
+    "line": 34
+   },
+   "tags": [
+    "invoice",
+    "undocumented"
+   ],
+   "contract": {
+    "status": "code-only",
+    "apiId": "invoice-app::api::openapi.yaml",
+    "drift": [
+     {
+      "kind": "code-only",
+      "message": "implemented in the code; not declared in the spec"
+     }
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::src/server/schemas.ts::draftInvoiceSchema",
+   "kind": "rule",
+   "name": "draftInvoiceSchema",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/schemas.ts",
+    "line": 4,
+    "endLine": 14
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/schemas.ts::updateInvoiceSchema",
+   "kind": "rule",
+   "name": "updateInvoiceSchema",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/schemas.ts",
+    "line": 17,
+    "endLine": 20
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/taxEngine.ts::computeTax",
+   "kind": "function",
+   "name": "computeTax",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/taxEngine.ts",
+    "line": 9,
+    "endLine": 13
+   },
+   "tags": [
+    "tax",
+    "tax"
+   ],
+   "facets": {
+    "business": {
+     "description": "Tax is charged by the customer's country: VAT in the EU, 20% in the UK, none for US customers (handled by TaxJar downstream)."
+    }
+   },
+   "docs": "Region-based tax lookup keyed by the customer's country."
+  },
+  {
+   "id": "invoice-app::table::customers",
+   "kind": "table",
+   "name": "customers",
+   "tags": [
+    "customer",
+    "data"
+   ]
+  },
+  {
+   "id": "invoice-app::src/server/taxEngine.ts::taxTreatment",
+   "kind": "function",
+   "name": "taxTreatment",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/taxEngine.ts",
+    "line": 22,
+    "endLine": 35
+   },
+   "tags": [
+    "tax"
+   ],
+   "facets": {
+    "business": {
+     "description": "How tax is handled for this customer, in plain English."
+    }
+   },
+   "docs": "Human-readable tax treatment for a country — shown on the invoice PDF and in the audit log. See: computeTax. Since 1.2."
+  },
+  {
+   "id": "invoice-app::src/server/taxEngine.ts::taxRateFor",
+   "kind": "function",
+   "name": "taxRateFor",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/server/taxEngine.ts",
+    "line": 43,
+    "endLine": 45
+   },
+   "tags": [
+    "tax",
+    "deprecated"
+   ],
+   "docs": "Raw decimal tax rate for a country. Deprecated: Prefer taxTreatment for display and computeTax for amounts; direct rate access is slated for removal in 2.0. Since 0.9."
+  },
+  {
+   "id": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "kind": "component",
+   "name": "CreateInvoiceForm",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/CreateInvoiceForm.tsx",
+    "line": 10,
+    "endLine": 35
+   },
+   "tags": [
+    "invoice",
+    "ux",
+    "beta"
+   ],
+   "docs": "Form to draft a new invoice; validates client-side with the shared zod schema.",
+   "stories": [
+    {
+     "id": "invoices-createinvoiceform--empty",
+     "name": "Empty"
+    },
+    {
+     "id": "invoices-createinvoiceform--with-line-items",
+     "name": "With line items"
+    },
+    {
+     "id": "invoices-createinvoiceform--invalid",
+     "name": "Invalid"
+    }
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/CreateInvoiceForm.tsx::submit",
+   "kind": "function",
+   "name": "submit",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/CreateInvoiceForm.tsx",
+    "line": 13,
+    "endLine": 25
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer",
+   "kind": "component",
+   "name": "EditInvoiceDrawer",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/EditInvoiceDrawer.tsx",
+    "line": 9,
+    "endLine": 43
+   },
+   "tags": [
+    "invoice",
+    "ux"
+   ],
+   "facets": {
+    "business": {
+     "description": "Lets a user change a draft invoice before it is sent. Sent invoices are shown but can no longer be edited."
+    }
+   },
+   "docs": "Edit line items on a draft invoice; posted invoices are read-only here."
+  },
+  {
+   "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSave",
+   "kind": "function",
+   "name": "onSave",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/EditInvoiceDrawer.tsx",
+    "line": 16,
+    "endLine": 22
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/EditInvoiceDrawer.tsx::onSend",
+   "kind": "function",
+   "name": "onSend",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/EditInvoiceDrawer.tsx",
+    "line": 24,
+    "endLine": 29
+   },
+   "tags": [
+    "invoice"
+   ]
+  },
+  {
+   "id": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "kind": "component",
+   "name": "InvoiceListPage",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/InvoiceListPage.tsx",
+    "line": 7,
+    "endLine": 30
+   },
+   "tags": [
+    "invoice",
+    "ux"
+   ],
+   "docs": "Lists invoices with status filters; entry point of the invoice UX."
+  },
+  {
+   "id": "invoice-app::src/ui/fields.tsx::LineItemRow",
+   "kind": "component",
+   "name": "LineItemRow",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/fields.tsx",
+    "line": 7,
+    "endLine": 15
+   },
+   "tags": [
+    "ux"
+   ],
+   "facets": {
+    "business": {
+     "description": "A single line on the invoice — what was sold and for how much."
+    }
+   },
+   "docs": "One editable invoice line: description + amount."
+  },
+  {
+   "id": "invoice-app::src/ui/fields.tsx::MoneyField",
+   "kind": "component",
+   "name": "MoneyField",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/fields.tsx",
+    "line": 18,
+    "endLine": 20
+   },
+   "tags": [
+    "ux"
+   ],
+   "docs": "Currency input that normalizes to cents; rejects negative amounts."
+  },
+  {
+   "id": "invoice-app::page::/invoices",
+   "kind": "page",
+   "name": "/invoices",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/router.tsx",
+    "line": 8
+   },
+   "tags": [
+    "invoice",
+    "ux",
+    "design:inv-01"
+   ],
+   "design": {
+    "status": "both",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "id": "INV-01",
+    "name": "Invoice list",
+    "nodeId": "1-2",
+    "url": "https://www.figma.com/design/INVOICEAPPDEMO0000/Invoice-app?node-id=1-2",
+    "image": {
+     "kind": "file",
+     "path": "docs/design/inv-01.svg"
+    },
+    "lastModified": "2026-10-03T17:42:13.131Z",
+    "freshness": "manifest",
+    "operations": [
+     "listInvoices",
+     "createInvoice",
+     "getInvoice",
+     "updateInvoice"
+    ],
+    "phase": "1"
+   },
+   "facets": {
+    "business": {
+     "label": "Invoice list",
+     "description": "Every invoice, newest first, with its status and a way into the draft editor."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::page::/invoices/new",
+   "kind": "page",
+   "name": "/invoices/new",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/router.tsx",
+    "line": 9
+   },
+   "tags": [
+    "invoice",
+    "ux",
+    "design:inv-02"
+   ],
+   "design": {
+    "status": "both",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "id": "INV-02",
+    "name": "New invoice",
+    "nodeId": "1-3",
+    "url": "https://www.figma.com/design/INVOICEAPPDEMO0000/Invoice-app?node-id=1-3",
+    "image": {
+     "kind": "file",
+     "path": "docs/design/inv-02.svg"
+    },
+    "lastModified": "2026-10-03T17:42:13.131Z",
+    "freshness": "manifest",
+    "operations": [
+     "createInvoice",
+     "getInvoice"
+    ],
+    "phase": "1",
+    "drift": [
+     {
+      "kind": "operation-unreached",
+      "message": "the design says this screen uses getInvoice (GET /invoices/:id); the built page never reaches it"
+     }
+    ]
+   },
+   "facets": {
+    "business": {
+     "label": "New invoice",
+     "description": "Draft a new invoice for a customer: pick the customer, add line items, save."
+    }
+   }
+  },
+  {
+   "id": "invoice-app::page::/invoices/:id/edit",
+   "kind": "page",
+   "name": "/invoices/:id/edit",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "src/ui/router.tsx",
+    "line": 10
+   },
+   "tags": [
+    "invoice",
+    "ux",
+    "undesigned"
+   ],
+   "design": {
+    "status": "code-only",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "drift": [
+     {
+      "kind": "code-only",
+      "message": "built; no screen in the design manifest describes this page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::external::Azure Document Intelligence",
+   "kind": "external",
+   "name": "Azure Document Intelligence",
+   "tags": [
+    "external",
+    "ocr"
+   ]
+  },
+  {
+   "id": "invoice-app::external::Example ERP",
+   "kind": "external",
+   "name": "Example ERP",
+   "tags": [
+    "external",
+    "erp"
+   ]
+  },
+  {
+   "id": "invoice-app::api::openapi.yaml",
+   "kind": "api",
+   "name": "Billing API",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "openapi.yaml",
+    "line": 1
+   },
+   "tags": [
+    "api"
+   ],
+   "facets": {
+    "business": {
+     "label": "Billing API"
+    }
+   },
+   "docs": "Create, edit and send customer invoices. Every operation needs a billing scope."
+  },
+  {
+   "id": "invoice-app::route::DELETE /invoices/{id}",
+   "kind": "route",
+   "name": "DELETE /invoices/{id}",
+   "tags": [
+    "spec-only",
+    "api:invoices"
+   ],
+   "contract": {
+    "status": "spec-only",
+    "apiId": "invoice-app::api::openapi.yaml",
+    "spec": {
+     "path": "openapi.yaml",
+     "line": 93,
+     "operationId": "deleteInvoice"
+    },
+    "summary": "Discard a draft invoice.",
+    "tags": [
+     "Invoices"
+    ],
+    "params": [
+     {
+      "name": "id",
+      "in": "path",
+      "required": true,
+      "type": "string"
+     }
+    ],
+    "responses": [
+     {
+      "status": "204",
+      "description": "Deleted."
+     }
+    ],
+    "security": [
+     "billingAuth: billing:admin"
+    ],
+    "drift": [
+     {
+      "kind": "spec-only",
+      "message": "declared in the spec; no implementation found in the indexed code"
+     }
+    ]
+   }
+  },
+  {
+   "id": "invoice-app::design::docs/design/screens.json",
+   "kind": "design",
+   "name": "Invoice app — screens",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "docs/design/screens.json",
+    "line": 1
+   },
+   "tags": [
+    "design"
+   ],
+   "facets": {
+    "business": {
+     "label": "Invoice app — screens"
+    }
+   }
+  },
+  {
+   "id": "invoice-app::page::/invoices/:param/discard",
+   "kind": "page",
+   "name": "/invoices/:param/discard",
+   "tags": [
+    "design-only",
+    "design:inv-03"
+   ],
+   "design": {
+    "status": "design-only",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "id": "INV-03",
+    "name": "Discard draft",
+    "nodeId": "1-4",
+    "url": "https://www.figma.com/design/INVOICEAPPDEMO0000/Invoice-app?node-id=1-4",
+    "image": {
+     "kind": "figma"
+    },
+    "lastModified": "2026-10-03T17:42:13.131Z",
+    "freshness": "manifest",
+    "operations": [
+     "deleteInvoice"
+    ],
+    "phase": "2",
+    "drift": [
+     {
+      "kind": "design-only",
+      "message": "designed; no page or component at this route in the indexed code"
+     }
+    ]
+   },
+   "facets": {
+    "business": {
+     "label": "Discard draft",
+     "description": "Confirm and discard a draft invoice that will never be sent."
+    }
+   },
+   "docs": "Confirm and discard a draft invoice that will never be sent."
+  },
+  {
+   "id": "invoice-app::flow::new-invoice",
+   "kind": "flow",
+   "name": "Start a new invoice",
+   "tags": [
+    "entrypoint",
+    "flow",
+    "design:new-invoice",
+    "phase:1"
+   ],
+   "design": {
+    "status": "both",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "id": "new-invoice",
+    "name": "Start a new invoice",
+    "operations": [
+     "createInvoice"
+    ],
+    "phase": "1",
+    "leadsTo": [
+     "draft-and-send"
+    ],
+    "lastModified": "2026-10-03T17:42:13.131Z",
+    "freshness": "manifest"
+   },
+   "facets": {
+    "business": {
+     "label": "Start a new invoice",
+     "description": "A billing user drafts an invoice for a customer: pick the customer, add line items, save."
+    }
+   },
+   "docs": "A billing user drafts an invoice for a customer: pick the customer, add line items, save."
+  },
+  {
+   "id": "invoice-app::flow::draft-and-send",
+   "kind": "flow",
+   "name": "Draft and send an invoice",
+   "tags": [
+    "entrypoint",
+    "flow",
+    "design:draft-and-send",
+    "phase:1"
+   ],
+   "design": {
+    "status": "design-only",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "id": "draft-and-send",
+    "name": "Draft and send an invoice",
+    "operations": [
+     "listInvoices",
+     "deleteInvoice"
+    ],
+    "phase": "1",
+    "lastModified": "2026-10-03T17:42:13.131Z",
+    "freshness": "manifest"
+   },
+   "facets": {
+    "business": {
+     "label": "Draft and send an invoice",
+     "description": "A billing user reviews a draft in the list, and can discard a draft that will never be sent."
+    }
+   },
+   "docs": "A billing user reviews a draft in the list, and can discard a draft that will never be sent."
+  },
+  {
+   "id": "invoice-app::flow::billing-cycle",
+   "kind": "flow",
+   "name": "Billing cycle",
+   "tags": [
+    "entrypoint",
+    "flow",
+    "design:billing-cycle",
+    "phase:1"
+   ],
+   "design": {
+    "status": "design-only",
+    "origin": "manifest",
+    "designId": "invoice-app::design::docs/design/screens.json",
+    "id": "billing-cycle",
+    "name": "Billing cycle",
+    "phase": "1",
+    "lastModified": "2026-10-03T17:42:13.131Z",
+    "freshness": "manifest"
+   },
+   "facets": {
+    "business": {
+     "label": "Billing cycle",
+     "description": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent."
+    }
+   },
+   "docs": "The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent."
+  },
+  {
+   "id": "invoice-app::test::e2e/billing.pw.spec.ts::billing › the invoice list shows every invoice newest first",
+   "kind": "test",
+   "name": "the invoice list shows every invoice newest first",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "e2e/billing.pw.spec.ts",
+    "line": 14,
+    "endLine": 17
+   },
+   "tags": [
+    "test",
+    "test:e2e",
+    "runner:playwright"
+   ],
+   "docs": "The billing screens end to end. INV-01 is a screen in the manifest; CON-99 deliberately matches nothing — an unresolved claim must be visible, not silently dropped (docs/proposals/tests-surface.md §7)."
+  },
+  {
+   "id": "invoice-app::test::e2e/billing.pw.spec.ts::billing › a new invoice is created and appears in the list",
+   "kind": "test",
+   "name": "a new invoice is created and appears in the list",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "e2e/billing.pw.spec.ts",
+    "line": 19,
+    "endLine": 23
+   },
+   "tags": [
+    "test",
+    "test:e2e",
+    "runner:playwright"
+   ],
+   "docs": "The billing screens end to end. INV-01 is a screen in the manifest; CON-99 deliberately matches nothing — an unresolved claim must be visible, not silently dropped (docs/proposals/tests-surface.md §7)."
+  },
+  {
+   "id": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft is saved for the picked customer",
+   "kind": "test",
+   "name": "a draft is saved for the picked customer",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "e2e/new-invoice.pw.spec.ts",
+    "line": 15,
+    "endLine": 18
+   },
+   "tags": [
+    "test",
+    "test:e2e",
+    "runner:playwright"
+   ],
+   "docs": "Starting a new invoice, end to end. The header declares the flow and its screen and the body opens nothing the graph can follow — so what the run says is all there is: a case the report says passed counts as observed for what it declares (*passed, by its own declaration*); the one it says failed stays declared only."
+  },
+  {
+   "id": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft with no line items is refused",
+   "kind": "test",
+   "name": "a draft with no line items is refused",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "e2e/new-invoice.pw.spec.ts",
+    "line": 20,
+    "endLine": 23
+   },
+   "tags": [
+    "test",
+    "test:e2e",
+    "runner:playwright"
+   ],
+   "docs": "Starting a new invoice, end to end. The header declares the flow and its screen and the body opens nothing the graph can follow — so what the run says is all there is: a case the report says passed counts as observed for what it declares (*passed, by its own declaration*); the one it says failed stays declared only."
+  },
+  {
+   "id": "invoice-app::test::test/invoiceService.test.ts::createInvoice computes a subtotal, tax and total from the draft lines",
+   "kind": "test",
+   "name": "createInvoice computes a subtotal, tax and total from the draft lines",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "test/invoiceService.test.ts",
+    "line": 12,
+    "endLine": 15
+   },
+   "tags": [
+    "test",
+    "test:unit",
+    "runner:node:test"
+   ],
+   "docs": "The invoice service, without a server. Declares the flow it stands behind; the imports it exercises are inferred, not declared. The invoice service, without a server. Declares the flow it stands behind; the imports it exercises are inferred, not declared."
+  },
+  {
+   "id": "invoice-app::test::test/invoiceService.test.ts::updateInvoice refuses an invoice that has left draft",
+   "kind": "test",
+   "name": "updateInvoice refuses an invoice that has left draft",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "test/invoiceService.test.ts",
+    "line": 17,
+    "endLine": 19
+   },
+   "tags": [
+    "test",
+    "test:unit",
+    "runner:node:test"
+   ],
+   "docs": "The invoice service, without a server. Declares the flow it stands behind; the imports it exercises are inferred, not declared."
+  },
+  {
+   "id": "invoice-app::test::test/invoiceService.test.ts::finalizeInvoice assigns a number and records a ledger entry",
+   "kind": "test",
+   "name": "finalizeInvoice assigns a number and records a ledger entry",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "test/invoiceService.test.ts",
+    "line": 21,
+    "endLine": 24
+   },
+   "tags": [
+    "test",
+    "test:unit",
+    "runner:node:test"
+   ],
+   "docs": "The invoice service, without a server. Declares the flow it stands behind; the imports it exercises are inferred, not declared."
+  },
+  {
+   "id": "invoice-app::test::test/rates.spec.ts::tax rates › the %s rate is %d",
+   "kind": "test",
+   "name": "the %s rate is %d",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "test/rates.spec.ts",
+    "line": 12,
+    "endLine": 18
+   },
+   "tags": [
+    "test",
+    "test:unit",
+    "runner:vitest",
+    "test:each",
+    "test:each",
+    "test:title-heuristic"
+   ],
+   "docs": "The rate table, without a database. The first case is parametrised on purpose: its title is a template, so the reporter's expanded rows can only meet this node through a pattern, and the `.skip` / `.todo` below it exist but ran nowhere — the three shapes a results report has to survive."
+  },
+  {
+   "id": "invoice-app::test::test/rates.spec.ts::tax rates › the FR treatment is confirmed with finance before it is charged",
+   "kind": "test",
+   "name": "the FR treatment is confirmed with finance before it is charged",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "test/rates.spec.ts",
+    "line": 20,
+    "endLine": 22
+   },
+   "tags": [
+    "test",
+    "test:unit",
+    "runner:vitest",
+    "test:skip"
+   ],
+   "docs": "The rate table, without a database. The first case is parametrised on purpose: its title is a template, so the reporter's expanded rows can only meet this node through a pattern, and the `.skip` / `.todo` below it exist but ran nowhere — the three shapes a results report has to survive."
+  },
+  {
+   "id": "invoice-app::test::test/rates.spec.ts::tax rates › the table reloads when the tax service publishes a change",
+   "kind": "test",
+   "name": "the table reloads when the tax service publishes a change",
+   "loc": {
+    "repo": "invoice-app",
+    "path": "test/rates.spec.ts",
+    "line": 24,
+    "endLine": 24
+   },
+   "tags": [
+    "test",
+    "test:unit",
+    "runner:vitest",
+    "test:todo"
+   ],
+   "docs": "The rate table, without a database. The first case is parametrised on purpose: its title is a template, so the reporter's expanded rows can only meet this node through a pattern, and the `.skip` / `.todo` below it exist but ran nowhere — the three shapes a results report has to survive."
+  },
+  {
+   "id": "invoice-app::test::run:unit:invoice-app",
+   "kind": "test",
+   "name": "unit run · invoice-app · 2026-10-03",
+   "tags": [
+    "test",
+    "test:unit",
+    "runner:vitest",
+    "test:run-level"
+   ],
+   "docs": "Every function this unit run reached, from coverage/coverage-final.json. Coverage is attributed to the run, not to individual tests — the report carries no per-test attribution."
+  }
+ ],
+ "edges": [
+  {
+   "kind": "renders",
+   "from": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm",
+   "to": "invoice-app::src/ui/fields.tsx::LineItemRow"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage",
+   "to": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::src/ui/fields.tsx::LineItemRow",
+   "to": "invoice-app::src/ui/fields.tsx::MoneyField"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::page::/invoices",
+   "to": "invoice-app::src/ui/InvoiceListPage.tsx::InvoiceListPage"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::page::/invoices/new",
+   "to": "invoice-app::src/ui/CreateInvoiceForm.tsx::CreateInvoiceForm"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::page::/invoices/:id/edit",
+   "to": "invoice-app::src/ui/EditInvoiceDrawer.tsx::EditInvoiceDrawer"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::api::openapi.yaml",
+   "to": "invoice-app::route::GET /invoices"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::api::openapi.yaml",
+   "to": "invoice-app::route::POST /invoices"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::api::openapi.yaml",
+   "to": "invoice-app::route::GET /invoices/:id"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::api::openapi.yaml",
+   "to": "invoice-app::route::PATCH /invoices/:id"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::api::openapi.yaml",
+   "to": "invoice-app::route::DELETE /invoices/{id}"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::api::openapi.yaml",
+   "to": "invoice-app::route::POST /invoices/:id/finalize"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::api::openapi.yaml",
+   "to": "invoice-app::route::POST /invoices/:id/approve"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::design::docs/design/screens.json",
+   "to": "invoice-app::page::/invoices"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::design::docs/design/screens.json",
+   "to": "invoice-app::page::/invoices/new"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::design::docs/design/screens.json",
+   "to": "invoice-app::page::/invoices/:param/discard"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::design::docs/design/screens.json",
+   "to": "invoice-app::page::/invoices/:id/edit"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::design::docs/design/screens.json",
+   "to": "invoice-app::flow::new-invoice"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::flow::new-invoice",
+   "to": "invoice-app::page::/invoices/new"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::design::docs/design/screens.json",
+   "to": "invoice-app::flow::draft-and-send"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::flow::draft-and-send",
+   "to": "invoice-app::page::/invoices"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::flow::draft-and-send",
+   "to": "invoice-app::page::/invoices/:param/discard"
+  },
+  {
+   "kind": "contains",
+   "from": "invoice-app::design::docs/design/screens.json",
+   "to": "invoice-app::flow::billing-cycle"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::flow::billing-cycle",
+   "to": "invoice-app::page::/invoices/new"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::flow::billing-cycle",
+   "to": "invoice-app::page::/invoices"
+  },
+  {
+   "kind": "renders",
+   "from": "invoice-app::flow::billing-cycle",
+   "to": "invoice-app::page::/invoices/:param/discard"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/billing.pw.spec.ts::billing › the invoice list shows every invoice newest first",
+   "to": "invoice-app::flow::draft-and-send"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/billing.pw.spec.ts::billing › the invoice list shows every invoice newest first",
+   "to": "invoice-app::page::/invoices"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/billing.pw.spec.ts::billing › a new invoice is created and appears in the list",
+   "to": "invoice-app::flow::draft-and-send"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/billing.pw.spec.ts::billing › a new invoice is created and appears in the list",
+   "to": "invoice-app::page::/invoices"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/billing.pw.spec.ts::billing › a new invoice is created and appears in the list",
+   "to": "invoice-app::route::POST /invoices"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft is saved for the picked customer",
+   "to": "invoice-app::flow::new-invoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft is saved for the picked customer",
+   "to": "invoice-app::page::/invoices/new"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft with no line items is refused",
+   "to": "invoice-app::flow::new-invoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::e2e/new-invoice.pw.spec.ts::new invoice › a draft with no line items is refused",
+   "to": "invoice-app::page::/invoices/new"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/invoiceService.test.ts::createInvoice computes a subtotal, tax and total from the draft lines",
+   "to": "invoice-app::flow::new-invoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/invoiceService.test.ts::createInvoice computes a subtotal, tax and total from the draft lines",
+   "to": "invoice-app::src/server/invoiceService.ts::createInvoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/invoiceService.test.ts::updateInvoice refuses an invoice that has left draft",
+   "to": "invoice-app::flow::new-invoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/invoiceService.test.ts::updateInvoice refuses an invoice that has left draft",
+   "to": "invoice-app::src/server/invoiceService.ts::updateInvoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/invoiceService.test.ts::finalizeInvoice assigns a number and records a ledger entry",
+   "to": "invoice-app::flow::new-invoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/invoiceService.test.ts::finalizeInvoice assigns a number and records a ledger entry",
+   "to": "invoice-app::src/server/invoiceService.ts::finalizeInvoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/rates.spec.ts::tax rates › the %s rate is %d",
+   "to": "invoice-app::src/server/taxEngine.ts::taxRateFor"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::test/rates.spec.ts::tax rates › the FR treatment is confirmed with finance before it is charged",
+   "to": "invoice-app::src/server/taxEngine.ts::taxTreatment"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::run:unit:invoice-app",
+   "to": "invoice-app::src/server/invoiceService.ts::createInvoice"
+  },
+  {
+   "kind": "covers",
+   "from": "invoice-app::test::run:unit:invoice-app",
+   "to": "invoice-app::src/server/invoiceService.ts::listInvoices"
+  }
+ ]
+}
