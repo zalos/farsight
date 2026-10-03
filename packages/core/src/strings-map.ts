@@ -109,7 +109,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.store.kind.other': same('store', 'Somewhere the application keeps data, of a kind not named more precisely.'),
   'map.store.known': same('known from', 'How the store was found: the code first, the workspace settings only where the code says nothing.'),
   'map.store.via.factory': same('the table’s own declaration', 'The table was declared with a helper that belongs to one database engine, so the code itself names the store.'),
-  'map.store.via.sdk': same('the database driver the code uses', 'Exactly one database driver is used anywhere in this source, so every table in it lives in that database.'),
+  'map.store.via.sdk': same('the package the code uses', 'The code uses a package that belongs to this store: the one database driver in this source, so every table in it lives in that database, or an outside system’s own client library.'),
   'map.store.via.datasource': same('the schema file’s data source', 'The data source block of the schema file names the database engine.'),
   'map.store.via.jpa': same('the application’s data source setting', 'The application’s settings name the database connection, and the engine is read from it.'),
   'map.store.via.config': same('the workspace settings', 'The code does not name this store; the workspace’s Farsight settings do.'),
