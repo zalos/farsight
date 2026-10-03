@@ -242,3 +242,59 @@ business. ⌘K: `travelTarget` sends a `work` node (or a `work::` id) to its pan
 **e2e.** `e2e/tests/work-surface|work-item|work-chips.pw.spec.ts` over `e2e/tests/work-stub.ts`, a stand-in for
 the routes built from `e2e/fixture/work/*.json` (regenerate with `node e2e/fixture/work/make.mjs` from the recorded
 invoice-app tracker); `routeWorkSettings()` adds the two work sources to `/api/settings`.
+
+## MAP — `#/map` (docs/proposals/map-view.md)
+
+Lane A's section (the surface, the canvas, the neighbourhood and the street) goes here; the property follows.
+
+#### Property — `surfaces/map-property.js`, `lib/map-property-model.js` (lane B, 2026-10-03)
+
+One screen up close (proposal §1, §3.2): the picture is the hero on the left, a 352px rail of eight tabs on the
+right (two rows of tabs), the step bar below; under 860px the rail goes under the hero. CSS: the
+`/* ── MAP property */` block at the end of `viewer.html`'s `<style>`. Strings: `map.prop.*`, §B of
+`core/src/strings-map.ts`.
+
+**The hook.** `mountMapProperty(host, ctx) → { update(ctx), tab(name?), destroy() }`. `host` is the full-stage
+overlay the map surface creates; `ctx = { data, model, screenIndex, flow, lens, onClose(), onStep(delta),
+onOpenScreen(index) }` — `data` the `/api/journey` answer, `model` `streetModel(data, S.BYID)`, `screenIndex` an
+index into `model.screens`. Back calls `onClose()`, the step bar `onStep(±1)`, a dot `onOpenScreen(i)`; an
+*also in* chip is a link to `#/map/<otherFlow>?node=<pageId>`. `update(ctx)` redraws in place (new screen, lens,
+answer) and keeps the open tab. The map surface owns the keys (`[` `]` `Esc`) and the zoom-out gesture. The module
+never writes `S.JOURNEY` — the journey overlay's — and reads the journey's helpers only where they are pure:
+`jrnGateLabel`, `jrnGatesShown`, `jrnAbsentHtml`, `jrnWords`, `jrnRefAnchors`, and the tests foot's parts
+(`jrnFoldFacts`, `jrnEvChipHtml`, `jrnObsText`, `jrnRunLineHtml`, `jrnFootScopeHtml`, exported for it).
+`jrnTestsFootHtml` itself checks `S.JOURNEY` and so is not called.
+
+**The model.** `propertyModel(data, screenIndex, graphById, model, { edges })` is pure (no DOM, no catalog, no
+lens): the street's `MapScreen`, `prev`/`next`, `alsoIn` (other flows whose `renders` edges reach the page), the
+hero kind (`image` · `figma` · `none`), each tab's facts, `changeIds` (the page, its components, the routes and
+handlers its calls reach) and `counts` — the tab strip's numbers, each the summary's own `Counted` object or
+`null`. `packages/server/test/map-property-model.test.ts` holds it to a captured answer
+(`test/fixtures/map-property-billing-cycle.json`).
+
+| tab | reads | number on the tab |
+|---|---|---|
+| Overview | the screen's sentence (`MapScreen.business`) in a quest-amber rule; at-a-glance chips; the calls (brief); the gates; the work rows | none |
+| Gates | `segment.gates` split guard / rule in walk order, named with `jrnGateLabel` (business: the words after the `@guard` colon, the rest counted as *N more that nobody put in plain words*); `segment.decisions`, `class: 'business'` only in the business register | `segment.counted.gates` |
+| APIs | `MapScreen.calls`: service (`SystemRow.label`, colour `svc-<index>`), what it is for, method + path outside business, the evidence chip (*spec-backed* · *implied* · *declared, never called* · *not built*), what it reads and writes; then every record, message and third party reached, once, with its modes | `counted.actions`; a screen not built: `counted.actionStops` |
+| UX | the page node, the components the walk met (`screenComponents`), story chips (`storyChipsHtml(screenStoryIds(…))`) | none |
+| Tests | `summary.coverage.segments[i]` through `jrnFoldFacts`: the evidence chip, the run behind it, the counts sentence, their own last run; the cases (not run-level) with how each is evidenced and its status; coverage runs that name no case apart | `coverage.segments[i].counted.tests` |
+| Route | the page name, built or planned, the design manifest that declares it, where the code routes it; the journey's `summary.links`; *other ways in* = edges into the page that are not `contains`, `covers`, `tracks` or a flow's `renders`; the design and `@see` links (`jrnRefAnchors`) | none |
+| Work | lazy, cached per sync: `GET /api/work/links?node=<page>` and the flow's `findings` (`flowWork`) kept to those items. With no work source configured nothing is asked and the tab says so | `counts.items` of the links answer, once it arrives |
+| Changes | lazy, cached per sync: `/api/history?repo=` for the spine, then `/api/changes?from=sync:<previous>&to=sync:<latest>`, kept to `changeIds`. 503 → *history is not kept on this server*; one sync → *no earlier sync to compare against*; nothing matched → *nothing on this screen changed between these syncs*; never blank | none |
+
+**The hero.** A design image (`designThumbHtml(node, 'mp-shot')`, the lightbox on click) sized to the stage, kept in
+the code lens too. A screen with no image declared gets the placeholder with `journey.absent.notIndexed`; a
+declared image that does not resolve (a Figma frame with no token — Discard draft in the fixture) swaps to the
+same placeholder with `design.noImage`. The placeholder: the design glyph, the screen's name, its route (not in
+business), its sentence, *designed, not built* when it is, the parts found (or *no components found*), the design
+link. No paste or upload control is drawn (proposal §9).
+
+**The lens.** The business register drops the route from the crumb and the placeholder, method + path, file
+lines, test runners and levels, change kinds, work keys and ids; it names components and records with `bizName()`
+and calls with `plainWords()`; the accent warms with the lens. Every row naming a call, record, gate, component,
+test or decision carries `data-map-card="<kind>" data-id="<nodeId>"` for the map's explore card.
+
+**e2e.** `e2e/tests/map-property.pw.spec.ts` deep-links through the map: the Invoice list hero and its counts, the
+APIs rows by service, New invoice's case verified by declaration, Discard draft's placeholder, the step bar, and no
+identifier-shaped word on any tab of any screen in the business lens.
