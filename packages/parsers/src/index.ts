@@ -11,10 +11,12 @@ import { applyDesigns } from './design/index.js';
 import { applyTests, testGlobsOf } from './tests/index.js';
 import { applyStories } from './stories/index.js';
 import { applyStores } from './stores.js';
+import { applyProjects, projectOfPath } from './shared/projects.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
 export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js';
+export { applyProjects, discoverProjects, projectOfPath, projectImports, importSpecifiers, workspaceGlobs } from './shared/projects.js';
 export { javaAdapter, ingestJava } from './java/index.js';
 export { applySpecs, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, discoverSpecs } from './openapi/index.js';
 export type { SpecApplication } from './openapi/index.js';
@@ -117,6 +119,19 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   if (options.stories !== false) {
     const { errors } = applyStories(merged, repoRoot, opts);
     if (errors.length) merged.specErrors = [...(merged.specErrors ?? []), ...errors];
+  }
+  // projects last: every node is on the fragment by now (the tests and stories passes add theirs),
+  // and each one under a project root carries its project and tags (shared/projects.ts)
+  if (options.projects !== false) merged.meta!.projects = applyProjects(merged, repoRoot, opts, config?.projects);
+  // a workspace package resolves to a directory: name the project that directory belongs to
+  // (NX or workspaces), so `@acme/money` reads as the `money` lib rather than as its alias
+  const projects = merged.meta?.projects;
+  if (projects && projects.tool !== 'none') {
+    for (const n of merged.nodes) {
+      if (n.kind !== 'package' || n.package?.scope !== 'workspace' || !n.package.root) continue;
+      const p = projectOfPath(n.package.root, projects.projects);
+      if (p && p.root !== '.') n.package.project = p.name;
+    }
   }
   return merged;
 }

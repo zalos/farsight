@@ -66,10 +66,9 @@ export interface DepsList {
   packages: Counted;
 }
 
-/** The project a node belongs to, when the graph carries projects (the NX lane stamps `node.project`). */
+/** The project a node belongs to, when the graph carries projects (the projects pass stamps `node.project`). */
 function projectOf(n: GraphNode | undefined): string | undefined {
-  const p = (n as { project?: { name?: unknown } } | undefined)?.project;
-  return p && typeof p.name === 'string' ? p.name : undefined;
+  return n?.project?.name;
 }
 
 /** Every node a journey's walk passes through, gates included — computed once per index and reused. */

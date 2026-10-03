@@ -8,7 +8,7 @@
     "noEmit": true,
     "paths": {
       "@invoice/plumbing": [
-        "./src/server/plumbing/index.ts"
+        "./src/server/plumbing/format.ts"
       ]
     }
   },

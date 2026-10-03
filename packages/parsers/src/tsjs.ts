@@ -1871,6 +1871,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       addEdge('imports', u.fromId, idOf(c.name), { specifier: u.spec, line: u.line, use: true, ...(c.subpath ? { subpath: c.subpath } : {}) }, USE_RES());
     }
     const builtins = [...builtinFiles].sort(([x], [y]) => x.localeCompare(y)).map(([spec, files]) => ({ spec, files: files.size }));
+    if (!builtins.length && !unresolvedAliases && !undeclared) return undefined;
     return {
       ...(builtins.length ? { builtins } : {}),
       ...(unresolvedAliases ? { unresolvedAliases } : {}),

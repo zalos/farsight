@@ -10,7 +10,7 @@ import {
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
   testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
-  impactOf, search, buildLine,
+  impactOf, search, buildLine, projectGraph, appClosure, findProject,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
 } from '@farsight/core';
 import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
@@ -1097,6 +1097,36 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         };
       });
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...surface, operations }));
+    }
+    // ── projects (docs/proposals/dependencies-and-nx.md §2.2) — a fold over the graph and meta.projects ──
+    if ((url === '/api/projects' || url.startsWith('/api/projects?') || url.startsWith('/api/projects/')) && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const g = loadJourneyGraph(graphPath);
+      const repo = u.searchParams.get('repo') || undefined;
+      const pg = projectGraph(g.index, g.meta.projects, repo ? { repo } : {});
+      const rest = decodeURIComponent(u.pathname.slice('/api/projects'.length).replace(/^\//, ''));
+      if (!rest) return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...(repo ? { repo } : {}), ...pg }));
+      const hit = findProject(pg, rest, repo);
+      if (!hit) return send(404, JSON.stringify({ error: `no project named ${rest}${repo ? ` in ${repo}` : ''}` }));
+      if (Array.isArray(hit)) return send(409, JSON.stringify({ error: `${hit.length} sources have a project named ${rest}; pass ?repo=`, repos: hit.map((p) => p.repo) }));
+      const nodeIds: Record<string, string[]> = {};
+      for (const n of g.index.byId.values()) {
+        if (n.project?.name !== hit.name || (n.loc?.repo ?? n.id.split('::')[0]) !== hit.repo) continue;
+        if (n.kind === 'module') continue; // a file's import list, not a part (the counts in projectGraph agree)
+        (nodeIds[n.kind] ??= []).push(n.id);
+      }
+      for (const ids of Object.values(nodeIds)) ids.sort();
+      const closure = appClosure(pg, hit.name, hit.repo)!;
+      return send(200, JSON.stringify({
+        generatedAt: g.meta.generatedAt,
+        project: hit,
+        dependencies: pg.dependencies.filter((d) => d.repo === hit.repo && d.from === hit.name),
+        dependents: pg.dependencies.filter((d) => d.repo === hit.repo && d.to === hit.name),
+        closure: { projects: closure.projects, count: closure.count },
+        nodeIds,
+        tagDimensions: pg.repos.find((r) => r.repo === hit.repo)?.tagDimensions ?? [],
+      }));
     }
     if (url.startsWith('/api/openapi') && req.method === 'GET') {
       // a spec generated from the code — every inference marked x-farsight-inferred
