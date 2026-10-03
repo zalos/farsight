@@ -28,6 +28,7 @@ import {
   storybookLive, type StoriesAnswer, type StorybookStatus,
   type ModelHubState, type Activity, buildLine, buildInfo, installState, currencyAdvice,
   projectFacets, projectGraph, projectsSummaryLine,
+  depsRowOf, counted,
 } from '@farsight/core';
 
 /** `changed` said as what moved: a working tree that differs from HEAD is not a new commit (the Changes spine agrees). */
@@ -96,6 +97,8 @@ function nodeDetail(n: GraphNode, full = false): string {
     const x = n.external;
     lines.push(`  external: ${x.kind}${x.via ? ` · via ${x.via}` : ''} · known from ${x.source}${x.ref ? ` (${x.ref})` : ''}`);
   }
+  // a dependency: which kind, the range its package.json files declare, who imports it and what journeys it reaches
+  if (n.kind === 'package' && n.package) lines.push(...packageLines(n));
   // the data store a table (or a store-like external) lives in, and which rule named it (data-stores.md §3.1)
   if (n.store) {
     const st = n.store;
@@ -176,6 +179,26 @@ function nodeDetail(n: GraphNode, full = false): string {
   }
   if (drawnIn > cap) lines.push(`  ← … +${drawnIn - cap} more incoming edge(s) — full:true lists them`);
   return lines.join('\n');
+}
+
+/**
+ * describe_node's package block (docs/proposals/dependencies-and-nx.md §2.3): scope · version ·
+ * declared in · importers · journeys reached, each number with its words. `farsight deps where`
+ * and GET /api/deps/where list every importing file.
+ */
+function packageLines(n: GraphNode): string[] {
+  const p = n.package!;
+  const row = depsRowOf(index, n);
+  const declared = p.declaredIn?.length
+    ? `declared ${p.version ?? '(ranges differ)'} in ${p.declaredIn.join(', ')}${p.dev ? ' (devDependencies only)' : ''}`
+    : p.scope === 'workspace' ? 'resolved by alias or workspace name, no package.json range' : 'declared in no package.json';
+  const out = [`  package: ${p.scope}${p.project ? ` · project ${p.project}` : ''}${p.root ? ` · ${p.root}` : ''} · ${declared}`];
+  if (new Set(row.versions.map((v) => v.range)).size > 1) out.push(`    ranges: ${row.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
+  out.push(`    ${countedText(row.importers)} · ${countedText(row.journeys)}${row.journeyRefs.length ? ` — ${row.journeyRefs.map((j) => j.name).join(', ')}` : ''}`);
+  if (p.externalId) out.push(`    the SDK of ${index.byId.get(p.externalId)?.name ?? p.externalId} (\`${p.externalId}\`)`);
+  if (p.note) out.push(`    ⚠ ${p.note}`);
+  out.push('    every importing file: farsight deps where ' + n.name + ' · impact_of for what uses it per hop');
+  return out;
 }
 
 /** Does this graph carry any test node? Decides whether "no test reaches this" is a finding or just silence. */
@@ -565,6 +588,13 @@ function dataLines(): string[] {
   }
   const ext = nodes.filter((n) => n.kind === 'external');
   if (ext.length) out.push(`third parties: ${ext.map((n) => `${n.name}${n.external ? ` (${n.external.kind})` : ''}`).join(' · ')}`);
+  if (nodes.some((n) => n.kind === 'package')) {
+    const pk = nodes.filter((n) => n.kind === 'package');
+    const third = pk.filter((n) => n.package?.scope !== 'workspace').length;
+    const c = counted(pk.length, 'count.unit.packages', 'count.scope.workspace', 'mcp graph_overview → package nodes', { breakdown: [
+      { key: 'count.part.packagesThirdParty', n: third }, { key: 'count.part.packagesWorkspace', n: pk.length - third }] });
+    out.push(`dependencies: ${countedText(c, { scope: false })} (${breakdownText(c)}) — search_graph kind:package, describe_node <package id>, farsight deps list`);
+  }
   const unknown = nodes.filter((n) => n.kind === 'unknown');
   if (unknown.length) out.push(`unresolved calls: ${unknown.length} — a fetch this build could not match to a route; describe_node names each`);
   return out;

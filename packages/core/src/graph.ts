@@ -23,6 +23,7 @@ export type NodeKind =
   | 'flow' // a named user flow from a design manifest: an ordered set of screens — a feature, and a journey entry
   | 'test' // one test case (it/test), or a synthetic run-level node for a report with no per-test attribution
   | 'work' // a work item from a tracker (Jira issue, Azure DevOps work item) — id work::<sourceId>::<key>, no loc
+  | 'package' // a dependency: a third-party package or a workspace library — id `${repo}::package::${name}`, no loc (see PackageRef)
   | 'unknown'; // the "?" stub: a call the graph could not resolve to any indexed source
 
 export type EdgeKind =
@@ -461,6 +462,60 @@ export interface StoresMeta {
   notes?: string[];
 }
 
+// ── dependencies: packages as nodes (docs/proposals/dependencies-and-nx.md §2.1) ──
+// A `package` node is one dependency of one source: a third-party package (`zod`, `@scope/pkg`)
+// or a workspace library a path alias / workspace package name resolves to. The edges into it are
+// `imports` edges: one from the importing file's `module` node (`${repo}::module::${path}`, the
+// *where it is included* fact) and one from each function/component whose body uses an imported
+// binding (the fact an impact walk needs to reach journeys).
+//
+// Documented `meta` keys on an `imports` edge into a package (GraphEdge.meta, untyped by design):
+//   specifier : the text the code wrote (`lodash/fp`)        line : the import's line in the importer's file
+//   subpath   : what follows the package name (`fp`)          names : the imported names, comma-joined
+//   typeOnly  : `import type` — erased at build               form : 'import' | 'reexport' | 'require' | 'dynamic'
+//   use       : true on a function → package edge (the line is then the first use in the body)
+
+/** Where a dependency is declared: one `package.json` and the range it writes. */
+export interface PackageDeclaration {
+  /** repo-relative path of the package.json */
+  path: string;
+  /** the range as written (`^3.23.8`, `workspace:*`) */
+  range: string;
+  field: 'dependencies' | 'devDependencies' | 'peerDependencies' | 'optionalDependencies';
+}
+
+/** package nodes: which dependency this is and where it is declared. */
+export interface PackageRef {
+  /** workspace = resolved to a directory inside the indexed source (a path alias or a workspace package name) */
+  scope: 'third-party' | 'workspace';
+  /** the declared range — when every declaration agrees; else the one nearest the source root (`declarations` keeps all) */
+  version?: string;
+  /** the package.json paths that declare it, repo-relative, sorted */
+  declaredIn?: string[];
+  /** declared only in devDependencies */
+  dev?: true;
+  /** workspace: the project (or workspace package name) it resolves to */
+  project?: string;
+  /** workspace: the repo-relative directory it resolves to */
+  root?: string;
+  /** every declaration, so two package.json files that disagree both stay visible */
+  declarations?: PackageDeclaration[];
+  /** this package is also a configured SDK external: the `external` node it names (the external keeps its node) */
+  externalId?: string;
+  /** one sentence when something about it is missing: imported but declared in no package.json above the importer */
+  note?: string;
+}
+
+/** Fragment meta: what the import pass read and set aside on purpose. */
+export interface PackagesMeta {
+  /** Node built-ins the code imports (`node:fs`, `path`), with how many files import each — never package nodes */
+  builtins?: { spec: string; files: number }[];
+  /** bare specifiers that matched a tsconfig path alias but resolved to no file — never guessed into a package */
+  unresolvedAliases?: number;
+  /** package nodes imported but declared in no package.json above any importer */
+  undeclared?: number;
+}
+
 // ── projects: which workspace project a node belongs to (docs/proposals/dependencies-and-nx.md §2.2) ──
 // Read once per source by parsers/src/shared/projects.ts: NX (`nx.json` + every `project.json` and every
 // `package.json` with an `nx` key or inside the root `workspaces` globs), plain workspaces, or one project
@@ -555,6 +610,8 @@ export interface GraphNode {
   store?: StoreRef;
   /** component/page nodes: the stories that render this component on its own — see StoryRef */
   stories?: StoryRef[];
+  /** package nodes only: which dependency this is, where it is declared and at what range — see PackageRef */
+  package?: PackageRef;
   /** every node under a workspace project's root: which project, its type and its tags — see ProjectRef */
   project?: ProjectRef;
   /** Lens-specific presentation data, e.g. business-friendly labels. */
@@ -641,7 +698,7 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; projects?: ProjectsMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json at the repo root was applied by ingestRepo */

@@ -1,15 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { relative, dirname, resolve as resolvePath } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef } from '@farsight/core';
+import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta } from '@farsight/core';
 import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
-import { createAliasResolver, resolveFileish } from './aliases.js';
+import { createAliasClassifier, resolveFileish } from './aliases.js';
+import { isBuiltin, packageOf, workspacePackageOf, PackageJsonIndex } from './shared/packages.js';
 import type { LanguageAdapter, IngestOptions } from './types.js';
 import { collectFiles, freshnessMeta } from './shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields } from './shared/docs.js';
 import { capLabel, leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/labels.js';
 import { autoTags, normalizePath, snippetRange } from './shared/tags.js';
 import { isTestFile } from './tests/cases.js';
+import { isStoryFile } from './stories/index.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
 
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
@@ -162,7 +164,14 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const importsByFile = new Map<string, Map<string, { file: string; name: string }>>();
   // file -> its re-exports, so lookups can follow barrel files (`export * from './x'`)
   const reexportsByFile = new Map<string, { stars: string[]; named: Map<string, { file: string; name: string }> }>();
-  const resolveAlias = createAliasResolver(repoRoot);
+  const classifyAlias = createAliasClassifier(repoRoot);
+  const resolveAlias = (importerAbs: string, spec: string): string | null => classifyAlias(importerAbs, spec)?.path ?? null;
+  // ── dependencies (docs/proposals/dependencies-and-nx.md §2.1) ──
+  // every bare specifier a file imports, requires or re-exports; classified into package
+  // nodes once pass 1 is done (a builtin, an app alias and an alias miss are set aside)
+  const pkgFacts: { file: string; abs: string; spec: string; line: number; form: 'import' | 'reexport' | 'require' | 'dynamic'; typeOnly: boolean; names: string[] }[] = [];
+  // a function whose body uses an imported package binding (or requires/imports one itself)
+  const pkgUses: { fromId: string; file: string; abs: string; spec: string; line: number }[] = [];
   // call-site `line` (1-based, in the caller's file) orders callees so a
   // journey can replay them in the order the code runs
   const pendingCalls: { fromId: string; file: string; callee: string; line?: number; deferred: boolean; tx: boolean; argsKey?: string }[] = [];
@@ -326,6 +335,26 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     const importMap = new Map<string, { file: string; name: string }>();
     // local name -> the third-party system that package is (01 §2.3.4); per file, like importMap
     const sdkImports = new Map<string, { spec: string; name: string; kind: ExternalKind }>();
+    // local name -> the bare specifier it was imported from (a value import; `import type` is erased)
+    const pkgLocals = new Map<string, string>();
+    const isBare = (src: string) => !src.startsWith('.') && !src.startsWith('/');
+    // a story file belongs to the stories pass (ADR 9) the way a spec file belongs to the tests pass:
+    // its imports (Storybook's own types, mostly) are not the application's dependencies
+    const storyFile = isStoryFile(file);
+    const notePkg = (src: string, at: number, form: 'import' | 'reexport' | 'require' | 'dynamic', typeOnly: boolean, names: string[]) => {
+      if (isBare(src) && !storyFile) pkgFacts.push({ file, abs, spec: src, line: line(at), form, typeOnly, names });
+    };
+    /** A module-level declaration (a schema, a table) that uses an imported package binding depends on the package. */
+    const pkgUsesIn = (ast: AstNode, fromId: string) => {
+      if (!pkgLocals.size) return;
+      walk(ast, (b, ps) => {
+        if (b.type !== 'Identifier') return;
+        const up = ps[ps.length - 1];
+        if (up && !up.computed && (((up.type === 'MemberExpression' || up.type === 'StaticMemberExpression') && up.property === b) || (up.type === 'Property' && up.key === b))) return;
+        const src = pkgLocals.get(String(b.name));
+        if (src) pkgUses.push({ fromId, file, abs, spec: src, line: line(b.start ?? 0) });
+      });
+    };
     // class name -> the UPPER_SNAKE constant its base URL starts with
     const classHosts = new Map<string, { constName: string }>();
     const reexports = { stars: [] as string[], named: new Map<string, { file: string; name: string }>() };
@@ -335,9 +364,41 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     importsByFile.set(file, importMap);
     reexportsByFile.set(file, reexports);
     typesByFile.set(file, types);
-    walk(program, (n) => {
+    walk(program, (n, parents) => {
+      // require('x') · import('x') · import x = require('x') — packages only; the symbol tables stay ESM
+      if (n.type === 'ImportExpression' || (n.type === 'CallExpression' && isNode(n.callee) && (n.callee as AstNode).type === 'Identifier'
+        && (n.callee as AstNode).name === 'require' && ((n.arguments as AstNode[]) ?? []).length === 1)) {
+        const src = stringValue(n.type === 'ImportExpression' ? n.source : (n.arguments as AstNode[])[0]);
+        if (src && isBare(src)) {
+          const up = parents[parents.length - 1];
+          const locals = up && up.type === 'VariableDeclarator' && up.init === n ? bindingNames(up.id) : [];
+          if (n.type !== 'ImportExpression') for (const l of locals) pkgLocals.set(l, src);
+          notePkg(src, n.start ?? 0, n.type === 'ImportExpression' ? 'dynamic' : 'require', false, locals);
+        }
+        return;
+      }
+      if (n.type === 'TSImportEqualsDeclaration' && isNode(n.moduleReference) && (n.moduleReference as AstNode).type === 'TSExternalModuleReference') {
+        const src = stringValue((n.moduleReference as AstNode).expression);
+        const local = isNode(n.id) ? String((n.id as AstNode).name) : '';
+        if (src && isBare(src)) {
+          if (local && n.importKind !== 'type') pkgLocals.set(local, src);
+          notePkg(src, n.start ?? 0, 'require', n.importKind === 'type', local ? [local] : []);
+        }
+        return false;
+      }
       if (n.type === 'ImportDeclaration') {
         const src = stringValue(n.source);
+        if (src && isBare(src)) {
+          const typeOnly = n.importKind === 'type';
+          const names: string[] = [];
+          for (const spec of (n.specifiers as AstNode[]) ?? []) {
+            const local = (spec.local as AstNode | undefined)?.name;
+            if (typeof local !== 'string') continue;
+            names.push(local);
+            if (!typeOnly && spec.importKind !== 'type') pkgLocals.set(local, src);
+          }
+          notePkg(src, n.start ?? 0, 'import', typeOnly, names);
+        }
         const driver = src ? sqlDriverOf(src) : undefined;
         if (driver) sqlDrivers.set(driver, [...(sqlDrivers.get(driver) ?? []), file]);
         // an SDK specifier names a third-party system outright — and never resolves on
@@ -361,6 +422,10 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         return false;
       }
       // export * from './x' — barrel files; lookups follow these
+      if (n.type === 'ExportAllDeclaration' && isNode(n.source)) {
+        const src0 = stringValue(n.source);
+        if (src0) notePkg(src0, n.start ?? 0, 'reexport', n.exportKind === 'type', []);
+      }
       if (n.type === 'ExportAllDeclaration' && !isNode(n.exported)) {
         const src = stringValue(n.source);
         const target = src ? resolveSpec(src) : null;
@@ -370,6 +435,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       // export { a, b as c } from './x'
       if (n.type === 'ExportNamedDeclaration' && isNode(n.source)) {
         const src = stringValue(n.source);
+        if (src) notePkg(src, n.start ?? 0, 'reexport', n.exportKind === 'type',
+          ((n.specifiers as AstNode[]) ?? []).map((sp) => (sp.exported as AstNode | undefined)?.name).filter((x): x is string => typeof x === 'string'));
         const target = src ? resolveSpec(src) : null;
         if (!target) return false;
         for (const spec of (n.specifiers as AstNode[]) ?? []) {
@@ -491,6 +558,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             tags: [...autoTags(file, name, 'rule'), ...(envSchemaFile || ENV_SCHEMA_NAME.test(name) ? ['env-schema'] : [])],
             signature: sourceSlice(source, init).slice(0, 200),
           });
+          // `z.object(…)` uses zod: the schema depends on the package it is written in
+          pkgUsesIn(init, id);
         } else if (init.type === 'CallExpression' && TABLE_FACTORIES.has(memberChain(init.callee).pop() ?? '')) {
           // pgTable('claims', {…}) — schema-as-code yields authoritative table
           // nodes (with columns) long before any DB-introspection adapter
@@ -514,6 +583,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             // the factory names the engine outright — the first store rule
             store: { ...FACTORY_STORES[factory]!, via: 'factory', ref: factory },
           });
+          pkgUsesIn(init, tableId); // `pgTable(…)` uses its ORM package
           // the variable is how code refers to the table — register it so
           // imported identifiers (and barrels) resolve to this node
           symbols.push({ nodeId: tableId, file, name, exported: true });
@@ -625,11 +695,27 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
           // an imported SDK binding used here: this function reaches that third-party
           // system (01 §2.3.4). The first reference marks the function; a property *name*
           // that happens to spell the local is not a use of it.
-          if (b.type === 'Identifier' && sdkImports.size) {
+          // a package binding used here, or a package required / imported in place: this
+          // function depends on that package (the edge an impact walk from the package follows)
+          if (b.type === 'ImportExpression' || (b.type === 'CallExpression' && isNode(b.callee) && (b.callee as AstNode).type === 'Identifier'
+            && (b.callee as AstNode).name === 'require')) {
+            const src = stringValue(b.type === 'ImportExpression' ? b.source : ((b.arguments as AstNode[]) ?? [])[0]);
+            if (src && isBare(src)) pkgUses.push({ fromId, file, abs, spec: src, line: line(b.start ?? 0) });
+          }
+          if (b.type === 'JSXIdentifier' && pkgLocals.size) {
+            const up = bodyParents[bodyParents.length - 1];
+            const isName = !!up && ((up.type === 'JSXMemberExpression' && up.property === b) || (up.type === 'JSXAttribute' && up.name === b));
+            const src = isName ? undefined : pkgLocals.get(String(b.name));
+            if (src) pkgUses.push({ fromId, file, abs, spec: src, line: line(b.start ?? 0) });
+            return;
+          }
+          if (b.type === 'Identifier' && (sdkImports.size || pkgLocals.size)) {
             const sdk = sdkImports.get(String(b.name));
             const up = bodyParents[bodyParents.length - 1];
             const isName = !!up && !up.computed
               && (((up.type === 'MemberExpression' || up.type === 'StaticMemberExpression') && up.property === b) || (up.type === 'Property' && up.key === b));
+            const pkgSrc = isName ? undefined : pkgLocals.get(String(b.name));
+            if (pkgSrc) pkgUses.push({ fromId, file, abs, spec: pkgSrc, line: line(b.start ?? 0) });
             if (sdk && !isName && !markedSdk.has(`${fromId}|${sdk.name}`)) {
               markedSdk.add(`${fromId}|${sdk.name}`);
               sdkUses.push({ fromId, file, ...(d.cls ? { via: d.cls } : {}), specifier: sdk.spec, name: sdk.name, kind: sdk.kind, line: line(b.start ?? 0) });
@@ -1643,10 +1729,155 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     }
   }
 
+  const packagesMeta = emitPackages();
+
   // the SQL drivers this repo imports — the `sdk` store rule runs in ingestRepo's store pass,
   // over every adapter's tables at once (parsers/src/stores.ts)
   const drivers = [...sqlDrivers].sort(([a], [b]) => a.localeCompare(b)).map(([spec, files]) => ({ spec, files: files.length }));
-  return { repo, nodes: [...nodes.values()], edges, meta: { ...meta, ...(drivers.length ? { stores: { drivers } } : {}) } };
+  return {
+    repo, nodes: [...nodes.values()], edges,
+    meta: { ...meta, ...(drivers.length ? { stores: { drivers } } : {}), ...(packagesMeta ? { packages: packagesMeta } : {}) },
+  };
+
+  /**
+   * Packages as nodes (docs/proposals/dependencies-and-nx.md §2.1). Every bare specifier pass 1
+   * read is classified once: a Node built-in is counted and set aside; an alias that resolved to
+   * a workspace library (a workspace package name, an NX-style `paths` entry, `@scope/*`) is a
+   * `workspace` package; an app-internal alias (`@/x`, `baseUrl`) is no package at all — the file
+   * edge is the fact; an alias that matched and named no file is counted, never guessed; the rest
+   * is a `third-party` package, declared or not. The importing file gets a `module` node with an
+   * `imports` edge per package (where it is included); a function whose body uses the package gets
+   * its own `imports` edge (what an impact walk from the package follows to the journeys).
+   */
+  function emitPackages(): PackagesMeta | undefined {
+    const pji = new PackageJsonIndex(repoRoot);
+    const builtinFiles = new Map<string, Set<string>>();
+    let unresolvedAliases = 0;
+    interface Agg { name: string; scope: PackageRef['scope']; project?: string; root?: string; decls: Map<string, PackageDeclaration>; undeclared: Set<string>; importers: Set<string> }
+    const pkgs = new Map<string, Agg>();
+    const classified = new Map<string, { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null>();
+    /** One specifier from one file → its package, or null (set aside). Cached per directory + specifier. */
+    const classify = (abs: string, spec: string): { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null => {
+      const key = `${dirname(abs)}\u0000${spec}`;
+      if (classified.has(key)) return classified.get(key)!;
+      let out: { name: string; subpath?: string; scope: PackageRef['scope']; root?: string } | null = null;
+      if (!isBuiltin(spec)) {
+        const hit = classifyAlias(abs, spec);
+        if (hit) {
+          const ws = hit.path ? workspacePackageOf(hit, repoRoot) : null;
+          if (ws) {
+            const sub = spec.length > ws.name.length && spec.startsWith(ws.name + '/') ? spec.slice(ws.name.length + 1) : undefined;
+            out = { name: ws.name, scope: 'workspace', ...(sub ? { subpath: sub } : {}), ...(ws.root ? { root: ws.root } : {}) };
+          } else if (!hit.path) out = null; // an alias miss — counted by the caller
+        } else {
+          const p = packageOf(spec);
+          if (p) out = { ...p, scope: 'third-party' };
+        }
+      }
+      classified.set(key, out);
+      return out;
+    };
+    const aggOf = (c: { name: string; scope: PackageRef['scope']; root?: string }): Agg => {
+      let a = pkgs.get(c.name);
+      if (!a) {
+        a = { name: c.name, scope: c.scope, ...(c.scope === 'workspace' ? { project: c.name } : {}), ...(c.root ? { root: c.root } : {}), decls: new Map(), undeclared: new Set(), importers: new Set() };
+        pkgs.set(c.name, a);
+      }
+      return a;
+    };
+    const idOf = (name: string) => `${repo}::package::${name}`;
+    const moduleEdges = new Map<string, { file: string; pkg: string; spec: string; subpath?: string; line: number; form: string; typeOnly: boolean; names: Set<string> }>();
+    for (const f of pkgFacts) {
+      if (isBuiltin(f.spec)) {
+        const root = f.spec.replace(/^node:/, '').split('/')[0]!;
+        const set = builtinFiles.get(`node:${root}`) ?? new Set<string>();
+        set.add(f.file);
+        builtinFiles.set(`node:${root}`, set);
+        continue;
+      }
+      const c = classify(f.abs, f.spec);
+      if (!c) {
+        if (classifyAlias(f.abs, f.spec)?.path === null) unresolvedAliases++;
+        continue;
+      }
+      const a = aggOf(c);
+      a.importers.add(f.file);
+      const d = pji.declarationFor(f.abs, c.name);
+      if (d) a.decls.set(d.path, d);
+      else a.undeclared.add(f.file);
+      const k = `${f.file}|${c.name}`;
+      const have = moduleEdges.get(k);
+      if (have) {
+        for (const nm of f.names) have.names.add(nm);
+        have.typeOnly &&= f.typeOnly;
+      } else {
+        moduleEdges.set(k, { file: f.file, pkg: c.name, spec: f.spec, ...(c.subpath ? { subpath: c.subpath } : {}), line: f.line, form: f.form, typeOnly: f.typeOnly, names: new Set(f.names) });
+      }
+    }
+    if (!pkgs.size && !builtinFiles.size && !unresolvedAliases) return undefined;
+
+    let undeclared = 0;
+    for (const a of [...pkgs.values()].sort((x, y) => x.name.localeCompare(y.name))) {
+      const declarations = [...a.decls.values()].sort((x, y) => x.path.localeCompare(y.path));
+      const ranges = new Set(declarations.map((d) => d.range));
+      // two package.json files that disagree: the one nearest the source root speaks for the node, `declarations` keeps both
+      const rootMost = declarations.slice().sort((x, y) => x.path.split('/').length - y.path.split('/').length || x.path.localeCompare(y.path))[0];
+      const version = ranges.size === 1 ? declarations[0]!.range : rootMost?.range;
+      const dev = declarations.length > 0 && declarations.every((d) => d.field === 'devDependencies');
+      let note: string | undefined;
+      if (a.scope === 'third-party' && !declarations.length) {
+        undeclared++;
+        note = `imported by ${a.importers.size} file${a.importers.size === 1 ? '' : 's'} but declared in no package.json above ${a.importers.size === 1 ? 'it' : 'them'}`;
+      } else if (a.scope === 'third-party' && a.undeclared.size) {
+        note = `${a.undeclared.size} of the ${a.importers.size} files that import it have no package.json above them that declares it`;
+      } else if (ranges.size > 1) {
+        note = `declared at ${ranges.size} different ranges: ${declarations.map((d) => `${d.range} in ${d.path}`).join(', ')}`;
+      }
+      const sdk = sdkEntry(a.name);
+      const extId = sdk?.node ? `${repo}::external::${sdkDecls.get(sdk.spec)?.name ?? sdk.name}` : undefined;
+      const ref: PackageRef = {
+        scope: a.scope,
+        ...(version ? { version } : {}),
+        ...(declarations.length ? { declaredIn: declarations.map((d) => d.path) } : {}),
+        ...(dev ? { dev: true as const } : {}),
+        ...(a.project ? { project: a.project } : {}),
+        ...(a.root ? { root: a.root } : {}),
+        ...(declarations.length ? { declarations } : {}),
+        ...(extId && nodes.has(extId) ? { externalId: extId } : {}),
+        ...(note ? { note } : {}),
+      };
+      addNode({ id: idOf(a.name), kind: 'package', name: a.name, tags: [], package: ref });
+    }
+    const IMPORT_RES = (): GraphEdge['resolution'] => ({ status: 'resolved', technique: 'static-import', confidence: 'HIGH', note: 'the import names the package' });
+    const USE_RES = (): GraphEdge['resolution'] => ({ status: 'resolved', technique: 'static-import', confidence: 'HIGH', note: 'the body uses a binding imported from the package' });
+    for (const m of [...moduleEdges.values()].sort((x, y) => x.file.localeCompare(y.file) || x.line - y.line)) {
+      const modId = `${repo}::module::${m.file}`;
+      addNode({ id: modId, kind: 'module', name: m.file, loc: { repo, path: m.file, line: 1 }, tags: [] });
+      addEdge('imports', modId, idOf(m.pkg), {
+        specifier: m.spec, line: m.line, form: m.form,
+        ...(m.subpath ? { subpath: m.subpath } : {}),
+        ...(m.names.size ? { names: [...m.names].join(',') } : {}),
+        ...(m.typeOnly ? { typeOnly: true } : {}),
+      }, IMPORT_RES());
+    }
+    const usedOnce = new Set<string>();
+    for (const u of pkgUses) {
+      if (!nodes.has(u.fromId)) continue;
+      const c = classify(u.abs, u.spec);
+      if (!c || !pkgs.has(c.name)) continue;
+      const k = `${u.fromId}|${c.name}`;
+      if (usedOnce.has(k)) continue;
+      usedOnce.add(k);
+      addEdge('imports', u.fromId, idOf(c.name), { specifier: u.spec, line: u.line, use: true, ...(c.subpath ? { subpath: c.subpath } : {}) }, USE_RES());
+    }
+    const builtins = [...builtinFiles].sort(([x], [y]) => x.localeCompare(y)).map(([spec, files]) => ({ spec, files: files.size }));
+    if (!builtins.length && !unresolvedAliases && !undeclared) return undefined;
+    return {
+      ...(builtins.length ? { builtins } : {}),
+      ...(unresolvedAliases ? { unresolvedAliases } : {}),
+      ...(undeclared ? { undeclared } : {}),
+    };
+  }
 }
 
 // ── helpers ──────────────────────────────────────────────────────
@@ -1685,6 +1916,17 @@ function typeMembers(members: AstNode[]): Map<string, TypeRef> {
     if (name && ref) props.set(name, ref);
   }
   return props;
+}
+
+/** The local names a binding pattern declares: `x`, `{ a, b: c }`, `[d, ...e]`, `{ f = 1 }`. */
+function bindingNames(p: unknown): string[] {
+  if (!isNode(p)) return [];
+  if (p.type === 'Identifier') return [String(p.name)];
+  if (p.type === 'ObjectPattern') return ((p.properties as AstNode[]) ?? []).flatMap((q) => bindingNames(q.type === 'RestElement' ? q.argument : q.value));
+  if (p.type === 'ArrayPattern') return ((p.elements as AstNode[]) ?? []).flatMap((q) => bindingNames(q));
+  if (p.type === 'AssignmentPattern') return bindingNames(p.left);
+  if (p.type === 'RestElement') return bindingNames(p.argument);
+  return [];
 }
 
 /** The parameter list of whatever kind of declaration a node is. */

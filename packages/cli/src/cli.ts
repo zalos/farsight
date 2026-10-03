@@ -9,6 +9,7 @@ import {
   designSurface, reconcileDesign, designDriftMarkdown, isDesignManifest, buildLine, buildInfo, installState, currencyAdvice,
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
+  packagesOf, importersOf, resolvePackage,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
 } from '@farsight/core';
 import type {
@@ -67,6 +68,13 @@ usage:
   farsight api diff --spec <path|url> [--repo <name>] [--format json|md] [--strict]
                                                                a proposed spec vs the code: not implemented / undocumented /
                                                                mismatched; --strict exits 1 on any drift
+  farsight deps list [--repo name] [--project name] [--third-party | --workspace] [--hops N] [--json]
+                                                               every package the code imports: third-party or a workspace
+                                                               library, the range each package.json declares, the files that
+                                                               import it and the journeys it reaches (--json: farsight-deps v0,
+                                                               not a frozen contract yet)
+  farsight deps where <package|id> [--repo name] [--json]      every file that imports one package, grouped by project or
+                                                               source, with the line, the specifier and the code that uses it
   farsight tests list [--level unit|e2e] [--scope a,b]         every test suite in the graph with its last run and freshness
   farsight tests matrix [--format table|csv|json]              journeys x tests: declared / reached / observed, coverage, gaps
                                                                (json|csv = farsight-tests-matrix v1, one row per flow/node/test)
@@ -897,6 +905,70 @@ switch (command) {
       break;
     }
     fail(`unknown api subcommand: ${sub} (list | spec | diff)`);
+  }
+  case 'deps': {
+    // packages as nodes (docs/proposals/dependencies-and-nx.md §2.1, §2.3): the same folds
+    // GET /api/deps and describe_node print. --json is `farsight-deps v0` — said in the
+    // document, because nothing pins it yet and a consumer must not treat it as frozen.
+    const sub = positional[0] ?? 'list';
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const index = buildIndex(nodes, edges);
+    const repo = flag('repo');
+    const hopsArg = flag('hops');
+    const hops = hopsArg != null ? Number(hopsArg) : undefined;
+    if (hops != null && !(Number.isInteger(hops) && hops >= 1 && hops <= IMPACT_MAX_HOPS)) fail(`--hops must be a whole number from 1 to ${IMPACT_MAX_HOPS}`);
+    const json = rest.includes('--json');
+    const header = { format: 'farsight-deps', version: 0, frozen: false, note: 'not a frozen contract yet: fields may change' };
+    if (!nodes.some((n) => n.kind === 'package')) {
+      const msg = 'no package nodes in this graph — it was written before imports were read as packages, or the code imports none; re-ingest to see them';
+      if (json) { console.log(JSON.stringify({ ...header, rows: [], note: msg }, null, 2)); break; }
+      console.log(msg);
+      break;
+    }
+    if (sub === 'list') {
+      const scope = rest.includes('--third-party') ? 'third-party' as const : rest.includes('--workspace') ? 'workspace' as const : undefined;
+      const list = packagesOf(index, { ...(repo ? { repo } : {}), ...(flag('project') ? { project: flag('project') } : {}), ...(scope ? { scope } : {}), ...(hops != null ? { hops } : {}) });
+      if (json) { console.log(JSON.stringify({ ...header, ...list, meta: store.meta.packages ?? {} }, null, 2)); break; }
+      if (!list.rows.length) { console.log('no package matches those filters'); break; }
+      console.log(`${countedText(list.packages)} (${breakdownText(list.packages)})\n`);
+      console.log('  PACKAGE                                  SOURCE           SCOPE        RANGE          FILES  JOURNEYS');
+      for (const r of list.rows) {
+        const range = r.version ?? (r.scope === 'workspace' ? '(alias)' : '(undeclared)');
+        console.log(`  ${r.name.slice(0, 40).padEnd(40)} ${r.repo.slice(0, 15).padEnd(15)}  ${r.scope.padEnd(11)}  ${(range + (r.dev ? ' dev' : '')).slice(0, 13).padEnd(13)}  ${String(r.importers.n).padStart(5)}  ${String(r.journeys.n).padStart(8)}`);
+        if (new Set(r.versions.map((v) => v.range)).size > 1) console.log(`      ranges: ${r.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
+        if (r.note) console.log(`      ⚠ ${r.note}`);
+      }
+      const builtins = Object.entries(store.meta.packages ?? {}).filter(([rp]) => !repo || rp === repo)
+        .flatMap(([rp, m]) => (m.builtins ?? []).map((b) => `${b.spec}${Object.keys(store.meta.packages ?? {}).length > 1 ? ` (${rp})` : ''}`));
+      console.log(`\n  files = source files that import it (test and story files are not read) · journeys = journeys whose path passes through code that uses it, within ${hops ?? 2} uses — a floor`);
+      if (builtins.length) console.log(`  the runtime's own modules, never counted as packages: ${builtins.join(', ')}`);
+      break;
+    }
+    if (sub === 'where') {
+      const ref = positional[1];
+      if (!ref) fail('deps where needs a package name or id (see `farsight deps list`)');
+      const found = resolvePackage(index, ref, repo);
+      if (!found.hit) fail(found.candidates.length ? `${found.candidates.length} sources import a package named ${ref} — pass its id or --repo: ${found.candidates.join(', ')}` : `no package ${ref} in this graph (see \`farsight deps list\`)`);
+      const where = importersOf(index, found.hit.id, hops != null ? { hops } : {})!;
+      if (json) { console.log(JSON.stringify({ ...header, ...where }, null, 2)); break; }
+      const r = where.package;
+      console.log(`${r.name} · ${r.scope}${r.version ? ` · ${r.version}` : ''}${r.project ? ` · project ${r.project}` : ''} · ${r.repo}`);
+      console.log(`${countedText(where.importers)} · ${countedText(r.journeys, { scope: false })}${r.journeyRefs.length ? ` — ${r.journeyRefs.map((j) => j.name).join(', ')}` : ''}`);
+      for (const v of r.versions) console.log(`  declared ${v.range} in ${v.declaredIn} (${v.field}${v.where ? ` · ${v.where}` : ''})`);
+      if (r.note) console.log(`  ⚠ ${r.note}`);
+      for (const g of where.groups) {
+        console.log(`\n  ${g.by === 'project' ? 'project' : 'source'} ${g.key} — ${countedText(g.count, { scope: false })}`);
+        for (const i of g.importers) {
+          console.log(`    ${i.path}:${i.line}  ${i.specifier}${i.typeOnly ? '  (type only)' : ''}${i.form && i.form !== 'import' ? `  (${i.form})` : ''}`);
+          for (const u of i.users) console.log(`      used by ${u.name} (${u.kind})${u.line != null ? ` at line ${u.line}` : ''}`);
+        }
+      }
+      break;
+    }
+    fail(`unknown deps subcommand: ${sub} (list | where)`);
   }
   case 'digest': {
     // the content digest of a checkout, computed exactly the way ingest computes it

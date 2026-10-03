@@ -11,6 +11,7 @@ import {
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
   testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
   impactOf, search, buildLine, projectGraph, appClosure, findProject,
+  packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
   counted,
 } from '@farsight/core';
@@ -1099,6 +1100,53 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       });
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...surface, operations }));
     }
+    // ── dependencies (docs/proposals/dependencies-and-nx.md §2.1, §2.3) — folds over the package nodes ──
+    if ((url === '/api/deps' || url.startsWith('/api/deps?') || url.startsWith('/api/deps/where')) && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const g = loadJourneyGraph(graphPath);
+      const repo = u.searchParams.get('repo') || undefined;
+      const hopsArg = u.searchParams.get('hops');
+      const hops = hopsArg ? Number(hopsArg) : undefined;
+      if (hops != null && !(Number.isInteger(hops) && hops >= 1 && hops <= IMPACT_MAX_HOPS)) {
+        return send(400, JSON.stringify({ error: `?hops= must be a whole number from 1 to ${IMPACT_MAX_HOPS}` }));
+      }
+      // a graph written before the dependencies pass carries no package node: say so instead of an empty list that reads as "no dependencies"
+      const hasPackages = [...g.index.byId.values()].some((n) => n.kind === 'package');
+      const stale = hasPackages ? {} : { note: 'this graph was written by a build that did not read imports as packages — re-sync the sources to see them' };
+      if (u.pathname === '/api/deps/where') {
+        const ref = u.searchParams.get('package');
+        if (!ref) return send(400, JSON.stringify({ error: 'missing ?package=<package node id or name>' }));
+        const found = resolvePackage(g.index, ref, repo);
+        if (!found.hit) {
+          return send(400, JSON.stringify({
+            error: found.candidates.length ? `${found.candidates.length} sources import a package named ${ref}; pass its id or ?repo=` : `no package ${ref} in this graph`,
+            ...(found.candidates.length ? { candidates: found.candidates } : {}), ...stale,
+          }));
+        }
+        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...importersOf(g.index, found.hit.id, hops != null ? { hops } : {}) }));
+      }
+      const kind = u.searchParams.get('kind') || undefined;
+      if (kind && kind !== 'third-party' && kind !== 'workspace') return send(400, JSON.stringify({ error: `unknown ?kind=${kind} — third-party or workspace` }));
+      const scopeParam = u.searchParams.get('scope');
+      const scoped = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const list = packagesOf(g.index, {
+        ...(repo ? { repo } : {}),
+        ...(u.searchParams.get('project') ? { project: u.searchParams.get('project')! } : {}),
+        ...(kind ? { scope: kind as 'third-party' | 'workspace' } : {}),
+        ...(hops != null ? { hops } : {}),
+      });
+      const rows = scoped ? list.rows.filter((r) => scoped.has(r.repo)) : list.rows;
+      const third = rows.filter((r) => r.scope === 'third-party').length;
+      const packages = scoped
+        ? counted(rows.length, 'count.unit.packages', 'count.scope.workspace', list.packages.source, { breakdown: [
+          { key: 'count.part.packagesThirdParty', n: third }, { key: 'count.part.packagesWorkspace', n: rows.length - third }] })
+        : list.packages;
+      const builtins = Object.fromEntries(Object.entries(g.meta.packages ?? {})
+        .filter(([r]) => (!repo || r === repo) && (!scoped || scoped.has(r)))
+        .map(([r, m]) => [r, m]));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', rows, packages, meta: builtins, ...stale }));
+    }
     // ── projects (docs/proposals/dependencies-and-nx.md §2.2) — a fold over the graph and meta.projects ──
     if ((url === '/api/projects' || url.startsWith('/api/projects?') || url.startsWith('/api/projects/')) && req.method === 'GET') {
       if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
@@ -1114,6 +1162,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const nodeIds: Record<string, string[]> = {};
       for (const n of g.index.byId.values()) {
         if (n.project?.name !== hit.name || (n.loc?.repo ?? n.id.split('::')[0]) !== hit.repo) continue;
+        if (n.kind === 'module') continue; // a file's import list, not a part (the counts in projectGraph agree)
         (nodeIds[n.kind] ??= []).push(n.id);
       }
       for (const ids of Object.values(nodeIds)) ids.sort();

@@ -177,7 +177,8 @@ export function projectGraph(index: GraphIndex, metas: Record<string, ProjectsMe
   // nodes by repo → project → kind
   const byProject = new Map<string, Map<string, number>>();
   for (const n of index.byId.values()) {
-    if (!n.project) continue;
+    // a module node is a file's import list (the dependencies pass), not a part of the project
+    if (!n.project || n.kind === 'module') continue;
     const repo = nodeOfRepo(n);
     if (!wanted.has(repo)) continue;
     const key = `${repo}::project::${n.project.name}`;
