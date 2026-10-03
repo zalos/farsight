@@ -82,3 +82,19 @@ test('http: a timeout is AzdoHttpError(0, timeout); a network failure is retried
   assert.equal(e2.reason, 'unreachable');
   assert.equal(n, 2);
 });
+
+test('http: a write is never replayed after a dropped connection or a 503 (a comment would post twice); a 429 is', async () => {
+  for (const fail of [() => { throw new TypeError('fetch failed'); }, () => res(503)]) {
+    let calls = 0;
+    const http = createAzdoHttp({ base, authorization: () => 'Basic x', sleep: async () => {}, random: () => 0, fetcher: async () => { calls++; return calls === 1 ? fail() : res(200, { id: 1 }); } });
+    await assert.rejects(http.request({ method: 'POST', path: '/p/_apis/wit/workItems/1/comments', apiVersion: '7.1', body: { text: 'x' } }), AzdoHttpError);
+    assert.equal(calls, 1);
+    calls = 0;
+    const read = await http.request({ method: 'POST', idempotent: true, path: '/p/_apis/wit/wiql', apiVersion: '7.1', body: {} });
+    assert.equal(read.status, 200);
+    assert.equal(calls, 2, 'a read that POSTs is retried');
+  }
+  const answers = [res(429, {}, { 'retry-after': '1' }), res(200, { id: 1 })];
+  const http = createAzdoHttp({ base, authorization: () => 'Basic x', sleep: async () => {}, random: () => 0, fetcher: async () => answers.shift()! });
+  assert.equal((await http.request({ method: 'PATCH', path: '/_apis/wit/workitems/1', apiVersion: '7.1', body: [] })).status, 200);
+});

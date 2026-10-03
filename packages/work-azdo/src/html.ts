@@ -55,8 +55,11 @@ export function htmlToText(html: string | undefined | null): string {
   let cell: string | null = null;
   let rowsInTable = 0;
   const emit = (s: string) => { if (cell !== null) cell += s; else out += s; };
-  const newline = () => { if (cell !== null) { cell += ' '; return; } out = out.replace(/[ \t]+$/, ''); if (!out.endsWith('\n') && out) out += '\n'; };
-  const blank = () => { if (cell !== null) { cell += ' '; return; } newline(); if (out && !out.endsWith('\n\n')) out += '\n'; };
+  // a bullet just written has no text yet: a <p> or <div> opening inside the <li> must not part them
+  const bulletOpen = () => lists.length > 0 && /(^|\n) *(- |\d+\. )$/.test(out);
+  const newline = () => { if (cell !== null) { cell += ' '; return; } if (bulletOpen()) return; out = out.replace(/[ \t]+$/, ''); if (!out.endsWith('\n') && out) out += '\n'; };
+  // inside a list a block ends a line, not a paragraph: the next item follows on the next line
+  const blank = () => { if (cell !== null) { cell += ' '; return; } newline(); if (lists.length) return; if (out && !out.endsWith('\n\n')) out += '\n'; };
   for (const tk of toks) {
     if (tk.text !== undefined) {
       let t = decodeEntities(tk.text);
