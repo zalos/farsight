@@ -82,6 +82,7 @@ moved out; open a map when you need it, not to orient.
 |---|---|
 | [docs/MAP-PACKAGES.md](docs/MAP-PACKAGES.md) | finding where something lives — every package, file by file, with what each module owns |
 | [docs/MAP-VIEWER.md](docs/MAP-VIEWER.md) | before editing `packages/server/public/*` — the ES-module split, the journey's four views, the band and drill mechanics, the surfaces |
+| [docs/SECURITY.md](docs/SECURITY.md) | touching the server's routes, secrets, tracker writes or recorded fixtures — the threat model, the request guard, the CI secret scan |
 | [docs/CI.md](docs/CI.md) | changing the GitHub Actions workflow, reading a red check, or running exactly what CI runs |
 | [docs/COUNTS.md](docs/COUNTS.md) | before printing, changing or defending a number — every count the product prints, its source field, what it counts, the scope it counts over, and the `Counted` shape a surface wires |
 | [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) | at session start — the verified current state and the ranked next work |
