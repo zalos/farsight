@@ -6,6 +6,7 @@
 // workspace) the way journey-numbers turns on the drill.
 import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
+import { stubStores } from './map-stores-stub';
 
 const FLOW = 'invoice-app::flow::billing-cycle';
 const STREET = '#/map/' + encodeURIComponent(FLOW);
@@ -368,5 +369,87 @@ test.describe('map — the street folds a long pathway', () => {
     // and folding back returns to three
     await page.locator(`.map-fold.data[data-fold="data|${FLOW}|1|5"]`).click();
     await expect(data).toHaveCount(3);
+  });
+});
+
+test.describe('map — data stores on the street', () => {
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::dataHtml
+   * @covers packages/server/public/app/surfaces/map.js::streetHtml
+   * @covers packages/server/public/app/lib/map-model.js::storesOf
+   */
+  test('a record names its store, the ERP is drawn as a store with its mode, reached when no method was recorded, the legend lists the stores', async ({ page }) => {
+    await stubStores(page);
+    await mapOn(page);
+    await openStreet(page, true);
+    const pd = (si: number) => page.locator(`.map-pd[data-flow="${FLOW}"][data-si="${si}"]`);
+    // New invoice writes invoices: the kind line names the store in words, the bar is the database's violet
+    const inv = pd(0).filter({ hasText: 'Invoices' }).first();
+    await expect(inv.locator('.kd')).toContainText('Invoice DB · record');
+    await expect(inv).toHaveAttribute('data-store', 'Invoice DB');
+    await expect(inv).toHaveAttribute('data-store-kind', 'sql');
+    // finalize writes the ERP: a store, in the record anatomy, amber, with the write word from op
+    const erpWrite = pd(1).and(page.locator('[data-kind="external"][data-mode="write"]'));
+    await expect(erpWrite).toHaveCount(1);
+    await expect(erpWrite.locator('.kd')).toContainText('Example ERP · ERP');
+    await expect(erpWrite.locator('.rw')).toHaveText('writes');
+    await expect(erpWrite).toHaveClass(/\brec\b/);
+    const bars = await page.evaluate(() => {
+      const c = (sel: string) => getComputedStyle(document.querySelector(sel)!).borderLeftColor;
+      const probe = (v: string) => { const d = document.createElement('div'); d.style.color = `var(${v})`; document.body.appendChild(d); const x = getComputedStyle(d).color; d.remove(); return x; };
+      return { erp: c('.map-pd[data-store-kind="erp"]'), sql: c('.map-pd[data-store-kind="sql"]'), amber: probe('--amber'), tbl: probe('--tbl') };
+    });
+    expect(bars.erp).toBe(bars.amber);
+    expect(bars.sql).toBe(bars.tbl);
+    // the list read reaches the ERP with no method recorded: reached, never writes
+    const erpReached = pd(1).and(page.locator('[data-kind="external"][data-mode="reached"]'));
+    await expect(erpReached).toHaveCount(1);
+    await expect(erpReached.locator('.rw')).toHaveText('reached');
+    // the legend: the stores this journey touches, and the reached swatch because a node uses it
+    const leg = page.locator(`.map-district[data-flow="${FLOW}"] .map-lane .leg`);
+    await expect(leg.locator('.mst')).toHaveText(['Invoice DB · database', 'Example ERP · ERP']);
+    await expect(leg).toContainText('reached');
+    // the head's stores chip is the summary's own Counted (one store from the fixture's config; the stub's ERP is not
+    // in the server's count), with its tip
+    const chip = page.locator(`.map-district[data-flow="${FLOW}"] .map-dhead .map-chip.k-store`);
+    await expect(chip).toHaveText(/1 data store/);
+    await expect(chip).toHaveAttribute('data-tip-id', 'number');
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::drawCard
+   * @covers packages/server/public/app/surfaces/map.js::dataKindWords
+   */
+  test('the explore card names the store and, outside the business register, how it is known', async ({ page }) => {
+    await stubStores(page);
+    await mapOn(page);
+    await openStreet(page, true);
+    await page.locator(`.map-pd[data-flow="${FLOW}"][data-si="0"][data-store="Invoice DB"]`).first().click();
+    const card = page.locator('.map-xcard');
+    await expect(card).toBeVisible();
+    await expect(card.locator('.store .mst')).toHaveText('Invoice DB · database');
+    await expect(card.locator('.store .via')).toBeVisible();
+    await expect(card.locator('.store .via')).toContainText('known from the workspace settings');
+  });
+
+  /** @covers packages/server/public/app/surfaces/map.js::drawCard */
+  test('the business street with stores prints no identifier: store names in words, how it is known hidden', async ({ page }) => {
+    await stubStores(page);
+    await mapOn(page);
+    await page.locator('#lb-business').click();
+    await expect(page.locator('body')).toHaveClass(/lens-business/);
+    await openStreet(page, true);
+    await expect(page.locator(`.map-pd[data-flow="${FLOW}"][data-store="Example ERP"]`).first()).toBeVisible();
+    const text = await visibleWords(page);
+    expect(text).toContain('Invoice DB');
+    expect(text).toContain('Example ERP');
+    expect([...new Set(text.match(IDENTIFIER) || [])], 'identifier-shaped words on the business street').toEqual([]);
+    await page.locator(`.map-pd[data-flow="${FLOW}"][data-si="1"][data-store="Example ERP"]`).first().click();
+    const card = page.locator('.map-xcard');
+    await expect(card.locator('.store .mst')).toBeVisible();
+    await expect(card.locator('.store .via')).toBeHidden();
+    const words = await card.evaluate((el) => (el as HTMLElement).innerText);
+    expect(words).toContain('Example ERP');
+    expect([...new Set(words.match(IDENTIFIER) || [])], 'identifier-shaped words on the business card').toEqual([]);
   });
 });

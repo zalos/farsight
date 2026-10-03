@@ -125,3 +125,31 @@ test('Changes keeps the page, its components and the routes and handlers its cal
   assert.ok(ids.includes('invoice-app::route::POST /invoices'));
   assert.ok(ids.includes('invoice-app::src/server/invoiceService.ts::createInvoice'));
 });
+
+// ── data stores: Data this screen reaches, grouped by store ─────────────────
+import { withStores } from './map-stores-fixture.ts';
+const { dataByStore } = await import(join(appDir, 'lib', 'map-property-model.js'));
+
+test('Data this screen reaches is grouped by store, the outside store with its mode, named stores first', () => {
+  const s = withStores(fx);
+  const sById: Record<string, any> = Object.fromEntries(s.nodes.map((n: { id: string }) => [n.id, n]));
+  const sm = streetModel(s.journey, sById);
+  const a = propertyModel(s.journey, 1, sById, sm, { edges: fx.edges }).tabs.apis;
+  assert.deepEqual(a.groups.map((g: any) => g.store ? g.store.name + ' · ' + g.store.kind : 'plain ' + g.kind), [
+    'Invoice DB · sql', 'Example ERP · erp', 'plain message',
+  ]);
+  const erp = a.groups[1].rows[0];
+  assert.deepEqual(erp.modes, ['write'], 'reached on the list read yields to the write on finalize');
+  assert.equal(a.records.length, a.groups.reduce((n: number, g: any) => n + g.rows.length, 0), 'every reached row is in exactly one group');
+});
+
+test('dataByStore: unnamed data last under its plain kind, records before outside systems before messages', () => {
+  const g = dataByStore([
+    { nodeId: 'm', kind: 'message', modes: ['write'], store: null },
+    { nodeId: 'x', kind: 'external', modes: ['reached'], store: null },
+    { nodeId: 'r', kind: 'record', modes: ['read'], store: null },
+    { nodeId: 's', kind: 'record', modes: ['read'], store: { name: 'S', kind: 'sql' } },
+  ]);
+  assert.deepEqual(g.map((x: any) => x.store ? x.store.name : x.kind), ['S', 'record', 'external', 'message']);
+  assert.deepEqual(reachedData([{ data: [{ nodeId: 'e', name: 'e', kind: 'external', mode: 'reached' }] }, { data: [{ nodeId: 'e', name: 'e', kind: 'external', mode: 'read' }] }])[0].modes, ['read']);
+});

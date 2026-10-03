@@ -234,11 +234,18 @@ function callWords(c) {
   if (biz()) return plainWords(c.summary) || plainWords(c.business) || plainWords(c.label) || plainWords(mo.business) || t('journey.biz.noWords');
   return String(c.summary || c.label || mo.label || c.operationId || '');
 }
+/** A record's, message's or third party's name in the lens; a third party's product name (Example ERP) is said as written. */
+function dataName(d) {
+  const n = S.BYID[d.nodeId];
+  if (d.kind === 'external' && !/[a-z][A-Z]|_|\/|\.[a-z]/.test(String(d.name || ''))) return String(d.name || '');
+  return nameOf(n, d.name);
+}
 function dataWords(data) {
   const lower = (w) => (biz() ? w.replace(/^./, (ch) => ch.toLowerCase()) : w);
-  const byMode = (mode) => data.filter((d) => d.mode === mode || d.mode === 'both').map((d) => lower(nameOf(S.BYID[d.nodeId], d.name)));
-  const r = byMode('read'), w = byMode('write');
-  return [r.length ? t('map.prop.apis.reads').replace('{list}', r.join(', ')) : '', w.length ? t('map.prop.apis.writes').replace('{list}', w.join(', ')) : ''].filter(Boolean).join(' · ');
+  const byMode = (mode) => data.filter((d) => d.mode === mode || (d.mode === 'both' && mode !== 'reached')).map((d) => (d.kind === 'external' ? dataName(d) : lower(dataName(d))));
+  const r = byMode('read'), w = byMode('write'), u = byMode('reached');
+  return [r.length ? t('map.prop.apis.reads').replace('{list}', r.join(', ')) : '', w.length ? t('map.prop.apis.writes').replace('{list}', w.join(', ')) : '',
+    u.length ? t('map.prop.apis.reached').replace('{list}', u.join(', ')) : ''].filter(Boolean).join(' · ');
 }
 function callRow(c, brief) {
   const verb = !biz() && (c.method || c.path) ? code([c.method, c.path].filter(Boolean).join(' ')) : '';
@@ -296,14 +303,36 @@ function apisHtml(pm) {
   const head = secHead('map.prop.apis.head', countNum(pm.counts.apis));
   const notBuilt = a.planned ? '<p class="mp-warn">' + sym('warning') + esc(t('map.prop.apis.notBuilt')) + '</p>' : '';
   const calls = a.calls.length ? capRows('calls', a.calls.map((c) => callRow(c, false)), pm.counts.apis) : absentRow(a.planned ? 'notBuilt' : 'noneIndexed');
-  const recs = a.records.length ? capRows('records', a.records.map((r) => {
-    const n = S.BYID[r.nodeId];
-    const kindKey = r.kind === 'message' ? 'sym.message' : r.kind === 'external' ? 'sym.external' : 'sym.record';
-    const modes = r.modes.length > 1 ? t('map.prop.apis.readsWrites') : r.modes[0] === 'write' ? t('map.prop.apis.writes').replace('{list}', '').trim() : t('map.prop.apis.reads').replace('{list}', '').trim();
-    return row(sym(r.kind === 'message' ? 'message' : r.kind === 'external' ? 'external' : 'record') + esc(nameOf(n, r.name)),
-      '<span' + defAttrs(kindKey) + '>' + esc(t(kindKey)) + '</span> · ' + esc(modes), '', { kind: r.kind || 'record', id: r.nodeId });
-  })) : absentRow(a.planned ? 'notBuilt' : 'noneIndexed');
+  const recs = a.records.length ? (a.groups || [{ store: null, kind: null, rows: a.records }]).map((g, gi) => storeGroupHtml(g, gi)).join('') : absentRow(a.planned ? 'notBuilt' : 'noneIndexed');
   return notBuilt + '<section class="mp-sec">' + head + calls + '</section>' + sec('map.prop.apis.records', recs);
+}
+
+/** How the calls on this screen use one record or store, in words. */
+function modesWords(modes) {
+  if (modes.includes('read') && modes.includes('write')) return { key: 'map.prop.apis.readsWrites', words: t('map.prop.apis.readsWrites') };
+  if (modes.includes('write')) return { key: 'map.prop.apis.writes', words: t('map.prop.apis.writes').replace('{list}', '').trim() };
+  if (modes.includes('read')) return { key: 'map.prop.apis.reads', words: t('map.prop.apis.reads').replace('{list}', '').trim() };
+  return { key: 'map.mode.reached', words: t('map.mode.reached') };
+}
+const STORE_KINDS = ['sql', 'document', 'files', 'erp', 'other'];
+/**
+ * One store's part of *Data this screen reaches*: its name and kind as the heading (a store's name is words
+ * somebody wrote, so every register prints it), then each record or outside system in it with its modes. What no
+ * store names comes last, under its plain kind word.
+ */
+function storeGroupHtml(g, gi) {
+  const sk = g.store ? (STORE_KINDS.includes(g.store.kind) ? g.store.kind : 'other') : '';
+  const plainKey = g.kind === 'message' ? 'map.kind.message' : g.kind === 'external' ? 'map.kind.external' : 'map.kind.record';
+  const head = g.store
+    ? '<h4 class="mp-grp st-' + sk + '" data-store="' + esc(g.store.name) + '"><i></i><span>' + esc(g.store.name) + '</span> · <span' + defAttrs('map.store.kind.' + sk) + '>' + esc(t('map.store.kind.' + sk)) + '</span></h4>'
+    : '<h4 class="mp-grp plain"><span' + defAttrs(plainKey) + '>' + esc(t(plainKey)) + '</span></h4>';
+  const rows = g.rows.map((r) => {
+    const kindKey = r.kind === 'message' ? 'sym.message' : r.kind === 'external' ? 'sym.external' : 'sym.record';
+    const m = modesWords(r.modes);
+    return row(sym(r.kind === 'message' ? 'message' : r.kind === 'external' ? 'external' : 'record') + esc(dataName(r)),
+      '<span' + defAttrs(kindKey) + '>' + esc(t(kindKey)) + '</span> · <span class="mp-mode ' + esc(r.modes.length > 1 ? 'both' : r.modes[0] || '') + '"' + defAttrs(m.key) + '>' + esc(m.words) + '</span>', '', { kind: r.kind || 'record', id: r.nodeId });
+  });
+  return '<div class="mp-store">' + head + capRows('records-' + gi, rows) + '</div>';
 }
 
 function uxHtml(pm) {

@@ -48,19 +48,49 @@ export function screenComponents(seg, byId, data) {
   return ids.filter((id) => id !== page).map((id) => nodeOf(id, byId, data));
 }
 
-/** The records, messages and third parties the calls reach, each once, with every way it is used. */
+/**
+ * The records, messages and third parties the calls reach, each once, with every way it is used and the store it
+ * lives in (`store`, or null). A direction the walk did not record (`reached`) is kept only while nothing known
+ * says which way the data flows.
+ */
 export function reachedData(calls) {
   const by = new Map();
   for (const c of calls || []) {
     for (const d of (c && c.data) || []) {
       if (!d || !d.nodeId) continue;
-      const row = by.get(d.nodeId) || { nodeId: d.nodeId, name: d.name, kind: d.kind, modes: [] };
+      const row = by.get(d.nodeId) || { nodeId: d.nodeId, name: d.name, kind: d.kind, modes: [], store: d.store || null };
+      if (!row.store && d.store) row.store = d.store;
       const modes = d.mode === 'both' ? ['read', 'write'] : [d.mode];
       modes.forEach((m) => { if (m && !row.modes.includes(m)) row.modes.push(m); });
       by.set(d.nodeId, row);
     }
   }
+  for (const row of by.values()) if (row.modes.length > 1) row.modes = row.modes.filter((m) => m !== 'reached');
   return [...by.values()];
+}
+
+/**
+ * The reached data grouped by the store it lives in: named stores first, in the order the screen meets them, each
+ * `{ store: { name, kind, … }, rows }`; then what no store names, one group per plain kind (`{ store: null, kind,
+ * rows }`) in the order record · external · message.
+ */
+export function dataByStore(rows) {
+  const named = [];
+  const plain = new Map();
+  for (const r of rows || []) {
+    if (r.store && r.store.name) {
+      let g = named.find((x) => x.store.name === r.store.name && x.store.kind === r.store.kind);
+      if (!g) { g = { store: r.store, kind: null, rows: [] }; named.push(g); }
+      g.rows.push(r);
+    } else {
+      const k = r.kind || 'record';
+      if (!plain.has(k)) plain.set(k, { store: null, kind: k, rows: [] });
+      plain.get(k).rows.push(r);
+    }
+  }
+  const order = ['record', 'external', 'message'];
+  const rest = [...plain.values()].sort((a, b) => (order.indexOf(a.kind) + 1 || 9) - (order.indexOf(b.kind) + 1 || 9));
+  return named.concat(rest);
 }
 
 /** Other flows that show this page: `renders` edges from a flow other than the one on screen. */
@@ -166,6 +196,7 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
       apis: {
         calls,
         records: reachedData(calls),
+        groups: dataByStore(reachedData(calls)),
         planned: screen.state === 'planned',
       },
       ux: { page: node, components, built: screen.state !== 'planned' },
