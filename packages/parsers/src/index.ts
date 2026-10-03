@@ -78,6 +78,8 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   }
   // the SQL drivers the adapters saw — read now, because the spec and design passes rebuild meta
   const drivers = fragments.flatMap((f) => f.meta?.stores?.drivers ?? []);
+  // what the import pass set aside (builtins, alias misses) — read now for the same reason
+  const packagesMeta = fragments.map((f) => f.meta?.packages).find((p) => p);
   const merged = mergeFragments(repo, fragments);
   if (config) { applyConfig(merged.nodes, config, merged.edges); merged.configApplied = true; }
   // tooling (scripts a person runs) is tagged with or without a config file: the default is `scripts/**`
@@ -104,6 +106,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   else merged.meta = { files: 0, sourceHash: 'empty', sourceDigest: digest };
   if (Object.keys(storesMeta).length) merged.meta.stores = storesMeta;
   else delete merged.meta.stores;
+  if (packagesMeta) merged.meta.packages = packagesMeta;
   // tests last: `@covers SCR-07` resolves against design screens and `@covers POST /x`
   // against routes a spec may have added, so both passes must have run first
   if (options.tests !== false) {

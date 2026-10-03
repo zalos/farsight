@@ -37,6 +37,32 @@ interface TsconfigPaths {
  * Returns a repo-relative path, or null for anything it can't resolve inside the repo.
  */
 export function createAliasResolver(repoRoot: string): (importerAbs: string, spec: string) => string | null {
+  const classify = createAliasClassifier(repoRoot);
+  return (importerAbs, spec) => classify(importerAbs, spec)?.path ?? null;
+}
+
+/**
+ * How a non-relative specifier resolved, not only where — the dependencies pass needs to
+ * know whether `@acme/money` is a workspace library (a `paths` alias or a workspace package
+ * name) or an app-internal alias (`@/components/x`, `baseUrl`), which is never a package.
+ * - `path`  — the repo-relative file it resolved to; null when a `paths` pattern matched and
+ *             no file exists (an alias miss: never guessed into a third-party package)
+ * - `via`   — which rule answered
+ * - `pattern` / `target` — the `paths` rule that matched and the target template that hit
+ * - `star`  — what the pattern's `*` matched
+ * - `workspace` — the workspace package's name and its absolute directory
+ */
+export interface AliasHit {
+  path: string | null;
+  via: 'paths' | 'baseUrl' | 'workspace';
+  pattern?: string;
+  target?: string;
+  baseDir?: string;
+  star?: string;
+  workspace?: { name: string; dir: string };
+}
+
+export function createAliasClassifier(repoRoot: string): (importerAbs: string, spec: string) => AliasHit | null {
   const tsconfigByDir = new Map<string, TsconfigPaths | null>();
   const workspaces = loadWorkspacePackages(repoRoot);
 
@@ -59,14 +85,17 @@ export function createAliasResolver(repoRoot: string): (importerAbs: string, spe
   return (importerAbs, spec) => {
     // 1. tsconfig paths
     const cfg = nearestTsconfig(dirname(importerAbs));
+    let missed: AliasHit | null = null;
     if (cfg) {
-      for (const candidate of matchPaths(spec, cfg.paths)) {
-        const hit = resolveFileish(candidate);
-        if (hit) return toRepoRelative(hit);
+      for (const m of matchPaths(spec, cfg.paths)) {
+        const hit = resolveFileish(m.candidate);
+        // a hit outside the repo is not addressable: it answers (path null) rather than falling through
+        if (hit) return { path: toRepoRelative(hit), via: 'paths', pattern: m.pattern, target: m.target, baseDir: m.baseDir, ...(m.star != null ? { star: m.star } : {}) };
+        missed ??= { path: null, via: 'paths', pattern: m.pattern, target: m.target, baseDir: m.baseDir, ...(m.star != null ? { star: m.star } : {}) };
       }
       if (cfg.baseUrlDir) {
         const hit = resolveFileish(join(cfg.baseUrlDir, spec));
-        if (hit) return toRepoRelative(hit);
+        if (hit) return { path: toRepoRelative(hit), via: 'baseUrl' };
       }
     }
     // 2. workspace package name (longest match wins: @x/y before @x/y-utils never collides)
@@ -90,10 +119,10 @@ export function createAliasResolver(repoRoot: string): (importerAbs: string, spe
           ];
       for (const c of candidates) {
         const hit = resolveFileish(c);
-        if (hit) return toRepoRelative(hit);
+        if (hit) return { path: toRepoRelative(hit), via: 'workspace', workspace: { name: bestName, dir: best.dir } };
       }
     }
-    return null;
+    return missed;
   };
 }
 
@@ -132,8 +161,8 @@ function loadTsconfig(file: string, seen: Set<string>): TsconfigPaths | null {
 }
 
 /** Expand a spec against path rules; supports at most one `*` per pattern (TS's rule). */
-function matchPaths(spec: string, rules: PathRule[]): string[] {
-  const out: string[] = [];
+function matchPaths(spec: string, rules: PathRule[]): { candidate: string; pattern: string; target: string; baseDir: string; star?: string }[] {
+  const out: { candidate: string; pattern: string; target: string; baseDir: string; star?: string }[] = [];
   for (const { pattern, targets, baseDir } of rules) {
     const star = pattern.indexOf('*');
     let matched: string | null = null;
@@ -147,7 +176,9 @@ function matchPaths(spec: string, rules: PathRule[]): string[] {
       }
     }
     if (matched === null) continue;
-    for (const t of targets) out.push(resolvePath(baseDir, t.replace('*', matched)));
+    for (const t of targets) {
+      out.push({ candidate: resolvePath(baseDir, t.replace('*', matched)), pattern, target: t, baseDir, ...(star >= 0 ? { star: matched } : {}) });
+    }
   }
   return out;
 }
