@@ -226,7 +226,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.ov.more': same('see all', 'Open the tab that lists every one of these.'),
 
   // gates
-  'map.prop.gates.head': same('Guards and rules on this screen', 'Each checkpoint a request from this screen meets, in the order the walk met it, with how many times.'),
+  'map.prop.gates.head': same('Checks and rules on this screen', 'Each checkpoint a request from this screen meets, in the order the walk met it, with how many times: a check on who may get through, a rule on what may be sent.'),
   'map.prop.gates.decisions': same('Decisions somebody wrote down', 'The branches in the code that carry a sentence a person wrote, saying what happens on each side.'),
   'map.prop.gates.mute': same('{n} more that nobody put in plain words', 'Checkpoints on this screen whose only name is the code’s own. They are counted here and named in the hybrid and code lenses.'),
   'map.prop.kind.guard': same('guard', 'A check on who may get through: a session, a scope, a role.'),

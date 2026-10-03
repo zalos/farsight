@@ -892,7 +892,7 @@ function drawLegend() {
   // between journeys: leads to (its mirror, requires, is the same line read backwards), each other, part of
   const between = [];
   if (f.links.has('leadsTo') || !f.links.size) between.push(lgRow('leadsTo', lgLine('leadsTo'), 'map.link.leadsTo') + lgRow('requires', lgLine('leadsTo'), 'map.link.requires', 'map.legend.requires'));
-  if (f.links.has('both')) between.push(lgRow('both', lgLine('leadsTo', true), 'map.link.both'));
+  if (f.links.has('both')) between.push(lgRow('mutual', lgLine('leadsTo', true), 'map.link.both'));
   if (f.links.has('partOf')) between.push(lgRow('partOf', lgLine('partOf'), 'map.link.partOf'));
   html += '<section>' + lgHead('map.legend.between') + between.join('') + '</section>';
   // under each screen: what a call does to the data beside it, the stores by kind
