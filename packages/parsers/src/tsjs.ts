@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { relative, dirname, resolve as resolvePath } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef } from '@farsight/core';
+import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef } from '@farsight/core';
 import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
 import { createAliasResolver, resolveFileish } from './aliases.js';
 import type { LanguageAdapter, IngestOptions } from './types.js';
@@ -19,6 +19,34 @@ const ROUTER_NAMES = new Set(['router', 'app']);
 const WRITE_OPS = new Set(['insert', 'update', 'delete', 'upsert', 'create']);
 const READ_OPS = new Set(['findMany', 'findOne', 'findFirst', 'find', 'select', 'query']);
 const TABLE_FACTORIES = new Set(['pgTable', 'mysqlTable', 'sqliteTable']); // Drizzle schema-as-code
+/** The store an engine-specific table factory names outright — the `factory` rule (docs/proposals/data-stores.md §3.1). */
+const FACTORY_STORES: Record<string, Omit<StoreRef, 'via' | 'ref'>> = {
+  pgTable: { name: 'Postgres', kind: 'sql', engine: 'postgres' },
+  mysqlTable: { name: 'MySQL', kind: 'sql', engine: 'mysql' },
+  sqliteTable: { name: 'SQLite', kind: 'sql', engine: 'sqlite' },
+};
+/**
+ * SQL driver packages and the store each one talks to — the `sdk` rule. When the repo imports drivers of
+ * exactly one store, every table it has lives there; two stores' drivers name nothing (core `StoreVia`).
+ */
+export const SQL_DRIVERS: Record<string, Omit<StoreRef, 'via' | 'ref'>> = {
+  pg: { name: 'Postgres', kind: 'sql', engine: 'postgres' },
+  'pg-promise': { name: 'Postgres', kind: 'sql', engine: 'postgres' },
+  postgres: { name: 'Postgres', kind: 'sql', engine: 'postgres' },
+  mysql2: { name: 'MySQL', kind: 'sql', engine: 'mysql' },
+  mysql: { name: 'MySQL', kind: 'sql', engine: 'mysql' },
+  'better-sqlite3': { name: 'SQLite', kind: 'sql', engine: 'sqlite' },
+  sqlite3: { name: 'SQLite', kind: 'sql', engine: 'sqlite' },
+  mssql: { name: 'SQL Server', kind: 'sql', engine: 'mssql' },
+  tedious: { name: 'SQL Server', kind: 'sql', engine: 'mssql' },
+  oracledb: { name: 'Oracle', kind: 'sql' },
+};
+/** The driver a specifier names — exactly, or as the root of a subpath import (`pg/lib/x`). */
+function sqlDriverOf(spec: string): string | undefined {
+  if (SQL_DRIVERS[spec]) return spec;
+  const root = spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!;
+  return SQL_DRIVERS[root] ? root : undefined;
+}
 const MAX_BRANCH_POINTS = 24; // per node — zero graph bloat beyond the field
 /**
  * Third-party systems a package specifier names outright (01 §2.3.4, the first of
@@ -107,7 +135,7 @@ const NO_FLAGS: SiteFlags = { deferred: false, tx: false };
 
 interface HttpCallSite {
   fromId: string;
-  method: string;
+  method?: string;
   path: string;
   line?: number;
   deferred: boolean;
@@ -138,6 +166,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const pendingCalls: { fromId: string; file: string; callee: string; line?: number; deferred: boolean; tx: boolean }[] = [];
   const pendingRenders: { fromId: string; file: string; callee: string; line?: number; jsx?: true; deferred: boolean; tx: boolean }[] = [];
   const httpCalls: HttpCallSite[] = [];
+  // SQL driver specifier → the files that import it (the `sdk` store rule)
+  const sqlDrivers = new Map<string, string[]>();
   // Drizzle-style ops name the table via an identifier argument — resolution
   // (imports, barrels, pgTable declarations) has to wait for pass 2
   const pendingDbOps: { fromId: string; file: string; tableName: string; op: string; write: boolean; code: string; line?: number; sql?: boolean; deferred: boolean; tx: boolean }[] = [];
@@ -174,10 +204,16 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const sdkUses: { fromId: string; file: string; via?: string; specifier: string; name: string; kind: ExternalKind; line?: number }[] = [];
   const markedSdk = new Set<string>(); // `${fromId}|${name}` — the first reference marks the function
   // a non-literal `fetch` inside a class whose base URL starts with a constant host
-  const pendingHostCalls: { fromId: string; file: string; cls: string; constName: string; method: string; line?: number; deferred: boolean; tx: boolean }[] = [];
+  const pendingHostCalls: { fromId: string; file: string; cls: string; constName: string; method?: string; line?: number; deferred: boolean; tx: boolean }[] = [];
   // every `fetch(` site inside a class method, keyed `${file}::${Class}` — what a
   // `<path>::<Class>` declaration attaches its edges to when nothing was detected
-  const classFetchSites = new Map<string, { fromId: string; method: string; line?: number }[]>();
+  const classFetchSites = new Map<string, { fromId: string; method?: string; line?: number }[]>();
+  // each class's methods, keyed `${file}::${Class}`: node id and whether it is private
+  // (`private` / `protected` / `#name`) — a declared client's edges hang on its public methods
+  const classMethods = new Map<string, { name: string; id: string; private: boolean }[]>();
+  // `this.helper(…)` calls inside a class's methods, with the `method:` literal of an
+  // object-literal first argument (`request({ method: 'PATCH', … })`): null = no such key
+  const classThisCalls = new Map<string, { fromId: string; callee: string; method: string | undefined | null; line: number }[]>();
   // Next.js App Router bookkeeping (file conventions are the router)
   const appPages: { nodeId: string; appRoot: string; dir: string }[] = [];
   const appApiRoutes: { nodeId: string; appRoot: string; dir: string }[] = [];
@@ -212,9 +248,10 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   // other kind of declaration — a client class this parser could not have typed
   const sdkTable = new Map(Object.entries(SDK_EXTERNALS));
   const declaredClassExternals = new Map<string, ExternalDecl>();
+  const sdkDecls = new Map<string, ExternalDecl>();
   for (const decl of options.externals ?? []) {
     if (decl.import.includes('::')) declaredClassExternals.set(decl.import.replace(/^\.\//, ''), decl);
-    else sdkTable.set(decl.import, { name: decl.name, kind: decl.kind, node: true });
+    else { sdkTable.set(decl.import, { name: decl.name, kind: decl.kind, node: true }); sdkDecls.set(decl.import, decl); }
   }
   /** The table row an import specifier names — exactly, or as the root of a subpath import. */
   const sdkEntry = (spec: string) => {
@@ -294,6 +331,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     walk(program, (n) => {
       if (n.type === 'ImportDeclaration') {
         const src = stringValue(n.source);
+        const driver = src ? sqlDriverOf(src) : undefined;
+        if (driver) sqlDrivers.set(driver, [...(sqlDrivers.get(driver) ?? []), file]);
         // an SDK specifier names a third-party system outright — and never resolves on
         // disk, so this has to happen before the unresolved-import bail below
         const sdk = src ? sdkEntry(src) : undefined;
@@ -351,6 +390,9 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
           const mname = typeof key.name === 'string' ? key.name : typeof key.value === 'string' ? key.value : '';
           if (!mname) continue;
           declared.push({ name: `${cls}.${mname}`, node: m, body: ((m.value as AstNode).body as AstNode) ?? null, kind: 'function', cls, clsGroup: clsDoc.group ?? cls });
+          const isPrivate = m.accessibility === 'private' || m.accessibility === 'protected' || key.type === 'PrivateIdentifier';
+          const ck = `${file}::${cls}`;
+          classMethods.set(ck, [...(classMethods.get(ck) ?? []), { name: mname, id: symbolId(file, `${cls}.${mname}`), private: isPrivate }]);
         }
         // the class's own base URL — `this.baseUrl = `${BC_API_HOST}/v2.0`` in the
         // constructor, or the same shape as a field initializer. A `fetch` in one of its
@@ -456,11 +498,14 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
               if (typeof keyName === 'string') cols.push(keyName);
             }
           }
+          const factory = memberChain(init.callee).pop()!;
           addNode({
             id: tableId, kind: 'table', name: tableName, lang: 'ts',
             loc: { repo, path: file, line: line(n.start ?? 0) },
             tags: autoTags(file, tableName, 'table'),
             ...(cols.length ? { signature: `columns: ${cols.join(', ')}` } : {}),
+            // the factory names the engine outright — the first store rule
+            store: { ...FACTORY_STORES[factory]!, via: 'factory', ref: factory },
           });
           // the variable is how code refers to the table — register it so
           // imported identifiers (and barrels) resolve to this node
@@ -698,6 +743,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
           // this.method() inside a class — the sibling method in the same file
           if (chain.length === 2 && chain[0] === 'this' && d.cls) {
             pendingCalls.push({ fromId, file, callee: `${d.cls}.${chain[1]}`, line: line(b.start ?? 0), ...f });
+            const ck = `${file}::${d.cls}`;
+            classThisCalls.set(ck, [...(classThisCalls.get(ck) ?? []), { fromId, callee: chain[1]!, method: methodLiteral(args[0]), line: line(b.start ?? 0) }]);
             return;
           }
           // this.<field>.<…>.<fn>() inside a class — a field whose type is declared is
@@ -1374,7 +1421,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   // declares the route. Every http edge carries its resolution.
   const routes = [...nodes.values()].filter((n) => n.kind === 'route');
   for (const hc of httpCalls) {
-    const meta = withFlags({ method: hc.method, path: hc.path, ...(hc.line != null ? { line: hc.line } : {}) }, hc)!;
+    const meta = withFlags({ ...(hc.method ? { method: hc.method } : {}), path: hc.path, ...(hc.line != null ? { line: hc.line } : {}) }, hc)!;
     const abs = hc.path.match(/^(https?:\/\/[^/]+)(\/.*)?$/);
     if (abs) {
       const host = abs[1]!.replace(/^https?:\/\//, '');
@@ -1386,20 +1433,29 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     }
     // a templated host (`${base}/x`) normalizes to a leading `:param` — match it as a host wildcard
     const hostless = hc.path.startsWith(':param/') ? hc.path.slice(':param'.length) : null;
-    const match = routes.find((r) => {
+    const atPath = routes.filter((r) => {
       // a 'use server' action is a route node named for the function — no method/path to match
-      const [m, p] = r.name.split(' ');
+      const [, p] = r.name.split(' ');
       if (!p) return false;
       const np = normalizePath(p);
-      return m === hc.method && (np === hc.path || (hostless != null && np === hostless));
+      return np === hc.path || (hostless != null && np === hostless);
     });
+    const match = hc.method ? atPath.find((r) => r.name.split(' ')[0] === hc.method) : undefined;
     if (match) {
       edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: match.id, meta,
         resolution: { status: 'resolved', technique: 'fetch→route', confidence: 'HIGH' } });
       continue;
     }
-    const stubId = `${repo}::unknown::${hc.method} ${hc.path}`;
-    addNode({ id: stubId, kind: 'unknown', name: `${hc.method} ${hc.path}`, tags: ['http', 'unresolved'] });
+    // the method is not a literal: the path alone decides, and only when one route serves it
+    if (!hc.method && atPath.length === 1) {
+      edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: atPath[0]!.id, meta,
+        resolution: { status: 'heuristic', technique: 'fetch→route', confidence: 'MEDIUM', note: 'the method is not a literal; the only route at this path' } });
+      continue;
+    }
+    // an unknown method stays unknown in the stub's name (`? /x`) — stitching needs a method to match on
+    const stubName = `${hc.method ?? '?'} ${hc.path}`;
+    const stubId = `${repo}::unknown::${stubName}`;
+    addNode({ id: stubId, kind: 'unknown', name: stubName, tags: ['http', 'unresolved'] });
     edges.push({ id: `e${edgeSeq++}`, kind: 'http', from: hc.fromId, to: stubId, meta,
       resolution: { status: 'unresolved', technique: 'fetch→route', confidence: 'LOW', candidates: [], note: 'no indexed route serves this path' } });
   }
@@ -1409,17 +1465,19 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   // unused SDK import, an unresolvable host constant and a declared class with no
   // `fetch` all leave nothing behind rather than inventing a system.
   /** The node for one third-party system, merging provenance onto whatever is already there. */
-  const externalNodeFor = (name: string, ref: ExternalRef): string => {
+  const externalNodeFor = (name: string, ref: ExternalRef, decl?: ExternalDecl): string => {
     const id = `${repo}::external::${name}`;
+    const store = ref.store ? storeOfExternal(name, ref, decl) : undefined;
     const existing = nodes.get(id);
     if (existing) {
       // an absolute-literal `fetch` to the same host may have made this node already:
       // one system is one node, so the provenance merges instead of forking it
       if (!existing.external) existing.external = ref;
+      if (store && !existing.store) existing.store = store;
       for (const t of ['external', ref.kind]) if (!existing.tags.includes(t)) existing.tags.push(t);
       return id;
     }
-    addNode({ id, kind: 'external', name, tags: ['external', ref.kind], external: ref });
+    addNode({ id, kind: 'external', name, tags: ['external', ref.kind], external: ref, ...(store ? { store } : {}) });
     return id;
   };
   const externalEdge = (fromId: string, extId: string, meta: GraphEdge['meta'], resolution: GraphEdge['resolution']) => {
@@ -1435,25 +1493,75 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   for (const use of sdkUses) {
     const decl = declaredFor(use.file, use.via);
     if (decl && use.via) usedDeclarations.add(`${use.file}::${use.via}`);
-    const extId = externalNodeFor(decl?.name ?? use.name, {
+    const extId = externalNodeFor(decl?.name ?? use.name, storeLike({
       kind: decl?.kind ?? use.kind, source: decl ? 'config' : 'sdk', ...(use.via ? { via: use.via } : {}), ref: use.specifier,
-    });
+    }, decl ?? sdkDecls.get(use.specifier)), decl ?? sdkDecls.get(use.specifier));
     externalEdge(use.fromId, extId, { via: 'sdk', ...(use.line != null ? { line: use.line } : {}) },
       { status: 'heuristic', technique: 'sdk-import', confidence: 'MEDIUM', note: `uses ${use.specifier} in ${use.file}` });
   }
 
+  /**
+   * A declared client class's call sites, one per public method (docs/proposals/data-stores.md §3.2):
+   * a public method that makes the `fetch` itself keeps its own site; one that calls a sibling
+   * (`this.request({ method: 'PATCH', … })`) that makes it gets the sibling's site, with the method
+   * from the first string literal on that path — the call's object-literal `method:`, else the
+   * sibling's `fetch` literal; none → no method. Only one hop is followed. A site no public
+   * method reaches this way (a private helper nobody public calls) stays where it is.
+   */
+  const perMethodSites = <S extends { fromId: string; method?: string; line?: number }>(key: string, sites: S[]): S[] => {
+    const methods = classMethods.get(key) ?? [];
+    const siteOf = new Map<string, S>();
+    for (const site of sites) if (!siteOf.has(site.fromId)) siteOf.set(site.fromId, site);
+    const out: S[] = [];
+    const covered = new Set<string>();
+    const calls = (classThisCalls.get(key) ?? []).slice().sort((a, b) => a.line - b.line);
+    for (const m of methods) {
+      if (m.private) continue;
+      const own = siteOf.get(m.id);
+      if (own) { out.push(own); covered.add(own.fromId); continue; }
+      for (const c of calls) {
+        if (c.fromId !== m.id) continue;
+        const helper = methods.find((h) => h.name === c.callee);
+        const hs = helper ? siteOf.get(helper.id) : undefined;
+        if (!hs) continue;
+        const method = typeof c.method === 'string' ? c.method : hs.method;
+        const { method: _drop, ...rest } = hs;
+        out.push({ ...rest, fromId: m.id, line: c.line, ...(method ? { method } : {}) } as unknown as S);
+        covered.add(hs.fromId);
+        break;
+      }
+    }
+    for (const site of sites) if (!covered.has(site.fromId)) out.push(site);
+    return out;
+  };
+
+  const declaredHostCalls = new Map<string, typeof pendingHostCalls>();
   for (const hostCall of pendingHostCalls) {
     const value = lookupConst(hostCall.file, hostCall.constName, new Set());
     const host = value ? hostOf(value) : null;
     if (!host) continue; // the constant could not be followed to a host: an absence, not a guess
     const decl = declaredFor(hostCall.file, hostCall.cls);
-    if (decl) usedDeclarations.add(`${hostCall.file}::${hostCall.cls}`);
-    const extId = externalNodeFor(decl?.name ?? host, {
-      kind: decl?.kind ?? 'http', source: decl ? 'config' : 'host', via: hostCall.cls, ref: hostCall.constName,
-    });
+    if (decl) {
+      // a declared client: its edges hang on its public methods, collected and placed below
+      const key = `${hostCall.file}::${hostCall.cls}`;
+      usedDeclarations.add(key);
+      declaredHostCalls.set(key, [...(declaredHostCalls.get(key) ?? []), hostCall]);
+      continue;
+    }
+    const extId = externalNodeFor(host, { kind: 'http', source: 'host', via: hostCall.cls, ref: hostCall.constName });
     externalEdge(hostCall.fromId, extId,
-      withFlags({ method: hostCall.method, via: 'host', ...(hostCall.line != null ? { line: hostCall.line } : {}) }, hostCall),
+      withFlags({ ...(hostCall.method ? { method: hostCall.method } : {}), via: 'host', ...(hostCall.line != null ? { line: hostCall.line } : {}) }, hostCall),
       { status: 'heuristic', technique: 'constant-host', confidence: 'MEDIUM', note: `base URL from ${hostCall.constName}` });
+  }
+  for (const [key, calls] of declaredHostCalls) {
+    const decl = declaredClassExternals.get(key)!;
+    const first = calls[0]!;
+    const extId = externalNodeFor(decl.name, storeLike({ kind: decl.kind, source: 'config', via: first.cls, ref: first.constName }, decl), decl);
+    for (const hostCall of perMethodSites(key, calls)) {
+      externalEdge(hostCall.fromId, extId,
+        withFlags({ ...(hostCall.method ? { method: hostCall.method } : {}), via: 'host', ...(hostCall.line != null ? { line: hostCall.line } : {}) }, hostCall),
+        { status: 'heuristic', technique: 'constant-host', confidence: 'MEDIUM', note: `base URL from ${hostCall.constName}` });
+    }
   }
 
   // a declaration nothing was detected for: the author says this class is the client, so
@@ -1464,14 +1572,17 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     const sites = classFetchSites.get(key);
     if (!sites?.length) continue;
     const cls = key.slice(key.indexOf('::') + 2);
-    const extId = externalNodeFor(decl.name, { kind: decl.kind, source: 'config', via: cls, ref: decl.import });
-    for (const site of sites) {
-      externalEdge(site.fromId, extId, { method: site.method, via: 'config', ...(site.line != null ? { line: site.line } : {}) },
+    const extId = externalNodeFor(decl.name, storeLike({ kind: decl.kind, source: 'config', via: cls, ref: decl.import }, decl), decl);
+    for (const site of perMethodSites(key, sites)) {
+      externalEdge(site.fromId, extId, { ...(site.method ? { method: site.method } : {}), via: 'config', ...(site.line != null ? { line: site.line } : {}) },
         { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `declared in farsight.config.json → externals as ${decl.import}` });
     }
   }
 
-  return { repo, nodes: [...nodes.values()], edges, meta };
+  // the SQL drivers this repo imports — the `sdk` store rule runs in ingestRepo's store pass,
+  // over every adapter's tables at once (parsers/src/stores.ts)
+  const drivers = [...sqlDrivers].sort(([a], [b]) => a.localeCompare(b)).map(([spec, files]) => ({ spec, files: files.length }));
+  return { repo, nodes: [...nodes.values()], edges, meta: { ...meta, ...(drivers.length ? { stores: { drivers } } : {}) } };
 }
 
 // ── helpers ──────────────────────────────────────────────────────
@@ -1598,18 +1709,58 @@ function hasDirective(node: AstNode | null | undefined, directive: string): bool
   return false;
 }
 
-function fetchMethod(optionsArg: AstNode | undefined): string {
-  let method = 'GET';
-  walk(optionsArg, (n) => {
-    if (n.type === 'Property' || n.type === 'ObjectProperty') {
-      const key = n.key as AstNode | undefined;
-      if (key && String(key.name ?? key.value) === 'method') {
-        const v = stringValue(n.value);
-        if (v) method = v.toUpperCase();
-      }
-    }
-  });
-  return method;
+/**
+ * Which external kinds are data stores by default (docs/proposals/data-stores.md §3.1): the app reads
+ * from and writes to an ERP, a database and a file store; OCR and a plain HTTP API are services it
+ * asks; mail and queues are messages. `farsight.config.json → externals[].store` overrides either way.
+ */
+const STORE_KINDS: Partial<Record<ExternalKind, StoreKind>> = { erp: 'erp', files: 'files', db: 'other' };
+
+/** `ref` with `store: true` when the external is used as a data store — the kind's default, else the declaration's word. */
+export function storeLike(ref: ExternalRef, decl?: ExternalDecl): ExternalRef {
+  const isStore = typeof decl?.store === 'boolean' ? decl.store : ref.kind in STORE_KINDS;
+  return isStore ? { ...ref, store: true } : ref;
+}
+
+/** The StoreRef a store-like external node carries: its own name, a kind from its system kind, and how it was known. */
+function storeOfExternal(name: string, ref: ExternalRef, decl?: ExternalDecl): StoreRef {
+  return {
+    name,
+    kind: STORE_KINDS[ref.kind] ?? 'other',
+    via: decl || ref.source === 'config' ? 'config' : 'sdk',
+    ...(decl ? { ref: decl.import } : ref.ref ? { ref: ref.ref } : {}),
+  };
+}
+
+/**
+ * The HTTP method a `fetch(url, init)` call names, or undefined when the code does not say.
+ * `fetch` itself defaults to GET, so no `init` at all, or an object literal with no `method`
+ * key and no spread, is a GET the code wrote. A `method` that is not a string literal, an
+ * `init` that is a variable, or a spread that could carry one is unknown — never a guess.
+ */
+function fetchMethod(optionsArg: AstNode | undefined): string | undefined {
+  if (!isNode(optionsArg)) return 'GET';
+  if (optionsArg.type !== 'ObjectExpression') return undefined;
+  const lit = methodLiteral(optionsArg);
+  if (lit !== null) return lit;
+  const props = (optionsArg.properties as AstNode[]) ?? [];
+  return props.some((p) => p.type === 'SpreadElement') ? undefined : 'GET';
+}
+
+/**
+ * An object literal's own top-level `method:` — the upper-cased string when it is a literal,
+ * undefined when the key is there but its value is not a literal, null when there is no key.
+ */
+function methodLiteral(obj: AstNode | undefined): string | undefined | null {
+  if (!isNode(obj) || obj.type !== 'ObjectExpression') return null;
+  for (const p of ((obj.properties as AstNode[]) ?? [])) {
+    if (p.type !== 'Property' && p.type !== 'ObjectProperty') continue;
+    const key = p.key as AstNode | undefined;
+    if (!key || String(key.name ?? key.value) !== 'method') continue;
+    const v = stringValue(p.value);
+    return v ? v.toUpperCase() : undefined;
+  }
+  return null;
 }
 
 /** The text of a string or template literal (holes become `?`), else null — SQL detection reads this. */

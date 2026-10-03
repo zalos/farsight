@@ -18,6 +18,13 @@
       "kind": "erp"
     }
   ],
+  "stores": [
+    {
+      "name": "Invoice DB",
+      "kind": "sql",
+      "engine": "postgres"
+    }
+  ],
   "plumbing": [
     "src/server/plumbing/**"
   ],
