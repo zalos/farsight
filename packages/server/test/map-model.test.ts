@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
-const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, storesOf, mergeMode, MODE_ORDER } = await import(join(appDir, 'lib', 'map-model.js'));
+const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, routeLinks, storesOf, mergeMode, MODE_ORDER } = await import(join(appDir, 'lib', 'map-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle.json'), 'utf8'));
 import { withStores, type AnyRec } from './map-stores-fixture.ts';
 const byId = new Map(fx.nodes.map((n: { id: string }) => [n.id, n]));
@@ -159,6 +159,59 @@ for (const n of [1, 3, 8, 21, 40]) {
     if (n >= 8) assert.ok(ratio > 0.6 && ratio < 1.67, `aspect ${L.size.w}×${L.size.h} is ${ratio.toFixed(2)}× the viewport's`);
   });
 }
+
+type Box = { x: number; y: number; w: number; h: number };
+type Pt = { x: number; y: number };
+/** Whether a straight run from a to b passes through the inside of r. */
+function crosses(a: Pt, b: Pt, r: Box) {
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+  return x0 < r.x + r.w - 1 && x1 > r.x + 1 && y0 < r.y + r.h - 1 && y1 > r.y + 1;
+}
+for (const n of [3, 12, 21, 40]) {
+  test(`the lines between ${n} journeys run in the gutters, square, with one label each that clears every journey`, () => {
+    const items = synthetic(n);
+    const L = layoutDistricts(items, { aspect: 1440 / 760 });
+    const ids = items.map((i) => i.id);
+    const links: Array<{ from: string; to: string; kind: string; labelW: number; labelH: number }> = [];
+    for (let i = 0; i < n - 1; i++) links.push({ from: ids[i], to: ids[i + 1], kind: 'leadsTo', labelW: 84, labelH: 18 });
+    for (let i = 0; i + 5 < n; i += 4) links.push({ from: ids[i], to: ids[i + 5], kind: 'partOf', labelW: 76, labelH: 18 });
+    if (n > 2) links.push({ from: ids[n - 1], to: ids[0], kind: 'leadsTo', labelW: 84, labelH: 18 });
+    const out = routeLinks(L.rects, links);
+    assert.equal(out.length, links.length, 'every link is routed');
+    const rects = [...L.rects.values()] as Box[];
+    const labels: Box[] = [];
+    for (const l of out) {
+      const p = l.points as Pt[];
+      // it starts on the edge of its own district and ends on the edge of the other
+      const a = L.rects.get(l.from)!, b = L.rects.get(l.to)!;
+      const onEdge = (q: Pt, r: Box) => (q.x === r.x || q.x === r.x + r.w || q.y === r.y || q.y === r.y + r.h)
+        && q.x >= r.x && q.x <= r.x + r.w && q.y >= r.y && q.y <= r.y + r.h;
+      assert.ok(onEdge(p[0], a) && onEdge(p[p.length - 1], b), `${l.from} → ${l.to} does not leave and arrive at the edges`);
+      for (let k = 0; k < p.length - 1; k++) {
+        assert.ok(p[k].x === p[k + 1].x || p[k].y === p[k + 1].y, 'a run that is not square');
+        for (const r of rects) assert.ok(!crosses(p[k], p[k + 1], r), `${l.from} → ${l.to} crosses a journey`);
+      }
+      if (l.label) {
+        const bx = { x: l.label.x - l.label.w / 2, y: l.label.y - l.label.h / 2, w: l.label.w, h: l.label.h };
+        for (const r of rects) assert.ok(!overlaps(bx, r), `the label of ${l.from} → ${l.to} covers a journey`);
+        for (const o of labels) assert.ok(!overlaps(bx, o), 'two labels overlap');
+        assert.ok([4, 3, 2, 1.5, 1].includes(l.label.scale));
+        labels.push(bx);
+      }
+    }
+    // the gutters leave room: most lines carry their word at the coarsest zoom
+    assert.ok(out.filter((l: { label: { scale: number } | null }) => l.label && l.label.scale === 4).length >= Math.ceil(out.length * 0.75), 'too few labels at the fit');
+  });
+}
+
+test('a line between two journeys side by side goes over the top when the gap between them cannot hold its word', () => {
+  const rects = new Map([['a', { x: 0, y: 200, w: 880, h: 500 }], ['b', { x: 1080, y: 200, w: 880, h: 500 }]]);
+  const [l] = routeLinks(rects, [{ from: 'a', to: 'b', kind: 'leadsTo', labelW: 84, labelH: 18 }]);
+  assert.ok(l.label, 'the label is placed');
+  assert.ok(l.points.length > 2, 'the route bends');
+  assert.ok(l.label.y < 200 || l.label.y > 700, 'the label sits in the gutter, not between the two');
+  assert.deepEqual(routeLinks(rects, [{ from: 'a', to: 'zz', kind: 'leadsTo' }]), [], 'a link to a journey not on the board is left out');
+});
 
 test('a band\'s districts share its height, so its rows line up', () => {
   const L = layoutDistricts([{ id: 'a', repo: 'r', w: 880, h: 438 }, { id: 'b', repo: 'r', w: 880, h: 900 }, { id: 'c', repo: 's', w: 880, h: 438 }]);

@@ -17,7 +17,7 @@
 // a tab whose subject nothing types prints no number. The business lens prints
 // words a person wrote or `humanize()` — never a route, a method, a file or an id.
 
-import { S, esc, currentLens, bizName, repoOf } from '../store.js';
+import { S, esc, currentLens, bizName, repoOf, humanize } from '../store.js';
 import { t, plainWords, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, countedUnit, countedAttrs, defAttrs, plainTip, unCode } from '../lib/counted.js';
@@ -27,7 +27,7 @@ import { designThumbHtml, linkHtml } from '../lib/graph-render.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { workSourcesConfigured, flowWork, stateHtml, sourceName } from '../work-chips.js';
 import {
-  jrnGateLabel, jrnGatesShown, jrnAbsentHtml, jrnWords, jrnRefAnchors,
+  jrnGateLabel, jrnGateText, jrnGatesShown, jrnAbsentHtml, jrnWords, jrnRefAnchors,
   jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml,
 } from './journeys.js';
 import { propertyModel } from '../lib/map-property-model.js';
@@ -226,7 +226,8 @@ function serviceTag(c) {
 }
 function evChip(ev) {
   const key = EV_KEY[ev];
-  if (!key) return '';
+  // the business lens prints the absences (declared, never called · not built) and not the contract's classes
+  if (!key || (biz() && (ev === 'spec-backed' || ev === 'implied'))) return '';
   return '<span class="api-chip mp-evc ' + (ev === 'spec-backed' ? 'ok' : ev === 'implied' ? 'warn' : 'stub') + '" data-ev="' + esc(ev) + '"' + defAttrs(key) + '>' + esc(t(key)) + '</span>';
 }
 /** What a call is for, in the lens on screen. */
@@ -255,19 +256,58 @@ function callRow(c, brief) {
   const sub = brief ? verb : [verb, data].filter(Boolean).join(' · ');
   return row(serviceTag(c) + esc(callWords(c)) + again, sub, evChip(c.evidence), { kind: 'call', id: c.nodeId });
 }
-function gateRow(g) {
+/**
+ * A checkpoint's name in the lens: the business lens says the words somebody wrote, and a permission name
+ * (`billing:read`) said as words (*Billing read*), never the code's spelling.
+ */
+function gateWords(g) {
   const label = jrnGateLabel(g);
-  const kindKey = g.kind === 'guard' ? 'map.prop.kind.guard' : 'map.prop.kind.rule';
+  return biz() && /^[\w.-]+(?::[\w.-]+)+$/.test(label) ? humanize(label.replace(/[:.]/g, ' ')) : label;
+}
+function gateKindKey(g) {
+  if (biz()) return g.kind === 'guard' ? 'map.biz.check' : 'map.biz.rule';
+  return g.kind === 'guard' ? 'map.prop.kind.guard' : 'map.prop.kind.rule';
+}
+function gateRow(g) {
+  const label = gateWords(g);
+  const kindKey = gateKindKey(g);
   const sub = '<span' + defAttrs(kindKey) + '>' + esc(t(kindKey)) + '</span>'
     + (g.planned ? ' · <span' + defAttrs('map.prop.planned') + '>' + esc(t('map.prop.planned')) + '</span>' : '');
-  const times = g.count > 1 ? '<span class="mp-dim"' + plainTip(g.count, 'map.prop.times', 'journey.scopeHere', '/api/journey') + '>' + esc(t('map.prop.times').replace('{n}', g.count)) + '</span>' : '';
+  const timesKey = g.merged > 1 ? 'map.prop.timesSame' : 'map.prop.times';
+  const times = g.count > 1 ? '<span class="mp-dim"' + plainTip(g.count, timesKey, 'journey.scopeHere', '/api/journey', g.parts) + '>' + esc(t(timesKey).replace('{n}', g.count)) + '</span>' : '';
   return row(sym(g.kind === 'guard' ? 'gate' : 'warning') + esc(label), sub, times, { kind: 'gate', id: g.id });
+}
+/**
+ * One row per checkpoint as the reader sees it: two gates the code names apart but the lens says in the same
+ * words (and of the same kind) are one row, their times added, with the parts as the tip's breakdown.
+ */
+/** A merged row's part in its tip: the code's name outside the business lens, the words in it. */
+function partName(g) { return biz() ? gateWords(g) : jrnGateText(g) || gateWords(g); }
+function dedupeGates(list) {
+  const out = [], at = new Map();
+  for (const g of list) {
+    const key = g.kind + '|' + (g.planned ? 'p' : '') + '|' + gateWords(g);
+    const n = g.count || 1;
+    if (!at.has(key)) {
+      const row0 = { ...g, count: n, merged: 1, parts: [[partName(g), n]] };
+      at.set(key, row0);
+      out.push(row0);
+    } else {
+      const r = at.get(key);
+      r.count += n;
+      r.merged += 1;
+      r.parts.push([partName(g), n]);
+    }
+  }
+  for (const r of out) if (r.merged < 2) r.parts = null;
+  return out;
 }
 let COUNTED_GATES = null;
 function gateList(rows, key) {
   const shown = jrnGatesShown(rows);
   if (!shown.rows.length) return absentRow('noneIndexed');
-  return capRows(key || 'gates', shown.drawn.map(gateRow), shown.mute ? null : shown.rows.length === shown.drawn.length ? COUNTED_GATES : null)
+  const drawn = dedupeGates(shown.drawn);
+  return capRows(key || 'gates', drawn.map(gateRow), shown.mute ? null : shown.rows.length === drawn.length ? COUNTED_GATES : null)
     + (shown.mute ? '<div class="mp-row none"><span class="mp-note"' + plainTip(shown.mute, 'map.prop.gates.mute', 'journey.scopeHere', '/api/journey') + '>'
       + esc(t('map.prop.gates.mute').replace('{n}', shown.mute)) + '</span></div>' : '');
 }
@@ -328,7 +368,9 @@ function storeGroupHtml(g, gi) {
     ? '<h4 class="mp-grp st-' + sk + '" data-store="' + esc(g.store.name) + '"><i></i><span>' + esc(g.store.name) + '</span> · <span' + defAttrs('map.store.kind.' + sk) + '>' + esc(t('map.store.kind.' + sk)) + '</span></h4>'
     : '<h4 class="mp-grp plain"><span' + defAttrs(plainKey) + '>' + esc(t(plainKey)) + '</span></h4>';
   const rows = g.rows.map((r) => {
-    const kindKey = r.kind === 'message' ? 'sym.message' : r.kind === 'external' ? 'sym.external' : 'sym.record';
+    const sk2 = g.store ? sk : '';
+    const kindKey = biz() ? (sk2 ? 'map.biz.kind.' + sk2 : r.kind === 'message' ? 'map.biz.kind.message' : r.kind === 'external' ? 'map.biz.kind.external' : 'map.biz.kind.record')
+      : r.kind === 'message' ? 'sym.message' : r.kind === 'external' ? 'sym.external' : 'sym.record';
     const m = modesWords(r.modes);
     return row(sym(r.kind === 'message' ? 'message' : r.kind === 'external' ? 'external' : 'record') + esc(dataName(r)),
       '<span' + defAttrs(kindKey) + '>' + esc(t(kindKey)) + '</span> · <span class="mp-mode ' + esc(r.modes.length > 1 ? 'both' : r.modes[0] || '') + '"' + defAttrs(m.key) + '>' + esc(m.words) + '</span>', '', { kind: r.kind || 'record', id: r.nodeId });
@@ -350,10 +392,17 @@ function uxHtml(pm) {
   return sec('map.prop.ux.page', page) + sec('map.prop.ux.components', comps) + sec('map.prop.ux.stories', stories || absentRow('noneIndexed'));
 }
 
+/** A test's name in the business lens: said as words, without the document references its authors cross-file it by. */
+function caseWords(name) {
+  const v = String(name || '');
+  const said = /\/|[a-z][A-Z]|_|\.[a-z]{2,4}\b/.test(v) ? unCode(v) : v;
+  // a path left in the words (a test named for the route it visits) is dropped, never printed
+  return (plainWords(said) || said).replace(/(^|[\s(])\/[\w.:{}\-/]*/g, '$1').replace(/\s{2,}/g, ' ').trim() || unCode(v);
+}
 function caseRow(x) {
   const how = x.observedVia === 'declaration' && x.status === 'passed' ? 'map.prop.tests.byDeclaration'
     : x.evidence === 'observed' ? 'map.prop.tests.byRun' : 'map.prop.tests.reached';
-  const name = biz() ? (/\/|[a-z][A-Z]|_|\.[a-z]{2,4}\b/.test(x.name || '') ? unCode(x.name) : String(x.name || '')) : String(x.name || '');
+  const name = biz() ? caseWords(x.name) : String(x.name || '');
   const sub = biz() ? '' : [x.level ? t('tests.level.' + x.level) : '', x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).map(esc).join(' · ');
   const status = x.status ? '<span class="st ' + esc(x.status) + '"' + defAttrs('tests.run.' + x.status) + '>' + esc(t('tests.run.' + x.status)) + '</span>' : '';
   return row(esc(name), sub, '<span class="mp-ev ' + esc(how.split('.').pop()) + '"' + defAttrs(how) + '>' + esc(t(how)) + '</span>' + status, { kind: 'test', id: x.id });
@@ -382,7 +431,7 @@ function testsHtml(pm) {
       + jrnRunLineHtml(facts.run);
   }
   const { cases, reports } = pm.tabs.tests;
-  const reportRow = (x) => row(esc(biz() ? unCode(x.name || '') : String(x.name || '')), biz() ? '' : esc([x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · ')),
+  const reportRow = (x) => row(esc(biz() ? caseWords(x.name) : String(x.name || '')), biz() ? '' : esc([x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · ')),
     '<span class="mp-ev reached"' + defAttrs('tests.evidence.runSeen') + '>' + esc(t('tests.evidence.runSeen')) + '</span>', { kind: 'test', id: x.id });
   return '<section class="mp-sec"><h3 class="hud-label"' + defAttrs('map.prop.tests.head') + '>' + esc(t('map.prop.tests.head')) + '</h3><div class="jrn-tfoot mp-tfoot">' + foot + '</div></section>'
     + '<section class="mp-sec">' + secHead('map.prop.tests.cases', countNum(k.tests)) + (cases.length ? capRows('cases', cases.map(caseRow), k.tests) : absentRow('noneIndexed')) + '</section>'
@@ -472,6 +521,7 @@ function loadIndexChanges(pm, repo) {
     if (!body || !body.diff) return { failed: true };
     const ids = new Set(pm.changeIds);
     const list = (body.diff.changes || []).filter((c) => c.subject && ids.has(c.subject.id));
+    // edge confidence is how sure the index is of a link — a fact about Farsight, not the application
     return { base: body.baseSync, head: body.headSync, list, sentences: body.sentences || {} };
   })();
 }
@@ -532,13 +582,15 @@ function commitsHtml(c) {
   return capRows('commits', c.list.map(commitRow), c.counted, '/api/history/touching');
 }
 
+/** The changes a lens prints: the business lens leaves out the index's own facts (how sure it is of a link). */
+function changeRows(c) { return biz() ? c.list.filter((x) => x.kind !== 'edge_confidence_changed') : c.list; }
 function indexChangesHtml(c) {
   if (!c) return '<div class="mp-row none mp-loading">' + esc(t('map.prop.loading')) + '</div>';
   if (c.off) return lineRow('map.prop.changes.noHistory');
   if (c.failed) return lineRow('map.prop.changes.failed');
   if (c.noEarlier) return lineRow('map.prop.changes.noEarlier');
-  if (!c.list.length) return lineRow('map.prop.changes.none');
-  return capRows('changes', c.list.map((x) => {
+  if (!changeRows(c).length) return lineRow('map.prop.changes.none');
+  return capRows('changes', changeRows(c).map((x) => {
     const s = c.sentences[x.id] || x.kind;
     const sub = biz() ? '' : esc([x.kind, x.subject && x.subject.name, currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · '));
     return row(clampHtml('change-' + x.id, biz() ? unCode(s) : s), sub, '<span class="api-chip ' + (x.severity === 'breaking' ? 'warn' : '') + '"' + defAttrs('changes.sev.' + x.severity) + '>' + esc(t('changes.sev.' + x.severity)) + '</span>', { kind: (x.subject && x.subject.kind) || 'node', id: x.subject && x.subject.id });

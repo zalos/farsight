@@ -18,10 +18,18 @@ const KNOWN_HTTP_NOISE: RegExp[] = [/\/api\/design\/image\?/];
 type Fixtures = {
   expectedHttpErrors: RegExp[];
   pageErrors: string[];
+  /** The map's legend opens by itself on a reader's first visit; specs start as a returning reader unless they set this false. */
+  mapLegendSeen: boolean;
+  mapLegendInit: void;
 };
 
 export const test = base.extend<Fixtures>({
   expectedHttpErrors: [[], { option: true }],
+  mapLegendSeen: [true, { option: true }],
+  mapLegendInit: [async ({ page, mapLegendSeen }, use) => {
+    if (mapLegendSeen) await page.addInitScript(() => { try { localStorage.setItem('fs-map-legend-seen', '1'); } catch { /* no storage: the legend opens */ } });
+    await use();
+  }, { auto: true }],
   pageErrors: [async ({ page, expectedHttpErrors }, use) => {
     const errors: string[] = [];
     const allowed = [...KNOWN_HTTP_NOISE, ...expectedHttpErrors];
