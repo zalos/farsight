@@ -1,0 +1,701 @@
+<title>Property Street Neighbourhood</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  color-scheme:dark;
+  --ground:#0A0D14;--panel:#111623;--raised:#182032;--line:#232C42;--line-soft:#1A2135;
+  --ink:#DCE4F5;--muted:#99A3BA;--dim:#828DA8;
+  --amber:#F0B44E;--cyan:#5BC8DD;--ok:#6FCF8E;--fn:#D8C27A;--tbl:#C287D6;--auth:#A78BE0;--warn:#E8A13C;--err:#E06C5F;
+  --accent:var(--cyan);--accent-dim:rgba(91,200,221,.12);
+  --svc-invoice:#5BC8DD;--svc-billing:#7FA3FF;--svc-accounts:#E08FBF;
+  --hud:'Futura','Avenir Next Condensed','Barlow Condensed','Arial Narrow',sans-serif;
+  --body:'Avenir Next','Segoe UI',system-ui,sans-serif;
+  --mono:'SF Mono','IBM Plex Mono',Menlo,Consolas,monospace;
+  --shadow:0 18px 40px rgba(0,0,0,.45);
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    color-scheme:light;
+    --ground:#F2F0EB;--panel:#FBFAF7;--raised:#EDEAE2;--line:#D8D3C6;--line-soft:#E5E1D6;
+    --ink:#22283A;--muted:#4E5361;--dim:#61677A;
+    --amber:#7D5915;--cyan:#18677A;--ok:#267448;--fn:#8A6D1F;--tbl:#8A4FA8;--auth:#6D4FC2;--warn:#7D5915;--err:#A75047;
+    --accent:var(--cyan);--accent-dim:rgba(24,103,122,.1);--shadow:0 18px 40px rgba(40,30,10,.18);
+    --svc-invoice:#18677A;--svc-billing:#2F5FC4;--svc-accounts:#A8457D;
+  }
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --ground:#F2F0EB;--panel:#FBFAF7;--raised:#EDEAE2;--line:#D8D3C6;--line-soft:#E5E1D6;
+  --ink:#22283A;--muted:#4E5361;--dim:#61677A;
+  --amber:#7D5915;--cyan:#18677A;--ok:#267448;--fn:#8A6D1F;--tbl:#8A4FA8;--auth:#6D4FC2;--warn:#7D5915;--err:#A75047;
+  --accent:var(--cyan);--accent-dim:rgba(24,103,122,.1);--shadow:0 18px 40px rgba(40,30,10,.18);
+  --svc-invoice:#18677A;--svc-billing:#2F5FC4;--svc-accounts:#A8457D;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5;padding-inline:16px;padding-block:24px 64px}
+a{color:var(--accent)}
+.wrap{max-width:1240px;margin:0 auto}
+h1,h2,h3{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-weight:600;text-wrap:balance;margin:0}
+h1{font-size:26px;letter-spacing:.2em;color:var(--accent)}
+h2{font-size:15px;color:var(--ink);margin-top:48px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h3{font-size:12.5px;color:var(--muted);letter-spacing:.14em}
+p{max-width:68ch;margin:8px 0}
+.lede{color:var(--muted);max-width:76ch}
+.hud{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:11px;color:var(--muted)}
+.mono{font-family:var(--mono);font-size:12px}
+kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;padding:0 5px;color:var(--ink);background:var(--raised)}
+.note{border-left:2px solid var(--amber);padding:6px 12px;color:var(--muted);margin:14px 0}
+.note b{color:var(--ink)}
+
+/* ---------- the canvas ---------- */
+.stage{margin-top:18px;border:1px solid var(--line);background:var(--panel);position:relative;height:min(78vh,760px);min-height:520px;overflow:hidden;user-select:none;-webkit-user-select:none}
+.stage:fullscreen{height:100%;border:0}
+.canvas{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;
+  background-image:radial-gradient(var(--line-soft) 1px,transparent 1px);background-size:28px 28px}
+.canvas.drag{cursor:grabbing}
+.world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+.world.anim{transition:transform .45s cubic-bezier(.2,.7,.2,1)}
+@media (prefers-reduced-motion:reduce){.world.anim{transition:none}}
+.links{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.links path{fill:none;stroke:var(--dim);stroke-width:2.5}
+.links path.contains{stroke-dasharray:8 8;opacity:.55}
+.links text{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;font-size:20px;fill:var(--muted)}
+
+.district{position:absolute;border:1.5px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 82%,transparent);overflow:visible}
+.district.focus{border-color:var(--accent);box-shadow:0 0 0 6px var(--accent-dim)}
+.d-head{position:absolute;left:0;right:0;top:0;min-height:92px;padding:14px 22px;display:flex;flex-direction:column;gap:4px;border-bottom:1px dashed var(--line-soft)}
+.d-head>*{flex-shrink:0}
+.d-head .name{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:20px;color:var(--ink)}
+.d-head .desc{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d-head .agg{display:flex;gap:8px;flex-wrap:wrap}
+.d-cover{position:absolute;inset:0;padding:48px 56px;display:flex;flex-direction:column;justify-content:flex-end;gap:14px;border-radius:10px;
+  background:linear-gradient(180deg,transparent 0%,color-mix(in srgb,var(--panel) 92%,transparent) 48%);transition:opacity .25s;cursor:pointer}
+.d-cover .name{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:54px;line-height:1;color:var(--ink)}
+.d-cover .desc{font-size:26px;color:var(--muted);max-width:30ch}
+.d-cover .agg{display:flex;gap:16px;flex-wrap:wrap}
+.d-cover .agg .chip{font-size:24px;padding:8px 18px;border-radius:22px}
+.d-cover .enter{font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:22px;color:var(--accent);margin-top:6px}
+.world.lvl-nb .d-street{opacity:.18;pointer-events:none}
+.world.lvl-nb .d-head{opacity:0}
+.world.lvl-st .d-cover{opacity:0;pointer-events:none}
+.d-street{position:absolute;inset:0;transition:opacity .25s}
+.d-street .edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.d-street .edges path{fill:none;stroke:var(--line);stroke-width:2}
+.d-street .edges path.step{stroke:var(--accent);stroke-width:3}
+.d-street .edges path.trunk{stroke:var(--line);stroke-width:3}
+.d-street .edges path.read{stroke:var(--cyan);stroke-width:2}
+.d-street .edges path.write{stroke:var(--amber);stroke-width:2}
+.d-street .edges path.ghost{stroke-dasharray:6 6;opacity:.55}
+.d-street .edges .ord{font-family:var(--hud);font-size:12px;letter-spacing:.1em;fill:var(--accent)}
+.world.no-plumb .lane,.world.no-plumb .pl,.world.no-plumb .pd,.world.no-plumb .edges path.plumb{display:none}
+
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:3px 10px;border-radius:12px;border:1px solid var(--line);color:var(--muted);white-space:nowrap;background:var(--panel)}
+.chip .n{font-family:var(--mono);color:var(--ink)}
+.chip.k-api{border-color:color-mix(in srgb,var(--cyan) 50%,transparent)}
+.chip.k-gate{border-color:color-mix(in srgb,var(--auth) 60%,transparent)}
+.chip.k-test{border-color:color-mix(in srgb,var(--ok) 55%,transparent)}
+.chip.k-work{border-color:color-mix(in srgb,var(--amber) 60%,transparent)}
+.chip.k-rec{border-color:color-mix(in srgb,var(--tbl) 60%,transparent)}
+.chip.k-warn{border-color:color-mix(in srgb,var(--warn) 70%,transparent);color:var(--warn)}
+.chip.k-absent{border-style:dashed}
+
+.scr{position:absolute;width:260px;height:214px;border:1.5px solid var(--line);border-radius:8px;background:var(--raised);box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
+.scr:hover,.scr.near{border-color:var(--accent);transform:translateY(-2px)}
+.scr .thumb{height:118px;background:#F6F8FB;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.scr .thumb svg{width:100%;height:100%}
+.scr .thumb.ph{background:repeating-linear-gradient(135deg,var(--raised) 0 10px,var(--panel) 10px 20px);color:var(--muted);flex-direction:column;gap:4px;font-size:11px}
+.scr .thumb.ph svg{width:28px;height:28px;stroke:var(--muted);fill:none;stroke-width:1.6}
+.scr .body{padding:8px 10px 6px;display:flex;flex-direction:column;gap:6px;flex:1}
+.scr .ttl{display:flex;align-items:baseline;gap:8px}
+.scr .ord{font-family:var(--hud);font-size:11px;letter-spacing:.12em;color:var(--accent)}
+.scr .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.scr .chips{display:flex;gap:5px;flex-wrap:wrap}
+.scr .chips .chip{font-size:10px;padding:2px 7px}
+.scr .stripe{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--ok)}
+.scr.planned .stripe{background:var(--warn)}
+
+.lane{position:absolute;left:22px;right:22px;border-top:1px dashed var(--line);padding-top:6px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.lane .lbl{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:10.5px;color:var(--muted)}
+.lane .leg{display:flex;gap:10px;align-items:center;margin-left:auto;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--muted)}
+.lane .leg i{display:inline-block;width:14px;height:4px;border-radius:2px;background:var(--svc);vertical-align:middle;margin-right:5px}
+.lane .leg .rw{display:inline-flex;align-items:center;gap:5px}
+.lane .leg .rw b{display:inline-block;width:14px;height:2px;background:var(--cyan)}
+.lane .leg .rw b.w{background:var(--amber)}
+.svc-invoice{--svc:var(--svc-invoice)}.svc-billing{--svc:var(--svc-billing)}.svc-accounts{--svc:var(--svc-accounts)}
+.pl{position:absolute;width:200px;border:1px solid var(--line);border-top:4px solid var(--svc,var(--cyan));border-radius:6px;background:var(--panel);padding:6px 9px 7px;display:flex;flex-direction:column;gap:3px;cursor:pointer;transition:border-color .15s;overflow:hidden}
+.pl:hover{border-color:var(--accent);border-top-color:var(--svc,var(--cyan))}
+.pl .k{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;white-space:nowrap}
+.pl .k span{overflow:hidden;text-overflow:ellipsis}
+.pl .k .svc{color:var(--svc,var(--cyan));flex:1}
+.pl .nm{font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl .sub{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl.absent{border-style:dashed;border-top-style:solid}
+.pl.absent .nm{color:var(--muted)}
+.pd{position:absolute;width:170px;height:34px;border:1px solid var(--line);border-left:3px solid var(--tbl);border-radius:5px;background:var(--panel);display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 8px;font-size:12px;color:var(--ink);cursor:pointer;transition:border-color .15s}
+.pd:hover{border-color:var(--accent);border-left-color:var(--tbl)}
+.pd.msg{border-left-color:var(--fn)}.pd.msg:hover{border-left-color:var(--fn)}
+.pd.ext{border-left-color:var(--warn)}.pd.ext:hover{border-left-color:var(--warn)}
+.pd.absent{border-style:dashed;border-left-style:solid}
+.pd .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pd .kd{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:8.5px;color:var(--dim);display:block}
+.pd .rw{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9px;flex-shrink:0}
+.pd .rw.read{color:var(--cyan)}.pd .rw.write,.pd .rw.both{color:var(--amber)}
+.lens-business .code{display:none !important}
+.lens-business{--accent:var(--amber);--accent-dim:rgba(240,180,78,.14)}
+
+/* chrome on the stage */
+.chrome{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:10px;padding:10px 12px;pointer-events:none;z-index:5}
+.chrome>*{pointer-events:auto}
+.lvls{display:flex;border:1px solid var(--line);border-radius:4px;background:var(--panel);overflow:hidden}
+.lvls button{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;color:var(--muted);background:none;border:0;padding:7px 12px;cursor:pointer}
+.lvls button.on{color:var(--accent);background:var(--accent-dim)}
+.crumb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:7px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
+.crumb b{color:var(--ink);font-weight:500}
+.crumb .sep{opacity:.5;margin:0 6px}
+.tools{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.tb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.tb:hover{color:var(--ink);border-color:var(--muted)}
+.tb.on{color:var(--accent);border-color:var(--accent);background:var(--accent-dim)}
+.tb:focus-visible,.lvls button:focus-visible,.tab:focus-visible,.scr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.hint{position:absolute;left:12px;bottom:10px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;z-index:5;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zoomro{position:absolute;right:12px;bottom:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;z-index:5}
+
+/* the explore card (one anatomy, every kind) */
+.xcard[hidden]{display:none}
+.xcard{position:fixed;z-index:60;width:300px;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.xcard .k{display:flex;justify-content:space-between;align-items:center}
+.xcard .k .hud{color:var(--accent)}
+.xcard .k button{background:none;border:0;color:var(--muted);cursor:pointer;font-size:14px}
+.xcard .nm{font-size:15px;color:var(--ink);font-weight:500}
+.xcard .sent{color:var(--muted);font-size:13px}
+.xcard .cnts{display:flex;gap:6px;flex-wrap:wrap}
+.xcard .where{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.xcard .where .hud{font-size:9.5px}
+.xcard .where .chip{cursor:pointer}
+.xcard .acts{display:flex;gap:6px;margin-top:2px}
+
+/* property mode */
+.prop{position:absolute;inset:0;z-index:8;background:var(--ground);display:grid;grid-template-columns:minmax(0,1fr) 352px;grid-template-rows:auto minmax(0,1fr) auto;gap:0}
+.prop[hidden]{display:none}
+.p-head{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+.p-hero{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:14px 18px 18px;overflow:hidden;min-height:0}
+.p-hero .frame{max-width:100%;max-height:100%;aspect-ratio:16/10;width:min(100%,calc((100% - 0px)));height:auto;border:1px solid var(--line);background:#F6F8FB;border-radius:6px;overflow:hidden;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+.p-hero .frame svg{width:100%;height:100%;display:block}
+.p-hero .frame.ph{background:repeating-linear-gradient(135deg,var(--raised) 0 14px,var(--panel) 14px 28px);border-style:dashed;flex-direction:column;gap:8px;color:var(--muted);text-align:center;padding:24px}
+.p-hero .frame.ph svg{width:56px;height:56px;stroke:var(--muted);fill:none;stroke-width:1.4}
+.p-hero .frame.ph .t{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:14px;color:var(--ink)}
+.p-hero .frame.ph .parts{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.p-hero .frame.ph .up{display:flex;gap:6px;margin-top:6px}
+.p-hero .hovers{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;flex-shrink:0}
+.p-side{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.tab{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--muted);background:none;border:0;border-bottom:2px solid transparent;padding:9px 9px 7px;cursor:pointer;display:inline-flex;gap:5px;align-items:center}
+.tab .n{font-family:var(--mono);letter-spacing:0;font-size:9.5px;color:var(--dim);border:1px solid var(--line);border-radius:8px;padding:0 5px}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tab.on .n{color:var(--accent);border-color:var(--accent)}
+.p-body{padding:12px 14px;overflow:auto;display:flex;flex-direction:column;gap:12px;font-size:13px}
+.sec{display:flex;flex-direction:column;gap:6px}
+.sec .hud{font-size:10px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+.row:last-child{border-bottom:0}
+.row .l{color:var(--ink);display:flex;flex-direction:column;gap:1px;min-width:0}
+.row .l .sub{color:var(--dim);font-size:11.5px}
+.row .r{color:var(--muted);font-size:11.5px;white-space:nowrap;text-align:right}
+.row.click{cursor:pointer}
+.row.click:hover .l{color:var(--accent)}
+.biz{color:var(--ink);font-size:13.5px;line-height:1.5;border-left:2px solid var(--amber);padding-left:10px}
+.p-foot{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--line);background:var(--panel)}
+.stepbtn{display:flex;flex-direction:column;gap:1px;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:6px 12px;cursor:pointer;min-width:0;max-width:34%;color:var(--ink)}
+.stepbtn:hover{border-color:var(--accent)}
+.stepbtn .hud{font-size:9.5px}
+.stepbtn .nm{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stepbtn.next{margin-left:auto;text-align:right}
+.stepbtn.off{opacity:.45;pointer-events:none}
+.p-foot .mid{flex:1;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.p-foot .mid .dots{display:flex;gap:6px}
+.p-foot .mid .dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--line);display:block}
+.p-foot .mid .dots i.on{background:var(--accent);border-color:var(--accent)}
+.p-foot .mid .also{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
+.p-foot .mid .also .chip{cursor:pointer;font-size:10px;padding:2px 8px}
+@media (max-width:860px){
+  .prop{grid-template-columns:1fr;grid-template-rows:auto minmax(220px,42%) minmax(0,1fr) auto}
+  .p-side{border-left:0;border-top:1px solid var(--line)}
+  .chrome{flex-wrap:wrap}.crumb{max-width:100%}
+}
+
+/* ---------- directions ---------- */
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin-top:16px}
+.dir{display:flex;flex-direction:column;gap:8px}
+.dir .wf{border:1px solid var(--line);border-radius:6px;background:var(--panel);aspect-ratio:16/10;max-width:100%;overflow:hidden}
+.dir .wf svg{width:100%;height:100%;display:block}
+.dir .t{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+.dir .t .hud{color:var(--accent)}
+.dir .t b{font-weight:500;color:var(--ink)}
+.dir p{font-size:13px;color:var(--muted);margin:0}
+.dir .pros{font-size:12.5px;display:flex;flex-direction:column;gap:3px;margin:0;padding:0;list-style:none}
+.dir .pros li{padding-left:14px;position:relative}
+.dir .pros li::before{content:"+";position:absolute;left:0;color:var(--ok);font-family:var(--mono)}
+.dir .pros li.c::before{content:"−";color:var(--err)}
+.dir .tag{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 50%,transparent);border-radius:3px;padding:1px 6px;margin-left:auto}
+.dir .tag.alt{color:var(--muted);border-color:var(--line)}
+svg.w text{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;fill:var(--muted);font-size:7px}
+svg.w text.s{font-size:5.5px;text-transform:none;letter-spacing:0;font-family:var(--body)}
+svg.w rect{fill:var(--raised);stroke:var(--line);stroke-width:.6}
+svg.w rect.scr{fill:#F6F8FB;stroke:var(--line)}
+svg.w rect.acc{stroke:var(--accent);fill:var(--accent-dim)}
+svg.w rect.g{fill:var(--panel)}
+svg.w rect.api{stroke:var(--cyan)}svg.w rect.rec{stroke:var(--tbl)}svg.w rect.msg{stroke:var(--fn)}svg.w rect.ext{stroke:var(--warn)}
+svg.w line,svg.w path{stroke:var(--dim);stroke-width:.8;fill:none}
+svg.w line.acc,svg.w path.acc{stroke:var(--accent);stroke-width:1.2}
+svg.w line.r,svg.w path.r{stroke:var(--tbl)}svg.w line.a,svg.w path.a{stroke:var(--cyan)}
+svg.w circle{fill:var(--panel);stroke:var(--accent);stroke-width:1}
+
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:12px}
+th{text-align:left;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--line)}
+td{padding:7px 10px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+td.m{font-family:var(--mono);font-size:12px;white-space:nowrap}
+.twrap{overflow-x:auto}
+.qs{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px}
+.q{border:1px solid var(--line);border-radius:6px;padding:12px 14px;background:var(--panel);display:flex;flex-direction:column;gap:4px}
+.q .hud{color:var(--amber)}
+.q p{font-size:13px;margin:0}
+.anat{display:grid;grid-template-columns:minmax(260px,320px) 1fr;gap:20px;align-items:start;margin-top:14px}
+@media (max-width:760px){.anat{grid-template-columns:1fr}}
+.anat ol{margin:0;padding-left:18px;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+.anat ol b{color:var(--ink);font-weight:500}
+</style>
+
+<div class="wrap">
+  <div class="hud" style="color:var(--amber)">Farsight · Storyboard, a new view · rapid prototype · 2026-10-03</div>
+  <h1>Property · Street · Neighbourhood</h1>
+  <p class="lede">One whiteboard, three altitudes. Zoom out and the journeys of an application sit side by side as neighbourhoods. Zoom into one and its screens line up along a street, each with its own pathway of calls and data underneath on demand. Zoom onto a screen and it snaps into the property view, where the screenshot is the hero and a tabbed rail holds everything Farsight knows about it. Below the working prototype are the alternative directions for each level, drawn rough on purpose, so we can cut before building.</p>
+  <p class="note"><b>Example data.</b> Every screen, API, record, gate, test and work item here comes from the <span class="mono">examples/invoice-app</span> fixture that the e2e suite runs on, lightly dressed (work keys, commits and the accounts service's customer list are invented to show the shape). Numbers are illustrative, not measured.</p>
+
+  <h2>1 · The working prototype</h2>
+  <p>Drag to pan. Pinch, <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + scroll, or the <span class="mono">+ −</span> buttons zoom. Plain scrolling pans, as in Miro and Figma. Zoom past a screen and it snaps into the property view; zoom back out and you land on the street. <kbd>Esc</kbd> backs out one level, <kbd>←</kbd> <kbd>→</kbd> step between screens in the property, <kbd>p</kbd> toggles plumbing, <kbd>b</kbd> switches the lens, <kbd>f</kbd> goes full screen.</p>
+
+  <div class="stage" id="stage">
+    <div class="chrome">
+      <div class="lvls" id="lvls">
+        <button data-l="nb" class="on">Neighbourhood</button><button data-l="st">Street</button><button data-l="pr">Property</button>
+      </div>
+      <div class="crumb" id="crumb"><b>Journeys</b></div>
+      <div class="tools">
+        <button class="tb" id="plumb" title="Street level: show the APIs, records, messages and third parties under the screens">Plumbing</button>
+        <button class="tb" id="lens" title="Business lens hides identifiers and shows the words people wrote">Lens · Hybrid</button>
+        <button class="tb" id="zi" title="Zoom in">+</button>
+        <button class="tb" id="zo" title="Zoom out">−</button>
+        <button class="tb" id="fit" title="Fit every journey">Fit</button>
+        <button class="tb" id="fs" title="Full screen">⤢</button>
+      </div>
+    </div>
+    <div class="canvas" id="canvas">
+      <div class="world lvl-nb no-plumb" id="world">
+        <svg class="links" id="links"></svg>
+      </div>
+    </div>
+    <div class="hint" id="hint">Click a neighbourhood or zoom in to walk its street</div>
+    <div class="zoomro" id="zoomro">×0.40</div>
+    <div class="prop" id="prop" hidden>
+      <div class="p-head">
+        <button class="tb" id="pback" title="Back to the street">← Street</button>
+        <div class="crumb" id="pcrumb" style="max-width:none;flex:1"></div>
+        <button class="tb" id="plens">Lens · Hybrid</button>
+        <button class="tb" id="pfs" title="Full screen">⤢</button>
+      </div>
+      <div class="p-hero" id="phero"></div>
+      <div class="p-side">
+        <div class="tabs" id="ptabs"></div>
+        <div class="p-body" id="pbody"></div>
+      </div>
+      <div class="p-foot" id="pfoot"></div>
+    </div>
+  </div>
+  <div id="xcard" class="xcard" hidden></div>
+
+  <h2>2 · Directions per level</h2>
+  <p class="lede">Three sketches per altitude. The one marked <span class="hud" style="color:var(--ok)">in prototype</span> is what the canvas above does today. Each sketch lists what it buys and what it costs, so the review is a cut, not a brainstorm.</p>
+
+  <h3 style="margin-top:22px">Neighbourhood · all journeys</h3>
+  <div class="grid3" id="dir-nb"></div>
+
+  <h3 style="margin-top:30px">Street · the screens of one journey</h3>
+  <div class="grid3" id="dir-st"></div>
+
+  <h3 style="margin-top:30px">Property · one screen</h3>
+  <div class="grid3" id="dir-pr"></div>
+
+  <h2>3 · One explorable card, every kind</h2>
+  <p class="lede">Street plumbing only works if an API, a record, a message, a third party, a gate and a test all open the same way. The prototype uses one card anatomy for all of them, drawn from the graph's existing node fields, so the same card can later back the code map, the APIs tab and MCP answers without a second design.</p>
+  <div class="anat">
+    <div class="xcard" style="position:static;width:auto;max-width:320px">
+      <div class="k"><span class="hud">① API · reads</span><span class="hud" style="color:var(--muted)">② spec-backed</span></div>
+      <div class="nm">③ List every invoice, newest first</div>
+      <div class="sent code mono" style="color:var(--dim)">④ GET /invoices · listInvoices</div>
+      <div class="cnts">⑤ <span class="chip k-rec"><span class="n">1</span> record read</span><span class="chip k-gate"><span class="n">1</span> gate</span><span class="chip k-test"><span class="n">2</span> tests verified</span></div>
+      <div class="where"><span class="hud">⑥ on</span><span class="chip">Invoice list</span></div>
+      <div class="acts"><span class="tb on">⑦ Open on APIs</span><span class="tb">Impact</span></div>
+    </div>
+    <ol>
+      <li><b>Kind and direction.</b> The node kind in words, and for data nodes whether this step reads or writes. The kind colour is the graph's own (route cyan, table violet, gate purple, warn amber).</li>
+      <li><b>Evidence class.</b> Spec-backed, implied, not built, not indexed. The same closed set the rest of the product prints, never a new word.</li>
+      <li><b>The name in the current register.</b> Business lens shows the spec summary or the sentence a person wrote. Hybrid adds the identifier underneath.</li>
+      <li><b>The identifier line</b> is a <span class="mono">code</span> element and disappears in the business lens, so lint rule 5 holds without a second template.</li>
+      <li><b>Counts as Counted.</b> Each chip is a number, a word and a scope, with the tooltip from the catalog's define. Nothing summed across hops.</li>
+      <li><b>Where it appears.</b> The screens (and, from the neighbourhood, the journeys) this node is reached from. Each chip travels there.</li>
+      <li><b>Two actions at most.</b> Open on the surface that owns it, and Impact. The card is a doorway, not a second inspector.</li>
+    </ol>
+  </div>
+
+  <h2>4 · Zoom and snap rules</h2>
+  <p class="lede">The three levels are one continuous scale with two thresholds and one snap. These are the numbers in the prototype; the review should say whether they feel right on a trackpad and on a touch screen.</p>
+  <div class="twrap"><table>
+    <tr><th>Scale</th><th>Level</th><th>What is drawn</th><th>What a click does</th></tr>
+    <tr><td class="m">&lt; 0.50</td><td>Neighbourhood</td><td>Each journey as a district with its name, its sentence and aggregate chips at poster size; the street beneath ghosted so the shape shows through; requires / leads to / part of as links between districts.</td><td>Zooms to fit that district (scale 0.85).</td></tr>
+    <tr><td class="m">0.50 – 1.60</td><td>Street</td><td>Screens in step order on a path with ordinals; a lean chip row per screen; with plumbing on, each screen's own pathway: its calls stacked beneath it with a service colour bar, and beside each call the records, messages and third parties it reads or writes.</td><td>A screen opens its property. A plumbing node opens its card.</td></tr>
+    <tr><td class="m">&gt; 1.60</td><td>Snap</td><td>When the zoom gesture ends above the threshold and a screen is within 320 world units of the viewport centre, that screen snaps into the property view. Nothing snaps mid-gesture.</td><td>Property: screenshot hero, tabbed rail, step bar.</td></tr>
+    <tr><td class="m">zoom out</td><td>Property → Street</td><td>A pinch out or <kbd>⌘</kbd>+scroll out past a small budget in the property closes it and lands on the street centred on that screen at scale 1.0, so the eye has somewhere to go.</td><td></td></tr>
+  </table></div>
+
+  <h2>5 · What the review should decide</h2>
+  <div class="qs">
+    <div class="q"><span class="hud">Where it lives</span><p>Portfolio gains a <b>Map</b> option next to the table: the same journeys, drawn. The journey row's existing views stay. The option is a workspace flag like the action drill until it earns its place.</p></div>
+    <div class="q"><span class="hud">Plumbing default</span><p>Off at street level, on by the <span class="mono">p</span> key and a chip, remembered per viewer. Business lens with plumbing on shows read and write words and spec summaries, never identifiers.</p></div>
+    <div class="q"><span class="hud">Snap feel</span><p>Snap on gesture end versus a dedicated "enter" control. The prototype does both. Pick one as primary so touch and trackpad behave the same.</p></div>
+    <div class="q"><span class="hud">Tab count</span><p>Eight tabs fit the rail in two rows at 352 px. Fold Route into Overview and Changes into Work to get to six, or keep eight and accept the second row.</p></div>
+    <div class="q"><span class="hud">Missing screenshots</span><p>The placeholder shows the glyph, the screen name, the route and the components Farsight found. Paste or upload goes to a bonus stream that writes the image path into the source's design manifest.</p></div>
+    <div class="q"><span class="hud">Work and changes scope</span><p>Only commits and work items that touched the parts on this screen, by the existing commit-to-function credit. Journey level aggregates them the same way, never the whole repo.</p></div>
+  </div>
+</div>
+
+<script>
+/* ---------- example data from examples/invoice-app ---------- */
+const SVG_INV01 = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="Helvetica, Arial, sans-serif"><rect width="640" height="400" fill="#f6f8fb"/><rect x="0" y="0" width="640" height="48" fill="#ffffff" stroke="#e2e8f0"/><text x="24" y="30" font-size="16" fill="#0b1220" font-weight="700">Invoices</text><rect x="520" y="12" width="96" height="24" rx="6" fill="#2563eb"/><text x="536" y="29" font-size="12" fill="#fff">+ New invoice</text><g font-size="12" fill="#475569"><rect x="24" y="72" width="592" height="36" fill="#fff" stroke="#e2e8f0"/><text x="36" y="95">INV-1042 · Initech · $12,400.00</text><rect x="520" y="80" width="72" height="20" rx="10" fill="#dcfce7"/><text x="534" y="94" fill="#15803d">finalized</text><rect x="24" y="112" width="592" height="36" fill="#fff" stroke="#e2e8f0"/><text x="36" y="135">INV-1041 · Globex · $3,180.00</text><rect x="520" y="120" width="72" height="20" rx="10" fill="#fef3c7"/><text x="546" y="134" fill="#b45309">draft</text><rect x="24" y="152" width="592" height="36" fill="#fff" stroke="#e2e8f0"/><text x="36" y="175">INV-1040 · Acme Widgets · $48,900.00</text><rect x="520" y="160" width="72" height="20" rx="10" fill="#dcfce7"/><text x="534" y="174" fill="#15803d">finalized</text><rect x="24" y="192" width="592" height="36" fill="#fff" stroke="#e2e8f0"/><text x="36" y="215">INV-1039 · Stark Industries · $9,050.00</text><rect x="520" y="200" width="72" height="20" rx="10" fill="#fef3c7"/><text x="546" y="214" fill="#b45309">draft</text></g><text x="24" y="380" font-size="10" fill="#94a3b8">INV-01 · Invoice list · wireframe</text></svg>`;
+const SVG_INV02 = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="Helvetica, Arial, sans-serif"><rect width="640" height="400" fill="#f6f8fb"/><rect x="0" y="0" width="640" height="48" fill="#ffffff" stroke="#e2e8f0"/><text x="24" y="30" font-size="16" fill="#0b1220" font-weight="700">New invoice</text><g font-size="12" fill="#475569"><text x="24" y="84">Customer</text><rect x="24" y="92" width="300" height="30" rx="4" fill="#fff" stroke="#cbd5e1"/><text x="36" y="112">Acme Widgets</text><text x="24" y="150">Line items</text><rect x="24" y="158" width="420" height="30" rx="4" fill="#fff" stroke="#cbd5e1"/><text x="36" y="178">Consulting · March</text><rect x="452" y="158" width="120" height="30" rx="4" fill="#fff" stroke="#cbd5e1"/><text x="464" y="178">$ 4,800.00</text><rect x="24" y="196" width="420" height="30" rx="4" fill="#fff" stroke="#cbd5e1"/><text x="36" y="216">Hosting · Q1</text><rect x="452" y="196" width="120" height="30" rx="4" fill="#fff" stroke="#cbd5e1"/><text x="464" y="216">$ 1,200.00</text><text x="24" y="250" fill="#2563eb">+ Add a line</text><text x="380" y="300" font-size="13">Subtotal  $ 6,000.00</text><text x="380" y="320" font-size="13">Tax (8%)  $ 480.00</text><text x="380" y="344" font-size="14" fill="#0b1220" font-weight="700">Total  $ 6,480.00</text><rect x="24" y="320" width="88" height="30" rx="6" fill="#2563eb"/><text x="46" y="340" fill="#fff">Save</text></g><text x="24" y="380" font-size="10" fill="#94a3b8">INV-02 · New invoice · wireframe</text></svg>`;
+
+const SERVICES = { invoice:{ name:'Invoice service' }, billing:{ name:'Billing service' }, accounts:{ name:'Accounts service' } };
+const OPS = {
+  listCustomers:{ id:'listCustomers', service:'accounts', method:'GET', path:'/customers', summary:'Customers to pick from', ev:'spec-backed', reads:['customers'], writes:[], handler:'accounts routes → customerService.list', tests:[] },
+  listInvoices:{ id:'listInvoices', service:'invoice', method:'GET', path:'/invoices', summary:'List every invoice, newest first', ev:'spec-backed', reads:['invoices'], writes:[], handler:'routes.ts:14 → invoiceService.listInvoices', tests:['billing.pw.spec.ts › lists invoices','invoiceService.test.ts › listInvoices orders newest first'] },
+  createInvoice:{ id:'createInvoice', service:'invoice', method:'POST', path:'/invoices', summary:'Draft a new invoice for a customer', ev:'spec-backed', reads:[], writes:['invoices'], handler:'routes.ts:22 → invoiceService.createInvoice', gates:['billing:write'], tests:['new-invoice.pw.spec.ts › saves a draft','invoiceService.test.ts › createInvoice totals'] },
+  getInvoice:{ id:'getInvoice', service:'invoice', method:'GET', path:'/invoices/{id}', summary:'Fetch one invoice by id', ev:'spec-backed', reads:['invoices'], writes:[], handler:'routes.ts:31 → invoiceService.getInvoice', tests:['invoiceService.test.ts › getInvoice'] },
+  updateInvoice:{ id:'updateInvoice', service:'invoice', method:'PATCH', path:'/invoices/{id}', summary:'Change the line items of a draft invoice', ev:'spec-backed', reads:['invoices'], writes:['invoices'], handler:'routes.ts:39 → invoiceService.updateInvoice', gates:['billing:write','only-draft'], tests:['billing.pw.spec.ts › edits a draft','invoiceService.test.ts › rejects edits once sent'] },
+  finalizeInvoice:{ id:'finalizeInvoice', service:'billing', method:'POST', path:'/invoices/{id}/finalize', summary:'Send the invoice: number it, post the ledger entry, notify the customer', ev:'implied', reads:['invoices'], writes:['invoices','ledger_entries'], msgs:['invoice.finalized'], ext:['Example ERP'], handler:'routes.ts:47 → invoiceService.finalizeInvoice', gates:['billing:write','only-draft','has-lines'], tests:['invoiceService.test.ts › finalize assigns a number'] },
+  deleteInvoice:{ id:'deleteInvoice', service:'invoice', method:'DELETE', path:'/invoices/{id}', summary:'Discard a draft invoice', ev:'not built', reads:[], writes:['invoices'], handler:null, tests:[] },
+};
+const RECS = { customers:{ id:'customers', name:'Customers', sentence:'Who can be billed; owned by the accounts service.' }, invoices:{ id:'invoices', name:'Invoices', sentence:'One row per invoice: customer, status, line items, totals, number once sent.' }, ledger_entries:{ id:'ledger_entries', name:'Ledger entries', sentence:'A credit posted for every invoice that is sent.' } };
+const MSGS = { 'invoice.finalized':{ id:'invoice.finalized', name:'Invoice finalized', sentence:'Published when an invoice is sent; the notifier and the ERP listen.' } };
+const EXTS = { 'Example ERP':{ id:'Example ERP', name:'Example ERP', sentence:'The accounting system that receives sent invoices (erpClient.ts).' } };
+const GATES = {
+  'billing:write':{ id:'billing:write', name:'Only a billing user can change invoices', code:"requireScope('billing:write') · auth.ts:10", kind:'guard' },
+  'billing:read':{ id:'billing:read', name:'Only a billing user can see invoices', code:"requireScope('billing:read') · auth.ts:10", kind:'guard' },
+  'only-draft':{ id:'only-draft', name:'Only draft invoices can be changed', code:'invoiceService.ts:37', kind:'rule' },
+  'has-lines':{ id:'has-lines', name:'An invoice must have at least one line item before it can be sent', code:'invoiceService.ts:60', kind:'rule' },
+};
+const SCREENS = {
+  'INV-02':{ id:'INV-02', name:'New invoice', route:'/invoices/new', state:'built', svg:SVG_INV02,
+    desc:'Draft a new invoice for a customer: pick the customer, add line items, save.',
+    ops:['listCustomers','createInvoice','getInvoice'], comps:['CreateInvoiceForm','LineItemRow','MoneyField'], gates:['billing:write'],
+    decisions:['Invalid input: show the validation errors instead of submitting'],
+    tests:[{n:'new-invoice.pw.spec.ts › saves a draft',k:'e2e',r:'passed · run 2026-10-01'},{n:'invoiceService.test.ts › createInvoice totals',k:'unit',r:'passed · run 2026-10-01'},{n:'CreateInvoiceForm.stories.tsx › Empty · Filled',k:'story',r:'2 stories live'}],
+    work:[{key:'BILL-17',t:'Line item amounts validate before submit',s:'done',c:2},{key:'BILL-19',t:'Tax shown per line',s:'to do',c:0}],
+    changes:[{sha:'a41c9e2',m:'feat(ui): validate line items before submit (BILL-17)',d:'2026-09-28',f:'CreateInvoiceForm.tsx'},{sha:'7f03b1d',m:'fix(ui): money field accepts pasted currency (BILL-17)',d:'2026-09-29',f:'fields.tsx'},{sha:'c2d8e40',m:'refactor(api): client posts the parsed draft',d:'2026-09-22',f:'client.ts'}] },
+  'INV-01':{ id:'INV-01', name:'Invoice list', route:'/invoices', state:'built', svg:SVG_INV01,
+    desc:'Every invoice, newest first, with its status and a way into the draft editor.',
+    ops:['listInvoices','getInvoice','updateInvoice','finalizeInvoice'], comps:['InvoiceListPage','EditInvoiceDrawer'], gates:['billing:read','billing:write','only-draft','has-lines'],
+    decisions:['Draft is still editable: persist the line-item changes','Only a draft can be sent; sending finalizes it for good'],
+    tests:[{n:'billing.pw.spec.ts › lists invoices',k:'e2e',r:'passed · run 2026-10-01'},{n:'billing.pw.spec.ts › edits a draft',k:'e2e',r:'passed · run 2026-10-01'},{n:'invoiceService.test.ts › rejects edits once sent',k:'unit',r:'passed · run 2026-10-01'},{n:'invoiceService.test.ts › finalize assigns a number',k:'unit',r:'passed · run 2026-10-01'}],
+    work:[{key:'BILL-21',t:'Send from the list',s:'in progress',c:3},{key:'BILL-14',t:'Newest first ordering',s:'done',c:1}],
+    changes:[{sha:'9b7e4a1',m:'feat(server): finalize route posts the ledger entry (BILL-21)',d:'2026-10-01',f:'invoiceService.ts'},{sha:'e1a0c77',m:'feat(ui): send button in the drawer (BILL-21)',d:'2026-09-30',f:'EditInvoiceDrawer.tsx'},{sha:'5d2f9b3',m:'feat(server): publish invoice.finalized (BILL-21)',d:'2026-09-30',f:'events.ts'},{sha:'08aa3e6',m:'fix(server): list orders by created_at (BILL-14)',d:'2026-09-20',f:'invoiceService.ts'},{sha:'b3c1d02',m:'chore(server): erp client stub',d:'2026-09-18',f:'erpClient.ts'}] },
+  'INV-03':{ id:'INV-03', name:'Discard draft', route:'/invoices/[id]/discard', state:'planned', svg:null,
+    desc:'Confirm and discard a draft invoice that will never be sent.',
+    ops:['deleteInvoice'], comps:[], gates:[], decisions:[], tests:[],
+    work:[{key:'BILL-23',t:'Discard a draft from the list',s:'to do',c:0}], changes:[] },
+};
+const JOURNEYS = [
+  { id:'billing-cycle', name:'Billing cycle', desc:'The whole cycle: start a new invoice, review it in the list, discard drafts that will never be sent.', screens:['INV-02','INV-01','INV-03'], x:60, y:60 },
+  { id:'new-invoice', name:'Start a new invoice', desc:'A billing user drafts an invoice for a customer: pick the customer, add line items, save.', screens:['INV-02'], x:60, y:980, leadsTo:'draft-and-send' },
+  { id:'draft-and-send', name:'Draft and send an invoice', desc:'A billing user reviews a draft in the list, and can discard a draft that will never be sent.', screens:['INV-01','INV-03'], x:980, y:980 },
+];
+
+/* ---------- layout constants ---------- */
+const SW=260, SH=214, COL=400, HEAD=118, SY=HEAD+36, PAD=60, PL_TOP=SY+SH+76, OPW=200, DW=170, DX=230, ROW=38, OPMIN=68, OPGAP=16;
+function opData(op){ const d=[]; const seen=new Set(); for(const r of op.reads){ const w=op.writes.includes(r); d.push({t:'rec',id:r,mode:w?'both':'read'}); seen.add(r); } for(const r of op.writes) if(!seen.has(r)) d.push({t:'rec',id:r,mode:'write'}); for(const m of (op.msgs||[])) d.push({t:'msg',id:m,mode:'write'}); for(const e of (op.ext||[])) d.push({t:'ext',id:e,mode:'write'}); return d; }
+function opRowH(op){ return Math.max(OPMIN, opData(op).length*ROW-4); }
+function stackH(s){ return s.ops.reduce((h,o)=>h+opRowH(OPS[o]),0)+(s.ops.length-1)*OPGAP; }
+const PLH=Math.max(...Object.values(SCREENS).map(stackH)), DH=PL_TOP+PLH+70;
+function distW(j){ return Math.max(880, PAD*2 + j.screens.length*COL); }
+
+/* ---------- aggregates (illustrative Counted-style chips) ---------- */
+function agg(j){
+  const scr = j.screens.map(id=>SCREENS[id]);
+  const ops = new Set(scr.flatMap(s=>s.ops)), gates=new Set(scr.flatMap(s=>s.gates));
+  const tests = scr.reduce((n,s)=>n+s.tests.filter(t=>t.k!=='story').length,0);
+  const work = new Set(scr.flatMap(s=>s.work.map(w=>w.key)));
+  const built = scr.filter(s=>s.state==='built').length;
+  const absent = [...ops].filter(o=>OPS[o].ev==='not built').length;
+  const chips=[
+    {k:'',n:scr.length,w:scr.length===1?'screen':'screens',tip:`screens in this journey · ${built} built`},
+    {k:'k-api',n:ops.size,w:'APIs',tip:`distinct operations the screens call · ${absent} not built`},
+    {k:'k-gate',n:gates.size,w:'gates',tip:'guards and rules on the way through'},
+    {k:'k-test',n:tests,w:'tests verified',tip:'cases a results report named as run over these parts'},
+    {k:'k-work',n:work.size,w:'work items',tip:'tracker items whose commits touched these parts'},
+  ];
+  if(built<scr.length) chips.push({k:'k-warn',n:scr.length-built,w:'not built',tip:'designed screens without a page in the code'});
+  return chips;
+}
+const chipHtml=(c)=>`<span class="chip ${c.k}" title="${c.tip||''}"><span class="n">${c.n}</span>${c.w}</span>`;
+const esc=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+/* ---------- state ---------- */
+const canvas=document.getElementById('canvas'), world=document.getElementById('world'), linksSvg=document.getElementById('links');
+const S={ tx:0, ty:0, s:.42, level:'nb', plumb:false, lens:'hybrid', journey:'billing-cycle', screen:null, inProp:false, tab:'Overview' };
+const SNAP=1.6, NB_MAX=.5, MIN_S=.18, MAX_S=2.6;
+const POS={}; // screen id → {jid, x, y} world coords (per journey instance: key `${jid}:${sid}`)
+const PLPOS={};
+
+/* ---------- build the world ---------- */
+function phSvg(){ return `<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 8"/><path d="M3 18l4-4"/></svg>`; }
+function screenChips(s){
+  const t=s.tests.filter(x=>x.k!=='story').length, st=s.tests.filter(x=>x.k==='story').length;
+  const c=[{k:'k-api',n:s.ops.length,w:'APIs',tip:'operations this screen calls'},{k:'k-gate',n:s.gates.length,w:s.gates.length===1?'gate':'gates',tip:'guards and rules on this screen'},{k:'k-test',n:t,w:'tests',tip:'cases verified over this screen'},{k:'k-work',n:s.work.length,w:'work',tip:'work items touching this screen'}];
+  if(st) c.push({k:'',n:st,w:'stories',tip:'live Storybook stories'});
+  return c.map(chipHtml).join('');
+}
+function buildWorld(){
+  for(const j of JOURNEYS){
+    const w=distW(j), d=document.createElement('div');
+    d.className='district'; d.dataset.j=j.id; d.style.cssText=`left:${j.x}px;top:${j.y}px;width:${w}px;height:${DH}px`;
+    const aggc=agg(j).map(chipHtml).join('');
+    d.innerHTML=`<div class="d-head"><div class="name">${esc(j.name)}</div><div class="desc">${esc(j.desc)}</div><div class="agg">${aggc}</div></div>
+      <div class="d-street"><svg class="edges"></svg></div>
+      <div class="d-cover" data-enter="${j.id}"><div class="name">${esc(j.name)}</div><div class="desc">${esc(j.desc)}</div><div class="agg">${aggc}</div><div class="enter">Walk the street →</div></div>`;
+    world.appendChild(d);
+    const st=d.querySelector('.d-street'), ed=st.querySelector('.edges'); ed.setAttribute('width',w); ed.setAttribute('height',DH);
+    // screens
+    let paths='';
+    j.screens.forEach((sid,i)=>{
+      const s=SCREENS[sid], x=PAD+i*COL, y=SY;
+      POS[`${j.id}:${sid}`]={jid:j.id,sid,x:j.x+x,y:j.y+y,cx:j.x+x+SW/2,cy:j.y+y+SH/2};
+      const el=document.createElement('div'); el.className='scr'+(s.state==='planned'?' planned':''); el.tabIndex=0; el.dataset.sid=sid; el.dataset.j=j.id;
+      el.style.cssText=`left:${x}px;top:${y}px`;
+      el.innerHTML=`<div class="stripe"></div><div class="thumb${s.svg?'':' ph'}">${s.svg||phSvg()+'<span>no screenshot yet</span>'}</div>
+        <div class="body"><div class="ttl"><span class="ord">${i+1} / ${j.screens.length}</span><span class="nm">${esc(s.name)}</span></div><div class="route mono code">${esc(s.route)}${s.state==='planned'?' · designed, not built':''}</div><div class="chips">${screenChips(s)}</div></div>`;
+      st.appendChild(el);
+      if(i<j.screens.length-1){ const x1=x+SW, x2=x+COL, ym=y+SH/2; paths+=`<path class="step" d="M${x1} ${ym} C ${x1+40} ${ym}, ${x2-40} ${ym}, ${x2} ${ym}"/><path class="step" d="M${x2-9} ${ym-6} L${x2} ${ym} L${x2-9} ${ym+6}"/><text class="ord" x="${(x1+x2)/2-14}" y="${ym-10}">then</text>`; }
+    });
+    // plumbing: one pathway per screen — its calls stacked beneath it, what each call reads and writes beside it
+    const lane=document.createElement('div'); lane.className='lane'; lane.style.top=(PL_TOP-40)+'px';
+    lane.innerHTML=`<span class="lbl">What each screen does · its calls, then what they read and write</span><span class="leg">${Object.entries(SERVICES).map(([k,v])=>`<span class="svc-${k}"><i></i>${v.name}</span>`).join('')}<span class="rw"><b></b>reads</span><span class="rw"><b class="w"></b>writes</span></span>`;
+    st.appendChild(lane);
+    j.screens.forEach((sid,si)=>{ const s=SCREENS[sid], x=PAD+si*COL; let y=PL_TOP; const tx=x+100;
+      const allAbsent=s.ops.every(o=>OPS[o].ev==='not built');
+      s.ops.forEach((o,oi)=>{ const op=OPS[o], data=opData(op), h=opRowH(op), absent=op.ev==='not built';
+        const el=document.createElement('div'); el.className=`pl api svc-${op.service}${absent?' absent':''}`; el.style.cssText=`left:${x}px;top:${y}px;height:${h}px`; el.dataset.kind='op'; el.dataset.id=o; el.dataset.j=j.id;
+        el.innerHTML=`<div class="k"><span class="svc">${esc(SERVICES[op.service].name)}</span>${op.ev==='spec-backed'?'':`<span style="color:var(--warn)">${op.ev}</span>`}</div><div class="nm">${esc(op.summary)}</div><div class="sub code">${op.method} ${op.path}</div>`; st.appendChild(el);
+        data.forEach((d,k)=>{ const dy=y+k*ROW, src=d.t==='rec'?RECS[d.id]:d.t==='msg'?MSGS[d.id]:EXTS[d.id]; const kd=d.t==='rec'?'record':d.t==='msg'?'message':'third party';
+          const pd=document.createElement('div'); pd.className=`pd ${d.t}${absent?' absent':''}`; pd.style.cssText=`left:${x+DX}px;top:${dy}px`; pd.dataset.kind=d.t; pd.dataset.id=d.id; pd.dataset.j=j.id;
+          pd.innerHTML=`<span class="nm"><span class="kd">${kd}</span>${esc(src.name)}</span><span class="rw ${d.mode}">${d.mode==='both'?'reads · writes':d.mode==='read'?'reads':'writes'}</span>`; st.appendChild(pd);
+          const my=dy+17, x1=x+OPW, x2=x+DX, cls=(d.mode==='read'?'read':'write')+(absent?' ghost':'');
+          paths+=`<path class="plumb ${cls}" d="M${x1} ${my} L${x2} ${my}"/>`;
+          if(d.mode!=='write') paths+=`<path class="plumb ${cls}" d="M${x1+9} ${my-5} L${x1} ${my} L${x1+9} ${my+5}"/>`;
+          if(d.mode!=='read') paths+=`<path class="plumb ${cls}" d="M${x2-9} ${my-5} L${x2} ${my} L${x2-9} ${my+5}"/>`;
+        });
+        y+=h+OPGAP;
+      });
+      if(s.ops.length) paths=`<path class="plumb trunk${allAbsent?' ghost':''}" d="M${tx} ${SY+SH} L${tx} ${y-OPGAP-4}"/>`+paths;
+    });
+    ed.innerHTML=paths;
+  }
+  // links between districts
+  const J=Object.fromEntries(JOURNEYS.map(j=>[j.id,j]));
+  let L='';
+  const a=J['new-invoice'], b=J['draft-and-send'], c=J['billing-cycle'];
+  const ax=a.x+distW(a), ay=a.y+DH/2, bx=b.x, by=b.y+DH/2;
+  L+=`<path d="M${ax} ${ay} C ${ax+60} ${ay}, ${bx-60} ${by}, ${bx} ${by}"/><path d="M${bx-16} ${by-10} L${bx} ${by} L${bx-16} ${by+10}"/><text x="${(ax+bx)/2-60}" y="${ay-16}">leads to</text>`;
+  const cx=c.x+distW(c)/2, cy=c.y+DH;
+  L+=`<path class="contains" d="M${cx-200} ${cy} C ${cx-200} ${cy+120}, ${a.x+distW(a)/2} ${a.y-120}, ${a.x+distW(a)/2} ${a.y}"/><path class="contains" d="M${cx+200} ${cy} C ${cx+200} ${cy+120}, ${b.x+distW(b)/2} ${b.y-120}, ${b.x+distW(b)/2} ${b.y}"/><text x="${cx-40}" y="${cy+70}">part of</text>`;
+  linksSvg.innerHTML=L;
+  const W=Math.max(...JOURNEYS.map(j=>j.x+distW(j)))+60, H=Math.max(...JOURNEYS.map(j=>j.y+DH))+60; linksSvg.setAttribute('width',W); linksSvg.setAttribute('height',H); S.W=W; S.H=H;
+}
+
+/* ---------- transform + levels ---------- */
+function apply(anim){
+  if(anim){ world.classList.add('anim'); clearTimeout(S._an); S._an=setTimeout(()=>world.classList.remove('anim'),480); } else world.classList.remove('anim');
+  world.style.transform=`translate(${S.tx}px,${S.ty}px) scale(${S.s})`;
+  const lvl=S.inProp?'pr':(S.s<NB_MAX?'nb':'st'); S.level=lvl;
+  world.classList.toggle('lvl-nb',lvl==='nb'); world.classList.toggle('lvl-st',lvl!=='nb');
+  document.querySelectorAll('#lvls button').forEach(b=>b.classList.toggle('on',b.dataset.l===lvl));
+  document.getElementById('zoomro').textContent='×'+S.s.toFixed(2);
+  updateCrumb(); markNear();
+}
+function viewCenter(){ const r=canvas.getBoundingClientRect(); return {x:(r.width/2-S.tx)/S.s, y:(r.height/2-S.ty)/S.s, w:r.width, h:r.height}; }
+function nearestScreen(){ const c=viewCenter(); let best=null,bd=1e9; for(const k in POS){ const p=POS[k]; const d=Math.hypot(p.cx-c.x,p.cy-c.y); if(d<bd){bd=d;best=p;} } return {p:best,d:bd}; }
+function nearestJourney(){ const c=viewCenter(); let best=null,bd=1e9; for(const j of JOURNEYS){ const d=Math.hypot(j.x+distW(j)/2-c.x, j.y+DH/2-c.y); if(d<bd){bd=d;best=j;} } return best; }
+function markNear(){ const n=S.s>=1.1&&!S.inProp?nearestScreen():null; document.querySelectorAll('.scr').forEach(el=>{ const hit=n&&n.d<320&&el.dataset.sid===n.p.sid&&el.dataset.j===n.p.jid; el.classList.toggle('near',!!hit); });
+  if(S.level==='st'){ const j=nearestJourney(); if(j) S.journey=j.id; document.querySelectorAll('.district').forEach(d=>d.classList.toggle('focus',d.dataset.j===S.journey)); } else document.querySelectorAll('.district').forEach(d=>d.classList.remove('focus'));
+  const hint=document.getElementById('hint'); hint.textContent = S.inProp?'': S.level==='nb'?'Click a neighbourhood or zoom in to walk its street': (n&&n.d<320&&S.s>=1.1?`Zoom in to enter ${SCREENS[n.p.sid].name}`:'Click a screen to enter it · p toggles plumbing');
+}
+function updateCrumb(){ const j=JOURNEYS.find(x=>x.id===S.journey); const el=document.getElementById('crumb'); el.innerHTML = S.level==='nb'?'<b>Journeys</b>':`Journeys<span class="sep">›</span><b>${esc(j.name)}</b>`; }
+function fitAll(anim){ const r=canvas.getBoundingClientRect(); S.s=Math.min(r.width/S.W, r.height/S.H)*.96; S.tx=(r.width-S.W*S.s)/2; S.ty=(r.height-S.H*S.s)/2; apply(anim); }
+function zoomTo(cx,cy,s,anim){ const r=canvas.getBoundingClientRect(); S.s=Math.min(MAX_S,Math.max(MIN_S,s)); S.tx=r.width/2-cx*S.s; S.ty=r.height/2-cy*S.s; apply(anim); }
+function enterJourney(jid){ const j=JOURNEYS.find(x=>x.id===jid); S.journey=jid; const r=canvas.getBoundingClientRect(); const w=distW(j); const hh=S.plumb?DH:PL_TOP-30; const s=Math.min(.95, (r.width-40)/w, (r.height-40)/hh); zoomTo(j.x+w/2, j.y+hh/2, s, true); }
+function zoomAt(px,py,factor){ const ns=Math.min(MAX_S,Math.max(MIN_S,S.s*factor)); const wx=(px-S.tx)/S.s, wy=(py-S.ty)/S.s; S.s=ns; S.tx=px-wx*ns; S.ty=py-wy*ns; apply(false); }
+function maybeSnap(){ if(S.inProp) return; if(S.s>=SNAP){ const n=nearestScreen(); if(n.p&&n.d<320){ openProperty(n.p.sid,n.p.jid); return; } } }
+
+/* ---------- pointer input ---------- */
+const ptrs=new Map(); let pinch=null, dragged=false;
+canvas.addEventListener('pointerdown',e=>{ ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); canvas.setPointerCapture(e.pointerId); dragged=false; if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch={d:Math.hypot(a.x-b.x,a.y-b.y)}; } });
+canvas.addEventListener('pointermove',e=>{ if(!ptrs.has(e.pointerId)) return; const prev=ptrs.get(e.pointerId); const cur={x:e.clientX,y:e.clientY}; ptrs.set(e.pointerId,cur);
+  if(ptrs.size===1){ const dx=cur.x-prev.x, dy=cur.y-prev.y; if(Math.abs(dx)+Math.abs(dy)>2) dragged=true; if(dragged){ S.tx+=dx; S.ty+=dy; canvas.classList.add('drag'); apply(false);} }
+  else if(ptrs.size===2&&pinch){ const [a,b]=[...ptrs.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y); const r=canvas.getBoundingClientRect(); zoomAt((a.x+b.x)/2-r.left,(a.y+b.y)/2-r.top,d/pinch.d); pinch.d=d; dragged=true; }
+});
+function ptrUp(e){ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch=null; if(ptrs.size===0){ canvas.classList.remove('drag'); if(dragged) setTimeout(maybeSnap,10); } }
+canvas.addEventListener('pointerup',ptrUp); canvas.addEventListener('pointercancel',ptrUp);
+canvas.addEventListener('click',e=>{ if(dragged) return; const pl=e.target.closest('.pl,.pd'); if(pl){ showCard(pl,pl.dataset.kind,pl.dataset.id,pl.dataset.j); return; } const sc=e.target.closest('.scr'); if(sc){ openProperty(sc.dataset.sid,sc.dataset.j); return; } const cv=e.target.closest('.d-cover'); if(cv&&S.level==='nb'){ enterJourney(cv.dataset.enter); return; } hideCard(); });
+canvas.addEventListener('keydown',e=>{ const sc=e.target.closest('.scr'); if(sc&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); openProperty(sc.dataset.sid,sc.dataset.j);} });
+let wheelT=null;
+canvas.addEventListener('wheel',e=>{ e.preventDefault(); const r=canvas.getBoundingClientRect(); if(e.ctrlKey||e.metaKey){ zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*.012)); } else { S.tx-=e.deltaX; S.ty-=e.deltaY; apply(false);} clearTimeout(wheelT); wheelT=setTimeout(maybeSnap,160); },{passive:false});
+
+/* ---------- explore card ---------- */
+const xcard=document.getElementById('xcard');
+function cardModel(kind,id,jid){
+  const j=JOURNEYS.find(x=>x.id===jid)||JOURNEYS[0];
+  if(kind==='op'){ const o=OPS[id]; const where=j.screens.filter(s=>SCREENS[s].ops.includes(id)); const tests=o.tests.length; const dir=(o.reads.length?'reads':'')+(o.reads.length&&o.writes.length?' · ':'')+(o.writes.length?'writes':'');
+    return {k:`${SERVICES[o.service].name} · ${dir||'no data'}`, ev:o.ev, name:o.summary, code:`${o.method} ${o.path} · ${o.id}${o.handler?' · '+o.handler:''}`, chips:[{k:'k-rec',n:o.reads.length+o.writes.length,w:'records touched',tip:'tables read or written by the handler'},{k:'k-gate',n:(o.gates||[]).length,w:'gates',tip:'guards and rules on the way'},{k:'k-test',n:tests,w:tests?'tests verified':'tests · none named',tip:'cases a results report named as run over the handler'}], where, acts:['Open on APIs','Impact']}; }
+  if(kind==='rec'){ const r=RECS[id]; const rs=Object.values(OPS).filter(o=>o.reads.includes(id)).length, ws=Object.values(OPS).filter(o=>o.writes.includes(id)).length; const where=j.screens.filter(s=>SCREENS[s].ops.some(o=>OPS[o].reads.includes(id)||OPS[o].writes.includes(id)));
+    return {k:'Record', ev:'indexed', name:r.name, code:`table ${id} · db.ts`, chips:[{k:'k-api',n:rs,w:'read by',tip:'operations that read this table'},{k:'k-api',n:ws,w:'written by',tip:'operations that write this table'}], where, acts:['Open on code map','Impact']}; }
+  if(kind==='msg'){ const m=MSGS[id]; const where=j.screens.filter(s=>SCREENS[s].ops.some(o=>(OPS[o].msgs||[]).includes(id))); return {k:'Message · published', ev:'indexed', name:m.name, code:`topic ${id} · events.ts:2`, chips:[{k:'k-api',n:1,w:'publisher',tip:'functions that publish this topic'},{k:'',n:2,w:'listeners',tip:'functions that subscribe'}], where, acts:['Open on code map','Impact']}; }
+  if(kind==='ext'){ const x=EXTS[id]; const where=j.screens.filter(s=>SCREENS[s].ops.some(o=>(OPS[o].ext||[]).includes(id))); return {k:'Third party · called', ev:'configured', name:x.name, code:`erpClient.ts::ErpClient · farsight.config.json externals`, chips:[{k:'k-api',n:1,w:'caller',tip:'operations that reach it'}], where, acts:['Open on code map','Impact']}; }
+  if(kind==='gate'){ const g=GATES[id]; const where=j.screens.filter(s=>SCREENS[s].gates.includes(id)); return {k:g.kind==='guard'?'Gate · guard':'Gate · rule', ev:'indexed', name:g.name, code:g.code, chips:[{k:'k-api',n:Object.values(OPS).filter(o=>(o.gates||[]).includes(id)).length,w:'operations guarded',tip:'operations this gate stands in front of'}], where, acts:['Open on code map','Impact']}; }
+  return null;
+}
+function showCard(anchor,kind,id,jid){
+  const m=cardModel(kind,id,jid); if(!m) return;
+  xcard.innerHTML=`<div class="k"><span class="hud">${esc(m.k)}</span><span class="hud" style="color:var(--muted)">${esc(m.ev)}</span><button aria-label="close">✕</button></div><div class="nm">${esc(m.name)}</div><div class="sent code mono" style="color:var(--dim)">${esc(m.code)}</div><div class="cnts">${m.chips.map(chipHtml).join('')}</div><div class="where"><span class="hud">on</span>${m.where.map(s=>`<span class="chip" data-go="${s}" data-j="${jid}">${esc(SCREENS[s].name)}</span>`).join('')||'<span class="chip k-absent">no screen in this journey</span>'}</div><div class="acts">${m.acts.map((a,i)=>`<span class="tb${i===0?' on':''}">${a}</span>`).join('')}</div>`;
+  xcard.hidden=false; const r=anchor.getBoundingClientRect(); const W=xcard.offsetWidth, H=xcard.offsetHeight; let x=r.left, y=r.bottom+8; if(x+W>innerWidth-16) x=innerWidth-16-W; if(y+H>innerHeight-16) y=Math.max(16,r.top-H-8); xcard.style.left=x+'px'; xcard.style.top=y+'px';
+  xcard.querySelector('button').onclick=hideCard; xcard.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>{ hideCard(); openProperty(c.dataset.go,c.dataset.j); });
+}
+function hideCard(){ xcard.hidden=true; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(!xcard.hidden) hideCard(); else if(S.inProp) closeProperty(); else if(S.level==='st') fitAll(true); } });
+
+/* ---------- property ---------- */
+const prop=document.getElementById('prop');
+const TABS=['Overview','Gates','APIs','UX','Tests','Route','Work','Changes'];
+function tabCount(s,t){ switch(t){ case 'Gates':return s.gates.length+s.decisions.length; case 'APIs':return s.ops.length; case 'UX':return s.comps.length; case 'Tests':return s.tests.length; case 'Work':return s.work.length; case 'Changes':return s.changes.length; default:return null; } }
+function openProperty(sid,jid){ hideCard(); S.screen=sid; if(jid) S.journey=jid; S.inProp=true; prop.hidden=false; renderProp(); const p=POS[`${S.journey}:${sid}`]; if(p){ S.s=1.2; const r=canvas.getBoundingClientRect(); S.tx=r.width/2-p.cx*S.s; S.ty=r.height/2-p.cy*S.s; } apply(false); document.getElementById('pback').focus(); }
+function closeProperty(){ S.inProp=false; prop.hidden=true; const p=POS[`${S.journey}:${S.screen}`]; if(p) zoomTo(p.cx,p.cy+(S.plumb?220:0),1.0,false); else apply(false); }
+function stepTo(dir){ const j=JOURNEYS.find(x=>x.id===S.journey); const i=j.screens.indexOf(S.screen)+dir; if(i>=0&&i<j.screens.length) openProperty(j.screens[i],j.id); }
+function renderProp(){
+  const s=SCREENS[S.screen], j=JOURNEYS.find(x=>x.id===S.journey), i=j.screens.indexOf(S.screen);
+  document.getElementById('pcrumb').innerHTML=`Journeys<span class="sep">›</span>${esc(j.name)}<span class="sep">›</span><b>${esc(s.name)}</b><span class="sep">·</span><span class="code mono" style="text-transform:none;letter-spacing:0">${esc(s.route)}</span>`;
+  const hero=document.getElementById('phero');
+  hero.innerHTML = s.svg ? `<div class="hovers"><span class="chip">design · docs/design/${s.id.toLowerCase()}.svg</span><span class="chip k-test">${s.tests.filter(t=>t.k==='story').length?'2 stories live':'no stories'}</span></div><div class="frame">${s.svg}</div>`
+    : `<div class="frame ph">${phSvg()}<div class="t">${esc(s.name)}</div><div class="mono code">${esc(s.route)}</div><div style="max-width:40ch">${esc(s.desc)}</div><div class="hud">designed, not built · no screenshot yet</div><div class="parts">${s.comps.length?s.comps.map(c=>`<span class="chip">${c}</span>`).join(''):'<span class="chip k-absent">no components found</span>'}</div><div class="up"><span class="tb">Paste an image</span><span class="tb">Upload…</span></div><div class="hud" style="font-size:9px;color:var(--dim)">saved into this source's design manifest · bonus stream</div></div>`;
+  const tabs=document.getElementById('ptabs'); tabs.innerHTML=TABS.map(t=>{ const n=tabCount(s,t); return `<button class="tab${t===S.tab?' on':''}" data-t="${t}">${t}${n!==null?`<span class="n">${n}</span>`:''}</button>`; }).join('');
+  tabs.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{ S.tab=b.dataset.t; renderProp(); });
+  document.getElementById('pbody').innerHTML=tabBody(s,j);
+  document.getElementById('pbody').querySelectorAll('[data-card]').forEach(el=>el.onclick=()=>showCard(el,el.dataset.card,el.dataset.id,j.id));
+  // foot
+  const prev=j.screens[i-1], next=j.screens[i+1]; const also=JOURNEYS.filter(x=>x.id!==j.id&&x.screens.includes(s.id));
+  document.getElementById('pfoot').innerHTML=`<div class="stepbtn prev${prev?'':' off'}" id="pprev"><span class="hud">← before this</span><span class="nm">${prev?esc(SCREENS[prev].name):'start of the journey'}</span></div>
+    <div class="mid"><span class="hud">step ${i+1} of ${j.screens.length} in ${esc(j.name)}</span><div class="dots">${j.screens.map((x,k)=>`<i class="${k===i?'on':''}" title="${esc(SCREENS[x].name)}"></i>`).join('')}</div>${also.length?`<div class="also"><span class="hud" style="font-size:9px">also in</span>${also.map(x=>`<span class="chip" data-jj="${x.id}">${esc(x.name)}</span>`).join('')}</div>`:''}</div>
+    <div class="stepbtn next${next?'':' off'}" id="pnext"><span class="hud">after this →</span><span class="nm">${next?esc(SCREENS[next].name):'end of the journey'}</span></div>`;
+  document.getElementById('pprev').onclick=()=>stepTo(-1); document.getElementById('pnext').onclick=()=>stepTo(1);
+  document.querySelectorAll('#pfoot [data-jj]').forEach(c=>c.onclick=()=>openProperty(s.id,c.dataset.jj));
+}
+const row=(l,sub,r,card)=>`<div class="row${card?' click':''}"${card?` data-card="${card.k}" data-id="${esc(card.id)}"`:''}><div class="l"><span>${l}</span>${sub?`<span class="sub">${sub}</span>`:''}</div>${r?`<div class="r">${r}</div>`:''}</div>`;
+function tabBody(s,j){
+  const biz=S.lens==='business';
+  switch(S.tab){
+    case 'Overview': return `<div class="sec"><span class="hud">What the user does here</span><div class="biz">${esc(s.desc)}</div></div>
+      <div class="sec"><span class="hud">At a glance</span><div class="cnts" style="display:flex;gap:6px;flex-wrap:wrap">${screenChips(s)}${s.state==='planned'?chipHtml({k:'k-warn',n:'',w:'designed, not built'}):''}</div></div>
+      <div class="sec"><span class="hud">Asks the service for</span>${s.ops.map(o=>row(esc(OPS[o].summary),biz?'':`<span class="code mono">${OPS[o].method} ${OPS[o].path}</span>`,OPS[o].ev,{k:'op',id:o})).join('')}</div>
+      <div class="sec"><span class="hud">Stands behind</span>${s.gates.length?s.gates.map(g=>row(esc(GATES[g].name),biz?'':`<span class="code mono">${esc(GATES[g].code)}</span>`,GATES[g].kind,{k:'gate',id:g})).join(''):row('<span style="color:var(--muted)">no gates on this screen</span>')}</div>
+      <div class="sec"><span class="hud">Work that touched it</span>${s.work.length?s.work.map(w=>row(`<span class="mono" style="color:var(--amber)">${w.key}</span> ${esc(w.t)}`,'',`${w.s}${w.c?` · ${w.c} commits`:''}`)).join(''):row('<span style="color:var(--muted)">no work item names these parts</span>')}</div>`;
+    case 'Gates': return `<div class="sec"><span class="hud">Guards and rules on this screen</span>${s.gates.length?s.gates.map(g=>row(esc(GATES[g].name),biz?'':`<span class="code mono">${esc(GATES[g].code)}</span>`,GATES[g].kind,{k:'gate',id:g})).join(''):row('<span style="color:var(--muted)">none indexed</span>')}</div>
+      <div class="sec"><span class="hud">Decisions a person wrote down</span>${s.decisions.length?s.decisions.map(d=>row('⑂ '+esc(d))).join(''):row('<span style="color:var(--muted)">none written</span>')}</div>`;
+    case 'APIs': return `<div class="sec"><span class="hud">${s.ops.length} operations this screen calls</span>${s.ops.map(o=>{const op=OPS[o]; const d=(op.reads.length?'reads '+op.reads.map(r=>RECS[r].name).join(', '):'')+(op.reads.length&&op.writes.length?' · ':'')+(op.writes.length?'writes '+op.writes.map(r=>RECS[r].name).join(', '):''); return row(`<span class="svc-${op.service}" style="color:var(--svc);font-family:var(--hud);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;margin-right:6px">${esc(SERVICES[op.service].name)}</span>${esc(op.summary)}`,(biz?'':`<span class="code mono">${op.method} ${op.path}</span> · `)+esc(d||'no data'),op.ev,{k:'op',id:o});}).join('')}</div>
+      <div class="sec"><span class="hud">Records this screen reaches</span>${[...new Set(s.ops.flatMap(o=>OPS[o].reads.concat(OPS[o].writes)))].map(r=>row(esc(RECS[r].name),esc(RECS[r].sentence),'',{k:'rec',id:r})).join('')||row('<span style="color:var(--muted)">none</span>')}</div>`;
+    case 'UX': return `<div class="sec"><span class="hud">Page and components</span>${s.comps.length?s.comps.map((c,i)=>row(i===0?`<span class="code mono">${c}</span><span style="color:var(--muted)"> page</span>`:`<span class="code mono">${c}</span><span style="color:var(--muted)"> component</span>`,biz?esc(c.replace(/([a-z])([A-Z])/g,'$1 $2')):'src/ui/'+c+'.tsx','')).join(''):row('<span style="color:var(--muted)">no page in the code for this route</span>')}</div>
+      <div class="sec"><span class="hud">Stories</span>${s.tests.filter(t=>t.k==='story').length?row('CreateInvoiceForm · Empty · Filled','live from the Invoice app UI Storybook','2 stories'):row('<span style="color:var(--muted)">none indexed</span>')}</div>`;
+    case 'Tests': { const t=s.tests.filter(x=>x.k!=='story'); return `<div class="sec"><span class="hud">${t.length} cases verified over this screen</span>${t.length?t.map(x=>row(esc(x.n),'',x.k+' · '+x.r)).join(''):row('<span style="color:var(--muted)">no case named in a results report</span>')}</div><div class="sec"><span class="hud">Evidence</span><div style="color:var(--muted);font-size:12.5px">verified = a results report named a case that ran over these parts. A coverage report alone would read <i>seen by a coverage run</i>.</div></div>`; }
+    case 'Route': return `<div class="sec"><span class="hud">Route</span>${row(`<span class="mono">${esc(s.route)}</span>`, s.state==='planned'?'declared in docs/design/screens.json · no page in src/ui/router.tsx':'src/ui/router.tsx · declared in docs/design/screens.json', s.state==='planned'?'designed, not built':'built')}</div>
+      <div class="sec"><span class="hud">Other ways in</span>${s.id==='INV-01'?row('From New invoice after Save','the form calls onDone and the router goes to /invoices'):s.id==='INV-02'?row('The + New invoice button on Invoice list'):row('Not reachable yet','the discard action is not built')}</div>`;
+    case 'Work': return `<div class="sec"><span class="hud">Work items whose commits touched these parts</span>${s.work.length?s.work.map(w=>row(`<span class="mono" style="color:var(--amber)">${w.key}</span> ${esc(w.t)}`,w.c?`${w.c} commits name it`:'no commit names it yet',w.s)).join(''):row('<span style="color:var(--muted)">none</span>')}</div>
+      <div class="sec"><span class="hud">Findings</span>${s.id==='INV-03'?row('To do, and nothing built','the route is designed; no page, no handler','finding'):s.id==='INV-01'?row('In progress, 3 commits name it','BILL-21 is open and the finalize route is implied, not in the spec','finding'):row('<span style="color:var(--muted)">nothing to flag</span>')}</div>`;
+    case 'Changes': return `<div class="sec"><span class="hud">Commits that changed the parts on this screen</span>${s.changes.length?s.changes.map(c=>row(esc(c.m),`<span class="code mono">${c.sha} · ${c.f}</span>`,c.d)).join(''):row('<span style="color:var(--muted)">no commit touched these parts</span>')}</div>`;
+  }
+  return '';
+}
+
+/* ---------- chrome ---------- */
+document.getElementById('lvls').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; const l=b.dataset.l; if(l==='nb'){ if(S.inProp) closeProperty(); fitAll(true);} else if(l==='st'){ if(S.inProp) closeProperty(); enterJourney(S.journey);} else { const j=JOURNEYS.find(x=>x.id===S.journey); openProperty(S.screen&&j.screens.includes(S.screen)?S.screen:j.screens[0],j.id);} };
+function setPlumb(v){ S.plumb=v; world.classList.toggle('no-plumb',!v); document.getElementById('plumb').classList.toggle('on',v); }
+document.getElementById('plumb').onclick=()=>setPlumb(!S.plumb);
+function setLens(l){ S.lens=l; document.body.classList.toggle('lens-business',l==='business'); const t='Lens · '+(l==='business'?'Business':'Hybrid'); document.getElementById('lens').textContent=t; document.getElementById('plens').textContent=t; document.getElementById('lens').classList.toggle('on',l==='business'); document.getElementById('plens').classList.toggle('on',l==='business'); if(S.inProp) renderProp(); }
+document.getElementById('lens').onclick=()=>setLens(S.lens==='business'?'hybrid':'business');
+document.getElementById('plens').onclick=()=>setLens(S.lens==='business'?'hybrid':'business');
+document.getElementById('zi').onclick=()=>{ const r=canvas.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1.35); world.classList.add('anim'); setTimeout(maybeSnap,120); };
+document.getElementById('zo').onclick=()=>{ const r=canvas.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1/1.35); };
+document.getElementById('fit').onclick=()=>fitAll(true);
+function toggleFs(){ const st=document.getElementById('stage'); if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); else if(st.requestFullscreen) st.requestFullscreen().catch(()=>{}); }
+document.getElementById('fs').onclick=toggleFs; document.getElementById('pfs').onclick=toggleFs;
+document.getElementById('pback').onclick=closeProperty;
+// property zoom-out budget
+let outBudget=0;
+prop.addEventListener('wheel',e=>{ if(!(e.ctrlKey||e.metaKey)) return; e.preventDefault(); outBudget+= e.deltaY>0? e.deltaY : -e.deltaY*.5; if(outBudget>140){ outBudget=0; closeProperty(); } if(outBudget<0) outBudget=0; },{passive:false});
+const pp=new Map(); let pd=null;
+prop.addEventListener('pointerdown',e=>{ pp.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pp.size===2){ const [a,b]=[...pp.values()]; pd=Math.hypot(a.x-b.x,a.y-b.y);} });
+prop.addEventListener('pointermove',e=>{ if(!pp.has(e.pointerId)) return; pp.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pp.size===2&&pd){ const [a,b]=[...pp.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y); if(d/pd<.78){ pd=null; pp.clear(); closeProperty(); } } });
+const ppUp=e=>{ pp.delete(e.pointerId); if(pp.size<2) pd=null; }; prop.addEventListener('pointerup',ppUp); prop.addEventListener('pointercancel',ppUp);
+document.addEventListener('keydown',e=>{ if(e.target.matches('input,textarea')) return; if(e.key==='p'){ setPlumb(!S.plumb); } if(e.key==='b'){ setLens(S.lens==='business'?'hybrid':'business'); } if(e.key==='f'){ toggleFs(); } if(S.inProp){ if(e.key==='ArrowLeft') stepTo(-1); if(e.key==='ArrowRight') stepTo(1); } });
+document.addEventListener('click',e=>{ if(!xcard.hidden&&!xcard.contains(e.target)&&!e.target.closest('.pl,.pd')&&!e.target.closest('[data-card]')) hideCard(); });
+window.addEventListener('resize',()=>{ if(S.level==='nb'&&!S.inProp) fitAll(false); });
+
+buildWorld(); fitAll(false);
+
+/* ---------- direction sketches ---------- */
+function W(spec){ let o=''; for(const e of spec){ const [t,...a]=e; if(t==='r') o+=`<rect x="${a[0]}" y="${a[1]}" width="${a[2]}" height="${a[3]}" rx="1.5" class="${a[4]||''}"/>`; else if(t==='t') o+=`<text x="${a[0]}" y="${a[1]}" class="${a[3]||''}">${a[2]}</text>`; else if(t==='l') o+=`<line x1="${a[0]}" y1="${a[1]}" x2="${a[2]}" y2="${a[3]}" class="${a[4]||''}"/>`; else if(t==='p') o+=`<path d="${a[0]}" class="${a[1]||''}"/>`; else if(t==='c') o+=`<circle cx="${a[0]}" cy="${a[1]}" r="${a[2]}"/>`; } return `<svg class="w" viewBox="0 0 160 100">${o}</svg>`; }
+const scrBox=(x,y,w,h,label)=>[['r',x,y,w,h,'scr'],['r',x+2,y+2,w-4,h*.3,'g'],['t',x+2,y+h+6,label,'s']];
+const DIRS={
+  nb:[
+    {name:'Districts with ghosted streets',tag:'in prototype',sk:W([...[[6,8,70,38,'Billing cycle'],[6,58,30,34,'Start'],[46,58,30,34,'Send']].flatMap(([x,y,w,h,l])=>[['r',x,y,w,h,'g'],['t',x+3,y+8,l],['r',x+3,y+12,w-6,h-16,''],['t',x+3,y+h-2,'3 screens · 5 APIs · 4 tests','s']]),['p','M36 75 L46 75','acc'],['p','M41 46 L21 58','']  ,['p','M41 46 L61 58',''],['r',84,8,70,84,'g'],['t',88,16,'Aggregate'],['t',88,26,'screens · APIs · gates','s'],['t',88,33,'tests · work · built %','s'],['t',88,46,'Links'],['t',88,56,'leads to · requires · part of','s'],['t',88,70,'Enter'],['t',88,80,'click or zoom in = the street','s']]),
+      p:'Each journey is a region. Its summary sits on top at poster size; the street beneath shows through faintly so the shape of the journey is visible before you enter. Links between regions carry the relations the graph already derives.',
+      pros:['Continuous zoom: the street is literally underneath','Shape and length of a journey read at a glance','Links give the map spatial meaning',{c:'Layout of regions needs a rule (by phase? by links?)'}]},
+    {name:'Journey cards on a grid',tag:'cheapest',sk:W([...[[6,8],[58,8],[110,8],[6,54],[58,54]].flatMap(([x,y])=>[['r',x,y,44,38,'g'],['t',x+3,y+8,'Journey'],['r',x+3,y+11,38,10,''],['t',x+3,y+28,'3 · 5 · 2 · 4','s'],['t',x+3,y+35,'built 2 of 3','s']]),['t',110,62,'Portfolio','s'],['t',110,70,'rows as cards.','s'],['t',110,78,'Zoom in opens','s'],['t',110,86,'the street.','s']]),
+      p:'The Portfolio rows become cards with the same aggregate chips. No spatial meaning, no links. Zooming into a card opens its street as a transition, not as a continuous canvas.',
+      pros:['A week, not a month: reuses Portfolio data and the flow status table','Scales to forty journeys without a layout engine',{c:'No sense of how journeys connect'},{c:'Not really a whiteboard; the zoom is a page change'}]},
+    {name:'Linked journey map',tag:'alt',sk:W([['c',30,50,14],['c',80,30,14],['c',130,50,14],['c',80,74,14],['l',44,50,66,34,'acc'],['l',94,34,116,46,'acc'],['l',44,50,66,70,''],['l',94,70,116,54,''],['t',16,74,'Sign in'],['t',62,13,'New invoice'],['t',116,74,'Send'],['t',62,96,'Discard'],['t',6,14,'Nodes = journeys'],['t',6,22,'edges = leads to / requires','s']]),
+      p:'Journeys as nodes of a graph drawn by requires, leads to and part of. The spatial layout is the order of the business, left to right. Screens appear inside a node when you zoom.',
+      pros:['The order of the business is the layout','Shared screens draw once, between the journeys that use them',{c:'Needs enough declared links to look like anything; the example has two'},{c:'Force layout drifts between syncs; people lose their place'}]},
+  ],
+  st:[
+    {name:'A pathway per screen',tag:'in prototype',sk:W([...scrBox(6,6,30,18,'1 New invoice'),...scrBox(60,6,30,18,'2 Invoice list'),...scrBox(114,6,30,18,'3 Discard'),['p','M36 15 L60 15','acc'],['p','M90 15 L114 15','acc'],
+      ['l',18,24,18,66,''],['r',6,38,24,12,'api'],['r',34,40,18,8,'rec'],['l',30,44,34,44,'a'],['r',6,56,24,12,'api'],['r',34,58,18,8,'rec'],['l',30,62,34,62,'r'],
+      ['l',72,24,72,86,''],['r',60,38,24,12,'api'],['r',88,40,18,8,'rec'],['l',84,44,88,44,'a'],['r',60,56,24,12,'api'],['r',88,58,18,8,'rec'],['l',84,62,88,62,'r'],['r',60,74,24,16,'api'],['r',88,72,18,8,'rec'],['r',88,82,18,8,'msg'],['l',84,78,88,76,'r'],['l',84,80,88,86,'r'],
+      ['l',126,24,126,38,''],['r',114,38,24,12,'api'],['r',142,40,14,8,'rec'],['l',138,44,142,44,'r'],['t',6,98,'Service colour on each call · reads cool, writes warm','s']]),
+      p:'Each screen owns a straight pathway down: the calls it makes, stacked in order, each with a service colour bar on top; beside each call, the records, messages and third parties it touches, with reads in cool lines and writes in warm. The same record appears under every screen that uses it. Nothing crosses.',
+      pros:['Reads as what the screen does, step by step, not as an architecture diagram','Service colour tells two systems apart at a glance','Every node is one click to the same card',{c:'A shared record is drawn once per screen; the journey-level count still counts it once'}]},
+    {name:'Subway map',tag:'alt',sk:W([['p','M8 30 L152 30','acc'],['p','M8 55 L152 55','a'],['p','M8 80 L152 80','r'],['c',30,30,4],['c',80,30,4],['c',130,30,4],['c',30,55,3],['c',55,55,3],['c',80,55,3],['c',105,55,3],['c',55,80,3],['c',105,80,3],['l',30,34,30,52,''],['l',80,34,80,52,''],['l',80,34,105,52,''],['l',55,59,55,77,''],['l',105,59,105,77,''],['t',22,22,'New'],['t',70,22,'List'],['t',120,22,'Discard'],['t',8,46,'API line'],['t',8,71,'Data line'],['t',8,96,'Stations = where a line is used','s']]),
+      p:'One line per system, screens as stations on the top line, operations and records as stations on the lines below, with vertical interchanges where a screen uses them. A poster, not a diagram.',
+      pros:['Glanceable at any width; very touch friendly','Systems as lines matches the ladder view people already know',{c:'Interchanges become dense fast; three screens with five operations already crowd'},{c:'Harder to make every station carry the same card without clutter'}]},
+    {name:'Shared lanes',tag:'set aside',sk:W([...scrBox(8,10,36,24,'1 New invoice'),...scrBox(62,10,36,24,'2 Invoice list'),...scrBox(116,10,36,24,'3 Discard'),['p','M44 22 L62 22','acc'],['p','M98 22 L116 22','acc'],['t',8,52,'API'],['r',8,56,30,10,'api'],['r',44,56,30,10,'api'],['r',80,56,30,10,'api'],['r',116,56,30,10,'api'],['t',8,78,'Records · messages'],['r',30,82,30,10,'rec'],['r',72,82,30,10,'rec'],['r',114,82,30,10,'msg'],['l',26,34,23,56,'a'],['l',80,34,59,56,'a'],['l',80,34,95,56,'a'],['l',134,34,131,56,'a'],['l',23,66,45,82,'r'],['l',59,66,45,82,'r'],['l',95,66,87,82,'r'],['l',95,66,129,82,'r']]),
+      p:'The first cut of the prototype. Operations and records drawn once in two lanes under all the screens, with lines converging from every screen that uses them.',
+      pros:['Shows what data the journey serves, drawn once',{c:'Lines converge and cross; it reads as an architecture diagram, not as what each screen does'},{c:'Set aside in review on 2026-10-03 for the pathway per screen'}]},
+  ],
+  pr:[
+    {name:'Right rail tabs + step bar',tag:'in prototype',sk:W([['r',4,4,152,10,'g'],['t',7,11,'Journeys › Billing cycle › New invoice','s'],['r',4,18,100,64,'scr'],['r',8,22,92,8,'g'],['r',108,18,48,64,'g'],['r',110,20,10,6,'acc'],['r',122,20,10,6,''],['r',134,20,10,6,''],['r',110,28,10,6,''],['r',122,28,10,6,''],['r',134,28,10,6,''],['l',110,40,152,40,''],['l',110,48,152,48,''],['l',110,56,152,56,''],['l',110,64,152,64,''],['r',4,86,152,10,'g'],['t',7,93,'← Invoice list','s'],['t',66,93,'step 1 of 3','s'],['t',122,93,'Invoice list →','s']]),
+      p:'The screenshot owns the left two thirds. A 352 px rail on the right carries eight tabs with counts, two rows deep. The bottom bar is the step bar: what came before, where you are, what comes next, and the other journeys this screen is part of.',
+      pros:['The tabbed rail is the drill inspector, reused','Step bar makes the journey walkable without leaving the property','Nothing overlaps the screenshot',{c:'Eight tabs wrap to two rows; six would sit in one'}]},
+    {name:'Icon rail left, pane right',tag:'alt',sk:W([['r',4,4,152,10,'g'],['r',4,18,12,64,'g'],['r',6,21,8,7,'acc'],['r',6,30,8,7,''],['r',6,39,8,7,''],['r',6,48,8,7,''],['r',6,57,8,7,''],['r',6,66,8,7,''],['r',20,18,86,64,'scr'],['r',24,22,78,8,'g'],['r',110,18,46,64,'g'],['t',113,26,'Overview'],['l',113,32,152,32,''],['l',113,40,152,40,''],['l',113,48,152,48,''],['l',113,56,152,56,''],['r',4,86,152,10,'g'],['t',7,93,'← before','s'],['t',120,93,'after →','s']]),
+      p:'Tabs become a thin icon rail on the left of the screenshot, like an IDE activity bar; the chosen tab fills a pane on the right. The screenshot sits between two edges of chrome.',
+      pros:['One row of tabs however many there are','Pane can be wider since the rail is thin',{c:'Two chrome edges either side of the hero; the eye bounces'},{c:'Icons need labels on hover; the HUD has words, not icons'}]},
+    {name:'Bottom drawer',tag:'alt',sk:W([['r',4,4,152,10,'g'],['r',4,18,152,44,'scr'],['r',8,22,144,8,'g'],['r',4,66,152,30,'g'],['r',8,69,16,6,'acc'],['r',26,69,16,6,''],['r',44,69,16,6,''],['r',62,69,16,6,''],['r',80,69,16,6,''],['r',98,69,16,6,''],['l',8,80,152,80,''],['l',8,86,152,86,''],['l',8,92,152,92,''],['t',120,74,'← 1 of 3 →','s']]),
+      p:'The screenshot runs full width. The tabs live in a drawer that rises from the bottom and can be dragged to any height; the step controls sit in its handle.',
+      pros:['Largest hero on wide screens and tablets in landscape','Drawer height is the reader’s choice: a strip or half the stage',{c:'A table of APIs in a short drawer scrolls; the rail does not'},{c:'Prev/next in the handle fight with the drag gesture on touch'}]},
+  ],
+};
+for(const [k,list] of Object.entries(DIRS)){ document.getElementById('dir-'+k).innerHTML=list.map((d,i)=>`<div class="dir"><div class="wf">${d.sk}</div><div class="t"><span class="hud">${k.toUpperCase()}${i+1}</span><b>${d.name}</b><span class="tag${d.tag==='in prototype'?'':' alt'}">${d.tag}</span></div><p>${d.p}</p><ul class="pros">${d.pros.map(x=>typeof x==='string'?`<li>${x}</li>`:`<li class="c">${x.c}</li>`).join('')}</ul></div>`).join(''); }
+</script>
