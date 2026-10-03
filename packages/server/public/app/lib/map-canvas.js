@@ -36,7 +36,8 @@ export function levelOf(s) { return s < LEVEL_NB ? 'nb' : 'st'; }
  * - `onLevel(level, prev)` when the scale crosses 0.5;
  * - `snapTargets()` → elements inside the world a gesture may snap to;
  * - `onSnap(el)` when a gesture ends near one above 1.6;
- * - `onGestureEnd()` after every gesture, snapped or not.
+ * - `onGestureEnd()` after every gesture, snapped or not;
+ * - `holdWheel()` → true while wheel events should be swallowed.
  * @group Map
  */
 export function createCanvas(stage, world, opts = {}) {
@@ -181,6 +182,8 @@ export function createCanvas(stage, world, opts = {}) {
     // a scrollable panel inside the stage (the explore card, the property) keeps its own wheel
     if (e.target && e.target.closest && e.target.closest('[data-map-wheel="own"]')) return;
     e.preventDefault();
+    // the owner may be finishing a gesture of its own (a pinch out that just left a screen)
+    if (opts.holdWheel && opts.holdWheel()) return;
     const r = rect();
     const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1;
     if (e.ctrlKey || e.metaKey) zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * unit * 0.012), false);

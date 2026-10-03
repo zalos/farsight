@@ -1,0 +1,265 @@
+// The MAP surface (docs/proposals/map-view.md, lane A): every journey on one
+// zoomable board. The fixture's design names three journeys; Billing cycle has
+// three screens — New invoice, Invoice list, and Discard draft (designed, not
+// built, its one call planned). The map is a workspace experiment: the fixture
+// sets no flags, so each test turns `flags.map` on in the page (never in the
+// workspace) the way journey-numbers turns on the drill.
+import type { Page } from '@playwright/test';
+import { test, expect, gotoReady } from './support';
+
+// Until lane B's surfaces/map-property.js lands, opening a screen asks for it and
+// gets a 404, and the map draws its own stand-in. Once it exists this never matches.
+test.use({ expectedHttpErrors: [/\/app\/surfaces\/map-property\.js$/] });
+
+const FLOW = 'invoice-app::flow::billing-cycle';
+const STREET = '#/map/' + encodeURIComponent(FLOW);
+const LIST_PAGE = 'invoice-app::page::/invoices';
+
+/** Identifier-shaped tokens (the journey-numbers check): camelCase, PascalCase compounds, snake_case, paths, HTTP verbs, spec files, document ids. */
+const IDENTIFIER = new RegExp([
+  String.raw`\b[a-z]+[A-Z][A-Za-z0-9]*\b`,
+  String.raw`\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b`,
+  String.raw`\b[a-z0-9]+_[a-z0-9_]+\b`,
+  String.raw`\b[A-Z0-9]+_[A-Z0-9_]+\b`,
+  String.raw`(?:^|[\s(])\/[\w.:{}\-]+`,
+  String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
+  String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
+  String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
+  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+|\bADR\s?\d+`,
+].join('|'), 'g');
+
+/** Switch the map on for this page only — the flag is read client-side. */
+async function mapOn(page: Page) {
+  await gotoReady(page, '#/portfolio');
+  await page.evaluate(() => {
+    const S = (window as any).S;
+    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+  });
+}
+async function go(page: Page, hash: string) {
+  await page.evaluate((h) => { location.hash = h; }, hash);
+}
+/** Open Billing cycle's street (plumbing on or off) and wait until its screens are drawn. */
+async function openStreet(page: Page, plumb = false) {
+  await go(page, STREET + (plumb ? '?plumb=1' : ''));
+  await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`)).toHaveCount(3);
+  await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
+}
+/** The words a reader can see on the board, as written. */
+async function visibleWords(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const w = document.createTreeWalker(document.querySelector('.map-stage')!, NodeFilter.SHOW_TEXT);
+    let n: Node | null;
+    while ((n = w.nextNode())) {
+      const el = n.parentElement;
+      if (!el || !n.textContent?.trim()) continue;
+      if (el.checkVisibility({ visibilityProperty: true })) out.push(n.textContent);
+    }
+    return out.join('\n');
+  });
+}
+
+test.describe('map — neighbourhood and street', () => {
+  /**
+   * @covers packages/server/public/app/shell.js::applyRoute
+   * @covers packages/server/public/app/shell.js::navTabs
+   * @covers packages/server/public/app/surfaces/map.js::mapEnabled
+   */
+  test('with the flag off there is no Map tab and a map link reads as the Portfolio', async ({ page }) => {
+    await gotoReady(page, '#/map');
+    await expect(page).toHaveURL(/#\/portfolio$/);
+    await expect(page.locator('#nav .navtab')).not.toContainText(['Map']);
+    await expect(page.locator('.pf-viewsw')).toHaveCount(0);
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::mountMap
+   * @covers packages/server/public/app/lib/map-model.js::neighbourhoodModel
+   * @covers packages/server/public/app/lib/map-model.js::streetModel
+   * @covers packages/server/public/app/lib/map-canvas.js::createCanvas
+   * @covers packages/server/public/app/surfaces/portfolio.js::mapSwitchHtml
+   * @covers GET /api/design
+   * @covers GET /api/journey
+   */
+  test('the three journeys as districts; entering Billing cycle walks its three screens in order', async ({ page }) => {
+    await mapOn(page);
+    // the Portfolio's door, drawn once the flag is on
+    await go(page, '#/journeys');
+    await go(page, '#/portfolio');
+    await expect(page.locator('.pf-viewsw [data-go="map"]')).toBeVisible();
+    await page.locator('.pf-viewsw [data-go="map"]').click();
+    await expect(page).toHaveURL(/#\/map$/);
+    await expect(page.locator('#nav .navtab.on')).toHaveText('Map');
+
+    const districts = page.locator('.map-district');
+    await expect(districts).toHaveCount(3);
+    await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
+    for (const name of ['Billing cycle', 'Start a new invoice', 'Draft and send an invoice']) {
+      await expect(page.locator('.map-dcover .nm', { hasText: name })).toBeVisible();
+    }
+    // every journey's numbers arrive as typed counts with their tips
+    await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-dcover .map-chip[data-tip-id="number"]`).first()).toBeVisible();
+    // the containing journey draws its parts' links
+    await expect(page.locator('.map-links [data-link="partOf"]')).toHaveCount(2);
+    await expect(page.locator('.map-links [data-link="leadsTo"]')).toHaveCount(1);
+
+    await page.locator(`.map-dcover[data-enter="${FLOW}"]`).click();
+    await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
+    await expect(page).toHaveURL(new RegExp('#/map/' + encodeURIComponent(FLOW)));
+    const screens = page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`);
+    await expect(screens).toHaveCount(3);
+    await expect(screens.locator('.ord')).toHaveText(['1', '2', '3']);
+    await expect(screens.locator('.nm')).toHaveText(['New invoice', 'Invoice list', 'Discard draft']);
+    await expect(screens.nth(2)).toHaveClass(/planned/);
+    await expect(page.locator('.map-crumb')).toContainText('Billing cycle');
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::setPlumb
+   * @covers packages/server/public/app/surfaces/map.js::mapKey
+   * @covers packages/server/public/app/lib/map-model.js::streetModel
+   */
+  test('plumbing: each screen\'s calls with a service bar and what they read and write; the planned call is dashed', async ({ page }) => {
+    await mapOn(page);
+    await openStreet(page, true);
+    await expect(page.locator('.map-world')).not.toHaveClass(/no-plumb/);
+    const list = page.locator(`.map-pl[data-flow="${FLOW}"][data-si="1"]`);
+    await expect(list).toHaveCount(5);
+    for (let i = 0; i < 5; i++) {
+      await expect(list.nth(i)).toHaveAttribute('data-svc', 'Billing API');
+      await expect(list.nth(i)).toHaveClass(/svc-0/);
+    }
+    // the service bar is the call's top border, in the service's colour
+    const bar = await list.first().evaluate((el) => getComputedStyle(el).borderTopWidth);
+    expect(parseFloat(bar)).toBeGreaterThanOrEqual(3);
+    await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-lane .leg`)).toContainText('Billing API');
+    const writes = page.locator(`.map-pd[data-flow="${FLOW}"][data-si="1"][data-mode="write"]`);
+    expect(await writes.count()).toBeGreaterThanOrEqual(1);
+    await expect(writes.first()).toBeVisible();
+    await expect(page.locator(`.map-pd[data-flow="${FLOW}"][data-si="1"][data-mode="both"]`).first()).toContainText('reads · writes');
+    // Discard draft: one call, planned — dashed, not built, nothing beside it
+    const discard = page.locator(`.map-pl[data-flow="${FLOW}"][data-si="2"]`);
+    await expect(discard).toHaveCount(1);
+    await expect(discard).toHaveClass(/absent/);
+    await expect(discard).toHaveAttribute('data-evidence', 'not built');
+    await expect(discard).toContainText('not built');
+    await expect(page.locator(`.map-pd[data-flow="${FLOW}"][data-si="2"]`)).toHaveCount(0);
+    const dashed = await discard.evaluate((el) => getComputedStyle(el).borderLeftStyle);
+    expect(dashed).toBe('dashed');
+
+    // p hides it again, and the address bar forgets it
+    await page.locator('.map-board').click({ position: { x: 20, y: 300 } });
+    await page.keyboard.press('p');
+    await expect(page.locator('.map-world')).toHaveClass(/no-plumb/);
+    await expect(page).not.toHaveURL(/plumb=1/);
+    await expect(list.first()).toBeHidden();
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::openMapProperty
+   * @covers packages/server/public/app/surfaces/map.js::closeProperty
+   * @covers packages/server/public/app/surfaces/map.js::mapEscape
+   */
+  test('a screen opens its property through the hook, [ ] walk the journey, Esc lands back on the street', async ({ page }) => {
+    await mapOn(page);
+    await openStreet(page);
+    await page.locator(`.map-scr[data-flow="${FLOW}"][data-index="1"] .nm`).click();
+    const host = page.locator('.map-prop-host');
+    await expect(host).toBeVisible();
+    await expect(host).toContainText('Invoice list');
+    await expect(page).toHaveURL(new RegExp('node=' + encodeURIComponent(LIST_PAGE).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    await page.keyboard.press(']');
+    await expect(host).toContainText('Discard draft');
+    await page.keyboard.press('[');
+    await expect(host).toContainText('Invoice list');
+    await page.keyboard.press('Escape');
+    await expect(host).toBeHidden();
+    await expect(page).not.toHaveURL(/node=/);
+    await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
+    // a shared link opens the same screen straight away
+    await go(page, '#/journeys');
+    await go(page, STREET + '?node=' + encodeURIComponent(LIST_PAGE));
+    await expect(host).toBeVisible();
+    await expect(host).toContainText('Invoice list');
+  });
+
+  /**
+   * @covers packages/server/public/app/lib/map-canvas.js::createCanvas
+   * @covers packages/server/public/app/surfaces/map.js::mapZoom
+   * @covers packages/server/public/app/surfaces/map.js::mapFit
+   */
+  test('zooming in past the screen nearest the middle opens it; zooming out of it lands back on the street; 0 fits every journey', async ({ page }) => {
+    await mapOn(page);
+    await openStreet(page);
+    const world = page.locator('.map-world');
+    // a plain scroll pans: the board moves, the scale does not
+    const before = await world.evaluate((el) => el.style.transform);
+    await page.mouse.move(700, 600);
+    await page.mouse.wheel(120, 0);
+    await expect.poll(() => world.evaluate((el) => el.style.transform)).not.toBe(before);
+    await page.mouse.wheel(-120, 0);
+    // + zooms about the middle; past 1.6 the screen there opens when the zoom ends
+    for (let i = 0; i < 3; i++) await page.keyboard.press('+');
+    const host = page.locator('.map-prop-host');
+    await expect(host).toBeVisible();
+    await expect(host).toContainText('Invoice list');
+    // a pinch out (⌘/Ctrl + scroll out) over the screen leaves it
+    await page.keyboard.down('Control');
+    for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 60);
+    await page.keyboard.up('Control');
+    await expect(host).toBeHidden();
+    await expect(page.locator('.map-zoomro')).toHaveText('×1.00');
+    await page.keyboard.press('0');
+    await expect(world).toHaveClass(/lvl-nb/);
+    await expect(page).toHaveURL(/#\/map$/);
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::closeCard
+   * @covers packages/server/public/app/lib/map-model.js::screensUsing
+   */
+  test('a call opens the explore card: what it is, where it is drawn, and a door to its own surface', async ({ page }) => {
+    await mapOn(page);
+    await openStreet(page, true);
+    await page.locator(`.map-pl[data-flow="${FLOW}"][data-si="0"][data-ci="0"] .nm`).click();
+    const card = page.locator('.map-xcard');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText('Billing API');
+    await expect(card).toContainText('spec-backed');
+    await expect(card.locator('.where .map-chip.go')).toHaveText(['New invoice', 'Invoice list']);
+    await expect(card.locator('.acts a').first()).toHaveAttribute('href', /#\/apis\//);
+    // Esc closes the card before anything else
+    await page.keyboard.press('Escape');
+    await expect(card).toBeHidden();
+    await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
+    // and a screen on the card travels there
+    await page.locator(`.map-pd[data-flow="${FLOW}"][data-si="1"][data-mode="write"]`).first().click();
+    await expect(card).toBeVisible();
+    await card.locator('.where .map-chip.go', { hasText: 'Invoice list' }).click();
+    await expect(page.locator('.map-prop-host')).toContainText('Invoice list');
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::mapRefresh
+   * @covers packages/server/public/app/strings.js::plainWords
+   */
+  test('the business lens on the street prints no identifier, plumbing included', async ({ page }) => {
+    await mapOn(page);
+    await page.locator('#lb-business').click();
+    await expect(page.locator('body')).toHaveClass(/lens-business/);
+    await openStreet(page, true);
+    await expect(page.locator(`.map-pl[data-flow="${FLOW}"]`).first()).toBeVisible();
+    const text = await visibleWords(page);
+    expect(text).toContain('Invoice list');
+    const hits = [...new Set(text.match(IDENTIFIER) || [])];
+    expect(hits, 'identifier-shaped words on the business street').toEqual([]);
+    // the explore card too
+    await page.locator(`.map-pl[data-flow="${FLOW}"][data-si="1"][data-ci="0"] .nm`).click();
+    await expect(page.locator('.map-xcard')).toBeVisible();
+    const cardText = await page.locator('.map-xcard').evaluate((el) => [...el.querySelectorAll('*')]
+      .filter((e) => e.childNodes.length && [...e.childNodes].some((c) => c.nodeType === 3 && c.textContent!.trim()) && (e as HTMLElement).checkVisibility())
+      .map((e) => [...e.childNodes].filter((c) => c.nodeType === 3).map((c) => c.textContent).join('')).join('\n'));
+    expect([...new Set(cardText.match(IDENTIFIER) || [])], 'identifier-shaped words on the business card').toEqual([]);
+  });
+});

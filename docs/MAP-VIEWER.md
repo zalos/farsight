@@ -243,9 +243,94 @@ business. ⌘K: `travelTarget` sends a `work` node (or a `work::` id) to its pan
 the routes built from `e2e/fixture/work/*.json` (regenerate with `node e2e/fixture/work/make.mjs` from the recorded
 invoice-app tracker); `routeWorkSettings()` adds the two work sources to `/api/settings`.
 
-## MAP — `#/map` (docs/proposals/map-view.md)
+## MAP — `surfaces/map.js`, `lib/map-canvas.js`, `lib/map-model.js` (2026-10-03)
 
-Lane A's section (the surface, the canvas, the neighbourhood and the street) goes here; the property follows.
+Every journey on one zoomable board, the way Miro or Figma draw one (brief: `docs/proposals/map-view.md`; the agreed
+look: `prototypes/map-view/property-street-neighbourhood.html`; ADR 10). Behind the workspace flag `flags.map`
+(Settings → Experiments, `set-flag-map`): off, `navTabs()` leaves the tab out, the Portfolio draws no switch, and
+`applyRoute` reads a `#/map…` link as `#/portfolio`. Strings `nav.map`, `map.*`, `set.flagMap`, `key.map*` in
+`core/src/strings-map.ts` (lane A's block, then lane B's), spread into the catalog.
+
+**Routes.** `#/map` (neighbourhood) · `#/map/<flowNodeId>` (street) · `#/map/<flowNodeId>?node=<pageNodeId>`
+(property) · `?plumb=1` (the street with its calls and data). The flow id is encoded in the path. The board writes
+where it is into the link with `history.replaceState` (no navigation, no history entries): after a gesture the
+journey the street is on, nothing at the neighbourhood, `?node=` while a screen is open. A hash change from outside
+(a link, the back button, the nav tab) goes through the surface's `update(route)` — `applyRoute` calls it instead of
+re-mounting when the surface on screen is the one routed to — so the board keeps its place.
+
+**Levels.** One continuous scale (`lib/map-canvas.js`): below **0.5** the neighbourhood, from 0.5 the street; a
+gesture that **ends** (pointer up, or 160 ms after the last wheel event) above **1.6** with a screen within **320**
+world units of the viewport's centre opens that screen (`snapTargets` → `onSnap`); the screen that would open is
+ringed (`.near`) from 1.1. Pan: drag, plain wheel. Zoom: pinch, ⌘/Ctrl + wheel, Safari's gesture events, `+` `-`,
+the ± tools; `0` and *Fit* fit every journey (never above 0.45, so it stays the neighbourhood). Programmatic moves
+animate 450 ms (`.anim`, off under `prefers-reduced-motion`); gestures never do. Leaving a screen lands on the street
+at scale **1.0** centred on it; a ⌘/Ctrl scroll out past a small budget, or a two-finger pinch out, over the open
+screen leaves it (the rest of that scroll is swallowed for 400 ms so the street does not keep zooming).
+
+**The neighbourhood.** One `.map-district` per flow, laid out in rows: the journeys that contain another (every
+screen of a smaller one is theirs) on rows of their own, then the rest in the order the design's `leadsTo` walks
+them (`neighbourhoodModel(designs, workByFlow, graphById)`), rows about as wide as the stage's shape asks. Each has a
+poster cover (`.map-dcover`: name, sentence, the journey's Counteds at poster size, *Open this journey*) over its
+ghosted street (opacity .18). Links between districts are drawn from each journey's own `summary.links` as it lands
+(*leads to*, its mirror *requires* drawn once, *part of* dashed) — never inferred by the viewer. The journeys are
+read one at a time, the one the route names first, under a generation counter; answers are cached per entry per
+sync (`JOURNEY_CACHE`, the `FLOW_CACHE` pattern), so a register flip never refetches. A district grows when its
+walk lands or plumbing is switched; the re-layout shifts the board so the journey in view stays where it was.
+
+**The street.** Screens in step order (`.map-scr`: `designThumbHtml(node, 'map')` with the lightbox click switched
+off — a click opens the screen — or a placeholder with the absence word; the ordinal; the name; the route as
+`.map-code`; *designed, not built* on a planned screen, whose stripe is warm; the screen's Counteds), joined by
+*then*. **Plumbing** (`p`, the *Plumbing* / *Calls and data* tool, `?plumb=1`, remembered per reader in
+`localStorage` `fs-map-plumb`): each screen owns the pathway straight below it — a trunk, its calls stacked in
+order (`.map-pl`, a top bar in the service's colour `svc-<index % 6>` from `summary.systems` api rows, the
+evidence word when not spec-backed, *again* when the journey made the call on an earlier screen, the call's words,
+method and path as `.map-code`), and beside each call its records, messages and third parties (`.map-pd`, *reads*
+cool, *writes* warm, *reads · writes* both, arrowheads by direction). Planned and declared calls are dashed and
+carry nothing beside them. Nothing crosses; the legend lane names the services and the two colours.
+
+**The model** (`lib/map-model.js`, pure, `packages/server/test/map-model.test.ts` over a captured answer in
+`test/fixtures/map-billing-cycle.json`). `streetModel(data, graphById)` → `{ journey, services, screens, links }`;
+a `MapScreen` is `{ index, ordinal, node, id, name, business, designId, route, state, chips: { calls, gates, tests,
+work: null }, calls, gates, decisions, absent, segment }`; a `MapCall` is `{ nodeId, marker, moment, service,
+method, path, operationId, summary, label, business, evidence, repeat, data[] }`, data `{ kind, nodeId, name, node,
+mode }`. Measured on the fixture and different from the proposal's first draft: a call's data is what the call
+reached, found up the markers' `under` chain (falling back to its moment's call); a planned screen's calls are its
+**planned call markers** (`via: 'planned'`), not `segment.declaredOnly` — that field lists operations a *built*
+screen's design names and no code on it calls, kept as `evidence: 'declared'` rows. Evidence: `spec-backed`
+(contract `both`) · `implied` (in the code, not in the spec) · `not built` (planned, or spec-only) · `declared`.
+`screensUsing(model, kind, nodeId)` answers the card's *on* row.
+
+**The explore card** (`.map-xcard`, §5): kind and direction (the service and what the call reads or writes; a data
+node's kind and what this call does to it), the evidence word, the name in the register, the identifier line
+(`.map-code`: method path · operationId · handled by …; a data node's name and file), *on* — the screens of this
+journey it is drawn under, each opening that screen — and at most two doors: *Open on APIs*
+(`#/apis/<apiId>?op=<routeId>`) and *Open on the code map* (`#/codemap?node=`). `b` on the map asks *what uses
+this?* about the card's node (`mapSelected()`). No number is printed on it in v1: nothing per call is typed yet.
+
+**The property hook** (lane B fills it). Opening a screen — a click, Enter, a snap, `?node=` — makes the stage's
+`.map-prop-host` overlay visible and calls `openMapProperty(host, ctx)`, which imports
+`surfaces/map-property.js` and calls its `mountMapProperty(host, ctx) → { update(ctx), destroy() }`; until that
+module exists a minimal stand-in (name, route, sentence, picture, Back, previous / next) answers. `ctx` is
+`{ data /* the /api/journey answer */, model /* streetModel */, screenIndex, screen /* model.screens[screenIndex] */,
+flow, lens, onClose(), onStep(delta), onOpenScreen(index) }`. Stepping calls `update(ctx)` on the same handle; a
+lens or register change calls `update(ctx)` with the new `lens`; closing calls `destroy()`. `[` `]` call
+`onStep`, Esc `onClose`; the street underneath stays centred on the open screen.
+
+**Keys** (`keymap.js`, only while the map is mounted): `p` plumbing · `+` `-` zoom · `0` fit · `[` `]` previous /
+next screen while one is open · Esc backs out one level (card → screen → street; the neighbourhood lets it fall
+through) · `b` what uses the card's node.
+
+**What the business lens hides.** Every `.map-code` element (routes, method and path, operation ids, handler
+names, a data node's identifier and file) is not drawn, the accent warms, and names are words: a call reads the
+sentence written for it (`plainWords`), a record or message its label or its name said as words (`ledger_entries`
+→ *Ledger entries*, `invoice.finalized` → *Invoice finalized*), a flow name that is code goes through `unCode`.
+Service names are the spec titles (`SystemRow.label`) in every lens. The e2e spec holds the street and the card to
+the journey-numbers identifier check.
+
+**e2e.** `e2e/tests/map-street.pw.spec.ts`: flag off → no tab and `#/map` lands on the Portfolio; flag on → the
+Portfolio switch, three districts, the links, entering Billing cycle → three screens in order; plumbing (service
+bar, a *writes* node, Discard draft's dashed *not built* call, `p`); the property through the hook, `[` `]`, Esc, a
+`?node=` deep link; snap by zooming in and leaving by ⌘-scroll out; the explore card; the business lens.
 
 #### Property — `surfaces/map-property.js`, `lib/map-property-model.js` (lane B, 2026-10-03)
 
