@@ -14,6 +14,8 @@ import {
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
 } from '@farsight/core';
 import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
+import { refuseRequest } from './guard.js';
+import { isSecretRef } from '@farsight/work';
 import { writeSpine, syncWork, workSourcesOf, keyOptionsOf, handleWorkRoute } from './work.js';
 import type { SourceConfig as WorkSourceConfig, WorkSettingsSource } from './work.js';
 import { ingestRepo, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, ingestDesign, readManifestSource, parseManifestText, isManifestUrl, gitHead, gitHeadRef, gitShallow, gitPrefix, GIT_ABSENT_WORD, headTitle, shallowFloorSentence } from '@farsight/parsers';
@@ -93,6 +95,35 @@ function loadSettings(ws: string): Settings {
   }
 }
 
+const SOURCE_TYPES = new Set(['local', 'git', 'openapi', 'design', 'work']);
+
+/**
+ * What PUT /api/settings may write: the shape the server reads back, and no secret
+ * value — `auth.secret` must be a `keychain:` / `env:` reference, because GET serves
+ * this file to the viewer. Null when the body may be saved; otherwise why not.
+ */
+export function settingsProblem(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return 'settings must be a JSON object';
+  const s = body as { sources?: unknown; collections?: unknown };
+  if (!Array.isArray(s.sources)) return 'settings.sources must be an array';
+  if (s.collections !== undefined && !Array.isArray(s.collections)) return 'settings.collections must be an array';
+  for (const [i, src] of s.sources.entries()) {
+    if (!src || typeof src !== 'object') return `sources[${i}] must be an object`;
+    const x = src as { id?: unknown; name?: unknown; type?: unknown; path?: unknown; auth?: { secret?: unknown } };
+    if (typeof x.id !== 'string' || !x.id) return `sources[${i}].id must be a non-empty string`;
+    if (typeof x.name !== 'string') return `sources[${i}].name must be a string`;
+    if (typeof x.type !== 'string' || !SOURCE_TYPES.has(x.type)) return `sources[${i}].type must be one of ${[...SOURCE_TYPES].join(', ')}`;
+    if (x.path !== undefined && typeof x.path !== 'string') return `sources[${i}].path must be a string`;
+    if (x.type === 'git' && typeof x.path === 'string' && x.path.startsWith('-')) return `sources[${i}].path is not a clone URL`;
+    const secret = x.auth?.secret;
+    if (secret !== undefined && !(typeof secret === 'string' && isSecretRef(secret))) {
+      // never echo it: it may be a pasted token
+      return `sources[${i}].auth.secret must be a keychain: or env: reference — secrets never go in settings`;
+    }
+  }
+  return null;
+}
+
 function saveSettings(ws: string, s: Settings): void {
   mkdirSync(dirname(settingsPath(ws)), { recursive: true });
   writeFileSync(settingsPath(ws), JSON.stringify(s, null, 2) + '\n');
@@ -106,7 +137,8 @@ function materialize(ws: string, source: Source): string {
     execFileSync('git', ['-C', dir, 'pull', '--ff-only', '--quiet'], { timeout: 60_000 });
   } else {
     mkdirSync(cacheDir(ws), { recursive: true });
-    execFileSync('git', ['clone', '--depth', '1', '--quiet', source.path, dir], { timeout: 120_000 });
+    // `--`: a clone URL from settings is never read as a git option (`--upload-pack=…`)
+    execFileSync('git', ['clone', '--depth', '1', '--quiet', '--', source.path, dir], { timeout: 120_000 });
   }
   return dir;
 }
@@ -740,11 +772,14 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       res.end(body);
     };
     const url = req.url ?? '/';
+    // loopback names only (DNS rebinding), and no state change from another site (CSRF) — guard.ts
+    const refused = refuseRequest(req);
+    if (refused) return send(403, JSON.stringify({ error: refused }));
 
     if (url === '/' || url === '/index.html') {
       // frames: only this server and the Storybooks the graph (or a source's settings) recorded —
       // the viewer never frames an origin nobody configured or discovered (ADR 9)
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': `frame-src 'self' ${storybookOrigins().join(' ')}`.trim() });
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': `object-src 'none'; base-uri 'self'; frame-src 'self' ${storybookOrigins().join(' ')}`.trim() });
       return res.end(readFileSync(join(publicDir, 'viewer.html')));
     }
     if (url.startsWith('/compare/') && req.method === 'GET') {
@@ -1450,7 +1485,10 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       req.on('data', (c) => (body += c));
       req.on('end', () => {
         try {
-          saveSettings(ws, JSON.parse(body));
+          const parsed = JSON.parse(body);
+          const problem = settingsProblem(parsed);
+          if (problem) return send(400, JSON.stringify({ error: problem }));
+          saveSettings(ws, parsed);
           send(200, JSON.stringify({ ok: true }));
         } catch (err) {
           send(400, JSON.stringify({ error: (err as Error).message }));
