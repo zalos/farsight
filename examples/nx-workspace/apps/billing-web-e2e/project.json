@@ -1,0 +1,7 @@
+{
+  "name": "billing-web-e2e",
+  "projectType": "application",
+  "sourceRoot": "apps/billing-web-e2e/src",
+  "tags": ["scope:billing"],
+  "implicitDependencies": ["billing-web"]
+}

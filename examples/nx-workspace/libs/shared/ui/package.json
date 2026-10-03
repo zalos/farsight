@@ -1,0 +1,9 @@
+{
+  "name": "@nxw/shared-ui",
+  "version": "0.0.0",
+  "private": true,
+  "nx": {
+    "projectType": "library",
+    "tags": ["scope:shared", "type:ui"]
+  }
+}

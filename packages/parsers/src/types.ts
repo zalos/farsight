@@ -27,6 +27,8 @@ export interface IngestOptions {
   tests?: boolean;
   /** false = skip the stories post-pass (CSF files → StoryRefs on components, Storybook discovery); default on */
   stories?: boolean;
+  /** false = skip the projects pass (NX / workspaces discovery, `project` on every node, project → project imports); default on */
+  projects?: boolean;
   /** extra/removed globs that claim a file as a test — from `farsight.config.json → tests`, passed to the adapters so they skip claimed files */
   testGlobs?: { include?: string[]; exclude?: string[] };
   /** declared third-party systems — from `farsight.config.json → externals`; renames/kinds the parser cannot infer */
