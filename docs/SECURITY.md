@@ -28,6 +28,14 @@ hostile local process. An agent that should not write as a person must reach tra
 diff request names, and Figma renders when `FIGMA_TOKEN` is set. `POST /api/sync` re-ingests every enabled
 source and costs CPU. Any local process may trigger it, and nothing beyond that is at stake.
 
+**The viewer renders text it did not write.** That includes code identifiers, file paths and JSDoc from any repo
+you ingest, tracker titles and comments, Storybook titles, and spec prose. Every value goes into HTML through
+`esc()` (`public/app/store.js`). A value used as an argument inside an event-handler attribute goes through
+`jsArg()`, because the HTML parser decodes `esc`'s `&#39;` before the handler runs. A link built from data must
+be `http(s)`, `vscode://` or an in-app `#/` route. Azure DevOps HTML bodies are reduced to text before they reach
+the viewer. The viewer's CSP limits frames, plugins and `<base>`. It does not yet forbid inline scripts, because
+the viewer uses inline handlers.
+
 ## What Farsight never does
 
 - **No telemetry.** It sends nothing to its authors or to any service you did not configure.
