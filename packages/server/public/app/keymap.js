@@ -1,4 +1,5 @@
-// keymap.js — every keyboard binding in one place (b · j/k · l · v · d · [ ] · f · t · ⌘K · y · ?)
+// keymap.js — every keyboard binding in one place (b · j/k · l · v · d · [ ] · f · t · ⌘K · y · ?;
+// on the Map also h/l · arrows · p · + − 0, asked of surfaces/map.js mapKey first)
 // plus the published keymap panel. Keys are the fast path, never the only
 // path: each action here also has a visible button somewhere in the chrome.
 
@@ -8,7 +9,7 @@ import { openPalette, closePalette, paletteNav, clearFocus, focusOn, closeSettin
 import { journeyOpen, forksOpen, closeForks, cutsOpen, closeCuts, closeJourney, jrnNav, jrnToggleView, jrnCycleLayout, jrnCycleDock, expandedOpen, closeExpanded, jrnActionStep } from './surfaces/journeys.js';
 import { jrnOpenTests, jrnOpenImpact } from './surfaces/journey-drill.js';
 import { openImpact, closeImpact, impactOpen } from './impact.js';
-import { mapOpen, mapEscape, mapKey, mapSelected } from './surfaces/map.js';
+import { mapOpen, mapEscape, mapKey, mapSelected, mapCopyLink } from './surfaces/map.js';
 import { copyLiveLink, closeShare } from './share.js';
 import { trapTab } from './lib/focus-trap.js';
 import { tipKeydown } from './lib/tooltip.js';
@@ -23,9 +24,14 @@ const KEYS = [
   { keys: 't', desc: 'key.t' },
   { keys: '[ / ]', desc: 'key.brackets' },
   { keys: 'b', desc: 'key.b' },
+  { keys: 'tab · enter', desc: 'key.mapTab' },
+  { keys: 'j / k', desc: 'key.mapJk' },
+  { keys: 'h / l', desc: 'key.mapHl' },
+  { keys: '← ↑ → ↓', desc: 'key.mapArrows' },
   { keys: 'p', desc: 'key.mapPlumb' },
   { keys: '+ / − / 0', desc: 'key.mapZoom' },
   { keys: '[ / ]', desc: 'key.mapStep' },
+  { keys: 'y', desc: 'key.mapLink' },
   { keys: 'f', desc: 'key.f' },
   { keys: 'y', desc: 'key.y' },
   { keys: '?', desc: 'key.help' },
@@ -118,7 +124,8 @@ function onKeydown(e) {
   if (jOpen && S.JOURNEY && e.key === 't') { e.preventDefault(); jrnOpenTests(); return; }
   if (e.key === 't' && !jOpen) { e.preventDefault(); location.hash = '#/tests'; return; }
   if (e.key === '?') { e.preventDefault(); toggleKeymapPanel(); return; }
-  if (e.key === 'y') { copyLiveLink(); return; }
+  // on the map the link is brought up to date with the picture first (§K)
+  if (e.key === 'y') { if (mapOpen()) mapCopyLink(); else copyLiveLink(); return; }
   // b asks one question — what else uses this? Inside a journey that is the open
   // step's impact answer, everywhere else the drawer on the selected card. One
   // key, two contexts: the proposal's key `i` is declined (§10.1), because two

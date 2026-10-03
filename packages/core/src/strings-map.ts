@@ -3,8 +3,8 @@
 // strings.ts like strings-work-hud.ts. Same rules as the rest of the catalog:
 // both registers, a define on every word a reader may not know, defines in
 // plain words (no backticks, no markdown, no dotted identifiers, no
-// placeholders). Two lanes write here: lane A's block (the surface, the canvas
-// and the street) and lane B's block (the property) below it.
+// placeholders). Lanes write here in blocks: lane A's (the surface, the canvas
+// and the street), lane B's (the property) below it, then the map pass's lettered blocks.
 import type { StringEntry } from './strings.js';
 
 function same(word: string, define?: string): StringEntry {
@@ -274,4 +274,15 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.alsoMore': same('{n} more', 'More journeys show this same screen; this opens them in place.'),
   'map.prop.alsoN': same('{n} journeys', 'Other journeys whose screens include this one, beyond the three shown.'),
   'map.prop.foot.go': same('open this screen', 'Go to this screen of the journey.'),
+
+  // §K — keyboard reach, fast travel and stable links (lane K)
+  'map.asOf': same('as of sync {n}', 'The sync this board is drawn from, with the day it was taken and, outside the business words, the source commit it read. Every number on the map is as of this sync, so a picture of the map says when it was true.'),
+  'map.tool.link': same('Copy link', 'Copy a link to exactly this picture: the journey, how far the board is zoomed and where it sits, the open card or screen, and the words it is read in. Whoever opens the link sees the same view. The y key does the same.'),
+  'map.link.copied': same('Link copied — it opens this same picture'),
+  'map.link.select': same('The link is selected beside the tools — copy it from there'),
+  'key.mapTab': same('Map: Tab walks the journeys, then each screen, its calls and its data; Enter opens what has the focus'),
+  'key.mapJk': same('Map: next or previous screen on the street'),
+  'key.mapHl': same('Map: previous or next journey'),
+  'key.mapArrows': same('Map: move the board; with Shift, further'),
+  'key.mapLink': same('Map: copy the link to this picture'),
 };
