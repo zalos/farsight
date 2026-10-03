@@ -476,7 +476,11 @@ function toPayload(action: WorkAction, p: Record<string, unknown>): IntentPayloa
   switch (action) {
     case 'transition': {
       const to = String(p.to ?? '');
-      return (STATE_CATEGORIES as readonly string[]).includes(to) ? { to: to as StateCategory } : { toName: to };
+      if ((STATE_CATEGORIES as readonly string[]).includes(to)) return { to: to as StateCategory };
+      // a state named by the tracker, with its category when the caller knows it (the HUD's state menu
+      // does): a grant's `to` allow-lists categories, so a name alone never passes one
+      const cat = String(p.category ?? '');
+      return { toName: to, ...((STATE_CATEGORIES as readonly string[]).includes(cat) ? { to: cat as StateCategory } : {}) };
     }
     case 'edit': {
       const fields: Record<string, unknown> = {};
@@ -699,6 +703,13 @@ export async function handleWorkRoute(req: IncomingMessage, url: string, ctx: Wo
       const cfg = cfgOf(row.source);
       if (!cfg) return J(404, { error: `the intent's source ${row.source} is no longer in settings` });
       const at = (ctx.now?.() ?? new Date()).toISOString();
+      // the outbox's state machine: confirm a queued request, re-base a conflict, drop either — nothing else.
+      // A confirm after a drop, or a second confirm of an applied comment, would write to the tracker again
+      const may: Record<string, readonly string[]> = { confirm: ['queued'], rebase: ['conflict'], drop: ['queued', 'conflict'] };
+      if (!may[im[2]!]!.includes(row.state)) {
+        const dropped = row.state === 'failed' && row.result?.error === 'dropped by a person';
+        return J(409, { error: `intent ${row.intent.id} is ${dropped ? 'dropped' : row.state}; ${im[2]} applies only to a ${may[im[2]!]!.join(' or ')} intent`, state: row.state });
+      }
       if (im[2] === 'drop') {
         cache.updateIntent(row.intent.id, { state: 'failed', result: { ok: false, error: 'dropped by a person' }, at });
         cache.audit({ at, source: row.source, intent: row.intent.id, item: row.intent.item, action: row.intent.action, requestedBy: row.intent.requestedBy, outcome: 'dropped' });

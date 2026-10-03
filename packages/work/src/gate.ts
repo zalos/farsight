@@ -191,7 +191,13 @@ export async function applyIntent(intent: Intent, ctx: ApplyContext): Promise<Ap
     return { intent, state: 'failed', pending: false, reason: `${intent.item} is not in the cache — sync first` };
   }
   const withBase: Intent = { ...intent, baseRevision: intent.baseRevision ?? cached.revision };
-  if (!cache.getIntent(intent.id)) cache.enqueueIntent(cfg.id, withBase, stamp());
+  const row = cache.getIntent(intent.id);
+  // a request is applied at most once: only a queued one (new, or waiting for a person) goes on. A second
+  // confirm of an applied comment, or a confirm after a person dropped it, must not write again
+  if (row && row.state !== 'queued') {
+    return { intent: row.intent, state: row.state, pending: false, ...(row.verdicts ? { verdicts: row.verdicts } : {}), reason: `this request is already ${row.state}` };
+  }
+  if (!row) cache.enqueueIntent(cfg.id, withBase, stamp());
 
   const d = await decide(withBase, { cfg, provider, session: ctx.session, item: cached });
   if (!d.allowed) {
