@@ -2158,16 +2158,24 @@
   .map-pl .sub{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .map-pl.absent{border-style:dashed;border-top-style:solid;background:transparent}
   .map-pl.absent .nm{color:var(--muted)}
-  .map-pd{position:absolute;width:170px;height:34px;border:1px solid var(--line);border-left:3px solid var(--tbl);border-radius:5px;background:var(--panel);display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 8px;font-size:12px;color:var(--ink);cursor:pointer;transition:border-color .15s}
+  .map-pd{position:absolute;width:210px;height:36px;border:1px solid var(--line);border-left:3px solid var(--tbl);border-radius:5px;background:var(--panel);display:flex;flex-direction:column;justify-content:center;gap:1px;padding:0 8px;font-size:12px;color:var(--ink);cursor:pointer;transition:border-color .15s;min-width:0}
   .map-pd:hover{border-color:var(--accent);border-left-color:var(--tbl)}
   .map-pd.msg,.map-pd.msg:hover{border-left-color:var(--fn)}
   .map-pd.ext,.map-pd.ext:hover{border-left-color:var(--warn)}
   .map-pd.absent{border-style:dashed;border-left-style:solid}
-  .map-pd .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.2}
-  .map-pd .kd{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:8.5px;color:var(--dim);display:block;overflow:hidden;text-overflow:ellipsis}
+  /* the kind line (kind · identifier, then reads / writes) is the one that truncates; the name keeps the node's width */
+  .map-pd .top{display:flex;align-items:baseline;gap:6px;min-width:0;line-height:1.1}
+  .map-pd .kd{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:8.5px;color:var(--dim);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .map-pd .kd .map-code{text-transform:none;letter-spacing:0;font-family:var(--mono)}
-  .map-pd .rw{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9px;flex-shrink:0}
+  .map-pd .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;line-height:1.2}
+  .map-pd .rw{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:8.5px;flex-shrink:0}
   .map-pd .rw.read{color:var(--cyan)} .map-pd .rw.write,.map-pd .rw.both{color:var(--amber)}
+  /* a fold row: the rest of a call's data, or of a screen's calls */
+  .map-fold{position:absolute;height:34px;display:flex;align-items:center;gap:4px;padding:0 10px;border:1px dashed var(--line);border-radius:5px;background:transparent;
+    font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:var(--muted);cursor:pointer;text-align:left}
+  .map-fold:hover,.map-fold:focus-visible{border-color:var(--accent);color:var(--ink);outline:none}
+  .map-fold .n{font-family:var(--mono);letter-spacing:0;color:var(--ink)}
+  .map-world.no-plumb .map-fold{display:none}
   body.lens-business .map-surface .map-code{display:none !important}
   /* chrome on the stage */
   .map-chrome{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:10px;padding:10px 12px;pointer-events:none;z-index:6}
