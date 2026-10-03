@@ -330,7 +330,9 @@ function districtSize(d) {
   const w = Math.max(DMIN, PAD * 2 + screenCount(d) * COL - (COL - SW));
   const j = MAP.journeys.get(d.id);
   const deepest = j && j.model ? Math.max(0, ...j.model.screens.map(stackH)) : 0;
-  const h = MAP.plumb && deepest ? PL_TOP + deepest + 70 : SY + SH + 70;
+  // without plumbing a district is its head, its screens and room below them: tall enough that a cover
+  // divided by --map-inv's cap (4) still holds a two-line name, a two-line sentence and the chip row
+  const h = MAP.plumb && deepest ? PL_TOP + deepest + 70 : SY + SH + 130;
   return { w, h };
 }
 /**
@@ -622,8 +624,7 @@ function renderDistrict(id) {
     + (desc ? tipAttrs({ text: desc, noFocus: true }) : '') + '><div class="map-dcover-in">'
     + '<div class="nm">' + esc(nameWords(d.name)) + '</div>'
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
-    + '<div class="agg">' + agg + '</div>'
-    + '<div class="enter">' + esc(t('map.cover.enter')) + ' ' + sym('start') + '</div></div></div>';
+    + '<div class="agg">' + agg + '</div></div></div>';
   el.classList.toggle('loaded', !!(j && j.model));
   sizeDistrict(id);
 }
