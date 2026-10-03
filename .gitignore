@@ -5,6 +5,7 @@ dist/
 *.sqlite
 graph.json
 .env
+.env.*
 build/
 .farsight/cache/
 .farsight/farsight.db*
@@ -28,3 +29,6 @@ packages/work-fixture/fixtures/**/applied.jsonl
 
 # local, never committed: the commit → session map and other owner-only notes
 .private/
+
+# Codex's mirror of the project skills; .claude/skills is the source, never commit the copy
+.agents/

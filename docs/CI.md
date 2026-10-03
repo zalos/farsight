@@ -1,7 +1,8 @@
 # CI
 
 `.github/workflows/ci.yml` runs on every push to `main` and every pull request. A newer push to the same ref
-cancels the run in progress. The workflow has read-only repository access and no secrets.
+cancels the run in progress. The workflow has read-only repository access and no secrets beyond the run's own
+`GITHUB_TOKEN`.
 
 ## What runs
 
@@ -21,6 +22,9 @@ installed again.
 The live tracker tests (`packages/work-jira`, `packages/work-azdo`, `test/live.test.ts`) skip unless
 `FARSIGHT_LIVE=1`, which CI never sets. No test reads a keychain. Secret resolution is tested with an injected
 runner.
+
+A third job, **secrets**, runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
+how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in-ci).
 
 ## Run the same thing locally
 

@@ -1,0 +1,22 @@
+# gitleaks configuration: the default rules, plus the few recorded-fixture lines
+# that look like keys and are not. CI runs this on every push and pull request
+# (.github/workflows/ci.yml, job `secrets`); run it locally with
+#   gitleaks dir . && gitleaks git .
+# Add an allowlist entry only for a value you have checked is not a credential,
+# and say here why it is not.
+title = "farsight"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Jira response shapes (recorded fixtures): search cursors and the session-bound XSRF token in operations links"
+# nextPageToken is an opaque search cursor (base64 of the JQL, e.g.
+# `project in ("KAN") ORDER BY updated ASC`); atl_token is Jira's XSRF form token,
+# useless without a browser session. Older history carries the recording's own
+# atl_token values; the tree carries zeros (record-fixtures.mjs zeroes them).
+# The match is on the line, not the path, so a real token elsewhere in a fixture
+# is still found. (A `paths` + `condition = "AND"` allowlist let whole fixture
+# files through in gitleaks 8.30 — checked with a planted token.)
+regexTarget = "line"
+regexes = ['''"nextPageToken":\s*"''', '''atl_token=[0-9a-f]{40}_lin''']

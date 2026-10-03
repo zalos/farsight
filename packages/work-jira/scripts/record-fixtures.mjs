@@ -10,8 +10,9 @@
 // test site with FARSIGHT_JIRA_SITE (site URL), FARSIGHT_JIRA_USER (account email)
 // and FARSIGHT_JIRA_KEYCHAIN (the token's secret reference, keychain:service/account).
 // A re-recording carries that site's names, ids and emails: replace them with the
-// example values (example.atlassian.net, dev@example.com, 712020:0…01) before
-// committing.
+// example values (example.atlassian.net, dev@example.com, 712020:0…01, and the
+// project / issue-type `entityId` UUIDs → 00000000-0000-4000-8000-0000000001xx)
+// before committing, then run `gitleaks dir .` (CI does).
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { resolveSecret } from '@farsight/work';
 import { createJiraProvider } from '../dist/index.js';
@@ -41,7 +42,9 @@ const recording = async (url, init) => {
   return new Response([101, 204, 205, 304].includes(res.status) ? null : text, { status: res.status, headers: res.headers });
 };
 const save = (name) => {
-  const json = JSON.stringify(tape, null, 1);
+  // Jira's XSRF token (atl_token, in operations links) is session-bound, not a credential,
+  // but it is the recording session's own value: it never goes into a public fixture
+  const json = JSON.stringify(tape, null, 1).replace(/atl_token=[0-9a-f]{40}/g, `atl_token=${'0'.repeat(40)}`);
   const enc = Buffer.from(`${USER}:${secret}`).toString('base64');
   if (json.includes(secret) || json.includes(enc)) throw new Error(`refusing to write ${name}: it would contain the credential`);
   writeFileSync(new URL(name, OUT), json + '\n');

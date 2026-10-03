@@ -45,7 +45,7 @@ await loc.click({
 
 ```ts
 // Recommended for forms — fast, fires real input events
-await page.getByLabel('Name').fill('Jared');
+await page.getByLabel('Name').fill('Ada');
 
 // Use for typeahead/autocomplete that depends on per-keystroke handlers
 await page.getByPlaceholder('Search…').pressSequentially('clearp', { delay: 50 });

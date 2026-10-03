@@ -19,10 +19,10 @@
     "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020:00000000-0000-0000-0000-000000000001",
     "accountId": "712020:00000000-0000-0000-0000-000000000001",
     "avatarUrls": {
-     "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-     "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-     "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-     "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+     "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+     "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+     "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+     "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
     },
     "displayName": "Farsight Test",
     "active": true
@@ -99,8 +99,8 @@
    "style": "next-gen",
    "isPrivate": false,
    "properties": {},
-   "entityId": "d3697d1b-9781-4c14-8ac6-692a164dbc8f",
-   "uuid": "d3697d1b-9781-4c14-8ac6-692a164dbc8f"
+   "entityId": "00000000-0000-4000-8000-000000000102",
+   "uuid": "00000000-0000-4000-8000-000000000102"
   }
  },
  {
@@ -504,10 +504,10 @@
     "self": "https://example.atlassian.net/rest/api/3/user?accountId=712020:00000000-0000-0000-0000-000000000001",
     "accountId": "712020:00000000-0000-0000-0000-000000000001",
     "avatarUrls": {
-     "48x48": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-     "24x24": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-     "16x16": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
-     "32x32": "https://secure.gravatar.com/avatar/be9d18f611892a738e54f2a3a171e2f9?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
+     "48x48": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+     "24x24": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+     "16x16": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png",
+     "32x32": "https://secure.gravatar.com/avatar/00000000000000000000000000000000?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FFT-5.png"
     },
     "displayName": "Farsight Test",
     "active": true
@@ -576,8 +576,8 @@
    "style": "next-gen",
    "isPrivate": false,
    "properties": {},
-   "entityId": "ab60ff48-3862-4f58-8e43-5063f48d515b",
-   "uuid": "ab60ff48-3862-4f58-8e43-5063f48d515b"
+   "entityId": "00000000-0000-4000-8000-000000000101",
+   "uuid": "00000000-0000-4000-8000-000000000101"
   }
  },
  {

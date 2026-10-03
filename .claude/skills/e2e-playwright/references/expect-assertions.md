@@ -161,7 +161,7 @@ For values that are already resolved (numbers, strings, arrays — not Locators)
 
 ```ts
 expect(2 + 2).toBe(4);
-expect(name).toEqual('Jared');
+expect(name).toEqual('Ada');
 expect(items).toContain('apple');
 expect(obj).toMatchObject({ status: 'ok' });
 expect(arr).toHaveLength(3);

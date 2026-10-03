@@ -30,7 +30,7 @@ const fn = (name: string, path: string, line: number): GraphNode =>
   ({ id: `app::${path}::${name}`, kind: 'function', name, tags: [], loc: { repo: 'app', path, line } } as GraphNode);
 
 test('a work node: id work::<source>::<key>, name = key, business label = title, tags, a tracker link, no loc', () => {
-  const n = workNodeOf(item('KAN-3', 'in-progress', { assignee: { id: 'u1', name: 'Jared' } }));
+  const n = workNodeOf(item('KAN-3', 'in-progress', { assignee: { id: 'u1', name: 'Ada Okafor' } }));
   assert.equal(n.id, 'work::jira-test::KAN-3');
   assert.equal(n.kind, 'work');
   assert.equal(n.name, 'KAN-3');

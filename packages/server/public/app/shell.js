@@ -3,7 +3,7 @@
 // chrome-owned panels moved from viewer.js (lens/theme/scope/chips, search
 // palette + focus, settings page, Model Hub overlay). Entry module.
 
-import { S, expose, esc, loadAll, hydrateScope, indexGuards, collSourceNames, scopedRepos, inScope, bizLabel, bizName, humanize, effectiveGroup, currentLens, cssId } from './store.js';
+import { S, expose, esc, jsArg, loadAll, hydrateScope, indexGuards, collSourceNames, scopedRepos, inScope, bizLabel, bizName, humanize, effectiveGroup, currentLens, cssId } from './store.js';
 import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf } from './lib/graph-render.js';
@@ -599,7 +599,7 @@ export function buildScope() {
   // highlighted above an unchecked list that looks like nothing is selected
   const isOn = (n) => S.scope === 'all' || S.scope.includes(n);
   const inColl = new Set(); colls.forEach((c) => collSourceNames(c).forEach((n) => inColl.add(n)));
-  const row = (name) => '<label class="sc-row"><input type="checkbox" ' + (isOn(name) ? 'checked' : '') + ' onchange="toggleScopeSrc(\'' + esc(name) + '\')"/><span>' + esc(name) + '</span></label>';
+  const row = (name) => '<label class="sc-row"><input type="checkbox" ' + (isOn(name) ? 'checked' : '') + ' onchange="toggleScopeSrc(' + jsArg(name) + ')"/><span>' + esc(name) + '</span></label>';
   let html = '<button class="sc-all' + (S.scope === 'all' ? ' on' : '') + '" onclick="setScopeAll()">◈ ' + esc(t('scope.all')) + '</button>';
   colls.forEach((c, i) => {
     const names = collSourceNames(c);
@@ -719,7 +719,7 @@ export function buildChips() {
   const biz = currentLens() === 'business';
   const top = Object.entries(counts).filter(([tag]) => !biz || /^[a-z]+$/i.test(tag)).sort((a, b) => b[1] - a[1]).slice(0, 5);
   document.getElementById('chips').innerHTML = top.map(([tag, c]) =>
-    '<button class="chip' + (S.activeTag === tag ? ' on' : '') + '" data-tag="' + esc(tag) + '" onclick="toggleTag(\'' + esc(tag) + '\')">' + esc(biz ? humanize(tag) : tag)
+    '<button class="chip' + (S.activeTag === tag ? ' on' : '') + '" data-tag="' + esc(tag) + '" onclick="toggleTag(' + jsArg(tag) + ')">' + esc(biz ? humanize(tag) : tag)
     + ' · <span class="cnt"' + plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', null, null, { tag }) + '>' + c + '</span></button>').join('');
 }
 /**

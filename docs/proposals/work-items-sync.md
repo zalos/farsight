@@ -330,7 +330,7 @@ where the two truths disagree, printed with both provenances: *ACME-140 is done;
   keys or field ids; hybrid adds the key; code adds `raw`.
 - **Settings** per source:
   ```json
-  { "id": "acme-jira", "type": "work", "provider": "jira", "site": "https://acme.atlassian.net",
+  { "id": "acme-jira", "type": "work", "provider": "jira", "site": "https://example.atlassian.net",
     "scope": { "projects": ["ACME"] }, "mode": "read-only",
     "auth": { "kind": "api-token", "user": "env:JIRA_USER", "secret": "keychain:farsight/jira-example" },
     "poll": "5m", "fields": {}, "permissions": {} }

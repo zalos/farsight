@@ -13,7 +13,7 @@
 // The business lens reads the tracker's words: titles, state names, people.
 // Keys, ids, shas, files and patches are the developer registers'.
 
-import { S, expose, esc, bizName, humanize } from '../store.js';
+import { S, expose, esc, jsArg, bizName, humanize } from '../store.js';
 import { t, def, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs } from '../lib/tooltip.js';
@@ -151,7 +151,7 @@ function drawStrip() {
   const c = LIST && LIST.counts;
   const counts = !ITEM_ID && c ? '<span class="counts">' + [countedHtml(c.items, '/api/work'), countedHtml(c.sources, '/api/work')].filter(Boolean).join(' · ') + '</span>' : '';
   const views = ITEM_ID ? '' : '<div class="wk-views" role="group">' + VIEWS.map((v) => '<button class="' + (v === VIEW ? 'on' : '') + '"'
-    + tipAttrs({ key: 'work.hud.view.' + v, noFocus: true }) + ' aria-pressed="' + (v === VIEW) + '" onclick="location.hash=\'' + esc(listHref({ view: v })) + '\'">'
+    + tipAttrs({ key: 'work.hud.view.' + v, noFocus: true }) + ' aria-pressed="' + (v === VIEW) + '" onclick="location.hash=' + jsArg(listHref({ view: v })) + '">'
     + esc(t('work.hud.view.' + v)) + '</button>').join('') + '</div>';
   el.innerHTML = '<div class="wk-strip"><h1>' + sym('work') + esc(t('nav.work')) + '</h1>'
     + '<p class="sub">' + esc(t('work.hud.sub')) + '</p>' + counts + views
