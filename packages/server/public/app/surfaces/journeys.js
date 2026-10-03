@@ -1897,6 +1897,8 @@ export function jrnSeamCardHtml(m) {
   return '<span class="jrn-seam' + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" data-order="' + m.stepOrder + '" tabindex="0"'
     + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc((m.method || '') + ' ' + (m.path || '')) + '">'
     + '<span class="l1">' + sym('api') + (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') + '<span class="nm">' + esc(name) + '</span>'
+    // the code names no method and several endpoints share the address: the read one is shown, and says so
+    + (m.methodAssumed ? '<span class="api-chip warn"' + tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) + '>' + esc(t('journey.seam.methodAssumed')) + '</span>' : '')
     + (summary ? '<span class="sum">' + esc(summary) + '</span>' : '')
     // whether the spec and the code agree is a developer's question
     + (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>')

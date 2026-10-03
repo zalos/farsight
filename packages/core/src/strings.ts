@@ -636,6 +636,8 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.seam.from': same('from'),
   'journey.seam.handled': same('handled'),
   'journey.seam.notBuilt': same('not built yet'),
+  'journey.seam.methodAssumed': same('method assumed',
+    'The code that makes this call does not name its HTTP method, and more than one endpoint answers at this address. The read (GET) endpoint is shown because that is what a request sends when no method is given; the others are kept as candidates.'),
   'journey.seam.uxSide': same('where the UX makes the call'),
   'journey.seam.apiSide': same('where the API starts'),
   'journey.seam.continues': same('continues'),

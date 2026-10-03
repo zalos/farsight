@@ -1009,6 +1009,11 @@ export interface SegmentMarker {
   titleFrom?: 'label' | 'route' | 'docs';
   /** for a route: the HTTP method + path the contract or the code names */
   method?: string;
+  /**
+   * call markers only: the code that made this call names no method, several routes serve its path,
+   * and the GET one was assumed (`meta.methodAssumed` on the edge) — `method` is the route's, not the code's
+   */
+  methodAssumed?: 'GET';
   path?: string;
   /**
    * which way data moved: a record marker from its reads/writes edge; an external marker from the
@@ -1629,6 +1634,7 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       ...(kind === 'external' && st?.via === 'http' && opOfMethod(edgeOfStep(st, n)?.meta?.method)
         ? { op: opOfMethod(edgeOfStep(st, n)?.meta?.method)! } : {}),
       ...((kind === 'record' || kind === 'external') && markerStoreOf(n) ? { store: markerStoreOf(n)! } : {}),
+      ...(kind === 'call' && st?.via === 'http' && edgeOfStep(st, n)?.meta?.methodAssumed === 'GET' ? { methodAssumed: 'GET' as const } : {}),
     };
     seg.markers.push(m);
     seg.counts.markers++;

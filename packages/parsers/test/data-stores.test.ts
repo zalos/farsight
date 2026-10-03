@@ -194,7 +194,10 @@ test('fetch: no init is a GET the code wrote; an init variable is unknown and ma
   assert.equal(http('b').meta?.method, undefined);
   assert.equal(http('b').to, 'r::route::GET /items', 'the only route at the path');
   assert.equal(http('b').resolution?.confidence, 'MEDIUM');
-  assert.equal(http('c').to, 'r::unknown::? /orders', 'two routes at the path: no pick, and the stub says the method is unknown');
+  // since the fetch-wrapper fix: two routes at the path and no method → the GET route, assumed and flagged
+  assert.equal(http('c').to, 'r::route::GET /orders');
+  assert.equal(http('c').meta?.methodAssumed, 'GET');
+  assert.equal(http('c').meta?.candidates, 'r::route::POST /orders');
 });
 
 // ── the journey: store and op on the markers, the stores the journey touches ──
