@@ -64,6 +64,7 @@ const CHROME_FILES = [
   'surfaces/portfolio.js', 'surfaces/codemap.js', 'surfaces/changes.js',
   'surfaces/stewardship.js', 'surfaces/journeys.js', 'surfaces/journey-drill.js', 'surfaces/apis.js',
   'surfaces/tests.js', 'surfaces/work.js', 'work-chips.js', 'stories.js', 'lib/tooltip.js',
+  'surfaces/map-property.js', 'lib/map-property-model.js',
 ];
 // journeys.js: only its NEW surface chrome is expected to use t(); its legacy
 // overlay strings are grandfathered line-by-line below.
