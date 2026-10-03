@@ -938,7 +938,7 @@ switch (command) {
       for (const r of list.rows) {
         const range = r.version ?? (r.scope === 'workspace' ? '(alias)' : '(undeclared)');
         console.log(`  ${r.name.slice(0, 40).padEnd(40)} ${r.repo.slice(0, 15).padEnd(15)}  ${r.scope.padEnd(11)}  ${(range + (r.dev ? ' dev' : '')).slice(0, 13).padEnd(13)}  ${String(r.importers.n).padStart(5)}  ${String(r.journeys.n).padStart(8)}`);
-        if (r.versions.length > 1) console.log(`      ranges: ${r.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
+        if (new Set(r.versions.map((v) => v.range)).size > 1) console.log(`      ranges: ${r.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
         if (r.note) console.log(`      ⚠ ${r.note}`);
       }
       const builtins = Object.entries(store.meta.packages ?? {}).filter(([rp]) => !repo || rp === repo)

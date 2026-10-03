@@ -193,7 +193,7 @@ function packageLines(n: GraphNode): string[] {
     ? `declared ${p.version ?? '(ranges differ)'} in ${p.declaredIn.join(', ')}${p.dev ? ' (devDependencies only)' : ''}`
     : p.scope === 'workspace' ? 'resolved by alias or workspace name, no package.json range' : 'declared in no package.json';
   const out = [`  package: ${p.scope}${p.project ? ` · project ${p.project}` : ''}${p.root ? ` · ${p.root}` : ''} · ${declared}`];
-  if (row.versions.length > 1) out.push(`    ranges: ${row.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
+  if (new Set(row.versions.map((v) => v.range)).size > 1) out.push(`    ranges: ${row.versions.map((v) => `${v.where} ${v.range}`).join(' · ')}`);
   out.push(`    ${countedText(row.importers)} · ${countedText(row.journeys)}${row.journeyRefs.length ? ` — ${row.journeyRefs.map((j) => j.name).join(', ')}` : ''}`);
   if (p.externalId) out.push(`    the SDK of ${index.byId.get(p.externalId)?.name ?? p.externalId} (\`${p.externalId}\`)`);
   if (p.note) out.push(`    ⚠ ${p.note}`);
