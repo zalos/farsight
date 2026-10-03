@@ -2094,7 +2094,9 @@
   .map-band span{position:absolute;left:0;bottom:calc(-100px);transform-origin:0 100%;transform:scale(var(--map-inv, 1));white-space:nowrap;
     font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 2px 3px}
   .map-world.lvl-nb .map-dstreet{opacity:.18;pointer-events:none}
-  .map-world.lvl-nb .map-dhead{opacity:0}
+  .map-world.lvl-nb .map-dhead{opacity:0;pointer-events:none}
+  /* on the street the head's chips are above the street layer, so their tips open on hover */
+  .map-world.lvl-st .map-dhead{z-index:2}
   .map-world.lvl-st .map-dcover{opacity:0;pointer-events:none;visibility:hidden}
   .map-dstreet{position:absolute;inset:0;transition:opacity .25s}
   .map-edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
