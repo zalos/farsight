@@ -17,6 +17,7 @@ import { sym } from '../sym.js';
 import { storiesCatalogueHtml } from '../stories.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
+import { mapEnabled } from './map.js';
 
 /** A catalog word's tip, or nothing when it has no define. */
 function tipOf(key) { return key && def(key) ? defAttrs(key) : ''; }
@@ -48,11 +49,25 @@ export function mountPortfolio(route, el) {
 /** The page around the table. Its heading and standfirst are catalog words too,
  * so a register flip has to redraw them — not only the rows. */
 function shellHtml() {
-  return '<div class="set-wrap pf-wrap"><h1>' + esc(t('nav.portfolio')) + '</h1>'
+  return '<div class="set-wrap pf-wrap"><div class="pf-headrow"><h1>' + esc(t('nav.portfolio')) + '</h1>' + mapSwitchHtml() + '</div>'
     + '<p class="sub">' + esc(t('portfolio.sub')) + '</p>'
     + '<div id="pf-body"><p class="set-note">' + esc(t('portfolio.loading')) + '</p></div>'
     // the components the product can show on their own, from the story files (ADR 9)
     + '<div id="pf-stories"></div></div>';
+}
+
+/**
+ * The door to the map beside the heading — only when the workspace turned the
+ * map on: the same journeys as this table, or drawn on one board. The table is
+ * the view on screen; *Map* goes to `#/map`. One catalog key names each button.
+ * @group Portfolio
+ */
+function mapSwitchHtml() {
+  if (!mapEnabled()) return '';
+  return '<span class="hud-label" id="pf-viewsw-label"' + tipOf('map.portfolio.view') + '>' + esc(t('map.portfolio.view')) + '</span>'
+    + '<span class="jrn-viewsw pf-viewsw" role="group" aria-labelledby="pf-viewsw-label">'
+    + '<button type="button" class="jrn-viewbtn on" aria-pressed="true"' + tipOf('map.portfolio.table') + '>' + esc(t('map.portfolio.table')) + '</button>'
+    + '<button type="button" class="jrn-viewbtn" aria-pressed="false" data-go="map" onclick="location.hash=\'#/map\'"' + tipOf('nav.map') + '>' + esc(t('nav.map')) + '</button></span>';
 }
 
 /**
