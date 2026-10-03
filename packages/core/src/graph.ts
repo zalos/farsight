@@ -351,6 +351,39 @@ export interface ExternalRef {
   via?: string;
   /** the package specifier (sdk) or the constant's name (host) */
   ref?: string;
+  /**
+   * this external is used as a data store — the app reads from it and writes to it, so a journey
+   * draws it like a record. Default from the kind (`erp` · `db` · `files` are stores; `ocr` · `http`
+   * are not; `email` · `queue` are messages), overridden by `farsight.config.json → externals[].store`.
+   */
+  store?: true;
+}
+
+/** The kinds of data store a record (or a store-like external) lives in. */
+export type StoreKind = 'sql' | 'document' | 'files' | 'erp' | 'other';
+/** A database engine, when the code or the config names one. */
+export type StoreEngine = 'postgres' | 'mysql' | 'sqlite' | 'mssql' | 'mongodb';
+/**
+ * How a store was known — code first, config last; the first rule that applies wins and nothing is guessed
+ * (docs/proposals/data-stores.md §3.1):
+ * - `factory`    — the table was declared with an engine-specific factory (`pgTable` · `mysqlTable` · `sqliteTable`)
+ * - `sdk`        — exactly one SQL driver package is imported anywhere in the repo (`pg`, `mysql2`, …); two different
+ *                  drivers name nothing
+ * - `datasource` — a `schema.prisma` `datasource { provider = … }` block
+ * - `jpa`        — Java: `spring.datasource.url` in `application.properties` / `.yml`, engine from the jdbc prefix
+ * - `config`     — `farsight.config.json → stores[]` (tables the code left unnamed) or a store-like `externals[]` entry
+ */
+export type StoreVia = 'factory' | 'sdk' | 'datasource' | 'jpa' | 'config';
+
+/** `table` nodes, and `external` nodes that are stores: which data store this lives in and how we know. */
+export interface StoreRef {
+  /** the store's name in words: 'Postgres', 'Business Central', 'Azure Blob Storage' — a product name or a config word */
+  name: string;
+  kind: StoreKind;
+  engine?: StoreEngine;
+  via: StoreVia;
+  /** what the rule read: 'pgTable' · 'pg' · 'schema.prisma' · 'spring.datasource.url' · the config entry */
+  ref?: string;
 }
 
 // ── stories: a component shown on its own (docs/ARCHITECTURE.md ADR 9) ─────
@@ -416,6 +449,18 @@ export interface StoriesMeta {
   unresolved: { file: string; reason: 'no-component' | 'component-unresolved' | 'unparsed'; component?: string; stories: number }[];
 }
 
+/** What the store pass read, per repo (parsers/src/stores.ts) — the evidence behind each table's `store`, and what named nothing. */
+export interface StoresMeta {
+  /** SQL driver packages the code imports, with how many files import each — the `sdk` rule's evidence */
+  drivers?: { spec: string; files: number }[];
+  /** how many table nodes got a store from each rule */
+  named?: Partial<Record<StoreVia, number>>;
+  /** table nodes no rule named a store for */
+  unnamed?: number;
+  /** one sentence per rule that read something and named nothing on purpose (two drivers, an env() provider…) */
+  notes?: string[];
+}
+
 export interface GraphNode {
   id: string;
   kind: NodeKind;
@@ -441,6 +486,8 @@ export interface GraphNode {
   test?: TestRef;
   /** external nodes only: which third-party system this is and how we knew it — see ExternalRef */
   external?: ExternalRef;
+  /** table nodes, and external nodes that are stores: the data store this lives in and how we know — see StoreRef */
+  store?: StoreRef;
   /** component/page nodes: the stories that render this component on its own — see StoryRef */
   stories?: StoryRef[];
   /** Lens-specific presentation data, e.g. business-friendly labels. */
@@ -527,7 +574,7 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json at the repo root was applied by ingestRepo */
