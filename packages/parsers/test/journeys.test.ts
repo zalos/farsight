@@ -27,15 +27,18 @@ function repo(files: Record<string, string>): string {
 }
 const only = { openapi: false, tests: false, stories: false, projects: false } as const;
 
-test('the NX example: each app declares its persona and an Access group, the root manifest its groups — one organisation for the source', async () => {
+test('the NX example: each app declares its persona and an Access group, the root manifest its groups, the root config the persona order', async () => {
   const g = await ingestRepo(join(EXAMPLES, 'nx-workspace'), { repoName: 'nx-workspace', ...only });
   const m = g.meta!.journeys!;
+  // apps/ops-admin's manifest is declared by its own config, so it is read first; the root
+  // config's journeys.personas puts Billing first anyway, and the names come from the manifests
   assert.deepEqual(m.personas.map((p) => `${p.id}=${p.name}@${p.from}`), [
-    'billing=Billing@apps/billing-web/docs/design/screens.json',
-    'ops=Operations@apps/ops-admin/docs/design/screens.json',
+    'billing=Billing@farsight.config.json',
+    'ops=Operations@farsight.config.json',
   ]);
+  assert.equal(m.personas[1]!.description, 'The team that runs the overnight collection.');
   assert.deepEqual(m.groups.map((x) => `${x.id}${x.persona ? `(${x.persona})` : ''}@${x.from}`), [
-    'access@apps/billing-web/docs/design/screens.json',
+    'access@apps/ops-admin/docs/design/screens.json',
     'invoices(billing)@docs/design/screens.json',
     'runs(ops)@docs/design/screens.json',
   ]);
@@ -76,6 +79,21 @@ test('a config flow id no manifest declares is a note; a source with no manifest
   assert.deepEqual(g.meta!.journeys!.personas, [], 'a persona nobody declares is the tree\'s to place, not the meta\'s');
   const bare = await ingestRepo(repo({ 'src/a.ts': 'export const a = 1;\n', 'farsight.config.json': JSON.stringify({ journeys: { flows: [{ id: 'x' }] } }) }), { repoName: 'b', ...only });
   assert.equal(bare.meta?.journeys, undefined);
+});
+
+test('a nested farsight.config.json places only the flows of the manifests under its folder, and the nearer word stands', async () => {
+  const screens = (id: string, flows: object[]) => JSON.stringify({ screens: [{ id, route: `/${id}` }], flows });
+  const dir = repo({
+    'apps/a/docs/design/screens.json': screens('A-1', [{ id: 'a-flow', name: 'A', screens: ['A-1'], persona: 'p', group: 'g1' }]),
+    'apps/b/docs/design/screens.json': screens('B-1', [{ id: 'b-flow', name: 'B', screens: ['B-1'], persona: 'p', group: 'g1' }]),
+    'farsight.config.json': JSON.stringify({ journeys: { groups: [{ id: 'g2', name: 'Root words' }], flows: [{ id: 'a-flow', order: 5, group: 'g2' }] } }),
+    'apps/a/farsight.config.json': JSON.stringify({ journeys: { groups: [{ id: 'g2', name: 'Nearer words' }], flows: [{ id: 'a-flow', group: 'g1' }, { id: 'b-flow', order: 1 }] } }),
+  });
+  const g = await ingestRepo(dir, { repoName: 'r', ...only });
+  const m = g.meta!.journeys!;
+  assert.deepEqual(m.flows, { 'a-flow': { order: 5, group: 'g1', from: 'apps/a/farsight.config.json', index: 0 } }, 'the nearer group wins, the root order stays');
+  assert.equal(m.groups.find((x) => x.id === 'g2')?.name, 'Nearer words');
+  assert.deepEqual(m.notes, ['flow "b-flow" is named by apps/a/farsight.config.json but no manifest under apps/a/ declares it']);
 });
 
 test('a manifest as a source of its own carries its organisation too', async () => {

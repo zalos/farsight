@@ -210,6 +210,31 @@ rename or add dimensions and give tag values their words in `farsight.config.jso
 
 `examples/nx-workspace` is a small NX workspace to try it on.
 
+**More than one config file.** A source may hold a `farsight.config.json` in any folder, not only at its root — an
+NX app or library can carry its own. The root file speaks for the whole source; a nested file speaks only for the
+code under its folder. **Paths in a nested file are relative to that folder**: `"plumbing": ["src/plumbing/**"]` in
+`apps/billing-web/farsight.config.json` means `apps/billing-web/src/plumbing/**`, and `"design": [{ "manifest":
+"docs/design/screens.json" }]` there means `apps/billing-web/docs/design/screens.json` (a URL stays a URL; a path that
+is absolute or climbs out of the source with `..` is ignored with a note — nothing outside the source is read).
+Field by field:
+
+- `tags`, `glossary`, `guards`, `entrypoints`, `setup` apply only to the code under the file's folder, after the root
+  file — so for a function under both, the nearer file's glossary word wins and its tags add. A function the root
+  already made a guard is not renamed again by a nested guard rule; that is reported as a conflict.
+- `plumbing`, `design`, `openapi`, `tests` (report globs, `include`, `exclude`) and `storybook` (`configDir`, `root`)
+  are added to the root's, rebased to the repo. Each file's `tests.<level>` block keeps its own `runner`, and
+  `results`, `coverage` and `report` take one glob or a list.
+- `externals` and `stores` are added to the root's; a second declaration of the same import or store name is a
+  conflict and the first one is kept.
+- `projects` and `tooling` are **root-only**; a nested file's value is ignored with a note.
+
+`farsight config list` (or MCP `config_files`, or `GET /api/config`) lists every file per source — root or the folder
+it is scoped to, the fields it gives, what was ignored — then the conflicts and the notes; `graph_overview` prints
+`config: <source> — 3 config files (1 for the whole source · 2 for one folder) · 1 conflict` when a source holds more
+than its root file. A file that is not valid JSON is a note naming it, never a failed ingest. Discovery honours the
+source's `exclude` globs and skips `node_modules`, `dist` and dot folders. `examples/nx-workspace` carries one in each
+app.
+
 ## 5. APIs: spec ↔ code
 
 If a source ships an OpenAPI/Swagger document, ingest reconciles it with the routes it found. The **APIs** tab in the viewer (`#/apis`) lists every API — spec-backed, or *implied* when a source serves routes with no spec on file — with operations, gates, consumers (the client function and its call site), and drift in words: *not implemented*, *undocumented*, *security mismatch*, *gate not declared in spec*, *request body not declared / not validated*, *deprecated in spec only*. Every route that carries a contract links there from Journeys and the Code map inspector, and back out to the source line and the spec line.
@@ -314,7 +339,7 @@ farsight journeys                       # persona › group › journeys, with s
 farsight journeys --persona ops --json  # one persona, as the JourneyTree document GET /api/journeys returns
 ```
 
-`examples/invoice-app/docs/design/screens.json` is the dogfood fixture: two built screens (one with an SVG wireframe), one designed-but-unbuilt screen listing `deleteInvoice`, one page with no design row, one operation the design lists that its page never reaches; two personas (*Billing*, *Operations*), two groups, one journey under both personas, and a `journeys` placement in its `farsight.config.json`. `examples/nx-workspace` keeps one manifest per app (`apps/billing-web/…`, `apps/ops-admin/…`, each with an *Access* group) beside the root one.
+`examples/invoice-app/docs/design/screens.json` is the dogfood fixture: two built screens (one with an SVG wireframe), one designed-but-unbuilt screen listing `deleteInvoice`, one page with no design row, one operation the design lists that its page never reaches; two personas (*Billing*, *Operations*), two groups, one journey under both personas, and a `journeys` placement in its `farsight.config.json`. `examples/nx-workspace` keeps one manifest per app (`apps/billing-web/…` found by name, `apps/ops-admin/…` declared by that app's own config; each with an *Access* group) beside the root one, and its root config's `journeys.personas` puts *Billing* before *Operations* whichever manifest is read first.
 
 ## Using Farsight in another app (local-only, no registry yet)
 

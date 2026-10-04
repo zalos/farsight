@@ -38,38 +38,70 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim
 
 // ── ingest: the declarations of one source ───────────────────────────────
 
+/** One config file's `journeys` block and the folder it applies to (`'.'` = the source root, every manifest). */
+export interface JourneysBlock { from: string; dir: string; journeys: JourneysConfig }
+
+/** A manifest a block reaches: the root's reaches every one; a nested file's, the manifests under its folder (never a URL). */
+function blockReaches(b: JourneysBlock, manifestPath: string): boolean {
+  if (!b.dir || b.dir === '.') return true;
+  if (/^https?:\/\//i.test(manifestPath)) return false;
+  return manifestPath.replace(/^\.\//, '').startsWith(`${b.dir.replace(/\/$/, '')}/`);
+}
+
 /**
- * Fold one source's manifests and config into `JourneysMeta`. The config's
- * arrays come first and are the order; a config entry overrides the manifest
- * entry with the same id field by field (only the fields it gives); ids the
- * config does not name follow in manifest order, the first manifest to declare
- * an id keeping it. A config placement for a flow no manifest declares is a
- * note, never a journey.
+ * Fold one source's manifests and config blocks into `JourneysMeta`.
+ *
+ * `config` is either one block (the root file's, as `farsight.config.json`) or the list
+ * `journeysConfigFor` gives — root first, then each nested file nearest last. The blocks'
+ * arrays come first and are the order (a block's ids in the order it lists them, the root's
+ * before a nested file's); an entry overrides an earlier one and the manifest entry with the
+ * same id field by field (only the fields it gives), so the nearest file's word stands; ids no
+ * block names follow in manifest order, the first manifest to declare an id keeping it.
+ * Personas and groups are one list per source wherever a block declares them; a placement
+ * (`flows[]`) only places flows a manifest the block reaches declares — any other id is a note,
+ * never a journey.
  */
 export function journeysMetaOf(
   manifests: { manifest: DesignManifest; path: string }[],
-  config?: JourneysConfig | null,
+  config?: JourneysConfig | JourneysBlock[] | null,
   configPath = 'farsight.config.json',
 ): JourneysMeta {
+  const blocks: JourneysBlock[] = !config ? [] : Array.isArray(config) ? config : [{ from: configPath, dir: '.', journeys: config }];
   const notes: string[] = [];
   const personas: JourneysMeta['personas'] = [];
   const groups: JourneysMeta['groups'] = [];
   const pAt = new Map<string, number>();
   const gAt = new Map<string, number>();
+  // the fields some block gave, per id — a manifest fills only the rest
+  const cfgPersona = new Map<string, Set<string>>();
+  const cfgGroup = new Map<string, Set<string>>();
 
-  for (const p of config?.personas ?? []) {
-    if (pAt.has(key(p.id))) continue;
-    pAt.set(key(p.id), personas.length);
-    personas.push({ id: p.id, name: p.name ?? p.id, ...(p.description ? { description: p.description } : {}), declared: true, from: configPath });
+  for (const b of blocks) {
+    for (const p of b.journeys.personas ?? []) {
+      const k = key(p.id);
+      const given = cfgPersona.get(k) ?? new Set<string>();
+      cfgPersona.set(k, given);
+      let at = pAt.get(k);
+      if (at == null) { at = personas.length; pAt.set(k, at); personas.push({ id: p.id, name: p.id, declared: true, from: b.from }); }
+      const e = personas[at]!;
+      if (p.name) { e.name = p.name; given.add('name'); }
+      if (p.description) { e.description = p.description; given.add('description'); }
+      if (p.name || p.description || !given.size) e.from = b.from;
+    }
+    for (const g of b.journeys.groups ?? []) {
+      const k = key(g.id);
+      const given = cfgGroup.get(k) ?? new Set<string>();
+      cfgGroup.set(k, given);
+      let at = gAt.get(k);
+      if (at == null) { at = groups.length; gAt.set(k, at); groups.push({ id: g.id, name: g.id, declared: true, from: b.from }); }
+      const e = groups[at]!;
+      if (g.name) { e.name = g.name; given.add('name'); }
+      if (g.description) { e.description = g.description; given.add('description'); }
+      if (g.persona) { e.persona = g.persona; given.add('persona'); }
+      if (g.name || g.description || g.persona || !given.size) e.from = b.from;
+    }
   }
-  for (const g of config?.groups ?? []) {
-    if (gAt.has(key(g.id))) continue;
-    gAt.set(key(g.id), groups.length);
-    groups.push({ id: g.id, name: g.name ?? g.id, ...(g.description ? { description: g.description } : {}), ...(g.persona ? { persona: g.persona } : {}), declared: true, from: configPath });
-  }
-  const cfgPersona = new Map((config?.personas ?? []).map((p) => [key(p.id), p]));
-  const cfgGroup = new Map((config?.groups ?? []).map((g) => [key(g.id), g]));
-  // which manifest first declared each id, for the fields the config left out and for the notes
+  // which manifest first declared each id, for the fields no block gave and for the notes
   const firstPersona = new Map<string, string>();
   const firstGroup = new Map<string, string>();
 
@@ -87,14 +119,14 @@ export function journeysMetaOf(
         personas.push({ id, name, ...(description ? { description } : {}), declared: true, from: path });
         continue;
       }
-      const cfg = cfgPersona.get(k);
-      if (cfg && !firstPersona.has(k)) {
-        // the config named it: fill only what the config left out
+      const given = cfgPersona.get(k);
+      if (given && !firstPersona.has(k)) {
+        // a block named it: fill only what no block gave
         firstPersona.set(k, path);
         const e = personas[at]!;
-        if (!cfg.name) e.name = name;
-        if (!cfg.description && description) e.description = description;
-      } else if (firstPersona.get(k) !== path && key(personas[at]!.name) !== key(name) && !cfg?.name) {
+        if (!given.has('name')) e.name = name;
+        if (!given.has('description') && description) e.description = description;
+      } else if (firstPersona.get(k) !== path && key(personas[at]!.name) !== key(name) && !given?.has('name')) {
         notes.push(`persona "${id}" is declared by ${firstPersona.get(k)} and ${path} with different names; "${personas[at]!.name}" from ${firstPersona.get(k)} is kept`);
       }
     }
@@ -112,39 +144,52 @@ export function journeysMetaOf(
         groups.push({ id, name, ...(description ? { description } : {}), ...(persona ? { persona } : {}), declared: true, from: path });
         continue;
       }
-      const cfg = cfgGroup.get(k);
-      if (cfg && !firstGroup.has(k)) {
+      const given = cfgGroup.get(k);
+      if (given && !firstGroup.has(k)) {
         firstGroup.set(k, path);
         const e = groups[at]!;
-        if (!cfg.name) e.name = name;
-        if (!cfg.description && description) e.description = description;
-        if (!cfg.persona && persona) e.persona = persona;
-      } else if (firstGroup.get(k) !== path && key(groups[at]!.name) !== key(name) && !cfg?.name) {
+        if (!given.has('name')) e.name = name;
+        if (!given.has('description') && description) e.description = description;
+        if (!given.has('persona') && persona) e.persona = persona;
+      } else if (firstGroup.get(k) !== path && key(groups[at]!.name) !== key(name) && !given?.has('name')) {
         notes.push(`group "${id}" is declared by ${firstGroup.get(k)} and ${path} with different names; "${groups[at]!.name}" from ${firstGroup.get(k)} is kept`);
       }
     }
   }
 
-  // placements: only flows some manifest of this source declares
-  const flowIds = new Map<string, string>();
-  for (const { manifest } of manifests) {
-    for (const f of Array.isArray(manifest.flows) ? manifest.flows : []) {
-      const id = str(f?.id);
-      if (id && !flowIds.has(key(id))) flowIds.set(key(id), id);
+  // placements: only flows a manifest the block reaches declares; a nearer block overrides field by field
+  const flows: JourneysMeta['flows'] = {};
+  let index = 0;
+  for (const b of blocks) {
+    const flowIds = new Map<string, string>();
+    for (const { manifest, path } of manifests) {
+      if (!blockReaches(b, path)) continue;
+      for (const f of Array.isArray(manifest.flows) ? manifest.flows : []) {
+        const id = str(f?.id);
+        if (id && !flowIds.has(key(id))) flowIds.set(key(id), id);
+      }
+    }
+    const seen = new Set<string>();
+    for (const f of b.journeys.flows ?? []) {
+      const at = index++;
+      const id = flowIds.get(key(f.id));
+      if (!id) {
+        notes.push(`flow "${f.id}" is named by ${b.from} but no manifest ${b.dir && b.dir !== '.' ? `under ${b.dir}/ ` : ''}declares it`);
+        continue;
+      }
+      if (seen.has(id)) continue; // the same id twice in one block: the first
+      seen.add(id);
+      const prior = flows[id];
+      flows[id] = {
+        ...(prior ?? {}),
+        ...(f.persona !== undefined ? { persona: f.persona } : {}),
+        ...(f.group !== undefined ? { group: f.group } : {}),
+        ...(f.order !== undefined ? { order: f.order } : {}),
+        from: b.from,
+        index: prior?.index ?? at,
+      };
     }
   }
-  const flows: JourneysMeta['flows'] = {};
-  (config?.flows ?? []).forEach((f, index) => {
-    const id = flowIds.get(key(f.id));
-    if (!id) { notes.push(`flow "${f.id}" is named by ${configPath} but no manifest declares it`); return; }
-    if (flows[id]) return;
-    flows[id] = {
-      ...(f.persona !== undefined ? { persona: f.persona } : {}),
-      ...(f.group !== undefined ? { group: f.group } : {}),
-      ...(f.order !== undefined ? { order: f.order } : {}),
-      from: configPath, index,
-    };
-  });
   return { personas, groups, flows, notes };
 }
 

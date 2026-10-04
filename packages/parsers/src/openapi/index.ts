@@ -7,9 +7,9 @@
  * the `api` node. Freshness meta folds the spec files in.
  */
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
 import type { GraphFragment } from '@farsight/core';
-import { applySpecToFragment, specToFragment, loadConfig, type ReconcileResult } from '@farsight/core';
+import { applySpecToFragment, specToFragment, type ReconcileResult } from '@farsight/core';
+import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 import type { IngestOptions } from '../types.js';
 import { discoverSpecs } from './discover.js';
 import { readSpecSource, isSpecUrl } from './read.js';
@@ -24,9 +24,9 @@ export interface SpecApplication {
 }
 
 /** Discover + reconcile every spec for the repo into the fragment (in place). Never throws: unreadable specs are reported in `errors`. */
-export async function applySpecs(fragment: GraphFragment, repoRoot: string, options: IngestOptions): Promise<{ applied: SpecApplication[]; errors: string[] }> {
-  const config = loadConfig(join(repoRoot, 'farsight.config.json'));
-  const { specs, errors } = await discoverSpecs(repoRoot, options, config?.openapi ?? []);
+export async function applySpecs(fragment: GraphFragment, repoRoot: string, options: IngestOptions, workspace?: WorkspaceConfig): Promise<{ applied: SpecApplication[]; errors: string[] }> {
+  const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged;
+  const { specs, errors } = await discoverSpecs(repoRoot, options, config.openapi ?? []);
   const applied: SpecApplication[] = [];
   if (!specs.length) return { applied, errors };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');

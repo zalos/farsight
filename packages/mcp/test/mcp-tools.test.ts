@@ -42,6 +42,7 @@ const schema = (name: string) => JSON.parse(readFileSync(join(repoRoot, 'schemas
 
 const TOOLS = [
   'api_drift', 'api_spec', 'api_surface',
+  'config_files',
   'describe_node',
   'design_drift', 'design_guide', 'design_surface',
   'graph_changes', 'graph_overview',

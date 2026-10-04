@@ -29,7 +29,9 @@ diff request names, and Figma renders when `FIGMA_TOKEN` is set. `POST /api/sync
 source and costs CPU. Any local process may trigger it, and nothing beyond that is at stake. NX's project-graph
 file (`.nx/workspace-data/project-graph.json`, an older cache path, or the one `projects.graphFile` names) is read,
 never produced: Farsight does not run `nx`, the file must resolve inside the source and stay under 20 MB, and only
-names discovery already found count.
+names discovery already found count. A `farsight.config.json` in a folder below the source root names paths
+relative to its folder; one that is absolute or climbs out of the source with `..` is dropped with a note, so a
+nested config file never points ingest outside the source (its URLs are fetched like the root file's).
 
 **The viewer renders text it did not write.** That includes code identifiers, file paths and JSDoc from any repo
 you ingest, tracker titles and comments, Storybook titles, and spec prose. Every value goes into HTML through

@@ -36,6 +36,7 @@ const changedWords = (changedBy?: 'commit' | 'working-tree'): string =>
   changedBy === 'working-tree' ? '⚠ the files changed after this run without a new commit — the working tree differs from HEAD' : '⚠ the source changed after this run';
 import { ingestRepo, readSpecSource, readManifestSource, repoContentDigest } from '@farsight/parsers';
 import { registerWorkTools } from './work.js';
+import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
 
 /** Serve the graph over stdio — what `farsight mcp` runs. */
@@ -477,6 +478,8 @@ const server = new McpServer({ name: 'farsight', version: '0.0.1' });
 
 // work items (Jira / Azure DevOps): read tools always, write tools only where a source grants an agent the action
 const work = registerWorkTools({ server, graphPath, index: () => index, roots: () => store.roots });
+// every farsight.config.json per source — the root's and the ones scoped to a folder (config-tools.ts)
+const configTools = registerConfigTools({ server, meta: () => store.meta });
 // journeys by persona and group, in declared order (journey-organisation-and-config-files.md §4.4)
 const journeysTools = registerJourneysTools({ server, index: () => index, meta: () => store.meta });
 
@@ -517,7 +520,7 @@ server.registerTool('graph_overview', {
     `repos: ${[...repos].join(', ')}`,
     `kinds: ${Object.entries(byKind).map(([k, v]) => `${k}:${v}`).join('  ')}`,
     `tags: ${topTags.map(([t, c]) => `${t}(${c})`).join(', ')}`,
-    ...testsLines(), ...storiesOverviewLines(), ...projectsOverviewLines(),
+    ...testsLines(), ...storiesOverviewLines(), ...projectsOverviewLines(), ...configTools.overviewLines(),
     '',
     '## what is in it',
     ...journeysTools.overviewLines(),

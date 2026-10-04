@@ -1182,6 +1182,15 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         tagDimensions: pg.repos.find((r) => r.repo === hit.repo)?.tagDimensions ?? [],
       }));
     }
+    // ── config files (docs/proposals/journey-organisation-and-config-files.md §5.4) — meta.config as ingest recorded it ──
+    if ((url === '/api/config' || url.startsWith('/api/config?')) && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const g = loadJourneyGraph(graphPath);
+      const repo = u.searchParams.get('repo') || undefined;
+      const config = Object.fromEntries(Object.entries(g.meta.config ?? {}).filter(([r]) => !repo || r === repo));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config }));
+    }
     if (url.startsWith('/api/openapi') && req.method === 'GET') {
       // a spec generated from the code — every inference marked x-farsight-inferred
       if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));

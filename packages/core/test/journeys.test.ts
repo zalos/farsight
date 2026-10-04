@@ -312,7 +312,7 @@ test('sanitizeJourneys keeps what is well formed and drops the rest, never throw
   assert.deepEqual(c.journeys, {
     personas: [{ id: 'a', name: 'A' }, { id: 'b' }],
     groups: [{ id: 'g', description: 'd' }],
-    flows: [{ id: 'f', persona: 'x' }, { id: 'h', persona: 'only', order: 2 }],
+    flows: [{ id: 'f', persona: ['x'] }, { id: 'h', persona: ['only'], order: 2 }],
   });
   assert.equal(sanitizeJourneys({ journeys: [] } as unknown as FarsightConfig).journeys, undefined);
   assert.deepEqual(sanitizeJourneys({}), {});

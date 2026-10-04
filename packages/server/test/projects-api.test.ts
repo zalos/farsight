@@ -136,3 +136,19 @@ test('an unknown project is a 404 with a sentence', async () => {
   assert.equal(code, 404);
   assert.match(body.error, /no project named nope/);
 });
+
+// ── GET /api/config (docs/proposals/journey-organisation-and-config-files.md §5.4): meta.config as ingest recorded it ──
+
+test('GET /api/config serves every source\'s config files, and ?repo= narrows to one', async () => {
+  const all = await get('/api/config');
+  assert.equal(all.code, 200);
+  assert.deepEqual(Object.keys(all.body.config).sort(), ['invoice-app', 'nx-workspace']);
+  assert.deepEqual(all.body.config, meta.config, 'the handler serves the recorded meta, not a second reading');
+  assert.deepEqual(all.body.config['invoice-app'].files.map((f: { path: string }) => f.path), ['farsight.config.json']);
+  const one = await get('/api/config?repo=nx-workspace');
+  assert.deepEqual(Object.keys(one.body.config), ['nx-workspace']);
+  assert.deepEqual(one.body.config['nx-workspace'].files.map((f: { path: string; root: boolean }) => `${f.path}:${f.root}`), [
+    'farsight.config.json:true', 'apps/billing-web/farsight.config.json:false', 'apps/ops-admin/farsight.config.json:false',
+  ]);
+  assert.equal(one.body.config['nx-workspace'].conflicts[0].kind, 'glossary');
+});

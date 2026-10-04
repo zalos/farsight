@@ -10,9 +10,10 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve, basename } from 'node:path';
-import type { GraphFragment, DesignManifest, DesignSource, DesignReconcile, JourneysConfig } from '@farsight/core';
-import { applyDesignToFragment, designToFragment, isDesignManifest, figmaFileKey, loadConfig, journeysMetaOf } from '@farsight/core';
+import { relative, resolve, basename } from 'node:path';
+import type { GraphFragment, DesignManifest, DesignSource, DesignReconcile, JourneysBlock } from '@farsight/core';
+import { applyDesignToFragment, designToFragment, isDesignManifest, figmaFileKey, journeysMetaOf } from '@farsight/core';
+import { loadWorkspaceConfig, journeysConfigFor, type WorkspaceConfig } from '../shared/config-files.js';
 import { collectFiles } from '../shared/files.js';
 import type { IngestOptions } from '../types.js';
 
@@ -105,7 +106,9 @@ export async function discoverManifests(repoRoot: string, options: IngestOptions
       seen.add(key);
       manifests.push({ ...parsed, path: key, origin: 'config', ...(d.name ? { name: d.name } : {}) });
     } catch (err) {
-      errors.push(`design ${ref}: ${(err as Error).message.split('\n')[0]}`);
+      // a declaration that names no file says so in words, without the absolute path the error carries
+      const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
+      errors.push(`design ${ref}: ${missing ? 'declared in farsight.config.json, but there is no file at that path' : (err as Error).message.split('\n')[0]}`);
     }
   }
   const candidates = collectFiles(repoRoot, ['.json'], options, (base) => !NAME_RE.test(base))
@@ -128,10 +131,15 @@ export async function discoverManifests(repoRoot: string, options: IngestOptions
 
 export interface DesignApplication { path: string; origin: 'file' | 'config'; result: DesignReconcile }
 
-/** Discover + reconcile every manifest for the repo into the fragment (in place). Never throws: unreadable manifests are reported in `errors`. */
-export async function applyDesigns(fragment: GraphFragment, repoRoot: string, options: IngestOptions): Promise<{ applied: DesignApplication[]; errors: string[] }> {
-  const config = loadConfig(join(repoRoot, 'farsight.config.json')) as ({ design?: DesignDeclaration[]; journeys?: JourneysConfig } | null);
-  const { manifests, errors } = await discoverManifests(repoRoot, options, config?.design ?? []);
+/**
+ * Discover + reconcile every manifest for the repo into the fragment (in place). Never throws: unreadable
+ * manifests are reported in `errors`. `workspace` is the source's config files as `ingestRepo` read them
+ * (read here when absent): every file's `design[]`, rebased to the repo, is declared; a manifest declared
+ * and also found by name is read once.
+ */
+export async function applyDesigns(fragment: GraphFragment, repoRoot: string, options: IngestOptions, workspace?: WorkspaceConfig): Promise<{ applied: DesignApplication[]; errors: string[] }> {
+  const ws = workspace ?? loadWorkspaceConfig(repoRoot, options);
+  const { manifests, errors } = await discoverManifests(repoRoot, options, (ws.merged.design ?? []) as DesignDeclaration[]);
   const applied: DesignApplication[] = [];
   if (!manifests.length) return { applied, errors };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
@@ -143,7 +151,7 @@ export async function applyDesigns(fragment: GraphFragment, repoRoot: string, op
   }
   titleDocLinks(fragment, repoRoot);
   fragment.meta = { files: (fragment.meta?.files ?? 0) + manifests.length, sourceHash: hash.digest('hex').slice(0, 12) };
-  foldJourneys(fragment, manifests, config?.journeys);
+  foldJourneys(fragment, manifests, journeysBlocksOf(ws, manifests.map((m) => m.path)));
   return { applied, errors };
 }
 
@@ -152,9 +160,20 @@ export async function applyDesigns(fragment: GraphFragment, repoRoot: string, op
  * manifest's `personas` / `groups` and the config's `journeys` block, folded once at ingest into
  * `meta.journeys` — the request-time tree (core `journeyTree`) reads it, never the files.
  */
-export function foldJourneys(fragment: GraphFragment, manifests: { manifest: DesignManifest; path: string }[], journeys?: JourneysConfig | null, configPath = 'farsight.config.json'): void {
+export function foldJourneys(fragment: GraphFragment, manifests: { manifest: DesignManifest; path: string }[], blocks: JourneysBlock[] = []): void {
   if (!manifests.length) return;
-  fragment.meta = { files: fragment.meta?.files ?? 0, sourceHash: fragment.meta?.sourceHash ?? '', ...fragment.meta, journeys: journeysMetaOf(manifests, journeys, configPath) };
+  fragment.meta = { files: fragment.meta?.files ?? 0, sourceHash: fragment.meta?.sourceHash ?? '', ...fragment.meta, journeys: journeysMetaOf(manifests, blocks) };
+}
+
+/**
+ * Every config file's `journeys` block that reaches one of these manifests, once each, root first
+ * and nearest last — `journeysConfigFor` per manifest, merged in that order.
+ */
+function journeysBlocksOf(ws: WorkspaceConfig, manifestPaths: string[]): JourneysBlock[] {
+  const out = new Map<string, JourneysBlock>();
+  for (const p of manifestPaths) for (const b of journeysConfigFor(ws, p)) if (!out.has(b.from)) out.set(b.from, b);
+  const depth = (b: JourneysBlock) => (!b.dir || b.dir === '.' ? 0 : b.dir.split('/').length);
+  return [...out.values()].sort((a, b) => depth(a) - depth(b) || a.from.localeCompare(b.from));
 }
 
 /**

@@ -9,7 +9,7 @@ import {
   designSurface, reconcileDesign, designDriftMarkdown, isDesignManifest, buildLine, buildInfo, installState, currencyAdvice,
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
-  packagesOf, importersOf, resolvePackage,
+  packagesOf, importersOf, resolvePackage, configFilesText,
   journeyTree, pickJourneys, journeyTreeLines,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
 } from '@farsight/core';
@@ -120,6 +120,11 @@ usage:
                                                                verdicts (your policy · the tracker · the credential), the
                                                                tracker's dry run when it has one, and the outcome; exit 0
                                                                written, 1 not written, 2 waiting for --confirm
+  farsight config list [--graph graph.json] [--repo name] [--json]
+                                                               every farsight.config.json per source: the root file and the ones
+                                                               scoped to a folder, the fields each gives and any it ignored, then
+                                                               the conflicts between them and the notes (--json: per source
+                                                               { files, conflicts, notes })
   farsight journeys [--repo name] [--persona p] [--group g] [--json] [--graph graph.json]
                                                                the journeys by persona, then by group, in the order the manifests
                                                                and farsight.config.json declare: status, screens built, the way in
@@ -132,8 +137,10 @@ usage:
 Snapshot history lives in .farsight/farsight.db (override: --db <path>); graph.json always carries the latest sync.
 Put a farsight.config.json at a repo root to add tag rules, a business glossary, declared guards/entrypoints,
 \`openapi: [{ path | url }]\` entries for spec documents discovery would not find, and \`design: [{ manifest }]\`
-for screens manifests (docs/design/screens.json — see docs/proposals/design-source.md). A positional that is a
-screens manifest is ingested as a design-only source.`;
+for screens manifests (docs/design/screens.json — see docs/proposals/design-source.md). More files in folders
+below it (an NX app's own farsight.config.json) speak only for the code under their folder, and their paths
+are relative to it; projects and tooling are root-only. A positional that is a screens manifest is ingested as
+a design-only source.`;
 
 // version never mutates either — a consumer checks what it is talking to before anything runs
 if (['version', '--version', '-v'].includes(command ?? '') || rest.includes('--version')) {
@@ -974,6 +981,23 @@ switch (command) {
       break;
     }
     fail(`unknown deps subcommand: ${sub} (list | where)`);
+  }
+  case 'config': {
+    // every farsight.config.json per source, as ingest recorded them on meta.config — the same
+    // fold the MCP config_files tool and graph_overview print (core config-files.ts)
+    const sub = positional[0] ?? 'list';
+    if (sub !== 'list') fail(`unknown config subcommand: ${sub} (list)`);
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const repo = flag('repo');
+    const metas = store.meta.config ?? {};
+    if (rest.includes('--json')) {
+      console.log(JSON.stringify(Object.fromEntries(Object.entries(metas).filter(([r]) => !repo || r === repo)), null, 2));
+      break;
+    }
+    console.log(configFilesText(metas, repo).join('\n'));
+    break;
   }
   case 'digest': {
     // the content digest of a checkout, computed exactly the way ingest computes it
