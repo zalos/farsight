@@ -3,6 +3,7 @@
     "tagValues": {
       "type": { "app": "Application", "feature": "Feature", "ui": "UI", "util": "Utility", "data-access": "Data access" },
       "domain": { "ops": "Operations" }
-    }
+    },
+    "graphFile": "nx-project-graph.json"
   }
 }

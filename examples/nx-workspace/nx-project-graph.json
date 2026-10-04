@@ -1,0 +1,211 @@
+{
+  "graph": {
+    "nodes": {
+      "billing-web": {
+        "name": "billing-web",
+        "type": "app",
+        "data": {
+          "root": "apps/billing-web",
+          "tags": [
+            "type:app",
+            "scope:billing"
+          ]
+        }
+      },
+      "billing-web-e2e": {
+        "name": "billing-web-e2e",
+        "type": "e2e",
+        "data": {
+          "root": "apps/billing-web-e2e",
+          "tags": [
+            "scope:billing"
+          ],
+          "implicitDependencies": [
+            "billing-web"
+          ]
+        }
+      },
+      "ops-admin": {
+        "name": "ops-admin",
+        "type": "app",
+        "data": {
+          "root": "apps/ops-admin",
+          "tags": [
+            "type:app",
+            "scope:ops"
+          ],
+          "implicitDependencies": [
+            "billing-data-access"
+          ]
+        }
+      },
+      "billing-data-access": {
+        "name": "billing-data-access",
+        "type": "lib",
+        "data": {
+          "root": "libs/billing/data-access",
+          "tags": [
+            "scope:billing",
+            "type:data-access"
+          ]
+        }
+      },
+      "billing-feature-invoices": {
+        "name": "billing-feature-invoices",
+        "type": "lib",
+        "data": {
+          "root": "libs/billing/feature-invoices",
+          "tags": [
+            "scope:billing",
+            "type:feature"
+          ]
+        }
+      },
+      "billing-ui": {
+        "name": "billing-ui",
+        "type": "lib",
+        "data": {
+          "root": "libs/billing/ui",
+          "tags": [
+            "scope:billing",
+            "type:ui"
+          ]
+        }
+      },
+      "@nxw/shared-ui": {
+        "name": "@nxw/shared-ui",
+        "type": "lib",
+        "data": {
+          "root": "libs/shared/ui",
+          "tags": [
+            "scope:shared",
+            "type:ui"
+          ]
+        }
+      },
+      "shared-util": {
+        "name": "shared-util",
+        "type": "lib",
+        "data": {
+          "root": "libs/shared/util",
+          "tags": [
+            "scope:shared",
+            "type:util"
+          ]
+        }
+      }
+    },
+    "dependencies": {
+      "billing-web": [
+        {
+          "source": "billing-web",
+          "target": "@nxw/shared-ui",
+          "type": "static"
+        },
+        {
+          "source": "billing-web",
+          "target": "billing-feature-invoices",
+          "type": "static"
+        },
+        {
+          "source": "billing-web",
+          "target": "shared-util",
+          "type": "static"
+        },
+        {
+          "source": "billing-web",
+          "target": "npm:react",
+          "type": "static"
+        },
+        {
+          "source": "billing-web",
+          "target": "npm:react-router-dom",
+          "type": "static"
+        }
+      ],
+      "billing-web-e2e": [
+        {
+          "source": "billing-web-e2e",
+          "target": "billing-web",
+          "type": "implicit"
+        },
+        {
+          "source": "billing-web-e2e",
+          "target": "shared-util",
+          "type": "dynamic"
+        },
+        {
+          "source": "billing-web-e2e",
+          "target": "npm:@playwright/test",
+          "type": "static"
+        }
+      ],
+      "ops-admin": [
+        {
+          "source": "ops-admin",
+          "target": "@nxw/shared-ui",
+          "type": "static"
+        },
+        {
+          "source": "ops-admin",
+          "target": "billing-data-access",
+          "type": "implicit"
+        },
+        {
+          "source": "ops-admin",
+          "target": "shared-util",
+          "type": "static"
+        },
+        {
+          "source": "ops-admin",
+          "target": "npm:react",
+          "type": "static"
+        }
+      ],
+      "billing-data-access": [],
+      "billing-feature-invoices": [
+        {
+          "source": "billing-feature-invoices",
+          "target": "billing-data-access",
+          "type": "static"
+        },
+        {
+          "source": "billing-feature-invoices",
+          "target": "billing-ui",
+          "type": "static"
+        },
+        {
+          "source": "billing-feature-invoices",
+          "target": "npm:react",
+          "type": "static"
+        }
+      ],
+      "billing-ui": [
+        {
+          "source": "billing-ui",
+          "target": "shared-util",
+          "type": "static"
+        },
+        {
+          "source": "billing-ui",
+          "target": "npm:react",
+          "type": "static"
+        }
+      ],
+      "@nxw/shared-ui": [
+        {
+          "source": "@nxw/shared-ui",
+          "target": "npm:react",
+          "type": "static"
+        }
+      ],
+      "shared-util": [
+        {
+          "source": "shared-util",
+          "target": "npm:date-fns",
+          "type": "static"
+        }
+      ]
+    }
+  }
+}

@@ -579,6 +579,23 @@ export interface ProjectsMeta {
   imports?: ProjectImports[];
   /** one sentence per thing read and set aside (a project.json that is not JSON, two projects with one name) */
   notes?: string[];
+  /**
+   * project → project dependencies NX's own project graph records, read from the file NX wrote
+   * (`.nx/workspace-data/project-graph.json`, an older cache path, or `farsight.config.json →
+   * projects.graphFile`) — never by running NX. Only names discovery found count; `npm:` targets are
+   * the dependencies pass's. The imports read from the files stay the primary evidence; this augments.
+   */
+  dependencies?: NxProjectDependency[];
+  /** the NX project-graph file that was read: its source-relative path, the projects and dependencies it named that counted */
+  graphFile?: { path: string; projects: number; dependencies: number };
+}
+
+/** One dependency NX's project graph records (`static` an import NX read, `dynamic` a lazy `import()`, `implicit` declared). */
+export interface NxProjectDependency {
+  from: string;
+  to: string;
+  type: 'static' | 'dynamic' | 'implicit';
+  via: 'nx-graph';
 }
 
 export interface GraphNode {

@@ -26,7 +26,10 @@ hostile local process. An agent that should not write as a person must reach tra
 `git log` / `git show` on configured checkouts (commit ids are checked as hex, and a clone URL is passed after
 `--`). It probes the Storybook URLs the graph recorded. It fetches spec or manifest URLs that a source or a
 diff request names, and Figma renders when `FIGMA_TOKEN` is set. `POST /api/sync` re-ingests every enabled
-source and costs CPU. Any local process may trigger it, and nothing beyond that is at stake.
+source and costs CPU. Any local process may trigger it, and nothing beyond that is at stake. NX's project-graph
+file (`.nx/workspace-data/project-graph.json`, an older cache path, or the one `projects.graphFile` names) is read,
+never produced: Farsight does not run `nx`, the file must resolve inside the source and stay under 20 MB, and only
+names discovery already found count.
 
 **The viewer renders text it did not write.** That includes code identifiers, file paths and JSDoc from any repo
 you ingest, tracker titles and comments, Storybook titles, and spec prose. Every value goes into HTML through

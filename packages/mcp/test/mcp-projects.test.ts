@@ -50,7 +50,7 @@ test('graph_overview carries one projects line: the tool, projects by type, depe
   const out = await call('graph_overview');
   const line = out.split('\n').find((l) => l.startsWith('projects: '));
   assert.ok(line, out);
-  assert.match(line!, /^projects: nx · 8 projects \(2 applications · 5 libraries · 1 e2e\) · 10 project dependencies/);
+  assert.match(line!, /^projects: nx · 8 projects \(2 applications · 5 libraries · 1 e2e\) · 11 project dependencies · nx graph: 11 dependencies read/);
   assert.match(line!, /Domain: Billing 5 · Shared 2 · Operations 1/);
   assert.match(line!, /Type: Application 2 · UI 2 · Data access 1 · Feature 1 · Utility 1 · no tag 1/);
 });
