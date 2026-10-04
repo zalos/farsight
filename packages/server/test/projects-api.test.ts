@@ -101,6 +101,10 @@ test('GET /api/projects serves the projectGraph fold whole, every source togethe
   assert.deepEqual(body.dependencies, JSON.parse(JSON.stringify(fold.dependencies)));
   assert.deepEqual(body.counts, JSON.parse(JSON.stringify(fold.counts)));
   assert.deepEqual(body.repos.map((r: any) => `${r.repo}:${r.tool}`), ['invoice-app:none', 'nx-workspace:nx']);
+  // every project's tree rides on its row, the same as /api/projects/<name> answers it
+  const web = body.projects.find((p: any) => p.name === 'billing-web');
+  assert.deepEqual(web.closure, ['billing-web', '@nxw/shared-ui', 'billing-feature-invoices', 'shared-util', 'billing-data-access', 'billing-ui']);
+  assert.deepEqual(body.repos.find((r: any) => r.repo === 'nx-workspace').graphFile, { path: 'nx-project-graph.json', projects: 8, dependencies: 11 });
 });
 
 test('GET /api/projects?repo= narrows to one source', async () => {

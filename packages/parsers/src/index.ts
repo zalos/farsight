@@ -17,6 +17,7 @@ export type { LanguageAdapter, IngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
 export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js';
 export { applyProjects, discoverProjects, projectOfPath, projectImports, importSpecifiers, workspaceGlobs } from './shared/projects.js';
+export { readNxProjectGraph, NX_GRAPH_PATHS, NX_GRAPH_MAX_BYTES } from './shared/nx-graph.js';
 export { javaAdapter, ingestJava } from './java/index.js';
 export { applySpecs, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, discoverSpecs } from './openapi/index.js';
 export type { SpecApplication } from './openapi/index.js';

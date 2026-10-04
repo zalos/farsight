@@ -3,19 +3,21 @@
 // NX example workspace ingested end to end. Runs against the built package: `pnpm build` first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ingestRepo, discoverProjects, projectOfPath, importSpecifiers } from '../dist/index.js';
+import { ingestRepo, discoverProjects, projectOfPath, importSpecifiers, readNxProjectGraph, NX_GRAPH_MAX_BYTES } from '../dist/index.js';
 import { buildIndex, projectGraph, appClosure, projectFacets, sanitizeProjects, mergeTagDimensions, countedProblems, GraphStore } from '@farsight/core';
 import type { Counted, GraphFragment } from '@farsight/core';
 
 const NX_EXAMPLE = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'examples', 'nx-workspace');
 
+const temps: string[] = [];
+process.on('exit', () => { for (const dir of temps) rmSync(dir, { recursive: true, force: true }); });
 function tempRepo(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-projects-'));
-  process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
+  temps.push(dir);
   for (const [rel, text] of Object.entries(files)) {
     mkdirSync(join(dir, rel, '..'), { recursive: true });
     writeFileSync(join(dir, rel), text);
@@ -192,18 +194,24 @@ test('the NX example: every node carries its project and tags; the project graph
     '@nxw/shared-ui:library', 'billing-data-access:library', 'billing-feature-invoices:library', 'billing-ui:library',
     'billing-web:application', 'billing-web-e2e:e2e', 'ops-admin:application', 'shared-util:library',
   ]);
-  const deps = pg.dependencies.map((d) => `${d.from}>${d.to}${d.implicit ? ' (implicit)' : ''} ${d.imports}`);
+  // the example carries the project graph NX would write (`nx graph --file`), named by farsight.config.json:
+  // it agrees with every import and implicit dependency, and adds one the files do not show (a lazy import
+  // from the e2e project), which merges as `nx` with no imports
+  assert.deepEqual(m.graphFile, { path: 'nx-project-graph.json', projects: 8, dependencies: 11 });
+  assert.equal(m.notes, undefined, 'npm: targets are skipped without a note');
+  const deps = pg.dependencies.map((d) => `${d.from}>${d.to}${d.implicit ? ' (implicit)' : ''}${d.nx ? ` (nx ${d.nxType})` : ''} ${d.imports}`);
   assert.deepEqual(deps, [
-    'billing-feature-invoices>billing-data-access 1',
-    'billing-feature-invoices>billing-ui 1',
-    'billing-ui>shared-util 1',
-    'billing-web>@nxw/shared-ui 1',
-    'billing-web>billing-feature-invoices 1',
-    'billing-web>shared-util 1',
-    'billing-web-e2e>billing-web (implicit) 0',
-    'ops-admin>@nxw/shared-ui 1',
-    'ops-admin>billing-data-access (implicit) 0',
-    'ops-admin>shared-util 1',
+    'billing-feature-invoices>billing-data-access (nx static) 1',
+    'billing-feature-invoices>billing-ui (nx static) 1',
+    'billing-ui>shared-util (nx static) 1',
+    'billing-web>@nxw/shared-ui (nx static) 1',
+    'billing-web>billing-feature-invoices (nx static) 1',
+    'billing-web>shared-util (nx static) 1',
+    'billing-web-e2e>billing-web (implicit) (nx implicit) 0',
+    'billing-web-e2e>shared-util (nx dynamic) 0',
+    'ops-admin>@nxw/shared-ui (nx static) 1',
+    'ops-admin>billing-data-access (implicit) (nx implicit) 0',
+    'ops-admin>shared-util (nx static) 1',
   ]);
   const web = pg.projects.find((p) => p.name === 'billing-web')!;
   assert.deepEqual(web.dependsOn, ['@nxw/shared-ui', 'billing-feature-invoices', 'shared-util']);
@@ -212,7 +220,7 @@ test('the NX example: every node carries its project and tags; the project graph
   assert.equal(web.nodes.n, 2);
   assert.deepEqual(web.nodes.breakdown?.map((p) => `${p.label}:${p.n}`), ['component:1', 'page:1']);
   assert.deepEqual(pg.counts.projects.breakdown?.map((p) => `${p.key}:${p.n}`), ['count.part.projectsApp:2', 'count.part.projectsLib:5', 'count.part.projectsE2e:1']);
-  assert.deepEqual(pg.counts.dependencies.breakdown?.map((p) => `${p.key}:${p.n}`), ['count.part.depsImported:8', 'count.part.depsDeclared:2']);
+  assert.deepEqual(pg.counts.dependencies.breakdown?.map((p) => `${p.key}:${p.n}`), ['count.part.depsImported:8', 'count.part.depsDeclared:2', 'count.part.depsNxGraph:1']);
   assert.deepEqual(pg.counts.byDimension.domain?.breakdown?.map((p) => `${p.label ?? p.key}:${p.n}`), ['Billing:5', 'Shared:2', 'Operations:1']);
   assert.ok(assertSound(pg) > 10, 'every number is a sound Counted');
 
@@ -223,4 +231,102 @@ test('the NX example: every node carries its project and tags; the project graph
   assert.deepEqual(appClosure(pg, 'ops-admin')!.projects, ['ops-admin', '@nxw/shared-ui', 'billing-data-access', 'shared-util']);
   assert.equal(appClosure(pg, 'nope'), undefined);
   assertSound(closure);
+});
+
+// ── NX's own project graph, read from the file NX wrote (never by running NX) ──
+
+const NX_PROJECTS = {
+  'nx.json': '{}',
+  'package.json': json({ name: 'ws', private: true }),
+  'apps/shop/project.json': json({ name: 'shop', tags: [] }), // no projectType, outside the layout folders
+  'tools/gen/project.json': json({ name: 'gen' }),
+  'shop-e2e/project.json': json({ name: 'shop-tests' }),
+};
+const cacheGraph = {
+  nodes: {
+    shop: { name: 'shop', type: 'app', data: { root: 'apps/shop' } },
+    gen: { name: 'gen', type: 'lib', data: { root: 'tools/gen' } },
+    'shop-tests': { name: 'shop-tests', type: 'e2e', data: { root: 'shop-e2e' } },
+    stranger: { name: 'stranger', type: 'lib', data: { root: 'x' } },
+  },
+  externalNodes: { 'npm:react': { type: 'npm', name: 'npm:react', data: { version: '18' } } },
+  dependencies: {
+    shop: [{ source: 'shop', target: 'gen', type: 'static' }, { source: 'shop', target: 'gen', type: 'implicit' }, { source: 'shop', target: 'npm:react', type: 'static' }],
+    'shop-tests': [{ source: 'shop-tests', target: 'shop', type: 'implicit' }, { source: 'shop-tests', target: 'stranger', type: 'static' }],
+    gen: [{ source: 'gen', target: 'gen', type: 'static' }, { target: 7, type: 'static' }, { source: 'gen', target: 'shop', type: 'weird' }],
+    stranger: [{ source: 'stranger', target: 'gen', type: 'static' }],
+  },
+};
+
+test('nx graph: the cache file NX writes is found, read in its bare shape, and types the projects no manifest typed', async () => {
+  const dir = tempRepo({ ...NX_PROJECTS, '.nx/workspace-data/project-graph.json': json(cacheGraph) });
+  const read = readNxProjectGraph(dir, discoverProjects(dir, 'r').projects);
+  assert.deepEqual(read.dependencies, [
+    { from: 'shop', to: 'gen', type: 'static', via: 'nx-graph' },
+    { from: 'shop-tests', to: 'shop', type: 'implicit', via: 'nx-graph' },
+  ], 'one per pair (static beats implicit), npm: targets and self-edges skipped');
+  assert.deepEqual(read.graphFile, { path: '.nx/workspace-data/project-graph.json', projects: 3, dependencies: 2 });
+  assert.deepEqual(read.notes.length, 2);
+  assert.match(read.notes[0]!, /names 1 project this source does not declare/);
+  assert.match(read.notes[1]!, /has 2 dependencies of a shape Farsight does not read/);
+  const g = await ingest(dir);
+  const m = g.meta!.projects!;
+  assert.deepEqual(m.projects.map((p) => `${p.name}:${p.type}`), ['shop:application', 'shop-tests:e2e', 'gen:library']);
+  assert.deepEqual(m.dependencies?.map((d) => `${d.from}>${d.to}`), ['shop>gen', 'shop-tests>shop']);
+  assert.equal(m.graphFile?.dependencies, 2);
+});
+
+test('nx graph: the `nx graph --file` export shape, named by projects.graphFile, wins over the cache', () => {
+  const dir = tempRepo({
+    ...NX_PROJECTS,
+    'farsight.config.json': json({ projects: { graphFile: 'docs/graph.json' } }),
+    'docs/graph.json': json({ graph: { nodes: cacheGraph.nodes, dependencies: { gen: [{ source: 'gen', target: 'shop', type: 'dynamic' }] } } }),
+    '.nx/workspace-data/project-graph.json': json(cacheGraph),
+  });
+  const read = readNxProjectGraph(dir, discoverProjects(dir, 'r').projects, 'docs/graph.json');
+  assert.deepEqual(read.dependencies.map((d) => `${d.from}>${d.to}:${d.type}`), ['gen>shop:dynamic']);
+});
+
+test('nx graph: a path out of the source, a symlink out of it, an oversize file and a malformed one each leave a note and no dependency', async () => {
+  const outside = tempRepo({ 'g.json': json(cacheGraph) });
+  const dir = tempRepo({ ...NX_PROJECTS, 'bad.json': '{ nope', 'shape.json': json({ graph: { nodes: [] } }) });
+  symlinkSync(join(outside, 'g.json'), join(dir, 'link.json'));
+  const projects = discoverProjects(dir, 'r').projects;
+  const cases: [string, RegExp][] = [
+    ['../x.json', /climbs out of the source/],
+    ['/etc/hosts', /absolute path/],
+    ['link.json', /resolves outside the source/],
+    ['missing.json', /was not found/],
+    ['bad.json', /could not be read as JSON/],
+    ['shape.json', /has no nodes and dependencies objects/],
+    ['apps', /is not a file/],
+  ];
+  for (const [path, note] of cases) {
+    const read = readNxProjectGraph(dir, projects, path);
+    assert.deepEqual(read.dependencies, [], path);
+    assert.equal(read.graphFile, undefined, path);
+    assert.equal(read.notes.length, 1, path);
+    assert.match(read.notes[0]!, note, path);
+  }
+  // past the cap the file is not even parsed
+  const big = tempRepo({ ...NX_PROJECTS });
+  writeFileSync(join(big, 'big.json'), Buffer.alloc(NX_GRAPH_MAX_BYTES + 1, 0x20));
+  const read = readNxProjectGraph(big, projects, 'big.json');
+  assert.match(read.notes[0]!, /over the 20 MB Farsight reads/);
+  // through ingest: the note lands on meta.projects.notes and nothing throws
+  writeFileSync(join(dir, 'farsight.config.json'), json({ projects: { graphFile: '../escape.json' } }));
+  const g = await ingest(dir);
+  assert.ok(g.meta!.projects!.notes?.some((n) => /climbs out of the source/.test(n)));
+  assert.equal(g.meta!.projects!.dependencies, undefined);
+});
+
+test('nx graph: never read for a source that is not an NX workspace', async () => {
+  const dir = tempRepo({
+    'package.json': json({ name: 'ws', workspaces: ['packages/*'] }),
+    'packages/a/package.json': json({ name: 'a' }),
+    '.nx/workspace-data/project-graph.json': json(cacheGraph),
+  });
+  const g = await ingest(dir);
+  assert.equal(g.meta!.projects!.tool, 'workspaces');
+  assert.equal(g.meta!.projects!.graphFile, undefined);
 });
