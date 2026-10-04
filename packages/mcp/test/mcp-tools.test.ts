@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
-  buildIndex, impactOf, journey, journeySummary, resolveEntry, screensFor, countedLine, SnapshotDb,
+  buildIndex, impactOf, journey, journeySummary, resolveEntry, screensFor, countedLine, SnapshotDb, journeyTree, journeyTreeLines,
   type GraphEdge, type GraphIndex, type GraphNode,
 } from '@farsight/core';
 import { WorkCache, workDbPath } from '@farsight/work';
@@ -46,7 +46,7 @@ const TOOLS = [
   'describe_node',
   'design_drift', 'design_guide', 'design_surface',
   'graph_changes', 'graph_overview',
-  'impact_of', 'journey', 'list_rules', 'model_hub_state', 'refresh_graph',
+  'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
   'search_graph', 'stories', 'test_coverage', 'trace_flow',
   // work items: always registered
   'work_changes', 'work_item', 'work_items', 'work_links', 'work_sync',
@@ -309,6 +309,52 @@ describe('journey', () => {
     assert.match(out, /^## 1 · /m);
     assert.match(out, /^• /m);
     assert.ok(!/\.tsx?:\d+/.test(out), 'the business view printed a code location');
+  });
+});
+
+describe('journeys', () => {
+  /** the tree the tool prints, from the graph file the server loaded */
+  const fold = () => {
+    const data = JSON.parse(readFileSync(graph, 'utf8'));
+    return journeyTree(buildIndex(data.nodes, data.edges), data.meta.journeys, null);
+  };
+
+  test('text: persona, then group, then one line per journey — the core fold, line for line', async () => {
+    const out = await call('journeys');
+    assert.equal(out, journeyTreeLines(fold(), { openHint: '(open with journey)' }).join('\n'));
+    assert.match(out, /^3 journeys · 2 personas · 3 groups across every source in scope$/m);
+    assert.match(out, /^## Billing — 3 journeys/m);
+    assert.match(out, /^### Invoices — 2 journeys/m);
+    assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
+    // the fixture's config moves draft-and-send into Review and send; it is under both personas
+    assert.match(out, /^- Draft and send an invoice — .* · also under Operations · placed by farsight\.config\.json · /m);
+    assert.ok(out.indexOf('## Billing') < out.indexOf('## Operations'), 'declared order, not alphabetical');
+  });
+
+  test('persona and group filters, and json is the JourneyTree', async () => {
+    const ops = await call('journeys', { persona: 'operations' });
+    assert.match(ops, /^1 journey · 1 persona · 1 group /m);
+    assert.ok(!ops.includes('## Billing'));
+    const none = await call('journeys', { group: 'nope' });
+    assert.match(none, /no journey under group "nope"/);
+    const json = JSON.parse(await call('journeys', { json: true }));
+    assert.deepEqual(json, JSON.parse(JSON.stringify(fold())));
+    assert.deepEqual(json.personas.map((p: { id: string }) => p.id), ['billing', 'ops']);
+  });
+
+  test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
+    const guide = await call('design_guide');
+    for (const words of ['personas[] { id, name, description? }', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
+      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
+      assert.ok(guide.includes(words), `design_guide does not say ${words}`);
+    }
+  });
+
+  test('graph_overview has the journeys line and journey names where a flow sits', async () => {
+    const overview = await call('graph_overview');
+    assert.match(overview, /^journeys: 3 journeys · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them/m);
+    const j = await call('journey', { entry: 'draft-and-send' });
+    assert.match(j, /^shown under: Billing › Review and send · Operations › Review and send \(start here\)$/m);
   });
 });
 

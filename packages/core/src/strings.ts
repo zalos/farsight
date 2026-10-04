@@ -22,6 +22,7 @@ import { WORK_HUD_STRINGS } from './strings-work-hud.js';
 import { MAP_STRINGS } from './strings-map.js';
 import { DEPS_STRINGS } from './strings-deps.js';
 import { CONFIG_STRINGS } from './strings-config.js';
+import { JOURNEYS_STRINGS } from './strings-journeys.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -95,6 +96,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...DEPS_STRINGS,
   // the config files pass's words live in strings-config.ts (count.unit.configFiles and its parts)
   ...CONFIG_STRINGS,
+  // the journey organisation's words live in strings-journeys.ts (journeys.noGroup, personas, groups, their counts)
+  ...JOURNEYS_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 

@@ -1,0 +1,28 @@
+{
+  "name": "Operations console — screens",
+  "personas": [
+    { "id": "ops", "name": "Operations", "description": "The team that runs the overnight collection." }
+  ],
+  "groups": [
+    { "id": "access", "name": "Access", "description": "Ways in and out." }
+  ],
+  "screens": [
+    {
+      "id": "OA-01",
+      "name": "Sign in with the directory",
+      "route": "/sign-in/directory",
+      "description": "Sign in through the company directory."
+    }
+  ],
+  "flows": [
+    {
+      "id": "ops-sign-in",
+      "name": "Sign in with the directory",
+      "description": "An operations user signs in before checking the overnight run.",
+      "persona": "ops",
+      "group": "access",
+      "order": 1,
+      "screens": ["OA-01"]
+    }
+  ]
+}

@@ -166,9 +166,14 @@ export interface DesignRef {
   /** flow nodes only: the flows this one requires first / leads to next (manifest flow ids) — linked journeys */
   requires?: string[];
   leadsTo?: string[];
-  /** flow nodes only: who the flow is for, and who answers for it (absent prints as an absence word) */
-  persona?: string;
+  /** flow nodes only: who the flow is for (one persona or several), and who answers for it (absent prints as an absence word) */
+  persona?: string | string[];
   owner?: string;
+  /** flow nodes only: the group the manifest puts it in under its persona(s), and its order there (journey-organisation-and-config-files.md §4.1) */
+  group?: string;
+  order?: number;
+  /** flow nodes only: where the flow sits in its manifest's `flows[]` (0-based) — the author's order, which ties and absent `order`s fall back to */
+  position?: number;
   /** screen nodes only: the numbered steps its spec and tests name (`SCR-07.2`) */
   steps?: { id: string; name: string; operation?: string }[];
   /** design nodes only: the product surfaces the manifest scopes, drawn or not */
@@ -590,6 +595,28 @@ export interface ProjectsMeta {
   graphFile?: { path: string; projects: number; dependencies: number };
 }
 
+/** A persona a manifest or a config declares — `{ id, name, description? }`, in the order it is shown. */
+export interface JourneyPersonaDecl { id: string; name: string; description?: string }
+/** A group of journeys under a persona; with `persona` it exists under that persona only. */
+export interface JourneyGroupDecl { id: string; name: string; description?: string; persona?: string }
+/** A config entry that places a flow a manifest declared: only the fields it gives override the manifest's. */
+export interface JourneyFlowPlacement { id: string; persona?: string | string[]; group?: string; order?: number }
+
+/**
+ * How one source's journeys are organised — `GraphFragment.meta.journeys`, folded at ingest from every
+ * manifest's `personas[]` / `groups[]` and the config's `journeys` block (core design.ts `journeysMetaOf`).
+ * The flows themselves stay on their `flow` nodes; this carries the declarations and the config's overrides.
+ */
+export interface JourneysMeta {
+  /** declared personas in the order they are shown; `from` = the manifest or config path that declared it (the config when it named it) */
+  personas: { id: string; name: string; description?: string; declared: boolean; from: string }[];
+  groups: { id: string; name: string; description?: string; persona?: string; declared: boolean; from: string }[];
+  /** the config's placements, by flow id — only flows a manifest declared */
+  flows: Record<string, { persona?: string | string[]; group?: string; order?: number; from: string; index: number }>;
+  /** one sentence per thing set aside (a config flow id no manifest declares) */
+  notes: string[];
+}
+
 /** One dependency NX's project graph records (`static` an import NX read, `dynamic` a lazy `import()`, `implicit` declared). */
 export interface NxProjectDependency {
   from: string;
@@ -730,7 +757,7 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta; journeys?: JourneysMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json (at the root or nested) was applied by ingestRepo */

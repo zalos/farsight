@@ -10,7 +10,7 @@
  * location, drift is computed ONCE here and stored. Pure — reading files and
  * talking to Figma lives in parsers/server.
  */
-import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink } from './graph.js';
+import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneysMeta } from './graph.js';
 import { t } from './strings.js';
 import { buildIndex, type GraphIndex } from './query.js';
 
@@ -64,16 +64,27 @@ export interface DesignFlow {
   /** linked journeys: flow ids that must happen before this one / that follow it (also derived from a longer flow's screen order) */
   requires?: string[];
   leadsTo?: string[];
-  /** who this flow is for — the front door groups by it (contractor · ops · admin) */
-  persona?: string;
+  /**
+   * who this flow is for — a persona id or name from `personas[]`, or several; a value no
+   * `personas[]` entry declares is a persona of its own (journey-organisation-and-config-files.md §4.1)
+   */
+  persona?: string | string[];
   /** who answers for it; absent prints as an absence word, never a guess */
   owner?: string;
+  /** the group it sits in under its persona(s) — a `groups[]` id or name; absent = the persona's *Other journeys* */
+  group?: string;
+  /** its place in the group, ascending; ties and absences keep the order the flows are written in */
+  order?: number;
   /** work items this flow is for (Jira keys, Azure DevOps ids) — a declared `tracks` link (work-items-sync.md §9) */
   work?: string[];
 }
 
 export interface DesignManifest {
   name?: string;
+  /** who the journeys are for, in the order they are shown */
+  personas?: JourneyPersonaDecl[];
+  /** groups of journeys under a persona, in the order they are shown; one with `persona` exists under that persona only */
+  groups?: JourneyGroupDecl[];
   figma?: { file?: string; token?: string };
   screens: DesignScreen[];
   flows?: DesignFlow[];
@@ -185,16 +196,26 @@ export interface FlowRow {
   status: 'both' | 'design-only';
   built: number;
   total: number;
-  /** who the flow is for, and who answers for it — absent means the manifest does not say */
-  persona?: string;
+  /** who the flow is for (one persona or several), and who answers for it — absent means the manifest does not say */
+  persona?: string | string[];
   owner?: string;
+  /** the manifest's group and order for it (journeyTree applies the config's overrides on top) */
+  group?: string;
+  order?: number;
+  /** where it sits in its manifest's flows (0-based); absent on a graph ingested before the manifest order was kept */
+  position?: number;
+  /** flow ids that must happen before this one / that follow it, as the manifest declares them */
+  requires: string[];
+  leadsTo: string[];
+  /** the source it belongs to */
+  repo: string;
   drift: DesignDrift[];
 }
 
 export interface DesignReconcile {
   design: { id: string; name: string; path: string };
   /** named flows: screens in order, how many are built, drift (unknown screen ids, operations no contract declares) */
-  flows: { flow: DesignFlow; nodeId: string; screenNodeIds: string[]; built: number; drift: DesignDrift[] }[];
+  flows: { flow: DesignFlow; nodeId: string; screenNodeIds: string[]; built: number; drift: DesignDrift[]; position?: number }[];
   /** designed and built: the screen resolved to a page/component in the code */
   matched: { screen: DesignScreen; nodeId: string; drift: DesignDrift[] }[];
   /** designed, not built: no page/component at that route/name */
@@ -336,7 +357,7 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
       for (const fid of ids ?? []) if (!flowIds.has(fid.toLowerCase())) drift.push({ kind: 'flow-unknown', message: `flow ${flow.id} ${field} ${fid}; the manifest defines no such flow` });
     }
     driftTotal += drift.length;
-    flows.push({ flow, nodeId: `${repo}::flow::${flow.id}`, screenNodeIds, built, drift });
+    flows.push({ flow, nodeId: `${repo}::flow::${flow.id}`, screenNodeIds, built, drift, position: flows.length });
   }
 
   return {
@@ -354,6 +375,14 @@ function workTags(keys: string[] | undefined): string[] {
 }
 
 /** The `flow` node for a manifest flow: a journey entry that renders its screens in order. */
+/** A manifest's `persona` as written: a trimmed string, a list of trimmed strings, or nothing (empty values dropped). */
+export function personaValue(v: unknown): string | string[] | undefined {
+  if (typeof v === 'string') return v.trim() || undefined;
+  if (!Array.isArray(v)) return undefined;
+  const list = v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim());
+  return list.length > 1 ? list : list[0];
+}
+
 export function flowNodeOf(f: DesignReconcile['flows'][number], source: DesignSource, designId: string): GraphNode {
   const { flow } = f;
   const total = flow.screens?.length ?? 0;
@@ -370,8 +399,11 @@ export function flowNodeOf(f: DesignReconcile['flows'][number], source: DesignSo
       ...(flow.phase ? { phase: String(flow.phase) } : {}),
       ...(flow.requires?.length ? { requires: flow.requires } : {}),
       ...(flow.leadsTo?.length ? { leadsTo: flow.leadsTo } : {}),
-      ...(flow.persona ? { persona: flow.persona } : {}),
+      ...(personaValue(flow.persona) ? { persona: personaValue(flow.persona)! } : {}),
       ...(flow.owner ? { owner: flow.owner } : {}),
+      ...(typeof flow.group === 'string' && flow.group.trim() ? { group: flow.group.trim() } : {}),
+      ...(typeof flow.order === 'number' && Number.isFinite(flow.order) ? { order: flow.order } : {}),
+      ...(f.position != null ? { position: f.position } : {}),
       ...(source.lastModified ? { lastModified: source.lastModified, freshness: source.freshness ?? 'manifest' } : {}),
       ...(f.drift.length ? { drift: f.drift } : {}),
     },
@@ -411,12 +443,22 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
   const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
   if (!byId.has(design.id)) { fragment.nodes.push(design); byId.set(design.id, design); }
   let seq = fragment.edges.length;
-  const contains = (to: string) => {
+  const contains = (to: string, undesigned = false) => {
     if (fragment.edges.some((e) => e.kind === 'contains' && e.from === design.id && e.to === to)) return;
-    fragment.edges.push({ id: `d${seq++}`, kind: 'contains', from: design.id, to, resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } } as GraphEdge);
+    fragment.edges.push({ id: `d${seq++}`, kind: 'contains', from: design.id, to, ...(undesigned ? { meta: { undesigned: true } } : {}), resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } } as GraphEdge);
   };
   for (const m of result.matched) {
     const node = byId.get(m.nodeId)!;
+    // a manifest read earlier stamped this page *built, not designed* — it was not that manifest's
+    // screen, and now one manifest designs it: the earlier stamp and its membership go (several
+    // manifests per source, one per NX app, journey-organisation-and-config-files.md §4)
+    if (node.design?.origin === 'manifest' && node.design.status === 'code-only') {
+      for (let i = fragment.edges.length - 1; i >= 0; i--) {
+        const e = fragment.edges[i]!;
+        if (e.kind === 'contains' && e.to === node.id && e.from !== design.id && e.meta?.undesigned) fragment.edges.splice(i, 1);
+      }
+      node.tags = node.tags.filter((t) => t !== 'undesigned');
+    }
     node.design = refOf(m.screen, manifest, source, design.id, 'both', m.drift);
     for (const t of [`design:${m.screen.id.toLowerCase()}`, ...workTags(m.screen.work)]) if (!node.tags.includes(t)) node.tags.push(t);
     // the design's name and sentence are the business words for a built screen (a glossary entry or @business still wins)
@@ -443,9 +485,11 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
   for (const c of result.codeOnly) {
     const node = byId.get(c.nodeId)!;
     if (node.design && node.design.origin === 'annotation') continue; // an @design annotation is a design row of its own
+    // another manifest of this source designs this page: it is not *undesigned*, only not this manifest's
+    if (node.design && node.design.origin === 'manifest' && node.design.status !== 'code-only' && node.design.designId !== design.id) continue;
     node.design = { status: 'code-only', origin: 'manifest', designId: design.id, drift: [{ kind: 'code-only', message: 'built; no screen in the design manifest describes this page' }] };
     if (!node.tags.includes('undesigned')) node.tags.push('undesigned');
-    contains(node.id);
+    contains(node.id, true);
   }
   // flows: a node per flow, rendering its screens in order (meta.line carries the order for journey())
   for (const f of result.flows) {
@@ -521,6 +565,12 @@ function flowRow(index: GraphIndex, n: GraphNode): FlowRow {
     built, total: screens.length,
     ...(d.persona ? { persona: d.persona } : {}),
     ...(d.owner ? { owner: d.owner } : {}),
+    ...(d.group ? { group: d.group } : {}),
+    ...(d.order != null ? { order: d.order } : {}),
+    ...(d.position != null ? { position: d.position } : {}),
+    requires: d.requires ?? [],
+    leadsTo: d.leadsTo ?? [],
+    repo: repoOfNode(n),
     drift: d.drift ?? [],
   };
 }
@@ -713,6 +763,72 @@ code, and drift says where they disagree. Nothing is drawn by hand.
   follows it. Farsight also derives the joins from a longer flow's screen order (a flow whose screens
   sit just before / after yours inside "Route 2b" is a prerequisite / what follows) — declare them when
   the order alone does not say it.
+- flows[].owner: who answers for the flow (a team or a person); absent prints as an absence word, never
+  a guess. flows[].work and screens[].work: work-item keys (Jira "KAN-3", Azure DevOps "AB#4711") the
+  flow or screen is built for — a declared link the Work tab and the work_* tools join on.
+- surfaces[]: { id, name, status?: "built" | "partly built" | "not started", description? } — the
+  product surfaces the docs scope, drawn or not; a surface nobody has drawn yet is still a row.
+
+## 1½ · Organise the journeys: who they are for, in groups, in your order
+
+The front door, the Portfolio, the Map, GET /api/journeys, the MCP journeys tool and the CLI
+(farsight journeys) all show the journeys as persona → group → journeys, in the order you declare:
+
+{
+  "personas": [
+    { "id": "contractor", "name": "Contractor", "description": "A vendor who submits and tracks invoices." },
+    { "id": "ops", "name": "Operations", "description": "The team that verifies vendors and approves invoices." }
+  ],
+  "groups": [
+    { "id": "access", "name": "Access", "description": "Ways in and out." },
+    { "id": "vendor-accounts", "name": "Vendor accounts", "persona": "contractor" },
+    { "id": "invoices", "name": "Invoices" }
+  ],
+  "flows": [
+    { "id": "contractor-sign-in", "name": "Sign in with email", "persona": "contractor", "group": "access", "order": 1, "screens": ["CON-01"] },
+    { "id": "vendor-account-creation", "name": "Create a vendor account", "persona": ["contractor", "ops"], "group": "vendor-accounts", "screens": ["CON-03", "OPS-04"] }
+  ]
+}
+
+- personas[] { id, name, description? } — in the order they are shown.
+- groups[] { id, name, description?, persona? } — in the order they are shown inside a persona. A group
+  with "persona" exists under that persona only; one without exists under every persona that has a
+  journey in it (Access under Contractor and Access under Operations are two sections, one word).
+- flows[].persona — a persona id or name, or a list of them: a journey for two kinds of person is
+  shown under each and counted once. A value no personas[] entry declares is a persona of its own,
+  after the declared ones, alphabetically — so "Contractor and Operations" written as one string is a
+  third persona; write ["contractor", "ops"] instead. No persona: the shared prefix of the flow's
+  screen ids stands in (marked derived), else the trailing "Not grouped".
+- flows[].group — a group id or name; undeclared is a group of its own after the declared ones; none,
+  or a group that belongs to another persona, puts the journey in the persona's "Other journeys".
+- flows[].order — a number, ascending inside the group; flows without one follow, and ties keep the
+  order the flows are written in the manifest (never alphabetical).
+- Matching is by id, then by name, case-insensitive and trimmed. One persona per id across every
+  manifest of a source (and across sources): the first manifest to declare it gives its words.
+- The persona's way in ("start here") is computed: the first journey nothing requires that has
+  something built and the most screens.
+
+The same block in farsight.config.json organises across manifests without editing them:
+
+{ "journeys": {
+    "personas": [ { "id": "ops" }, { "id": "contractor" } ],
+    "groups":   [ { "id": "access", "name": "Ways in" } ],
+    "flows":    [ { "id": "vendor-account-creation", "group": "access", "order": 3 } ] } }
+
+The config's arrays are the order; an entry overrides the manifest entry with the same id field by
+field (only the fields it gives); ids it does not name follow in manifest order. flows[] here only
+places flows a manifest declares — an id no manifest declares is a note (journeys tool, notes), never
+a journey.
+
+Several farsight.config.json files: any farsight.config.json below the source root applies to its
+own folder only, and every path in it is relative to that folder (an NX app's
+apps/web/farsight.config.json says "design": [{ "manifest": "docs/design/screens.json" }] for
+apps/web/docs/design/screens.json); lists add up, the nearer file wins for a node under two, and a
+conflict is reported, never silent. Its journeys block organises the manifests under its folder.
+"projects" and "tooling" are read from the root file only. The config_files tool lists the files read.
+
+An agent manages all of this with its own file tools — Farsight never writes into a code source: edit
+the manifest or the config, call refresh_graph, then journeys to check the result.
 
 ## 2 · What the graph does with it (no code needed yet)
 
@@ -740,7 +856,8 @@ code, and drift says where they disagree. Nothing is drawn by hand.
 
 ## 4 · Verify as you go (MCP tools, same facts as the HUD)
 
-1. graph_overview — flows and screens appear under entry points; the graph path names the workspace.
+1. graph_overview — flows and screens appear under entry points; the graph path names the workspace;
+   the journeys line counts them by persona and group. journeys lists them in that order.
 2. design_surface — every screen's status, image on file, Figma link, operations, drift; flows with
    "N of M screens built".
 3. journey entry:"Vendor (contractor) validation" — the feature timeline: each screen (SCREEN band with
@@ -749,7 +866,8 @@ code, and drift says where they disagree. Nothing is drawn by hand.
 4. api_surface / api_drift — the operations the flow spans flip from spec-only to both as handlers land.
 5. design_drift — reconcile a proposed manifest before committing it: design_drift manifest:<path>.
 6. describe_node <screen or flow id> — the design block (status, id, freshness, operations, docs).
-7. CLI equivalents: farsight design list · farsight design diff --manifest <path> --repo <name> --strict.
+7. CLI equivalents: farsight design list · farsight journeys [--persona p] · farsight design diff
+   --manifest <path> --repo <name> --strict.
 
 ## 5 · How a journey is drawn (HUD) and printed (MCP) — the blueprint timeline
 

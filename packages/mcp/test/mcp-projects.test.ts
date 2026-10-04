@@ -75,7 +75,7 @@ test('config_files prints one line per file, then the conflicts and the notes', 
   const out = await call('config_files');
   const lines = out.split('\n');
   assert.equal(lines[0], '## nx-workspace — 3 config files in this source (1 for the whole source · 2 for one folder) · 1 conflict');
-  assert.equal(lines[1], 'farsight.config.json — root — the whole source · projects, glossary');
+  assert.equal(lines[1], 'farsight.config.json — root — the whole source · projects, glossary, journeys');
   assert.equal(lines[2], 'apps/billing-web/farsight.config.json — scoped to apps/billing-web/ · glossary, plumbing');
   assert.equal(lines[3], 'apps/ops-admin/farsight.config.json — scoped to apps/ops-admin/ · design, glossary · ignored: tooling');
   assert.match(out, /conflicts:\n {2}glossary "InvoicesPage": farsight\.config\.json, apps\/billing-web\/farsight\.config\.json — apps\/billing-web\/farsight\.config\.json's word stands under its folder/);

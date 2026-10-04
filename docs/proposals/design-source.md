@@ -30,6 +30,17 @@ reviewable, diffable, independent of Figma access. The design analogue of `opena
 
 `flows[]` *(added the same day)* name a **feature** — `{ id, name, description, screens: [ids in order], docs: [repo paths or URLs], operations, phase, requires?: [flow ids], leadsTo?: [flow ids] }` (`requires`/`leadsTo` added 2026-09-05 for linked journeys; unknown ids are `flow-unknown` drift) — and become `flow` nodes (tags `entrypoint`, `flow`) that `renders` their screens in order: a journey from the flow walks the feature screen by screen, each screen continuing into its code or its planned calls; `screensFor()` returns the flow's screens in order for the SCREEN band; the design surface lists flows with *N of M built*. The authoring recipe is `designGuide()` in core, served by MCP `design_guide` and `GET /api/design/guide`.
 
+*(2026-10-04, journey-organisation-and-config-files.md §4)* The manifest also declares who the journeys are for and
+how they are grouped: `personas: [{ id, name, description? }]` and `groups: [{ id, name, description?, persona? }]`,
+each in the order shown; per flow `persona` (an id or name, or a list — a journey under two personas is listed under
+each and counted once), `group` (an id or name; none = the persona's *Other journeys*) and `order` (ascending in the
+group; absent or tied = the order the flows are written). Undeclared values become personas / groups of their own
+after the declared ones, so an older manifest reads unchanged. Beside them: `owner`, `work` (work-item keys, on flows
+and screens) and `surfaces[]`. `farsight.config.json → journeys` takes the same shapes, orders across manifests and
+overrides a flow's placement by id; a nested `farsight.config.json` applies to its own folder with paths relative to
+it (root-only `projects` and `tooling`). Ingest folds all of it into `meta.journeys[repo]`; core `journeyTree()` is the
+one fold behind `/api/journeys`, MCP `journeys` and `farsight journeys`.
+
 Per screen: `id` (the name the docs use — required), `name`, **`route`** (the page's identity —
 matched against `page` nodes however the adapter spelled params: `[token]`, `{token}`, `:token`) or
 `component` (a component's name for a screen that is not a page), `url` or `nodeId` (Figma), `image`

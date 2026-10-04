@@ -456,6 +456,22 @@ Domain: Billing 5 · Shared 2 · Operations 1 — Type: …* (the `examples/nx-w
 file of that source that imports it, wherever it sits. The ranges (`DepsRow.versions`: where · range · declaring
 package.json) are facts, not counts, and print beside the row.
 
+### Journeys (`/api/journeys` → core `journeys.ts` `journeyTree()`; MCP `journeys`, `graph_overview`; CLI `farsight journeys`)
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| journeys in the tree | `count.unit.journeys` *n journeys* (both) | `count.scope.workspace` | `journeyTree().counts.journeys` — distinct flow node ids over `designSurface()` in scope | each flow once, however many personas show it |
+| personas | `count.unit.personas` *n personas* (both) | `count.scope.workspace` | `journeyTree().counts.personas` | persona headings shown: declared ones with a journey, undeclared values, derived prefixes, and the trailing *Not grouped* when something sits there |
+| groups | `count.unit.groups` *n groups* (both) | `count.scope.workspace` | `journeyTree().counts.groups` | group sections shown, one per persona a group appears under (*Access* under two personas is two), *Other journeys* included |
+| journeys under a persona | `count.unit.journeys` (both) | `count.scope.persona` | `JourneyPersona.counts.journeys` | the journeys listed under that persona; equals the sum of its groups' counts. A journey for two personas is counted in each, once in the tree |
+| journeys in a group | `count.unit.journeys` (both) | `count.scope.group` | `JourneyGroup.counts.journeys` | the journeys listed in that group under that persona |
+| built journeys | `count.unit.journeysBuilt` *n of m journeys built* (both) | `count.scope.persona` / `count.scope.group` | `counts.built` on a persona or a group | journeys whose every screen exists in code (`status: both`), of the journeys beside it; a partly built journey is not built |
+
+`count.scope.persona` (*for this persona*) and `count.scope.group` (*in this group*) are new with this table. The
+example graphs: `examples/invoice-app` — *3 journeys · 2 personas · 3 groups* (Billing 3, Operations 1: *Draft and
+send* is under both); `examples/nx-workspace` — *4 journeys · 2 personas · 4 groups*. `pickJourneys()` (the
+`persona` / `group` filters) recounts the tree-level numbers over what it keeps.
+
 ### Code map by project and package (`surfaces/codemap-projects.js`, `lib/codemap-model.js`; lane C)
 
 | number | unit / bizUnit | scope | source | counts |

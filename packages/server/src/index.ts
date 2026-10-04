@@ -13,7 +13,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted,
+  counted, journeyTree,
 } from '@farsight/core';
 import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest } from './guard.js';
@@ -860,6 +860,16 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         })
         .catch((err) => send(500, JSON.stringify({ error: String((err as Error)?.message ?? err) })));
       return;
+    }
+    // ── journeys organised by persona and group (journey-organisation-and-config-files.md §4.4) — before
+    // /api/journey, whose prefix it shares; the same journeyTree() the MCP tool and the CLI print ──
+    if ((url === '/api/journeys' || url.startsWith('/api/journeys?')) && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const g = loadJourneyGraph(graphPath);
+      const scopeParam = u.searchParams.get('scope');
+      const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', tree: journeyTree(g.index, g.meta.journeys, scope) }));
     }
     if (url.startsWith('/api/journey') && req.method === 'GET') {
       // linearized execution walk from one entry node, enriched with on-disk code

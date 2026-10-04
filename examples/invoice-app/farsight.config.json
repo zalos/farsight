@@ -36,5 +36,13 @@
     "url": "http://127.0.0.1:4539",
     "command": "npm run storybook",
     "name": "Invoice app UI"
+  },
+  "journeys": {
+    "flows": [
+      {
+        "id": "draft-and-send",
+        "group": "review"
+      }
+    ]
   }
 }
