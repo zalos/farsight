@@ -2071,7 +2071,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'count.scope.node': same('for this part alone',
     'What the number beside it counts over: this one part of the code, not the journey or the screen it sits in.'),
   'count.scope.source': same('in this source',
-    'What the number beside it counts over: everything one source holds at one test level, whether or not it reaches any journey. A journey’s own number counts only the cases that reach it, so it is smaller.'),
+    'What the number beside it counts over: everything one source holds, whether or not it reaches any journey — for tests, at one test level. A journey’s own number counts only the cases that reach it, so it is smaller.'),
   'count.scope.selection': same('in the sources and level selected',
     'What the number beside it counts over: the sources the scope filter selects, at the test level the page is filtered to. Change either filter and every number on the page follows.'),
   'count.scope.workspace': same('across every source in scope',
