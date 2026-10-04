@@ -320,8 +320,8 @@ function isIndex(x) { return !!(x && x.projectKeyOf instanceof Map); }
 /**
  * An application's closure from the graph the page holds: the project first,
  * then each project it depends on nearest-first, deduplicated — the same reading
- * as core `appClosure` (project → project imports plus `implicitDependencies`,
- * sorted by from then to). `{ projects: [name], dependencies: [{ repo, from, to,
+ * as core `appClosure` (project → project imports, `implicitDependencies` and the
+ * dependencies NX's own project graph records, sorted by from then to). `{ projects: [name], dependencies: [{ repo, from, to,
  * imports, implicit? }] }`; empty when the source declares no such project.
  */
 export function projectClosure(metas, repo, name) {
@@ -342,6 +342,13 @@ export function projectClosure(metas, repo, name) {
   for (const p of list) for (const to of p.implicitDependencies || []) {
     if (to === p.name || !names.has(to)) continue;
     dep(p.name, to).implicit = true;
+  }
+  // NX's own project graph, when the workspace wrote one: it augments, never takes an import count away
+  for (const x of m.dependencies || []) {
+    if (!names.has(x.from) || !names.has(x.to) || x.from === x.to) continue;
+    const d = dep(x.from, x.to);
+    d.nx = true;
+    if (!d.nxType) d.nxType = x.type;
   }
   const all = [...deps.values()].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
   const order = [name];

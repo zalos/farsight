@@ -49,7 +49,7 @@ package cards are `.nk-package.pkg-ws|pkg-tp` (copper `--pkg`, solid or hatched 
 on the kind line, the range as the sub line outside business).
 
 **Views.** *App and its related* (`?view=app&project=<name>[&repo=]`) draws at once from the graph the page holds —
-`projectClosure(metas, repo, name)` reads `meta.projects` imports plus `implicitDependencies` the way core
+`projectClosure(metas, repo, name)` reads `meta.projects` imports, `implicitDependencies` and NX graph `dependencies` the way core
 `appClosure` does — then fetches `/api/projects/<name>` (the closure) and `/api/projects?repo=` (the dependencies
 between its projects, with their `Counted`s, which label the arrows when they arrive); the boxes stand in `closureColumns` columns with
 `.cm-pedge` arrows labelled `.cm-elabel` by `ProjectDependency.count` (*declared only* when 0), third-party packages a

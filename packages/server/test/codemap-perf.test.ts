@@ -156,6 +156,8 @@ test('an application’s closure on the page is core appClosure’s', () => {
     const page = M.projectClosure(meta.projects, 'nx-workspace', p.name);
     assert.deepEqual(page.projects, core.projects, p.name);
     assert.deepEqual(page.dependencies.map((d: AnyRec) => [d.from, d.to, d.imports]), core.dependencies.map((d) => [d.from, d.to, d.imports]), p.name);
+    // …and the tree every ProjectRow carries
+    assert.deepEqual(page.projects, pg.projects.find((r) => r.repo === 'nx-workspace' && r.name === p.name)!.closure, p.name + ' row');
   }
   assert.deepEqual(M.projectClosure(meta.projects, 'nx-workspace', 'no-such-project').projects, []);
 });
