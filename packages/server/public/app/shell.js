@@ -8,7 +8,8 @@ import { t, def, initRegister, onRegisterChange, toggleRegister } from './string
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf } from './lib/graph-render.js';
 import { mountJourneys, hideJourneyOverlay, journeysRefresh } from './surfaces/journeys.js';
-import { cmapScopeHtml } from './surfaces/codemap-projects.js';
+import { cmapScopeHtml, projectTravelItems } from './surfaces/codemap-projects.js';
+import { pickerHasQuery } from './lib/multi-pick.js';
 import { mountCodemap, unmountCodemap, codemapRefresh } from './surfaces/codemap.js';
 import { mountPortfolio, portfolioRefresh } from './surfaces/portfolio.js';
 import { mountChanges, changesRefresh } from './surfaces/changes.js';
@@ -168,6 +169,9 @@ export function parseRoute() {
     // the code map's grouping (none | project | a tag dimension) and its two views' subjects
     group: q.get('group'),
     project: q.get('project'),
+    // the code map's tag filter (`tag=domain:billing,type:ui`) and the project box fast travel arrives at
+    tag: q.get('tag'),
+    box: q.get('box'),
     package: q.get('package'),
     op: q.get('op'),
     line: q.get('line') ? +q.get('line') : null,
@@ -686,6 +690,8 @@ export function scopeMenuOpen() { const m = document.getElementById('scopemenu')
  */
 function scopeMenuKey(e) {
   if (e.key !== 'Escape' || !scopeMenuOpen() || tipOpen()) return;
+  // a picker in the menu with words typed clears them first (lib/multi-pick.js); the next Esc closes the menu
+  if (pickerHasQuery(e)) return;
   e.preventDefault();
   e.stopImmediatePropagation();
   closeScopeMenu();
@@ -811,7 +817,21 @@ export function searchNodes(q) {
     }
     if (score > 0) score += KIND_BONUS[n.kind] || 0;
     return { n, score };
-  }).filter((r) => r.score > 0).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => r.n);
+  }).concat(projectTravelItems().map((p) => {
+    // a workspace project (surfaces/codemap-projects.js) is matched on its name, its words and its tags;
+    // on a tie an application outranks a library, which outranks a test project
+    const name = p.name.toLowerCase(), words = p.words.toLowerCase();
+    const tags = [...(p.tags || []), ...p.tagWords].map((x) => String(x).toLowerCase());
+    let score = 0;
+    if (name === raw || words === raw) score += 100;
+    for (const term of terms) {
+      if (name === term || words === term) score += 10;
+      else if (name.includes(term) || words.includes(term)) score += 5;
+      else if (tags.some((x) => x.includes(term))) score += 4;
+    }
+    if (score > 0) score += p.type === 'application' ? 2 : p.type === 'library' ? 1 : 0;
+    return { n: p, score };
+  })).filter((r) => r.score > 0).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => r.n);
 }
 /**
  * Leave the code map's focus without redrawing it — for when the map is not on
@@ -913,6 +933,13 @@ export function renderPalette(results) {
   S.palResults = results;
   const owners = ownerLines(results, names);
   document.getElementById('presults').innerHTML = results.map((n, i) => {
+    // a project row names its kind and where it lands in words: the code map, grouped by project
+    if (n.kind === 'project') {
+      return '<div class="presult presult-project' + (i === S.palIndex ? ' hot' : '') + '" data-id="' + esc(n.id) + '" onclick="pick(this.dataset.id)">'
+        + (biz ? '<span class="pk pdest">' + esc(t('codemap.pick.dest')) + '</span><span class="pname">' + esc(n.words) + '</span><span class="meta"></span></div>'
+          : '<span class="pk k-project">' + esc(t('codemap.pick.kind')) + '</span><span class="pname">' + esc(n.name)
+            + (n.sub ? '<span class="powner">' + esc(n.sub) + '</span>' : '') + '</span><span class="meta"></span><span class="pdest pto">' + esc(t('codemap.pick.dest')) + '</span></div>');
+    }
     const to = t('nav.' + travelTarget(n).surface);
     return '<div class="presult' + (i === S.palIndex ? ' hot' : '') + '" data-id="' + esc(n.id) + '" onclick="pick(this.dataset.id)">'
       + (biz ? '<span class="pk pdest">' + esc(to) + '</span><span class="pname">' + esc(names[i]) + (dup(i) ? '<span class="parea">' + esc(areaOf(n)) + '</span>' : '') + '</span><span class="meta"></span></div>'
@@ -965,6 +992,14 @@ export function ownerLines(results, names) {
  */
 export function pick(id) {
   closePalette();
+  // a project is not a graph node: it is one of the rows the palette showed
+  const proj = (S.palResults || []).find((x) => x.id === id && x.kind === 'project');
+  if (proj) {
+    // already there: the hash would not change, so the map is asked to arrive again
+    if (location.hash === proj.hash) history.replaceState(null, '', '#/codemap');
+    location.hash = proj.hash;
+    return;
+  }
   const n = S.BYID[id] || S.GRAPH.nodes.find((x) => x.id === id);
   if (!n) return;
   const to = travelTarget(n);

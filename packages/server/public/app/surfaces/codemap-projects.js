@@ -18,6 +18,7 @@ import { t } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { plainTip, countedHtml, countedAttrs, countedText } from '../lib/counted.js';
+import { pickerHtml, focusPicker, resetPicker } from '../lib/multi-pick.js';
 import { render, select, renderNode, drawEdges, kindWord, NODE_W } from '../lib/graph-render.js';
 import {
   groupChoices, foldGroups, projectOfItem, projectFacets, dimensionsOf, dependsOnIds,
@@ -25,6 +26,8 @@ import {
 } from '../lib/codemap-model.js';
 
 const GROUP_KEY = 'fs-cmap-group';
+/** The project and tag filters, kept beside the GROUP choice (`{ projects: [key], values: { dim: [value] } }`). */
+const FILTER_KEY = 'fs-cmap-filters';
 const biz = () => currentLens() === 'business';
 const metas = () => (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.projects) || {};
 
@@ -34,8 +37,20 @@ export function cmap() {
     let group = 'none';
     try { group = localStorage.getItem(GROUP_KEY) || 'none'; } catch (e) { /* private window: none */ }
     S.cmap = { group, hidePackages: false, showModules: false, projects: new Set(), values: {}, dep: null, view: null, rev: 0, pass: null, passRev: -1, passGraph: null };
+    try {
+      const f = JSON.parse(localStorage.getItem(FILTER_KEY) || 'null');
+      if (f && Array.isArray(f.projects)) S.cmap.projects = new Set(f.projects.map(String));
+      if (f && f.values && typeof f.values === 'object') for (const [d, vs] of Object.entries(f.values)) if (Array.isArray(vs) && vs.length) S.cmap.values[d] = new Set(vs.map(String));
+    } catch (e) { /* private window or an unreadable value: no filters */ }
   }
   return S.cmap;
+}
+/** Keep the project and tag filters for the next visit. */
+function saveFilters() {
+  const c = cmap();
+  const values = {};
+  for (const [d, set] of Object.entries(c.values)) if (set.size) values[d] = [...set];
+  try { localStorage.setItem(FILTER_KEY, JSON.stringify({ projects: [...c.projects], values })); } catch (e) { /* private window: this visit only */ }
 }
 /** Something the pass depends on moved: the next ask recomputes it. */
 function bump() { cmap().rev++; }
@@ -328,7 +343,7 @@ function boxEl(b) {
   if (g.kind === 'project') {
     if (g.project.type) sub.push(typeWord(g.project.type));
     const f = projectFacets(g.project, metas());
-    for (const d of dimensionsOf(metas(), g.project.repo)) for (const v of f.byDimension[d.key] || []) if (d.key !== 'type' || !g.project.type || v.word !== typeWord(g.project.type)) sub.push(v.word);
+    for (const d of dimensionsOf(metas(), g.project.repo)) for (const v of f.byDimension[d.key] || []) if (d.key !== 'type' || !g.project.type || v.word.toLowerCase() !== typeWord(g.project.type).toLowerCase()) sub.push(v.word);
     if (Object.keys(metas()).length > 1 && !biz()) sub.push(g.project.repo);
   } else if (g.kind === 'value') sub.push(dimLabel(cmapGrouping()));
   const pv = cmap().view && cmap().view.kind === 'package' && cmap().view.data ? versionFor(cmap().view.data.package.versions, g.project ? g.project.name : '') : null;
@@ -400,9 +415,10 @@ export function buildCmapControls() {
   }
   if (hasPkgs) html += '<button class="chip' + (c.hidePackages ? ' on' : '') + '" id="cm-hidepkg" onclick="cmapTogglePackages()"' + tipAttrs({ key: 'codemap.pkg.hide', noFocus: true }) + '>' + esc(t('codemap.pkg.hide')) + '</button>';
   if (hasFiles) html += '<button class="chip' + (c.showModules ? ' on' : '') + '" id="cm-files" onclick="cmapToggleFiles()"' + tipAttrs({ key: 'codemap.pkg.files', noFocus: true }) + '>' + esc(t('codemap.pkg.files')) + '</button>';
-  html += '<div class="cm-views"><button class="chip" id="cm-viewsbtn" onclick="cmapViewsMenu(event)" aria-haspopup="true"' + tipAttrs({ key: 'codemap.view.menu', noFocus: true }) + '>' + esc(t('codemap.view.menu')) + ' ▾</button>'
-    + '<div class="cm-menu" id="cm-viewsmenu" role="menu" onclick="event.stopPropagation()"></div></div>';
-  if (narrowing() && !c.view) html += '<button class="chip on" id="cm-filtered" onclick="cmapClearFilters()"' + tipAttrs({ key: 'codemap.filter.active', noFocus: true }) + '>' + esc(t('codemap.filter.active')) + ' ✕</button>';
+  html += '<div class="cm-views"><button class="chip" id="cm-viewsbtn" onclick="cmapViewsMenu(event)" aria-haspopup="true" aria-expanded="false"' + tipAttrs({ key: 'codemap.view.menu', noFocus: true }) + '>' + esc(t('codemap.view.menu')) + ' ▾</button>'
+    + '<div class="cm-menu" id="cm-viewsmenu" role="group" aria-label="' + esc(t('codemap.view.menu')) + '" onclick="event.stopPropagation()"></div></div>';
+  if (narrowing() && !c.view) html += '<button class="chip on" id="cm-filtered" onclick="cmapClearFilters()"' + tipAttrs({ key: 'codemap.filter.active', noFocus: true }) + '>' + esc(t('codemap.filter.active')) + ' ✕</button>'
+    + filterChipsHtml();
   if (c.view) {
     const name = c.view.kind === 'app' ? projectWord(c.view.project) : (c.view.id && S.BYID[c.view.id] ? (biz() ? bizName(S.BYID[c.view.id]) : S.BYID[c.view.id].name) : c.view.ref);
     const key = c.view.kind === 'app' ? 'codemap.view.appOf' : 'codemap.view.packageOf';
@@ -410,6 +426,55 @@ export function buildCmapControls() {
     html += '<button class="chip on cm-viewchip" id="cm-viewchip" onclick="cmapCloseView()"' + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key).replace('{name}', name) + state) + ' ✕</button>';
   }
   el.innerHTML = html;
+}
+
+/** Toolbar chips in the toolbar before the rest fold into `+n filters`. */
+const BAR_CHIPS = 3;
+/**
+ * The project and tag filters as chips beside *filtered*, each one dropping that
+ * filter; past three, `+n filters` opens the scope menu where all of them are.
+ */
+function filterChipsHtml() {
+  const c = cmap();
+  const byKey = new Map(allProjects().map((p) => [projKey(p), p]));
+  const chips = [...c.projects].map((k) => ({ word: projectWord(byKey.has(k) ? byKey.get(k).name : k.split('::').pop()), act: 'cmapDropFilter(' + jsArg('p') + ',' + jsArg(k) + ')', id: 'p:' + k }));
+  for (const [d, set] of Object.entries(c.values)) {
+    for (const v of set) {
+      const p = allProjects().find((x) => (projectFacets(x, metas()).byDimension[d] || []).some((f) => f.value === v));
+      const w = p ? (projectFacets(p, metas()).byDimension[d] || []).find((f) => f.value === v).word : v;
+      chips.push({ word: w, act: 'cmapDropFilter(' + jsArg(d) + ',' + jsArg(v) + ')', id: d + ':' + v });
+    }
+  }
+  const tip = tipAttrs({ key: 'codemap.pick.dropFilter', noFocus: true });
+  return chips.slice(0, BAR_CHIPS).map((x) => '<button class="chip cm-fchip" data-filter="' + esc(x.id) + '" onclick="' + x.act + '"' + tip
+    + ' aria-label="' + esc(t('codemap.pick.remove').replace('{name}', x.word)) + '">' + esc(x.word) + ' ✕</button>').join('')
+    + (chips.length > BAR_CHIPS ? '<button class="chip cm-fchip cm-fmore" onclick="toggleScopeMenu(event)"' + tipAttrs({ key: 'codemap.pick.moreFilters', noFocus: true }) + '>'
+      + esc(t('codemap.pick.moreFilters').replace('{n}', String(chips.length - BAR_CHIPS))) + '</button>' : '');
+}
+/** Drop one filter from its toolbar chip: a project (`p`, its key) or a tag value (its dimension, the value). */
+function cmapDropFilter(dim, v) {
+  const c = cmap();
+  if (dim === 'p') c.projects.delete(v);
+  else if (c.values[dim]) c.values[dim].delete(v);
+  filtered();
+}
+
+/**
+ * The projects of the sources in scope as fast-travel results (⌘K): not graph
+ * nodes, so each is a small record of its own — kind `project`, the project's
+ * name, its words, its type and tags to match on, and where Enter goes.
+ * @group Code map
+ */
+export function projectTravelItems() {
+  if (!S.GRAPH) return [];
+  const multi = Object.keys(metas()).length > 1;
+  return appProjects().map((p) => ({
+    id: 'project::' + projKey(p), kind: 'project', name: p.name, repo: p.repo, type: p.type, tags: p.tags,
+    bizLabel: nameWords(p.name), words: nameWords(p.name),
+    tagWords: Object.values(projectFacets(p, metas()).byDimension).flat().map((v) => v.word),
+    sub: [typeWord(p.type), multi && !biz() ? p.repo : ''].filter(Boolean).join(' · '),
+    hash: '#/codemap?group=project&box=' + encodeURIComponent(projectToken(projKey(p))),
+  }));
 }
 
 /** Applications first (the projects that say so), then every other project of the sources in scope. */
@@ -427,26 +492,47 @@ function packagesInScope() {
   return S.GRAPH.nodes.filter((n) => n.kind === 'package' && inScope(n)).sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
-/** Open or close the Views menu: an application to draw with its related projects, or a package to find. */
+/**
+ * Open or close the Views menu: an application (or a library) to draw with its
+ * related projects, or a package to find — each a searchable single-select picker,
+ * the first one's field focused so the keyboard can type and press Enter.
+ */
 function cmapViewsMenu(ev) {
   if (ev) ev.stopPropagation();
   const menu = document.getElementById('cm-viewsmenu');
   if (!menu) return;
-  if (menu.classList.contains('open')) { menu.classList.remove('open'); return; }
-  const multi = Object.keys(metas()).length > 1;
+  if (menu.classList.contains('open')) { closeViewsMenu(); return; }
   const apps = appProjects();
   const pkgs = packagesInScope();
+  const onClose = () => { closeViewsMenu(); const b = document.getElementById('cm-viewsbtn'); if (b) b.focus({ preventScroll: true }); };
   menu.innerHTML = '<div class="cm-mhead hud-label"' + tipAttrs({ key: 'codemap.view.app', noFocus: true }) + '>' + esc(t('codemap.view.app')) + '</div>'
-    + (apps.length ? apps.map((p) => '<button role="menuitem" class="cm-mrow" onclick="cmapOpenApp(' + jsArg(p.name) + ',' + jsArg(p.repo) + ')">' + esc(projectWord(p.name))
-      + '<span class="cm-mdim">' + esc([typeWord(p.type), multi && !biz() ? p.repo : ''].filter(Boolean).join(' · ')) + '</span></button>').join('')
-      : '<div class="cm-mnone">' + esc(t('codemap.view.noApps')) + '</div>')
+    + (apps.length ? '<div class="cm-pickrow">' + pickerHtml('cm-pick-app', {
+      multi: false, label: t('codemap.view.app'), placeholder: t('codemap.pick.findProject'), countKey: 'codemap.pick.countProjects',
+      options: projectOptions(), groups: PROJECT_GROUPS(), selected: cmap().view && cmap().view.kind === 'app' ? [cmap().view.repo + '::' + cmap().view.project] : [],
+      onChange: (ids) => { const k = ids[0]; if (!k) return; const i = k.indexOf('::'); cmapOpenApp(k.slice(i + 2), k.slice(0, i)); },
+      onClose,
+    }) + '</div>' : '<div class="cm-mnone">' + esc(t('codemap.view.noApps')) + '</div>')
     + '<div class="cm-mhead hud-label"' + tipAttrs({ key: 'codemap.view.package', noFocus: true }) + '>' + esc(t('codemap.view.package')) + '</div>'
-    + (pkgs.length ? pkgs.map((n) => '<button role="menuitem" class="cm-mrow" onclick="cmapOpenPackage(' + jsArg(n.id) + ')">' + sym('package') + ' ' + esc(biz() ? bizName(n) : n.name)
-      + '<span class="cm-mdim">' + esc([pkgScopeWord(n), multi && !biz() ? repoOfNode(n) : ''].filter(Boolean).join(' · ')) + '</span></button>').join('')
-      : '<div class="cm-mnone">' + esc(t('codemap.view.noPackages')) + '</div>');
+    + (pkgs.length ? '<div class="cm-pickrow">' + pickerHtml('cm-pick-pkg', {
+      multi: false, label: t('codemap.view.package'), placeholder: t('codemap.pick.findPackage'), countKey: 'codemap.pick.countPackages',
+      options: packageOptions(pkgs), groups: PACKAGE_GROUPS(), selected: cmap().view && cmap().view.kind === 'package' && cmap().view.id ? [cmap().view.id] : [],
+      onChange: (ids) => { if (ids[0]) cmapOpenPackage(ids[0]); },
+      onClose,
+    }) + '</div>' : '<div class="cm-mnone">' + esc(t('codemap.view.noPackages')) + '</div>');
   menu.classList.add('open');
-  const close = () => { menu.classList.remove('open'); document.removeEventListener('click', close); };
+  const btn = document.getElementById('cm-viewsbtn');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+  focusPicker(apps.length ? 'cm-pick-app' : 'cm-pick-pkg');
+  const close = (e) => { if (menu.contains(e.target)) return; closeViewsMenu(); document.removeEventListener('click', close); };
   setTimeout(() => document.addEventListener('click', close), 0);
+}
+/** Close the Views menu and forget what was typed in it. */
+function closeViewsMenu() {
+  const menu = document.getElementById('cm-viewsmenu');
+  if (menu) menu.classList.remove('open');
+  const btn = document.getElementById('cm-viewsbtn');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  resetPicker('cm-pick-app'); resetPicker('cm-pick-pkg');
 }
 
 /** Redraw the map and the controls after the state moved, keeping the selection. */
@@ -456,7 +542,12 @@ function redraw() {
   if (S.selected && S.BYID[S.selected]) select(S.selected);
   buildCmapControls();
 }
-/** Write the code map's link (`group`, `view`, `project`, `package`, `repo`) without remounting. */
+/**
+ * Write the code map's link (`group`, `view`, `project`, `package`, `repo`, and
+ * outside a view the filters: `project=a,b` and `tag=domain:billing,type:ui`)
+ * without remounting. A project is written by its name, or `repo::name` when two
+ * sources have a project of that name.
+ */
 function writeHash() {
   const c = cmap();
   const q = new URLSearchParams();
@@ -464,9 +555,49 @@ function writeHash() {
   if (r.lens) q.set('lens', r.lens);
   if (c.view && c.view.kind === 'app') { q.set('view', 'app'); q.set('project', c.view.project); if (c.view.repo) q.set('repo', c.view.repo); }
   else if (c.view && c.view.kind === 'package') { q.set('view', 'package'); q.set('package', c.view.id || c.view.ref); }
-  else if (c.group && c.group !== 'none') q.set('group', c.group);
-  const h = '#/codemap' + (q.toString() ? '?' + q.toString() : '');
+  else {
+    if (c.group && c.group !== 'none') q.set('group', c.group);
+    if (c.projects.size) q.set('project', [...c.projects].map(projectToken).join(','));
+    const tags = [];
+    for (const [d, set] of Object.entries(c.values)) for (const v of set) tags.push(d + ':' + v);
+    if (tags.length) q.set('tag', tags.join(','));
+  }
+  // the lists stay readable in the address bar: a comma between names, a colon inside a tag
+  const qs = q.toString().replace(/%2C/gi, ',').replace(/%3A/gi, ':');
+  const h = '#/codemap' + (qs ? '?' + qs : '');
   if (location.hash !== h) history.replaceState(null, '', h);
+}
+/** Every project of every source the graph records, scope or not: `[{ repo, name, type, tags }]`. */
+function allProjects() {
+  const out = [];
+  for (const [repo, m] of Object.entries(metas())) for (const p of m.projects || []) out.push({ repo, name: p.name, type: p.type, tags: p.tags || [] });
+  return out;
+}
+/** A filter's project in the link: its name, or `repo::name` when another source has one of that name. */
+function projectToken(key) {
+  const i = key.indexOf('::');
+  const name = i >= 0 ? key.slice(i + 2) : key;
+  return allProjects().filter((p) => p.name === name).length > 1 ? key : name;
+}
+/** The project keys a link's `project=` names: `repo::name` as written, a bare name every source's project of that name. */
+function projectsFromLink(v) {
+  const all = allProjects();
+  const out = new Set();
+  for (const tok of String(v || '').split(',').map((x) => x.trim()).filter(Boolean)) {
+    if (tok.includes('::')) { if (all.some((p) => projKey(p) === tok)) out.add(tok); continue; }
+    for (const p of all) if (p.name === tok) out.add(projKey(p));
+  }
+  return out;
+}
+/** The tag values a link's `tag=dim:value,…` names. */
+function valuesFromLink(v) {
+  const out = {};
+  for (const tok of String(v || '').split(',').map((x) => x.trim()).filter(Boolean)) {
+    const i = tok.indexOf(':');
+    if (i <= 0) continue;
+    (out[tok.slice(0, i)] = out[tok.slice(0, i)] || new Set()).add(tok.slice(i + 1));
+  }
+  return out;
 }
 
 /** The GROUP choice: kept, and written to the link. */
@@ -503,8 +634,7 @@ function packageId(ref, repo) {
 /** Open a view: draw at once from the graph, then fill in what the server folds. */
 async function openView(v) {
   const c = cmap();
-  const menu = document.getElementById('cm-viewsmenu');
-  if (menu) menu.classList.remove('open');
+  closeViewsMenu();
   if (v.kind === 'package') v.id = packageId(v.ref, v.repo);
   v.loading = true;
   c.view = v;
@@ -554,10 +684,55 @@ export function cmapFromRoute(route) {
   const want = route && route.view === 'app' && route.project ? { kind: 'app', project: route.project, repo: route.repo || undefined }
     : route && route.view === 'package' && route.package ? { kind: 'package', ref: route.package, repo: route.repo || undefined } : null;
   const same = want && c.view && c.view.kind === want.kind && (want.kind === 'app' ? c.view.project === want.project : (c.view.ref === want.ref || c.view.id === want.ref));
-  if (!want) { if (c.view) { c.view = null; bump(); } }
-  else if (!same) { openView(want); return; }
+  if (!want) {
+    if (c.view) { c.view = null; bump(); }
+    // the filters a link names win over the ones kept from the last visit; a link that names none keeps those
+    if (route && (route.project || route.tag)) {
+      c.projects = route.project ? projectsFromLink(route.project) : new Set();
+      c.values = route.tag ? valuesFromLink(route.tag) : {};
+      saveFilters();
+    }
+    // a kept filter for a project this graph no longer has would hide everything: dropped
+    const known = new Set(allProjects().map(projKey));
+    const stale = [...c.projects].filter((k) => !known.has(k));
+    if (stale.length) { stale.forEach((k) => c.projects.delete(k)); saveFilters(); }
+    // ⌘K to a project (`?group=project&box=<name>`): the map grouped by project, that project's box in view
+    if (route && route.box) c.group = 'project';
+    // a link to one card that the kept filters hide drops them: an arrival is always visible
+    if (route && route.node && S.BYID[route.node]) {
+      bump();
+      if (cmapHide(S.BYID[route.node]) === 'filtered') { c.projects = new Set(); c.values = {}; c.dep = null; saveFilters(); }
+    }
+  } else if (!same) { openView(want); return; }
   bump();
   buildCmapControls();
+}
+
+/**
+ * After the code map drew: a link that names a project box (`box=<name|repo::name>`,
+ * fast travel's arrival) scrolls it into view, marks it and opens its inspector; a
+ * link that lands on a card the kept filters hide drops them, so the arrival is
+ * visible; the filters kept from the last visit are written into the link.
+ * @group Code map
+ */
+export function cmapArrive(route) {
+  const c = cmap();
+  if (!route || c.view) return;
+  if (route.box) {
+    const key = [...projectsFromLink(route.box)][0];
+    const find = () => key && document.getElementById('cmbox-' + cssId('p::' + key));
+    // a kept filter that leaves the project out gives way: the arrival is the project
+    if (key && !find() && narrowing()) { c.projects = new Set(); c.values = {}; c.dep = null; saveFilters(); redraw(); }
+    const el = find();
+    if (el) {
+      document.querySelectorAll('.cm-box.cm-arrived').forEach((x) => x.classList.remove('cm-arrived'));
+      el.classList.add('cm-arrived');
+      el.scrollIntoView({ block: 'center', inline: 'center' });
+      const i = key.indexOf('::');
+      inspectProject(key.slice(0, i), key.slice(i + 2));
+    }
+  }
+  if (!route.node && !route.box && narrowing() && !route.project && !route.tag) writeHash();
 }
 
 // ── the scope menu's code map sections ───────────────────────────────────
@@ -573,33 +748,127 @@ export function cmapScopeHtml() {
   const projects = appProjects();
   const pkgs = packagesInScope();
   if (!projects.length && !pkgs.length) return '';
-  const multi = Object.keys(metas()).length > 1;
-  const row = (on, handler, label, dim) => '<label class="sc-row"><input type="checkbox" ' + (on ? 'checked' : '') + ' onchange="' + handler + '"/><span>' + esc(label) + '</span>'
-    + (dim ? '<span class="sc-n">' + esc(dim) + '</span>' : '') + '</label>';
   let html = '<div class="sc-group cm-scope"><div class="sc-plain hud-label"' + tipAttrs({ key: 'codemap.filter.title', noFocus: true }) + '>' + esc(t('codemap.filter.title')) + '</div>';
   if (projects.length > 1) {
-    html += '<div class="sc-plain cm-sub"' + tipAttrs({ key: 'codemap.filter.projects', noFocus: true }) + '>' + esc(t('codemap.filter.projects')) + '</div>'
-      + projects.map((p) => row(c.projects.has(p.repo + '::' + p.name), 'cmapToggleProject(' + jsArg(p.repo) + ',' + jsArg(p.name) + ')', projectWord(p.name), multi && !biz() ? p.repo : typeWord(p.type))).join('');
+    html += '<div class="sc-plain cm-sub"' + tipAttrs({ key: 'codemap.pick.projects', noFocus: true }) + '>' + esc(t('codemap.pick.projects')) + '</div>'
+      + '<div class="cm-pickrow">' + pickerHtml('cm-pick-proj', {
+        multi: true, label: t('codemap.pick.projects'), placeholder: t('codemap.pick.findProject'), countKey: 'codemap.pick.countProjects',
+        options: projectOptions(), groups: PROJECT_GROUPS(), selected: c.projects,
+        onChange: (ids) => { cmap().projects = new Set(ids); filtered(); },
+      }) + '</div>';
   }
-  for (const ch of choices().filter((x) => x.key !== 'none' && x.key !== 'project')) {
-    const vals = new Map();
-    for (const p of projects) for (const v of projectFacets(p, metas()).byDimension[ch.key] || []) vals.set(v.value, v.word);
-    if (!vals.size) continue;
-    const set = c.values[ch.key] || new Set();
-    html += '<div class="sc-plain cm-sub">' + esc(ch.label) + '</div>'
-      + [...vals].sort((a, b) => a[1].localeCompare(b[1])).map(([v, w]) => row(set.has(v), 'cmapToggleValue(' + jsArg(ch.key) + ',' + jsArg(v) + ')', w)).join('');
+  const tagOpts = tagOptions(projects);
+  if (tagOpts.options.length) {
+    html += '<div class="sc-plain cm-sub"' + tipAttrs({ key: 'codemap.pick.tags', noFocus: true }) + '>' + esc(t('codemap.pick.tags')) + '</div>'
+      + '<div class="cm-pickrow">' + pickerHtml('cm-pick-tags', {
+        multi: true, label: t('codemap.pick.tags'), placeholder: t('codemap.pick.findTag'), countKey: 'codemap.pick.countTags',
+        options: tagOpts.options, groups: tagOpts.groups,
+        selected: Object.entries(c.values).flatMap(([d, set]) => [...set].map((v) => d + '=' + v)),
+        onChange: (ids) => {
+          const values = {};
+          for (const id of ids) { const i = id.indexOf('='); (values[id.slice(0, i)] = values[id.slice(0, i)] || new Set()).add(id.slice(i + 1)); }
+          cmap().values = values;
+          filtered();
+        },
+      }) + '</div>';
   }
   if (pkgs.length) {
     html += '<div class="sc-plain cm-sub"' + tipAttrs({ key: 'codemap.filter.dependsOn', noFocus: true }) + '>' + esc(t('codemap.filter.dependsOn')) + '</div>'
-      + '<div class="cm-deprow"><select id="cm-dep" class="cm-select" onchange="cmapSetDep(this.value)"><option value="">' + esc(t('codemap.filter.anyPackage')) + '</option>'
-      + pkgs.map((n) => '<option value="' + esc(n.id) + '"' + (c.dep === n.id ? ' selected' : '') + '>' + esc((biz() ? bizName(n) : n.name) + (multi && !biz() ? ' · ' + repoOfNode(n) : '')) + '</option>').join('')
-      + '</select></div>';
+      + '<div class="cm-pickrow" id="cm-dep">' + pickerHtml('cm-pick-dep', {
+        multi: false, chips: true, label: t('codemap.filter.dependsOn'), placeholder: t('codemap.pick.findPackage'), countKey: 'codemap.pick.countPackages',
+        options: packageOptions(pkgs), groups: PACKAGE_GROUPS(), selected: c.dep ? [c.dep] : [],
+        onChange: (ids) => cmapSetDep(ids[0] || null),
+      }) + '</div>';
   }
   if (narrowing() && !c.view) html += '<button class="sc-all cm-clear" onclick="cmapClearFilters()">✕ ' + esc(t('codemap.filter.clear')) + '</button>';
   return html + '</div>';
 }
-/** After a filter moved: redraw and rebuild the scope menu, which stays open. */
+
+// ── the options the pickers list ─────────────────────────────────────────
+/** The project groups, in the order a picker lists them: applications, libraries, end-to-end, the rest. */
+const PROJECT_GROUPS = () => ['application', 'library', 'e2e', 'other'].map((k) => ({ key: k, word: t('codemap.pick.group.' + k) }));
+const PACKAGE_GROUPS = () => ['workspace', 'thirdParty'].map((k) => ({ key: k, word: t('codemap.pick.group.' + k) }));
+/** A project's name in words, whatever the lens: what a reader who types words finds it by. */
+const nameWords = (name) => humanize(String(name || '').replace(/^@[^/]+\//, '').replace(/\//g, ' '));
+/** A number in a picker's row: its tip, but no tab stop of its own (the field holds the keyboard). */
+const rowNumber = (n, attrs) => '<span class="cnt"' + attrs.replace(' tabindex="0"', '') + ' tabindex="-1">' + n + '</span>';
+
+/** The graph's parts of each project, by kind, keyed `repo::name` — `ProjectRow.nodes` folded on the page. */
+let PARTS = null;
+function partsByProject() {
+  if (PARTS && PARTS.graph === S.GRAPH) return PARTS.map;
+  const map = new Map();
+  for (const n of (S.GRAPH && S.GRAPH.nodes) || []) {
+    if (!n.project || n.kind === 'module') continue;
+    const k = repoOfNode(n) + '::' + n.project.name;
+    const e = map.get(k) || { n: 0, kinds: {} };
+    e.n++; e.kinds[n.kind] = (e.kinds[n.kind] || 0) + 1;
+    map.set(k, e);
+  }
+  PARTS = { graph: S.GRAPH, map };
+  return map;
+}
+
+/**
+ * Every project of the sources in scope as a picker option: grouped by type, its
+ * words, its type and tag words as the sub line, its parts of the code as a number
+ * with its tip, and matched on its name, its words and its tags.
+ * @group Code map
+ */
+export function projectOptions() {
+  const multi = Object.keys(metas()).length > 1;
+  const parts = partsByProject();
+  return appProjects().map((p) => {
+    const k = projKey(p);
+    const f = projectFacets(p, metas());
+    const words = [];
+    for (const d of dimensionsOf(metas(), p.repo)) for (const v of f.byDimension[d.key] || []) if (d.key !== 'type' || !p.type || v.word.toLowerCase() !== typeWord(p.type).toLowerCase()) words.push(v.word);
+    const c = parts.get(k) || { n: 0, kinds: {} };
+    const rows = Object.entries(c.kinds).sort((a, b) => b[1] - a[1]).map(([kind, n]) => [kindWord(kind), n]);
+    return {
+      id: k,
+      word: projectWord(p.name),
+      group: p.type === 'application' || p.type === 'library' || p.type === 'e2e' ? p.type : 'other',
+      sub: [typeWord(p.type), ...words, multi && !biz() ? p.repo : ''].filter(Boolean).join(' · '),
+      countHtml: rowNumber(c.n, plainTip(c.n, 'count.unit.parts', 'count.scope.project', '/graph', rows)),
+      match: [p.name, nameWords(p.name), ...(p.tags || []), ...Object.values(f.byDimension).flat().map((v) => v.word)],
+    };
+  });
+}
+/** Every tag value the projects in scope carry, one option per dimension and value, grouped by dimension. */
+function tagOptions(projects) {
+  const groups = [], options = [];
+  for (const ch of choices().filter((x) => x.key !== 'none' && x.key !== 'project')) {
+    const vals = new Map();
+    for (const p of projects) for (const v of projectFacets(p, metas()).byDimension[ch.key] || []) {
+      const e = vals.get(v.value) || { word: v.word, n: 0 };
+      e.n++; vals.set(v.value, e);
+    }
+    if (!vals.size) continue;
+    groups.push({ key: ch.key, word: ch.label });
+    for (const [v, e] of [...vals].sort((a, b) => a[1].word.localeCompare(b[1].word))) {
+      options.push({ id: ch.key + '=' + v, word: e.word, group: ch.key, match: [v, ch.label],
+        countHtml: rowNumber(e.n, plainTip(e.n, 'count.unit.projects', 'count.scope.workspace', '/graph')) });
+    }
+  }
+  return { groups, options };
+}
+/** The packages in scope as options: workspace libraries, then third-party. */
+function packageOptions(pkgs) {
+  const multi = Object.keys(metas()).length > 1;
+  return pkgs.map((n) => ({
+    id: n.id,
+    word: biz() ? bizName(n) : n.name,
+    group: n.package && n.package.scope === 'workspace' ? 'workspace' : 'thirdParty',
+    sub: multi && !biz() ? repoOfNode(n) : '',
+    match: [n.name, bizName(n)],
+  }));
+}
+
+/** After a filter moved: keep it, write it to the link, redraw, and rebuild the scope menu, which stays open. */
 function filtered() {
+  saveFilters();
+  if (!cmap().view) writeHash();
   redraw();
   if (window.buildScope) window.buildScope();
 }
@@ -778,5 +1047,5 @@ function inspectValue(g) {
 
 expose({
   cmapSetGroup, cmapTogglePackages, cmapToggleFiles, cmapViewsMenu, cmapOpenApp, cmapOpenPackage, cmapCloseView,
-  cmapToggleProject, cmapToggleValue, cmapSetDep, cmapKeepDep, cmapClearFilters, cmapInspectProject: inspectProject,
+  cmapToggleProject, cmapToggleValue, cmapSetDep, cmapKeepDep, cmapClearFilters, cmapDropFilter, cmapInspectProject: inspectProject,
 });

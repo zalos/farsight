@@ -7,7 +7,7 @@
 import { S, esc, cssId } from '../store.js';
 import { t } from '../strings.js';
 import { render, select, cardOf } from '../lib/graph-render.js';
-import { cmapFromRoute, buildCmapControls } from './codemap-projects.js';
+import { cmapFromRoute, buildCmapControls, cmapArrive } from './codemap-projects.js';
 
 /**
  * Mount the Code map: view=map (default) shows the interim graph with an
@@ -44,6 +44,8 @@ export function mountCodemap(route, el) {
     const el = document.getElementById('nd-' + cssId(cardOf(route.node)));
     if (el) el.scrollIntoView({ block: 'center', inline: 'center' });
   }
+  // a project box to arrive at (⌘K), kept filters that would hide the arrival, kept filters into the link
+  cmapArrive(route);
 }
 
 /**
