@@ -156,6 +156,8 @@ export interface JourneyRow extends FlowRow {
   designId: string;
   /** every persona id of this tree the journey is shown under (one row per persona) */
   personaIds: string[];
+  /** the same personas' names, in the same order */
+  personaNames: string[];
   /** the group section it sits in under this persona */
   groupId: string;
   /** the persona's way in: the first journey nothing requires with something built and the most screens (else the first one nothing requires) */
@@ -329,7 +331,7 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
     return ao - bo || (a.order ?? 0) - (b.order ?? 0) || (a.cfgIndex ?? Infinity) - (b.cfgIndex ?? Infinity) || a.seq - b.seq;
   };
 
-  const personaIdsOf = new Map<string, string[]>();
+  const personaIdsOf = new Map<string, { ids: string[]; names: string[] }>();
   const personas: JourneyPersona[] = rank([...pBuckets.values()], pIndex).map((pb) => {
     const groups = rank([...pb.groups.values()], gIndex).map((gb) => {
       const journeys: JourneyRow[] = gb.rows.slice().sort(journeyOrder).map((p) => {
@@ -337,6 +339,7 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
           ...p.row,
           designId: p.designId,
           personaIds: [],
+          personaNames: [],
           groupId: gb.id,
           pinned: false,
           statusKey: flowStatusWord(p.row.built, p.row.total).key,
@@ -346,10 +349,12 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
         if (p.persona !== undefined) r.persona = p.persona; else delete r.persona;
         if (p.group !== undefined) r.group = p.group; else delete r.group;
         if (p.order !== undefined) r.order = p.order; else delete r.order;
-        const ids = personaIdsOf.get(r.nodeId) ?? [];
-        if (!ids.includes(pb.id)) ids.push(pb.id);
-        personaIdsOf.set(r.nodeId, ids);
-        r.personaIds = ids; // shared: every row of one flow lists every persona it is under
+        const under = personaIdsOf.get(r.nodeId) ?? { ids: [], names: [] };
+        if (!under.ids.includes(pb.id)) { under.ids.push(pb.id); under.names.push(pb.name); }
+        personaIdsOf.set(r.nodeId, under);
+        // shared: every row of one flow lists every persona it is under
+        r.personaIds = under.ids;
+        r.personaNames = under.names;
         return r;
       });
       return {
@@ -390,7 +395,11 @@ const matches = (x: { id: string; name: string }, q: string) => key(x.id) === ke
 export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?: string } = {}): JourneyTree {
   const personas = tree.personas
     .filter((p) => !opts.persona || matches(p, opts.persona))
-    .map((p) => (opts.group ? { ...p, groups: p.groups.filter((g) => matches(g, opts.group!)) } : p))
+    .map((p) => {
+      if (!opts.group) return p;
+      const groups = p.groups.filter((g) => matches(g, opts.group!));
+      return { ...p, groups, counts: groupCounts(groups.flatMap((g) => g.journeys), 'count.scope.persona', p.id) };
+    })
     .filter((p) => p.groups.length);
   return { ...tree, personas, counts: treeCounts(personas), derived: personas.some((p) => p.derived) };
 }
@@ -426,8 +435,9 @@ export function journeyTreeLines(tree: JourneyTree, opts: { openHint?: string } 
       lines.push(`### ${g.name}${g.declared || g.key ? '' : ' (not declared in groups[])'} — ${countedText(g.counts.journeys, { scope: false })}${g.description ? ` — ${g.description}` : ''}`);
       for (const j of g.journeys) {
         const word = flowStatusWord(j.built, j.total);
-        const built = word.key === 'journey.status.partly' ? '' : ` · built ${j.built} of ${j.total}`;
-        const others = j.personaIds.length > 1 ? ` · also under ${j.personaIds.filter((x) => x !== p.id).map((x) => tree.personas.find((q) => q.id === x)?.name ?? x).join(', ')}` : '';
+        // a status word that already says n of m is not followed by the same numbers again
+        const built = t(word.key, 'professional').includes('{m}') ? '' : ` · built ${j.built} of ${j.total}`;
+        const others = j.personaIds.length > 1 ? ` · also under ${j.personaNames.filter((_, i) => j.personaIds[i] !== p.id).join(', ')}` : '';
         lines.push(`- ${j.name} — ${word.text}${built}${j.pinned ? ` · ${t('portfolio.pinned', 'professional')}` : ''}${others}${j.placedBy ? ` · placed by ${j.placedBy}` : ''} · \`${j.nodeId}\`${opts.openHint ? ` ${opts.openHint}` : ''}`);
       }
     }

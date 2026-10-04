@@ -36,6 +36,7 @@ const changedWords = (changedBy?: 'commit' | 'working-tree'): string =>
   changedBy === 'working-tree' ? '⚠ the files changed after this run without a new commit — the working tree differs from HEAD' : '⚠ the source changed after this run';
 import { ingestRepo, readSpecSource, readManifestSource, repoContentDigest } from '@farsight/parsers';
 import { registerWorkTools } from './work.js';
+import { registerJourneysTools } from './journeys-tools.js';
 
 /** Serve the graph over stdio — what `farsight mcp` runs. */
 export async function runMcpServer(graphArg?: string): Promise<void> {
@@ -476,10 +477,12 @@ const server = new McpServer({ name: 'farsight', version: '0.0.1' });
 
 // work items (Jira / Azure DevOps): read tools always, write tools only where a source grants an agent the action
 const work = registerWorkTools({ server, graphPath, index: () => index, roots: () => store.roots });
+// journeys by persona and group, in declared order (journey-organisation-and-config-files.md §4.4)
+const journeysTools = registerJourneysTools({ server, index: () => index, meta: () => store.meta });
 
 server.registerTool('graph_overview', {
   title: 'Graph overview',
-  description: 'Orient in the codebase graph: which Farsight build is running (version · built · commit) and which wrote the graph, whether a newer build is installed, which graph file and workspace, freshness (when it was ingested), repos, node counts by kind, top tags, and entry points (pages, routes, UI components, and design flows — named features from a screens manifest that run as journeys). Also the tests freshness line, what is in it (flows, route prefixes, tables, third parties, queues), how much change history exists, and the work sources (Jira / Azure DevOps) with their freshness, items by state and which work_* write tools this server grants. Ends with "keeping current": what is out of date and the steps to check, update, restart and re-ingest. Use first in every session, and again when a result looks stale.',
+  description: 'Orient in the codebase graph: which Farsight build is running (version · built · commit) and which wrote the graph, whether a newer build is installed, which graph file and workspace, freshness (when it was ingested), repos, node counts by kind, top tags, and entry points (pages, routes, UI components, and design flows — named features from a screens manifest that run as journeys; one journeys line counts them by persona and group, which the journeys tool lists). Also the tests freshness line, what is in it (flows, route prefixes, tables, third parties, queues), how much change history exists, and the work sources (Jira / Azure DevOps) with their freshness, items by state and which work_* write tools this server grants. Ends with "keeping current": what is out of date and the steps to check, update, restart and re-ingest. Use first in every session, and again when a result looks stale.',
   inputSchema: {},
 }, async () => {
   if (!nodes.length) {
@@ -517,6 +520,7 @@ server.registerTool('graph_overview', {
     ...testsLines(), ...storiesOverviewLines(), ...projectsOverviewLines(),
     '',
     '## what is in it',
+    ...journeysTools.overviewLines(),
     ...flowLines(),
     ...routePrefixLines(),
     ...dataLines(),
@@ -890,6 +894,8 @@ server.registerTool('journey', {
   const lines = [
     `Journey from ${seed.name} — ${built} step(s)${j.plannedCount ? ` + ${j.plannedCount} planned (declared in the spec, not yet built)` : ''}${asideSummary}${choiceSummary}${cutSummary}${j.truncated ? ' · ⚠ truncated at cap' : ''}`,
     `entry: ${seed.id}`,
+    // a flow says where the front door shows it: persona › group (journeys lists the rest)
+    ...(seed.kind === 'flow' && journeysTools.placementLine(seed.id) ? [journeysTools.placementLine(seed.id)] : []),
     // the numbers the HUD's header prints — the same typed counts, each group naming the
     // scope it counts over (docs/COUNTS.md), so an agent quotes the number a reader sees
     sum.counted

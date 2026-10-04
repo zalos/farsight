@@ -122,7 +122,8 @@ test('GET /api/projects/<name> — dependencies, dependents, closure and node id
   assert.deepEqual(body.dependencies.map((d: any) => d.to), ['@nxw/shared-ui', 'billing-feature-invoices', 'shared-util']);
   assert.deepEqual(body.dependents.map((d: any) => `${d.from}${d.implicit ? ' (implicit)' : ''}`), ['billing-web-e2e (implicit)']);
   assert.deepEqual(body.closure.projects, ['billing-web', '@nxw/shared-ui', 'billing-feature-invoices', 'shared-util', 'billing-data-access', 'billing-ui']);
-  assert.deepEqual(Object.keys(body.nodeIds).sort(), ['component', 'page']);
+  // the app's own screens manifest (apps/billing-web/docs/design/screens.json) is its node too
+  assert.deepEqual(Object.keys(body.nodeIds).sort(), ['component', 'design', 'page']);
   assert.equal(body.tagDimensions[0].key, 'domain');
   // a scoped package name travels percent-encoded
   const scoped = await get(`/api/projects/${encodeURIComponent('@nxw/shared-ui')}`);

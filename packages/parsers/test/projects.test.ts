@@ -217,8 +217,9 @@ test('the NX example: every node carries its project and tags; the project graph
   assert.deepEqual(web.dependsOn, ['@nxw/shared-ui', 'billing-feature-invoices', 'shared-util']);
   assert.deepEqual(web.dependents, ['billing-web-e2e']);
   assert.deepEqual(web.facets.byDimension.type, [{ value: 'app', word: 'Application' }]);
-  assert.equal(web.nodes.n, 2);
-  assert.deepEqual(web.nodes.breakdown?.map((p) => `${p.label}:${p.n}`), ['component:1', 'page:1']);
+  // two screens (the invoices page and the sign-in page) and the app's own screens manifest
+  assert.equal(web.nodes.n, 5);
+  assert.deepEqual(web.nodes.breakdown?.map((p) => `${p.label}:${p.n}`), ['component:2', 'page:2', 'design:1']);
   assert.deepEqual(pg.counts.projects.breakdown?.map((p) => `${p.key}:${p.n}`), ['count.part.projectsApp:2', 'count.part.projectsLib:5', 'count.part.projectsE2e:1']);
   assert.deepEqual(pg.counts.dependencies.breakdown?.map((p) => `${p.key}:${p.n}`), ['count.part.depsImported:8', 'count.part.depsDeclared:2', 'count.part.depsNxGraph:1']);
   assert.deepEqual(pg.counts.byDimension.domain?.breakdown?.map((p) => `${p.label ?? p.key}:${p.n}`), ['Billing:5', 'Shared:2', 'Operations:1']);

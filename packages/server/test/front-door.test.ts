@@ -28,7 +28,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   GraphStore, buildIndex, stitchHttp, designSurface, apiSurface, testsSurface,
-  flowStatusWord, journey, journeySummary, screensFor,
+  flowStatusWord, journey, journeySummary, screensFor, journeyTree,
   type GraphIndex, type GraphMeta, type GraphNode, type GraphEdge,
 } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
@@ -162,6 +162,35 @@ function sameMetric(label: string, got: any, want: any): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+
+describe('/api/journeys is journeyTree()', () => {
+  test('the tree — personas, groups, journeys in order, every count — is the fold\'s, whole and scoped', async () => {
+    const body = await api('/api/journeys');
+    same('scope', body.scope, 'all');
+    same('tree', body.tree, wire(journeyTree(index, meta.journeys, null)));
+    const scoped = await api('/api/journeys?scope=invoice-app');
+    same('scoped tree', scoped.tree, wire(journeyTree(index, meta.journeys, new Set(['invoice-app']))));
+    const other = await api('/api/journeys?scope=nothing-here');
+    same('a scope with no source', other.tree.counts.journeys.n, 0);
+  });
+
+  test('the example manifest\'s organisation reaches the wire: declared order, the config placement, one flow under two personas', async () => {
+    const { tree } = await api('/api/journeys');
+    same('personas in declared order', tree.personas.map((p: any) => p.name), ['Billing', 'Operations']);
+    same('billing groups', tree.personas[0].groups.map((g: any) => `${g.name}: ${g.journeys.map((j: any) => j.id).join(', ')}`),
+      ['Invoices: billing-cycle, new-invoice', 'Review and send: draft-and-send']);
+    same('journeys counted once', tree.counts.journeys.n, 3);
+    same('the placement says who moved it', tree.personas[1].groups[0].journeys[0].placedBy, 'farsight.config.json');
+    // every flow the design surface lists is in the tree, and nothing else is
+    const flows = designSurface(index, null).flatMap((d) => d.flows.map((f) => f.nodeId)).sort();
+    same('the tree holds the design surface\'s flows', [...new Set(tree.personas.flatMap((p: any) => p.groups.flatMap((g: any) => g.journeys.map((j: any) => j.nodeId))))].sort(), flows);
+  });
+
+  test('/api/journey (singular) still answers a walk — the two routes share a prefix', async () => {
+    const r = await api('/api/journey?entry=invoice-app::flow::new-invoice');
+    assert.ok(Array.isArray(r.steps), 'the journey walk');
+  });
+});
 
 describe('/api/design is designSurface()', () => {
   test('the screen and flow counts on the card are the fold\'s counts', async () => {

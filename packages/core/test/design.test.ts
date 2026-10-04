@@ -225,6 +225,34 @@ test('the manifest can say who a flow is for, who owns it, what steps a screen h
   assert.equal(pd!.flows.length, 0);
 });
 
+test('a flow carries its personas, group, order and place in the manifest; a flow row carries requires, leads to and its source', () => {
+  const f = fragment();
+  const organised: DesignManifest = {
+    ...manifest,
+    personas: [{ id: 'billing', name: 'Billing' }, { id: 'ops', name: 'Operations' }],
+    groups: [{ id: 'invoices', name: 'Invoices' }],
+    flows: [
+      { id: 'list', name: 'List', screens: ['INV-01'], persona: ' billing ', group: 'invoices', order: 2, leadsTo: ['draft'] },
+      { id: 'draft', name: 'Draft and discard', screens: ['INV-01', 'INV-03'], persona: ['billing', ' ', 'ops'], requires: ['list'] },
+      { id: 'odd', name: 'Odd values', screens: ['INV-01'], persona: [' only '], group: '  ', order: Number.NaN },
+    ],
+  };
+  assert.ok(isDesignManifest(organised));
+  applyDesignToFragment(f, organised, { repo: 'app', path: 'docs/design/screens.json' });
+  const index = buildIndex(f.nodes, f.edges);
+  const list = index.byId.get('app::flow::list')!.design!;
+  assert.deepEqual([list.persona, list.group, list.order, list.position], ['billing', 'invoices', 2, 0]);
+  const draft = index.byId.get('app::flow::draft')!.design!;
+  assert.deepEqual([draft.persona, draft.group, draft.order, draft.position], [['billing', 'ops'], undefined, undefined, 1]);
+  const odd = index.byId.get('app::flow::odd')!.design!;
+  assert.deepEqual([odd.persona, odd.group, odd.order], ['only', undefined, undefined], 'a one-item list is the item; blanks and NaN are dropped');
+  const rows = designSurface(index)[0]!.flows;
+  assert.deepEqual(rows.map((r) => r.id), ['draft', 'list', 'odd'], 'the surface keeps its order by name');
+  const row = rows.find((r) => r.id === 'draft')!;
+  assert.deepEqual([row.persona, row.requires, row.leadsTo, row.repo, row.position], [['billing', 'ops'], ['list'], [], 'app', 1]);
+  assert.deepEqual(rows.find((r) => r.id === 'list')!.leadsTo, ['draft']);
+});
+
 test('journeySummary: the three bands — screens in order, business docs/gates/rules/decisions, the system timeline with records & messages', () => {
   const f = fragment();
   const withFlows: DesignManifest = { ...manifest, flows: [{ id: 'draft', name: 'Draft and discard', description: 'Draft, review, discard.', screens: ['INV-01', 'INV-03'], docs: ['docs/flows.md'] }] };
