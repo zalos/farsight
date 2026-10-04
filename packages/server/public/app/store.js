@@ -20,7 +20,7 @@ export const S = {
   expandedGroups: new Set(), scope: 'all',
   // the code map's projects and packages (surfaces/codemap-projects.js): group, filters, chips, the open view
   cmap: null,
-  guardsByTarget: {}, displayCache: null, BYID: {}, RENDER_PARENTS: {},
+  guardsByTarget: {}, validatesByTarget: {}, EDGES_OF: new Map(), displayCache: null, displayById: null, BYID: {}, RENDER_PARENTS: {},
   JOURNEY: null, journeyObserver: null, journeyActive: 0,
   JRN_TREE: null, jrnForksOpen: false, mhTimer: null,
   jrnLayout: null,          // 'storyboard' | 'timeline' | 'sheet' | 'drill' — the journey view axis (persisted fs-jrn-layout; the register picks the default)
@@ -57,16 +57,27 @@ export async function loadAll() {
 // ── model helpers ───────────────────────────────────────────────
 /** @group Shell */
 export function repoOf(n) { return n.repo || (n.loc && n.loc.repo) || n.id.split('::')[0]; }
-/** @group Shell */
+/**
+ * One pass over the graph's nodes and one over its edges, so the map and the
+ * inspector look things up instead of scanning every edge per card: nodes by id,
+ * the gates on each target, the `validates` edges into each node (rule badges),
+ * the edges touching each node in graph order (the inspector's relations), and
+ * which components render each component.
+ * @group Shell
+ */
 export function indexGuards() {
-  S.guardsByTarget = {}; S.BYID = {}; S.RENDER_PARENTS = {};
+  S.guardsByTarget = {}; S.validatesByTarget = {}; S.EDGES_OF = new Map(); S.BYID = {}; S.RENDER_PARENTS = {};
   S.GRAPH.nodes.forEach((n) => (S.BYID[n.id] = n));
+  const touch = (id, e) => { const l = S.EDGES_OF.get(id); if (l) l.push(e); else S.EDGES_OF.set(id, [e]); };
   S.GRAPH.edges.forEach((e) => {
     if (e.kind === 'guards') {
       const g = S.BYID[e.from];
       if (g) (S.guardsByTarget[e.to] = S.guardsByTarget[e.to] || []).push(g);
     }
+    if (e.kind === 'validates') (S.validatesByTarget[e.to] = S.validatesByTarget[e.to] || []).push(e);
     if (e.kind === 'renders') (S.RENDER_PARENTS[e.to] = S.RENDER_PARENTS[e.to] || []).push(e.from);
+    touch(e.from, e);
+    if (e.to !== e.from) touch(e.to, e);
   });
 }
 /** A component rendered by exactly one other component is "embedded" —

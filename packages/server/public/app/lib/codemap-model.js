@@ -142,18 +142,230 @@ export function groupOf(item, by, metas) {
   return { key: 'v::' + by + '::' + vals[0].value, word: vals[0].word, value: vals[0].value, kind: 'value' };
 }
 
+// ── the index: one pass over the graph, every per-node question answered by a lookup ──
+/** A card from a test file (`*.spec.*`, `*.test.*`, or under a tests folder), by the file it lives in. */
+export const TEST_FILE = /(?:\.(?:spec|test|e2e|cy)\.[cm]?[jt]sx?$)|(?:^|\/)(?:__tests__|e2e|tests?)\//;
+/** True when a node (or a file group, by its first member) lives in a test file. */
+export function isTestFileNode(n) {
+  if (!n || n.kind === 'package') return false;
+  const path = (n.loc && n.loc.path) || n.path || (n.members && n.members[0] && n.members[0].loc && n.members[0].loc.path) || '';
+  return TEST_FILE.test(String(path));
+}
+
+/**
+ * The code map's index of one graph: ONE pass over the nodes and ONE over the
+ * edges, so that grouping, filtering and counting the map are lookups and set
+ * algebra rather than a fold over every node per node (21k nodes × a 7 ms fold
+ * was minutes per draw). Rebuilt only when the page holds a different graph.
+ *
+ * - `projectKeyOf`  node id → `repo::name` (projectOfItem: a workspace package resolves to its project)
+ * - `projects`      `repo::name` → `{ repo, name, type, tags, facets, parts }` — facets computed once per project;
+ *                   `parts` counts its non-file nodes (what `groupChoices` folds over)
+ * - `partOrder`     project keys in the order their first non-file node appears
+ * - `nodesByProject` `repo::name` → Set of node ids
+ * - `projectsByValue` dimension → value → Set of project keys
+ * - `packageIds`    the package nodes · `importersOf` package id → Set of importer ids (`imports` edges)
+ * - `validatesTo`   node id → how many `validates` edges point at it
+ * - `testFiles`     node ids that live in a test file · `byRepo` repo → Set of project keys
+ */
+export function buildCodemapIndex(nodes, edges, metas) {
+  const projectKeyOf = new Map();
+  const projects = new Map();
+  const partOrder = [];
+  const nodesByProject = new Map();
+  const projectsByValue = new Map();
+  const packageIds = new Set();
+  const importersOf = new Map();
+  const validatesTo = new Map();
+  const testFiles = new Set();
+  const byRepo = new Map();
+  for (const n of nodes || []) {
+    if (n.kind === 'package') packageIds.add(n.id);
+    else if (isTestFileNode(n)) testFiles.add(n.id);
+    const p = projectOfItem(n, metas);
+    if (!p) continue;
+    const k = p.repo + '::' + p.name;
+    projectKeyOf.set(n.id, k);
+    let row = projects.get(k);
+    if (!row) {
+      row = { repo: p.repo, name: p.name, type: p.type, tags: p.tags || [], facets: projectFacets(p, metas), parts: 0 };
+      projects.set(k, row);
+      nodesByProject.set(k, new Set());
+      if (!byRepo.has(p.repo)) byRepo.set(p.repo, new Set());
+      byRepo.get(p.repo).add(k);
+      for (const [dim, vals] of Object.entries(row.facets.byDimension)) {
+        if (!projectsByValue.has(dim)) projectsByValue.set(dim, new Map());
+        const m = projectsByValue.get(dim);
+        for (const v of vals) { if (!m.has(v.value)) m.set(v.value, new Set()); m.get(v.value).add(k); }
+      }
+    }
+    nodesByProject.get(k).add(n.id);
+    if (n.kind !== 'module') { if (!row.parts) partOrder.push(k); row.parts++; }
+  }
+  for (const e of edges || []) {
+    if (e.kind === 'imports' && packageIds.has(e.to)) {
+      if (!importersOf.has(e.to)) importersOf.set(e.to, new Set());
+      importersOf.get(e.to).add(e.from);
+    } else if (e.kind === 'validates') validatesTo.set(e.to, (validatesTo.get(e.to) || 0) + 1);
+  }
+  return { projectKeyOf, projects, partOrder, nodesByProject, projectsByValue, packageIds, importersOf, validatesTo, testFiles, byRepo, metas };
+}
+
+/**
+ * The GROUP choices from the index, over the projects of the sources in `repos`
+ * (a Set, or null for every source): the same list `groupChoices()` gives for the
+ * nodes of those sources, in O(projects).
+ */
+export function groupChoicesFor(index, repos) {
+  const out = [{ key: 'none' }];
+  const keys = index.partOrder.filter((k) => !repos || repos.has(index.projects.get(k).repo));
+  if (!keys.length) return out;
+  out.push({ key: 'project' });
+  const dims = [];
+  for (const k of keys) {
+    const p = index.projects.get(k);
+    for (const d of dimensionsOf(index.metas, p.repo)) {
+      if (!(p.facets.byDimension[d.key] || []).length) continue;
+      if (!dims.some((x) => x.key === d.key)) dims.push({ key: d.key, label: d.label });
+    }
+  }
+  const order = (k) => { const i = DEFAULT_DIMENSIONS.findIndex((d) => d.key === k); return i < 0 ? 99 : i; };
+  dims.sort((a, b) => order(a.key) - order(b.key) || a.key.localeCompare(b.key));
+  return out.concat(dims);
+}
+
+/** The intersection of two Sets, iterating the smaller. */
+function intersect(a, b) {
+  const [small, big] = a.size <= b.size ? [a, b] : [b, a];
+  const out = new Set();
+  for (const x of small) if (big.has(x)) out.add(x);
+  return out;
+}
+
+/**
+ * The node ids a code map filter keeps, or null when nothing narrows — set
+ * algebra over the index, never a predicate per node:
+ * - the projects that pass: the picked `projects` ∩ (per tag dimension, the union
+ *   of the projects carrying a picked value) ∩ the app `closure` (`{ repo, names }`);
+ * - the kept nodes: the union of those projects' nodes (a workspace package
+ *   stands in its project), plus each package a kept node imports;
+ * - `dep` (a package id) intersects with its importers and itself; `nodeIds`
+ *   (a Set) intersects too.
+ * With no project-shaped narrowing every node passes before `dep` / `nodeIds`.
+ */
+export function passFor(index, { projects, values, closure, dep, nodeIds } = {}) {
+  const picked = projects && projects.size ? projects : null;
+  const dims = Object.entries(values || {}).filter(([, set]) => set && set.size);
+  const projectish = !!(closure || picked || dims.length);
+  if (!projectish && !dep && !nodeIds) return null;
+  let keep = null;
+  if (projectish) {
+    let pass = null;
+    const narrow = (set) => { pass = pass ? intersect(pass, set) : set; };
+    if (closure) {
+      const set = new Set();
+      for (const name of closure.names || []) { const k = closure.repo + '::' + name; if (index.projects.has(k)) set.add(k); }
+      narrow(set);
+    }
+    if (picked) narrow(new Set([...picked].filter((k) => index.projects.has(k))));
+    for (const [dim, vals] of dims) {
+      const m = index.projectsByValue.get(dim);
+      const set = new Set();
+      if (m) for (const v of vals) for (const k of m.get(v) || []) set.add(k);
+      narrow(set);
+    }
+    keep = new Set();
+    for (const k of pass) for (const id of index.nodesByProject.get(k) || []) keep.add(id);
+    // a package a kept part imports stays: packages × their importers, never every edge
+    for (const pkg of index.packageIds) {
+      if (keep.has(pkg)) continue;
+      for (const id of index.importersOf.get(pkg) || []) if (keep.has(id)) { keep.add(pkg); break; }
+    }
+  }
+  if (dep) {
+    const d = new Set(index.importersOf.get(dep) || []);
+    d.add(dep);
+    keep = keep ? intersect(keep, d) : d;
+  }
+  if (nodeIds) keep = keep ? intersect(keep, nodeIds) : new Set(nodeIds);
+  return keep;
+}
+
+/**
+ * The group a card falls in, from the index — the same `{ key, word, kind,
+ * project?, value? }` as `groupOf`, in O(1): the node's project key (a file
+ * group's first member with a project), then its facets as the index holds them.
+ */
+export function groupKeyOf(item, by, index) {
+  let k = item ? index.projectKeyOf.get(item.id) : undefined;
+  if (!k && item && item.members && item.members.length) {
+    const m = item.members.find((x) => x.project) || null;
+    if (m) k = index.projectKeyOf.get(m.id);
+  }
+  const p = k && index.projects.get(k);
+  if (!p) {
+    if (item && item.kind === 'package') return { key: THIRD_PARTY, kind: 'thirdParty' };
+    return { key: NO_PROJECT, kind: 'noProject' };
+  }
+  const project = { repo: p.repo, name: p.name, type: p.type, tags: p.tags };
+  if (by === 'project') return { key: 'p::' + k, word: p.name, kind: 'project', project };
+  const vals = p.facets.byDimension[by] || [];
+  if (!vals.length) return { key: NO_TAG, kind: 'noTag' };
+  return { key: 'v::' + by + '::' + vals[0].value, word: vals[0].word, value: vals[0].value, kind: 'value' };
+}
+
+/** True when the argument is an index from `buildCodemapIndex` (not a graph's `meta.projects`). */
+function isIndex(x) { return !!(x && x.projectKeyOf instanceof Map); }
+
+/**
+ * An application's closure from the graph the page holds: the project first,
+ * then each project it depends on nearest-first, deduplicated — the same reading
+ * as core `appClosure` (project → project imports plus `implicitDependencies`,
+ * sorted by from then to). `{ projects: [name], dependencies: [{ repo, from, to,
+ * imports, implicit? }] }`; empty when the source declares no such project.
+ */
+export function projectClosure(metas, repo, name) {
+  const m = metaOf(metas, repo);
+  const list = m && Array.isArray(m.projects) ? m.projects : [];
+  const names = new Set(list.map((p) => p.name));
+  if (!names.has(name)) return { projects: [], dependencies: [] };
+  const deps = new Map();
+  const dep = (from, to) => {
+    const k = from + '\u0000' + to;
+    if (!deps.has(k)) deps.set(k, { repo, from, to, imports: 0 });
+    return deps.get(k);
+  };
+  for (const i of m.imports || []) {
+    if (!names.has(i.from) || !names.has(i.to) || i.from === i.to) continue;
+    dep(i.from, i.to).imports += i.imports || 0;
+  }
+  for (const p of list) for (const to of p.implicitDependencies || []) {
+    if (to === p.name || !names.has(to)) continue;
+    dep(p.name, to).implicit = true;
+  }
+  const all = [...deps.values()].sort((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
+  const order = [name];
+  const seen = new Set(order);
+  for (let i = 0; i < order.length; i++) for (const d of all) if (d.from === order[i] && !seen.has(d.to)) { seen.add(d.to); order.push(d.to); }
+  return { projects: order, dependencies: all.filter((d) => seen.has(d.from) && seen.has(d.to)) };
+}
+
 const KIND_RANK = { page: 0, component: 1, api: 2, route: 3, function: 4, rule: 5, group: 4, table: 6, queue: 7, external: 8, unknown: 9, module: 10, package: 11 };
 const TAIL = { noTag: 1, noProject: 2, thirdParty: 3 };
 
 /**
  * Cards folded into groups: each group with its members (in kind order, then
  * name), the count of each kind among them, and — for a project group — the
- * project. Groups are sorted by word, the three catch-alls last.
+ * project. Groups are sorted by word, the three catch-alls last. The third
+ * argument is the graph's `meta.projects`, or (on the page) the index from
+ * `buildCodemapIndex`, which makes each card's group a lookup.
  */
 export function foldGroups(items, by, metas) {
   const groups = new Map();
+  // given the index, each card's group is a lookup; given `meta.projects`, a fold per card (small graphs, tests)
+  const at = isIndex(metas) ? (it) => groupKeyOf(it, by, metas) : (it) => groupOf(it, by, metas);
   for (const it of items || []) {
-    const g = groupOf(it, by, metas);
+    const g = at(it);
     let row = groups.get(g.key);
     if (!row) groups.set(g.key, (row = { ...g, members: [], byKind: {} }));
     row.members.push(it);

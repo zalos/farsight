@@ -3,7 +3,7 @@
 // graph) and supplies nodeCardHtml/vsl to the Journeys surface so both speak
 // one visual language. All chrome glyphs are drawn sprite symbols — no emoji.
 
-import { S, expose, esc, jsArg, cssId, repoOf, bizLabel, bizName, humanize, effectiveGroup, inScope, collSourceNames, currentLens } from '../store.js';
+import { S, expose, esc, jsArg, cssId, repoOf, bizLabel, bizName, humanize, effectiveGroup, scopedRepos, collSourceNames, currentLens } from '../store.js';
 import { sym } from '../sym.js';
 import { t, def } from '../strings.js';
 import { setTip, tipSource, tipAttrs } from './tooltip.js';
@@ -57,7 +57,9 @@ const GB_HEAD = 36, GB_ROW = 54, GB_PADX = 10, GAP = 14, COL_MAX = 980;
  * @group Graph rendering
  */
 export function displayNodes() {
-  const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && inScope(n) && (!S.focusSet || S.focusSet.has(n.id)) && !cmapHide(n));
+  // one pass, O(1) per node: the scope's sources read once, the code map's own reasons a lookup (cmapHide)
+  const repos = scopedRepos();
+  const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && (!repos || repos.has(repoOf(n))) && (!S.focusSet || S.focusSet.has(n.id)) && !cmapHide(n));
   const out = [], groupMap = {};
   for (const n of raw) {
     const g = effectiveGroup(n);
@@ -105,7 +107,7 @@ export function itemHeight(n) {
   if (n.kind === 'group') return n.expanded ? GB_HEAD + n.members.length * GB_ROW + 10 : 100;
   let h = 64;
   if (n.loc || n.kind === 'package') h += 13;
-  if ((S.guardsByTarget[n.id] || []).length || S.GRAPH.edges.some((e) => e.kind === 'validates' && e.to === n.id)) h += 24;
+  if ((S.guardsByTarget[n.id] || []).length || (S.validatesByTarget[n.id] || []).length) h += 24;
   return h;
 }
 /**
@@ -117,6 +119,7 @@ export function render() {
   stage.querySelectorAll('.node,.lanehead,.groupbox').forEach((e) => e.remove());
   const nodes = displayNodes();
   S.displayCache = nodes;
+  S.displayById = new Map(nodes.map((n) => [n.id, n]));
   const memberToGroup = {};
   nodes.forEach((n) => { if (n.kind === 'group' && !n.expanded) n.members.forEach((m) => (memberToGroup[m.id] = n.id)); });
   updateStats(nodes.length);
@@ -195,7 +198,7 @@ export function drawEdges(memberToGroup) {
  */
 export function nodeCardHtml(n, mini, name) {
   const guards = S.guardsByTarget[n.id] || [];
-  const rules = (S.GRAPH.edges || []).filter((e) => e.kind === 'validates' && e.to === n.id).length;
+  const rules = (S.validatesByTarget[n.id] || []).length;
   const c = n.contract;
   const kw = name != null ? kindWord(n.kind) : (n.kind === 'unknown' ? '? ' + t('term.unresolved') : (n.kind || ''));
   // a package says which kind of package it is in words, beside the stripe that says it in shape
@@ -365,16 +368,16 @@ export function updateStats(shown) {
 export function statsBreakdown() {
   const out = { guards: 0, outOfScope: 0, outOfFocus: 0, files: 0, packages: 0, filtered: 0, grouped: 0, noLane: 0 };
   if (!S.GRAPH) return out;
-  for (const n of S.GRAPH.nodes) {
-    if (!inScope(n)) out.outOfScope++;
-    else if (n.kind === 'guard') out.guards++;
-    else if (S.focusSet && !S.focusSet.has(n.id)) out.outOfFocus++;
-    else { const why = cmapHide(n); if (why) out[why]++; }
-  }
-  const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && inScope(n) && (!S.focusSet || S.focusSet.has(n.id)) && !cmapHide(n));
+  // one pass, O(1) per node: each node lands in its bucket, and a node that is drawn folds into its file group
+  const repos = scopedRepos();
   const groups = {};
   const items = [];
-  for (const n of raw) {
+  for (const n of S.GRAPH.nodes) {
+    if (repos && !repos.has(repoOf(n))) { out.outOfScope++; continue; }
+    if (n.kind === 'guard') { out.guards++; continue; }
+    if (S.focusSet && !S.focusSet.has(n.id)) { out.outOfFocus++; continue; }
+    const why = cmapHide(n);
+    if (why) { out[why]++; continue; }
     const g = effectiveGroup(n);
     if (g) {
       if (!groups[g.key]) { groups[g.key] = { kind: 'group', laneKind: g.laneKind, members: 0 }; items.push(groups[g.key]); }
@@ -439,7 +442,7 @@ const CARD_OF = { id: null, graph: null, card: null };
  */
 export function select(id) {
   S.selected = id; render();
-  const n = S.displayCache.find((n) => n.id === id) || S.GRAPH.nodes.find((n) => n.id === id);
+  const n = (S.displayById && S.displayById.get(id)) || S.BYID[id];
   if (!n) return;
   const insp = document.getElementById('inspector');
   if (n.kind === 'group') {
@@ -457,12 +460,13 @@ export function select(id) {
     return;
   }
   const guards = S.guardsByTarget[n.id] || [];
-  const validates = S.GRAPH.edges.filter((e) => e.kind === 'validates' && e.to === n.id)
-    .map((e) => S.GRAPH.nodes.find((x) => x.id === e.from)).filter(Boolean);
-  const dataEdges = S.GRAPH.edges.filter((e) => (e.kind === 'reads' || e.kind === 'writes') && (e.from === n.id || e.to === n.id));
+  const validates = (S.validatesByTarget[n.id] || []).map((e) => S.BYID[e.from]).filter(Boolean);
+  // the edges touching this node, in graph order, from the index (store.js indexGuards) — never a scan of every edge
+  const touching = S.EDGES_OF.get(n.id) || [];
+  const dataEdges = touching.filter((e) => e.kind === 'reads' || e.kind === 'writes');
   const business = biz();
   // a gate's own inspector lists what it protects: those edges are the only ones it has
-  const relEdges = S.GRAPH.edges.filter((e) => (e.from === n.id || e.to === n.id) && (e.kind !== 'guards' || (n.kind === 'guard' && e.from === n.id)) && e.kind !== 'validates' && e.kind !== 'reads' && e.kind !== 'writes');
+  const relEdges = touching.filter((e) => (e.kind !== 'guards' || (n.kind === 'guard' && e.from === n.id)) && e.kind !== 'validates' && e.kind !== 'reads' && e.kind !== 'writes');
   const rels = relEdges.map((e) => {
     const otherId = e.from === n.id ? e.to : e.from;
     const other = S.BYID[otherId] || S.GRAPH.nodes.find((x) => x.id === otherId);
