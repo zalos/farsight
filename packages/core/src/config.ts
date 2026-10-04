@@ -62,6 +62,30 @@ export interface FarsightConfig {
 export interface ProjectsConfig {
   tagDimensions?: TagDimension[];
   tagValues?: Record<string, Record<string, string>>;
+  /**
+   * A project-graph file NX wrote (`nx graph --file=<path>.json`), source-relative. Read, never
+   * produced: Farsight does not run NX. A path that is absolute or climbs out of the source (`..`)
+   * is refused with a note (`graphFilePath`); without it the NX cache paths are looked at.
+   */
+  graphFile?: string;
+}
+
+/**
+ * A `projects.graphFile` value checked as a path inside the source: relative, no `..` segment, no
+ * drive letter or NUL. The containment check against the real source root (symlinks) is the
+ * reader's; this one needs no disk. Returns the normalized path, or the sentence that refuses it.
+ */
+export function graphFilePath(value: string): { path: string } | { note: string } {
+  const raw = value.trim();
+  const refuse = (why: string) => ({ note: `projects.graphFile ${JSON.stringify(raw.slice(0, 200))} ${why}, so it is not read.` });
+  if (!raw) return refuse('is empty');
+  if (raw.includes('\0')) return refuse('holds a NUL character');
+  const p = raw.replace(/\\/g, '/');
+  if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) return refuse('is an absolute path; it must name a file inside the source');
+  const parts = p.split('/').filter((x) => x && x !== '.');
+  if (parts.includes('..')) return refuse('climbs out of the source with ..');
+  if (!parts.length) return refuse('names no file');
+  return { path: parts.join('/') };
 }
 
 /** One Storybook, as `farsight.config.json → storybook` declares it. Farsight never starts it. */
@@ -194,6 +218,8 @@ export function sanitizeProjects(config: FarsightConfig): FarsightConfig {
     }
     if (Object.keys(values).length) out.tagValues = values;
   }
+  // kept as written when it is a string; graphFilePath() refuses an escape where a note can be recorded
+  if (typeof r.graphFile === 'string' && r.graphFile.trim()) out.graphFile = r.graphFile.trim();
   config.projects = out;
   return config;
 }

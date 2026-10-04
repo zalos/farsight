@@ -10,7 +10,7 @@ import {
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
   testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
-  impactOf, affectedReach, search, buildLine, projectGraph, appClosure, findProject,
+  impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
   counted,
@@ -1159,13 +1159,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const hit = findProject(pg, rest, repo);
       if (!hit) return send(404, JSON.stringify({ error: `no project named ${rest}${repo ? ` in ${repo}` : ''}` }));
       if (Array.isArray(hit)) return send(409, JSON.stringify({ error: `${hit.length} sources have a project named ${rest}; pass ?repo=`, repos: hit.map((p) => p.repo) }));
-      const nodeIds: Record<string, string[]> = {};
-      for (const n of g.index.byId.values()) {
-        if (n.project?.name !== hit.name || (n.loc?.repo ?? n.id.split('::')[0]) !== hit.repo) continue;
-        if (n.kind === 'module') continue; // a file's import list, not a part (the counts in projectGraph agree)
-        (nodeIds[n.kind] ??= []).push(n.id);
-      }
-      for (const ids of Object.values(nodeIds)) ids.sort();
+      // the fold above is kept per loaded graph, so the node ids are a lookup, not a walk
+      const nodeIds = projectNodeIds(g.index, g.meta.projects, hit.repo, hit.name);
       const closure = appClosure(pg, hit.name, hit.repo)!;
       return send(200, JSON.stringify({
         generatedAt: g.meta.generatedAt,
