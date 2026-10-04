@@ -235,7 +235,7 @@ export function pickerHasQuery(e) {
   return !!(at && at.p && at.p.state.query);
 }
 
-if (typeof document !== 'undefined') {
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   // capture: the menus a picker lives in stop clicks from bubbling (so a click inside never
   // closes them), and the keymap listens on the document too — the field's keys are its own
   document.addEventListener('input', onInput, true);
