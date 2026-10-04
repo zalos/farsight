@@ -47,10 +47,10 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | **`0.2.0`** (GitHub Release v0.2.0, 2026-10-04), workspace main after the map-view, data-stores and map-pass-2 passes (PRs #8–#36; `8e1c134` is the last feature merge — the project picker) |
-| tests | **926** — core 275 · work 59 · parsers 165 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 227 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 187/187** (the `codemap-projects` spec starts its own two-source server) |
-| string/symbol lint | **1938 entries · 33 sprite symbols · 36 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings, sync 61) and the reference app's own `farsight` on **4477** (the Node 24 global install, started from that workspace, sync 96, `flags.map` on in its local settings). Both `status` up to date on `8e1c134`. Check `lsof` before restarting or measuring on any port. |
+| build | **`0.2.0`** (GitHub Release v0.2.0, 2026-10-04), workspace main after the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#40; `8ec6a5d` is the last feature merge — the code map's index and toolbar project picker) |
+| tests | **939** — core 280 · work 59 · parsers 169 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 231 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 190/190** (the `codemap-projects` and `codemap-toolbar` specs start their own two-source server) |
+| string/symbol lint | **1944 entries · 33 sprite symbols · 36 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `8ec6a5d` on 2026-10-04 and re-synced through `POST /api/sync`. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -200,6 +200,37 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
    that fold past six; used by the scope menu's Projects / Tags / Depends-on, the Views menu's two pickers (single),
    and ⌘K (projects match, applications first, arriving `?group=project&box=<name>`); project and tag filters now
    ride in the link (`?project=`, `?tag=`) and in localStorage.
+10. **The code map's performance pass — one precomputed index, set algebra, the project graph folded once**
+    (2026-10-04, PRs #39–#40). The defect: the code map grouped by project or by a tag dimension hung the page for
+    minutes on the dogfood graph (21,175 nodes) — `cmapHide(n)` ran once per node and, grouped, called the GROUP-choices
+    fold over every node each time (≈7 ms × 21k × 2 passes ≈ 280 s per draw); card heights, rule badges and the
+    inspector also scanned every edge per card. **Measured on the live dogfood server, before → after:** ungrouped
+    2.2 s → 1.1 s; grouped by project *did not draw in 90 s* → **0.8 s**; a two-project filter and the app view ≈ 0.3 s
+    (the lane's measurement); zero page errors. **Viewer:** `lib/codemap-model.js` `buildCodemapIndex` (one pass over
+    nodes, one over edges: node → project key, project → nodes, dimension → value → projects, package → importers,
+    `validates` counts, test files, repo → projects), `groupChoicesFor` (O(projects)), `passFor` (a filter is set
+    algebra — projects ∪, tag values ∪ per dimension then ∩ across dimensions and with the project filter and the app
+    closure, packages kept via their importers, `dep` ∩), `groupKeyOf` (O(1)), `projectClosure` (the app's tree from
+    `meta.projects` so *App and its related* draws at once); one index per graph object and the choices cached per
+    graph + scope; `store.js indexGuards()` also builds `S.validatesByTarget` and `S.EDGES_OF`, so `select()`,
+    `itemHeight()` and `nodeCardHtml()` look up instead of scanning. A **Projects** chip in the code map toolbar
+    (`Projects · n` when picked) opens kind chips (Applications · Libraries · End-to-end · Other), the same searchable
+    multi-select as the scope menu (one filter, one `?project=`), and *Focus on an application* — the app view, drawn
+    from the page's graph first and labelled when the server answers. A regression guard: `codemap-perf.test.ts`
+    (a synthetic 20k-node graph, the index + choices + two filters + the fold under 2 s; `passFor` proven equal to the
+    old per-node predicate on the NX example + invoice app). **Core/server:** `projectGraph()` is folded once per
+    `GraphIndex` (a `WeakMap`, refolded when the index or `meta.projects` changes; `?repo=` narrows the kept rows),
+    closures walk an adjacency built once and are remembered, every `ProjectRow` carries `closure: string[]`,
+    `/api/projects/<name>` is a lookup (`projectNodeIds`). `/api/projects` on the dogfood graph: 15 ms first, under 1 ms
+    after. **NX's own project graph is read, never produced** (`parsers/src/shared/nx-graph.ts`): for an NX source the
+    first of `.nx/workspace-data/project-graph.json`, `.nx/cache/project-graph.json`, `node_modules/.cache/nx/project-graph.json`
+    or the file `farsight.config.json → projects.graphFile` names (source-relative; absolute, `..`, NUL, a symlink out of
+    the source, a non-file or > 20 MB each refused with a note; both the `nx graph --file` and the bare cache shapes;
+    `npm:` targets skipped; only names discovery found count, the rest a count in `notes`; nothing is ever spawned —
+    `docs/SECURITY.md` says so). Recorded as `meta.projects.dependencies` (`via: 'nx-graph'`) and `graphFile`; a project
+    no manifest typed takes NX's type; in the project graph a pair NX records gets `nx: true` + `nxType`, a pair only NX
+    knows is a dependency with `imports: 0` under the new part `count.part.depsNxGraph`; `graph_overview` prints
+    `nx graph: N dependencies read`. Imports read from the files stay the primary evidence (principle 2).
 
 ## Release and CI — 2026-10-01
 
@@ -246,6 +277,15 @@ regression of the data-stores pass (#15–#18). `packages/parsers/src/tsjs.ts`, 
 is a call expression, read a `method:` string literal from its object-literal arguments (spreads included), the way the
 class-method path already does; a helper whose name is a verb (`post`, `put`, `patch`, `del`) is a fallback. A test with
 that exact shape, then re-measure read-only on the reference app (drift back to 7, http edges to routes still 69).
+
+**Left open by the code map performance pass (2026-10-04), small:** the app view narrows by the closure alone (a
+kept project or tag filter no longer applies inside it — its chips are hidden there and would have emptied the tree
+quietly); the toolbar gets crowded on a 1600 px window with tag chips on (they are cut off left of GROUP); a folded
+file group's row in a box is taller than its card (gaps, no overlaps); a stale NX cache file is read as-is (its age is
+not compared to the manifests); the viewer does not yet read `ProjectRow.closure` from `/api/projects` (it computes the
+same tree from `meta.projects`, proven equal by test); `farsight deps list` does not print the NX-graph line (only MCP
+`graph_overview` does). A broader thought the pass raised: `/graph` still ships the whole 48 MB graph to the browser and
+every surface folds it client-side — the next ceiling is a server-side query API with the same index semantics.
 
 **Left open by map pass 2 (2026-10-04), in order:**
 
