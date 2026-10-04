@@ -1,0 +1,6 @@
+{
+  "glossary": {
+    "InvoicesPage": { "label": "Open invoices", "description": "The customer's open invoices, with the amount still owed." }
+  },
+  "plumbing": ["src/plumbing/**"]
+}

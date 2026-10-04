@@ -106,7 +106,9 @@ export async function discoverManifests(repoRoot: string, options: IngestOptions
       seen.add(key);
       manifests.push({ ...parsed, path: key, origin: 'config', ...(d.name ? { name: d.name } : {}) });
     } catch (err) {
-      errors.push(`design ${ref}: ${(err as Error).message.split('\n')[0]}`);
+      // a declaration that names no file says so in words, without the absolute path the error carries
+      const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
+      errors.push(`design ${ref}: ${missing ? 'declared in farsight.config.json, but there is no file at that path' : (err as Error).message.split('\n')[0]}`);
     }
   }
   const candidates = collectFiles(repoRoot, ['.json'], options, (base) => !NAME_RE.test(base))

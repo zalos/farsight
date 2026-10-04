@@ -40,7 +40,9 @@ export async function discoverSpecs(repoRoot: string, options: IngestOptions, de
       seen.add(key);
       specs.push({ ...parsed, path: key, origin: 'config', ...(d.name ? { name: d.name } : {}) });
     } catch (err) {
-      errors.push(`openapi ${ref}: ${(err as Error).message.split('\n')[0]}`);
+      // a declaration that names no file says so in words, without the absolute path the error carries
+      const missing = (err as NodeJS.ErrnoException).code === 'ENOENT';
+      errors.push(`openapi ${ref}: ${missing ? 'declared in farsight.config.json, but there is no file at that path' : (err as Error).message.split('\n')[0]}`);
     }
   }
 

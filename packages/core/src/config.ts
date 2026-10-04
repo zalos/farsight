@@ -450,8 +450,8 @@ export type ConfigScope = (node: GraphNode) => boolean;
 
 /** The scope of a nested config file at repo-relative `dir`: nodes whose `loc.path` is under `dir/`. `''` = the root = every node. */
 export function scopeOfDir(dir: string): ConfigScope | undefined {
-  const d = dir.replace(/\\/g, '/').replace(/^\.\/?/, '').replace(/\/+$/, '');
-  if (!d) return undefined;
+  const d = dir.replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '');
+  if (!d || d === '.') return undefined;
   const prefix = `${d}/`;
   return (node) => !!node.loc?.path && node.loc.path.replace(/\\/g, '/').startsWith(prefix);
 }
