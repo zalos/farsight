@@ -115,8 +115,9 @@ export function placesFromTree(tree) {
  * pure so a test can hold it to 40 journeys.
  *
  * `items` are the districts in model order, each `{ id, repo, w, h }` in world
- * units: `w` is the street's own width (so zooming in reveals the street in
- * place), `h` its height. The rule:
+ * units — at the board altitude a cover's width (`boardWidth()`, the street's own
+ * width clamped) and a cover's height; on the street the street's own size. The
+ * rule:
  * - one **band** per source, stacked top to bottom, each headed by a label
  *   strip of `labelH`;
  * - inside a band, districts packed left to right in **rows** that wrap at one
@@ -125,6 +126,9 @@ export function placesFromTree(tree) {
  * - the row width is chosen among the widths the rows could break at, to bring
  *   the whole board's aspect nearest `aspect` (the viewport's width ÷ height) —
  *   a fit then uses the screen instead of a strip of it.
+ * - each band is a **panel**: `{ x, y, w, h }` runs from its header strip (`labelH`, where the surface draws the
+ *   band's name and count) to `pad` below its last row, `pad` either side of the districts, and every band's
+ *   panel is as wide as the board's widest row, so the bands line up; `n` is how many slots it holds.
  * The band a district falls in is `opts.bandKey(item)` — by default its source
  * (`item.repo`); the Map's *Band by: domain* passes the journey's domain. Bands
  * keep the order their first district has in `items`.
@@ -143,7 +147,7 @@ export function placesFromTree(tree) {
  * @group Map
  */
 export function layoutDistricts(items, opts = {}) {
-  const o = { aspect: 1.6, colGap: 200, rowGap: 160, bandGap: 280, labelH: 120, margin: 80, ...opts };
+  const o = { aspect: 1.6, colGap: 200, rowGap: 160, bandGap: 140, labelH: 240, pad: 60, margin: 80, ...opts };
   const echoes = new Map();
   if (o.bandKey === 'persona') {
     const order = Array.isArray(o.personaOrder) ? o.personaOrder : [];
@@ -196,11 +200,13 @@ export function layoutDistricts(items, opts = {}) {
         x += it.w + o.colGap;
         bandW = Math.max(bandW, x - o.colGap - o.margin);
       }
-      const h = rowY + rowH - top;
-      out.push({ repo: b.repo, x: o.margin, y: top, w: bandW, h });
+      const h = rowY + rowH - top + o.pad;
+      out.push({ repo: b.repo, x: o.margin - o.pad, y: top, w: bandW, h, n: b.items.length });
       maxW = Math.max(maxW, bandW);
       y = top + h + o.bandGap;
     }
+    // every band's panel spans the board's widest row, so the bands line up as one column of panels
+    for (const b of out) b.w = maxW + o.pad * 2;
     const size = { w: maxW + o.margin * 2, h: (bands.length ? y - o.bandGap : o.margin) + o.margin };
     return { rects, bands: out, size, rowW };
   };
@@ -212,6 +218,17 @@ export function layoutDistricts(items, opts = {}) {
   }
   if (best) best.echoes = echoes;
   return best || place(widest);
+}
+
+/**
+ * A journey's width on the board: its street's own width, clamped between `min` and `max` (the surface passes two
+ * and four screens' worth). A cover is a card and a street is a street — the two no longer share a width, so a
+ * fourteen-screen journey is not six times as wide as a one-screen one at the fit (the 2026-10-04 clarity pass).
+ * @group Map
+ */
+export function boardWidth(streetW, min, max) {
+  const w = Number(streetW) || 0;
+  return Math.max(min, Math.min(max, w));
 }
 
 /**

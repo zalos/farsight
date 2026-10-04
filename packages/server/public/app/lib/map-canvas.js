@@ -177,6 +177,8 @@ export function attachCanvas(stage, world, opts = {}) {
     world.style.transform = 'translate(' + st.tx + 'px,' + st.ty + 'px) scale(' + st.s + ')';
     // what an owner's counter-scaled content multiplies by to keep a steady size on screen (capped)
     world.style.setProperty('--map-inv', String(Math.min(1 / st.s, INV_MAX)));
+    // and the scale itself, for content that must never read under a size on screen (a 1-px border, a 9-px chip)
+    world.style.setProperty('--map-s', String(st.s));
     const lvl = levelFn(st.s);
     const prev = st.level;
     st.level = lvl;
