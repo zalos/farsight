@@ -78,15 +78,20 @@ export function neighbourhoodModel(designs, workByFlow) {
  * - the row width is chosen among the widths the rows could break at, to bring
  *   the whole board's aspect nearest `aspect` (the viewport's width ÷ height) —
  *   a fit then uses the screen instead of a strip of it.
- * Returns `{ rects: Map(id → {x, y, w, h}), bands: [{ repo, x, y, w, h }], size: {w, h}, rowW }`.
+ * The band a district falls in is `opts.bandKey(item)` — by default its source
+ * (`item.repo`); the Map's *Band by: domain* passes the journey's domain. Bands
+ * keep the order their first district has in `items`.
+ * Returns `{ rects: Map(id → {x, y, w, h}), bands: [{ repo, x, y, w, h }], size: {w, h}, rowW }` —
+ * a band's `repo` is its key, whatever the key is.
  * @group Map
  */
 export function layoutDistricts(items, opts = {}) {
   const o = { aspect: 1.6, colGap: 200, rowGap: 160, bandGap: 280, labelH: 120, margin: 80, ...opts };
+  const bandKey = typeof o.bandKey === 'function' ? o.bandKey : (it) => it.repo || '';
   const list = Array.isArray(items) ? items : [];
   const bands = [];
   for (const it of list) {
-    const key = it.repo || '';
+    const key = bandKey(it) || '';
     let b = bands.find((x) => x.repo === key);
     if (!b) { b = { repo: key, items: [] }; bands.push(b); }
     b.items.push(it);

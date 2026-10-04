@@ -167,8 +167,10 @@ test('tag dimensions: defaults, a rename by prefix, an added dimension, value wo
 test('the NX example: every node carries its project and tags; the project graph lists projects, tags and dependencies', async () => {
   const g = await ingestRepo(NX_EXAMPLE, { repoName: 'nx-workspace' });
   // a package node belongs to no one project: a third-party package is imported from several,
-  // and a workspace package names the project it resolves to on `package.project` instead
-  const missing = g.nodes.filter((n) => !n.project && n.kind !== 'package').map((n) => n.id);
+  // and a workspace package names the project it resolves to on `package.project` instead.
+  // The design manifest (docs/design/screens.json at the workspace root) and the journeys it
+  // declares sit under no project folder either — the code map groups them under no project
+  const missing = g.nodes.filter((n) => !n.project && n.kind !== 'package' && n.kind !== 'design' && n.kind !== 'flow').map((n) => n.id);
   assert.deepEqual(missing, [], 'every node of the NX example carries its project');
   assert.equal(g.nodes.find((n) => n.id === 'nx-workspace::package::@nxw/shared/util')?.package?.project, 'shared-util', 'a workspace package names the project it resolves to');
   const node = (name: string) => g.nodes.find((n) => n.name === name)!;

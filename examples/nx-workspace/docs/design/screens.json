@@ -1,0 +1,35 @@
+{
+  "name": "NX example — screens",
+  "screens": [
+    {
+      "id": "BIL-01",
+      "name": "Open invoices",
+      "route": "/invoices",
+      "description": "The open invoices of the billing domain, with their amounts."
+    },
+    {
+      "id": "OPS-01",
+      "name": "Overnight run",
+      "route": "/runs",
+      "description": "The overnight run: how much was collected today."
+    }
+  ],
+  "flows": [
+    {
+      "id": "review-open-invoices",
+      "name": "Review open invoices",
+      "description": "A billing user opens the list of open invoices and reads what is owed.",
+      "screens": [
+        "BIL-01"
+      ]
+    },
+    {
+      "id": "check-report-runs",
+      "name": "Check the overnight run",
+      "description": "An operations user checks how much the overnight run collected.",
+      "screens": [
+        "OPS-01"
+      ]
+    }
+  ]
+}

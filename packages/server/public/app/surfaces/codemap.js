@@ -7,6 +7,7 @@
 import { S, esc, cssId } from '../store.js';
 import { t } from '../strings.js';
 import { render, select, cardOf } from '../lib/graph-render.js';
+import { cmapFromRoute, buildCmapControls } from './codemap-projects.js';
 
 /**
  * Mount the Code map: view=map (default) shows the interim graph with an
@@ -28,6 +29,9 @@ export function mountCodemap(route, el) {
   document.body.classList.add('surface-graph');
   const note = document.getElementById('codemap-note');
   if (note) { note.textContent = t('ph.codemap.note'); note.style.display = ''; }
+  // the group, the filters and the view this link names (surfaces/codemap-projects.js)
+  cmapFromRoute(route);
+  if (window.buildScope) window.buildScope();
   render();
   // #/codemap?node=<id> — land on one card (the APIs surface and journeys link here)
   if (route.node && S.BYID[route.node]) {
@@ -60,6 +64,7 @@ export function codemapRefresh(reason, route) {
   }
   render();
   if (S.selected) select(S.selected);
+  buildCmapControls();
 }
 
 /** Leaving the Code map: hide the graph frame + interim note.
@@ -68,4 +73,6 @@ export function unmountCodemap() {
   document.body.classList.remove('surface-graph');
   const note = document.getElementById('codemap-note');
   if (note) note.style.display = 'none';
+  // the scope menu drops its code map sections off the map
+  if (window.buildScope) setTimeout(window.buildScope, 0);
 }

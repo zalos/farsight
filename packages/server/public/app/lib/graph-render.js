@@ -10,6 +10,7 @@ import { setTip, tipSource, tipAttrs } from './tooltip.js';
 import { storiesSecHtml } from '../stories.js';
 import { defAttrs, plainTip, unCode } from './counted.js';
 import { nodeWorkSecHtml } from '../work-chips.js';
+import { cmapHide, cmapGrouping, renderGrouped, projectSecHtml, packageSecHtml, packageActionsHtml, pkgScopeWord } from '../surfaces/codemap-projects.js';
 
 /** True in the business lens — the map and the inspector name things, never identify them. */
 function biz() { return currentLens() === 'business'; }
@@ -43,8 +44,11 @@ const LANES = [
   { label: 'Routes', kinds: ['api', 'route'] },
   { label: 'Logic', kinds: ['function', 'rule'] },
   { label: 'Data & Events', kinds: ['table', 'queue', 'external', 'unknown'] },
+  // a file is drawn only with *show files* on (the code map's chip); a package always, unless hidden
+  { key: 'codemap.lane.files', kinds: ['module'] },
+  { key: 'codemap.lane.deps', kinds: ['package'] },
 ];
-const LANE_W = 256, NODE_W = 196, TOP = 54;
+export const LANE_W = 256, NODE_W = 196, TOP = 54;
 const GB_HEAD = 36, GB_ROW = 54, GB_PADX = 10, GAP = 14, COL_MAX = 980;
 
 /** Build the display node list: guards become badges; grouped functions
@@ -53,7 +57,7 @@ const GB_HEAD = 36, GB_ROW = 54, GB_PADX = 10, GAP = 14, COL_MAX = 980;
  * @group Graph rendering
  */
 export function displayNodes() {
-  const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && inScope(n) && (!S.focusSet || S.focusSet.has(n.id)));
+  const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && inScope(n) && (!S.focusSet || S.focusSet.has(n.id)) && !cmapHide(n));
   const out = [], groupMap = {};
   for (const n of raw) {
     const g = effectiveGroup(n);
@@ -100,7 +104,7 @@ export function laneOf(n) {
 export function itemHeight(n) {
   if (n.kind === 'group') return n.expanded ? GB_HEAD + n.members.length * GB_ROW + 10 : 100;
   let h = 64;
-  if (n.loc) h += 13;
+  if (n.loc || n.kind === 'package') h += 13;
   if ((S.guardsByTarget[n.id] || []).length || S.GRAPH.edges.some((e) => e.kind === 'validates' && e.to === n.id)) h += 24;
   return h;
 }
@@ -116,10 +120,12 @@ export function render() {
   const memberToGroup = {};
   nodes.forEach((n) => { if (n.kind === 'group' && !n.expanded) n.members.forEach((m) => (memberToGroup[m.id] = n.id)); });
   updateStats(nodes.length);
+  // grouped by project or a tag dimension, or one of the two views: boxes of cards (surfaces/codemap-projects.js)
+  if (cmapGrouping() !== 'none') { renderGrouped(nodes, memberToGroup); return; }
 
   nodes.sort((a, b) => ((a.loc && a.loc.path) || a.codename || '').localeCompare((b.loc && b.loc.path) || b.codename || '') || ((a.loc && a.loc.line) || 0) - ((b.loc && b.loc.line) || 0));
   const laneNodes = LANES.map((l, i) => nodes.filter((n) => laneOf(n) === i)).filter((g) => g.length);
-  const laneLabels = LANES.filter((l, i) => nodes.some((n) => laneOf(n) === i)).map((l) => l.label);
+  const laneLabels = LANES.filter((l, i) => nodes.some((n) => laneOf(n) === i)).map((l) => (l.key ? t(l.key) : l.label));
   const head = document.createElement('div'); head.className = 'lanehead'; head.style.display = 'flex';
   S.positions = {};
   let colOffset = 0, maxY = 0;
@@ -137,7 +143,7 @@ export function render() {
       y += h + GAP; maxY = Math.max(maxY, y);
     });
     const subcols = sub + 1;
-    head.insertAdjacentHTML('beforeend', '<span class="hud-label" style="width:' + (subcols * LANE_W) + 'px;text-align:center;flex-shrink:0">' + laneLabels[gi] + '</span>');
+    head.insertAdjacentHTML('beforeend', '<span class="hud-label" style="width:' + (subcols * LANE_W) + 'px;text-align:center;flex-shrink:0">' + esc(laneLabels[gi]) + '</span>');
     colOffset += subcols;
   });
   stage.appendChild(head);
@@ -150,6 +156,16 @@ export function render() {
     renderNode(n, false);
   });
 
+  drawEdges(memberToGroup);
+}
+/**
+ * The arrows between the cards on the map, from where `render()` (or the
+ * grouped layout) put them: every edge whose two ends are drawn, re-routed to
+ * a folded group's card, the selected card's arrows lit.
+ * @group Graph rendering
+ */
+export function drawEdges(memberToGroup) {
+  const svg = document.getElementById('edgesvg');
   svg.innerHTML = '';
   const visibleIds = new Set(Object.keys(S.positions));
   displayEdges(visibleIds, memberToGroup).forEach((e) => {
@@ -182,22 +198,26 @@ export function nodeCardHtml(n, mini, name) {
   const rules = (S.GRAPH.edges || []).filter((e) => e.kind === 'validates' && e.to === n.id).length;
   const c = n.contract;
   const kw = name != null ? kindWord(n.kind) : (n.kind === 'unknown' ? '? ' + t('term.unresolved') : (n.kind || ''));
-  return '<div class="kind k-' + esc(n.kind || '') + '">' + esc(kw)
+  // a package says which kind of package it is in words, beside the stripe that says it in shape
+  const pkg = n.kind === 'package' ? ' · ' + esc(pkgScopeWord(n)) : '';
+  const ver = n.kind === 'package' && !mini && !(name != null && biz()) && n.package && n.package.version ? '<div class="sub">' + esc(n.package.version) + '</div>' : '';
+  return '<div class="kind k-' + esc(n.kind || '') + '">' + (n.kind === 'package' ? sym('package') + ' ' : '') + esc(kw) + pkg
     + (c && c.status !== 'both' ? ' · ' + esc(t(c.status === 'spec-only' ? 'apis.status.specOnly' : c.status === 'declared' ? 'apis.status.declared' : 'apis.status.codeOnly')) : '') + '</div>'
     + '<div class="name">' + esc(name != null ? name : bizLabel(n)) + '</div><div class="codename">' + esc(n.name || '') + '</div>'
-    + (n.loc && !mini ? '<div class="sub">' + esc(n.loc.path) + ':' + n.loc.line + vsl(repoOf(n), n.loc.path, n.loc.line) + '</div>' : '')
+    + (n.loc && !mini ? '<div class="sub">' + esc(n.loc.path) + ':' + n.loc.line + vsl(repoOf(n), n.loc.path, n.loc.line) + '</div>' : '') + ver
     + ((guards.length || rules) && !mini ? '<div class="gbadges">' + guards.map((g) => '<span class="gbadge">' + sym('lock') + ' ' + esc(name != null && biz() ? bizName(g) : g.name.replace(/^requireScope: /, '')) + '</span>').join('')
       + (rules ? '<span class="gbadge rule"' + plainTip(rules, 'count.part.rules', 'count.scope.node', '/graph') + '>' + sym('shield') + ' ' + esc(t(rules === 1 ? 'count.part.rulesOne' : 'count.part.rules').replace('{n}', rules)) + '</span>' : '') + '</div>' : '');
 }
 /**
  * @group Graph rendering
  */
-export function renderNode(n, mini) {
+export function renderNode(n, mini, extraCls) {
   const stage = document.getElementById('stage');
   const p = S.positions[n.id]; if (!p) return;
   const el = document.createElement('div');
   const isGroup = n.kind === 'group';
-  el.className = 'node nk-' + cssId(n.kind || '') + (mini ? ' mini' : '') + (isGroup ? ' grp' : '') + (S.selected === n.id || (S.selected && cardOf(S.selected) === n.id) ? ' sel' : '') + (S.activeTag && !(n.tags || []).includes(S.activeTag) ? ' faded' : '')
+  el.className = 'node nk-' + cssId(n.kind || '') + (mini ? ' mini' : '') + (extraCls ? ' ' + extraCls : '')
+    + (n.kind === 'package' ? (n.package && n.package.scope === 'workspace' ? ' pkg-ws' : ' pkg-tp') : '') + (isGroup ? ' grp' : '') + (S.selected === n.id || (S.selected && cardOf(S.selected) === n.id) ? ' sel' : '') + (S.activeTag && !(n.tags || []).includes(S.activeTag) ? ' faded' : '')
     + (n.contract && n.contract.status === 'spec-only' ? ' contract-spec-only' : '');
   el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
   if (p.w) el.style.width = p.w + 'px';
@@ -327,7 +347,8 @@ export function updateStats(shown) {
     breakdown: { rows: [
       ['tip.stats.shown', shown],
       ...[['tip.stats.grouped', b.grouped], ['tip.stats.guards', b.guards], ['tip.stats.outOfScope', b.outOfScope],
-        ['tip.stats.outOfFocus', b.outOfFocus], ['tip.stats.noLane', b.noLane]].filter((r) => r[1] > 0),
+        ['tip.stats.outOfFocus', b.outOfFocus], ['tip.stats.files', b.files], ['tip.stats.packages', b.packages],
+        ['tip.stats.filtered', b.filtered], ['tip.stats.noLane', b.noLane]].filter((r) => r[1] > 0),
       ['tip.stats.total', total],
     ] },
   } });
@@ -336,18 +357,21 @@ export function updateStats(shown) {
  * Why each thing the graph holds is, or is not, a card on the map — the same
  * filters `displayNodes()` applies, counted instead of applied. Every node
  * lands in exactly one bucket, so `shown + grouped + guards + outOfScope +
- * outOfFocus + noLane` is the graph's total.
+ * outOfFocus + files + packages + filtered + noLane` is the graph's total
+ * (files: drawn only with *show files*; packages: *hide packages*; filtered: a
+ * code map filter or view — surfaces/codemap-projects.js `cmapHide`).
  * @group Graph rendering
  */
 export function statsBreakdown() {
-  const out = { guards: 0, outOfScope: 0, outOfFocus: 0, grouped: 0, noLane: 0 };
+  const out = { guards: 0, outOfScope: 0, outOfFocus: 0, files: 0, packages: 0, filtered: 0, grouped: 0, noLane: 0 };
   if (!S.GRAPH) return out;
   for (const n of S.GRAPH.nodes) {
     if (!inScope(n)) out.outOfScope++;
     else if (n.kind === 'guard') out.guards++;
     else if (S.focusSet && !S.focusSet.has(n.id)) out.outOfFocus++;
+    else { const why = cmapHide(n); if (why) out[why]++; }
   }
-  const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && inScope(n) && (!S.focusSet || S.focusSet.has(n.id)));
+  const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && inScope(n) && (!S.focusSet || S.focusSet.has(n.id)) && !cmapHide(n));
   const groups = {};
   const items = [];
   for (const n of raw) {
@@ -469,9 +493,12 @@ export function select(id) {
     + (n.kind === 'api' ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="#/apis/' + encodeURIComponent(n.id) + '">' + sym('api') + ' ' + esc(t('nav.apis')) + '</a>' : '')
     + (n.contract ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="#/apis/' + encodeURIComponent(n.contract.apiId) + '?op=' + encodeURIComponent(n.id) + '">' + sym('api') + ' ' + esc(t('apis.contractLink')) + '</a>' : '')
     + '<button class="btn" onclick="openImpact(' + jsArg(n.id) + ')"' + tipAttrs({ key: 'surf.insp.impact', noFocus: true }) + '>' + sym('fork') + ' ' + esc(t('surf.insp.impactBtn')) + '</button>'
+    + packageActionsHtml(n)
     // the editor is a developer's door; the business lens has no use for it
     + (href && !business ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="' + esc(href) + '">' + sym('open') + ' VS Code</a>' : '') + '</div>'
     + (bizText ? '<div class="insp-sec"><span class="hud-label">' + esc(t('surf.insp.summary')) + '</span><p>' + esc(business ? unCode(bizText) : bizText) + '</p></div>' : '')
+    + projectSecHtml(n)
+    + packageSecHtml(n)
     + storiesSecHtml(n)
     + (n.design ? designSecHtml(n) : '')
     + (n.contract ? contractSecHtml(n) : '')
