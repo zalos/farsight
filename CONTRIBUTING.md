@@ -11,14 +11,27 @@ Thanks for helping. This page is the short version; the project contract (princi
 
 ## Branches, commits, pull requests
 
-- One feature branch per change: `feat/…`, `fix/…`, `docs/…`, `chore/…`. Never commit to `main` directly.
-- [Conventional commits](https://www.conventionalcommits.org/): `feat(parsers): …`, `fix(cli): …`, `docs: …`,
-  `chore: …`, `test: …` — the scope is the package name. The changelog and release notes are generated from these
-  (`scripts/changelog.mjs`), so the subject line is what users will read.
-- Open a pull request against `main`. **CI must be green** (`ci.yml`: build, typecheck, tests, string lint, e2e —
-  see [docs/CI.md](docs/CI.md)) before it is merged.
-- PRs are merged with a **merge commit, not a squash** (`--no-ff`): the changelog reads `<last tag>..HEAD` commit by
-  commit, and a squash would collapse it into one line.
+- One branch per change: `feat/…`, `fix/…`, `docs/…`, `chore/…`. Never commit to `main` directly — `main` is
+  protected and takes pull requests only.
+- **PRs are squash-merged.** One PR becomes one commit on `main`, whose subject is the **PR title** and whose message
+  is the **PR body**. So the title is written as a [Conventional Commit](https://www.conventionalcommits.org/) —
+  `type(scope): what changed`, e.g. `feat(server): a searchable project picker`, `fix(cli): …`, `docs: …` — and the
+  body follows `.github/PULL_REQUEST_TEMPLATE.md` (*what changed · why · how it was checked · left open*). The
+  changelog and release notes are generated from these subjects (`scripts/changelog.mjs`), one line per PR with a
+  link to it, so write the title for the person reading the changelog.
+- **Types:** `feat fix docs test chore build ci refactor perf style revert`. **Scopes:** the package (`core parsers
+  server mcp cli work work-jira work-azdo work-fixture`) or the surface (`e2e scripts ci docs proposals examples
+  release deps viewer skills`); a new scope is added to `SCOPES` in `scripts/lint-commits.mjs` in the same change. `!`
+  after the scope or a `BREAKING CHANGE:` footer marks a breaking change. No full stop, under 120 characters.
+- **Commits on the branch** are conventional too, but they are working notes — commit often, don't polish, the squash
+  folds them. `pnpm install` installs a `commit-msg` hook that checks the shape (`scripts/install-hooks.mjs`, copied
+  into `.git/hooks`; Git LFS's hooks stay) and sets `.gitmessage` as the commit template; `pnpm lint:commits
+  --message 'fix(cli): …'` tries a subject by hand.
+- Open the pull request against `main`. **CI must be green** before it is merged (`ci.yml`, see
+  [docs/CI.md](docs/CI.md)): `validate`, `e2e`, `secrets`, and `commits` — the PR title against the type and scope
+  lists, every branch commit for shape. Then `gh pr merge <n> --squash` (the branch is deleted on merge; keep the
+  title the PR carries). A merge refused as "not up to date" wants `gh pr update-branch <n>`, never `--admin`.
+- Commit messages carry no session links or private names; `Co-Authored-By:` lines are fine.
 
 ## Run what CI runs
 

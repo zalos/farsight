@@ -1,0 +1,9 @@
+# type(scope): what changed, in words a reader of the changelog understands
+#
+# types:  feat fix docs test chore build ci refactor perf style revert
+# scopes: core parsers server mcp cli work work-jira work-azdo work-fixture
+#         e2e scripts ci docs proposals examples release deps viewer skills
+# `!` after the scope, or a `BREAKING CHANGE:` footer, marks a breaking change.
+#
+# Body (optional): why, what a reader should know, what was measured.
+# Footers: Co-Authored-By: … — never a session link (the repo is public).

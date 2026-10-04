@@ -1,8 +1,10 @@
 # CI validation: every push to main and every pull request.
-# Three independent jobs, run in parallel so each reports its own verdict:
+# Four independent jobs, run in parallel so each reports its own verdict:
 #   validate — install, build, typecheck (packages + e2e), unit tests, string/symbol lint
 #   e2e      — install, build, Playwright suite on the real `farsight serve` (see docs/CI.md)
 #   secrets  — gitleaks over the pushed / PR commits, with .gitleaks.toml (see docs/SECURITY.md)
+#   commits  — on a PR: the PR title (it becomes the squash commit on main) and every
+#              commit on the branch are Conventional Commits (scripts/lint-commits.mjs)
 # Live tracker tests stay off: they run only with FARSIGHT_LIVE=1, which CI never sets.
 name: CI
 
@@ -19,6 +21,28 @@ permissions:
   contents: read
 
 jobs:
+  commits:
+    name: commits
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # the title reaches the script through env, never pasted into shell text
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the lint walks base..head
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: The PR title is a Conventional Commit (it is the commit that lands on main)
+        run: node scripts/lint-commits.mjs --message "$PR_TITLE"
+      - name: Every commit on the branch is a Conventional Commit
+        run: node scripts/lint-commits.mjs --range "$BASE_SHA..$HEAD_SHA" --any-scope
+
   secrets:
     name: secrets
     runs-on: ubuntu-latest

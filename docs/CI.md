@@ -6,13 +6,16 @@ cancels the run in progress. The workflow has read-only repository access and no
 
 ## What runs
 
-Two jobs on `ubuntu-latest` run **in parallel**, so a red e2e and a red unit test are separate signals. Both use
-Node from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store cached on the lockfile.
+Four jobs on `ubuntu-latest` run **in parallel**, so a red e2e and a red unit test are separate signals. All four
+are required on `main`. The two build jobs use Node from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with
+the pnpm store cached on the lockfile.
 
 | job | steps | timeout |
 |---|---|---|
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm typecheck` (every package, then `e2e/`) → `pnpm -r test` → `pnpm lint:strings` | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` | 30 min |
+| **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
+| **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
 
 On the first runs (2026-10-01), **validate** took 1–1¼ min and **e2e** about 1½ min, of which the 109-test
 suite itself takes about 41 s on the runner (13 s on a warm Mac). The first run of a new `@playwright/test`
@@ -39,6 +42,9 @@ pnpm lint:strings
 pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```
+
+`pnpm lint:commits --message 'fix(cli): …'` tries a PR title against the `commits` job's rule; the `commit-msg` hook
+that `pnpm install` installs (`scripts/install-hooks.mjs`) runs the same check on every local commit.
 
 `node .claude/skills/e2e-playwright/scripts/check-e2e-setup.mjs` checks the e2e prerequisites before a run.
 Set `CI=1` to get the runner's Playwright behaviour: `test.only` fails the run, and a failed test is retried once.

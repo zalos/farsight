@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed into .git/hooks by `node scripts/install-hooks.mjs` (run by `pnpm install`'s prepare).
+# The subject must be a Conventional Commit; CI checks the same rule on the PR title and commits.
+exec node "$(git rev-parse --show-toplevel)/scripts/lint-commits.mjs" --file "$1" --any-scope

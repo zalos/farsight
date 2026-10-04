@@ -126,10 +126,12 @@ test('--no-tag --branch --commit-notes: the release-PR shape — a new branch wi
     assert.match(notes, /releases\/download\/v0\.1\.1\/farsight-cli-0\.1\.1\.tgz/);
     assert.equal(r.g('status', '--porcelain'), '', 'everything it wrote is committed');
 
-    // after the PR merges, the tag goes on the release commit; the next release starts there
+    // the PR is squash-merged: main gets one commit `chore(release): v0.1.1 (#9)` with the PR's title;
+    // the tag goes on that commit and the next release starts there
     r.g('switch', '-q', 'main');
-    r.g('merge', '-q', '--no-ff', '-m', 'Merge pull request #9 from example/release/v0.1.1', 'release/v0.1.1');
-    r.g('tag', '-a', 'v0.1.1', '-m', 'v0.1.1', 'release/v0.1.1');
+    r.g('merge', '-q', '--squash', 'release/v0.1.1');
+    r.g('commit', '-q', '-m', 'chore(release): v0.1.1 (#9)');
+    r.g('tag', '-a', 'v0.1.1', '-m', 'v0.1.1');
     writeFileSync(join(r.dir, 'b.txt'), 'b');
     r.g('add', 'b.txt');
     r.g('commit', '-q', '-m', 'feat: next thing');

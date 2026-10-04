@@ -27,9 +27,9 @@ gh workflow run release.yml -f bump=patch -f dry_run=true # gates + the version 
 gh run watch                                              # follow it
 ```
 
-Then review and **merge the release PR with a merge commit** (not squash: the tag goes on the release commit,
-and `scripts/changelog.mjs` relies on merge commits staying out of the next section). publish.yml runs on that
-merge and creates the tag and the Release; `gh run watch` follows it too.
+Then review and **squash-merge the release PR, keeping its title** (`gh pr merge <n> --squash`; `main` accepts
+no other merge kind). The squash commit on `main` reads `chore(release): vX.Y.Z (#N)`; publish.yml runs on that
+push, tags that commit and creates the Release; `gh run watch` follows it too.
 
 | input | meaning |
 |---|---|
@@ -60,20 +60,22 @@ merge and creates the tag and the Release; `gh run watch` follows it too.
 ## What the publish workflow does
 
 1. `detect`: reads the version from the root `package.json` and looks for the commit `chore(release): vX.Y.Z`
-   among the pushed commits (a merge brings in the release branch's commits; a squash or rebase merge keeps the
-   subject, with ` (#N)` for a squash). None → not a release, stop. Tag `vX.Y.Z` already on `origin` → nothing to
-   do, stop (re-running is safe).
-2. `publish`: checks out **the release commit** (not the merge commit), runs the same gates, reads the notes from
+   among the pushed commits — the squash commit `chore(release): vX.Y.Z (#N)` (the expected shape, since the PR
+   title becomes the subject); a merge commit bringing the branch's commit or a rebase keeping the subject would be
+   found too. None → not a release, stop. Tag `vX.Y.Z` already on `origin` → nothing to do, stop (re-running is
+   safe).
+2. `publish`: checks out **the release commit** (the squash commit on `main`), runs the same gates, reads the notes from
    `.github/release-notes/vX.Y.Z.md`, packs, smoke-tests exactly as above, creates the annotated tag `vX.Y.Z`
    (message = the notes) on the release commit and pushes it, `gh release create vX.Y.Z
    build/farsight-cli-X.Y.Z.tgz --verify-tag` with the notes, the optional npm publish, and the job summary with
    the install line.
 
-Why the release commit and not the merge commit: the tag, the tarball's build stamp (`farsight --version` prints
-it) and the `CHANGELOG.md` section then describe the same commit. If something else landed on `main` between the
-release PR and its merge, it is not in this release's tarball and it is listed in the next release's changelog
-(`<last tag>..HEAD`), rather than shipped unlisted. With *Require branches to be up to date* on, as `main` has,
-that only happens when someone updates the release branch from `main` before merging.
+The squash commit is a new commit, so its sha differs from the one the release workflow smoke-tested on the
+branch; publish packs again on the squash commit, and the tag, the tarball's build stamp (`farsight --version`
+prints it) and the `CHANGELOG.md` section all describe that one commit on `main`. With *Require branches to be up
+to date* on, as `main` has, nothing lands between the release PR and its merge unless someone updates the release
+branch from `main` first — then those changes are listed in the *next* release's changelog (`<last tag>..HEAD`),
+rather than shipped unlisted.
 
 Tags are not branch pushes, so `main`'s branch protection does not stop publish from pushing `vX.Y.Z` with
 `GITHUB_TOKEN`. A future **tag ruleset** would — then give the ruleset a bypass for the Actions app, or create
@@ -110,7 +112,7 @@ publish.yml needs neither: it pushes only a tag and creates a Release with `GITH
    `gh pr list --label release` shows `chore(release): vX.Y.Z`.
 3. **CI on the PR:** with `RELEASE_TOKEN`, `gh pr checks <n> --watch`. Without it, `gh pr close <n> && gh pr
    reopen <n>` first, then `gh pr checks <n> --watch` until `validate` and `e2e` pass.
-4. **Merge** with a merge commit: `gh pr merge <n> --merge --delete-branch`.
+4. **Squash-merge**, keeping the PR title: `gh pr merge <n> --squash` (the branch is deleted on merge).
 5. **Publish:** `gh run list --workflow publish.yml -L 1`, then `gh run watch <id>`; check
    `git fetch --tags && git show vX.Y.Z --stat` points at the `chore(release)` commit and
    `gh release view vX.Y.Z` lists `farsight-cli-X.Y.Z.tgz`.
@@ -149,8 +151,8 @@ node scripts/release.mjs --bump patch --no-tag --branch 'release/v{version}' --c
 git push -u origin release/vX.Y.Z && gh pr create --base main --title 'chore(release): vX.Y.Z' --body-file .github/release-notes/vX.Y.Z.md --label release
 ```
 
-A release opened by hand like this is the same release PR: merge it and publish.yml tags and publishes. A PR
-you open yourself starts CI, so this is also the fallback when the workflow cannot open the PR.
+A release opened by hand like this is the same release PR: squash-merge it and publish.yml tags and publishes.
+A PR you open yourself starts CI, so this is also the fallback when the workflow cannot open the PR.
 
 `node scripts/release.mjs --bump patch` without `--no-tag` still commits **and tags** on the current branch,
 as before; under protection that tag cannot reach `main`'s history by a push, so use it only to rehearse locally
@@ -158,11 +160,12 @@ as before; under protection that tag cannot reach `main`'s history by a push, so
 
 - `changelog.mjs` groups conventional-commit subjects (`type(scope)!: subject`, `BREAKING CHANGE:` footers)
   under *Breaking · Features · Fixes · Docs · Tests · Chores · Other*; merge commits and earlier release
-  commits are skipped; a subject that is not a conventional commit lands under *Other*. Flags: `--version`,
-  `--since <tag|sha>`, `--write` (prepends to `CHANGELOG.md` below an `## [Unreleased]` head), `--notes <file>`,
-  `--dry-run`. Before the first tag the range starts after the commit that seeded `CHANGELOG.md`'s newest
-  section, so the first release does not repeat `[0.1.0]` — **merge release branches with `--no-ff`, not
-  squash**, or that seed commit is folded into a squash and the first tagged release looks empty.
+  commits are skipped; a subject that is not a conventional commit lands under *Other*. Since PRs are
+  squash-merged, each commit on `main` is one PR: the ` (#N)` GitHub appends to the subject is dropped from the
+  line and printed as a link to the PR, which is why the **PR title must be a conventional commit** (CI's `commits`
+  check holds that). Flags: `--version`, `--since <tag|sha>`, `--write` (prepends to `CHANGELOG.md` below an
+  `## [Unreleased]` head), `--notes <file>`, `--dry-run`. Before the first tag the range starts after the commit
+  that seeded `CHANGELOG.md`'s newest section (history: releases before 2026-10-04 were merged with merge commits).
 - `release.mjs` refuses a dirty tree, a branch other than `main` (without `--allow-branch`), a tag that exists,
   a `--branch` that exists, and a version that does not move forward. Only the root `package.json` version
   moves: `pack.mjs` gives it to the tarball and core's `buildInfo()` reads it in a workspace build; `packages/*`

@@ -38,9 +38,10 @@ jobs:
           lfs: true
 
       # The push is a release when it brings in the commit `chore(release): vX.Y.Z`
-      # for the version the root package.json now carries. That holds for the merge
-      # commit of a release PR (the expected way), and also for a squash or a rebase
-      # merge, whose subject gains ` (#N)` or stays as it was.
+      # for the version the root package.json now carries. A squash merge (the way
+      # main is configured: the PR title becomes the subject, plus ` (#N)`) is the
+      # expected shape; a merge commit bringing the branch's commit, or a rebase
+      # keeping the subject as it was, are found too.
       - name: Is this push a release?
         id: find
         env:
@@ -79,8 +80,8 @@ jobs:
       SHA: ${{ needs.detect.outputs.sha }}
       PRE: ${{ needs.detect.outputs.prerelease }}
     steps:
-      # the release commit itself, not the merge commit: the tag, the tarball's build
-      # stamp and the CHANGELOG section all describe exactly that commit
+      # the release commit itself (under squash merging, the commit on main): the tag,
+      # the tarball's build stamp and the CHANGELOG section all describe that one commit
       - name: Check out the release commit with full history and tags
         uses: actions/checkout@v7
         with:

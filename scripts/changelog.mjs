@@ -10,7 +10,9 @@
 // to CHANGELOG.md (so the first tagged release does not repeat the seeded
 // one), or nothing — the whole history. Merge commits and earlier release
 // commits are skipped; a subject that is not a conventional commit lands
-// under *Other* rather than being dropped. Zero dependencies (Node 24).
+// under *Other* rather than being dropped. PRs are squash-merged, so each
+// commit on main is one PR: its ` (#N)` suffix becomes a link to the PR.
+// Zero dependencies (Node 24).
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -32,6 +34,8 @@ const CHORE_TYPES = new Set(['chore', 'build', 'ci', 'refactor', 'perf', 'style'
 const RELEASE_SUBJECT = /^v?\d+\.\d+\.\d+/;
 const SUBJECT = /^(?<type>[a-zA-Z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?:\s+(?<subject>.+)$/;
 const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:\s*(?<note>.+)$/m;
+// the ` (#123)` GitHub appends to a squash-merge subject
+const PR_SUFFIX = /\s\(#(?<pr>\d+)\)$/;
 
 export const UNRELEASED_HEAD = '## [Unreleased]';
 const CHANGELOG_PREAMBLE = [
@@ -49,7 +53,8 @@ const tryGit = (cwd, args) => { try { return git(cwd, args).trim(); } catch { re
 
 /** Parse one commit; `type` is the group key it lands under. */
 export function parseCommit({ sha, short, subject, body = '', parents = [] }) {
-  const m = SUBJECT.exec(subject.trim());
+  const pr = PR_SUFFIX.exec(subject.trim())?.groups.pr ?? null;
+  const m = SUBJECT.exec(subject.trim().replace(PR_SUFFIX, ''));
   const footer = BREAKING_FOOTER.exec(body);
   const breaking = Boolean(m?.groups.bang || footer);
   let type = 'other';
@@ -64,7 +69,8 @@ export function parseCommit({ sha, short, subject, body = '', parents = [] }) {
     group: breaking ? 'breaking' : type,
     type,
     scope: m?.groups.scope ?? null,
-    subject: m ? m.groups.subject.trim() : subject.trim(),
+    subject: m ? m.groups.subject.trim() : subject.trim().replace(PR_SUFFIX, ''),
+    pr: pr ? Number(pr) : null,
     breaking,
     breakingNote: footer?.groups.note.trim() ?? null,
     merge: parents.length > 1,
@@ -119,7 +125,8 @@ function line(c, repoUrl) {
   const scope = c.scope ? `**${c.scope}:** ` : '';
   const link = repoUrl ? `[${c.short}](${repoUrl}/commit/${c.sha})` : `\`${c.short}\``;
   const note = c.breakingNote ? ` — ${c.breakingNote}` : '';
-  return `- ${scope}${c.subject}${note} (${link})`;
+  const pr = c.pr ? (repoUrl ? ` [#${c.pr}](${repoUrl}/pull/${c.pr})` : ` #${c.pr}`) : '';
+  return `- ${scope}${c.subject}${note}${pr} (${link})`;
 }
 
 /** The grouped body: one `### Heading` per non-empty group, in GROUPS order. */

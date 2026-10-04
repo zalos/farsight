@@ -14,7 +14,9 @@
     "test:scripts": "node --test \"scripts/test/*.test.mjs\"",
     "lint:strings": "node scripts/lint-strings.mjs",
     "e2e": "node scripts/e2e.mjs",
-    "e2e:typecheck": "tsc -p e2e/tsconfig.json"
+    "e2e:typecheck": "tsc -p e2e/tsconfig.json",
+    "lint:commits": "node scripts/lint-commits.mjs",
+    "prepare": "node scripts/install-hooks.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
