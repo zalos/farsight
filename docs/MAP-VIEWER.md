@@ -340,18 +340,30 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
   lands (the re-layout shifts the board so the journey in view stays put).
 
 Each district has a poster **cover** (`.map-dcover`: name clamped to two lines, sentence to two, the journey's
-Counteds in one row; its whole sentence is the cover's tip) over its ghosted street (opacity .18). Covers are
+Counteds, which wrap to a second row and past that fold into one `+n` chip whose number tip lists them
+(`foldCoverChips`, measured when districts are placed and when the counter-scale moves); its tip is the whole name and
+sentence) over its ghosted street (opacity .18). Covers are
 **counter-scaled**: the canvas sets `--map-inv = min(1/scale, 4)` on the world (`INV_MAX`), and `.map-dcover-in` is a
 box the district's size divided by `--map-inv`, scaled back up by it from its top-left corner — so its text keeps a
 steady size on screen down to scale 0.25 and shrinks no faster below, the name reading at ≥ 12 px at the fit of the
 21-journey dogfood graph (×0.16), and it can never draw outside its district. Without plumbing a district is
-`SY + SH + 130` tall, enough for that box at the cap to hold all three rows. The district under the pointer or the
+`SY + SH + 160` tall, enough for that box at the cap to hold the name, the sentence and two rows of chips. The district under the pointer or the
 focus rises above its neighbours and brings its links up with their words.
 
 **Links** come from each journey's own `summary.links` as it lands, never inferred by the viewer: *leads to* (and its
-mirror *requires*, drawn once) always, dimmed; *part of* (dashed) only for the district under the pointer or the
+mirror *requires*, drawn once; two journeys that lead to each other are one line with an arrowhead at each end and
+the one label *lead to each other*) always, dimmed; *part of* (dashed) only for the district under the pointer or the
 focus, or at the street when both its ends are in view — at the fit they are noise (`linkVisibility()`, run on every
-move). Link words show at the neighbourhood only on the hovered district's links.
+move). **Routes** (lane L, 2026-10-03) are `routeLinks(rects, links)` in `lib/map-model.js`, pure and unit-tested on 3
+to 40 journeys: a shortest path over the grid of lanes 70 world units outside every district's edges, charging a bend
+600 and a lane another line already uses a little, from the middle of one side to the middle of a side — so a line is
+square, runs in the gutters and never crosses a district; lines sharing a lane are spread 14 apart. A line whose
+straight runs are all too short for its word (two journeys side by side) goes over the top by the row gutter instead.
+**Labels** are placed once per line, on its longest straight run where the box clears every district and every label
+before it, at the largest counter-scale it fits at (4, 3, 2, 1.5, 1 — `label.scale`); a label is drawn only while
+`--map-inv` is at most its scale, so a short run's word appears as you zoom in and never lands on a cover. Strokes are
+`vector-effect: non-scaling-stroke` (1.6 px at any zoom); arrowheads and labels are counter-scaled by `--map-inv` with
+a CSS transform. The words are measured once per word on the links layer (`labelWidth`).
 
 The journeys are read one at a time, the one the route names first, under a generation counter; answers are cached per
 entry per sync (`JOURNEY_CACHE`, the `FLOW_CACHE` pattern), so a register flip never refetches.
@@ -386,10 +398,11 @@ saves a row (a call with 4 data nodes and a screen with 5 calls draw whole). Cli
 fewer` / `▾ fewer calls` folds it back); the district redraws, and its height follows the pathway **as drawn** — the
 folded height by default, so the neighbourhood packing stays tight, growing downward when a fold opens (the band
 re-lays, the journey in view stays put). The fold's number is that call's or screen's own markers beyond those drawn,
-with a `plainTip` (`map.fold.scopeCall` · `map.fold.scopeScreen`); no count of the journey moves. A data node is
-**210** wide (`DW`, the column `COL` is 480): its name keeps the node's whole width (about 27 characters at the
-street scale) and the kind line above it — store · kind (or kind) · identifier, then *reads* / *writes* /
-*reached* — is the one that truncates. The data order is writes, *reads · writes*, reads, then *reached*
+with a `plainTip` (`map.fold.scopeCall` · `map.fold.scopeScreen`); no count of the journey moves. Lane L widened the column (`COL` 480 → 600, `SH` 214 → 236): a call node is
+**250** wide and as tall as its words need — its name and its method and path wrap whole (`callTextH`, a safe estimate
+of characters per line), never an ellipsis; a screen's name wraps to three lines and its route shows whole; a data
+node is **280** wide (`DW`): its name and its kind words (store · kind, then *reads* / *writes* / *reached*) show
+whole, and only the hybrid identifier at the end of the kind line may give way (the card prints it whole). The data order is writes, *reads · writes*, reads, then *reached*
 (`MODE_ORDER`).
 
 **The model** (`lib/map-model.js`, pure, `packages/server/test/map-model.test.ts` over a captured answer in
@@ -438,7 +451,7 @@ lens or register change calls `update(ctx)` with the new `lens`; closing calls `
 | arrows | outside the property and card | pan 80 px (Shift: 240) |
 | `[` / `]` | property | previous / next screen |
 | `p` · `+ − 0` · `b` · `y` | | plumbing · the next stop in or out, fit what is in view · what uses the card's node · copy the link |
-| `?` | | the legend when lane L's exists (`mapToggleLegend`, a TODO until then), else the keymap panel |
+| `?` | | opens and closes the legend (`mapToggleLegend` → `toggleLegend`); on a focused word with a tip it opens that tip, as everywhere |
 
 What a level does not show is `inert` (`applyTabbing`, redone when the level or the property changes): the ghosted
 streets and heads at the neighbourhood, the board under an open property; covers are `visibility:hidden` on the
@@ -450,8 +463,29 @@ street, and a cover's own chips are not stops. A walk landing redraws a district
 names, a data node's identifier and file) is not drawn, the accent warms, and names are words: a call reads the
 sentence written for it (`plainWords`), a record or message its label or its name said as words (`ledger_entries`
 → *Ledger entries*, `invoice.finalized` → *Invoice finalized*), a flow name that is code goes through `unCode`.
-Service names are the spec titles (`SystemRow.label`) in every lens. The e2e spec holds the street and the card to
-the journey-numbers identifier check.
+Service names are the spec titles (`SystemRow.label`) in every lens. Lane L finished the job: a data node's kind line
+is the store and a plain word (`map.biz.kind.*`: *Invoice DB · database record*, *Example ERP · ERP record*, *notice*,
+*outside system*); a call prints *declared, not called* and *not built* but never *spec-backed* or *implied* (the card
+and the property's chips too, `evShown` / `evChip`); a checkpoint is a *check* or a *rule* (`map.biz.check` ·
+`map.biz.rule`) named in words — a permission name said through `humanize()` — and checkpoints said in the same words
+are one row with their times added (`dedupeGates`, `map.prop.timesSame`); the property's Changes leave out the
+index's own facts (`edge_confidence_changed`); a test's name drops document references (`caseWords`). The e2e specs
+hold the board, the legend, the street with plumbing, the card and all eight property tabs to the journey-numbers
+identifier check and to none of *spec-backed · implied · guard · edge confidence · MEDIUM*.
+
+**The legend** (lane L, `?` on the toolbar and the `?` key; `.map-legend`, strings `map.legend.*`). Opens by itself
+once, on a reader's first visit (`localStorage` `fs-map-legend-seen`; the e2e `support.ts` fixture `mapLegendSeen`
+starts every spec as a returning reader), closes with its ✕, Esc or `?`. It lists only what the board has drawn
+(`legendFacts`): between journeys *leads to* and its *requires* reading, *lead to each other*, *part of*; under each
+screen *reads*, *writes*, *reads and writes*, *reached* and the stores by kind; on a screen the built and designed
+stripes, *again*, the call evidence words, the ×n mark when a checkpoint repeats; and the evidence words the journeys
+earned (the cover's own evidence chip as the swatch). Each swatch is drawn with the board's own classes (the drill
+legend's rule), so a swatch cannot describe a line the board does not draw; each word carries its define.
+
+**Toolbar and crumb.** The Map's own lens switch is gone (the header's lens is global). The tools stay on one row;
+under 1280 px the chrome tightens and the crumb takes a row of its own rather than cut the journey's name; the trail is
+whole in its tip at any width. The Portfolio's switch reads *Table · Board* (`map.portfolio.board`); the nav tab stays
+*Map*.
 
 **e2e.** `e2e/tests/map-street.pw.spec.ts`: flag off → no tab and `#/map` lands on the Portfolio; flag on → the
 Portfolio switch, three districts, the links, entering Billing cycle → three screens in order; plumbing (service
@@ -462,11 +496,7 @@ and Esc the board; the explore card; the business lens; data stores
 stores, the card's *known from* in hybrid and hidden in business, the business street with stores) over
 `e2e/tests/map-stores-stub.ts`, a `page.route` stub that adds stores in the proposal's shapes and skips what the real
 answer already carries. `e2e/tests/map-zoom.pw.spec.ts` (over a `page.route` stub repeating Billing cycle's screens
-to fourteen): mouse notches, trackpad steps, a ctrlKey pinch and `deltaMode` lines each settle on the calls stop
-(a data node's name ≥ 11 px), then the enter stop with the hint, and only the next gesture enters; `+ −` stop to stop
-and Fit keep the journey, `−` from it is the board; a journey opens centred with its head at the top and nothing
-above it; the edge cue counts the screens past the edge and slides to them; nothing draws under the toolbar at any
-zoom; a tip opens on hover and a click on its chip opens the screen.
+twelve-journey board stubbed over the fixture (`/api/design` and `/api/journey` through `page.route`) where every line
 
 #### Property — `surfaces/map-property.js`, `lib/map-property-model.js` (lane B, 2026-10-03)
 

@@ -55,7 +55,8 @@ async function stops(page: Page) {
   return page.evaluate(() => {
     const el = document.querySelector('.map-pd .nm') as HTMLElement;
     const board = document.querySelector('.map-board') as HTMLElement;
-    return { calls: 11 / parseFloat(getComputedStyle(el).fontSize), enter: (board.clientHeight * 0.64) / 214 };
+    // 236: a screen card's height (SH in surfaces/map.js; lane L made it 236 so a long name wraps)
+    return { calls: 11 / parseFloat(getComputedStyle(el).fontSize), enter: (board.clientHeight * 0.64) / 236 };
   });
 }
 /** A data node's name in px on screen, measured. */

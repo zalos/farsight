@@ -2056,14 +2056,21 @@
   .map-world.anim{transition:transform .45s cubic-bezier(.2,.7,.2,1)}
   @media (prefers-reduced-motion:reduce){.map-world.anim{transition:none}}
   .map-links{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-  .map-links path{fill:none;stroke:var(--dim);stroke-width:2.5}
-  .map-links path.contains{stroke-dasharray:8 8;opacity:.6}
-  .map-links text{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;font-size:20px;fill:var(--muted)}
-  .map-links g{opacity:.45}
+  /* the lines between journeys (lane L): routed in the gutters, a steady 1.6px at any zoom (non-scaling stroke),
+     arrowheads and labels counter-scaled by --map-inv like the covers; a label sits once on its own line in a gap */
+  .map-links path{fill:none;stroke:var(--dim);stroke-width:1.6;vector-effect:non-scaling-stroke}
+  .map-links path.contains{stroke-dasharray:7 6}
+  .map-links path.head{stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .map-links text{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:11px;fill:var(--muted)}
+  .map-links text.probe{visibility:hidden}
+  .map-links .lbl rect{fill:var(--panel);stroke:var(--line);stroke-width:1;vector-effect:non-scaling-stroke}
+  .map-links .lbl.off{display:none}
+  .map-links g[data-link]{opacity:.55}
   .map-links g.off{display:none}
   .map-links g.hot{opacity:1}
   .map-links g.hot path{stroke:var(--accent)}
-  .map-world.lvl-nb .map-links g:not(.hot) text{display:none}
+  .map-links g.hot text{fill:var(--ink)}
+  .map-links g.hot .lbl rect{stroke:var(--accent)}
   .map-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;pointer-events:none}
   .map-note>span{pointer-events:auto}
   /* a district: head (street), street, poster cover (neighbourhood) */
@@ -2071,7 +2078,7 @@
   .map-district.focus{border-color:var(--accent);box-shadow:0 0 0 6px var(--accent-dim)}
   .map-dhead{position:absolute;left:0;right:0;top:0;min-height:92px;padding:14px 22px;display:flex;flex-direction:column;gap:4px;border-bottom:1px dashed var(--line-soft);transition:opacity .25s}
   .map-dhead .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:20px;color:var(--ink)}
-  .map-dhead .desc{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .map-dhead .desc{color:var(--muted);font-size:13px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .map-dhead .agg,.map-dcover .agg{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   /* the cover: counter-scaled by --map-inv (min(1/scale, 4), set by lib/map-canvas.js) so its name reads at any
      zoom; the inner box is the district's size divided by --map-inv, scaled back up, so it never draws outside it */
@@ -2083,7 +2090,10 @@
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
   .map-dcover .desc{font-size:13px;line-height:1.25;color:var(--muted);flex:none;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .map-dcover .agg{display:flex;gap:5px;flex-wrap:nowrap;overflow:hidden;flex:none;min-width:0}
+  /* the chips wrap to a second row; past that the last ones fold into one +n chip (foldCoverChips) — never cut mid-chip */
+  .map-dcover .agg{display:flex;gap:4px 5px;flex-wrap:wrap;align-content:flex-start;overflow:hidden;flex:none;min-width:0}
+  .map-dcover .agg>[hidden]{display:none !important}
+  .map-dcover .agg .map-more{border-style:dashed;color:var(--ink)}
   .map-dcover .agg .map-chip,.map-dcover .agg .wk-chip{font-size:11px;padding:1px 8px;flex:none}
   .map-dcover:focus-visible{outline:4px solid var(--accent);outline-offset:-4px}
   /* the district under the pointer or the focus rises above its neighbours */
@@ -2131,7 +2141,7 @@
   .map-chip.go:hover{border-color:var(--accent);color:var(--ink)}
   .map-work:empty{display:none}
   /* a screen on the street */
-  .map-scr{position:absolute;width:260px;height:214px;border:1.5px solid var(--line);border-radius:8px;background:var(--raised);box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
+  .map-scr{position:absolute;width:260px;height:236px;border:1.5px solid var(--line);border-radius:8px;background:var(--raised);box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
   .map-scr:hover,.map-scr.near{border-color:var(--accent);transform:translateY(-2px)}
   .map-scr:focus-visible,.map-pl:focus-visible,.map-pd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   /* §K: the board's focus ring keeps a steady width on screen at any zoom (--map-inv), with a glow in the lens accent */
@@ -2150,8 +2160,10 @@
   .map-scr .body{padding:7px 10px 6px 12px;display:flex;flex-direction:column;gap:4px;flex:1;min-height:0}
   .map-scr .ttl{display:flex;align-items:baseline;gap:8px;min-width:0}
   .map-scr .ord{font-family:var(--hud);font-size:12px;letter-spacing:.12em;color:var(--accent)}
-  .map-scr .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .map-scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* a screen's name wraps (three lines hold the longest measured) and its route shows whole */
+  .map-scr .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:13px;line-height:1.2;color:var(--ink);min-width:0;overflow-wrap:anywhere;
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .map-scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim);overflow-wrap:anywhere;line-height:1.25}
   .map-scr .route:empty{display:none}
   .map-scr .map-chips{display:flex;gap:5px;flex-wrap:wrap}
   .map-scr .map-chips .map-chip,.map-scr .state .map-chip{font-size:10px;padding:1px 7px}
@@ -2171,17 +2183,18 @@
   .map-lane .leg .mst{text-transform:none;letter-spacing:.02em;font-family:var(--body);font-size:11px;color:var(--ink)}
   .map-lane .leg .mst i{background:var(--stc)}
   .svc-0{--svc:var(--svc-0)} .svc-1{--svc:var(--svc-1)} .svc-2{--svc:var(--svc-2)} .svc-3{--svc:var(--svc-3)} .svc-4{--svc:var(--svc-4)} .svc-5{--svc:var(--svc-5)} .svc-none{--svc:var(--dim)}
-  .map-pl{position:absolute;width:200px;border:1px solid var(--line);border-top:4px solid var(--svc,var(--cyan));border-radius:6px;background:var(--panel);padding:6px 9px 7px;display:flex;flex-direction:column;gap:3px;cursor:pointer;transition:border-color .15s;overflow:hidden}
+  .map-pl{position:absolute;width:250px;border:1px solid var(--line);border-top:4px solid var(--svc,var(--cyan));border-radius:6px;background:var(--panel);padding:6px 9px 7px;display:flex;flex-direction:column;gap:3px;cursor:pointer;transition:border-color .15s;overflow:hidden}
   .map-pl:hover{border-color:var(--accent);border-top-color:var(--svc,var(--cyan))}
   .map-pl .k{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--muted);display:flex;gap:8px;white-space:nowrap;align-items:baseline}
   .map-pl .k .svc{color:var(--svc,var(--cyan));flex:1;overflow:hidden;text-overflow:ellipsis}
   .map-pl .k .map-ev{color:var(--warn)}
   .map-pl .k .again{color:var(--dim)}
-  .map-pl .nm{font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .map-pl .sub{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* a call's words and its method and path wrap onto the lines they need; the node is sized for them (callTextH) */
+  .map-pl .nm{font-size:12.5px;line-height:16px;color:var(--ink);overflow-wrap:anywhere}
+  .map-pl .sub{font-family:var(--mono);font-size:10px;line-height:13px;color:var(--dim);overflow-wrap:anywhere}
   .map-pl.absent{border-style:dashed;border-top-style:solid;background:transparent}
   .map-pl.absent .nm{color:var(--muted)}
-  .map-pd{position:absolute;width:210px;height:36px;border:1px solid var(--line);border-left:3px solid var(--tbl);border-radius:5px;background:var(--panel);display:flex;flex-direction:column;justify-content:center;gap:1px;padding:0 8px;font-size:12px;color:var(--ink);cursor:pointer;transition:border-color .15s;min-width:0}
+  .map-pd{position:absolute;width:280px;height:36px;border:1px solid var(--line);border-left:3px solid var(--tbl);border-radius:5px;background:var(--panel);display:flex;flex-direction:column;justify-content:center;gap:1px;padding:0 8px;font-size:12px;color:var(--ink);cursor:pointer;transition:border-color .15s;min-width:0}
   .map-pd:hover{border-color:var(--accent);border-left-color:var(--tbl)}
   .map-pd.msg,.map-pd.msg:hover{border-left-color:var(--fn)}
   .map-pd.ext,.map-pd.ext:hover{border-left-color:var(--warn)}
@@ -2233,6 +2246,30 @@
   .map-edgecue.l{left:10px} .map-edgecue.r{right:10px}
   .map-edgecue .n{font-family:var(--mono);letter-spacing:0;color:var(--accent)}
   .map-edgecue:hover,.map-edgecue:focus-visible{background:var(--accent-dim);outline:none}
+  /* the legend (lane L): the board's own classes draw each swatch, so a swatch cannot describe a line the board does not draw */
+  .map-legend[hidden]{display:none}
+  .map-legend{position:absolute;right:12px;top:56px;z-index:7;width:340px;max-width:calc(100% - 24px);max-height:calc(100% - 110px);overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 18px 40px rgba(0,0,0,.45);padding:10px 14px 12px;display:flex;flex-direction:column;gap:8px;user-select:text;-webkit-user-select:text}
+  .map-legend .lg-top{display:flex;align-items:center;gap:8px}
+  .map-legend .lg-top .hud-label{flex:1;color:var(--accent)}
+  .map-legend .lg-top .x{color:var(--muted);font-size:13px;padding:0 2px}
+  .map-legend section{display:flex;flex-direction:column;gap:5px}
+  .map-legend .lg-h{font-size:9.5px;color:var(--dim)}
+  .map-legend .lg-row{display:grid;grid-template-columns:48px auto;column-gap:10px;align-items:center;font-size:12px;color:var(--ink)}
+  .map-legend .lg-row .w{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;color:var(--ink)}
+  .map-legend .lg-row .say{grid-column:2;color:var(--muted);font-size:11.5px;line-height:1.3}
+  .map-legend .sw{display:flex;align-items:center;justify-content:center;height:16px}
+  .map-lgsw{position:static;width:44px;height:12px;overflow:visible}
+  .map-lgsw g[data-link]{opacity:1}
+  .map-legend .mst i{display:inline-block;width:22px;height:5px;border-radius:2px;background:var(--stc)}
+  .map-legend .lg-stripe{width:30px;height:14px;border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:3px;background:var(--raised)}
+  .map-legend .lg-stripe.planned{border-left-color:var(--warn)}
+  .map-legend .lg-again{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--dim)}
+  .map-legend .lg-call{width:34px;height:14px;border:1px solid var(--line);border-top:3px solid var(--svc-0);border-radius:3px}
+  .map-legend .lg-call.absent{border-style:dashed;border-top-style:solid}
+  .map-legend .lg-times{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .map-legend .lg-evc{width:30px;height:16px;padding:0;justify-content:center}
+  .map-legend .lg-hint{margin:0;font-size:11px;color:var(--dim)}
   /* the explore card */
   .map-xcard[hidden]{display:none}
   .map-xcard{position:fixed;z-index:60;width:320px;max-width:calc(100vw - 32px);background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 18px 40px rgba(0,0,0,.45);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
@@ -2265,7 +2302,19 @@
   .pf-headrow h1{margin-right:auto}
   .pf-headrow .pf-viewsw{margin-left:0}
   .pf-headrow .jrn-viewbtn{font-size:10px;padding:5px 13px}
-  @media (max-width:860px){ .map-chrome{flex-wrap:wrap} .map-crumb{max-width:100%} }
+  /* a narrow stage (lane L, measured at 1024): the chrome tightens before anything clips — the tools stay on one
+     row, and the crumb takes a row of its own under them rather than cut the journey's name (whole in its tip) */
+  .map-crumb{flex:0 1 auto;min-width:96px}
+  .map-tools{flex-wrap:nowrap}
+  @media (max-width:1280px){
+    .map-chrome{gap:6px;flex-wrap:wrap}
+    .map-crumb{order:9;max-width:calc(100% - 8px);flex:0 1 auto}
+    .map-lvls button{padding:7px 8px;letter-spacing:.08em}
+    .map-tb{padding:6px 7px;letter-spacing:.06em}
+    .map-tools{flex-wrap:nowrap;gap:4px}
+    .map-asof{padding:6px 7px}
+  }
+  @media (max-width:860px){ .map-chrome{flex-wrap:wrap} .map-crumb{max-width:100%} .map-tools{flex-wrap:wrap} }
   /* ── MAP property — surfaces/map-property.js ─────────────────────────────
      One screen up close: the picture is the hero (left), a 352px rail of eight
      tabs (right, two rows of tabs), the step bar below. Under 860px the rail

@@ -25,14 +25,18 @@ import { tipAttrs, TIP_SELECTOR, hideTip } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, storesOf, MODE_ORDER } from '../lib/map-model.js';
-import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER } from '../lib/map-canvas.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, MODE_ORDER } from '../lib/map-model.js';
+import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import { shareLink } from '../share.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
-const SW = 260, SH = 214, COL = 480, HEAD = 118, SY = HEAD + 36, PAD = 60;
-const PL_TOP = SY + SH + 76, OPW = 200, DX = 230, DW = 210, ROW = 40, OPMIN = 68, OPGAP = 16;
+// lane L widened the column (480 → 600) so a call's words and path and a data node's kind line show whole at the
+// calls stop: a call wraps its name and path onto as many lines as they need (`callTextH`), never an ellipsis
+const SW = 260, SH = 236, COL = 600, HEAD = 118, SY = HEAD + 36, PAD = 60;
+const PL_TOP = SY + SH + 76, OPW = 250, DX = 280, DW = 280, ROW = 40, OPMIN = 68, OPGAP = 16;
+/** A call node's text metrics (CSS `.map-pl`): characters per line of its name and of its path, and line heights — on the safe side, so the box is never shorter than its words. */
+const CALL_NAME_CH = 31, CALL_PATH_CH = 35, CALL_NAME_LH = 16, CALL_PATH_LH = 13, CALL_CHROME_H = 36;
 /** The folds (map-view.md, street fold): a call draws its first DATA_SHOWN data nodes, a screen its first CALLS_SHOWN
  * calls; the rest fold into one row — but only when that saves a row (a fold row standing in for one node does not). */
 const DATA_SHOWN = 3, CALLS_SHOWN = 4, FOLD_H = 34;
@@ -50,6 +54,8 @@ const ENTER_COVER = SNAP_COVER + 0.04;
 /** Leaving a property lands on the street at this scale, centred on the screen. */
 const STREET_SCALE = 1.0;
 const PLUMB_KEY = 'fs-map-plumb';
+/** Set once the legend has opened by itself, so it does so on a reader's first visit only. */
+const LEGEND_KEY = 'fs-map-legend-seen';
 
 /** The surface's own state. Nothing here is shared with the journey overlay. */
 const MAP = {
@@ -71,6 +77,8 @@ const MAP = {
   route: null,
   /** the folds the reader opened while the board is mounted: `calls|<flow>|<si>`, `data|<flow>|<si>|<ci>` */
   open: new Set(),
+  /** whether the legend panel is open */
+  legend: false,
 };
 
 /** Per-sync cache of journey answers, keyed `flowId@sync` — a register flip never refetches. */
@@ -131,8 +139,20 @@ function storeKindKey(st) { return 'map.store.kind.' + storeKind(st); }
  * a product name or a word somebody wrote in the settings, so every register prints it.
  */
 function dataKindWords(dd) {
+  // the business lens says what it is in plain words: Invoice DB · database record, Example ERP · ERP record
+  if (biz()) return (dd.store ? dd.store.name + ' · ' : '') + t(dataBizKey(dd));
   if (!dd.store) return kindWord(dd.kind);
   return dd.store.name + ' · ' + (dd.kind === 'record' ? kindWord('record') : t(storeKindKey(dd.store)));
+}
+/** The business lens's word for a data node: by its store's kind when it has one, else by its own kind. */
+function dataBizKey(dd) {
+  if (dd.store) return 'map.biz.kind.' + storeKind(dd.store);
+  return dd.kind === 'message' ? 'map.biz.kind.message' : dd.kind === 'external' ? 'map.biz.kind.external' : 'map.biz.kind.record';
+}
+/** Whether a call's evidence word prints: never *spec-backed* on the street, and in the business lens only the absences (*declared, not called*, *not built*). */
+function evShown(ev, onCard) {
+  if (ev === 'spec-backed') return !!onCard && !biz();
+  return !(biz() && ev === 'implied');
 }
 function evKey(ev) {
   return ev === 'spec-backed' ? 'map.ev.specBacked' : ev === 'implied' ? 'map.ev.implied' : ev === 'declared' ? 'map.ev.declared' : 'journey.absent.notBuilt';
@@ -209,7 +229,9 @@ export function mapRefresh(reason) {
   if (!MAP.el || !MAP.world) return;
   if (reason === 'lens' || reason === 'register') {
     redrawChrome();
-    renderAll();
+    // a call's height follows its words in the lens, so the districts re-lay (the journey in view stays put)
+    relayoutKeeping(() => renderAll());
+    if (MAP.legend) drawLegend();
     if (MAP.card) reopenCard();
     if (MAP.prop && MAP.prop.handle && MAP.prop.handle.update) MAP.prop.handle.update(propCtx());
     return;
@@ -270,6 +292,7 @@ function start() {
     MAP.nb = neighbourhoodModel(MAP.designs, null);
     layout();
     renderAll();
+    if (MAP.nb.districts.length && !legendSeen()) { markLegendSeen(); openLegend(); }
     fillWork(gen);
     applyRouteTarget(MAP.route, false);
     walk(gen);
@@ -298,6 +321,7 @@ async function ensureJourney(id, gen = MAP.gen) {
   const entry = data && data.summary ? { data, model: streetModel(data, S.BYID) } : { error: true };
   MAP.journeys.set(id, entry);
   relayoutKeeping(() => renderDistrict(id));
+  if (MAP.legend) drawLegend();
   if (MAP.autoFit === id && !MAP.prop) enterJourney(id, false);
   return entry;
 }
@@ -310,7 +334,7 @@ function fillWork(gen) {
       d.work = resp;
       MAP.world.querySelectorAll('[data-work-for="' + cssAttr(d.id) + '"]').forEach((el) => { el.innerHTML = flowChipHtml(resp); });
       const de = districtEl(d.id);
-      if (de) tabDistrict(de);
+      if (de) { tabDistrict(de); foldCoverChips(de); }
     });
   }
 }
@@ -477,9 +501,25 @@ function screenCalls(flow, si, s) {
   if (!foldable) return { shown: all, fold: null, hidden: 0 };
   return open ? { shown: all, fold: 'less', hidden: 0 } : { shown: all.slice(0, CALLS_SHOWN), fold: 'more', hidden: all.length - CALLS_SHOWN };
 }
+/** Lines a text takes at `per` characters a line, wrapping at spaces (a word longer than a line breaks anywhere). */
+function textLines(text, per) {
+  let lines = 1, col = 0;
+  for (const w of String(text || '').split(/\s+/).filter(Boolean)) {
+    const n = w.length;
+    if (col && col + 1 + n > per) { lines++; col = 0; }
+    if (n > per) { lines += Math.floor((col + n) / per); col = (col + n) % per; } else col += (col ? 1 : 0) + n;
+  }
+  return lines;
+}
+/** The height a call's words and path need in the lens on screen (the business lens prints no path). */
+function callTextH(c) {
+  const name = textLines(callWords(c), CALL_NAME_CH) * CALL_NAME_LH;
+  const path = biz() ? 0 : textLines((c.method + ' ' + c.path).trim(), CALL_PATH_CH) * CALL_PATH_LH;
+  return CALL_CHROME_H + name + path;
+}
 function callRowH(flow, si, ci, c) {
   const cd = callData(flow, si, ci, c);
-  return Math.max(OPMIN, (cd.shown.length + (cd.fold ? 1 : 0)) * ROW - 4);
+  return Math.max(OPMIN, (cd.shown.length + (cd.fold ? 1 : 0)) * ROW - 4, callTextH(c));
 }
 /** A screen's pathway height as drawn now — folded unless the reader opened it. */
 function stackH(flow, si, s) {
@@ -492,8 +532,8 @@ function districtSize(d) {
   const j = MAP.journeys.get(d.id);
   const deepest = j && j.model ? Math.max(0, ...j.model.screens.map((s, si) => stackH(d.id, si, s))) : 0;
   // without plumbing a district is its head, its screens and room below them: tall enough that a cover
-  // divided by --map-inv's cap (4) still holds a two-line name, a two-line sentence and the chip row
-  const h = MAP.plumb && deepest ? PL_TOP + deepest + 70 : SY + SH + 130;
+  // divided by --map-inv's cap (4) still holds a two-line name, a two-line sentence and two rows of chips
+  const h = MAP.plumb && deepest ? PL_TOP + deepest + 70 : SY + SH + 160;
   return { w, h };
 }
 /**
@@ -537,6 +577,8 @@ function placeDistricts() {
     if (el) el.style.cssText = 'left:' + g.x + 'px;top:' + g.y + 'px;width:' + g.w + 'px;height:' + g.h + 'px';
   }
   if (MAP.links) { MAP.links.setAttribute('width', MAP.size.w); MAP.links.setAttribute('height', MAP.size.h); }
+  // the covers' boxes follow their districts' sizes: their chip rows fold again
+  foldCoverChips();
 }
 function districtEl(id) {
   return MAP.world ? MAP.world.querySelector('.map-district[data-flow="' + cssAttr(id) + '"]') : null;
@@ -686,6 +728,9 @@ function onCanvasChange(st) {
   }
   MAP.world.querySelectorAll('.map-district').forEach((d) => d.classList.toggle('focus', st.level === 'st' && d.dataset.flow === MAP.focus));
   linkVisibility();
+  // the covers' boxes follow the counter-scale; their chip rows re-fold when it has moved
+  const inv = Math.min(1 / st.s, INV_MAX);
+  if (st.level === 'nb' && Math.abs(inv - (MAP.foldInv || 0)) > 0.08) { MAP.foldInv = inv; foldCoverChips(); }
   drawCrumb();
   drawHint(st);
   applyTabbing();
@@ -767,12 +812,12 @@ function stageHtml() {
     + '<button type="button" class="map-edgecue l" hidden></button><button type="button" class="map-edgecue r" hidden></button>'
     + '<div class="map-hint" aria-live="polite"></div>'
     + '<div class="map-zoomro"' + tipAttrs({ key: 'map.zoom', noFocus: true }) + '></div>'
+    + '<div class="map-legend" hidden role="dialog" aria-label="' + esc(t('map.legend.title')) + '"></div>'
     + '<div class="map-prop-host" hidden></div>'
     + '</div><div class="map-xcard" hidden role="dialog"></div></div>';
 }
 function chromeHtml() {
   const lvl = (l, key) => '<button type="button" data-l="' + l + '" aria-pressed="false"' + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
-  const lensOn = biz();
   const tool = (act, key, label, extra) => '<button type="button" class="map-tb' + (extra || '') + '" data-act="' + act + '" aria-label="' + esc(t(key)) + '"' + tipAttrs({ key, noFocus: true }) + '>' + label + '</button>';
   return '<div class="map-lvls" role="group" aria-label="' + esc(t('map.levels')) + '">'
     + lvl('nb', 'map.level.nb') + lvl('st', 'map.level.st') + lvl('pr', 'map.level.pr') + '</div>'
@@ -780,12 +825,12 @@ function chromeHtml() {
     + '<span class="map-asof"></span>'
     + '<div class="map-tools">'
     + tool('plumb', 'map.tool.plumb', esc(t('map.tool.plumb')), MAP.plumb ? ' on' : '')
-    + tool('lens', 'map.tool.lens', esc(t('map.tool.lens')) + ' · ' + esc(t(lensOn ? 'chrome.lensBusiness' : currentLens() === 'code' ? 'chrome.lensCode' : 'chrome.lensHybrid')), lensOn ? ' on' : '')
     + tool('in', 'map.tool.zoomIn', '+')
     + tool('out', 'map.tool.zoomOut', '−')
     + tool('fit', 'map.tool.fit', esc(t('map.tool.fit')))
     + tool('full', 'map.tool.full', esc(t('map.tool.full')))
     + tool('link', 'map.tool.link', esc(t('map.tool.link')))
+    + tool('legend', 'map.tool.legend', '?', MAP.legend ? ' on map-tb-legend' : ' map-tb-legend')
     + '</div>';
 }
 function redrawChrome() {
@@ -805,7 +850,10 @@ function drawCrumb() {
     const sc = propScreen();
     if (sc) html += sep + '<b>' + esc(sc.name) + '</b>';
   }
-  el.innerHTML = html;
+  // on a narrow stage the journey's name may ellipsize: the trail is whole in its tip
+  const whole = el.ownerDocument.createElement('div');
+  whole.innerHTML = html;
+  el.innerHTML = '<span' + tipAttrs({ text: whole.textContent.replace(/›/g, ' › '), noFocus: true }) + '>' + html + '</span>';
   drawAsOf();
 }
 /**
@@ -850,7 +898,7 @@ function onChromeClick(e) {
   if (b.dataset.l) { goLevel(b.dataset.l); return; }
   switch (b.dataset.act) {
     case 'plumb': setPlumb(!MAP.plumb); break;
-    case 'lens': toggleLens(); break;
+    case 'legend': toggleLegend(); break;
     case 'in': mapZoom(1.35); break;
     case 'out': mapZoom(1 / 1.35); break;
     case 'fit': mapFit(); break;
@@ -871,10 +919,6 @@ function goLevel(l) {
     centreScreen(flow, i, STREET_SCALE, false);
     openProperty(flow, i);
   });
-}
-function toggleLens() {
-  const next = biz() ? 'hybrid' : 'business';
-  if (typeof window.setLens === 'function') window.setLens(next);
 }
 function toggleFull() {
   if (!MAP.stage) return;
@@ -970,6 +1014,103 @@ export function mapFit() {
   writeHash(null, null);
 }
 
+// ── the legend (lane L) ──────────────────────────────────────────────────
+function legendSeen() { try { return localStorage.getItem(LEGEND_KEY) === '1'; } catch { return true; } }
+function markLegendSeen() { try { localStorage.setItem(LEGEND_KEY, '1'); } catch { /* a private window: it opens again next visit */ } }
+/** Open or close the legend (the `?` tool). @group Map */
+export function toggleLegend() { if (MAP.legend) closeLegend(); else openLegend(); }
+function openLegend() {
+  MAP.legend = true;
+  drawLegend();
+  const b = MAP.stage && MAP.stage.querySelector('[data-act="legend"]');
+  if (b) { b.classList.add('on'); b.setAttribute('aria-expanded', 'true'); }
+}
+function closeLegend() {
+  MAP.legend = false;
+  const box = MAP.stage && MAP.stage.querySelector('.map-legend');
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  const b = MAP.stage && MAP.stage.querySelector('[data-act="legend"]');
+  if (b) { b.classList.remove('on'); b.setAttribute('aria-expanded', 'false'); }
+}
+/** What the board has drawn so far, so the legend lists only that. */
+function legendFacts() {
+  const f = { links: new Set(), modes: new Set(), stores: new Map(), again: false, planned: false, built: false, times: false, ev: new Set(), evidence: new Map(), calls: false };
+  if (MAP.links) MAP.links.querySelectorAll('g[data-link]').forEach((g) => f.links.add(g.dataset.both ? 'both' : g.dataset.link));
+  for (const j of MAP.journeys.values()) {
+    if (!j || !j.model) continue;
+    for (const st of storesOf(j.model)) if (!f.stores.has(storeKind(st))) f.stores.set(storeKind(st), st);
+    for (const s of j.model.screens) {
+      if (s.state === 'planned') f.planned = true; else f.built = true;
+      if ((s.gates || []).some((g) => g.count > 1)) f.times = true;
+      for (const c of s.calls) {
+        f.calls = true;
+        if (c.repeat) f.again = true;
+        if (c.evidence !== 'spec-backed') f.ev.add(c.evidence);
+        for (const d of c.data) f.modes.add(d.mode);
+      }
+    }
+    const ew = j.data && j.data.summary && j.data.summary.coverage && j.data.summary.coverage.journey && j.data.summary.coverage.journey.evidenceWord;
+    if (ew && ew.key && !f.evidence.has(ew.key)) f.evidence.set(ew.key, ew);
+  }
+  return f;
+}
+/** One row: a swatch drawn with the board's own classes (so it cannot describe a line the board does not draw), its word, and a sentence. */
+function lgRow(kind, swatch, key, sayKey) {
+  return '<div class="lg-row" data-lg="' + esc(kind) + '"><span class="sw">' + swatch + '</span>'
+    + '<span class="w"' + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</span>'
+    + (sayKey ? '<span class="say">' + esc(t(sayKey)) + '</span>' : '') + '</div>';
+}
+function lgLine(kind, both) {
+  const head = kind === 'partOf' ? '' : '<path class="head" d="M35 2 L41 6 L35 10"/>' + (both ? '<path class="head" d="M9 2 L3 6 L9 10"/>' : '');
+  return '<svg class="map-links map-lgsw" viewBox="0 0 44 12" aria-hidden="true"><g data-link="' + kind + '" class="hot"><path class="ln' + (kind === 'partOf' ? ' contains' : '') + '" d="M3 6 L41 6"/>' + head + '</g></svg>';
+}
+function lgFlow(mode) {
+  const cls = 'plumb ' + (mode === 'read' ? 'read' : mode === 'reached' ? 'reached' : 'write');
+  const toCall = '<path class="' + cls + '" d="M9 2 L3 6 L9 10"/>', toData = '<path class="' + cls + '" d="M35 2 L41 6 L35 10"/>';
+  return '<svg class="map-edges map-lgsw" viewBox="0 0 44 12" aria-hidden="true"><path class="' + cls + '" d="M3 6 L41 6"/>'
+    + (mode === 'reached' ? '' : (mode !== 'write' ? toCall : '') + (mode !== 'read' ? toData : '')) + '</svg>';
+}
+function lgHead(key) { return '<div class="lg-h hud-label"' + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</div>'; }
+function drawLegend() {
+  const box = MAP.stage && MAP.stage.querySelector('.map-legend');
+  if (!box || !MAP.legend) return;
+  const f = legendFacts();
+  let html = '<div class="lg-top"><span class="hud-label"' + tipAttrs({ key: 'map.legend.title', noFocus: true }) + '>' + esc(t('map.legend.title')) + '</span>'
+    + '<button type="button" class="x" data-act="legend-close" aria-label="' + esc(t('map.legend.close')) + '">✕</button></div>';
+  // between journeys: leads to (its mirror, requires, is the same line read backwards), each other, part of
+  const between = [];
+  if (f.links.has('leadsTo') || !f.links.size) between.push(lgRow('leadsTo', lgLine('leadsTo'), 'map.link.leadsTo') + lgRow('requires', lgLine('leadsTo'), 'map.link.requires', 'map.legend.requires'));
+  if (f.links.has('both')) between.push(lgRow('mutual', lgLine('leadsTo', true), 'map.link.both'));
+  if (f.links.has('partOf')) between.push(lgRow('partOf', lgLine('partOf'), 'map.link.partOf'));
+  html += '<section>' + lgHead('map.legend.between') + between.join('') + '</section>';
+  // under each screen: what a call does to the data beside it, the stores by kind
+  if (f.calls) {
+    const modes = [['read', 'map.lane.reads'], ['write', 'map.lane.writes'], ['both', 'map.legend.both'], ['reached', 'map.mode.reached']]
+      .filter(([m]) => m === 'read' || m === 'write' || f.modes.has(m));
+    html += '<section>' + lgHead('map.legend.under') + modes.map(([m, k]) => lgRow(m, lgFlow(m), k)).join('')
+      + [...f.stores.entries()].map(([kind, st]) => lgRow('store-' + kind, '<span class="mst st-' + kind + '"><i></i></span>', biz() ? 'map.biz.kind.' + kind : storeKindKey(st))).join('')
+      + '</section>';
+  }
+  // on a screen: the stripes, AGAIN, the evidence words on a call (not in the business lens), the ×n mark
+  const marks = [];
+  if (f.built) marks.push(lgRow('built', '<span class="lg-stripe"></span>', 'map.legend.built'));
+  if (f.planned) marks.push(lgRow('planned', '<span class="lg-stripe planned"></span>', 'map.screen.planned'));
+  if (f.again) marks.push(lgRow('again', '<span class="lg-again">' + esc(t('map.call.again')) + '</span>', 'map.call.again', 'map.legend.againSay'));
+  for (const ev of f.ev) if (!biz() || ev !== 'implied') marks.push(lgRow('ev-' + ev, '<span class="lg-call' + (ev === 'implied' ? '' : ' absent') + '"></span>', evKey(ev)));
+  if (f.times) marks.push(lgRow('times', '<span class="lg-times">' + esc(t('map.legend.times')) + '</span>', 'map.legend.timesSay'));
+  html += '<section>' + lgHead('map.legend.screens') + marks.join('') + '</section>';
+  // what proves a journey runs: the evidence words the journeys on the board earned
+  if (f.evidence.size) {
+    html += '<section>' + lgHead('map.legend.evidence') + [...f.evidence.entries()].map(([key, ew]) =>
+      lgRow('evidence-' + (ew.cls || 'none'), '<span class="map-chip k-ev lg-evc ev-' + esc(ew.cls || 'none') + '">'
+        + (ew.cls === 'observed' ? sym('live') : ew.cls === 'stale' ? sym('stale') : ew.cls === 'reached' ? sym('step') : '') + '</span>', key)).join('') + '</section>';
+  }
+  html += '<p class="lg-hint">' + esc(t('map.legend.hint')) + '</p>';
+  box.innerHTML = html;
+  box.hidden = false;
+  box.onclick = (e) => { const b = e.target.closest('[data-act="legend-close"]'); if (b) closeLegend(); };
+}
+
 // ── drawing ──────────────────────────────────────────────────────────────
 function renderAll() {
   if (!MAP.world) return;
@@ -1013,13 +1154,15 @@ function renderDistrict(id) {
     // the cover is counter-scaled (--map-inv, set by the canvas) so its name reads at any zoom;
     // its whole sentence is the cover's tip
     + '<div class="map-dcover" role="button" tabindex="0" data-enter="' + esc(id) + '" aria-label="' + esc(t('map.cover.enter') + ' · ' + nameWords(d.name)) + '"'
-    + (desc ? tipAttrs({ text: desc, noFocus: true }) : '') + '><div class="map-dcover-in">'
+    + tipAttrs({ text: nameWords(d.name) + (desc ? ' · ' + desc : ''), noFocus: true }) + '><div class="map-dcover-in">'
     + '<div class="nm">' + esc(nameWords(d.name)) + '</div>'
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
     + '<div class="agg">' + agg + '</div></div></div>';
   el.classList.toggle('loaded', !!(j && j.model));
   sizeDistrict(id);
   tabDistrict(el);
+  // a district drawn before it is placed has no size yet: placeDistricts() folds it once it has one
+  if (el.style.width) foldCoverChips(el);
   if (had) focusQuiet(el.querySelector(had));
 }
 /** A selector that finds the same board element after a redraw. */
@@ -1030,6 +1173,38 @@ function focusKey(a) {
   if (own.matches('.map-scr')) return '.map-scr[data-index="' + own.dataset.index + '"]';
   if (own.matches('.map-fold')) return '.map-fold[data-fold="' + cssAttr(own.dataset.fold) + '"]';
   return '.' + own.classList[0] + '[data-si="' + own.dataset.si + '"][data-ci="' + own.dataset.ci + '"]' + (own.dataset.di != null ? '[data-di="' + own.dataset.di + '"]' : '');
+}
+/**
+ * A cover's chips wrap to a second row; past two rows the last ones fold into one `+n` chip whose tip lists them —
+ * measured, because the cover's box follows the zoom (`--map-inv`). Run when a district draws and when the zoom
+ * moves the counter-scale.
+ */
+function foldCoverChips(scope) {
+  const aggs = scope ? scope.querySelectorAll('.map-dcover .agg') : MAP.world ? MAP.world.querySelectorAll('.map-dcover .agg') : [];
+  aggs.forEach((agg) => {
+    agg.querySelectorAll(':scope > .map-more').forEach((x) => x.remove());
+    const kids = [...agg.children];
+    kids.forEach((k) => { k.hidden = false; });
+    const shown = () => kids.filter((k) => !k.hidden && k.offsetParent !== null && k.offsetWidth > 0);
+    const vis = shown();
+    if (!vis.length) return;
+    const top0 = vis[0].offsetTop, rowH = vis[0].offsetHeight;
+    const row = (el) => Math.round((el.offsetTop - top0) / (rowH + 4));
+    if (vis.every((k) => row(k) <= 1)) return;
+    const hidden = [];
+    let more = null;
+    for (let i = vis.length - 1; i > 0; i--) {
+      vis[i].hidden = true;
+      hidden.unshift(vis[i]);
+      if (more) more.remove();
+      const n = hidden.length;
+      const rows = hidden.map((h) => [h.textContent.trim(), 1]);
+      agg.insertAdjacentHTML('beforeend', '<span class="map-chip map-more"' + plainTip(n, 'map.cover.moreOf', 'map.fold.scopeJourney', '/api/journey', rows).replace(' tabindex="0"', '') + '>'
+        + esc(t('map.cover.more').replace('{n}', String(n))) + '</span>');
+      more = agg.lastElementChild;
+      if (row(more) <= 1 && shown().every((k) => row(k) <= 1)) break;
+    }
+  });
 }
 function sizeDistrict(id) {
   const el = districtEl(id);
@@ -1106,7 +1281,7 @@ function streetHtml(d, j, g) {
   m.screens.forEach((s, si) => {
     const x = PAD + si * COL;
     let y = PL_TOP;
-    const tx = x + 100;
+    const tx = x + OPW / 2;
     const sc = screenCalls(d.id, si, s);
     sc.shown.forEach(({ c, ci }) => {
       const h = callRowH(d.id, si, ci, c);
@@ -1159,7 +1334,7 @@ function screenHtml(d, m, s, x, y, n) {
 /** One call on a screen's pathway: the service bar, its evidence where it is not spec-backed, its name and (not in the business lens) its method and path. */
 function callHtml(d, s, c, si, ci, x, y, h) {
   const svc = c.service ? 'svc-' + (c.service.index % 6) : 'svc-none';
-  const ev = c.evidence === 'spec-backed' ? '' : '<span class="map-ev"' + tipAttrs({ key: evKey(c.evidence), noFocus: true }) + '>' + esc(t(evKey(c.evidence))) + '</span>';
+  const ev = !evShown(c.evidence) ? '' : '<span class="map-ev"' + tipAttrs({ key: evKey(c.evidence), noFocus: true }) + '>' + esc(t(evKey(c.evidence))) + '</span>';
   const again = c.repeat ? '<span class="again"' + tipAttrs({ key: 'map.call.again', noFocus: true }) + '>' + esc(t('map.call.again')) + '</span>' : '';
   return '<div class="map-pl ' + svc + (ghost(c) ? ' absent' : '') + '" role="button" tabindex="0" data-kind="call"'
     + ' data-evidence="' + esc(c.evidence) + '" data-svc="' + esc(c.service ? c.service.label : '') + '"'
@@ -1200,7 +1375,7 @@ function dataHtml(d, s, c, dd, si, ci, k, x, y) {
     + (dd.store ? ' data-store="' + esc(dd.store.name) + '" data-store-kind="' + esc(storeKind(dd.store)) + '"' : '')
     + ' data-flow="' + esc(d.id) + '" data-si="' + si + '" data-ci="' + ci + '" data-di="' + k + '" style="left:' + x + 'px;top:' + y + 'px">'
     // the kind line truncates (kind · identifier, then what the call does to it); the name has the node's width
-    + '<span class="top"><span class="kd">' + esc(dataKindWords(dd)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
+    + '<span class="top"><span class="kd"' + (biz() ? tipAttrs({ key: dataBizKey(dd), noFocus: true }) : '') + '>' + esc(dataKindWords(dd)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
     + '<span class="rw ' + esc(dd.mode) + '"' + tipAttrs({ key: modeKey(dd.mode), noFocus: true }) + '>' + esc(modeWord(dd.mode)) + '</span></span>'
     + '<span class="nm">' + esc(dataWords(dd)) + '</span></div>';
 }
@@ -1208,19 +1383,22 @@ function dataHtml(d, s, c, dd, si, ci, k, x, y) {
 /**
  * The links between districts, from each journey's own `summary.links`: *leads
  * to* (and its mirror *requires*, drawn once) and *part of*. A link appears when
- * the walk that names it lands — never inferred here.
+ * the walk that names it lands — never inferred here. Two journeys that each
+ * lead to the other are one line with an arrowhead at each end and one label.
+ * The routes are `routeLinks()` (lib/map-model.js): orthogonal, in the gutters,
+ * never across a district, each label once on its own line where it clears
+ * every cover.
  */
 function drawLinks() {
   if (!MAP.links) return;
-  const seen = new Set();
-  let out = '';
+  const byKey = new Map();
   const edge = (from, to, kind) => {
+    if (from === to || !MAP.geom.has(from) || !MAP.geom.has(to)) return;
     const key = kind + ':' + from + '>' + to;
-    if (seen.has(key) || from === to) return;
-    const a = MAP.geom.get(from), b = MAP.geom.get(to);
-    if (!a || !b) return;
-    seen.add(key);
-    out += linkPath(a, b, kind).replace('<g ', '<g data-from="' + esc(from) + '" data-to="' + esc(to) + '" ');
+    if (byKey.has(key)) return;
+    const back = byKey.get(kind + ':' + to + '>' + from);
+    if (back && kind === 'leadsTo') { back.both = true; return; }
+    byKey.set(key, { from, to, kind, both: false });
   };
   for (const [id, j] of MAP.journeys) {
     const l = j && j.model && j.model.links;
@@ -1229,18 +1407,77 @@ function drawLinks() {
     for (const r of l.requires || []) edge(r.id, id, 'leadsTo');
     for (const r of l.partOf || []) edge(r.id, id, 'partOf');
   }
-  MAP.links.innerHTML = out;
+  const list = [...byKey.values()].map((l) => {
+    const word = t(linkWordKey(l));
+    const w = labelWidth(word);
+    return { ...l, word, labelW: w + LINK_LABEL_PAD * 2, labelH: LINK_LABEL_H };
+  });
+  const routed = routeLinks(MAP.geom, list);
+  MAP.links.innerHTML = routed.map(linkHtml).join('');
   linkVisibility();
+}
+const LINK_LABEL_H = 18, LINK_LABEL_PAD = 7, LINK_CORNER = 26;
+function linkWordKey(l) { return l.kind === 'partOf' ? 'map.link.partOf' : l.both ? 'map.link.both' : 'map.link.leadsTo'; }
+/** A label's width at the counter-scale of 1, measured once per word on the links layer itself (so the HUD face counts). */
+const LABEL_W = new Map();
+function labelWidth(word) {
+  if (LABEL_W.has(word)) return LABEL_W.get(word);
+  let w = 0;
+  try {
+    const probe = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    probe.setAttribute('class', 'probe');
+    probe.textContent = word;
+    MAP.links.appendChild(probe);
+    w = probe.getComputedTextLength();
+    probe.remove();
+  } catch { w = 0; }
+  // before the face has loaded, or off the page: a generous estimate of the condensed capitals
+  if (!(w > 0)) w = word.length * 8.6;
+  w = Math.ceil(w + word.length * 0.6);
+  LABEL_W.set(word, w);
+  return w;
+}
+/** A polyline with its corners rounded. */
+function roundedPath(pts) {
+  let d = 'M' + pts[0].x + ' ' + pts[0].y;
+  for (let k = 1; k < pts.length - 1; k++) {
+    const a = pts[k - 1], b = pts[k], c = pts[k + 1];
+    const l1 = Math.hypot(b.x - a.x, b.y - a.y), l2 = Math.hypot(c.x - b.x, c.y - b.y);
+    const r = Math.min(LINK_CORNER, l1 / 2, l2 / 2);
+    const p = { x: b.x - ((b.x - a.x) / (l1 || 1)) * r, y: b.y - ((b.y - a.y) / (l1 || 1)) * r };
+    const q = { x: b.x + ((c.x - b.x) / (l2 || 1)) * r, y: b.y + ((c.y - b.y) / (l2 || 1)) * r };
+    d += ' L' + p.x + ' ' + p.y + ' Q' + b.x + ' ' + b.y + ' ' + q.x + ' ' + q.y;
+  }
+  const z = pts[pts.length - 1];
+  return d + ' L' + z.x + ' ' + z.y;
+}
+/** An arrowhead at `at`, pointing from `from`; counter-scaled so it reads at any zoom. */
+function arrowHtml(from, at) {
+  const deg = Math.atan2(at.y - from.y, at.x - from.x) * 180 / Math.PI;
+  return '<path class="head" d="M-10 -6 L0 0 L-10 6" style="transform:translate(' + at.x + 'px,' + at.y + 'px) rotate(' + deg.toFixed(1) + 'deg) scale(var(--map-inv,1))"/>';
+}
+function linkHtml(l) {
+  const p = l.points, n = p.length;
+  const heads = l.kind === 'partOf' ? '' : arrowHtml(p[n - 2], p[n - 1]) + (l.both ? arrowHtml(p[1], p[0]) : '');
+  const lb = l.label;
+  // the label is drawn once, on its own line, in a gap the line leaves for it; it shows from the zoom it fits at
+  const label = lb ? '<g class="lbl" data-scale="' + lb.scale + '" style="transform:translate(' + lb.x + 'px,' + lb.y + 'px) scale(var(--map-inv,1))">'
+    + '<rect x="' + (-l.labelW / 2) + '" y="' + (-l.labelH / 2) + '" width="' + l.labelW + '" height="' + l.labelH + '" rx="3"/>'
+    + '<text x="0" y="0.5" text-anchor="middle" dominant-baseline="central">' + esc(l.word) + '</text></g>' : '';
+  return '<g data-link="' + l.kind + '"' + (l.both ? ' data-both="1"' : '') + ' data-from="' + esc(l.from) + '" data-to="' + esc(l.to) + '">'
+    + '<path class="ln' + (l.kind === 'partOf' ? ' contains' : '') + '" d="' + roundedPath(p) + '" vector-effect="non-scaling-stroke"/>' + heads + label + '</g>';
 }
 /**
  * Which links show. *Leads to* is always drawn, dimmed. *Part of* is noise at
  * the fit: it shows only for the district under the pointer or the focus, or
  * at the street when both its ends are in view. The district under the pointer
- * or the focus brings all of its links up, with their words.
+ * or the focus brings all of its links up. A label shows once the board is
+ * zoomed in far enough for it to fit where it was placed.
  */
 function linkVisibility() {
   if (!MAP.links || !MAP.cv) return;
   const st = MAP.cv.state();
+  const inv = Math.min(1 / st.s, INV_MAX);
   const c = MAP.cv.viewCenter();
   const view = { x: c.x - c.w / 2, y: c.y - c.h / 2, w: c.w, h: c.h };
   const inView = (id) => { const g = MAP.geom.get(id); return !!g && g.x < view.x + view.w && view.x < g.x + g.w && g.y < view.y + view.h && view.y < g.y + g.h; };
@@ -1249,6 +1486,8 @@ function linkVisibility() {
     const show = g.dataset.link !== 'partOf' || hot || (st.level === 'st' && inView(g.dataset.from) && inView(g.dataset.to));
     g.classList.toggle('off', !show);
     g.classList.toggle('hot', hot);
+    const lb = g.querySelector('.lbl');
+    if (lb) lb.classList.toggle('off', inv > Number(lb.dataset.scale) + 1e-6);
   });
 }
 function onDistrictHot(e) {
@@ -1257,33 +1496,6 @@ function onDistrictHot(e) {
   if (id === MAP.hot) return;
   MAP.hot = id;
   linkVisibility();
-}
-function linkPath(a, b, kind) {
-  const cls = kind === 'partOf' ? ' class="contains"' : '';
-  const word = esc(t(kind === 'partOf' ? 'map.link.partOf' : 'map.link.leadsTo'));
-  const acx = a.x + a.w / 2, bcx = b.x + b.w / 2;
-  let d, lx, ly, head = '', anchor = 'start';
-  if (b.y >= a.y + a.h) {                       // below
-    const x1 = Math.max(a.x + 60, Math.min(a.x + a.w - 60, bcx)), y1 = a.y + a.h, x2 = bcx, y2 = b.y;
-    d = 'M' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + (y1 + 110) + ', ' + x2 + ' ' + (y2 - 110) + ', ' + x2 + ' ' + y2;
-    lx = (x1 + x2) / 2 + 12; ly = (y1 + y2) / 2;
-    head = 'M' + (x2 - 10) + ' ' + (y2 - 16) + ' L' + x2 + ' ' + y2 + ' L' + (x2 + 10) + ' ' + (y2 - 16);
-  } else if (a.y >= b.y + b.h) {                // above
-    const x1 = acx, y1 = a.y, x2 = Math.max(b.x + 60, Math.min(b.x + b.w - 60, acx)), y2 = b.y + b.h;
-    d = 'M' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + (y1 - 110) + ', ' + x2 + ' ' + (y2 + 110) + ', ' + x2 + ' ' + y2;
-    lx = (x1 + x2) / 2 + 12; ly = (y1 + y2) / 2;
-    head = 'M' + (x2 - 10) + ' ' + (y2 + 16) + ' L' + x2 + ' ' + y2 + ' L' + (x2 + 10) + ' ' + (y2 + 16);
-  } else {                                      // beside
-    const right = b.x >= a.x;
-    const x1 = right ? a.x + a.w : a.x, y1 = a.y + Math.min(a.h, b.h) / 2, x2 = right ? b.x : b.x + b.w, y2 = b.y + Math.min(a.h, b.h) / 2;
-    const k = right ? 60 : -60;
-    d = 'M' + x1 + ' ' + y1 + ' C ' + (x1 + k) + ' ' + y1 + ', ' + (x2 - k) + ' ' + y2 + ', ' + x2 + ' ' + y2;
-    lx = (x1 + x2) / 2; ly = Math.min(y1, y2) - 16; anchor = 'middle';
-    head = right ? 'M' + (x2 - 16) + ' ' + (y2 - 10) + ' L' + x2 + ' ' + y2 + ' L' + (x2 - 16) + ' ' + (y2 + 10)
-      : 'M' + (x2 + 16) + ' ' + (y2 - 10) + ' L' + x2 + ' ' + y2 + ' L' + (x2 + 16) + ' ' + (y2 + 10);
-  }
-  return '<g data-link="' + kind + '"><path' + cls + ' d="' + d + '"/>' + (kind === 'partOf' ? '' : '<path d="' + head + '"/>')
-    + '<text x="' + lx + '" y="' + ly + '" text-anchor="' + anchor + '">' + word + '</text></g>';
 }
 
 // ── clicks on the board ──────────────────────────────────────────────────
@@ -1374,7 +1586,7 @@ function drawCard() {
     const modes = [...new Set(c.data.map((x) => x.mode).filter((x) => x !== 'reached'))];
     const dir = modes.length ? (modes.includes('both') || (modes.includes('read') && modes.includes('write')) ? t('map.lane.both') : modeWord(modes[0])) : '';
     head = esc(c.service ? c.service.label : t('map.lane.noService')) + (dir ? ' · ' + esc(dir) : '');
-    ev = '<span class="map-ev"' + tipAttrs({ key: evKey(c.evidence) }) + '>' + esc(t(evKey(c.evidence))) + '</span>';
+    ev = evShown(c.evidence, true) ? '<span class="map-ev"' + tipAttrs({ key: evKey(c.evidence) }) + '>' + esc(t(evKey(c.evidence))) + '</span>' : '';
     name = callWords(c);
     const handler = c.marker && c.marker.handler ? c.marker.handler.name : '';
     code = [(c.method + ' ' + c.path).trim(), c.operationId, handler ? t('map.card.handler') + ' ' + handler : ''].filter(Boolean).join(' · ');
@@ -1709,11 +1921,8 @@ function panBy(key, big) {
   MAP.cv.shift(dx, dy);
   syncHashSoon();
 }
-/**
- * `?` on the map opens its legend. TODO(lane L): the legend panel is lane L's; when it merges this calls its toggle
- * and returns true. Until then it returns false and `?` opens the keymap panel, as everywhere else.
- */
-function mapToggleLegend() { return false; }
+/** `?` on the map opens its legend, and closes it again; the keymap panel stays one key away elsewhere. */
+function mapToggleLegend() { if (!MAP.stage || MAP.prop) return false; toggleLegend(); return true; }
 
 // ── keys (keymap.js asks these, only on #/map) ────────────────────────────
 /** Whether the map is the surface on screen. @group Map */
@@ -1725,8 +1934,9 @@ export function mapOpen() { return !!MAP.stage; }
  */
 export function mapEscape() {
   if (!MAP.stage) return false;
-  if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop) return false;
+  if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }
+  if (MAP.legend) { closeLegend(); return true; }
   if (MAP.prop) { closeProperty(); return true; }
   if (MAP.cv && MAP.cv.level() === 'st') {
     const flow = MAP.focus;
