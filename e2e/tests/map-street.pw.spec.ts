@@ -103,7 +103,16 @@ test.describe('map — neighbourhood and street', () => {
     await expect(page.locator('.map-links [data-link="leadsTo"]')).toHaveCount(1);
     // at the fit: one band for the one source, no two districts overlap, every cover's name reads at ≥ 12 px
     // and draws inside its district; part-of links wait for a hover
-    await expect(page.locator('.map-band')).toHaveText(['invoice-app']);
+    await expect(page.locator('.map-band .w')).toHaveText(['invoice-app']);
+    await expect(page.locator('.map-band .n')).toHaveText(['3 journeys']);
+    // a cover at the board is a card: the name, one status chip and at most two marks — no sentence, no chip row
+    await expect(page.locator('.map-dcover .desc')).toHaveCount(0);
+    for (const cv of await page.locator('.map-dcover .agg').all()) {
+      await expect(cv.locator(':scope > .map-chip.k-status')).toHaveCount(1);
+      expect(await cv.locator(':scope > :visible').count()).toBeLessThanOrEqual(3);
+    }
+    // the journey's numbers are all in its header, from the journey-fitted stop up
+    await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-dhead .agg .map-chip`).first()).toBeAttached();
     const fit = await page.evaluate(() => {
       const ds = [...document.querySelectorAll('.map-district')].map((d) => d.getBoundingClientRect());
       let overlaps = 0;

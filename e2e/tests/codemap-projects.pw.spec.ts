@@ -150,8 +150,11 @@ test.describe('on invoice-app and the NX example together', () => {
 
   test('the Map bands by domain when asked, and says no domain for the rest', async ({ page }) => {
     await go(page, '#/map?lens=hybrid');
+    // at 1440 px Band by is folded to its current value, the choices in its menu
+    await page.locator('.map-band-cur').click();
     await page.locator('[data-act="band"][data-band="domain"]').click();
-    await expect(page.locator('.map-band.dom span')).toHaveText(['Billing', 'Operations', 'no domain']);
+    await expect(page.locator('.map-band.dom .w')).toHaveText(['Billing', 'Operations', 'no domain']);
+    await page.locator('.map-band-cur').click();
     await page.locator('[data-act="band"][data-band="source"]').click();
     await expect(page.locator('.map-band.dom')).toHaveCount(0);
   });

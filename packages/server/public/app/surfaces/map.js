@@ -20,15 +20,15 @@ import { S, esc, expose, currentLens, humanize, bizName, unCode } from '../store
 import { t, def, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
-import { countedHtml, plainTip } from '../lib/counted.js';
+import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, MODE_ORDER } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree } from '../lib/journeys-tree.js';
-import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
+import { attachCanvas, levelOf, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import {
   onAffectedChange, affectedOn, affectedSpec, affectedHops, affectedParams, setAffected, setAffectedHops, clearAffected, resetAffected,
@@ -47,6 +47,24 @@ const CALL_NAME_CH = 31, CALL_PATH_CH = 35, CALL_NAME_LH = 16, CALL_PATH_LH = 13
  * calls; the rest fold into one row — but only when that saves a row (a fold row standing in for one node does not). */
 const DATA_SHOWN = 3, CALLS_SHOWN = 4, FOLD_H = 34;
 const DMIN = 880;
+/**
+ * The board altitude draws a journey as a card, not its street (the 2026-10-04 clarity pass). The board has its own
+ * layout, drawn in **board px** — the size a thing has on screen when the board fits a laptop's stage — times
+ * BOARD_K world units: a card is CARD_BASE + CARD_SCREEN per screen wide, its screens clamped to two to four
+ * (`boardWidth()`), and CARD_H tall — a name, one status chip and two marks — so the rows pack and the bands read
+ * as bands. A cover's inside is drawn at `--map-cs` (`coverScale()`): board px at the fit, counter-scaled above it.
+ */
+const BOARD_K = 5;
+const CARD_BASE = 48, CARD_SCREEN = 60, CARD_H = 58, COVER_MIN_SCREENS = 2, COVER_MAX_SCREENS = 4;
+/** The width a street of `n` screens takes. */
+function streetW(n) { return PAD * 2 + n * COL - (COL - SW); }
+/** Each altitude's layout spacing: the band header strip, the panel's inset, the gaps (world units). */
+const BAND_GEOM = {
+  nb: { labelH: 30 * BOARD_K, pad: 10 * BOARD_K, bandGap: 14 * BOARD_K, colGap: 22 * BOARD_K, rowGap: 16 * BOARD_K, margin: 14 * BOARD_K },
+  st: { labelH: 150, pad: 40, bandGap: 200 },
+};
+/** The most a cover's words grow over their board px when the board is sparse (a few journeys fit large). */
+const COVER_GROW_MAX = 1.25;
 /** Where a street lands when it is entered or left: a district fits, never above this. */
 const STREET_FIT_MAX = 0.95;
 /** …and never below this: under LEVEL_NB the board draws covers, so a journey stop below it would not be a street. */
@@ -73,9 +91,18 @@ const MAP = {
   nb: { districts: [] },
   /** flow node id → { data, model } | { error: true } */
   journeys: new Map(),
-  /** flow node id → { x, y, w, h } */
+  /** flow node id → { x, y, w, h } — the layout of the altitude on screen (`alt`) */
   geom: new Map(),
   size: { w: 0, h: 0 },
+  /**
+   * Which layout `geom` is: `'nb'` (the board — cards of a clamped width) or `'st'` (streets at their own width).
+   * The board swaps between them where the level changes, keeping one journey still on the stage (`ensureAlt`).
+   */
+  alt: 'nb',
+  /** both layouts, `{ nb, st }`, each `layoutDistricts()`'s answer */
+  lay: null,
+  /** while a programmatic move swaps the layout itself, the canvas's level does not swap it back */
+  altHold: false,
   plumb: false,
   band: 'source',                   // 'source' | 'domain' | 'persona' — what the neighbourhood's bands are (persisted fs-map-band)
   /** the journeys organised persona → group (lib/journeys-tree.js), when the server or the fold answered */
@@ -192,6 +219,8 @@ export function mountMap(route, el) {
   MAP.plumb = route && /(?:^|[?&])plumb=1(?:&|$)/.test(String(route.raw || '')) ? true : readPlumb();
   MAP.band = readBand();
   MAP.fitted = false;
+  MAP.alt = 'nb';
+  MAP.lay = null;
   el.innerHTML = stageHtml();
   MAP.stage = el.querySelector('.map-stage');
   MAP.board = el.querySelector('.map-board');
@@ -234,6 +263,9 @@ export function mountMap(route, el) {
   for (const el of [MAP.board, MAP.stage]) el.addEventListener('scroll', () => { el.scrollTop = 0; el.scrollLeft = 0; });
   MAP.tabState = null;
   MAP.board.addEventListener('pointerleave', () => { MAP.hot = null; linkVisibility(); });
+  // where the pointer is on the stage: a zoom that crosses the level keeps the journey under it still
+  MAP.board.addEventListener('pointermove', (e) => { const r = MAP.board.getBoundingClientRect(); MAP.ptr = { x: e.clientX - r.left, y: e.clientY - r.top }; }, { passive: true });
+  MAP.board.addEventListener('wheel', (e) => { const r = MAP.board.getBoundingClientRect(); MAP.ptr = { x: e.clientX - r.left, y: e.clientY - r.top }; }, { capture: true, passive: true });
   MAP.stage.querySelector('.map-chrome').addEventListener('click', onChromeClick);
   const host = MAP.stage.querySelector('.map-prop-host');
   host.addEventListener('wheel', onPropWheel, { passive: false });
@@ -298,6 +330,8 @@ export function unmountMap() {
   document.removeEventListener('click', onDocClick, true);
   if (document.fullscreenElement && MAP.stage && MAP.stage.contains(document.fullscreenElement)) document.exitFullscreen().catch(() => {});
   MAP.el = MAP.stage = MAP.board = MAP.world = MAP.links = MAP.cv = null;
+  MAP.lay = null;
+  MAP.alt = 'nb';
 }
 
 /**
@@ -321,10 +355,15 @@ function bandToolHtml() {
   const per = canBandByPersona();
   if (!dom && !per) return '';
   const on = bandingByDomain() ? 'domain' : bandingByPersona() ? 'persona' : 'source';
-  const opt = (v, key) => '<button type="button" class="map-tb' + (on === v ? ' on' : '') + '" data-act="band" data-band="' + v + '" aria-pressed="' + (on === v) + '"'
+  const opt = (v, key) => '<button type="button" class="map-seg' + (on === v ? ' on' : '') + '" data-act="band" data-band="' + v + '" aria-pressed="' + (on === v) + '"'
     + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
-  return '<span class="map-band-pick" role="group" aria-label="' + esc(t('map.band.by')) + '"><span class="hud-label"' + tipAttrs({ key: 'map.band.by', noFocus: true }) + '>' + esc(t('map.band.by')) + '</span>'
-    + opt('source', 'map.band.source') + (dom ? opt('domain', 'map.band.domain') : '') + (per ? opt('persona', 'map.band.persona') : '') + '</span>';
+  const opts = opt('source', 'map.band.source') + (dom ? opt('domain', 'map.band.domain') : '') + (per ? opt('persona', 'map.band.persona') : '');
+  // one segmented control; under 1360 px it folds to its current value, the others in a menu under it
+  return '<span class="map-band-pick' + (MAP.bandMenu ? ' open' : '') + '" role="group" aria-label="' + esc(t('map.band.by')) + '">'
+    + '<span class="hud-label"' + tipAttrs({ key: 'map.band.by', noFocus: true }) + '>' + esc(t('map.band.by')) + '</span>'
+    + '<button type="button" class="map-tb map-band-cur" data-act="band-menu" aria-haspopup="true" aria-expanded="' + !!MAP.bandMenu + '"'
+    + tipAttrs({ key: 'map.band.' + on, noFocus: true }) + '>' + esc(t('map.band.' + on)) + '</button>'
+    + '<span class="map-segs">' + opts + '</span></span>';
 }
 /** Band the districts by source, domain or persona, keep the choice, and lay the board out again. */
 function setBand(v) {
@@ -524,6 +563,11 @@ function routeView(route) {
 /** Put the board where a link says: the world point (x, y) — from the journey's corner on a street — at the middle, at scale z. */
 function applyView(v, flow, anim) {
   if (!MAP.cv || !v) return;
+  holdingAlt(() => viewAt(v, flow, anim));
+}
+function viewAt(v, flow, anim) {
+  // the link's point is in the layout of the altitude it names
+  ensureAlt(levelOf(v.z), flow || MAP.journey || MAP.focus);
   const g = flow && MAP.geom.get(flow);
   if (v.x == null) {
     const b = boardSize();
@@ -622,8 +666,13 @@ function stackH(flow, si, s) {
   const h = sc.shown.reduce((a, { c, ci }) => a + callRowH(flow, si, ci, c), 0) + Math.max(0, sc.shown.length - 1) * OPGAP;
   return sc.fold ? h + OPGAP + FOLD_H : h;
 }
-function districtSize(d) {
-  const w = Math.max(DMIN, PAD * 2 + screenCount(d) * COL - (COL - SW));
+function districtSize(d, alt) {
+  const w = Math.max(DMIN, streetW(screenCount(d)));
+  // the board: a card — the street's width clamped, one height for every cover
+  if (alt === 'nb') {
+    const card = (n) => (CARD_BASE + n * CARD_SCREEN) * BOARD_K;
+    return { w: boardWidth(card(screenCount(d)), card(COVER_MIN_SCREENS), card(COVER_MAX_SCREENS)), h: CARD_H * BOARD_K };
+  }
   const j = MAP.journeys.get(d.id);
   const deepest = j && j.model ? Math.max(0, ...j.model.screens.map((s, si) => stackH(d.id, si, s))) : 0;
   // without plumbing a district is its head, its screens and room below them: tall enough that a cover
@@ -633,41 +682,88 @@ function districtSize(d) {
 }
 /**
  * Where the districts sit: `layoutDistricts()` (lib/map-model.js) — one band per
- * source, rows that wrap at the width that brings the board's shape nearest the
- * stage's, every district keeping its street's width.
+ * source (or domain, or persona), rows that wrap at the width that brings the
+ * board's shape nearest the stage's. Laid out twice: the board's cards (`nb`) and
+ * the streets at their own widths (`st`); `geom` is the altitude on screen.
  */
 function layout() {
   const ds = MAP.nb.districts;
   // banded by domain: each journey's domain (its flow's project, else its screens' pages), the
   // bands in word order with *no domain* last; banded by source, the model's order as it was
   const byDomain = bandingByDomain();
-  const bw0 = MAP.board ? MAP.board.clientWidth : 0, bh0 = MAP.board ? MAP.board.clientHeight : 0;
+  const bw = MAP.board ? MAP.board.clientWidth : 0, bh = MAP.board ? MAP.board.clientHeight : 0;
+  const aspect = bw > 0 && bh > 0 ? bw / bh : 1.6;
+  const lay = {};
   if (bandingByPersona()) {
     // banded by persona: the tree's persona order, inside a band its groups then journeys; a journey
     // for two people draws its street once (the first band) and an echo card in each other band
-    const L = layoutDistricts(ds.map((d) => ({ id: d.id, repo: d.repo || '', places: d.places, ...districtSize(d) })),
-      { aspect: bw0 > 0 && bh0 > 0 ? bw0 / bh0 : 1.6, bandKey: 'persona', personaOrder: MAP.nb.personaOrder, echoW: DMIN });
-    MAP.geom = L.rects;
-    MAP.bands = L.bands;
-    MAP.size = L.size;
-    MAP.echoes = L.echoes || new Map();
-    MAP.bandWords = new Map(L.bands.map((b) => [b.repo, (MAP.nb.personas && MAP.nb.personas.get(b.repo)) || t('portfolio.noPersona')]));
-    return;
+    for (const alt of ['nb', 'st']) {
+      lay[alt] = layoutDistricts(ds.map((d) => ({ id: d.id, repo: d.repo || '', places: d.places, ...districtSize(d, alt) })),
+        { aspect, bandKey: 'persona', personaOrder: MAP.nb.personaOrder, echoW: DMIN, ...BAND_GEOM[alt] });
+    }
+    MAP.bandWords = new Map(lay.nb.bands.map((b) => [b.repo, (MAP.nb.personas && MAP.nb.personas.get(b.repo)) || t('portfolio.noPersona')]));
+  } else {
+    const dom = new Map(byDomain ? ds.map((d) => [d.id, journeyDomain(d, S.GRAPH.nodes, S.GRAPH.meta && S.GRAPH.meta.projects)]) : []);
+    MAP.bandWords = new Map(byDomain ? [...dom.values()].map((v) => [v.key, v.word]) : []);
+    for (const alt of ['nb', 'st']) {
+      let items = ds.map((d) => ({ id: d.id, repo: d.repo || '', band: byDomain ? dom.get(d.id).key : (d.repo || ''), ...districtSize(d, alt) }));
+      if (byDomain) {
+        const rank = (k) => (k ? 0 : 1);
+        items = items.slice().sort((a, b) => rank(a.band) - rank(b.band) || String(MAP.bandWords.get(a.band)).localeCompare(String(MAP.bandWords.get(b.band))));
+      }
+      // the empty key is a band too when banding by domain (*no domain*), so it is never folded into the source default
+      lay[alt] = layoutDistricts(items, { aspect, bandKey: (it) => (byDomain ? (it.band || '\u0000') : it.band), ...BAND_GEOM[alt] });
+    }
   }
-  MAP.echoes = new Map();
-  const dom = new Map(byDomain ? ds.map((d) => [d.id, journeyDomain(d, S.GRAPH.nodes, S.GRAPH.meta && S.GRAPH.meta.projects)]) : []);
-  MAP.bandWords = new Map(byDomain ? [...dom.values()].map((v) => [v.key, v.word]) : []);
-  let items = ds.map((d) => ({ id: d.id, repo: d.repo || '', band: byDomain ? dom.get(d.id).key : (d.repo || ''), ...districtSize(d) }));
-  if (byDomain) {
-    const rank = (k) => (k ? 0 : 1);
-    items = items.slice().sort((a, b) => rank(a.band) - rank(b.band) || String(MAP.bandWords.get(a.band)).localeCompare(String(MAP.bandWords.get(b.band))));
-  }
-  const bw = MAP.board ? MAP.board.clientWidth : 0, bh = MAP.board ? MAP.board.clientHeight : 0;
-  // the empty key is a band too when banding by domain (*no domain*), so it is never folded into the source default
-  const L = layoutDistricts(items, { aspect: bw > 0 && bh > 0 ? bw / bh : 1.6, bandKey: (it) => (byDomain ? (it.band || '\u0000') : it.band) });
+  MAP.lay = lay;
+  applyGeom();
+}
+/** Point `geom`, `bands`, `size` and `echoes` at the layout of the altitude on screen. */
+function applyGeom() {
+  const L = MAP.lay && MAP.lay[MAP.alt];
+  if (!L) return;
   MAP.geom = L.rects;
   MAP.bands = L.bands;
   MAP.size = L.size;
+  MAP.echoes = L.echoes || new Map();
+}
+/** A journey's street rect, whichever altitude is on screen — what a journey's stop and frame are measured on. */
+function stRect(id) { return MAP.lay && MAP.lay.st ? MAP.lay.st.rects.get(id) : MAP.geom.get(id); }
+/**
+ * Swap the board to the layout of altitude `alt`, keeping the journey `keepId` where it is on the stage (its
+ * corner stays put; its neighbours move). Returns true when the canvas was shifted for it. The level change is
+ * the stop where a card becomes a street: zooming in reveals the street from the card's corner.
+ */
+function ensureAlt(alt, keepId) {
+  if (!MAP.lay || MAP.alt === alt) return false;
+  const before = keepId && MAP.geom.get(keepId);
+  MAP.alt = alt;
+  applyGeom();
+  placeDistricts();
+  drawLinks();
+  const after = keepId && MAP.geom.get(keepId);
+  if (!(before && after && MAP.cv)) return false;
+  const s = MAP.cv.state().s;
+  const hold = MAP.altHold;
+  MAP.altHold = true;
+  MAP.cv.shift((before.x - after.x) * s, (before.y - after.y) * s);
+  MAP.altHold = hold;
+  // the shift lands before any animated move starts from it
+  void MAP.world.offsetWidth;
+  return true;
+}
+/** Run a programmatic move that sets its own altitude first: the canvas's level does not swap it back meanwhile. */
+function holdingAlt(fn) {
+  const hold = MAP.altHold;
+  MAP.altHold = true;
+  try { return fn(); } finally { MAP.altHold = hold; }
+}
+/** The journey that stays still when a gesture crosses the level: the one under the pointer, else the open one, else the middle's. */
+function altKeep() {
+  if (MAP.cv && MAP.cv.inGesture() && MAP.ptr) return journeyAt(MAP.ptr);
+  if (MAP.journey && MAP.geom.has(MAP.journey)) return MAP.journey;
+  const b = boardSize();
+  return journeyAt({ x: b.w / 2, y: b.h / 2 });
 }
 /** Re-lay the districts after one changed size, keeping the journey in view where it was on screen. */
 function relayoutKeeping(draw) {
@@ -693,8 +789,12 @@ function placeDistricts() {
     const named = (MAP.bands || []).filter((b) => byDomain || byPersona || b.repo);
     const word = (b) => (byPersona ? (MAP.bandWords && MAP.bandWords.get(b.repo)) || t('portfolio.noPersona')
       : byDomain ? (b.repo === '\u0000' ? t('map.band.noDomain') : (MAP.bandWords && MAP.bandWords.get(b.repo)) || b.repo) : b.repo);
-    const html = named.map((b) => '<div class="map-band' + (byDomain ? ' dom' : byPersona ? ' per' : '') + '" data-band="' + esc(b.repo) + '" style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px"><span>' + esc(word(b)) + '</span></div>').join('');
-    if (html && MAP.links) MAP.links.insertAdjacentHTML('afterend', html);
+    // each band a faint panel the width of the board's widest row, so the bands line up; its header names it,
+    // counts its journeys and — banded by persona — says who that person is, in the words the tree carries
+    const html = named.map((b) => '<div class="map-band' + (byDomain ? ' dom' : byPersona ? ' per' : '') + '" data-band="' + esc(b.repo) + '"'
+      + ' style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px">' + bandHeadHtml(b, word(b), byPersona) + '</div>').join('');
+    // under the lines between journeys and the districts: a panel is ground, not a thing on it
+    if (html && MAP.links) MAP.links.insertAdjacentHTML('beforebegin', html);
     drawEchoes();
   }
   for (const [id, g] of MAP.geom) {
@@ -705,6 +805,16 @@ function placeDistricts() {
   if (MAP.links) { MAP.links.setAttribute('width', MAP.size.w); MAP.links.setAttribute('height', MAP.size.h); }
   // the covers' boxes follow their districts' sizes: their chip rows fold again
   foldCoverChips();
+}
+/** A band's header: its word, how many journeys it holds (a count with its tip) and, for a person, who they are. */
+function bandHeadHtml(b, word, byPersona) {
+  const n = typeof b.n === 'number' ? b.n : 0;
+  const p = byPersona && MAP.tree && (MAP.tree.personas || []).find((x) => x.id === b.repo);
+  const desc = p && p.description ? sentence(p.description) : '';
+  return '<div class="map-band-head"><span class="w">' + esc(word) + '</span>'
+    + '<span class="n"' + plainTip(n, 'map.band.journeys', 'map.band.scope', byPersona ? '/api/journeys' : '/api/design').replace(' tabindex="0"', '') + '>'
+    + esc(countWords('map.band.journeys', n)) + '</span>'
+    + (desc ? '<span class="d">' + esc(desc) + '</span>' : '') + '</div>';
 }
 /**
  * Banded by persona, a journey for two people draws its street once — in the first persona's band — and in
@@ -743,14 +853,39 @@ function boardSize() {
 /** The scale at which every journey fits — the board stop. */
 function boardScale() {
   const b = boardSize();
-  if (!MAP.size.w || !b.w || !b.h) return 0;
-  return Math.min(LEVEL_NB * 0.9, (b.w - FRAME_PAD * 2) / MAP.size.w, (b.h - FRAME_PAD * 2) / MAP.size.h);
+  // measured on the board's own layout, whichever altitude is on screen
+  const size = MAP.lay && MAP.lay.nb ? MAP.lay.nb.size : MAP.size;
+  if (!size.w || !b.w || !b.h) return 0;
+  // the same scale fitAll() lands on, the risk headline's row included — else + from the fit went to a board stop
+  // a hair above the fit, whose frame fitted the board again, and the zoom never left it
+  return Math.min(LEVEL_NB * 0.9, (b.w - FRAME_PAD * 2) / size.w, (b.h - FRAME_PAD * 2 - riskTop()) / size.h);
+}
+/**
+ * What a cover's inside (and a band's header, at the board) is scaled by: board px are BOARD_K world units, so at
+ * the fit its words are as large as the board fits them (never more than COVER_GROW_MAX of their board px), and
+ * zoomed in past the fit they keep that size on screen while the card grows round them — counter-scaled.
+ */
+function coverScale(s) {
+  const fit = boardScale();
+  if (!(s > 0) || !(fit > 0)) return BOARD_K;
+  return Math.min(BOARD_K, Math.min(BOARD_K * fit, COVER_GROW_MAX) / s);
+}
+/** The row the risk headline takes over the top of the board, when it shows. */
+function riskTop() {
+  const risk = MAP.stage && MAP.stage.querySelector('.map-risk');
+  if (!risk || risk.hidden || !MAP.board) return 0;
+  // from the board's top edge to under the headline: it floats a little below the toolbar
+  return Math.max(0, risk.getBoundingClientRect().bottom - MAP.board.getBoundingClientRect().top) + 8;
 }
 function fitAll(anim) {
   if (!MAP.cv || !MAP.size.w) return;
+  holdingAlt(() => fitBoard(anim));
+}
+function fitBoard(anim) {
+  // the board draws cards: its layout first, keeping the journey that was open where it is, so the move starts from it
+  ensureAlt('nb', MAP.journey || MAP.focus);
   // the risk headline sits over the top of the board: the fit leaves it its row
-  const risk = MAP.stage && MAP.stage.querySelector('.map-risk');
-  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: FRAME_PAD, top: risk && !risk.hidden ? risk.offsetHeight + 8 : 0, max: LEVEL_NB * 0.9, anim });
+  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: FRAME_PAD, top: riskTop(), max: LEVEL_NB * 0.9, anim });
 }
 /** The height a journey's frame holds: its head and screens, and its pathways when plumbing is on. */
 function frameH(g) { return MAP.plumb ? g.h : SY + SH + 70; }
@@ -760,7 +895,7 @@ function frameH(g) { return MAP.plumb ? g.h : SY + SH + 70; }
  * edge cue saying how many screens are past the edge.
  */
 function journeyScale(id) {
-  const g = MAP.geom.get(id);
+  const g = stRect(id);
   const b = boardSize();
   if (!g || !b.w || !b.h) return 0;
   const s = Math.min(STREET_FIT_MAX, (b.w - FRAME_PAD * 2) / g.w, (b.h - FRAME_PAD * 2) / frameH(g));
@@ -811,13 +946,18 @@ function mapStops(anchor) {
  * board (nothing above it), centred across when it fits, else starting at its first screen.
  */
 function enterJourney(id, anim) {
-  const g = MAP.geom.get(id);
-  if (!g || !MAP.cv) return;
-  openedJourney(id);
-  const s = journeyScale(id);
-  const b = boardSize();
-  const tx = g.w * s <= b.w - FRAME_PAD * 2 ? (b.w - g.w * s) / 2 - g.x * s : FRAME_PAD - g.x * s;
-  MAP.cv.set(tx, FRAME_PAD - g.y * s, s, anim);
+  if (!MAP.cv || !MAP.geom.has(id)) return;
+  holdingAlt(() => {
+    // the street's layout first, its card's corner kept where it was, so the zoom grows out of the card
+    ensureAlt('st', id);
+    const g = MAP.geom.get(id);
+    if (!g) return;
+    openedJourney(id);
+    const s = journeyScale(id);
+    const b = boardSize();
+    const tx = g.w * s <= b.w - FRAME_PAD * 2 ? (b.w - g.w * s) / 2 - g.x * s : FRAME_PAD - g.x * s;
+    MAP.cv.set(tx, FRAME_PAD - g.y * s, s, anim);
+  });
   writeHash(id, null);
 }
 /**
@@ -867,10 +1007,14 @@ function screenPos(flow, index) {
   return { x: g.x + PAD + index * COL + SW / 2, y: g.y + SY + SH / 2 };
 }
 function centreScreen(flow, index, scale, anim) {
-  const p = screenPos(flow, index);
-  if (!p || !MAP.cv) return;
-  openedJourney(flow);
-  MAP.cv.centerOn(p.x, p.y + (MAP.plumb ? 200 : 0), scale, anim);
+  if (!MAP.cv) return;
+  holdingAlt(() => {
+    ensureAlt(levelOf(scale), flow);
+    const p = screenPos(flow, index);
+    if (!p) return;
+    openedJourney(flow);
+    MAP.cv.centerOn(p.x, p.y + (MAP.plumb ? 200 : 0), scale, anim);
+  });
 }
 
 /** A journey the reader opened becomes the current journey (see `MAP.journey`). */
@@ -918,7 +1062,15 @@ function stickHead(st) {
 }
 function onCanvasChange(st) {
   if (!MAP.stage) return;
+  // a gesture crossed the level: the other layout, the journey under the pointer kept still (its shift redraws all this)
+  if (!MAP.altHold && MAP.lay && st.level !== MAP.alt) {
+    const keep = altKeep();
+    // zooming into a card opens that journey: the street that grows out of it is the one the stops frame
+    if (st.level === 'st' && keep) openedJourney(keep);
+    if (ensureAlt(st.level, keep)) return;
+  }
   const lvl = MAP.prop ? 'pr' : st.level;
+  MAP.world.style.setProperty('--map-cs', String(coverScale(st.s)));
   MAP.world.classList.toggle('lvl-nb', st.level === 'nb');
   MAP.world.classList.toggle('lvl-st', st.level !== 'nb');
   MAP.stage.querySelectorAll('.map-lvls button').forEach((b) => {
@@ -992,9 +1144,11 @@ function drawRisk() {
   el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
     + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })).join('<span class="sep">·</span>');
   const appeared = el.hidden;
+  // whether the board sits at its fit — asked before the headline shows, since the fit then leaves it its row
+  const at = appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb' ? MAP.cv.stopAt() : null;
   el.hidden = false;
   // it arrived over a board fitted without it: fit again, leaving it its row
-  if (appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb') { const at = MAP.cv.stopAt(); if (at && at.id === 'board') fitAll(false); }
+  if (at && at.id === 'board') fitAll(false);
 }
 /** The screen a zoom in would enter, ringed and named in the hint first, so the snap is never a surprise. */
 function onArm(el) {
@@ -1083,10 +1237,12 @@ function stageHtml() {
     + '</div><div class="map-xcard" hidden role="dialog"></div></div>';
 }
 function chromeHtml() {
-  const lvl = (l, key) => '<button type="button" data-l="' + l + '" aria-pressed="false"' + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
+  // under 1360 px a level button is its glyph and one word (the whole name stays its label and its tip)
+  const lvl = (l, key, glyph) => '<button type="button" data-l="' + l + '" aria-pressed="false" aria-label="' + esc(t(key)) + '"' + tipAttrs({ key, noFocus: true }) + '>'
+    + '<span class="lv-full">' + esc(t(key)) + '</span><span class="lv-short">' + sym(glyph) + esc(t(key + '.short')) + '</span></button>';
   const tool = (act, key, label, extra) => '<button type="button" class="map-tb' + (extra || '') + '" data-act="' + act + '" aria-label="' + esc(t(key)) + '"' + tipAttrs({ key, noFocus: true }) + '>' + label + '</button>';
   return '<div class="map-lvls" role="group" aria-label="' + esc(t('map.levels')) + '">'
-    + lvl('nb', 'map.level.nb') + lvl('st', 'map.level.st') + lvl('pr', 'map.level.pr') + '</div>'
+    + lvl('nb', 'map.level.nb', 'interchange') + lvl('st', 'map.level.st', 'step') + lvl('pr', 'map.level.pr', 'screen') + '</div>'
     + '<div class="map-crumb"></div>'
     + '<span class="map-asof"></span>'
     + '<div class="map-tools">'
@@ -1189,7 +1345,8 @@ function onChromeClick(e) {
     case 'aff-fit': fitAffected(true); break;
     case 'aff-list': toggleAffList(); break;
     case 'aff-hops': setAffectedHops(+b.dataset.h); break;
-    case 'band': setBand(b.dataset.band); break;
+    case 'band': MAP.bandMenu = false; setBand(b.dataset.band); break;
+    case 'band-menu': MAP.bandMenu = !MAP.bandMenu; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-segs .map-seg'); if (f) f.focus(); } break;
     default:
   }
 }
@@ -1317,13 +1474,17 @@ export function mapFit() {
  */
 function fitAffected(anim) {
   if (!MAP.cv || !affectedReady()) return false;
-  const rects = affectedFlows().map((f) => MAP.geom.get(f)).filter(Boolean);
-  if (!rects.length) return false;
-  const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
-  const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
+  const flows = affectedFlows().filter((f) => MAP.geom.has(f));
+  if (!flows.length) return false;
   // one journey reached: its own stop, the street; several: as large as covers allow
-  if (rects.length === 1) { const id = affectedFlows().find((f) => MAP.geom.has(f)); enterJourney(id, anim); return true; }
-  MAP.cv.fit({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, { pad: FRAME_PAD, max: LEVEL_NB * 0.9, anim });
+  if (flows.length === 1) { enterJourney(flows[0], anim); return true; }
+  holdingAlt(() => {
+    ensureAlt('nb', MAP.journey || MAP.focus);
+    const rects = flows.map((f) => MAP.geom.get(f)).filter(Boolean);
+    const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
+    const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
+    MAP.cv.fit({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, { pad: FRAME_PAD, max: LEVEL_NB * 0.9, anim });
+  });
   writeHash(null, null);
   return true;
 }
@@ -1550,7 +1711,7 @@ function renderDistrict(id) {
   const d = MAP.nb.districts.find((x) => x.id === id);
   if (!el || !d) return;
   const j = MAP.journeys.get(id);
-  const g = MAP.geom.get(id) || { w: DMIN, h: SY + SH + 70 };
+  const g = stRect(id) || { w: DMIN, h: SY + SH + 70 };
   const agg = aggHtml(d, j);
   const desc = sentence(d.description);
   // a walk landing redraws the district under the keyboard: the focus comes back to the same thing
@@ -1564,8 +1725,9 @@ function renderDistrict(id) {
     + '<div class="map-dcover" role="button" tabindex="0" data-enter="' + esc(id) + '" aria-label="' + esc(t('map.cover.enter') + ' · ' + nameWords(d.name)) + '"'
     + tipAttrs({ text: nameWords(d.name) + (desc ? ' · ' + desc : ''), noFocus: true }) + '><div class="map-dcover-in">'
     + '<div class="nm">' + esc(nameWords(d.name)) + '</div>'
-    + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
-    + '<div class="agg">' + agg + '</div></div></div>';
+    // the board altitude: a card — the name, one status chip and at most two marks; the sentence and every other
+    // number are in the journey's header from the journey-fitted stop up (and the sentence in the cover's tip)
+    + '<div class="agg">' + coverAggHtml(d, j) + '</div></div></div>';
   el.classList.toggle('loaded', !!(j && j.model));
   sizeDistrict(id);
   tabDistrict(el);
@@ -1617,7 +1779,7 @@ function foldCoverChips(scope) {
 }
 function sizeDistrict(id) {
   const el = districtEl(id);
-  const g = MAP.geom.get(id);
+  const g = stRect(id);
   if (!el || !g) return;
   const svg = el.querySelector('.map-edges');
   if (svg) { svg.setAttribute('width', g.w); svg.setAttribute('height', g.h); }
@@ -1653,6 +1815,31 @@ function aggHtml(d, j) {
     k.stores && k.stores.n ? chip(k.stores, 'k-store') : '',
     k.declaredNotCalled && k.declaredNotCalled.n ? chip(k.declaredNotCalled, 'k-absent') : '',
   ].join('') + work;
+}
+
+/**
+ * What a cover carries at the board altitude: one status chip — *built*, *partly built · n of m* or *designed, not
+ * built*, the summary's own `built` count with its tip — an *at risk* mark when the journey's evidence is stale or
+ * not every screen is built (its tip says which), and `→ n`, how many journeys it leads to (filled by `drawLinks`).
+ */
+function coverAggHtml(d, j) {
+  if (!j) return '<span class="map-chip k-absent"' + tipAttrs({ key: 'map.cover.loading', noFocus: true }) + '>' + esc(t('map.cover.loading')) + '</span>';
+  if (j.error) return '<span class="map-chip k-absent"' + tipAttrs({ key: 'map.cover.failed', noFocus: true }) + '>' + esc(t('map.cover.failed')) + '</span>';
+  const sum = j.data.summary || {};
+  const b = sum.counted && sum.counted.built;
+  const cov = sum.coverage && sum.coverage.journey;
+  const ew = cov && cov.evidenceWord;
+  const stale = !!(ew && ew.cls === 'stale');
+  const partly = !!(b && b.of != null && b.n < b.of);
+  let status = '';
+  if (b && b.of != null) {
+    const [key, cls] = b.n >= b.of ? ['map.cover.status.built', 'k-ok'] : b.n === 0 ? ['map.cover.status.none', 'k-absent'] : ['map.cover.status.partly', 'k-warn'];
+    status = countedHtml(b, '/api/journey', { cls: 'map-chip k-status ' + cls, words: t(key).split('{n}').join(String(b.n)).split('{m}').join(String(b.of)) });
+  }
+  const why = [stale ? t('map.cover.risk.stale') : '', partly ? t('map.cover.risk.notBuilt') : ''].filter(Boolean);
+  const risk = why.length ? '<span class="map-mark risk"' + tipAttrs({ text: t('map.cover.risk') + ' · ' + why.join(' · '), noFocus: true }) + '>'
+    + sym('warning') + esc(t('map.cover.risk')) + '</span>' : '';
+  return status + risk + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
 }
 
 /** The street of one district: screens in step order, then — with plumbing on — each screen's pathway. */
@@ -1823,9 +2010,36 @@ function drawLinks() {
     const w = labelWidth(word);
     return { ...l, word, labelW: w + LINK_LABEL_PAD * 2, labelH: LINK_LABEL_H };
   });
-  const routed = routeLinks(MAP.geom, list);
+  // the board draws no labels and its gutters are narrower: the lanes sit closer to the cards
+  const board = MAP.alt === 'nb';
+  const routed = routeLinks(MAP.geom, board ? list.map((l) => ({ ...l, labelW: 0, labelH: 0 })) : list, board ? { margin: 8 * BOARD_K } : {});
   MAP.links.innerHTML = routed.map(linkHtml).join('');
+  fillLeadMarks(list);
   linkVisibility();
+}
+/**
+ * Each cover's `→ n`: how many journeys it leads to, from the same lines the board draws (a pair that lead to each
+ * other counts at both ends) — at the board the lines themselves show only for the journey under the pointer.
+ */
+function fillLeadMarks(list) {
+  if (!MAP.world) return;
+  const to = new Map();
+  const add = (a, b) => { if (!to.has(a)) to.set(a, new Set()); to.get(a).add(b); };
+  for (const l of list) {
+    if (l.kind !== 'leadsTo') continue;
+    add(l.from, l.to);
+    if (l.both) add(l.to, l.from);
+  }
+  const name = (id) => { const d = MAP.nb.districts.find((x) => x.id === id); return d ? nameWords(d.name) : id; };
+  MAP.world.querySelectorAll('.map-mark.leads[data-leads-for]').forEach((el) => {
+    const set = to.get(el.dataset.leadsFor);
+    const n = set ? set.size : 0;
+    el.hidden = !n;
+    if (!n) { el.innerHTML = ''; return; }
+    const html = '<span' + plainTip(n, 'map.cover.leadsOf', 'map.fold.scopeJourney', '/api/journey', [...set].map((id) => [name(id), 1])).replace(' tabindex="0"', '') + '>'
+      + esc(t('map.cover.leads').split('{n}').join(String(n))) + '</span>';
+    if (el.innerHTML !== html) el.innerHTML = html;
+  });
 }
 const LINK_LABEL_H = 18, LINK_LABEL_PAD = 7, LINK_CORNER = 26;
 function linkWordKey(l) { return l.kind === 'partOf' ? 'map.link.partOf' : l.both ? 'map.link.both' : 'map.link.leadsTo'; }
@@ -1879,27 +2093,35 @@ function linkHtml(l) {
     + '<path class="ln' + (l.kind === 'partOf' ? ' contains' : '') + '" d="' + roundedPath(p) + '" vector-effect="non-scaling-stroke"/>' + heads + label + '</g>';
 }
 /**
- * Which links show. *Leads to* is always drawn, dimmed. *Part of* is noise at
- * the fit: it shows only for the district under the pointer or the focus, or
- * at the street when both its ends are in view. The district under the pointer
- * or the focus brings all of its links up. A label shows once the board is
- * zoomed in far enough for it to fit where it was placed.
+ * Which links show. At the **board** altitude (the covers) no line is drawn but the ones of the journey under the
+ * pointer or holding the focus — both its ends lit, every other journey dimmed, as the Affected mode dims — and no
+ * label at all: the cover's `→ n` says the lines exist. From the journey-fitted stop up (the streets) *leads to*
+ * is always drawn, dimmed; *part of* only for the journey under the pointer or the focus, or when both its ends are
+ * in view; the journey under the pointer brings all of its lines up; a label shows once the board is zoomed in far
+ * enough for it to fit where it was placed.
  */
 function linkVisibility() {
   if (!MAP.links || !MAP.cv) return;
   const st = MAP.cv.state();
+  const board = st.level === 'nb';
   const inv = Math.min(1 / st.s, INV_MAX);
   const c = MAP.cv.viewCenter();
   const view = { x: c.x - c.w / 2, y: c.y - c.h / 2, w: c.w, h: c.h };
   const inView = (id) => { const g = MAP.geom.get(id); return !!g && g.x < view.x + view.w && view.x < g.x + g.w && g.y < view.y + view.h && view.y < g.y + g.h; };
+  const ends = new Set();
   MAP.links.querySelectorAll('g[data-link]').forEach((g) => {
     const hot = !!MAP.hot && (g.dataset.from === MAP.hot || g.dataset.to === MAP.hot);
-    const show = g.dataset.link !== 'partOf' || hot || (st.level === 'st' && inView(g.dataset.from) && inView(g.dataset.to));
+    const show = board ? hot : g.dataset.link !== 'partOf' || hot || (inView(g.dataset.from) && inView(g.dataset.to));
     g.classList.toggle('off', !show);
     g.classList.toggle('hot', hot);
+    if (hot) { ends.add(g.dataset.from); ends.add(g.dataset.to); }
     const lb = g.querySelector('.lbl');
-    if (lb) lb.classList.toggle('off', inv > Number(lb.dataset.scale) + 1e-6);
+    if (lb) lb.classList.toggle('off', board || inv > Number(lb.dataset.scale) + 1e-6);
   });
+  // the board: a journey with lines under the pointer lights its ends and dims the rest
+  const lit = board && ends.size > 0;
+  MAP.world.classList.toggle('links-lit', lit);
+  MAP.world.querySelectorAll('.map-district').forEach((d) => d.classList.toggle('link-end', lit && ends.has(d.dataset.flow)));
 }
 function onDistrictHot(e) {
   const d = e.target && e.target.closest ? e.target.closest('.map-district') : null;
@@ -1955,6 +2177,8 @@ function enterCover(tgt) {
   else ensureJourney(flow).then(() => { if (MAP.focus === flow && MAP.cv && MAP.cv.level() === 'st') focusQuiet(MAP.world && MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"]')); });
 }
 function onDocClick(e) {
+  // the folded *Band by* menu closes on a click anywhere else
+  if (MAP.bandMenu && !(e.target.closest && e.target.closest('.map-band-pick'))) { MAP.bandMenu = false; redrawChrome(); }
   if (!MAP.card) return;
   const card = MAP.el && MAP.el.querySelector('.map-xcard');
   if (card && card.contains(e.target)) return;
@@ -2384,6 +2608,7 @@ export function mapEscape() {
   if (!MAP.stage) return false;
   // the Affected list closes first, then the mode leaves before anything else (lane I)
   if (MAP.affList) { toggleAffList(false); return true; }
+  if (MAP.bandMenu) { MAP.bandMenu = false; redrawChrome(); const c = MAP.stage.querySelector('.map-band-cur'); if (c) c.focus(); return true; }
   if (affectedOn()) { clearAffected(); return true; }
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }

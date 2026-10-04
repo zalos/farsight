@@ -175,10 +175,18 @@ test.describe('journeys organised by persona and group, as the fixture declares 
       S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
     });
     await page.evaluate(() => { location.hash = '#/map'; });
+    // at 1440 px Band by is folded to its current value: its menu holds the choices
+    await page.locator('.map-band-cur').click();
+    await expect(page.locator('.map-band-cur')).toHaveAttribute('aria-expanded', 'true');
     const persona = page.locator('.map-band-pick [data-band="persona"]');
     await persona.click();
     await expect(persona).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.map-band.per span')).toHaveText(['Billing', 'Operations']);
+    await expect(page.locator('.map-band-cur')).toHaveText('persona');
+    await expect(page.locator('.map-band-cur')).toHaveAttribute('aria-expanded', 'false');
+    // each band a panel headed by the person, how many journeys and who they are
+    await expect(page.locator('.map-band.per .w')).toHaveText(['Billing', 'Operations']);
+    await expect(page.locator('.map-band.per .n')).toHaveText(['3 journeys', '1 journey']);
+    await expect(page.locator('.map-band.per .d').first()).not.toBeEmpty();
     // one street per journey, counted once; the second band holds a card that leads to it
     await expect(page.locator('.map-district')).toHaveCount(3);
     const shared = 'invoice-app::flow::draft-and-send';

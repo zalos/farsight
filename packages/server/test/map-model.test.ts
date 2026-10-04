@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
-const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, routeLinks, storesOf, mergeMode, MODE_ORDER } = await import(join(appDir, 'lib', 'map-model.js'));
+const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, routeLinks, storesOf, mergeMode, boardWidth, MODE_ORDER } = await import(join(appDir, 'lib', 'map-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle.json'), 'utf8'));
 import { withStores, type AnyRec } from './map-stores-fixture.ts';
 const byId = new Map(fx.nodes.map((n: { id: string }) => [n.id, n]));
@@ -219,6 +219,42 @@ test('a band\'s districts share its height, so its rows line up', () => {
   assert.equal(L.rects.get('c')!.h, 438);
   assert.deepEqual(L.bands.map((b: { repo: string }) => b.repo), ['r', 's']);
   assert.deepEqual(layoutDistricts([]).rects.size, 0);
+});
+
+// ── the board altitude (clarity pass 2026-10-04): cards of a clamped width, a panel per band ──────────
+test('a cover is a card: its width is the street\'s clamped between two and four screens\' worth', () => {
+  assert.equal(boardWidth(120, 168, 288), 168, 'a one-screen journey is as wide as two');
+  assert.equal(boardWidth(228, 168, 288), 228, 'three screens keep their own width');
+  assert.equal(boardWidth(888, 168, 288), 288, 'fourteen screens are as wide as four');
+  assert.equal(boardWidth(undefined, 168, 288), 168);
+  // on the 21-journey board the widest card is under twice the narrowest, where the streets differ 6×
+  const items = synthetic(21).map((it) => ({ ...it, w: boardWidth(it.w, 1100, 2200), h: 290 }));
+  const L = layoutDistricts(items, { aspect: 1440 / 760, labelH: 150, pad: 50, bandGap: 70, colGap: 110, rowGap: 80, margin: 70 });
+  const ws = [...L.rects.values()].map((r: { w: number }) => r.w);
+  assert.ok(Math.max(...ws) / Math.min(...ws) <= 2);
+  assert.ok([...L.rects.values()].every((r: { h: number }) => r.h === 290), 'every card one height, so the rows pack');
+});
+
+test('every band is a panel as wide as the board\'s widest row, its header strip clear of its districts', () => {
+  const items = synthetic(21);
+  const o = { aspect: 1440 / 760, labelH: 240, pad: 60, bandGap: 140, margin: 80 };
+  const L = layoutDistricts(items, o);
+  assert.ok(L.bands.length > 1);
+  const x0 = L.bands[0].x, w0 = L.bands[0].w;
+  for (const b of L.bands) {
+    assert.equal(b.x, x0, 'the bands line up on the left');
+    assert.equal(b.w, w0, 'and on the right');
+    assert.ok(b.x >= 0 && b.x + b.w <= L.size.w, 'a panel stays on the board');
+    const mine = items.filter((x) => x.repo === b.repo);
+    assert.equal(b.n, mine.length, 'n counts the band\'s districts');
+    for (const it of mine) {
+      const r = L.rects.get(it.id)!;
+      assert.ok(r.y >= b.y + o.labelH, `${it.id} sits under its band's header`);
+      assert.ok(r.x >= b.x + o.pad && r.x + r.w <= b.x + b.w - o.pad + 1e-6, `${it.id} keeps the panel's inset`);
+      assert.ok(r.y + r.h + o.pad <= b.y + b.h + 1e-6, `${it.id} keeps the panel's inset below`);
+    }
+  }
+  for (let i = 1; i < L.bands.length; i++) assert.equal(L.bands[i].y, L.bands[i - 1].y + L.bands[i - 1].h + o.bandGap, 'one gap between panels');
 });
 
 // ── Band by: persona (journey-organisation §4.4) ──────────────────────────

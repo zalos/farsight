@@ -446,8 +446,31 @@
   .cm-counts{margin:2px 0 4px;font-size:11.5px}
   .cm-wgroup{margin-bottom:10px} .cm-whead{font-size:12px;margin-bottom:4px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
   .rel.cm-user{margin-left:14px;border-left-style:dashed}
-  .map-band-pick{display:inline-flex;align-items:center;gap:4px;margin-right:8px}
+  .map-band-pick{display:inline-flex;align-items:center;gap:6px;margin-right:8px;position:relative}
   .map-band-pick .hud-label{font-size:9px;white-space:nowrap}
+  /* Band by: one segmented control (clarity pass); under 1360 px it folds to its current value and a menu */
+  .map-segs{display:inline-flex;border:1px solid var(--line);border-radius:4px;background:var(--panel);overflow:hidden}
+  .map-seg{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:var(--muted);padding:6px 10px;white-space:nowrap;cursor:pointer}
+  .map-seg + .map-seg{border-left:1px solid var(--line)}
+  .map-seg:hover{color:var(--ink)}
+  .map-seg.on{color:var(--accent);background:var(--accent-dim)}
+  .map-seg:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .map-band-pick .map-band-cur{display:none}
+  .map-lvls .lv-short{display:none;align-items:center;gap:5px}
+  .map-lvls .lv-short .sym{width:12px;height:12px}
+  @media (max-width:1359px){
+    .map-asof{display:none}
+    .map-lvls .lv-full{display:none}
+    .map-lvls .lv-short{display:inline-flex}
+  }
+  /* the whole toolbar needs ~1490 px: Band by folds first */
+  @media (max-width:1499px){
+    .map-band-pick .map-band-cur{display:inline-flex}
+    .map-band-pick .map-segs{display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:8;flex-direction:column;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+    .map-band-pick.open .map-segs{display:flex}
+    .map-band-pick .map-seg + .map-seg{border-left:0;border-top:1px solid var(--line)}
+    .map-band-pick .map-seg{text-align:left}
+  }
   /* a flow is a business object — the design's named journey, amber like the business lens */
   .k-flow{color:var(--amber)} .node.nk-flow{border-color:rgba(240,180,78,.45)}
   /* "?" stubs: dashed + dim + the ? word — three encodings, none of them colour alone */
@@ -2224,16 +2247,39 @@
   .map-dcover .agg{display:flex;gap:4px 5px;flex-wrap:wrap;align-content:flex-start;overflow:hidden;flex:none;min-width:0}
   .map-dcover .agg>[hidden]{display:none !important}
   .map-dcover .agg .map-more{border-style:dashed;color:var(--ink)}
-  .map-dcover .agg .map-chip,.map-dcover .agg .wk-chip{font-size:11px;padding:1px 8px;flex:none}
+  /* the board altitude (clarity pass): a card's inside is drawn in board px at --map-cs (surfaces/map.js
+     coverScale) — the size the board fits it at, counter-scaled past the fit — so a chip reads at 10 px, a name at 13 */
+  .map-world.lvl-nb .map-dcover-in,.map-world.lvl-nb .map-echo-in{width:calc(100% / var(--map-cs,1));height:calc(100% / var(--map-cs,1));transform:scale(var(--map-cs,1));padding:6px 8px;gap:3px}
+  .map-world.lvl-nb .map-dcover .nm,.map-world.lvl-nb .map-echo .nm{font-size:13px;letter-spacing:.08em}
+  .map-dcover .agg .map-chip,.map-dcover .agg .wk-chip,.map-dcover .agg .map-mark{font-size:10px;padding:0 6px;line-height:14px;flex:none}
+  .map-world.lvl-nb .map-echo .go{font-size:10px}
+  .map-world.lvl-nb .map-affb.corner{transform:scale(var(--map-cs,1))}
+  .map-mark{display:inline-flex;align-items:center;gap:.35em;white-space:nowrap;color:var(--muted)}
+  .map-mark[hidden]{display:none}
+  .map-mark .sym{width:1.1em;height:1.1em}
+  .map-mark.risk{color:var(--warn)}
+  .map-mark.leads{color:var(--muted);border:1px dashed var(--line);border-radius:12px}
   .map-dcover:focus-visible{outline:4px solid var(--accent);outline-offset:-4px}
   /* the district under the pointer or the focus rises above its neighbours */
   .map-district:hover,.map-district:focus-within{z-index:3}
   .map-world.lvl-nb .map-district:hover,.map-world.lvl-nb .map-district:focus-within{border-color:var(--accent)}
-  /* a band of journeys from one source, its label counter-scaled like the covers */
-  .map-band{position:absolute;height:0;pointer-events:none}
-  .map-band span{position:absolute;left:0;bottom:calc(-100px);transform-origin:0 100%;transform:scale(var(--map-inv, 1));white-space:nowrap;
-    font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);padding:0 2px 3px}
-  .map-world.lvl-nb .map-dstreet{opacity:.18;pointer-events:none}
+  /* the board: a journey's lines show only under the pointer or the focus — its ends lit, every other journey dimmed */
+  .map-world.lvl-nb.links-lit .map-district:not(.link-end){opacity:.32;filter:grayscale(.6)}
+  .map-world.lvl-nb.links-lit .map-district.link-end{border-color:var(--accent)}
+  /* a band of journeys (one source, domain or persona): a faint panel as wide as the board's widest row, so the bands
+     line up, a 1-px border at any zoom (--map-s), and a header counter-scaled like the covers — its word, how many
+     journeys, and for a person who they are; the type never reads under 10 px on screen */
+  .map-band{position:absolute;pointer-events:none;border-radius:calc(6px / var(--map-s,1));
+    background:color-mix(in srgb,var(--ink) 3%,transparent);border:calc(1px / var(--map-s,1)) solid color-mix(in srgb,var(--accent) 30%,var(--line))}
+  .map-band-head{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--map-inv, 1));padding:7px 10px;
+    display:flex;align-items:baseline;gap:10px;width:calc(100% / var(--map-inv, 1));pointer-events:none;font-size:12px;white-space:nowrap}
+  .map-world.lvl-nb .map-band-head{transform:scale(var(--map-cs,1));width:calc(100% / var(--map-cs,1))}
+  .map-band-head > *{pointer-events:auto}
+  .map-band-head .w{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;color:var(--ink);flex:none}
+  .map-band-head .n{font-size:11px;color:var(--muted);flex:none}
+  .map-band-head .d{font-size:11px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis}
+  /* the board draws cards, not streets: a card is narrower than its street, which waits for the journey altitude */
+  .map-world.lvl-nb .map-dstreet{visibility:hidden;pointer-events:none}
   .map-world.lvl-nb .map-dhead{opacity:0;pointer-events:none}
   /* on the street the head's chips are above the street layer, so their tips open on hover */
   .map-world.lvl-st .map-dhead{z-index:2}
@@ -2459,7 +2505,8 @@
   @media (min-width:1281px){ .map-chrome:has(.map-affbar) .map-crumb{flex:1 1 0;max-width:min(40%,460px)} }
   @media (max-width:1280px){
     .map-chrome{gap:6px;flex-wrap:wrap}
-    .map-crumb{order:9;max-width:calc(100% - 8px);flex:0 1 auto}
+    /* the as-of stamp, the levels and Band by fold first (under 1360 px), so the crumb keeps the first row */
+    .map-crumb{flex:0 1 auto;min-width:72px}
     .map-affbar{order:10}
     .map-lvls button{padding:7px 8px;letter-spacing:.08em}
     .map-tb{padding:6px 7px;letter-spacing:.06em}
