@@ -13,7 +13,6 @@ import { createConnection } from 'node:net';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-// @ts-expect-error — plain ESM helper shared with the webServer, no .d.ts
 import { CLI, makeWorkspace } from '../fixture/workspace.mjs';
 
 const SYNC_PORT = Number(process.env['FARSIGHT_E2E_SYNC_PORT'] || 4511);
