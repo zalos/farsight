@@ -47,10 +47,10 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`e4bcea5`** after the journey-organisation pass (PRs #45–#48, below) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
-| tests | **1001** — core 297 · work 59 · parsers 185 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 54 · server 249 · cli 59, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 198/198** (the `codemap-projects` and `codemap-toolbar` specs start their own two-source server; `journeys-organised` runs on the fixture's declared personas and groups) |
-| string/symbol lint | **1973 entries · 33 sprite symbols · 38 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `e4bcea5` on 2026-10-04 (evening) and re-synced through `POST /api/sync` (4478 sync 63, 4477 sync 102); both prefixes' global `farsight` print `commit e4bcea5`. Check `lsof` before restarting or measuring on any port. |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`4fdfd98`** after the Map clarity pass (PR #50) on the journey-organisation pass (PRs #45–#48, below) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1003** — core 297 · work 59 · parsers 185 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 54 · server 251 · cli 59, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 198/198** (the `codemap-projects` and `codemap-toolbar` specs start their own two-source server; `journeys-organised` runs on the fixture's declared personas and groups) |
+| string/symbol lint | **1988 entries · 33 sprite symbols · 38 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both re-synced through `POST /api/sync` on `e4bcea5` (4478 sync 63, 4477 sync 102), then restarted on `4fdfd98` (viewer-only change, no re-sync needed); both prefixes' global `farsight` print `commit 4fdfd98`. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -268,6 +268,22 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       older server (proven equal to `journeyTree()` by test). Verified on the dogfood server: 21 journeys · 5 personas
       · 6 groups, zero page errors on the front door, the Portfolio and the Map.
 
+12. **The Map clarity pass — the board draws by altitude** (2026-10-04, late; PR #50, one lane, from the owner's
+    verdict *"the map looks a bit crowded"* and the lead's screenshot review of the live board). At **board** altitude
+    a journey is a **card**: its name, one status chip (*built* · *partly built · n of m* · *designed, not built*), an
+    *at risk* mark (stale and/or not every screen built — the AT RISK bar's own facts) and `→ n` (how many journeys it
+    leads to); the description and the full chip row live in the street head, from the journey altitude up. Cards are
+    2–4 screens wide and one height (`lib/map-model.js boardWidth()`), so **a cover no longer shares a width with its
+    street** — the board has its own layout and `ensureAlt()` swaps layouts at the level change keeping the journey
+    under the pointer fixed. Links at the board draw only for the hovered or focused journey (both ends lit, the rest
+    dimmed, no labels); from the journey altitude up they draw as before. Each band is a faint **panel** as wide as the
+    widest row with a counter-scaled header (the band word · *n journeys* · a persona's description). The toolbar folds:
+    *Band by* is one segmented control (a menu under 1500 px), the as-of stamp hides and the level buttons shorten under
+    1360 px. Also fixed: `+` / ⌘-scroll from the fit did nothing while the AT RISK headline showed (`boardScale()`
+    ignored its row). **Measured on a copy of the dogfood graph (21 journeys):** the board fits at ×0.21 at 1440×1000
+    (was ×0.12) and ×0.14 at 1280×720 (was ×0.08), every chip readable, zero page errors on 44 shots. Then PR #51: a
+    closed journey blurs the focus it still held at once (a hidden control kept it for a frame) and the focus spec polls.
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -302,6 +318,12 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   the work usage — the `--help` form of a subcommand should not touch git.
 
 ## Next work, ranked
+
+**The Map clarity pass left open (2026-10-04):** *at risk* shows on 18 of 21 cards on the dogfood graph (most
+journeys there are stale — a second, quieter mark for *stale alone* may read better than one word for two facts);
+with many more journeys on a small window the card text shrinks with the fit (nothing keeps it above 8 px); the layout
+swap on a gesture is not animated (the neighbours snap); no e2e guard for the board-stop fix (the fixture shows no
+risk headline); the Map's `h`/`l` keys walk model order, not persona-band order.
 
 **The journey-organisation pass left open (2026-10-04), first because it is what the owner asked for:** declare
 `personas` and `groups` in the reference app's own manifest (outside this repo) — today its three persona strings
