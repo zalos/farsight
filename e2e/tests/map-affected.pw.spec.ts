@@ -53,7 +53,7 @@ test.describe('map — the Affected mode', () => {
     const bar = page.locator('.map-affbar');
     await expect(bar).toBeVisible();
     await expect(bar.locator('.map-affname')).toHaveText('POST /invoices');
-    await expect(bar).toContainText('3 journeys reach it');
+    await expect(bar).toContainText('in 3 journeys');
     await expect(scr(page, 2)).toHaveClass(/aff-dim/);
     for (const i of [0, 1]) {
       await expect(scr(page, i)).toHaveClass(/aff-hit/);
@@ -85,7 +85,7 @@ test.describe('map — the Affected mode', () => {
     await expect(districts).toHaveCount(3);
     await expect(page.locator('.map-district.aff-hit')).toHaveCount(3);
     for (const d of await districts.all()) await expect(d.locator('.map-dcover .map-affb')).toHaveText('reached at hop 1');
-    await expect(page.locator('.map-affbar')).toContainText('3 journeys reach it');
+    await expect(page.locator('.map-affbar')).toContainText('in 3 journeys');
   });
 
   /**
@@ -98,10 +98,11 @@ test.describe('map — the Affected mode', () => {
     await go(page, STREET + '?node=' + encodeURIComponent(LIST_PAGE) + '&affected=' + encodeURIComponent(TABLE) + '&ahops=3');
     const tab = page.locator('#mp-tab-affected');
     await expect(tab).toBeVisible();
-    await expect(tab.locator('.mp-tabn')).toHaveText('4');
+    // four screen rows on three journeys, two pages: a screen several journeys share is counted once (round 2)
+    await expect(tab.locator('.mp-tabn')).toHaveText('2');
     await tab.click();
     const body = page.locator('#mp-body');
-    await expect(body.locator('.mp-aff .mp-chips')).toContainText(['3 journeys reach it']);
+    await expect(body.locator('.mp-aff .mp-chips')).toContainText(['in 3 journeys']);
     await expect(body.locator('.mp-aff .mp-chips')).toContainText('6 calls reach it');
     await expect(body.locator('.mp-affbound')).toContainText('≥ a floor');
     // per distance: their own path meets it, then what uses it directly holds the first tests

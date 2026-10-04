@@ -31,7 +31,7 @@ import {
   jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml,
 } from './journeys.js';
 import { propertyModel } from '../lib/map-property-model.js';
-import { affectedOn, affectedSpec, affectedTabHtml, affectedTabCount, journeyChipReach, pickAffected } from './map-affected.js';
+import { affectedOn, affectedSpec, affectedTabHtml, affectedTabCount, journeyChipReach, pickAffected, affectedSummaryHtml } from './map-affected.js';
 
 /** The rail's tabs, in order. */
 export const MAP_PROP_TABS = ['overview', 'gates', 'apis', 'ux', 'tests', 'route', 'work', 'changes'];
@@ -701,6 +701,8 @@ function headHtml(pm, ctx) {
     + '<span>' + esc(j.name || '') + '</span><span class="sep">›</span><b>' + esc(pm.screen.name || '') + '</b>'
     + (biz() || !pm.tabs.route.route ? '' : '<span class="sep">·</span>' + code(pm.tabs.route.route)) + '</nav>'
     + (pm.node ? '<button type="button" class="btn mp-affact' + (affectedSpec() === pm.node.id ? ' on' : '') + '" data-act="affected" data-seed="' + esc(pm.node.id) + '"' + defAttrs('map.affected.action') + '>' + esc(t('map.affected.action')) + '</button>' : '')
+    // while the board is dimmed around something, the head says around what and how much (round 2)
+    + affectedSummaryHtml()
     + '<span class="hud-label mp-level"' + defAttrs('map.prop.level') + '>' + esc(t('map.prop.level')) + '</span>';
 }
 
@@ -776,7 +778,8 @@ export function mountMapProperty(host, ctx) {
     }
     const c = st.ctx;
     // a seed picked here dims the board around it, and the tab that answers opens (lane I)
-    if (act.dataset.act === 'affected' && c.onAffected) { st.tab = 'affected'; c.onAffected(act.dataset.seed); return; }
+    // the same seed again changes nothing in the mode, so the tab is opened here, not only by the mode's redraw (round 2)
+    if (act.dataset.act === 'affected' && c.onAffected) { st.tab = 'affected'; c.onAffected(act.dataset.seed); render(); return; }
     if (act.dataset.act === 'aff-pick') { pickAffected(Number(act.dataset.i)); return; }
     if (act.dataset.act === 'back' && c.onClose) c.onClose();
     else if (act.dataset.act === 'step' && c.onStep) c.onStep(Number(act.dataset.d));

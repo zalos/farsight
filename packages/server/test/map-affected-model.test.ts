@@ -68,3 +68,30 @@ test('a change asks about screens and calls first and names the rest as not aske
   assert.equal(p.seeds[0].id, 'n9');
   assert.equal(p.more, 2);
 });
+
+test('a screen several journeys share is one screen, listed with its journeys', () => {
+  const g = M.groupScreens([
+    { flowId: 'a', screenId: 'p1', name: 'Sign in', hop: 1 },
+    { flowId: 'b', screenId: 'p1', name: 'Sign in', hop: 0 },
+    { flowId: 'b', screenId: 'p2', name: 'Pay', hop: 2 },
+  ]);
+  assert.deepEqual(g.map((x) => [x.screenId, x.hop, x.flows]), [['p1', 0, ['a', 'b']], ['p2', 2, ['b']]]);
+});
+
+test('the list rows: journeys with owners, screens once, owners, tests — the same rows as CSV and as JSON v0', () => {
+  const report = { hops: [{ hop: 1, nodes: [{ nodeId: 'x', tests: [{ id: 't1', name: 'pays, "fast"' }] }] }, { hop: 2, nodes: [] }],
+    reach: { journeys: [{ flowId: 'a', name: 'A', hop: 1 }, { flowId: 'b', name: 'B', hop: 1 }],
+      screens: [{ flowId: 'a', screenId: 'p1', name: 'Sign in', hop: 1 }, { flowId: 'b', screenId: 'p1', name: 'Sign in', hop: 1 }], calls: [] } };
+  const rows = M.affectedRows([{ seed: 's', report }], { owner: (f: string) => (f === 'a' ? 'Ops' : ''), evidence: () => 'declared' });
+  assert.deepEqual(rows.map((r: any) => r.kind), ['journey', 'journey', 'screen', 'owner', 'test']);
+  assert.equal(rows[2].journeys, 'a; b');
+  assert.equal(M.furthestHop([{ report }]), 1, 'nothing further out than 1');
+  const csv = M.affectedCsv(rows);
+  assert.equal(csv.split('\n')[0], 'seed,distance,kind,id,name,journeys,owner,evidence');
+  assert.match(csv, /"pays, ""fast"""/);
+  const json = JSON.parse(M.affectedJson(rows, { hops: 2 }));
+  assert.equal(json.format, 'farsight-affected');
+  assert.equal(json.version, 0);
+  assert.equal(json.frozen, false);
+  assert.equal(json.rows.length, rows.length);
+});

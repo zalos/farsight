@@ -22,6 +22,7 @@ import { tipAttrs } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import {
   AFF_HOPS, AFF_MAX_HOPS, parseSeedSpec, hopsOf, pickSeeds, combineReaches, reachKey, hopGroups, testEvidenceKey,
+  groupScreens, furthestHop, affectedRows, affectedCsv, affectedJson,
 } from '../lib/map-affected-model.js';
 
 /** The mode's state. `state`: idle · loading · ok · failed · unknown · noParts. */
@@ -215,6 +216,9 @@ export function paintDistrict(el, flow, model) {
   if (seedHere) el.classList.add('aff-seed');
   const jb = jr ? reachBadgeHtml(jr, 'j') : '<span class="map-affb not"' + tipAttrs({ key: 'map.affected.not', noFocus: true }) + '>' + esc(t('map.affected.not')) + '</span>';
   el.querySelectorAll('.map-dhead .agg, .map-dcover-in .agg').forEach((a) => a.insertAdjacentHTML('afterbegin', jb));
+  // at the board the cover's own badge is small: a lit journey also carries one large badge on its corner,
+  // counter-scaled like the cover, so lit and dimmed read apart at the fit (round 2)
+  if (jr) el.insertAdjacentHTML('beforeend', reachBadgeHtml(jr, 'corner'));
   el.querySelectorAll('.map-scr').forEach((sc) => {
     const id = sc.dataset.node;
     const r = screenReach(flow, id);
@@ -262,10 +266,17 @@ export function affectedBarHtml() {
     step += '<button type="button" data-act="aff-hops" data-h="' + h + '" aria-pressed="' + (h === AFF.hops) + '" aria-label="' + esc(label) + '">' + h + '</button>';
   }
   step += '</span>';
+  // a longer reach that finds nothing new says so, instead of printing the same numbers silently (round 2)
+  const far = AFF.state === 'ok' ? furthestHop(AFF.entries) : null;
+  const noMore = far != null && far < AFF.hops
+    ? '<span class="map-affst map-affnomore"' + defAttrs('map.affected.noMore') + '>' + esc(t('map.affected.noMore').replace('{n}', String(Math.max(far, 1)))) + '</span>' : '';
+  const ready = AFF.state === 'ok';
+  const btn = (act, key) => '<button type="button" class="map-tb map-affact" data-act="' + act + '"' + (ready ? '' : ' disabled') + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
   return '<div class="map-affbar" role="region" aria-label="' + esc(t('map.affected.title')) + '">'
     + '<span class="hud-label ttl"' + defAttrs('map.affected.title') + '>' + esc(t('map.affected.title')) + '</span>'
-    + '<span class="on"><span class="hud-label"' + defAttrs('map.affected.on') + '>' + esc(t('map.affected.on')) + '</span> <b class="map-affname">' + esc(name) + '</b></span>'
-    + barCounts() + more + step + state
+    + '<span class="on"><span class="hud-label"' + defAttrs('map.affected.on') + '>' + esc(t('map.affected.on')) + '</span> <b class="map-affname"' + tipAttrs({ text: name, noFocus: true }) + '>' + esc(name) + '</b></span>'
+    + barCounts() + more + step + noMore + state
+    + btn('aff-fit', 'map.affected.fit') + btn('aff-list', 'map.affected.list')
     + '<button type="button" class="map-tb" data-act="aff-clear"' + tipAttrs({ key: 'map.affected.clear', noFocus: true }) + '>' + esc(t('map.affected.clear')) + '</button></div>';
 }
 
@@ -273,7 +284,76 @@ export function affectedBarHtml() {
 function barCounts() {
   if (AFF.state !== 'ok' || AFF.entries.length !== 1) return '';
   const k = AFF.entries[0].report.reach.counted;
-  return '<span class="map-affn">' + [k.journeys, k.screens].map((c) => countedHtml(c, '/api/impact', { cls: 'map-chip' })).join('') + '</span>';
+  // screens first (each page once), then the journeys they are in
+  return '<span class="map-affn">' + [k.screens, k.journeys].map((c) => countedHtml(c, '/api/impact', { cls: 'map-chip' })).join('') + '</span>';
+}
+/** The seed and its counts in one line, for the property's head while the mode is on (round 2). @group Map */
+export function affectedSummaryHtml() {
+  if (!AFF.spec) return '';
+  const name = AFF.label || (AFF.seeds[0] ? seedName(AFF.seeds[0].id) : '');
+  return '<span class="mp-affhead"><span class="hud-label"' + defAttrs('map.affected.on') + '>' + esc(t('map.affected.on')) + '</span> <b>' + esc(name) + '</b>'
+    + (AFF.state === 'ok' ? barCounts() : ' ' + affectedBarState()) + '</span>';
+}
+/** The journeys any answer reaches, for Fit-to-affected. @group Map */
+export function affectedFlows() {
+  return affectedReady() ? [...AFF.combined.journeys.keys()] : [];
+}
+
+// ── the list panel (round 2): the same answer written out, and copied as CSV or JSON ──
+/**
+ * The rows of the answer for the list and the copy. `board` gives the journeys' names and owners as the Map
+ * draws them (`{ owner(flowId), name(flowId) }`).
+ * @group Map
+ */
+export function affectedListRows(board = {}) {
+  if (!affectedReady()) return [];
+  return affectedRows(AFF.entries, {
+    owner: (f) => (board.owner ? board.owner(f) : '') || '',
+    journeyName: (f, fallback) => (board.name ? board.name(f) : '') || flowName(f, fallback),
+    seedName,
+    evidence: (x) => t(testEvidenceKey(x)),
+  });
+}
+/** The rows as text to copy: `csv` or `json` (farsight-affected v0, not frozen). @group Map */
+export function affectedExport(kind, board) {
+  const rows = affectedListRows(board);
+  if (kind === 'json') return { text: affectedJson(rows, { seed: AFF.spec, hops: AFF.hops, sync: syncKey() }), n: rows.length };
+  return { text: affectedCsv(rows), n: rows.length };
+}
+/** The list panel's body: per distance, journeys (with owners), screens once (with their journeys), owners, tests. @group Map */
+export function affectedListHtml(board = {}) {
+  if (!affectedReady()) return '<p class="mp-dim">' + affectedBarState() + '</p>';
+  const rows = affectedListRows(board);
+  const bySeed = new Map();
+  for (const r of rows) {
+    if (!bySeed.has(r.seed)) bySeed.set(r.seed, new Map());
+    const m = bySeed.get(r.seed);
+    if (!m.has(r.distance)) m.set(r.distance, []);
+    m.get(r.distance).push(r);
+  }
+  const head = '<div class="al-top"><span class="hud-label"' + defAttrs('map.affected.listTitle') + '>' + esc(t('map.affected.listTitle')) + '</span>'
+    + '<button type="button" class="x" data-act="aff-list-close" aria-label="' + esc(t('map.affected.listClose')) + '">✕</button></div>'
+    + '<div class="al-acts"><button type="button" class="map-tb" data-act="aff-copy" data-kind="csv"' + tipAttrs({ key: 'map.affected.copyCsv', noFocus: true }) + '>' + esc(t('map.affected.copyCsv')) + '</button>'
+    + '<button type="button" class="map-tb" data-act="aff-copy" data-kind="json"' + tipAttrs({ key: 'map.affected.copyJson', noFocus: true }) + '>' + esc(t('map.affected.copyJson')) + '</button>'
+    + '<span class="al-copied" aria-live="polite"></span></div>';
+  const bound = AFF.entries.map((e) => boundHtml(e.report)).filter((x, i, a) => a.indexOf(x) === i).join('');
+  let body = '';
+  for (const [seed, groups] of bySeed) {
+    if (bySeed.size > 1) body += '<h3 class="hud-label al-seed">' + esc(seed) + '</h3>';
+    for (const [hop, list] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
+      const sec = (kind, key, line) => {
+        const xs = list.filter((r) => r.kind === kind);
+        return xs.length ? '<div class="mp-affsub hud-label"' + defAttrs(key) + '>' + esc(t(key)) + ' · ' + xs.length + '</div>' + xs.map(line).join('') : '';
+      };
+      body += '<section class="al-hop" data-hop="' + hop + '">' + groupHead(hop)
+        + sec('journey', 'map.affected.journeys', (r) => '<div class="al-row" data-kind="journey"><span class="nm">' + esc(r.name) + '</span>' + (r.owner ? '<span class="sub">' + esc(r.owner) + '</span>' : '') + '</div>')
+        + sec('screen', 'map.affected.screens', (r) => '<div class="al-row" data-kind="screen"><span class="nm">' + esc(r.name) + '</span><span class="sub">' + esc(t('map.affected.onJourneys').replace('{list}', r.journeys)) + '</span></div>')
+        + sec('owner', 'map.affected.owners', (r) => '<div class="al-row" data-kind="owner"><span class="nm">' + esc(r.name) + '</span></div>')
+        + sec('test', biz() ? 'map.affected.tests' : 'map.affected.tests', (r) => '<div class="al-row" data-kind="test"><span class="nm">' + esc(r.name) + '</span><span class="sub">' + esc(r.evidence) + '</span></div>')
+        + '</section>';
+    }
+  }
+  return head + bound + (body || '<p class="mp-dim">' + esc(t('impact.none')) + '</p>');
 }
 
 // ── the explore card and the property speak the mode's words ──────────────
@@ -363,12 +443,16 @@ export function affectedTabHtml(ctx) {
   const pick = AFF.entries.length > 1
     ? '<div class="mp-affpick"><span class="hud-label"' + defAttrs('map.affected.seedFor') + '>' + esc(t('map.affected.seedFor')) + '</span>'
       + AFF.entries.map((x, i) => '<button type="button" class="api-chip' + (i === AFF.pick ? ' on' : '') + '" data-act="aff-pick" data-i="' + i + '" aria-pressed="' + (i === AFF.pick) + '">' + esc(seedName(x.seed)) + '</button>').join('') + '</div>' : '';
-  const counts = [k.journeys, k.screens, k.calls, k.tests].filter((c) => countedUnit(c))
-    .map((c) => countedHtml(c, '/api/impact', { cls: 'mp-chip' })).join('');
+  const counts = [k.screens, k.journeys, k.calls, k.tests].filter((c) => countedUnit(c))
+    .map((c) => countedHtml(c, '/api/impact', { cls: 'mp-chip' }) + (c === k.tests ? withinHtml() : '')).join('');
   const scope = '<div class="mp-affscope"><span class="hud-label"' + defAttrs('count.scope.affected') + '>' + esc(t('count.scope.affected')) + '</span> <b>' + esc(seedName(e.seed)) + '</b></div>';
   const groups = hopGroups(r).map((g) => {
     const j = g.journeys.map((x) => rowHtml(esc(flowName(x.flowId, x.name)), '', '', carry('#/map/' + encodeURIComponent(x.flowId))));
-    const s = g.screens.map((x) => rowHtml(esc(x.name), esc(flowName(x.flowId)), '', carry('#/map/' + encodeURIComponent(x.flowId) + '?node=' + encodeURIComponent(x.screenId))));
+    // a screen several journeys share is listed once, with its journeys (round 2); it opens on the journey on screen when it is one of them
+    const s = groupScreens(g.screens).map((x) => {
+      const flow = ctx && x.flows.includes(ctx.flow) ? ctx.flow : x.flows[0];
+      return rowHtml(esc(x.name), esc(t('map.affected.onJourneys').replace('{list}', x.flows.map((f) => flowName(f)).join(' · '))), '', carry('#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(x.screenId)));
+    });
     const c = g.calls.map((x) => rowHtml(esc(callName(x.nodeId, x.name)), biz() ? '' : '<code>' + esc(x.name) + '</code>', isSeed(x.nodeId) ? '<span class="api-chip">' + esc(t('map.affected.seed')) + '</span>' : ''));
     const sub = (key, rows) => (rows.length ? '<div class="mp-affsub hud-label"' + defAttrs(key) + '>' + esc(t(key)) + '</div>' + rows.join('') : '');
     return '<section class="mp-sec mp-affgroup" data-hop="' + g.hop + '">' + groupHead(g.hop)
@@ -376,6 +460,10 @@ export function affectedTabHtml(ctx) {
   }).join('');
   return '<section class="mp-sec mp-aff">' + pick + scope + '<div class="mp-chips">' + counts + '</div>' + boundHtml(r) + '</section>'
     + (groups || '<div class="mp-row none">' + esc(t('impact.none')) + '</div>') + stopsHtml(r);
+}
+/** The tests count's scope word: how far the answer was asked. */
+function withinHtml() {
+  return '<span class="mp-affwithin"' + defAttrs('map.affected.within') + '>' + esc(t('map.affected.within').replace('{n}', String(AFF.hops))) + '</span>';
 }
 function affectedBarState() {
   const key = AFF.state === 'loading' ? 'map.affected.reading' : AFF.state === 'unknown' ? 'map.affected.unknown' : AFF.state === 'noParts' ? 'map.affected.noParts' : 'map.affected.failed';

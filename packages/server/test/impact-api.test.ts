@@ -290,6 +290,14 @@ describe('?reach=1 — the impact answer placed on the journeys (the Map\'s Affe
     assert.deepEqual(r.counted.journeys.breakdown, [{ key: 'count.part.reachDirect', n: 3 }]);
   });
 
+  test('a screen several journeys share is counted once — by the page it shows — and listed once per journey', () => {
+    const r = reachOf(ZOD);
+    const pages = new Set(r.screens.map((s) => s.screenId));
+    assert.equal(r.counted.screens.n, pages.size);
+    assert.ok(r.screens.length >= pages.size);
+    assert.equal(r.counted.screens.unit, 'count.unit.affectedScreens');
+  });
+
   test('every count is a sound Counted over count.scope.affected whose parts are a partition by distance', () => {
     assert.ok(COUNT_SCOPES.includes('count.scope.affected'));
     for (const id of [TABLE, ROUTE, ZOD]) {

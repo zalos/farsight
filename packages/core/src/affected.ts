@@ -185,7 +185,10 @@ export function affectedReach(index: GraphIndex, report: ImpactReport): Affected
   for (const h of report.hops) for (const n of h.nodes) for (const t of n.tests ?? []) if (!firstAt.has(t.id)) firstAt.set(t.id, h.hop);
 
   const src = 'core affected.ts affectedReach';
-  // screens counted once each: a page two journeys share is two screens of two journeys, as the Map draws it
+  // screens counted once each, by the page they show: a page four journeys share is one screen (round 2 — it read as
+  // four), met at the fewest hop any of its journeys meets it; the list keeps one row per journey, as the Map draws it
+  const screenHop = new Map<string, number>();
+  for (const x of screens) screenHop.set(x.screenId, Math.min(x.hop, screenHop.get(x.screenId) ?? Infinity));
   return {
     seed,
     hops: budget,
@@ -196,8 +199,8 @@ export function affectedReach(index: GraphIndex, report: ImpactReport): Affected
     counted: {
       journeys: counted(journeys.length, 'count.unit.affectedJourneys', 'count.scope.affected', `${src} → journeys whose walk meets the seed or a listed node`,
         { bizUnit: 'count.unit.affectedJourneys', breakdown: byDistance(journeys.map((x) => x.hop)) }),
-      screens: counted(screens.length, 'count.unit.affectedScreens', 'count.scope.affected', `${src} → screens of those journeys whose own part of the walk meets them`,
-        { bizUnit: 'count.unit.affectedScreens', breakdown: byDistance(screens.map((x) => x.hop)) }),
+      screens: counted(screenHop.size, 'count.unit.affectedScreens', 'count.scope.affected', `${src} → distinct pages of those journeys whose own part of a walk meets them`,
+        { bizUnit: 'count.unit.affectedScreens', breakdown: byDistance([...screenHop.values()]) }),
       calls: counted(calls.length, 'count.unit.affectedCalls', 'count.scope.affected', `${src} → route nodes in the hop sets, and the seed when it is one`,
         { breakdown: byDistance(calls.map((x) => x.hop)) }),
       tests: counted(reaching.total, 'count.unit.affectedTests', 'count.scope.affected', `${src} → impactTestsReaching(report, ${budget})`,

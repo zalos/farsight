@@ -31,7 +31,7 @@ import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/m
 import { parseRoute } from '../shell.js';
 import {
   onAffectedChange, affectedOn, affectedSpec, affectedHops, affectedParams, setAffected, setAffectedHops, clearAffected, resetAffected,
-  paintDistrict, affectedBarHtml, screenChipReach,
+  paintDistrict, affectedBarHtml, screenChipReach, affectedFlows, affectedListHtml, affectedExport, affectedReady,
 } from './map-affected.js';
 import { shareLink } from '../share.js';
 
@@ -967,6 +967,8 @@ function stageHtml() {
     + '<div class="map-hint" aria-live="polite"></div>'
     + '<div class="map-zoomro"' + tipAttrs({ key: 'map.zoom', noFocus: true }) + '></div>'
     + '<div class="map-legend" hidden role="dialog" aria-label="' + esc(t('map.legend.title')) + '"></div>'
+    + '<div class="map-afflist" hidden role="dialog" data-map-wheel="own" aria-label="' + esc(t('map.affected.listTitle')) + '"></div>'
+    + '<div class="map-toast" role="status" aria-live="polite" hidden></div>'
     + '<div class="map-prop-host" hidden></div>'
     + '</div><div class="map-xcard" hidden role="dialog"></div></div>';
 }
@@ -1062,6 +1064,8 @@ function onChromeClick(e) {
     case 'full': toggleFull(); break;
     case 'link': mapCopyLink(); break;
     case 'aff-clear': clearAffected(); break;
+    case 'aff-fit': fitAffected(true); break;
+    case 'aff-list': toggleAffList(); break;
     case 'aff-hops': setAffectedHops(+b.dataset.h); break;
     case 'band': setBand(b.dataset.band); break;
     default:
@@ -1137,6 +1141,8 @@ export function mapCopyLink() {
     const b = MAP.stage && MAP.stage.querySelector('[data-act="link"]');
     const hint = MAP.stage && MAP.stage.querySelector('.map-hint');
     if (hint) hint.textContent = t(key);
+    // the hint line is easy to miss: a toast by the tools says it too, in every path (round 2)
+    toast(t(key));
     if (b) { b.classList.add('on'); setTimeout(() => b.classList.remove('on'), 1500); }
   };
   const fallback = () => {
@@ -1173,12 +1179,104 @@ export function mapZoom(f) { if (MAP.cv && !MAP.prop) { MAP.autoFit = null; MAP.
  */
 export function mapFit() {
   if (!MAP.cv) return;
+  // while the board is dimmed around something, Fit frames what reaches it (round 2)
+  if (!MAP.prop && fitAffected(true)) { closeCard(); return; }
   closeCard();
   const flow = MAP.prop ? MAP.prop.flow : MAP.cv.level() === 'st' ? MAP.focus : null;
   closeProperty({ keepHash: true });
   if (flow && MAP.geom.has(flow)) { enterJourney(flow, true); return; }
   fitAll(true);
   writeHash(null, null);
+}
+
+/**
+ * Fit-to-affected: frame the districts of the journeys that reach the thing picked — at most the board's own stop,
+ * so they draw as covers — and the link follows. False when the mode has no reached journey on the board.
+ */
+function fitAffected(anim) {
+  if (!MAP.cv || !affectedReady()) return false;
+  const rects = affectedFlows().map((f) => MAP.geom.get(f)).filter(Boolean);
+  if (!rects.length) return false;
+  const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
+  const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
+  // one journey reached: its own stop, the street; several: as large as covers allow
+  if (rects.length === 1) { const id = affectedFlows().find((f) => MAP.geom.has(f)); enterJourney(id, anim); return true; }
+  MAP.cv.fit({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, { pad: FRAME_PAD, max: LEVEL_NB * 0.9, anim });
+  writeHash(null, null);
+  return true;
+}
+
+// ── the Affected list (round 2) ──────────────────────────────────────────
+/** The board's words for a journey, for the list: its name in the lens, its owner. */
+const affBoard = {
+  owner: (f) => { const d = (MAP.nb.districts || []).find((x) => x.id === f); return (d && d.owner) || ''; },
+  name: (f) => { const d = (MAP.nb.districts || []).find((x) => x.id === f); return d ? nameWords(d.name) : ''; },
+};
+function toggleAffList(force) {
+  const box = MAP.stage && MAP.stage.querySelector('.map-afflist');
+  if (!box) return;
+  const open = force != null ? force : box.hidden;
+  MAP.affList = open && affectedOn();
+  if (!MAP.affList) { box.hidden = true; box.innerHTML = ''; return; }
+  if (MAP.legend) closeLegend();
+  drawAffList();
+}
+function drawAffList() {
+  const box = MAP.stage && MAP.stage.querySelector('.map-afflist');
+  if (!box || !MAP.affList) return;
+  box.innerHTML = affectedListHtml(affBoard);
+  box.hidden = false;
+  box.onclick = (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.act === 'aff-list-close') toggleAffList(false);
+    else if (b.dataset.act === 'aff-copy') copyAffected(b.dataset.kind, box);
+  };
+}
+/** Copy the list's rows as CSV or JSON: the clipboard, else a copy command, else a selected field in the panel. */
+function copyAffected(kind, box) {
+  const { text, n } = affectedExport(kind, affBoard);
+  copyText(text, (how) => {
+    const note = box.querySelector('.al-copied');
+    if (how === 'field') {
+      let f = box.querySelector('.al-field');
+      if (!f) { f = document.createElement('textarea'); f.className = 'al-field'; f.readOnly = true; f.setAttribute('aria-label', t('map.affected.copyField')); box.appendChild(f); }
+      f.value = text; f.focus(); f.select();
+    }
+    const words = how === 'none' ? t('map.affected.copyFailed') : how === 'field' ? t('map.affected.copyField') : t('map.affected.copiedRows').replace('{n}', String(n));
+    if (note) note.textContent = words;
+    toast(words);
+  });
+}
+/**
+ * Copy text: the clipboard, then `execCommand('copy')`, then — when neither takes it — the caller's own field.
+ * `done(how)`: 'clipboard' · 'command' · 'field'.
+ */
+function copyText(text, done) {
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    done(ok ? 'command' : 'field');
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done('clipboard'), fallback);
+    else fallback();
+  } catch { fallback(); }
+}
+let toastT = null;
+/** A confirmation near the tools, on screen for 2 s, whatever path the copy took (round 2). */
+function toast(words) {
+  const el = MAP.stage && MAP.stage.querySelector('.map-toast');
+  if (!el) return;
+  el.textContent = words;
+  el.hidden = false;
+  el.classList.add('on');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.classList.remove('on'); el.hidden = true; }, 2000);
 }
 
 // ── the legend (lane L) ──────────────────────────────────────────────────
@@ -1271,6 +1369,16 @@ function drawLegend() {
     html += '<section>' + lgHead('map.legend.evidence') + [...f.evidence.entries()].map(([key, ew]) =>
       lgRow('evidence-' + (ew.cls || 'none'), '<span class="map-chip k-ev lg-evc ev-' + esc(ew.cls || 'none') + '">'
         + (ew.cls === 'observed' ? sym('live') : ew.cls === 'stale' ? sym('stale') : ew.cls === 'reached' ? sym('step') : '') + '</span>', key)).join('') + '</section>';
+  }
+  // while the board is dimmed around something, the badges it draws (round 2)
+  if (affectedReady()) {
+    const badge = (cls, words) => '<span class="map-affb ' + cls + '">' + esc(words) + '</span>';
+    html += '<section>' + lgHead('map.affected.title')
+      + lgRow('aff-seed', badge('seed', '◎'), 'map.affected.seed')
+      + lgRow('aff-self', badge('self', '0'), 'map.affected.self')
+      + (biz() ? lgRow('aff-biz1', badge('', '1'), 'map.affected.bizAt1') + lgRow('aff-biz2', badge('', '2'), 'map.affected.bizAt2')
+        : lgRow('aff-at', badge('', 'n'), 'map.affected.at'))
+      + lgRow('aff-not', badge('not', '–'), 'map.affected.not') + '</section>';
   }
   html += '<p class="lg-hint">' + esc(t('map.legend.hint')) + '</p>';
   box.innerHTML = html;
@@ -2117,7 +2225,8 @@ export function mapOpen() { return !!MAP.stage; }
  */
 export function mapEscape() {
   if (!MAP.stage) return false;
-  // the Affected mode leaves before anything else (lane I)
+  // the Affected list closes first, then the mode leaves before anything else (lane I)
+  if (MAP.affList) { toggleAffList(false); return true; }
   if (affectedOn()) { clearAffected(); return true; }
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }
@@ -2222,6 +2331,8 @@ function onAffected() {
     if (el) { paintDistrict(el, d.id, j && j.model); if (el.style.width) foldCoverChips(el); }
   }
   if (MAP.card) drawCard();
+  if (MAP.affList) { if (affectedOn()) drawAffList(); else toggleAffList(false); }
+  if (MAP.legend) drawLegend();
   if (MAP.prop && MAP.prop.handle && MAP.prop.handle.update) MAP.prop.handle.update(propCtx());
   if (MAP.prop) { const sc = propScreen(); if (sc) writeHash(MAP.prop.flow, sc.id); }
   else if (MAP.cv) writeHash(MAP.cv.level() === 'st' ? MAP.focus : null, null);
