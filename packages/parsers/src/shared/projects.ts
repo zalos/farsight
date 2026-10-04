@@ -28,6 +28,7 @@ import { globToRegExp, mergeTagDimensions } from '@farsight/core';
 import type { IngestOptions } from '../types.js';
 import { collectFiles } from './files.js';
 import { createAliasResolver, resolveFileish } from '../aliases.js';
+import { readNxProjectGraph } from './nx-graph.js';
 
 /** Kinds an adapter may place without a file whose project is read from what they are joined to. */
 const PLACELESS_KINDS = new Set<GraphNode['kind']>(['table', 'queue', 'flag', 'rule', 'guard']);
@@ -226,6 +227,14 @@ export function projectImports(repoRoot: string, projects: readonly ProjectDecl[
 export function applyProjects(fragment: GraphFragment, repoRoot: string, options: IngestOptions, config: ProjectsConfig | undefined): ProjectsMeta {
   const repo = fragment.repo;
   const { tool, projects, notes } = discoverProjects(repoRoot, repo, options);
+  // NX's own project graph, when NX wrote one: dependencies it knows, and the type of a project no manifest typed
+  const nx = tool === 'nx' ? readNxProjectGraph(repoRoot, projects, config?.graphFile) : undefined;
+  if (nx) {
+    for (const p of projects) if (!p.type && nx.types.has(p.name)) p.type = nx.types.get(p.name)!;
+    notes.push(...nx.notes);
+  } else if (config?.graphFile !== undefined) {
+    notes.push(`projects.graphFile is set, but this source is not an NX workspace (no nx.json), so it is not read.`);
+  }
   for (const n of fragment.nodes) {
     const path = n.loc?.path;
     if (!path || (n.loc!.repo && n.loc!.repo !== repo)) continue;
@@ -262,5 +271,7 @@ export function applyProjects(fragment: GraphFragment, repoRoot: string, options
     ...(config?.tagValues ? { tagValues: config.tagValues } : {}),
     ...(imports.length ? { imports } : {}),
     ...(notes.length ? { notes } : {}),
+    ...(nx?.dependencies.length ? { dependencies: nx.dependencies } : {}),
+    ...(nx?.graphFile ? { graphFile: nx.graphFile } : {}),
   };
 }
