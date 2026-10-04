@@ -68,6 +68,8 @@ const CHROME_FILES = [
   'surfaces/map.js', 'lib/map-canvas.js', 'lib/map-model.js',
   // lane B's two
   'surfaces/map-property.js', 'lib/map-property-model.js',
+  // lane I's Affected mode
+  'surfaces/map-affected.js', 'lib/map-affected-model.js',
   // lane C (code map by project and package)
   'surfaces/codemap-projects.js', 'lib/codemap-model.js',
 ];

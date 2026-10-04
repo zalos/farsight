@@ -619,6 +619,17 @@ export class SnapshotDb {
     }
   }
 
+  /**
+   * The commits whose sha starts with `prefix` (at least 4 hex characters), in any repository —
+   * how a link that names a commit by its short sha finds it (the Map's Affected mode). Newest first.
+   */
+  commitsByPrefix(prefix: string): { repo: string; sha: string; at: string; author: string; subject: string }[] {
+    const p = String(prefix || '').toLowerCase();
+    if (!/^[0-9a-f]{4,40}$/.test(p)) return [];
+    return this.db.prepare('SELECT repo, sha, at, author, subject FROM "commit" WHERE substr(sha, 1, ?) = ? ORDER BY at DESC, repo')
+      .all(p.length, p) as { repo: string; sha: string; at: string; author: string; subject: string }[];
+  }
+
   /** The nodes a commit changed, or `null` when they were never computed against `graph` (then compute, never assume none). */
   commitNodes(repo: string, sha: string, graph?: string): { node: string; path: string; fileOnly: boolean }[] | null {
     const done = this.db.prepare('SELECT graph FROM commit_node_done WHERE repo = ? AND sha = ?').get(repo, sha) as { graph: string } | undefined;

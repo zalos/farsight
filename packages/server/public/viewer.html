@@ -2365,6 +2365,45 @@
     .map-asof{padding:6px 7px}
   }
   @media (max-width:860px){ .map-chrome{flex-wrap:wrap} .map-crumb{max-width:100%} .map-tools{flex-wrap:wrap} }
+  /* ── MAP Affected mode — surfaces/map-affected.js (lane I): dimmed, not hidden; badged with how a thing is reached ── */
+  .map-chrome:has(.map-affbar){flex-wrap:wrap}
+  .map-affbar{flex-basis:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--accent);padding-top:8px;min-width:0}
+  .map-affbar .ttl{color:var(--accent)}
+  .map-affbar .on{font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46%}
+  .map-affname{color:var(--ink);font-weight:500}
+  .map-affhops{display:inline-flex;align-items:center;gap:4px}
+  .map-affhops button{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:3px 8px;background:var(--panel);cursor:pointer}
+  .map-affhops button[aria-pressed="true"]{color:var(--accent);border-color:var(--accent);background:var(--accent-dim)}
+  .map-affst{font-size:11px;color:var(--muted)} .map-affst.warn{color:var(--warn,#E8A13C)} .map-affst .n{font-family:var(--mono);color:var(--ink)}
+  .map-affbar .map-tb[data-act="aff-clear"]{margin-left:auto}
+  .map-world.lvl-nb .map-district.aff-dim{opacity:.32}
+  .map-world.lvl-st .map-district.aff-dim .map-dhead{opacity:.4}
+  .map-district.aff-seed{box-shadow:0 0 0 3px var(--accent)}
+  .map-scr.aff-dim,.map-pl.aff-dim,.map-pd.aff-dim{opacity:.26}
+  .map-scr.aff-hit{border-color:var(--accent)}
+  .map-pl.aff-hit,.map-pd.aff-hit{border-color:var(--accent)}
+  .map-scr.aff-seed,.map-pl.aff-seed,.map-pd.aff-seed{outline:3px double var(--accent);outline-offset:3px}
+  .map-affb{display:inline-flex;align-items:center;font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:1px 6px;background:var(--accent-dim);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .map-affb.self{background:var(--accent);color:var(--bg)}
+  .map-affb.seed{border-style:double;border-width:3px}
+  .map-affb.not{color:var(--dim);border-color:var(--line);background:transparent}
+  .map-dhead .map-affb.j,.map-dcover .map-affb.j,.map-dhead .map-affb.not,.map-dcover .map-affb.not{font-size:11px;padding:2px 8px}
+  .map-pd .map-affb{position:absolute;right:-4px;top:-17px}
+  .map-pl .k .map-affb{margin-left:auto}
+  .map-chip.go .map-affb,.mp-alsochip .map-affb{margin-left:6px;background:transparent;color:var(--accent)}
+  .map-affn{display:inline-flex;gap:6px}
+  .map-xcard .acts .map-tb.aff{color:var(--accent);border-color:var(--accent)}
+  .mp-affact{margin-left:auto} .mp-affact.on,.mp-affbtn.on{color:var(--accent);border-color:var(--accent)}
+  .mp-affbtn{margin-left:6px;cursor:pointer;font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:2px 7px;background:var(--panel)}
+  .mp-affbtn:hover,.mp-affbtn:focus-visible{color:var(--accent);border-color:var(--accent)}
+  .mp-affhop{color:var(--accent);margin:4px 0 2px}
+  .mp-affsub{font-size:9.5px;color:var(--dim);margin:6px 0 2px}
+  .mp-affpick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+  .mp-affpick .api-chip.on{color:var(--accent);border-color:var(--accent)}
+  .mp-affscope{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .mp-aff .mp-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .mp-affbound{margin-top:6px}
+  a.mp-row.card{text-decoration:none;color:inherit}
   /* ── MAP property — surfaces/map-property.js ─────────────────────────────
      One screen up close: the picture is the hero (left), a 352px rail of eight
      tabs (right, two rows of tabs), the step bar below. Under 860px the rail

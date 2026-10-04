@@ -10,7 +10,7 @@ import {
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
   testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
-  impactOf, search, buildLine, projectGraph, appClosure, findProject,
+  impactOf, affectedReach, search, buildLine, projectGraph, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
   counted,
@@ -1270,10 +1270,51 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           ...(seed.id !== nodeArg ? { resolvedFrom: nodeArg } : {}),
           seedNode: enrichNode(seed),
           ...report,
+          // the Map's Affected mode: the same answer placed on the journeys, screens and calls (one walk
+          // per flow, cached per graph) — additive, asked for by name
+          ...(on('reach') ? { reach: affectedReach(g.index, report) } : {}),
         }));
       } catch (err) {
         // a refused budget is a sentence with a 400, not a 500 (§8)
         return send(400, JSON.stringify({ error: (err as Error).message }));
+      }
+    }
+    // ── one commit and the parts it touched (the Map's Affected mode seeds, map-pass-2026-10-03 §4) ──
+    if (url.startsWith('/api/history/commit') && req.method === 'GET') {
+      const u = new URL(url, 'http://localhost');
+      const sha = (u.searchParams.get('sha') ?? '').trim();
+      if (!sha) return send(400, JSON.stringify({ error: 'missing ?sha=<commit sha, or its first characters>' }));
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      let db: SnapshotDb;
+      try {
+        db = openHistory(ws);
+      } catch (err) {
+        return send(503, JSON.stringify({ error: (err as Error).message }));
+      }
+      try {
+        const want = u.searchParams.get('repo');
+        const rows = db.commitsByPrefix(sha).filter((r) => !want || r.repo === want);
+        const row = rows[0];
+        if (!row) return send(404, JSON.stringify({ error: `no commit read starts with ${sha}` }));
+        const g = loadJourneyGraph(graphPath);
+        // the parts its hunks were resolved to (`lines`), else every part defined in a file it changed
+        // (`file`, the same whole-path suffix rule /api/history/touching credits) — modules only when
+        // a file holds nothing else
+        const resolved = db.commitNodes(row.repo, row.sha);
+        let parts: { node: string; how: 'lines' | 'file' }[] = [];
+        if (resolved && resolved.some((r) => !r.fileOnly)) {
+          parts = resolved.filter((r) => !r.fileOnly && g.index.byId.has(r.node)).map((r) => ({ node: r.node, how: 'lines' as const }));
+        } else {
+          const files = db.filesForCommit(row.repo, row.sha).map((f) => f.path);
+          const inFile = (n: GraphNode) => !!n.loc?.path && (n.loc.repo ?? n.id.split('::')[0]) === row.repo
+            && files.some((f) => f === n.loc!.path || f.endsWith('/' + n.loc!.path));
+          const hit = [...g.index.byId.values()].filter(inFile);
+          const own = hit.filter((n) => n.kind !== 'module' && n.kind !== 'test');
+          parts = (own.length ? own : hit.filter((n) => n.kind !== 'test')).map((n) => ({ node: n.id, how: 'file' as const }));
+        }
+        return send(200, JSON.stringify({ ...row, parts, ...(rows.length > 1 ? { ambiguous: rows.length } : {}) }));
+      } finally {
+        db.close();
       }
     }
     // ── the commits that touched a set of parts (the Map's Changes tab, map-pass-2026-10-03 §3 N) ──
