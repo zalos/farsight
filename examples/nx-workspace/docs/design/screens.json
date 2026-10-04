@@ -1,5 +1,19 @@
 {
   "name": "NX example — screens",
+  "groups": [
+    {
+      "id": "invoices",
+      "name": "Invoices",
+      "description": "Reading what is owed.",
+      "persona": "billing"
+    },
+    {
+      "id": "runs",
+      "name": "Overnight runs",
+      "description": "Checking what the overnight run collected.",
+      "persona": "ops"
+    }
+  ],
   "screens": [
     {
       "id": "BIL-01",
@@ -19,6 +33,8 @@
       "id": "review-open-invoices",
       "name": "Review open invoices",
       "description": "A billing user opens the list of open invoices and reads what is owed.",
+      "persona": "billing",
+      "group": "invoices",
       "screens": [
         "BIL-01"
       ]
@@ -27,6 +43,8 @@
       "id": "check-report-runs",
       "name": "Check the overnight run",
       "description": "An operations user checks how much the overnight run collected.",
+      "persona": "ops",
+      "group": "runs",
       "screens": [
         "OPS-01"
       ]

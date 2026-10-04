@@ -443,20 +443,19 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
   const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
   if (!byId.has(design.id)) { fragment.nodes.push(design); byId.set(design.id, design); }
   let seq = fragment.edges.length;
-  const contains = (to: string) => {
+  const contains = (to: string, undesigned = false) => {
     if (fragment.edges.some((e) => e.kind === 'contains' && e.from === design.id && e.to === to)) return;
-    fragment.edges.push({ id: `d${seq++}`, kind: 'contains', from: design.id, to, resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } } as GraphEdge);
+    fragment.edges.push({ id: `d${seq++}`, kind: 'contains', from: design.id, to, ...(undesigned ? { meta: { undesigned: true } } : {}), resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH' } } as GraphEdge);
   };
   for (const m of result.matched) {
     const node = byId.get(m.nodeId)!;
     // a manifest read earlier stamped this page *built, not designed* — it was not that manifest's
     // screen, and now one manifest designs it: the earlier stamp and its membership go (several
     // manifests per source, one per NX app, journey-organisation-and-config-files.md §4)
-    const prior = node.design;
-    if (prior?.origin === 'manifest' && prior.status === 'code-only' && prior.designId && prior.designId !== design.id) {
+    if (node.design?.origin === 'manifest' && node.design.status === 'code-only') {
       for (let i = fragment.edges.length - 1; i >= 0; i--) {
         const e = fragment.edges[i]!;
-        if (e.kind === 'contains' && e.from === prior.designId && e.to === node.id) fragment.edges.splice(i, 1);
+        if (e.kind === 'contains' && e.to === node.id && e.from !== design.id && e.meta?.undesigned) fragment.edges.splice(i, 1);
       }
       node.tags = node.tags.filter((t) => t !== 'undesigned');
     }
@@ -490,7 +489,7 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
     if (node.design && node.design.origin === 'manifest' && node.design.status !== 'code-only' && node.design.designId !== design.id) continue;
     node.design = { status: 'code-only', origin: 'manifest', designId: design.id, drift: [{ kind: 'code-only', message: 'built; no screen in the design manifest describes this page' }] };
     if (!node.tags.includes('undesigned')) node.tags.push('undesigned');
-    contains(node.id);
+    contains(node.id, true);
   }
   // flows: a node per flow, rendering its screens in order (meta.line carries the order for journey())
   for (const f of result.flows) {
