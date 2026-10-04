@@ -50,6 +50,39 @@ domain* (`map.js` `bandToolHtml`, `fs-map-band`) passes `journeyDomain` to `layo
 when `canBandByDomain`. e2e: `e2e/tests/codemap-projects.pw.spec.ts` (its second half serves invoice-app + the NX
 example itself, `fixture/workspace.mjs` `makeProjectsWorkspace`).
 
+#### The project picker — `lib/multi-pick.js`, `lib/multi-pick-model.js` (2026-10-04)
+
+One picker wherever a project, a tag value or a package is picked. A host writes `pickerHtml(id, spec)` into whatever
+it draws (`spec`: `options` `[{ id, word, group, sub?, countHtml?, match? }]`, `groups` `[{ key, word }]` in their
+fixed order, `selected`, `multi`, `chips` for a single pick shown as a droppable chip, `label`, `placeholder`,
+`countKey` — a catalog key with `{n} of {m}` — `onChange(ids, id, on)`, `onClose()`); every event is handled by
+delegation on the document in the capture phase (the menus stop clicks bubbling; the keymap listens on the document),
+so a host that rebuilds itself with innerHTML keeps the picker's query, active option and chip fold (kept by id), and
+the field gets its focus back. `multi-pick-model.js` is pure and unit-tested: `fold` (lower case, accents dropped),
+`matchScore` (every term inside a word the option lists — its name, its words, its tags; a prefix of the whole query
+outranks a word start outranks a substring), `shownOptions` (groups in order, better matches first inside each).
+The list is a listbox (`aria-multiselectable` in multi mode) driven from the field with `aria-activedescendant`: ↑/↓
+move (the first lands on the first match), Enter toggles or picks, Space toggles once the arrows moved (before that it
+types a space), ⌘A selects every option shown, Esc clears the words, then closes (the scope menu's capture-phase Esc
+handler yields while a picker has words — `pickerHasQuery`). Chips fold into `+n` past six (`FOLD_AT`). The match
+count is plain words (`codemap.pick.count*`) with its define as the tip; an option's number carries a number tip
+but no tab stop of its own (the field holds the keyboard). Classes are `mpk-*` — `mp-*` is the Map's property.
+
+Uses: the scope menu's **Projects** (`cm-pick-proj`, multi; Applications → Libraries → End-to-end tests → Other
+projects; the type and tag words as the sub line, the project's parts of the code — `ProjectRow.nodes` folded on the
+page — as the number), **Tags** (`cm-pick-tags`, multi, grouped by dimension, ids `dim=value`) and **Depends on**
+(`cm-pick-dep`, single with a chip); the Views menu's *App and its related* (`cm-pick-app`, single, its field focused
+when the menu opens) and *Where is a package included* (`cm-pick-pkg`, single; From this workspace → Third-party).
+The project and tag filters are kept in `fs-cmap-filters` beside `fs-cmap-group` and written to the link outside a
+view — `project=a,b` (a name, or `repo::name` when two sources have a project of that name) and
+`tag=domain:billing,type:ui`; a link that names them wins, one that does not keeps the kept ones and is rewritten with
+them, a kept key the graph no longer has is dropped, and a link to a card (`node=`) or a box (`box=`) that the kept
+filters hide drops them. Selected projects and tag values are also chips in `#cmapctl` beside *filtered* (three,
+then `+n filters`, which opens the scope menu). **Fast travel** lists projects (`projectTravelItems()`, kind word
+*project*, an application above a library above a test project at equal score) and lands on
+`#/codemap?group=project&box=<name>`: the map grouped by project, the box marked `.cm-arrived` and scrolled into view,
+its inspector open. e2e: `e2e/tests/codemap-picker.pw.spec.ts`.
+
 ## Tooltips — `lib/tooltip.js` (2026-09-25)
 
 **The rule** (AGENTS.md invariants): every number and every detail carries a tip built from the catalog's
