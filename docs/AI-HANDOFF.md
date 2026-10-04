@@ -47,7 +47,7 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | `0.1.2` (GitHub Release v0.1.2), workspace main after the map-view, data-stores and map-pass-2 passes (PRs #8–#34; `8e1c134` is the last feature merge — the project picker) |
+| build | **`0.2.0`** (GitHub Release v0.2.0, 2026-10-04), workspace main after the map-view, data-stores and map-pass-2 passes (PRs #8–#36; `8e1c134` is the last feature merge — the project picker) |
 | tests | **926** — core 275 · work 59 · parsers 165 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 227 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 187/187** (the `codemap-projects` spec starts its own two-source server) |
 | string/symbol lint | **1938 entries · 33 sprite symbols · 36 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
 | servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings, sync 61) and the reference app's own `farsight` on **4477** (the Node 24 global install, started from that workspace, sync 96, `flags.map` on in its local settings). Both `status` up to date on `8e1c134`. Check `lsof` before restarting or measuring on any port. |
@@ -215,7 +215,9 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   `chore(release): vX.Y.Z` from `release/vX.Y.Z` (version commit + `CHANGELOG.md` + `.github/release-notes/vX.Y.Z.md`,
   gates and smoke test already run); merging it runs `publish.yml`, which tags the release commit, packs, smoke-tests
   and creates the GitHub Release. A PR opened with `GITHUB_TOKEN` does not start CI — close/reopen it, or add a
-  `RELEASE_TOKEN` PAT (`docs/RELEASING.md`). First release under this flow not yet rehearsed.
+  `RELEASE_TOKEN` PAT (`docs/RELEASING.md`). **Rehearsed for real with v0.2.0 (2026-10-04):** the workflow's gates and smoke test passed, PR #36 opened, its CI did
+  not start (no `RELEASE_TOKEN`), a close/reopen started it, a merge commit merged it, publish.yml tagged `v0.2.0` and
+  published the Release with `farsight-cli-0.2.0.tgz`. Add a `RELEASE_TOKEN` PAT to drop the close/reopen step.
 - **CI on every push and PR** (`ci.yml`): validate (install, build, typecheck, tests, string lint, ~1 min) and e2e
   (Playwright chromium, 109 specs, ~1.5 min) in parallel on Ubuntu; artifacts on failure; the live tracker tests skip
   there. First run on `main` green. → `docs/CI.md`. Watch: `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19.
