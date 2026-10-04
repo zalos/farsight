@@ -47,10 +47,10 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | `0.1.2` (GitHub Release v0.1.2), workspace main after the map-view, data-stores and map-pass-2 passes (PRs #8–#30; `bf8f30d` is the last feature merge, `58eee1d` the example-manifest bump) |
-| tests | **918** — core 275 · work 59 · parsers 165 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 219 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 170/170** (the `codemap-projects` spec starts its own two-source server) |
-| string/symbol lint | **1890 entries · 33 sprite symbols · 34 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings, sync 59) and the reference app's own `farsight` on **4477** (the Node 24 global install, started from that workspace, sync 94, `flags.map` on in its local settings). Both `status` up to date on `bf8f30d`. Check `lsof` before restarting or measuring on any port. |
+| build | `0.1.2` (GitHub Release v0.1.2), workspace main after the map-view, data-stores and map-pass-2 passes (PRs #8–#32; `5cfbe89` is the last feature merge — the round-2 fixes) |
+| tests | **922** — core 275 · work 59 · parsers 165 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 223 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 179/179** (the `codemap-projects` spec starts its own two-source server) |
+| string/symbol lint | **1914 entries · 33 sprite symbols · 34 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings, sync 60) and the reference app's own `farsight` on **4477** (the Node 24 global install, started from that workspace, sync 95, `flags.map` on in its local settings). Both `status` up to date on `5cfbe89`. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -192,7 +192,7 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
    agree across views for every persona, the blast radius is credited by every role, *Where is a package included*
    was called the best panel in the product. One **regression** found by all eight: the Map takes the journey
    nearest the viewport centre, not the one clicked (a wide journey opened at its fitted-width floor loses to its
-   neighbour) — fixed in `fix/map-round-2` together with the Affected mode's readability at board altitude (fit-to-
+   neighbour) — fixed in PR #32 together with the Affected mode's readability at board altitude (fit-to-
    affected, a list with CSV/JSON), scope words on per-journey counts, the legend covering the toolbar, the zoom
    anchor and first-notch tooltip, the stepper's feedback, Enter/`?`/`y`, pan bounds, and the code map's spec-file
    boxes.
@@ -222,8 +222,8 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 **Left open by map pass 2 (2026-10-04), in order:**
 
-1. **Land `fix/map-round-2`** (the round-2 blocker and its convergent findings; `_synthesis.md` in the private review
-   folder has the ranked list), then re-check the widest journey on 4477 by click, link and keys. Still open after it:
+1. PR #32 landed the round-2 blocker and its convergent findings (`_synthesis.md` in the private review folder has the
+   ranked list); the lead re-checked the widest journey on 4477 by click, plumbing, link and `j` — all keep it. Still open:
    an export of the affected set for CI (a commit/PR seed with a deduplicated test list, `farsight-affected v1` once
    frozen), PNG/PDF of the board, screen tabs and *Where is it included* in the URL, a file:line on screen cards, the
    Tests page's *no source digest* warning on the cover, the word for `sql` stores in the business register.
