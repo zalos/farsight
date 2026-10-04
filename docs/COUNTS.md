@@ -342,20 +342,24 @@ The e2e stub (`e2e/tests/work-stub.ts`) builds the same shapes with the same key
 
 The map computes no number of its own: every chip is a `Counted` the journey summary typed, printed with
 `countedHtml(c, '/api/journey')` and its tip. Before a journey's walk lands, its cover says *reading this journey…*
-(`map.cover.loading`) — the design rows' `built/total` are not typed and are not printed here.
+(`map.cover.loading`) — the design rows' `built/total` are not typed and are not printed here. Since the clarity pass
+(2026-10-04) the board's card prints only the `built` status chip, the *at risk* mark and *→ n*; every other journey
+number below is in the street head, from the journey-fitted stop up — no count changed meaning.
 
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
-| `3 screens` | C:`summary.counted.screens` (breakdown `count.part.screensReached` · `count.part.screensNotReached`) | screens the journey names — its design's, else the walk's — in order, each once | journey | district cover and street head; the tip splits it into reached by the walk / not reached |
-| `10 reached` | C:`summary.counted.screensReached` | named screens a segment of the walk opens on, each once — the street's screens | journey | cover and head beside `14 screens`, drawn only when fewer than the screens named (lane N, 2026-10-03; on the reference app's POC journey 14 named · 10 reached · 23 stops, the drill's unit) |
-| `2 of 3 built` | C:`summary.counted.built` | named screens a page in the code serves, of how many | journey | cover and head; warm when not all are built |
-| `5 actions` | C:`summary.counted.actions` | distinct operations the code calls | journey | cover and head |
-| `6 gates & rules` | C:`summary.counted.gates` (breakdown guards · rules) | checkpoints on the walk | journey | cover and head |
-| `7 test cases` + its evidence word | C:`summary.coverage.journey.counted.tests` (breakdown unit · integration · e2e) beside `summary.coverage.journey.evidenceWord` (`lib/map-chips.js` `mapTestsChips`) | distinct cases reaching the journey, and the class of the strongest evidence | journey | cover and head; the word is the Portfolio's for the same fold (`/api/tests?flow=` and `/api/journey` agree on all 18 of the reference app's journeys), *not built* on `sharedEvidence`; never a count of tests without its class |
-| `owner · Billing team` · `reaches the ERP · Example ERP` | `/api/design` flow `owner`; `summary.systems[].externalKind === 'erp'` (else a declared approve/post/sync operation: *ERP hand-off declared, not built*) | not counts — the Portfolio's Owner and Reaches-the-ERP columns, same rule | journey | cover and head; absent when the manifest names nobody or nothing reaches an ERP |
-| `1 declared, not called` | C:`summary.counted.declaredNotCalled` | operations named and not called | journey | cover and head; not drawn at 0 |
-| `1 data store` | C:`summary.counted.stores` (breakdown holding records · outside systems) | data stores the journey touches, each once by name — a database its records live in (named by the code or the settings), an outside system it uses as a store; a record whose store nobody named is not counted | journey | cover and head; not drawn at 0 |
-| work chip | C:`/api/work/flow/<id>` `counts.items` | as the Portfolio's | flow | cover and head; not drawn at 0 or without a work source |
+| `3 screens` | C:`summary.counted.screens` (breakdown `count.part.screensReached` · `count.part.screensNotReached`) | screens the journey names — its design's, else the walk's — in order, each once | journey | street head; the tip splits it into reached by the walk / not reached |
+| `10 reached` | C:`summary.counted.screensReached` | named screens a segment of the walk opens on, each once — the street's screens | journey | head beside `14 screens`, drawn only when fewer than the screens named (lane N, 2026-10-03; on the reference app's POC journey 14 named · 10 reached · 23 stops, the drill's unit) |
+| `2 of 3 built` | C:`summary.counted.built` | named screens a page in the code serves, of how many | journey | street head; warm when not all are built. On the board's card (clarity pass 2026-10-04) the same Counted, same tip, in words: *built* · *partly built · 2 of 3* · *designed, not built* (`map.cover.status.*`) |
+| `→ 2` | `plainTip(n, 'map.cover.leadsOf', 'map.fold.scopeJourney', '/api/journey')` ← the *leads to* lines `drawLinks` draws from each journey's `summary.links` (`fillLeadMarks`; a pair that lead to each other counts at both ends) | journeys this one leads to, each once; the tip names them | journey | the board's card; not drawn at 0 |
+| `3 journeys` | `plainTip(n, 'map.band.journeys', 'map.band.scope', '/api/design' or '/api/journeys')` ← `layoutDistricts` band `n` | journeys drawn in the band — banded by persona a journey for two people is in both bands (its card and an echo), so the bands can sum past the board's journeys | one band | each band panel's header |
+| `5 actions` | C:`summary.counted.actions` | distinct operations the code calls | journey | street head |
+| `6 gates & rules` | C:`summary.counted.gates` (breakdown guards · rules) | checkpoints on the walk | journey | street head |
+| `7 test cases` + its evidence word | C:`summary.coverage.journey.counted.tests` (breakdown unit · integration · e2e) beside `summary.coverage.journey.evidenceWord` (`lib/map-chips.js` `mapTestsChips`) | distinct cases reaching the journey, and the class of the strongest evidence | journey | street head; the word is the Portfolio's for the same fold (`/api/tests?flow=` and `/api/journey` agree on all 18 of the reference app's journeys), *not built* on `sharedEvidence`; never a count of tests without its class |
+| `owner · Billing team` · `reaches the ERP · Example ERP` | `/api/design` flow `owner`; `summary.systems[].externalKind === 'erp'` (else a declared approve/post/sync operation: *ERP hand-off declared, not built*) | not counts — the Portfolio's Owner and Reaches-the-ERP columns, same rule | journey | street head; absent when the manifest names nobody or nothing reaches an ERP |
+| `1 declared, not called` | C:`summary.counted.declaredNotCalled` | operations named and not called | journey | street head; not drawn at 0 |
+| `1 data store` | C:`summary.counted.stores` (breakdown holding records · outside systems) | data stores the journey touches, each once by name — a database its records live in (named by the code or the settings), an outside system it uses as a store; a record whose store nobody named is not counted | journey | street head; not drawn at 0 |
+| work chip | C:`/api/work/flow/<id>` `counts.items` | as the Portfolio's | flow | street head; not drawn at 0 or without a work source |
 | `1 action` · `2 gates & rules` · `4 test cases` + evidence word on a screen | C:`segment.counted.actions` · C:`segment.counted.gates` · C:`summary.coverage.segments[i].counted.tests` beside `coverage.segments[i].evidenceWord` (`MapScreen.chips.evidence`) | as the journey's, over one screen | screen (`journey.scopeHere`) | screen card; the business lens leaves out a zero; a non-zero tests count always carries its word |
 | ordinal `1` `2` `3` | the screen's place in `summary.segments` | a position, not a count (`map.screen.ordinal`) | journey | screen card |
 | `×0.95` | the board's scale | not a count — the zoom (`map.zoom`) | the board | bottom right |
@@ -365,7 +369,7 @@ The map computes no number of its own: every chip is a `Counted` the journey sum
 The plumbing prints no other number: a call, a record, a message and a third party are drawn once per screen that reaches
 them, so the same record appears under two screens while the journey's own counts still count it once.
 
-The stores (docs/proposals/data-stores.md) print one number on the map, *n data stores* on the cover and head
+The stores (docs/proposals/data-stores.md) print one number on the map, *n data stores* in the street head
 (`summary.counted.stores`, above, with its tip); the legend lists the stores by name (`summary.system.stores`, else
 the street's own data) and the property groups its data rows by store, neither with a count — the map does not count
 stores itself.
@@ -423,9 +427,9 @@ picked, what uses it as far out as the distance chosen, and the journeys and scr
 
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
-| `2 journeys stale` | viewer Counted `count.unit.riskStale` ← each journey's `summary.coverage.journey.evidenceWord.cls === 'stale'` | journeys whose cover's evidence word is *stale*; each once | `count.scope.workspace` | the risk line over the board, once every walk has landed; not drawn at 0 |
+| `2 journeys stale` | viewer Counted `count.unit.riskStale` ← each journey's `summary.coverage.journey.evidenceWord.cls === 'stale'` | journeys whose evidence word is *stale* (the card's at-risk mark); each once | `count.scope.workspace` | the risk line over the board, once every walk has landed; not drawn at 0 |
 | `1 not fully built` | viewer Counted `count.unit.riskNotBuilt` ← `summary.counted.built` with `n < of` | journeys with at least one screen designed and not built | `count.scope.workspace` | the same line |
-| `1 reaches the ERP` | viewer Counted `count.unit.riskErp` ← `erpReached(summary)` (the cover's ERP chip) | journeys whose calls reach the ERP | `count.scope.workspace` | the same line |
+| `1 reaches the ERP` | viewer Counted `count.unit.riskErp` ← `erpReached(summary)` (the head's ERP chip) | journeys whose calls reach the ERP | `count.scope.workspace` | the same line |
 | *on this journey* | `map.screen.onJourney` (words + tip, no number) | names the scope of the screen card's and the property's numbers: this screen's part of this journey's walk — the same screen on another journey prints its own | — | the screen card's chips, the property's head |
 
 ### Projects (`/api/projects` → core `projects.ts` `projectGraph()` / `appClosure()`; MCP `graph_overview`)

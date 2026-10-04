@@ -178,7 +178,7 @@ test.describe('map — the lines between journeys', () => {
    * @covers packages/server/public/app/surfaces/map.js::drawLinks
    * @covers packages/server/public/app/surfaces/map.js::linkVisibility
    */
-  test('on a twelve-journey board every line has at most one label, and no label covers a journey', async ({ page }) => {
+  test('at the board a line shows only for the journey under the pointer, unlabelled; zoomed in every line has at most one label, none over a journey', async ({ page }) => {
     await stubBoard(page);
     await mapOn(page);
     await go(page, '#/map');
@@ -187,25 +187,30 @@ test.describe('map — the lines between journeys', () => {
     await expect(page.locator('.map-links g[data-link="leadsTo"]')).toHaveCount(14);
     await expect(page.locator('.map-links g[data-both]')).toHaveCount(1);
     await expect(page.locator('.map-links g[data-both] .head')).toHaveCount(2);
+    // the board altitude: no line and no label until a journey is under the pointer; the covers say the lines exist
+    await expect(page.locator('.map-links g[data-link]:not(.off)')).toHaveCount(0);
     const fit = await labelOverlaps(page);
-    expect(fit.most, 'a line with two labels').toBeLessThanOrEqual(1);
-    expect(fit.onCover, 'labels over a journey at the fit').toBe(0);
-    expect(fit.onLabel, 'labels over each other at the fit').toBe(0);
-    expect(fit.labels, 'labels drawn at the fit').toBeGreaterThan(0);
-    // a label is one word, never doubled into its neighbour
-    for (const w of fit.words) expect(w).toMatch(/^(leads to|part of|lead to each other)$/i);
-    // hovering a journey lights its lines, part of included, with their labels — still clear of every journey
+    expect(fit.labels, 'labels drawn at the board').toBe(0);
+    await expect(page.locator(`.map-district[data-flow="${SYN(3)}"] .map-mark.leads`)).toBeVisible();
+    // hovering a journey lights its lines, part of included, both ends lit and the rest dimmed — still unlabelled
     await page.locator(`.map-district[data-flow="${SYN(6)}"] .map-dcover`).hover();
     await expect(page.locator('.map-links g.hot').first()).toBeVisible();
     await expect(page.locator(`.map-links g[data-link="partOf"][data-to="${SYN(6)}"]`)).not.toHaveClass(/\boff\b/);
-    const hot = await labelOverlaps(page);
-    expect(hot.onCover, 'labels over a journey with a journey lit').toBe(0);
-    // zoomed in, more labels fit; none lands on a journey
+    await expect(page.locator('.map-links g[data-link]:not(.off):not(.hot)')).toHaveCount(0);
+    await expect(page.locator(`.map-district[data-flow="${SYN(6)}"]`)).toHaveClass(/\blink-end\b/);
+    await expect(page.locator('.map-world')).toHaveClass(/\blinks-lit\b/);
+    expect((await labelOverlaps(page)).labels, 'labels drawn at the board with a journey lit').toBe(0);
+    // zoomed in to a journey, every leads-to is drawn; a line has at most one label and none lands on a journey
     await page.evaluate(() => (window as any).mapZoom(1.6));
+    await expect(page.locator('.map-world')).toHaveClass(/\blvl-st\b/);
     await page.waitForTimeout(600);
+    await expect(page.locator('.map-links g[data-link="leadsTo"].off')).toHaveCount(0);
     const near = await labelOverlaps(page);
+    expect(near.most, 'a line with two labels').toBeLessThanOrEqual(1);
     expect(near.onCover, 'labels over a journey zoomed in').toBe(0);
     expect(near.onLabel).toBe(0);
+    // a label is one word, never doubled into its neighbour
+    for (const w of near.words) expect(w).toMatch(/^(leads to|part of|lead to each other)$/i);
   });
 });
 

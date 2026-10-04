@@ -477,12 +477,25 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
 
 **The neighbourhood.** One `.map-district` per flow. The layout rule is `layoutDistricts(items, { aspect })` in
 `lib/map-model.js` (pure; tested on 1, 3, 8, 21 and 40 synthetic journeys for no overlap and the board's shape):
-- **bands by source** (`repo`), stacked top to bottom in the order the design answer names the sources, each headed
-  by a `.map-band` label with the source's name;
+- **bands by source** (`repo`), stacked top to bottom in the order the design answer names the sources; each band is
+  a **panel** (`.map-band`, clarity pass 2026-10-04): a faint wash with a 1-px border at any zoom (`--map-s`), as wide
+  as the board's widest row so the bands line up (`band.w`, `pad` either side of its districts, `pad` below), headed
+  in its `labelH` strip by `bandHeadHtml()` — the band's word, *n journeys* (`map.band.journeys`, a number with its
+  tip, `b.n` slots) and, banded by persona, the persona's `description` from the tree — drawn under the links layer;
 - inside a band, `neighbourhoodModel` orders the journeys that contain another (every screen of a smaller one is
   theirs) first, then by name, and they are packed left to right in **rows** that wrap at one maximum row width;
-- every district keeps its **street's world width** (so zooming in reveals the street where the cover was) and takes
-  its band's tallest height, so rows line up;
+- the board is laid out **twice** (`MAP.lay = { nb, st }`; clarity pass 2026-10-04): **a cover is a card, a street is
+  a street — the two no longer share a width.** The board (`nb`) is drawn in *board px* × `BOARD_K` (5) world units:
+  a card is `CARD_BASE + CARD_SCREEN × screens` wide with its screens clamped to 2–4 (`boardWidth()`, so a 14-screen
+  journey is at most twice a 1-screen one, where their streets differ 6×) and `CARD_H` tall; its gaps, header strip
+  and panel inset are board px too (`BAND_GEOM.nb`). The streets (`st`) keep their own width and height. `geom`,
+  `bands`, `size` and `echoes` are the layout of `MAP.alt`; `ensureAlt(alt, keepId)` swaps them where the level
+  changes, shifting the canvas so the kept journey's corner stays where it was on the stage — a gesture keeps the
+  journey under the pointer (`altKeep()`, `MAP.ptr`) and opens it; a programmatic move (`enterJourney`, `fitAll`,
+  `centreScreen`, `applyView`, `fitAffected`) swaps first under `holdingAlt()` and computes its target in the new
+  layout, so the animation starts from the card. Stops and frames are measured on the street rect (`stRect()`), the
+  board stop on the board's size;
+- every district takes its band's tallest height, so rows line up;
 - the row width is the one, among the widths a row could break at, that brings the board's aspect nearest the
   stage's (width ÷ height under the chrome), so a fit uses the screen. Re-run on resize, on plumbing, and as each walk
   lands (the re-layout shifts the board so the journey in view stays put).
@@ -496,22 +509,29 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
   `map.band.echo` *walk it under <persona>*, click / Enter enters the journey), narrowed to `DMIN`. Districts — and
   every count the board prints — stay one per journey.
 
-Each district has a poster **cover** (`.map-dcover`: name clamped to two lines, sentence to two, the journey's
-Counteds, which wrap to a second row and past that fold into one `+n` chip whose number tip lists them
-(`foldCoverChips`, measured when districts are placed and when the counter-scale moves); its tip is the whole name and
-sentence) over its ghosted street (opacity .18). Covers are
-**counter-scaled**: the canvas sets `--map-inv = min(1/scale, 4)` on the world (`INV_MAX`), and `.map-dcover-in` is a
-box the district's size divided by `--map-inv`, scaled back up by it from its top-left corner — so its text keeps a
-steady size on screen down to scale 0.25 and shrinks no faster below, the name reading at ≥ 12 px at the fit of the
-21-journey dogfood graph (×0.16), and it can never draw outside its district. Without plumbing a district is
-`SY + SH + 160` tall, enough for that box at the cap to hold the name, the sentence and two rows of chips. The district under the pointer or the
-focus rises above its neighbours and brings its links up with their words.
+Each district has a **cover** (`.map-dcover`) drawn **by altitude** (clarity pass 2026-10-04). At the **board**
+(below `LEVEL_NB`) a cover is a card: the name (two lines, its tip the whole name and sentence), **one status chip**
+— *built*, *partly built · n of m* or *designed, not built*, the summary's own `counted.built` with its number tip —
+and at most two marks: **at risk** (`sym('warning')` + word, amber; when the journey's evidence word is *stale* or not
+every screen is built, the tip says which — the same facts the risk headline sums) and **→ n**, how many journeys it
+leads to (`fillLeadMarks`, from the lines `drawLinks` routes; its tip names them). Everything else — the sentence,
+screens, tests with their evidence word, ERP, owner, actions, gates, stores, declared-not-called, the work chip — is
+in the journey's **head** (`.map-dhead`, `aggHtml`), drawn from the journey-fitted stop up; nothing is dropped from the
+data, only from what is drawn below the stop. The street under a card is hidden at the board. A cover's inside is
+scaled by `--map-cs` (`coverScale(s)` = min(`BOARD_K`, min(`BOARD_K` × fit, 1.25) ÷ s)): at the fit its board px are
+as large as the board fits them (a chip ≈ 10 px, a name ≈ 13 px on a laptop, never more than 1.25× when few
+journeys fit large), and zoomed in past the fit they keep that size on screen while the card grows — counter-scaled.
+Band headers and echo cards use the same scale at the board and `--map-inv` on the street. `foldCoverChips` still
+folds a row that would overflow into `+n`. The district under the pointer or the focus rises above its neighbours.
 
-**Links** come from each journey's own `summary.links` as it lands, never inferred by the viewer: *leads to* (and its
-mirror *requires*, drawn once; two journeys that lead to each other are one line with an arrowhead at each end and
-the one label *lead to each other*) always, dimmed; *part of* (dashed) only for the district under the pointer or the
-focus, or at the street when both its ends are in view — at the fit they are noise (`linkVisibility()`, run on every
-move). **Routes** (lane L, 2026-10-03) are `routeLinks(rects, links)` in `lib/map-model.js`, pure and unit-tested on 3
+**Links** come from each journey's own `summary.links` as it lands, never inferred by the viewer. **At the board**
+(clarity pass 2026-10-04) no line is drawn but those of the journey under the pointer or holding the focus
+(`MAP.hot`) — both ends lit (`.link-end`), every other district dimmed (`.links-lit`, as the Affected mode dims) — and
+no label at all; the cover's *→ n* says the lines exist, and the board's routes use 40-unit lanes without labels.
+**From the journey-fitted stop up**: *leads to* (and its mirror *requires*, drawn once; two journeys that lead to each
+other are one line with an arrowhead at each end and the one label *lead to each other*) always, dimmed; *part of*
+(dashed) only for the district under the pointer or the focus, or when both its ends are in view (`linkVisibility()`,
+run on every move). **Routes** (lane L, 2026-10-03) are `routeLinks(rects, links)` in `lib/map-model.js`, pure and unit-tested on 3
 to 40 journeys: a shortest path over the grid of lanes 70 world units outside every district's edges, charging a bend
 600 and a lane another line already uses a little, from the middle of one side to the middle of a side — so a line is
 square, runs in the gutters and never crosses a district; lines sharing a lane are spread 14 apart. A line whose
@@ -639,9 +659,13 @@ stripes, *again*, the call evidence words, the ×n mark when a checkpoint repeat
 earned (the cover's own evidence chip as the swatch). Each swatch is drawn with the board's own classes (the drill
 legend's rule), so a swatch cannot describe a line the board does not draw; each word carries its define.
 
-**Toolbar and crumb.** The Map's own lens switch is gone (the header's lens is global). The tools stay on one row;
-under 1280 px the chrome tightens and the crumb takes a row of its own rather than cut the journey's name; the trail is
-whole in its tip at any width. The Portfolio's switch reads *Table · Board* (`map.portfolio.board`); the nav tab stays
+**Toolbar and crumb.** The Map's own lens switch is gone (the header's lens is global). The whole toolbar needs about
+1490 px, so it folds in steps and keeps one row down to 1024 px (clarity pass 2026-10-04): under **1500 px** *Band by*
+(one segmented control, `.map-segs`) folds to its current value (`.map-band-cur`) with the choices in a menu under it
+(`MAP.bandMenu`; a click outside or Esc closes it); under **1360 px** the as-of stamp leaves the toolbar (sync, day and
+commit stay in the header's sync-chip tip) and the level buttons shrink to a glyph and one word
+(`map.level.*.short`, the whole name their label and tip). The crumb shrinks and ellipsizes rather than take a row;
+the trail is whole in its tip at any width. The Portfolio's switch reads *Table · Board* (`map.portfolio.board`); the nav tab stays
 *Map*.
 
 **e2e.** `e2e/tests/map-street.pw.spec.ts`: flag off → no tab and `#/map` lands on the Portfolio; flag on → the
@@ -758,8 +782,9 @@ stops. Every count of tests carries its evidence word right after it (`mapTestsC
 fold's `evidenceWord`, *not built* on `sharedEvidence` — the Portfolio's word for the same fold) on the cover, the
 head, each screen card (`MapScreen.chips.evidence`) and the property's Overview (`tabs.overview.evidence`). The cover
 also prints `reaches the ERP · <system>` (Portfolio's rule over `summary.systems`, else *ERP hand-off declared, not
-built*) and `owner · <name>` from the manifest. Cover order: screens, reached, built, tests + evidence, ERP, owner,
-then actions, gates, stores, declared-not-called — a narrow cover clips from the end until its row wraps or folds.
+built*) and `owner · <name>` from the manifest. Head order: screens, reached, built, tests + evidence, ERP, owner,
+then actions, gates, stores, declared-not-called — wrapping as the head needs. Since the clarity pass the board's
+card prints only the status chip and its two marks; the evidence word and *stale* stay one chip in the head.
 e2e: `e2e/tests/map-numbers.pw.spec.ts`.
 
 **The hero.** A design image (`designThumbHtml(node, 'mp-shot')`, the lightbox on click) sized to the stage, kept in
