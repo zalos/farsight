@@ -26,9 +26,10 @@
 
 const SRC = '/api/design flows';
 
-/** `{ n, unit, scope, source }` — the shape core's `counted()` returns. */
+/** `{ n, unit, bizUnit, scope, source }` — the shape core's `counted()` returns. */
 function counted(n, unit, scope, source, breakdown) {
-  const c = { n, unit, scope, source };
+  // the units are people's words (journeys, built, personas, groups): the business lens prints them too
+  const c = { n, unit, bizUnit: unit, scope, source };
   if (breakdown && breakdown.length) c.breakdown = breakdown;
   return c;
 }

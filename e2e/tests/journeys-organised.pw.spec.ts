@@ -130,6 +130,17 @@ test.describe('journeys organised by persona and group, as the manifest of §4.1
     await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="cycle"] .jrn-gbody')).toBeVisible();
   });
 
+  /** @covers packages/server/public/app/lib/journeys-tree.js::orgCounted */
+  test('the business lens prints the same counts, in people\'s words, with no identifier', async ({ page }) => {
+    await organise(page);
+    await gotoReady(page, '#/journeys?lens=business');
+    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '2 groups']);
+    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-pcount')).toHaveText('3 journeys · 1 built');
+    await page.locator('.jrn-org > .set-note .jrn-org-n').first().click();
+    await expect(page.locator('#fs-tip')).toContainText('across every source in scope');
+    await expect(page.locator('#fs-tip')).not.toContainText('/api/');
+  });
+
   /** @covers packages/server/public/app/lib/journeys-model.js::filterTree */
   test('?persona= and ?group= in the link narrow the section, and a link shows everyone again', async ({ page }) => {
     await organise(page);

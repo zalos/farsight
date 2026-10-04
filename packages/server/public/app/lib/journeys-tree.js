@@ -88,7 +88,16 @@ export function jrnGroupName(g) { return (g && g.name) || t('journeys.noGroup');
  */
 export function jrnOrgCountsHtml(counts) {
   if (!counts) return '';
-  const fix = (c) => (c && c.breakdown ? { ...c, breakdown: c.breakdown.map((p) => ({ ...p, label: p.label || t('journeys.noGroup') })) } : c);
   return [counts.journeys, counts.built].filter(Boolean)
-    .map((c) => countedHtml(fix(c), '/api/journeys', { cls: 'jrn-org-n' })).join('<span class="jrn-org-sep"> · </span>');
+    .map((c) => countedHtml(orgCounted(c), '/api/journeys', { cls: 'jrn-org-n' })).join('<span class="jrn-org-sep"> · </span>');
+}
+/**
+ * A tree count ready to print in any lens: its units are people's words, so the business lens prints
+ * the same unit when the answer names no `bizUnit`; a breakdown's unnamed part is *Other journeys*.
+ */
+export function orgCounted(c) {
+  if (!c) return c;
+  const out = { ...c, bizUnit: c.bizUnit || c.unit };
+  if (c.breakdown) out.breakdown = c.breakdown.map((p) => ({ ...p, label: p.label || t('journeys.noGroup') }));
+  return out;
 }
