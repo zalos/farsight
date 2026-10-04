@@ -53,8 +53,8 @@ test('personas in declared order, groups in declared order, journeys by order th
     ]],
     ['ops', [
       ['access', ['ops-sign-in']],
-      // a group scoped to the contractor still holds the shared journey under ops: the journey names it
-      ['vendor-accounts', ['vendor-account-creation']],
+      // a group declared for the contractor is not ops's: under ops the shared journey sits in Other journeys
+      ['_other', ['vendor-account-creation']],
     ]],
   ]);
 });
@@ -78,15 +78,14 @@ test('a journey for two people is listed under each and counted once in the tree
   assert.equal(tree.personas[0].groups[0].counts.journeys.scope, 'count.scope.group');
   assert.deepEqual(M.placesOf(tree, 'app::flow::vendor-account-creation').map((x: any) => x.persona.id), ['contractor', 'ops']);
   assert.equal(M.journeysInOrder(tree).length, 6);
-  // built counts only journeys every screen of which is built
+  // built counts only journeys every screen of which is built, out of the journeys beside it
   assert.equal(tree.personas[0].counts.built.n, 4);
+  assert.equal(tree.personas[0].counts.built.of, 5);
   assert.equal(tree.personas[0].counts.built.unit, 'count.unit.journeysBuilt');
-});
-
-test('a persona\'s breakdown by group adds up to its count', () => {
-  const tree = M.treeFrom(designs, null, { ordinal });
-  const c = tree.personas[0].counts.journeys;
-  assert.equal(c.breakdown.reduce((a: number, p: any) => a + p.n, 0), c.n);
+  assert.equal(tree.personas[0].counts.built.bizUnit, 'count.unit.journeysBuilt', 'printed in the business lens too');
+  // rows carry where they sit, as core's rows do
+  const shared = tree.personas[1].groups[1].journeys[0];
+  assert.deepEqual([shared.personaIds, shared.personaNames, shared.groupId, shared.statusKey], [['contractor', 'ops'], ['Contractor', 'Operations'], '_other', 'journey.status.partly']);
 });
 
 test('a manifest written before this pass: undeclared personas alphabetically, no persona last, the prefix fallback is derived', () => {
@@ -99,12 +98,13 @@ test('a manifest written before this pass: undeclared personas alphabetically, n
       flow('e', { screens: ['A-1', 'B-2'] }),
     ],
   }], null, {});
-  assert.deepEqual(tree.personas.map((p: any) => [p.name, p.declared]),
-    [['Contractor', false], ['Contractor and Operations', false], ['INV', false], ['Operations', false], ['', false]]);
+  assert.deepEqual(tree.personas.map((p: any) => [p.id, p.name, p.declared, !!p.derived, p.key]),
+    [['Contractor', 'Contractor', false, false, undefined], ['Contractor and Operations', 'Contractor and Operations', false, false, undefined],
+      ['INV', 'INV', false, true, undefined], ['Operations', 'Operations', false, false, undefined], ['_none', '', false, false, 'portfolio.noPersona']]);
   assert.equal(tree.derived, true);
-  // no group anywhere: one trailing *Other journeys* group under each persona
-  for (const p of tree.personas) assert.deepEqual(p.groups.map((g: any) => g.id), ['']);
-  assert.equal(tree.counts.groups.n, 1);
+  // no group anywhere: one trailing *Other journeys* group under each persona, counted once per persona
+  for (const p of tree.personas) assert.deepEqual(p.groups.map((g: any) => [g.id, g.key]), [['_other', 'journeys.noGroup']]);
+  assert.equal(tree.counts.groups.n, 5);
 });
 
 test('undeclared groups follow the declared ones alphabetically; no group is last', () => {
@@ -116,7 +116,7 @@ test('undeclared groups follow the declared ones alphabetically; no group is las
       flow('w', { persona: 'p', group: 'access' }),
     ],
   }], null, {});
-  assert.deepEqual(tree.personas[0].groups.map((g: any) => [g.name, g.declared]), [['Access', true], ['Apple', false], ['Zebra', false], ['', false]]);
+  assert.deepEqual(tree.personas[0].groups.map((g: any) => [g.id, g.declared]), [['access', true], ['Apple', false], ['Zebra', false], ['_other', false]]);
 });
 
 test('the config overrides a flow\'s placement by id and orders personas first (meta.journeys)', () => {
@@ -124,17 +124,17 @@ test('the config overrides a flow\'s placement by id and orders personas first (
     app: {
       personas: [{ id: 'ops', name: 'Operations', declared: true, from: 'farsight.config.json' }],
       groups: [],
-      flows: { 'contractor-sign-in': { persona: 'ops', group: 'access', order: 0, from: 'farsight.config.json' } },
+      flows: { 'contractor-sign-in': { persona: 'ops', group: 'access', order: 0, from: 'farsight.config.json', index: 0 } },
       notes: ['flow "x" is named by farsight.config.json but no manifest declares it'],
     },
   };
   const tree = M.treeFrom(designs, metas, { ordinal });
   assert.equal(tree.personas[0].id, 'ops', 'the config\'s order is the order');
-  assert.deepEqual(tree.personas[0].groups[0].journeys.map((j: any) => j.id), ['contractor-sign-in', 'ops-sign-in']);
+  assert.deepEqual(tree.personas[0].groups[0].journeys.map((j: any) => [j.id, j.placedBy]), [['contractor-sign-in', 'farsight.config.json'], ['ops-sign-in', undefined]]);
   assert.deepEqual(tree.notes, metas.app.notes);
 });
 
-test('the pinned way in is marked and does not move', () => {
+test('the pinned way in is marked per persona and does not move', () => {
   const tree = M.treeFrom([{
     repo: 'app', screens: [], flows: [
       flow('small', { persona: 'p', screens: ['A-1'], total: 1 }),
@@ -161,4 +161,57 @@ test('filterTree narrows by persona and group without recounting', () => {
   assert.equal(f.counts.journeys.n, 6, 'the tree\'s total is the tree\'s');
   assert.equal(M.filterTree(tree, null, null), tree);
   assert.deepEqual(ids(M.filterTree(tree, null, 'access')).map((x: any) => x[0]), ['contractor', 'ops']);
+});
+
+// ── parity with core: the fallback draws what /api/journeys answers ──────────
+import { GraphStore, buildIndex, designSurface, journeyTree, type GraphNode, type GraphEdge, type GraphMeta } from '@farsight/core';
+import { ingestRepo } from '@farsight/parsers';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+
+/** The parts of a tree a surface draws, with a trailing bucket's name left to the surface (it carries `key`). */
+function drawn(tree: any) {
+  const c = (x: any) => [x.n, x.of ?? null, x.unit, x.bizUnit, x.scope];
+  return {
+    personas: tree.personas.map((p: any) => ({
+      id: p.id, name: p.key ? '' : p.name, key: p.key, declared: p.declared, derived: !!p.derived, description: p.description,
+      counts: [c(p.counts.journeys), c(p.counts.built)],
+      groups: p.groups.map((g: any) => ({
+        id: g.id, name: g.key ? '' : g.name, key: g.key, declared: g.declared, description: g.description,
+        counts: [c(g.counts.journeys), c(g.counts.built)],
+        journeys: g.journeys.map((j: any) => [j.nodeId, j.designId, j.groupId, j.pinned, j.statusKey, j.placedBy ?? null, j.personaIds]),
+      })),
+    })),
+    counts: [c(tree.counts.journeys), c(tree.counts.personas), c(tree.counts.groups)],
+    derived: tree.derived, notes: tree.notes,
+  };
+}
+
+test('on the invoice-app fixture the fallback fold draws exactly what core journeyTree answers — with today\'s rows and with an older server\'s', async () => {
+  const fixture = join(here, '..', '..', '..', 'examples', 'invoice-app');
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-jrn-parity-'));
+  try {
+    const store = new GraphStore();
+    const fragment = await ingestRepo(fixture, { repoName: 'invoice-app' });
+    store.roots[fragment.repo] = fixture;
+    store.addFragment(fragment);
+    store.save(join(dir, 'graph.json'));
+    const data = JSON.parse(readFileSync(join(dir, 'graph.json'), 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[]; meta: GraphMeta };
+    const index = buildIndex(data.nodes, data.edges);
+    const core = journeyTree(index, data.meta.journeys);
+    assert.ok(core.personas.length >= 2 && core.personas[0]!.groups.length >= 1, 'the fixture declares personas and groups');
+    const designs = JSON.parse(JSON.stringify(designSurface(index, null)));
+    const nodeOf = (id: string) => index.byId.get(id) ?? null;
+    assert.deepEqual(drawn(M.treeFrom(designs, data.meta.journeys, { nodeOf })), drawn(core));
+    // an older /api/design: flows by name, none of the organisation's fields — the node and its place in the graph fill them
+    const flowAt = new Map(data.nodes.filter((n) => n.kind === 'flow').map((n, i) => [n.id, i]));
+    const older = designs.map((d: any) => ({ ...d, flows: d.flows.map((f: any) => {
+      const { position, group, order, requires, leadsTo, repo, ...rest } = f;
+      void position; void group; void order; void requires; void leadsTo; void repo;
+      return { ...rest, ...(typeof rest.persona === 'string' ? {} : { persona: undefined }) };
+    }) }));
+    assert.deepEqual(drawn(M.treeFrom(older, data.meta.journeys, { nodeOf, ordinal: (id: string) => flowAt.get(id) ?? null })), drawn(core));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

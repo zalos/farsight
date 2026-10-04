@@ -26,7 +26,7 @@ import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/to
 import { plainTip, countedHtml, defAttrs } from '../lib/counted.js';
 import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnDrillStep, jrnInspPanelHtml } from './journey-drill.js';
 import { fillJourneyWork } from '../work-chips.js';
-import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml, orgCounted } from '../lib/journeys-tree.js';
+import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf } from '../lib/journeys-model.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
@@ -199,9 +199,9 @@ function jrnOrganisedHtml(org, route) {
   }
   let html = '<div class="set-sec jrn-org"><h2' + defAttrs('journeys.persona.title') + '>' + esc(t('journeys.persona.title')) + '</h2>'
     + '<p class="set-note">' + esc(t('journeys.persona.sub')) + ' '
-    + countedHtml(orgCounted(tree.counts.journeys), '/api/journeys', { cls: 'jrn-org-n' }) + '<span class="jrn-org-sep"> · </span>'
-    + countedHtml(orgCounted(tree.counts.personas), '/api/journeys', { cls: 'jrn-org-n' }) + '<span class="jrn-org-sep"> · </span>'
-    + countedHtml(orgCounted(tree.counts.groups), '/api/journeys', { cls: 'jrn-org-n' }) + '</p>'
+    + countedHtml(tree.counts.journeys, '/api/journeys', { cls: 'jrn-org-n' }) + '<span class="jrn-org-sep"> · </span>'
+    + countedHtml(tree.counts.personas, '/api/journeys', { cls: 'jrn-org-n' }) + '<span class="jrn-org-sep"> · </span>'
+    + countedHtml(tree.counts.groups, '/api/journeys', { cls: 'jrn-org-n' }) + '</p>'
     + (tree.derived ? '<p class="set-note">' + esc(t('portfolio.personaDerived')) + '</p>' : '');
   if (filtered) {
     const what = [route.persona ? jrnPersonaName(tree.personas.find((p) => p.id === route.persona) || { name: route.persona }) : '',

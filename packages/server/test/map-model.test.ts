@@ -244,8 +244,8 @@ test('with a tree, a district carries its personas, its group and its order', ()
   assert.deepEqual((by.get('both') as any).personaIds, ['con', 'ops']);
   assert.equal((by.get('login') as any).groupId, 'access');
   assert.equal((by.get('login') as any).order, 1);
-  assert.deepEqual((by.get('loose') as any).personaIds, ['']);
-  assert.deepEqual(nb.personaOrder, ['con', 'ops', '']);
+  assert.deepEqual((by.get('loose') as any).personaIds, ['_none']);
+  assert.deepEqual(nb.personaOrder, ['con', 'ops', '_none']);
   assert.equal(nb.personas.get('ops'), 'Operations');
   // without a tree nothing changes: the source band's model, no places
   const plain = neighbourhoodModel(pdesigns);
@@ -256,7 +256,7 @@ test('banded by persona: bands in the tree\'s persona order, districts by group 
   const nb = neighbourhoodModel(pdesigns, null, ptree);
   const items = nb.districts.map((d: any) => ({ id: d.id, repo: d.repo, places: d.places, w: 880, h: 400 }));
   const L = layoutDistricts(items, { bandKey: 'persona', personaOrder: nb.personaOrder, aspect: 100 });
-  assert.deepEqual(L.bands.map((b: { repo: string }) => b.repo), ['con', 'ops', '']);
+  assert.deepEqual(L.bands.map((b: { repo: string }) => b.repo), ['con', 'ops', '_none']);
   // one wide row per band (aspect 100): x order is the band's order
   const xs = (band: number) => [...L.rects.entries()].filter(([, r]: any) => r.y >= L.bands[band].y && r.y <= L.bands[band].y + L.bands[band].h)
     .sort((a: any, b: any) => a[1].x - b[1].x).map(([id]: any) => String(id).replace('r::flow::', ''));

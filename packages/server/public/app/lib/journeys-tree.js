@@ -48,7 +48,7 @@ export function loadJourneyTree(designs) {
     const p = fetch('/api/journeys?scope=' + encodeURIComponent(scope)).then(async (r) => {
       if (r.ok) {
         const j = await r.json();
-        if (j && j.tree && Array.isArray(j.tree.personas)) return { tree: j.tree, live: true };
+        if (j && j.tree && Array.isArray(j.tree.personas)) return { tree: j.tree, live: true, designs };
       }
       // anything else is an older server: it has no such route (404), or reads the path as
       // `/api/journey` and asks for an entry (400) — the same tree is folded here instead
@@ -76,28 +76,17 @@ async function fold(designs) {
 export function clearJourneyTrees() { CACHE.clear(); }
 
 // ── the words every surface prints for the tree ─────────────────
-/** A persona's words: its declared name, else the catalog's word for the bucket of journeys for nobody named. */
-export function jrnPersonaName(p) { return (p && p.name) || t('portfolio.noPersona'); }
-/** A group's words: its declared name, else *Other journeys*. */
-export function jrnGroupName(g) { return (g && g.name) || t('journeys.noGroup'); }
+/** A persona's words: the catalog's, in the register on screen, for the trailing bucket (`key`); else its name. */
+export function jrnPersonaName(p) { return p && p.key ? t(p.key) : (p && p.name) || t('portfolio.noPersona'); }
+/** A group's words: *Other journeys* in the register on screen for the trailing bucket; else its name. */
+export function jrnGroupName(g) { return g && g.key ? t(g.key) : (g && g.name) || t('journeys.noGroup'); }
 /**
- * A persona's or a group's two counts with their tips: `n journeys · m built`.
- * Every number is a `Counted` from the tree; its breakdown labels the trailing
- * bucket in words.
+ * A persona's or a group's two counts with their tips: `n journeys · n of m journeys built`.
+ * Every number is a `Counted` from the tree, printed as it came (the tree names its `bizUnit`).
  * @group Journey view
  */
 export function jrnOrgCountsHtml(counts) {
   if (!counts) return '';
   return [counts.journeys, counts.built].filter(Boolean)
-    .map((c) => countedHtml(orgCounted(c), '/api/journeys', { cls: 'jrn-org-n' })).join('<span class="jrn-org-sep"> · </span>');
-}
-/**
- * A tree count ready to print in any lens: its units are people's words, so the business lens prints
- * the same unit when the answer names no `bizUnit`; a breakdown's unnamed part is *Other journeys*.
- */
-export function orgCounted(c) {
-  if (!c) return c;
-  const out = { ...c, bizUnit: c.bizUnit || c.unit };
-  if (c.breakdown) out.breakdown = c.breakdown.map((p) => ({ ...p, label: p.label || t('journeys.noGroup') }));
-  return out;
+    .map((c) => countedHtml(c, '/api/journeys', { cls: 'jrn-org-n' })).join('<span class="jrn-org-sep"> · </span>');
 }

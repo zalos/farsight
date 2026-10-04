@@ -25,21 +25,6 @@ async function pageTree(page: Page): Promise<AnyRec> {
   });
 }
 
-/** Two declared personas and two groups over the fixture's three flows; billing-cycle is for both people. */
-async function organise(page: Page) {
-  await page.route(/\/api\/journeys(\?|$)/, (r) => r.fulfill({ status: 404, json: { error: 'an older server: no such route' } }));
-  await page.route(/\/api\/design\?/, async (r) => {
-    const res = await r.fetch();
-    const j = await res.json();
-    const d = j.designs[0];
-    d.personas = [{ id: 'billing', name: 'Billing clerk', description: 'Drafts and sends the invoices.' }, { id: 'manager', name: 'Finance manager' }];
-    d.groups = [{ id: 'drafts', name: 'Drafting' }, { id: 'cycle', name: 'Month end' }];
-    const at: AnyRec = { 'new-invoice': ['billing', 'drafts', 2], 'draft-and-send': ['billing', 'drafts', 1], 'billing-cycle': [['billing', 'manager'], 'cycle', null] };
-    for (const f of d.flows) if (at[f.id]) { f.persona = at[f.id][0]; f.group = at[f.id][1]; if (at[f.id][2] != null) f.order = at[f.id][2]; }
-    await r.fulfill({ response: res, json: j });
-  });
-}
-
 test.describe('journeys organised by persona and group', () => {
   /**
    * @covers packages/server/public/app/surfaces/journeys.js::jrnOrganisedHtml
@@ -87,55 +72,53 @@ test.describe('journeys organised by persona and group', () => {
 
 });
 
-test.describe('journeys organised by persona and group, as the manifest of §4.1 declares them', () => {
-  // the fold answers for a server with no /api/journeys route: its 404 is the shape under test
-  test.use({ expectedHttpErrors: [/\/api\/journeys/] });
+test.describe('journeys organised by persona and group, as the fixture declares them', () => {
+  // the fixture's manifest: personas Billing and Operations, groups Invoices and Review and send; Billing cycle (order 1)
+  // and Start a new invoice (order 2) under Billing › Invoices; Draft and send for both, moved to Review and send by
+  // the config's placement
 
   /**
    * @covers packages/server/public/app/lib/journeys-tree.js::jrnOrgCountsHtml
    * @covers packages/server/public/app/surfaces/journeys.js::jrnToggleGroup
+   * @covers GET /api/journeys
    */
   test('groups fold and stay folded; a journey for two people is under each, counted once in the total', async ({ page }) => {
-    await organise(page);
     await gotoReady(page, '#/journeys');
     const billing = page.locator('.jrn-persona[data-persona="billing"]');
-    await expect(billing.locator('.jrn-ghead')).toHaveCount(2);
-    await expect(billing.locator('.jrn-gname')).toHaveText(['Drafting', 'Month end']);
-    // order 1 before order 2, whatever the names
-    await expect(billing.locator('.jrn-group[data-group="drafts"] .dsg-flow-name')).toHaveText(['Draft and send an invoice', 'Start a new invoice']);
-    // the manager has one group: no group heading, the card straight under the persona
-    const manager = page.locator('.jrn-persona[data-persona="manager"]');
-    await expect(manager.locator('.jrn-ghead')).toHaveCount(0);
-    await expect(manager.locator('.dsg-flow-name')).toHaveText(['Billing cycle']);
-    await expect(manager.locator('.dsg-flow')).toContainText('also for Billing clerk');
+    await expect(billing.locator('.jrn-pname')).toHaveText('Billing');
+    await expect(billing.locator('.jrn-gname')).toHaveText(['Invoices', 'Review and send']);
+    // order 1 before order 2; the config's placement moved Draft and send out of Invoices
+    await expect(billing.locator('.jrn-group[data-group="invoices"] .dsg-flow-name')).toHaveText(['Billing cycle', 'Start a new invoice']);
+    await expect(billing.locator('.jrn-group[data-group="review"] .dsg-flow-name')).toHaveText(['Draft and send an invoice']);
+    // Operations has one group: no group heading, the card straight under the persona
+    const ops = page.locator('.jrn-persona[data-persona="ops"]');
+    await expect(ops.locator('.jrn-ghead')).toHaveCount(0);
+    await expect(ops.locator('.dsg-flow-name')).toHaveText(['Draft and send an invoice']);
+    await expect(ops.locator('.dsg-flow')).toContainText('also for Billing');
     // counts: the tree once, each persona its own; every number carries its tip
-    const total = page.locator('.jrn-org > .set-note .jrn-org-n').first();
-    await expect(total).toHaveText('3 journeys');
-    await expect(billing.locator('.jrn-pcount .jrn-org-n').first()).toHaveText('3 journeys');
-    await expect(manager.locator('.jrn-pcount .jrn-org-n').first()).toHaveText('1 journey');
+    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '3 groups']);
+    await expect(billing.locator('.jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
+    await expect(ops.locator('.jrn-pcount .jrn-org-n').first()).toHaveText('1 journey');
     await billing.locator('.jrn-pcount .jrn-org-n').first().click();
     const tip = page.locator('#fs-tip');
-    await expect(tip).toContainText('for this person');
+    await expect(tip).toContainText('for this persona');
     await expect(tip).toContainText('/api/journeys');
-    const parts = (await tip.locator('table td.n').allInnerTexts()).map(Number).filter((x) => !Number.isNaN(x));
-    expect(parts.reduce((a, b) => a + b, 0)).toBe(3);
     await page.keyboard.press('Escape');
     // fold a group: hidden, and still folded after a reload
-    const toggle = billing.locator('.jrn-group[data-group="drafts"] .jrn-gtoggle');
+    const toggle = billing.locator('.jrn-group[data-group="invoices"] .jrn-gtoggle');
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(billing.locator('.jrn-group[data-group="drafts"] .jrn-gbody')).toBeHidden();
+    await expect(billing.locator('.jrn-group[data-group="invoices"] .jrn-gbody')).toBeHidden();
     await page.reload();
-    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="drafts"] .jrn-gtoggle')).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="cycle"] .jrn-gbody')).toBeVisible();
+    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="invoices"] .jrn-gtoggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-group[data-group="review"] .jrn-gbody')).toBeVisible();
   });
 
-  /** @covers packages/server/public/app/lib/journeys-tree.js::orgCounted */
-  test('the business lens prints the same counts, in people\'s words, with no identifier', async ({ page }) => {
-    await organise(page);
+  /** @covers packages/server/public/app/lib/journeys-tree.js::jrnOrgCountsHtml */
+  test('the business lens prints the same counts, in people\'s words, with no endpoint', async ({ page }) => {
     await gotoReady(page, '#/journeys?lens=business');
-    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '2 groups']);
-    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-pcount')).toHaveText('3 journeys · 1 built');
+    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '3 groups']);
+    await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
     await page.locator('.jrn-org > .set-note .jrn-org-n').first().click();
     await expect(page.locator('#fs-tip')).toContainText('across every source in scope');
     await expect(page.locator('#fs-tip')).not.toContainText('/api/');
@@ -143,41 +126,41 @@ test.describe('journeys organised by persona and group, as the manifest of §4.1
 
   /** @covers packages/server/public/app/lib/journeys-model.js::filterTree */
   test('?persona= and ?group= in the link narrow the section, and a link shows everyone again', async ({ page }) => {
-    await organise(page);
-    await gotoReady(page, '#/journeys?persona=billing&group=drafts');
+    await gotoReady(page, '#/journeys?persona=billing&group=review');
     await expect(page.locator('.jrn-persona')).toHaveCount(1);
-    await expect(page.locator('.jrn-persona .dsg-flow')).toHaveCount(2);
-    await expect(page.locator('.jrn-org-filter')).toContainText('Billing clerk · Drafting');
+    await expect(page.locator('.jrn-persona .dsg-flow')).toHaveCount(1);
+    await expect(page.locator('.jrn-org-filter')).toContainText('Billing · Review and send');
     await page.locator('.jrn-org-filter a').click();
     await expect(page.locator('.jrn-persona')).toHaveCount(2);
     // a persona's heading is the link that narrows to it
-    await page.locator('.jrn-persona[data-persona="manager"] .jrn-pname').click();
-    await expect(page).toHaveURL(/#\/journeys\?persona=manager$/);
+    await page.locator('.jrn-persona[data-persona="ops"] .jrn-pname').click();
+    await expect(page).toHaveURL(/#\/journeys\?persona=ops$/);
     await expect(page.locator('.jrn-persona')).toHaveCount(1);
   });
 
   /** @covers packages/server/public/app/surfaces/journeys.js::jrnFillOrg */
   test('the open journey\'s header says who it is for and its group', async ({ page }) => {
-    await organise(page);
-    await gotoReady(page, '#/journeys/' + encodeURIComponent(FLOW));
+    await gotoReady(page, '#/journeys/' + encodeURIComponent('invoice-app::flow::draft-and-send'));
     const org = page.locator('#jrn-orgline .g-org');
-    await expect(org).toContainText('For Billing clerk · Month end');
-    await expect(org).toContainText('also for Finance manager');
+    await expect(org).toContainText('For Billing · Review and send');
+    await expect(org).toContainText('also for Operations');
+    await gotoReady(page, '#/journeys/' + encodeURIComponent(FLOW));
+    await expect(page.locator('#jrn-orgline .g-org')).toHaveText('For Billing · Invoices');
   });
 
   /** @covers packages/server/public/app/surfaces/portfolio.js::render */
   test('the Portfolio draws one table per persona and group, in the same order, with the same pin', async ({ page }) => {
-    await organise(page);
     await gotoReady(page, '#/portfolio');
     const sections = page.locator('.pf-persona');
     await expect(sections).toHaveCount(2);
-    await expect(sections.locator('h2')).toContainText(['Billing clerk', 'Finance manager']);
+    await expect(sections.locator('h2')).toContainText(['Billing', 'Operations']);
     const billing = sections.nth(0);
     await expect(billing.locator('.pf-group')).toHaveCount(2);
     await expect(billing.locator('table')).toHaveCount(2);
-    await expect(billing.locator('table').nth(0).locator('td:first-child a')).toHaveText(['Draft and send an invoice', 'Start a new invoice']);
-    // the pin is the front door's: the widest built way in, wherever its group puts it
-    await expect(page.locator('#pf-body tr.pinned td:first-child a').first()).toHaveText('Billing cycle');
+    await expect(billing.locator('table').nth(0).locator('td:first-child a')).toHaveText(['Billing cycle', 'Start a new invoice']);
+    // the pin is the tree's, one per persona: Billing cycle for Billing, the one journey for Operations
+    await expect(billing.locator('tr.pinned td:first-child a')).toHaveText(['Billing cycle']);
+    await expect(sections.nth(1).locator('tr.pinned td:first-child a')).toHaveText(['Draft and send an invoice']);
     await expect(sections.nth(1).locator('.pf-group')).toHaveCount(0);
   });
 
@@ -186,7 +169,6 @@ test.describe('journeys organised by persona and group, as the manifest of §4.1
    * @covers packages/server/public/app/surfaces/map.js::drawEchoes
    */
   test('the Map bands by persona: the tree\'s order, the shared journey drawn once with a card in the other band', async ({ page }) => {
-    await organise(page);
     await gotoReady(page, '#/portfolio');
     await page.evaluate(() => {
       const S = (window as any).S;
@@ -196,13 +178,34 @@ test.describe('journeys organised by persona and group, as the manifest of §4.1
     const persona = page.locator('.map-band-pick [data-band="persona"]');
     await persona.click();
     await expect(persona).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.map-band.per span')).toHaveText(['Billing clerk', 'Finance manager']);
+    await expect(page.locator('.map-band.per span')).toHaveText(['Billing', 'Operations']);
     // one street per journey, counted once; the second band holds a card that leads to it
     await expect(page.locator('.map-district')).toHaveCount(3);
-    const echo = page.locator(`.map-echo[data-echo="${FLOW}"]`);
+    const shared = 'invoice-app::flow::draft-and-send';
+    const echo = page.locator(`.map-echo[data-echo="${shared}"]`);
     await expect(echo).toHaveCount(1);
-    await expect(echo).toContainText('walk it under Billing clerk');
+    await expect(echo).toContainText('walk it under Billing');
     await echo.click();
-    await expect(page.locator(`.map-district[data-flow="${FLOW}"]`)).toHaveClass(/focus/);
+    await expect(page.locator(`.map-district[data-flow="${shared}"]`)).toHaveClass(/focus/);
+  });
+});
+
+test.describe('journeys organised, on a server with no /api/journeys', () => {
+  // an older server (or an older global install) answers 404: the viewer folds the tree itself
+  test.use({ expectedHttpErrors: [/\/api\/journeys/] });
+
+  /**
+   * @covers packages/server/public/app/lib/journeys-tree.js::loadJourneyTree
+   * @covers packages/server/public/app/lib/journeys-model.js::treeFrom
+   */
+  test('the fallback fold draws the front door exactly as the route does', async ({ page }) => {
+    await gotoReady(page, '#/journeys');
+    const section = page.locator('.jrn-org');
+    await expect(section.locator('.jrn-persona')).toHaveCount(2);
+    const live = await section.innerText();
+    await page.route(/\/api\/journeys(\?|$)/, (r) => r.fulfill({ status: 404, json: { error: 'an older server: no such route' } }));
+    await page.reload();
+    await expect(section.locator('.jrn-persona')).toHaveCount(2);
+    expect(await section.innerText()).toBe(live);
   });
 });

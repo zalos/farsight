@@ -361,18 +361,16 @@ journeys: JourneyRow[], counts { journeys, built } }, counts }`, tree `counts { 
 **`treeFrom(designs, metas, { nodeOf, ordinal })`** (`lib/journeys-model.js`, pure, `packages/server/test/
 journeys-model.test.ts`) from `/api/design`, the graph's `meta.journeys` when present, each flow's node (`requires`,
 `leadsTo`, `group`, `order`, a persona list the older row leaves out) and its position in the graph (the manifest's
-order — `/api/design` sorts flows by name). One promise per scope and sync, shared by the front door, the Portfolio,
-the Map and the journey header, so the four cannot disagree; the graph is folded once per graph object (flow
-ordinals), never per node. The fold's rules: a persona value matches a declared persona by id, else by name
-(case-insensitive, trimmed); an undeclared one follows the declared, alphabetically; none → the screen-id-prefix
-fallback (`derived`, `portfolio.personaDerived`), else the trailing *No persona* bucket (id `''`, word
-`portfolio.noPersona`); groups the same, the trailing bucket *Other journeys* (`journeys.noGroup`); journeys by
-`order`, ties and absences in manifest order; a journey for two people is under each and once in the tree's count;
-the pinned way in (per manifest: of the flows nothing requires, the widest with something built) is marked
-(`pinned`) and never moved. `filterTree(tree, persona, group)`, `placesOf(tree, nodeId)`, `journeysInOrder(tree)`
-are its views. Words: `jrnPersonaName` / `jrnGroupName` fill the two buckets; `jrnOrgCountsHtml` / `orgCounted`
-print `n journeys · m built` with tips in every lens (the units are people's words, so a count without `bizUnit`
-prints its `unit` in the business lens too).
+order — an older `/api/design` sorts flows by name). The fold is core `journeyTree()` (`packages/core/src/journeys.ts`)
+rule for rule — same ids (`_none` / `_other` for the trailing persona and group, carrying `key` — the catalog key the
+surface prints the bucket's words from), same row fields (`personaIds`, `personaNames`, `groupId`, `designId`,
+`statusKey`, `placedBy`, `pinned`), same `Counted`s (with `bizUnit`) — and `journeys-model.test.ts` holds it to
+`journeyTree()` on the ingested invoice-app fixture, with today's `/api/design` rows and with an older server's. One
+promise per scope and sync, shared by the front door, the Portfolio, the Map and the journey header, so the four
+cannot disagree; the graph is folded once per graph object (flow ordinals), never per node. `filterTree(tree,
+persona, group)` (keeps the tree's counts), `placesOf(tree, nodeId)`, `journeysInOrder(tree)` are its views.
+Words: `jrnPersonaName` / `jrnGroupName` print a bucket from its `key` in the register on screen, else the declared
+name; `jrnOrgCountsHtml` prints `n journeys · n of m journeys built` with tips.
 
 - **Front door** (`surfaces/journeys.js` `jrnOrganisedHtml`): *Journeys by who uses them* (`journeys.persona.title`)
   with the tree's three counts, then per persona a `hud-label` heading (a link to `#/journeys?persona=<id>`, an
@@ -389,8 +387,9 @@ prints its `unit` in the business lens too).
   in tree order (each journey once).
 - **Map**: *Band by: persona* — below.
 
-e2e: `e2e/tests/journeys-organised.pw.spec.ts` (structure and the order rule on the fixture as it is, against the
-manifest on disk; personas, groups and a shared journey shaped onto `/api/design` with `/api/journeys` answering 404).
+e2e: `e2e/tests/journeys-organised.pw.spec.ts` (structure and the order rule against the manifest on disk; the
+fixture's personas *Billing* and *Operations*, its two groups and the shared, config-placed *Draft and send* on the
+front door, the header, the Portfolio and the Map; and the front door drawn identically with `/api/journeys` answering 404).
 
 ## MAP — `surfaces/map.js`, `lib/map-canvas.js`, `lib/map-model.js` (2026-10-03)
 

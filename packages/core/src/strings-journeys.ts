@@ -34,4 +34,20 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
   'count.unit.groups': same('{n} groups',
     'Groups of journeys shown under the kinds of person, such as the ways in and the things a person can do. A group shown under two kinds of person is counted under each.'),
   'count.unit.groupsOne': one('1 group', 'count.unit.groups'),
+  // the viewer's words (lane C): the organised front door, its filter and the journey header
+  'journeys.persona.title': {
+    hud: 'Quest lines', professional: 'Journeys by who uses them',
+    define: 'Every journey the design manifests in scope declare, organised by the person it is for and then by its group, in the order the manifests and the configuration declare them.',
+  },
+  'journeys.persona.sub': same('Who each journey is for, then its group, in the order the manifests declare.'),
+  'journeys.persona.undeclared': same('named only by its journeys',
+    'A journey names this person, and no manifest or configuration declares it, so it has no description and follows the declared people in alphabetical order.'),
+  'journeys.persona.filtered': same('Showing {what} only'),
+  'journeys.persona.showAll': same('show everyone'),
+  'journeys.persona.toggle': same('Show or hide this group of journeys'),
+  'journeys.persona.empty': same('No journey matches this filter.'),
+  'journeys.persona.for': same('For',
+    'Who this journey is for and the group it sits in, as the design manifest or the configuration declares them.'),
+  'journeys.persona.alsoUnder': same('also for {names}',
+    'This journey is for more than one person, so it is listed under each of them and counted once in the total.'),
 };

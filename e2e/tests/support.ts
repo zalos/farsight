@@ -15,10 +15,6 @@ import { test as base, expect, type Page } from '@playwright/test';
  */
 const KNOWN_HTTP_NOISE: RegExp[] = [
   /\/api\/design\/image\?/,
-  // TEMPORARY (lane C of the journey-organisation pass): until the server's
-  // `/api/journeys` route lands, an older server answers 404 or 400 and the viewer folds the same
-  // tree from /api/design (lib/journeys-tree.js). Remove once the route is on main.
-  /\/api\/journeys\?/,
 ];
 
 type Fixtures = {

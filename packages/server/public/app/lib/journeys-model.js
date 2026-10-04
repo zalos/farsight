@@ -2,45 +2,44 @@
 // pure functions (no DOM, no store).
 //
 // The server answers `/api/journeys` with a `JourneyTree` folded by core
-// `journeyTree()` (docs/proposals/journey-organisation-and-config-files.md
-// §4.3). An older server has no such route: `treeFrom()` folds the same shape
-// from `/api/design`'s answer, so the Journeys front door, the Portfolio and the
-// Map read one shape whichever server answers. The rules are the proposal's
-// §4.1, written once here:
+// `journeyTree()` (packages/core/src/journeys.ts; proposal
+// docs/proposals/journey-organisation-and-config-files.md §4.3). An older server
+// has no such route: `treeFrom()` folds the same shape from `/api/design`'s
+// answer, rule for rule, so the Journeys front door, the Portfolio and the Map
+// draw the same tree whichever server answers:
 //
 // - a flow's `persona` is a string or an array; each value matches a declared
 //   persona by id, else by name (case-insensitive, trimmed); a value nothing
-//   declares is a persona of its own (`declared: false`) after the declared
-//   ones, alphabetically; a flow with no persona takes the shared prefix of its
-//   screen ids (`derived`), else falls under the trailing *No persona* (id '');
-// - a flow's `group` matches a declared group by id, else by name; undeclared →
-//   a group of its own after the declared ones, alphabetically; none → the
-//   persona's trailing *Other journeys* group (id '');
-// - inside a group: `order` ascending, ties and absences in manifest order;
-// - the pinned *way in* of each manifest (the first unrequired flow with
-//   something built, the widest) is marked and never moved.
+//   declares is a persona of its own (`declared: false`, id = the value) after
+//   the declared ones, alphabetically; a flow with no persona takes the shared
+//   prefix of its screen ids (`derived`), else falls under the trailing persona
+//   `_none` (`key: 'portfolio.noPersona'`);
+// - a flow's `group` matches a declared group by id, else by name — a group
+//   declared for another persona is not this one's; undeclared → a group of its
+//   own after the declared ones, alphabetically; none (or another persona's) →
+//   the trailing `_other` (`key: 'journeys.noGroup'`);
+// - inside a group: journeys with an `order` first, ascending; then the config's
+//   placement order; then manifest order;
+// - per persona, the way in (of the journeys nothing requires, the one with
+//   something built and the most screens) is `pinned`, and never moved.
 //
-// Every count is a `Counted` (core counts.ts): `{ n, unit, scope, source, breakdown? }`.
-// Names a person wrote are kept as written; the words for the two buckets
-// (*No persona*, *Other journeys*) are the surface's, from the catalog.
+// Every count is a `Counted` (core counts.ts): `{ n, of?, unit, bizUnit, scope, source }`.
 
-const SRC = '/api/design flows';
+/** The trailing persona and group ids — core's `JOURNEY_NO_PERSONA` / `JOURNEY_NO_GROUP`. */
+export const JOURNEY_NO_PERSONA = '_none';
+export const JOURNEY_NO_GROUP = '_other';
+const SRC = 'treeFrom';
 
-/** `{ n, unit, bizUnit, scope, source }` — the shape core's `counted()` returns. */
-function counted(n, unit, scope, source, breakdown) {
+function counted(n, unit, scope, source, of) {
   // the units are people's words (journeys, built, personas, groups): the business lens prints them too
   const c = { n, unit, bizUnit: unit, scope, source };
-  if (breakdown && breakdown.length) c.breakdown = breakdown;
+  if (of != null) c.of = of;
   return c;
 }
 
 /** A name compared the way the proposal matches: trimmed, case-insensitive. */
 function norm(s) { return String(s == null ? '' : s).trim().toLowerCase(); }
-
-/** An id for a name nothing declared: lower case, words joined by `-`. */
-export function slugOf(s) {
-  return norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || norm(s);
-}
+const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
 
 /** A journey is built when the code builds every screen it names. */
 export function isBuilt(f) {
@@ -48,194 +47,173 @@ export function isBuilt(f) {
   return total > 0 && ((f && f.built) || 0) >= total;
 }
 
-/** The persona values a flow names, as a list (a string, an array, or nothing). */
-function personaValues(v) {
-  const list = Array.isArray(v) ? v : v == null || v === '' ? [] : [v];
-  return list.map((x) => String(x).trim()).filter(Boolean);
+/** The catalog key of a journey's one status word (core `flowStatusWord`). */
+function statusKeyOf(built, total) {
+  return total > 0 && built >= total ? 'journey.status.built' : built > 0 ? 'journey.status.partly' : 'journey.status.designedNotBuilt';
 }
 
-/** The pinned way in among `flows`: of those nothing requires, the widest with something built. */
-export function pinnedOf(flows) {
-  const entries = flows.filter((f) => !(f.requires || []).length);
-  const p = entries.filter((f) => (f.built || 0) > 0).sort((a, b) => (b.total || 0) - (a.total || 0))[0] || entries[0] || flows[0];
-  return p ? p.nodeId : null;
+function groupCounts(rows, scope, where) {
+  const built = rows.filter(isBuilt).length;
+  return {
+    journeys: counted(rows.length, 'count.unit.journeys', scope, SRC + ' → ' + where + '.journeys'),
+    built: counted(built, 'count.unit.journeysBuilt', scope, SRC + ' → ' + where + '.journeys where every screen is built', rows.length),
+  };
 }
 
 /**
  * Fold a `JourneyTree` from `/api/design`'s design sources.
  *
  * `metas` is the graph's `meta.journeys` (repo → `JourneysMeta`) when the graph
- * carries one: its declared personas and groups and its config overrides by
- * flow id. A design source may also carry `personas` / `groups` itself. `opts`:
+ * carries one: its declared personas and groups, and the config's placements by
+ * flow id. `opts`:
  * - `nodeOf(nodeId)` → the flow's graph node, whose `design` carries what an
  *   older `/api/design` row leaves out (`requires`, `leadsTo`, `group`, `order`,
  *   a persona list);
- * - `ordinal(nodeId)` → the flow's position in its manifest (`/api/design`
- *   sorts flows by name; the graph keeps the manifest's order).
+ * - `ordinal(nodeId)` → the flow's position in its manifest (an older
+ *   `/api/design` sorts flows by name; the graph keeps the manifest's order).
  * @group Journey view
  */
 export function treeFrom(designs, metas, opts = {}) {
   const nodeOf = typeof opts.nodeOf === 'function' ? opts.nodeOf : () => null;
   const ordinal = typeof opts.ordinal === 'function' ? opts.ordinal : () => null;
   const M = metas && typeof metas === 'object' ? metas : {};
-  const declaredP = [];          // { id, name, description?, declared: true }
-  const declaredG = [];          // { id, name, description?, persona?, declared: true }
-  const addP = (p) => {
-    if (!p || !p.id) return;
-    const had = declaredP.find((x) => x.id === p.id);
-    if (had) { if (!had.description && p.description) had.description = p.description; return; }
-    declaredP.push({ id: String(p.id), name: String(p.name || p.id), ...(p.description ? { description: String(p.description) } : {}), declared: true });
-  };
-  const addG = (g) => {
-    if (!g || !g.id) return;
-    const pk = g.persona ? String(g.persona) : '';
-    const had = declaredG.find((x) => x.id === g.id && (x.persona || '') === pk);
-    if (had) { if (!had.description && g.description) had.description = g.description; return; }
-    declaredG.push({ id: String(g.id), name: String(g.name || g.id), ...(g.description ? { description: String(g.description) } : {}), ...(pk ? { persona: pk } : {}), declared: true });
-  };
-  const notes = [];
   const sources = Array.isArray(designs) ? designs : [];
-  // the config's order is the order: meta first (it folds config over manifest), then a source's own
-  for (const d of sources) {
-    const m = d && M[d.repo];
-    if (m) { (m.personas || []).forEach(addP); (m.groups || []).forEach(addG); }
-  }
+  const repos = [...new Set(sources.map((d) => d && d.repo).filter(Boolean))].sort();
+  const inScope = repos.map((r) => [r, M[r]]).filter(([, m]) => !!m);
+
+  // the declarations across the sources in scope (a design source may carry its own too)
+  const pDecl = [], gDecl = [];
+  const pById = new Map(), gById = new Map();
+  const addP = (p) => { if (p && str(p.id) && !pById.has(norm(p.id))) { pById.set(norm(p.id), p); pDecl.push(p); } };
+  const addG = (g) => { if (g && str(g.id) && !gById.has(norm(g.id))) { gById.set(norm(g.id), g); gDecl.push(g); } };
+  for (const [, m] of inScope) { (m.personas || []).forEach(addP); (m.groups || []).forEach(addG); }
   for (const d of sources) { ((d && d.personas) || []).forEach(addP); ((d && d.groups) || []).forEach(addG); }
-  for (const m of Object.values(M)) for (const n of (m && m.notes) || []) if (!notes.includes(n)) notes.push(n);
+  const pByName = new Map(), gByName = new Map();
+  for (const p of pDecl) if (!pByName.has(norm(p.name || p.id))) pByName.set(norm(p.name || p.id), p);
+  for (const g of gDecl) if (!gByName.has(norm(g.name || g.id))) gByName.set(norm(g.name || g.id), g);
+  const pIndex = new Map(pDecl.map((p, i) => [p.id, i]));
+  const gIndex = new Map(gDecl.map((g, i) => [g.id, i]));
 
-  // the rows: every flow once, with what the older answer leaves out read from its node
-  const rows = [];
+  // the flows, in manifest order
+  const placed = [];
   const seen = new Set();
-  sources.forEach((d, di) => {
-    const pinned = pinnedOf(((d && d.flows) || []).map((f) => withNode(f, nodeOf)));
-    ((d && d.flows) || []).forEach((f0, fi) => {
-      if (!f0 || !f0.nodeId || seen.has(f0.nodeId)) return;
-      seen.add(f0.nodeId);
-      const f = withNode(f0, nodeOf);
-      const over = (M[d.repo] && M[d.repo].flows && M[d.repo].flows[f.id]) || null;
-      const ord = ordinal(f.nodeId);
-      rows.push({
-        ...f,
-        repo: f.repo || d.repo || '',
-        persona: over && over.persona != null ? over.persona : f.persona,
-        group: over && over.group != null ? over.group : f.group,
-        order: over && over.order != null ? over.order : f.order,
-        pinned: f.nodeId === pinned,
-        _at: di * 1e6 + (typeof ord === 'number' ? ord : 1e5 + fi),
-      });
-    });
-  });
-
-  const pById = new Map(declaredP.map((p) => [p.id, p]));
-  const pByName = new Map(declaredP.map((p) => [norm(p.name), p]));
-  const undeclaredP = new Map();  // id → persona
-  let derived = false;
-  /** the personas a row is listed under, as persona ids ('' = no persona) */
-  const personaIdsOf = (r) => {
-    let vals = personaValues(r.persona);
-    if (!vals.length) {
-      const prefixes = [...new Set((r.screens || []).map((x) => String(x).split('-')[0]).filter(Boolean))];
-      if (prefixes.length === 1) { derived = true; vals = [prefixes[0]]; r.personaDerived = true; }
-    }
-    if (!vals.length) return [''];
-    const out = [];
-    for (const v of vals) {
-      const p = pById.get(v) || pByName.get(norm(v));
-      let id;
-      if (p) id = p.id;
-      else {
-        id = slugOf(v);
-        if (pById.has(id)) id = id + '~';     // a free name never captures a declared id
-        if (!undeclaredP.has(id)) undeclaredP.set(id, { id, name: v, declared: false });
-      }
-      if (!out.includes(id)) out.push(id);
-    }
-    return out;
-  };
-  for (const r of rows) r.personaIds = personaIdsOf(r);
-
-  // the persona sections, in order: declared · undeclared alphabetically · no persona
-  const personaOrder = [
-    ...declaredP,
-    ...[...undeclaredP.values()].sort((a, b) => a.name.localeCompare(b.name)),
-    { id: '', name: '', declared: false },
-  ];
-  const groupKeys = new Set();
-  const personas = [];
-  for (const p of personaOrder) {
-    const list = rows.filter((r) => r.personaIds.includes(p.id));
-    if (!list.length) continue;
-    // the groups this persona can hold: scoped to it, or to nobody
-    const gHere = declaredG.filter((g) => !g.persona || g.persona === p.id);
-    const gById = new Map();
-    for (const g of gHere) if (!gById.has(g.id) || g.persona) gById.set(g.id, g);
-    const gByName = new Map([...gById.values()].map((g) => [norm(g.name), g]));
-    const undeclaredG = new Map();
-    const groupOf = (r) => {
-      const v = r.group == null ? '' : String(r.group).trim();
-      if (!v) return '';
-      const g = gById.get(v) || gByName.get(norm(v));
-      if (g) return g.id;
-      // a group declared for another persona, named by a journey that is also this one's: the same group
-      const other = declaredG.find((x) => x.id === v) || declaredG.find((x) => norm(x.name) === norm(v));
-      if (other) { gById.set(other.id, other); return other.id; }
-      let id = slugOf(v);
-      if (gById.has(id)) id = id + '~';
-      if (!undeclaredG.has(id)) undeclaredG.set(id, { id, name: v, declared: false });
-      return id;
-    };
-    const byGroup = new Map();
-    for (const r of list) {
-      const gid = groupOf(r);
-      if (!byGroup.has(gid)) byGroup.set(gid, []);
-      byGroup.get(gid).push(r);
-    }
-    const gOrder = [
-      ...[...gById.values()].sort((a, b) => declaredG.indexOf(a) - declaredG.indexOf(b)),
-      ...[...undeclaredG.values()].sort((a, b) => a.name.localeCompare(b.name)),
-      { id: '', name: '', declared: false },
-    ];
-    const groups = [];
-    for (const g of gOrder) {
-      const js = byGroup.get(g.id);
-      if (!js || !js.length) continue;
-      groupKeys.add(g.id);
-      const journeys = js.slice().sort((a, b) => {
-        const oa = typeof a.order === 'number' ? a.order : Infinity;
-        const ob = typeof b.order === 'number' ? b.order : Infinity;
-        return (oa === ob ? 0 : oa < ob ? -1 : 1) || a._at - b._at;
-      }).map(rowOut);
-      const built = journeys.filter(isBuilt).length;
-      groups.push({
-        id: g.id, name: g.name, ...(g.description ? { description: g.description } : {}), declared: !!g.declared,
-        journeys,
-        counts: {
-          journeys: counted(journeys.length, 'count.unit.journeys', 'count.scope.group', SRC),
-          built: counted(built, 'count.unit.journeysBuilt', 'count.scope.group', SRC + ' · built of total'),
-        },
+  let seq = 0;
+  for (const d of sources) {
+    const flows = ((d && d.flows) || []).map((f, i) => {
+      const row = withNode(f, nodeOf);
+      const ord = row.position != null ? row.position : ordinal(row.nodeId);
+      return { row, i, ord: typeof ord === 'number' ? ord : Infinity };
+    }).sort((a, b) => a.ord - b.ord || a.i - b.i).map((x) => x.row);
+    for (const row0 of flows) {
+      if (!row0 || !row0.nodeId || seen.has(row0.nodeId)) continue;
+      seen.add(row0.nodeId);
+      const row = { ...row0, repo: row0.repo || d.repo || '' };
+      const ov = (M[row.repo] && M[row.repo].flows && M[row.repo].flows[row.id]) || null;
+      const pick = (k) => (ov && ov[k] !== undefined ? ov[k] : row[k]);
+      placed.push({
+        row, designId: d.id || '', seq: seq++,
+        persona: pick('persona'), group: pick('group'), order: pick('order'),
+        cfgIndex: ov && typeof ov.index === 'number' ? ov.index : undefined,
+        placedBy: ov ? ov.from : undefined,
       });
     }
-    const n = groups.reduce((a, g) => a + g.journeys.length, 0);
-    const built = groups.reduce((a, g) => a + g.counts.built.n, 0);
-    // a persona's journeys, by group: the groups partition them (a journey sits in one group)
-    const parts = groups.map((g) => ({ key: 'count.unit.journeys', n: g.journeys.length, label: g.name || '' }));
-    personas.push({
-      id: p.id, name: p.name, ...(p.description ? { description: p.description } : {}), declared: !!p.declared,
-      groups,
-      counts: {
-        journeys: counted(n, 'count.unit.journeys', 'count.scope.persona', SRC, groups.length > 1 ? parts : null),
-        built: counted(built, 'count.unit.journeysBuilt', 'count.scope.persona', SRC + ' · built of total'),
-      },
-    });
   }
+
+  const pBuckets = new Map();
+  let derivedAny = false;
+  const resolvePersona = (value) => {
+    const d = pById.get(norm(value)) || pByName.get(norm(value));
+    if (d) return { k: 'd:' + norm(d.id), id: d.id, name: d.name || d.id, description: d.description, declared: true };
+    return { k: 'u:' + norm(value), id: value.trim(), name: value.trim(), declared: false };
+  };
+  for (const p of placed) {
+    const values = typeof p.persona === 'string' ? [p.persona] : Array.isArray(p.persona) ? p.persona : [];
+    const targets = [];
+    for (const v of values) if (str(v)) targets.push(resolvePersona(v));
+    if (!targets.length) {
+      const prefixes = [...new Set((p.row.screens || []).map((x) => String(x).split('-')[0]).filter(Boolean))];
+      if (prefixes.length === 1) targets.push({ k: 'u:' + norm(prefixes[0]), id: prefixes[0], name: prefixes[0], declared: false, derived: true });
+      else targets.push({ k: 'none', id: JOURNEY_NO_PERSONA, name: '', declared: false, none: true });
+    }
+    const unique = [...new Map(targets.map((x) => [x.k, x])).values()];
+    for (const tg of unique) {
+      let pb = pBuckets.get(tg.k);
+      if (!pb) { pb = { id: tg.id, name: tg.name, description: tg.description, declared: tg.declared, derived: false, none: !!tg.none, groups: new Map() }; pBuckets.set(tg.k, pb); }
+      if (tg.derived) { pb.derived = true; derivedAny = true; }
+      let gk = 'none';
+      let gb = { id: JOURNEY_NO_GROUP, name: '', declared: false, none: true };
+      const gv = str(p.group);
+      if (gv) {
+        const d = gById.get(norm(gv)) || gByName.get(norm(gv));
+        if (d) {
+          const owner = d.persona ? resolvePersona(d.persona).k : null;
+          if (!owner || owner === tg.k) { gk = 'd:' + norm(d.id); gb = { id: d.id, name: d.name || d.id, description: d.description, declared: true, none: false }; }
+        } else { gk = 'u:' + norm(gv); gb = { id: gv, name: gv, declared: false, none: false }; }
+      }
+      let g = pb.groups.get(gk);
+      if (!g) { g = { ...gb, rows: [] }; pb.groups.set(gk, g); }
+      g.rows.push(p);
+    }
+  }
+
+  const alpha = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.name.localeCompare(b.name);
+  const rank = (list, at) => [
+    ...list.filter((x) => x.declared).sort((a, b) => (at.get(a.id) || 0) - (at.get(b.id) || 0)),
+    ...list.filter((x) => !x.declared && !x.none).sort(alpha),
+    ...list.filter((x) => x.none),
+  ];
+  const num = (v, d) => (typeof v === 'number' ? v : d);
+  const journeyOrder = (a, b) => {
+    const ao = a.order != null ? 0 : 1, bo = b.order != null ? 0 : 1;
+    return ao - bo || num(a.order, 0) - num(b.order, 0) || num(a.cfgIndex, Infinity) - num(b.cfgIndex, Infinity) || a.seq - b.seq;
+  };
+  const under = new Map();
+  const personas = rank([...pBuckets.values()], pIndex).map((pb) => {
+    const groups = rank([...pb.groups.values()], gIndex).map((gb) => {
+      const journeys = gb.rows.slice().sort(journeyOrder).map((p) => {
+        const r = {
+          ...p.row, designId: p.designId, personaIds: [], personaNames: [], groupId: gb.id, pinned: false,
+          statusKey: statusKeyOf(p.row.built || 0, p.row.total != null ? p.row.total : (p.row.screens || []).length),
+          ...(p.placedBy ? { placedBy: p.placedBy } : {}),
+        };
+        if (p.persona !== undefined) r.persona = p.persona; else delete r.persona;
+        if (p.group !== undefined) r.group = p.group; else delete r.group;
+        if (p.order !== undefined) r.order = p.order; else delete r.order;
+        const u = under.get(r.nodeId) || { ids: [], names: [] };
+        if (!u.ids.includes(pb.id)) { u.ids.push(pb.id); u.names.push(pb.name); }
+        under.set(r.nodeId, u);
+        r.personaIds = u.ids;
+        r.personaNames = u.names;
+        return r;
+      });
+      return {
+        id: gb.id, name: gb.name, ...(gb.description ? { description: gb.description } : {}), declared: gb.declared,
+        ...(gb.none ? { key: 'journeys.noGroup' } : {}),
+        journeys, counts: groupCounts(journeys, 'count.scope.group', pb.id + '/' + gb.id),
+      };
+    });
+    const all = groups.flatMap((g) => g.journeys);
+    const entries = all.filter((j) => !(j.requires || []).length);
+    const pin = entries.filter((j) => (j.built || 0) > 0).reduce((best, j) => (!best || (j.total || 0) > (best.total || 0) ? j : best), undefined) || entries[0] || all[0];
+    if (pin) pin.pinned = true;
+    return {
+      id: pb.id, name: pb.name, ...(pb.description ? { description: pb.description } : {}), declared: pb.declared,
+      ...(pb.derived ? { derived: true } : {}), ...(pb.none ? { key: 'portfolio.noPersona' } : {}),
+      groups, counts: groupCounts(all, 'count.scope.persona', pb.id),
+    };
+  });
+  const uniq = new Set(personas.flatMap((p) => p.groups.flatMap((g) => g.journeys.map((j) => j.nodeId))));
+  const sections = personas.reduce((n, p) => n + p.groups.length, 0);
+  const multi = inScope.length > 1;
+  const notes = inScope.flatMap(([repo, m]) => (m.notes || []).map((n) => (multi ? repo + ': ' + n : n)));
   return {
     personas,
     counts: {
-      journeys: counted(rows.length, 'count.unit.journeys', 'count.scope.workspace', SRC),
-      personas: counted(personas.length, 'count.unit.personas', 'count.scope.workspace', SRC),
-      groups: counted(groupKeys.size, 'count.unit.groups', 'count.scope.workspace', SRC),
+      journeys: counted(uniq.size, 'count.unit.journeys', 'count.scope.workspace', SRC + ' → distinct flow node ids'),
+      personas: counted(personas.length, 'count.unit.personas', 'count.scope.workspace', SRC + ' → personas'),
+      groups: counted(sections, 'count.unit.groups', 'count.scope.workspace', SRC + ' → personas[].groups (one per persona it is shown under)'),
     },
-    derived,
+    derived: derivedAny,
     notes,
   };
 }
@@ -251,13 +229,8 @@ function withNode(f, nodeOf) {
     persona: f.persona != null ? f.persona : d.persona,
     group: f.group != null ? f.group : d.group,
     order: f.order != null ? f.order : d.order,
+    position: f.position != null ? f.position : d.position,
   };
-}
-
-/** A `JourneyRow` as the tree hands it out: the row without the fold's own bookkeeping. */
-function rowOut(r) {
-  const { _at, personaIds, ...rest } = r;
-  return { ...rest, personaIds: personaIds.slice() };
 }
 
 /**

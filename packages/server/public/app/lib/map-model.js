@@ -95,10 +95,11 @@ export function placesFromTree(tree) {
   const groups = new Map();
   for (const p of (tree && tree.personas) || []) {
     personaOrder.push(p.id);
-    personas.set(p.id, p.name || '');
+    // a trailing bucket (`key`) is named by the surface, in the register on screen
+    personas.set(p.id, p.key ? '' : p.name || '');
     let rank = 0;
     for (const g of p.groups || []) {
-      groups.set(p.id + '/' + g.id, g.name || '');
+      groups.set(p.id + '/' + g.id, g.key ? '' : g.name || '');
       for (const j of g.journeys || []) {
         if (!places.has(j.nodeId)) places.set(j.nodeId, []);
         const list = places.get(j.nodeId);
