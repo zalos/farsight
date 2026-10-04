@@ -153,18 +153,14 @@ function jrnScopeParam() {
  * @business Lists the screens a design declares and whether the code has them yet.
  */
 async function jrnMountDesigns() {
-  let data;
-  try { data = await fetch('/api/design?scope=' + encodeURIComponent(jrnScopeParam())).then((r) => r.json()); }
-  catch (err) { return; }
-  if (!data || data.error || !Array.isArray(data.designs) || !data.designs.length) return;
+  const answer = await jrnFrontDoorData();
+  if (!answer) return;
+  const { data, got } = answer;
   const host = document.getElementById('jrn-designs');
   if (!host) return;
   host.innerHTML = '<div class="set-sec"><h2>' + esc(t('design.title')) + '</h2>'
     + '<p class="set-note">' + esc(t('design.sub')) + '</p>'
     + data.designs.map(jrnDesignCardHtml).join('') + '</div>';
-  // the journeys themselves, organised persona → group above the manifests (§4.4)
-  let got;
-  try { got = await loadJourneyTree(data.designs); } catch (err) { return; }
   const org = document.getElementById('jrn-organised');
   if (!org || !got || !got.tree) return;
   JRN_ORG = { tree: got.tree, designs: data.designs, live: got.live };
@@ -262,6 +258,25 @@ function jrnToggleGroup(btn) {
   try { localStorage.setItem(JRN_FOLD_KEY, JSON.stringify([...set])); } catch { /* a private window: the fold holds for this visit */ }
 }
 
+/** The front door's two answers, one read per scope and sync: a picker drawn twice in a row (a mount, then
+ * a register or lens redraw) awaits the same read and paints back to back, never one under the pointer later. */
+const JRN_DOOR = new Map();
+function jrnFrontDoorData() {
+  const key = jrnScopeParam() + '@' + ((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || '');
+  if (!JRN_DOOR.has(key)) {
+    JRN_DOOR.clear();
+    JRN_DOOR.set(key, (async () => {
+      const data = await fetch('/api/design?scope=' + encodeURIComponent(jrnScopeParam())).then((r) => r.json());
+      if (!data || data.error || !Array.isArray(data.designs) || !data.designs.length) return null;
+      // the journeys themselves, organised persona → group above the manifests (§4.4) — read
+      // before either is drawn, so the page lands in one paint and nothing moves under the pointer
+      let got = null;
+      try { got = await loadJourneyTree(data.designs); } catch (err) { got = null; }
+      return { data, got };
+    })().catch(() => { JRN_DOOR.delete(key); return null; }));
+  }
+  return JRN_DOOR.get(key);
+}
 /**
  * One design source: its name and manifest, the Figma file, the counts with
  * their definitions on hover, and the screen lists. Every count is a fact
@@ -1030,6 +1045,7 @@ export async function openJourney(id) {
   trapFocus(overlay);
   document.getElementById('jrn-title').textContent = '…';
   document.getElementById('jrn-count').textContent = '';
+  const orgEl = document.getElementById('jrn-orgline'); if (orgEl) orgEl.innerHTML = '';
   document.getElementById('jrn-trunc').style.display = 'none';
   const cutEl = document.getElementById('jrn-cuts'); if (cutEl) cutEl.style.display = 'none';
   const fb = document.getElementById('jrn-forksbtn'); if (fb) fb.style.display = 'none';
@@ -4011,6 +4027,8 @@ export function renderJourney(data) {
   const cnt = (sum && sum.counts) || {};
   document.getElementById('jrn-count').innerHTML = jrnHeaderHtml(data, sum, cnt, lens);
   // who the journey is for and its group, from the organised tree (a flow only)
+  const orgEl = document.getElementById('jrn-orgline');
+  if (orgEl) orgEl.innerHTML = '';
   if (isFlow && entry.id) jrnFillOrg(entry.id);
   // the trackers' work on this journey, when a work source is configured and anything is linked
   fillJourneyWork(entry);
@@ -4108,7 +4126,7 @@ export function renderJourney(data) {
   jrnFitToWindow();
 }
 /**
- * The header line's first group for a flow: `For <persona> · <group>`, read from
+ * Beside the journey's title, for a flow: `For <persona> · <group>`, read from
  * the same tree the front door draws (lib/journeys-tree.js), so the two cannot
  * disagree. A journey for two people names the first and says it is also for
  * the rest. Nothing is drawn when the tree does not list the journey.
@@ -4119,16 +4137,15 @@ function jrnFillOrg(entryId) {
   loadJourneyTree().then((got) => {
     if (!S.JOURNEY || !S.JOURNEY.entry || S.JOURNEY.entry.id !== entryId) return;
     const places = placesOf(got && got.tree, entryId);
-    const el = document.getElementById('jrn-count');
-    if (!places.length || !el || el.querySelector('.g-org')) return;
+    const el = document.getElementById('jrn-orgline');
+    if (!places.length || !el) return;
     const p = places[0];
     const others = [...new Set(places.slice(1).map((x) => x.persona))].filter((x) => x !== p.persona);
-    const html = '<span class="jrn-hg g-org"><span class="jrn-org-for"' + defAttrs('journeys.persona.for') + '>' + esc(t('journeys.persona.for')) + '</span> '
+    el.innerHTML = '<span class="g-org"><span class="jrn-org-for"' + defAttrs('journeys.persona.for') + '>' + esc(t('journeys.persona.for')) + '</span> '
       + '<a class="jrn-org-p" href="' + esc('#/journeys?persona=' + encodeURIComponent(p.persona.id)) + '">' + esc(jrnPersonaName(p.persona)) + '</a>'
       + ' · <span class="jrn-org-g">' + esc(jrnGroupName(p.group)) + '</span>'
       + (others.length ? ' <span class="jrn-org-also"' + defAttrs('journeys.persona.alsoUnder') + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
-      + '</span>' + (el.innerHTML ? '<span class="jrn-hsep"> · </span>' : '');
-    el.insertAdjacentHTML('afterbegin', html);
+      + '</span>';
   }).catch(() => { /* an older server with no design answer: the header keeps its counts */ });
 }
 /**

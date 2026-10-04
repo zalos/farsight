@@ -669,8 +669,10 @@
   .jrn-group.folded .jrn-chev{transform:none}
   .jrn-gbody{padding-left:12px;border-left:1px solid var(--line)}
   .jrn-org-filter a{color:var(--accent)}
-  .jrn-count .g-org a{color:var(--accent);text-decoration:none}
-  .jrn-count .g-org .jrn-org-also{color:var(--muted)}
+  .jrn-orgline{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .jrn-orgline .jrn-org-for{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;margin-right:2px}
+  .jrn-orgline a{color:var(--accent);text-decoration:none}
+  .jrn-orgline .jrn-org-also{color:var(--dim)}
   .jrn-start .jrn-startlist{margin:6px 0 10px;padding-left:20px;color:var(--ink);font-size:12.5px;line-height:1.8}
   .jrn-start .jrn-startbtns{display:flex;gap:8px;align-items:center}
   /* both are actions: the accent, never the browser's link blue on the blue-black ground */
@@ -2838,6 +2840,7 @@
     <div class="jrn-head-top">
       <span class="hud-label">Journey</span>
       <h2 id="jrn-title">—</h2>
+      <span class="jrn-orgline" id="jrn-orgline"></span>
       <span class="jrn-viewslot" id="jrn-layoutsw"></span>
       <button class="x" onclick="closeJourney()" aria-label="Close journey" title="Close (Esc)">✕</button>
     </div>

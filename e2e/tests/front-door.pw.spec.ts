@@ -51,6 +51,10 @@ test.describe('front door', () => {
     const drift = page.locator('.dsg-card .api-count').filter({ hasText: /drift/ }).first();
     await expect(drift).toBeVisible();
     await expect(drift).not.toHaveAttribute('title', /./);
+    // the organised journeys sit above the design cards: bring the count on screen first, since a tip
+    // closes when what holds its trigger scrolls — and a click's own scroll-into-view would close it
+    await drift.scrollIntoViewIfNeeded();
+    await expect(drift).toBeInViewport();
     await drift.click();
     const tip = page.locator('#fs-tip');
     await expect(tip).toBeVisible();
