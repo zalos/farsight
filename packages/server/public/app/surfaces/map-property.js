@@ -40,7 +40,7 @@ const TAB_KEY = (tab) => (tab === 'affected' ? 'map.affected.tab' : 'map.prop.ta
 function tabsNow() { return affectedOn() ? MAP_PROP_TABS.concat(['affected']) : MAP_PROP_TABS; }
 /** A row's seed action: dim the board around this work item or commit (lane I). */
 function affBtn(spec) {
-  return '<button type="button" class="api-chip mp-affbtn' + (affectedSpec() === spec ? ' on' : '') + '" data-act="affected" data-seed="' + esc(spec) + '"' + defAttrs('map.affected.actionShort') + '>' + esc(t('map.affected.actionShort')) + '</button>';
+  return '<button type="button" class="mp-affbtn' + (affectedSpec() === spec ? ' on' : '') + '" data-act="affected" data-seed="' + esc(spec) + '"' + defAttrs('map.affected.actionShort') + '>' + esc(t('map.affected.actionShort')) + '</button>';
 }
 const EV_KEY = { 'spec-backed': 'map.prop.ev.specBacked', implied: 'map.prop.ev.implied', declared: 'map.prop.ev.declared', 'not built': 'journey.absent.notBuilt' };
 

@@ -498,6 +498,62 @@ stores, the card's *known from* in hybrid and hidden in business, the business s
 answer already carries. `e2e/tests/map-zoom.pw.spec.ts` (over a `page.route` stub repeating Billing cycle's screens
 twelve-journey board stubbed over the fixture (`/api/design` and `/api/journey` through `page.route`) where every line
 
+#### Affected — `surfaces/map-affected.js`, `lib/map-affected-model.js` (map pass 2, lane I, 2026-10-03)
+
+Blast radius as a mode of the Map, not a tab (`docs/proposals/map-pass-2026-10-03.md` §4). Pick a thing and the
+whole board dims to what reaches it, at every altitude; Esc or *clear* lights it again.
+
+**Seeds and the link.** `?affected=<nodeId>` (a screen's page, a call's route, a record, message or third party) ·
+`package:<nodeId>` · `work:<KEY or item id>` · `commit:<sha prefix>`, with `ahops=<1–5>` when the distance is not
+the default 2 (`ahops`, so it never collides with the impact drawer's `hops`). `parseRoute` reads both;
+`writeHash` writes `affectedParams()` with every other picture parameter, so the mode survives zoom, level
+changes and a copied link, and `applyRouteTarget` → `routeAffected` sets or clears it from the link. A work item
+resolves through `GET /api/work?q=KEY` → `/api/work/item/<id>`: the parts its commits touched (`commits[].nodes`),
+else the parts it links; a commit through `GET /api/history/commit?sha=` (its resolved hunks, else every part
+defined in a file it changed). At most 8 parts are asked about (`pickSeeds`: screens, calls, components first);
+the rest are named on the bar as *n more parts not asked*.
+
+**The answer.** One `/api/impact?node=<seed>&direction=upstream&hops=H&tests=1&reach=1` per seed, cached per seed,
+distance and sync. `reach` is core `affectedReach(index, report)` (`packages/core/src/affected.ts`): journeys and
+screens whose walk meets the seed (`hop: 0`, said *its path meets it* — not a distance) or a listed node (the
+fewest hop), the routes and data nodes in the hop sets, and four `Counted`s partitioned by distance (docs/COUNTS.md
+§Map → Affected). `flows=1` is not asked: the walk sets supersede the per-node flows, and they are what lets a
+package reach its journeys (through the rule a journey's gate is). Several seeds: `combineReaches` keeps every seed
+that reaches a place with its own distance; the badge shows the nearest, its tip names each part — never a count
+across them.
+
+**Drawing** (`paintDistrict(el, flow, model)`, called at the end of `renderDistrict` and on every change of the
+mode): classes `aff-hit` / `aff-dim` / `aff-seed` and `.map-affb` badges only — nothing hidden. The neighbourhood
+dims districts not reached (`.lvl-nb .aff-dim`), badges the rest in the cover's and head's chip row, and rings the
+journey the seed was picked on or shows as a screen. The street dims screens, calls and data nodes not reached and
+badges the rest (screen: under its title; call: in its service row; data node: above its corner); the seed is
+ringed (double outline, *the thing picked*). Words: *its path meets it* · *reached at hop n* (hybrid, code) ·
+*through what uses it directly / through what uses those / further out* (business) · *not reached*.
+
+**The mode bar** (`affectedBarHtml`, a second row of `.map-chrome`, so the board starts under it): the seed's name
+(the business name in business; a work item's key and title; a commit's subject), its journeys and screens when
+one seed was asked about, *n more parts not asked*, the distance stepper 1–5 (`impact.hops.*` words, the current
+one `aria-pressed`), the state (*reading…*, failed, unknown link, no parts), *clear*.
+
+**Entry points.** *What's affected* on the explore card (a call or a data node, `origin` = its journey) and on the
+property's head (the screen's page); *Affected* on each row of the property's Work tab (`work:<key>`) and Changes
+commit rows (`commit:<sha>`), which also open the Affected tab; a link from the Portfolio, the code map or anywhere
+that writes `?affected=`.
+
+**The Affected tab** (the property's ninth tab, present only while the mode is on; its number is the picked seed's
+`counted.screens`): a seed chooser when several parts were asked about; the scope label and the seed; the four
+Counteds (calls not in business); the bound (`impact.bound.floor` with the report's note, or `impact.biz.floor` with
+its reasons in business); then one section per distance — *its path meets it*, *uses it directly*, *reaches it
+through those*, *reaches it through n others* (the impact panel's words) — each with its journeys, screens (links
+that open them, the mode carried), calls and the tests first met there (names and evidence class; business: the
+count with its levels); then *not walked* — the report's stops with *n behind it* (business: *not followed past
+…*). While the mode is on the explore card's *on* chips and the property's *also in* chips carry how each screen or
+journey is reached.
+
+Esc clears the mode before anything else (`mapEscape`). e2e: `e2e/tests/map-affected.pw.spec.ts`; the pure parts:
+`packages/server/test/map-affected-model.test.ts`; the fold over HTTP: `impact-api.test.ts` (`?reach=1`) and
+`history-api.test.ts` (`/api/history/commit`).
+
 #### Property — `surfaces/map-property.js`, `lib/map-property-model.js` (lane B, 2026-10-03)
 
 One screen up close (proposal §1, §3.2): the picture is the hero on the left, a 352px rail of eight tabs on the

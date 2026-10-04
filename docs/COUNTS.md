@@ -399,6 +399,24 @@ tab whose subject nothing types prints **no number**: Overview, UX, Route and Ch
 
 ---
 
+#### Affected (`surfaces/map-affected.js`: `/api/impact?direction=upstream&tests=1&reach=1` → core `affected.ts` `affectedReach()`)
+
+The Affected mode (map pass 2, lane I) prints only the reach's own `Counted`s, one answer per seed. With several
+seeds (a work item or commit touching several parts) each answer is kept apart: the bar prints no count, a badge's
+tip names each part and how it reaches the place, and the tab reads one seed at a time. Nothing is added across
+seeds or across hops. Scope `count.scope.affected` (*on what reaches it*) is new with this table: the thing
+picked, what uses it as far out as the distance chosen, and the journeys and screens whose own path meets either.
+
+| printed | source | counts | scope | where |
+|---|---|---|---|---|
+| `3 journeys reach it` | C:`reach.counted.journeys` (breakdown by distance first met: `count.part.reachSelf` · `reachDirect` · `reachThrough` · `reachFar`) | journeys whose walk (steps, their gates, the screens) meets the seed — *its path meets it*, not a distance — or meets a node the report lists, at the fewest hop; each once. The same journey set `journeysReaching()` (deps) reads | affected | the mode bar (one seed only), the Affected tab |
+| `4 screens reach it` · the tab's number | C:`reach.counted.screens` (same breakdown) | screens whose own segment of a walk meets the seed or a listed node; a screen two journeys share counts in each, as the Map draws it | affected | the mode bar (one seed only), the Affected tab and its tab count |
+| `6 calls reach it` | C:`reach.counted.calls` (same breakdown); **no `bizUnit`** | routes in the report's hop sets, and the seed when it is one | affected | the Affected tab, hybrid and code only |
+| `5 tests reach what uses it` | C:`reach.counted.tests` = `impactTestsReaching(report, budget).total` (breakdown by the distance each test is first met) | the union the impact panel, the CLI and the MCP print for hops 1..budget, each test once | affected | the Affected tab; per distance the tab lists the tests first met there (business: `n tests first met here`, a `plainTip` with the levels) |
+| `2 more parts not asked` | viewer: a change's touched parts beyond the 8 asked about (`plainTip` → `map.affected.partsMore`) | parts of the indexed code the change touched and the board did not ask about | the change | the mode bar; the picture is then a floor |
+| `≥ a floor: …` | `report.bound` + `uncertainty.note` (business: `impact.biz.floor` with its reasons) | not a count — the bound, as the impact panel prints it | — | the Affected tab |
+| `n behind it` on a stop | `report.cutPoints[].behind` | as the impact panel's | one stop | the tab's *not walked*, hybrid and code; business names each stop without a number |
+
 ### Projects (`/api/projects` → core `projects.ts` `projectGraph()` / `appClosure()`; MCP `graph_overview`)
 
 | number | unit / bizUnit | scope | source | counts |
