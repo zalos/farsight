@@ -15,7 +15,7 @@
 // (node.branches, step.conditions, top-level forkCount) is all optional.
 // Everything from the server is untrusted display data → esc().
 
-import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens } from '../store.js';
+import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens, cssId } from '../store.js';
 import { t, def, evidenceWord, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { nodeCardHtml, vsl, linkHtml, designChipHtml, designThumbHtml } from '../lib/graph-render.js';
@@ -23,9 +23,11 @@ import { journeyViewHash, isJourneyRoute } from '../lib/route-url.js';
 import { trapFocus, releaseFocus, rememberOpener } from '../lib/focus-trap.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/tooltip.js';
-import { plainTip } from '../lib/counted.js';
+import { plainTip, countedHtml, defAttrs } from '../lib/counted.js';
 import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnDrillStep, jrnInspPanelHtml } from './journey-drill.js';
 import { fillJourneyWork } from '../work-chips.js';
+import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
+import { filterTree, placesOf } from '../lib/journeys-model.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -97,6 +99,7 @@ function renderPicker(el) {
   entries.forEach((n) => (byRepo[repoOf(n)] = byRepo[repoOf(n)] || []).push(n));
   let html = '<div class="set-wrap"><h1>' + esc(t('journeys.pickerTitle')) + '</h1><p class="sub">' + esc(t('journeys.pickerSub')) + '</p>'
     + startHereHtml()
+    + '<div id="jrn-organised"></div>'
     + '<div id="jrn-designs"></div>';
   const repos = Object.keys(byRepo).sort();
   if (!repos.length) html += '<div class="set-sec"><p class="set-note">' + esc(t('journeys.pickerEmpty')) + '</p></div>';
@@ -159,7 +162,106 @@ async function jrnMountDesigns() {
   host.innerHTML = '<div class="set-sec"><h2>' + esc(t('design.title')) + '</h2>'
     + '<p class="set-note">' + esc(t('design.sub')) + '</p>'
     + data.designs.map(jrnDesignCardHtml).join('') + '</div>';
+  // the journeys themselves, organised persona → group above the manifests (§4.4)
+  let got;
+  try { got = await loadJourneyTree(data.designs); } catch (err) { return; }
+  const org = document.getElementById('jrn-organised');
+  if (!org || !got || !got.tree) return;
+  JRN_ORG = { tree: got.tree, designs: data.designs, live: got.live };
+  org.innerHTML = jrnOrganisedHtml(JRN_ORG, S.route || {});
 }
+
+// ── the organised section: persona → group → journeys ───────────
+/** The last tree the front door drew, kept so a group toggle need not refetch. */
+let JRN_ORG = null;
+const JRN_FOLD_KEY = 'fs-jrn-groups';
+/** The groups a reader folded, by `persona/group` id — remembered in this browser. */
+function jrnFoldedGroups() {
+  try { return new Set(JSON.parse(localStorage.getItem(JRN_FOLD_KEY) || '[]')); } catch { return new Set(); }
+}
+/**
+ * One organised section across the manifests in scope: a heading per persona
+ * (its description and counts), its groups in order — folded or open, a persona
+ * with one group shows no group heading — and the journey cards as the
+ * manifests had them. `?persona=` and `?group=` in the hash narrow it.
+ * @group Journey view
+ * @business Every journey, by the person it is for and then by group, in the order the design says.
+ */
+function jrnOrganisedHtml(org, route) {
+  const tree = org.tree;
+  if (!tree || !tree.personas || !tree.personas.length) return '';
+  const shown = filterTree(tree, route.persona, route.group);
+  const filtered = shown !== tree;
+  const rowsOf = new Map();
+  const repoByFlow = new Map();
+  for (const d of org.designs || []) for (const f of d.flows || []) { rowsOf.set(f.nodeId, d.screens || []); repoByFlow.set(f.nodeId, d.repo); }
+  const folded = jrnFoldedGroups();
+  const multi = new Map();
+  for (const p of tree.personas) for (const g of p.groups) for (const j of g.journeys) {
+    if (!multi.has(j.nodeId)) multi.set(j.nodeId, []);
+    if (!multi.get(j.nodeId).includes(p)) multi.get(j.nodeId).push(p);
+  }
+  let html = '<div class="set-sec jrn-org"><h2' + defAttrs('journeys.persona.title') + '>' + esc(t('journeys.persona.title')) + '</h2>'
+    + '<p class="set-note">' + esc(t('journeys.persona.sub')) + ' '
+    + countedHtml(tree.counts.journeys, '/api/journeys', { cls: 'jrn-org-n' }) + '<span class="jrn-org-sep"> · </span>'
+    + countedHtml(tree.counts.personas, '/api/journeys', { cls: 'jrn-org-n' }) + '<span class="jrn-org-sep"> · </span>'
+    + countedHtml(tree.counts.groups, '/api/journeys', { cls: 'jrn-org-n' }) + '</p>'
+    + (tree.derived ? '<p class="set-note">' + esc(t('portfolio.personaDerived')) + '</p>' : '');
+  if (filtered) {
+    const what = [route.persona ? jrnPersonaName(tree.personas.find((p) => p.id === route.persona) || { name: route.persona }) : '',
+      route.group ? (jrnGroupName((tree.personas.flatMap((p) => p.groups).find((g) => g.id === route.group)) || { name: route.group })) : ''].filter(Boolean).join(' · ');
+    html += '<p class="set-note jrn-org-filter">' + esc(t('journeys.persona.filtered').replace('{what}', what))
+      + ' <a href="' + esc(location.hash.split('?')[0] || '#/journeys') + '">' + esc(t('journeys.persona.showAll')) + '</a></p>';
+  }
+  if (!shown.personas.length) return html + '<p class="set-note">' + esc(t('journeys.persona.empty')) + '</p></div>';
+  for (const p of shown.personas) {
+    html += '<section class="jrn-persona" data-persona="' + esc(p.id) + '">'
+      + '<div class="jrn-phead"><a class="hud-label jrn-pname" href="' + esc('#/journeys?persona=' + encodeURIComponent(p.id)) + '">' + esc(jrnPersonaName(p)) + '</a>'
+      + (p.id && !p.declared ? '<span class="api-chip"' + defAttrs('journeys.persona.undeclared') + '>' + esc(t('journeys.persona.undeclared')) + '</span>' : '')
+      + '<span class="jrn-pcount">' + jrnOrgCountsHtml(p.counts) + '</span></div>'
+      + (p.description ? '<p class="dsg-flow-desc">' + esc(p.description) + '</p>' : '');
+    const heads = p.groups.length > 1;
+    for (const g of p.groups) {
+      const key = p.id + '/' + g.id;
+      const isFolded = heads && folded.has(key);
+      const cards = g.journeys.map((f) => {
+        const others = (multi.get(f.nodeId) || []).filter((x) => x !== p);
+        const also = others.length ? '<span class="api-chip"' + defAttrs('journeys.persona.alsoUnder') + '>'
+          + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '';
+        return jrnFlowCardHtml(f, rowsOf.get(f.nodeId) || [], f.repo || repoByFlow.get(f.nodeId), !!f.pinned, also);
+      }).join('');
+      if (!heads) { html += '<div class="jrn-group" data-group="' + esc(g.id) + '">' + cards + '</div>'; continue; }
+      const bodyId = 'jrn-g-' + cssId(key);
+      html += '<div class="jrn-group' + (isFolded ? ' folded' : '') + '" data-group="' + esc(g.id) + '">'
+        + '<div class="jrn-ghead"><button type="button" class="jrn-gtoggle" aria-expanded="' + (!isFolded) + '" aria-controls="' + esc(bodyId) + '"'
+        + ' data-key="' + esc(key) + '" onclick="jrnToggleGroup(this)" aria-label="' + esc(t('journeys.persona.toggle') + ' · ' + jrnGroupName(g)) + '"><span class="jrn-chev" aria-hidden="true"></span>'
+        + '<span class="jrn-gname">' + esc(jrnGroupName(g)) + '</span></button>'
+        + '<span class="jrn-gcount">' + jrnOrgCountsHtml(g.counts) + '</span></div>'
+        + (g.description ? '<p class="dsg-flow-desc">' + esc(g.description) + '</p>' : '')
+        + '<div class="jrn-gbody" id="' + esc(bodyId) + '"' + (isFolded ? ' hidden' : '') + '>' + cards + '</div></div>';
+    }
+    html += '</section>';
+  }
+  return html + '</div>';
+}
+/**
+ * Fold or open one group of journeys, and remember it in this browser.
+ * @group Journey view
+ */
+function jrnToggleGroup(btn) {
+  const key = btn.dataset.key;
+  const box = btn.closest('.jrn-group');
+  const body = box && box.querySelector('.jrn-gbody');
+  if (!body) return;
+  const fold = !body.hidden;
+  body.hidden = fold;
+  box.classList.toggle('folded', fold);
+  btn.setAttribute('aria-expanded', String(!fold));
+  const set = jrnFoldedGroups();
+  if (fold) set.add(key); else set.delete(key);
+  try { localStorage.setItem(JRN_FOLD_KEY, JSON.stringify([...set])); } catch { /* a private window: the fold holds for this visit */ }
+}
+
 /**
  * One design source: its name and manifest, the Figma file, the counts with
  * their definitions on hover, and the screen lists. Every count is a fact
@@ -177,7 +279,6 @@ function jrnDesignCardHtml(d) {
     + plainTip(c[k] || 0, 'design.count.' + k, 'design.scope.manifest', '/api/design', k === 'drift' ? designDriftRows([...(d.screens || []), ...(d.flows || [])]) : null)
     + '><b>' + (c[k] || 0) + '</b><span>' + esc(t('design.count.' + k)) + '</span></span>').join('') + '</div>';
   const rows = d.screens || [];
-  const flows = d.flows || [];
   const notBuilt = rows.filter((s) => s.status === 'design-only');
   const built = rows.filter((s) => s.status === 'both');
   const isUrl = /^https?:\/\//.test(d.manifestPath || '');
@@ -186,46 +287,12 @@ function jrnDesignCardHtml(d) {
       + (d.manifestPath && !isUrl ? vsl(d.repo, d.manifestPath, 1) : '') + '</div>'
     + (d.figmaFile ? '<div class="dsg-path">' + linkHtml(d.figmaFile, t('design.openFigma')) + '</div>' : '')
     + counts
-    + (flows.length ? jrnFlowGroupsHtml(flows, rows, d.repo) : '')
     + (notBuilt.length ? '<div class="dsg-list"><span class="hud-label">' + esc(t('design.notBuilt')) + '</span>'
       + notBuilt.map(jrnDesignRowHtml).join('') + '</div>' : '')
     + (built.length ? '<div class="dsg-list"><span class="hud-label">' + esc(t('design.built')) + '</span>'
       + built.map(jrnDesignRowHtml).join('') + '</div>' : '')
     + '</div>';
 }
-/**
- * The flows grouped by who they are for — the manifest's persona, or the shared
- * prefix of their screen ids when it does not say, labelled as derived. The flow
- * nothing else requires that has something built is marked as the way in, by the
- * same rule the flow status table uses so the two front doors cannot disagree.
- * @group Journey view
- * @business Groups the product's journeys by the person who lives in them.
- */
-function jrnFlowGroupsHtml(flows, rows, repo) {
-  const entries = flows.filter((f) => !(f.requires || []).length);
-  const pinnedId = (entries.filter((f) => (f.built || 0) > 0)
-    .sort((a, b) => (b.total || 0) - (a.total || 0))[0] || entries[0] || flows[0] || {}).nodeId;
-  const byPersona = new Map();
-  let derived = false;
-  for (const f of flows) {
-    let key = f.persona;
-    if (!key) {
-      const prefixes = [...new Set((f.screens || []).map((x) => String(x).split('-')[0]).filter(Boolean))];
-      key = prefixes.length === 1 ? prefixes[0] : '';
-      if (key) derived = true;
-    }
-    const k = key || t('portfolio.noPersona');
-    if (!byPersona.has(k)) byPersona.set(k, []);
-    byPersona.get(k).push(f);
-  }
-  return '<div class="dsg-list"><span class="hud-label">' + esc(t('design.flows')) + '</span>'
-    + (derived ? '<p class="set-note">' + esc(t('portfolio.personaDerived')) + '</p>' : '')
-    + [...byPersona.entries()].map(([persona, list]) => '<div class="dsg-group"><span class="dsg-persona hud-label">' + esc(persona) + '</span>'
-      + list.slice().sort((a, b) => (a.nodeId === pinnedId ? -1 : b.nodeId === pinnedId ? 1 : a.name.localeCompare(b.name)))
-        .map((f) => jrnFlowCardHtml(f, rows, repo, f.nodeId === pinnedId)).join('') + '</div>').join('')
-    + '</div>';
-}
-
 /**
  * One flow the design declares — a named, ordered set of screens (a feature a
  * person moves through). Shows how much of it is built, the screens in order
@@ -235,7 +302,7 @@ function jrnFlowGroupsHtml(flows, rows, repo) {
  * @group Journey view
  * @business One named journey the design declares, and how much of it exists in code.
  */
-function jrnFlowCardHtml(f, rows, repo, pinned) {
+function jrnFlowCardHtml(f, rows, repo, pinned, extra) {
   const byId = {};
   (rows || []).forEach((r) => { if (r.designId) byId[r.designId] = r; });
   const chips = (f.screens || []).map((id, i) => {
@@ -257,6 +324,7 @@ function jrnFlowCardHtml(f, rows, repo, pinned) {
     + (pinned ? '<span class="pf-pin">' + esc(t('portfolio.pinned')) + '</span>' : '')
     + '<span class="api-chip ' + (statusKey === 'journey.status.built' ? 'ok' : 'stub') + '">' + esc(statusText) + '</span>'
     + (f.phase ? '<span class="api-chip">' + esc(t('design.phase')) + ' ' + esc(f.phase) + '</span>' : '')
+    + (extra || '')
     // the status word already carries n of m when it is partly built — only a
     // fully built flow needs the count spelled out beside it
     + (statusKey === 'journey.status.built' ? '<span class="dsg-sub">' + esc(t('design.screensBuilt').replace('{b}', built).replace('{n}', total)) + '</span>' : '')
@@ -3942,6 +4010,8 @@ export function renderJourney(data) {
     : (lens === 'code' ? (entry.name || '') : jrnLabel(entry));
   const cnt = (sum && sum.counts) || {};
   document.getElementById('jrn-count').innerHTML = jrnHeaderHtml(data, sum, cnt, lens);
+  // who the journey is for and its group, from the organised tree (a flow only)
+  if (isFlow && entry.id) jrnFillOrg(entry.id);
   // the trackers' work on this journey, when a work source is configured and anything is linked
   fillJourneyWork(entry);
   const ls = document.getElementById('jrn-layoutsw');
@@ -4036,6 +4106,30 @@ export function renderJourney(data) {
   if (keep) jrnSelect(S.journeyActive, true);
   else { S.journeyActive = -1; jrnDockRender(-1); jrnUpdateProgress(); }
   jrnFitToWindow();
+}
+/**
+ * The header line's first group for a flow: `For <persona> · <group>`, read from
+ * the same tree the front door draws (lib/journeys-tree.js), so the two cannot
+ * disagree. A journey for two people names the first and says it is also for
+ * the rest. Nothing is drawn when the tree does not list the journey.
+ * @group Journey view
+ * @business Says who the journey is for and which group of journeys it belongs to.
+ */
+function jrnFillOrg(entryId) {
+  loadJourneyTree().then((got) => {
+    if (!S.JOURNEY || !S.JOURNEY.entry || S.JOURNEY.entry.id !== entryId) return;
+    const places = placesOf(got && got.tree, entryId);
+    const el = document.getElementById('jrn-count');
+    if (!places.length || !el || el.querySelector('.g-org')) return;
+    const p = places[0];
+    const others = [...new Set(places.slice(1).map((x) => x.persona))].filter((x) => x !== p.persona);
+    const html = '<span class="jrn-hg g-org"><span class="jrn-org-for"' + defAttrs('journeys.persona.for') + '>' + esc(t('journeys.persona.for')) + '</span> '
+      + '<a class="jrn-org-p" href="' + esc('#/journeys?persona=' + encodeURIComponent(p.persona.id)) + '">' + esc(jrnPersonaName(p.persona)) + '</a>'
+      + ' · <span class="jrn-org-g">' + esc(jrnGroupName(p.group)) + '</span>'
+      + (others.length ? ' <span class="jrn-org-also"' + defAttrs('journeys.persona.alsoUnder') + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
+      + '</span>' + (el.innerHTML ? '<span class="jrn-hsep"> · </span>' : '');
+    el.insertAdjacentHTML('afterbegin', html);
+  }).catch(() => { /* an older server with no design answer: the header keeps its counts */ });
 }
 /**
  * The header count line: five named groups instead of a run of fourteen counts
@@ -4543,4 +4637,4 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     S.jrnFitRaf = requestAnimationFrame(() => { S.jrnFitRaf = 0; jrnFitToWindow(); });
   });
 }
-expose({ openJourney: gotoJourney, closeJourney, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf });
+expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf });

@@ -169,6 +169,8 @@ export function parseRoute() {
     // the code map's grouping (none | project | a tag dimension) and its two views' subjects
     group: q.get('group'),
     project: q.get('project'),
+    // the Journeys front door's filters: one persona (`persona=`) and one group of journeys (`group=`, shared with the code map's grouping)
+    persona: q.get('persona'),
     // the code map's tag filter (`tag=domain:billing,type:ui`) and the project box fast travel arrives at
     tag: q.get('tag'),
     box: q.get('box'),

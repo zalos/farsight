@@ -27,6 +27,7 @@ import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, MODE_ORDER } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
+import { loadJourneyTree } from '../lib/journeys-tree.js';
 import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import {
@@ -59,7 +60,7 @@ const ENTER_COVER = SNAP_COVER + 0.04;
 /** Leaving a property lands on the street at this scale, centred on the screen. */
 const STREET_SCALE = 1.0;
 const PLUMB_KEY = 'fs-map-plumb';
-/** What the districts band by: `source` (the default) or `domain` (docs/proposals/dependencies-and-nx.md §2.3). */
+/** What the districts band by: `source` (the default), `domain` (docs/proposals/dependencies-and-nx.md §2.3) or `persona` (journey-organisation §4.4). */
 const BAND_KEY = 'fs-map-band';
 /** Set once the legend has opened by itself, so it does so on a reader's first visit only. */
 const LEGEND_KEY = 'fs-map-legend-seen';
@@ -76,7 +77,11 @@ const MAP = {
   geom: new Map(),
   size: { w: 0, h: 0 },
   plumb: false,
-  band: 'source',                   // 'source' | 'domain' — what the neighbourhood's bands are (persisted fs-map-band)
+  band: 'source',                   // 'source' | 'domain' | 'persona' — what the neighbourhood's bands are (persisted fs-map-band)
+  /** the journeys organised persona → group (lib/journeys-tree.js), when the server or the fold answered */
+  tree: null,
+  /** banded by persona: echo slot id → the journey it leads to (a journey for two people, drawn once) */
+  echoes: new Map(),
   focus: null,                      // the journey the street is on (the current journey: `journey` when one is open, else the nearest)
   /**
    * The journey the reader opened — a click on its cover, Enter, a deep link, ⌘K, h / l, a snap, a screen. It is
@@ -302,18 +307,28 @@ export function unmountMap() {
 function bandingByDomain() {
   return MAP.band === 'domain' && canBandByDomain(MAP.nb.districts, S.GRAPH && S.GRAPH.nodes, S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.projects);
 }
-/** *Band by: source · domain* — drawn only when the graph has domains to band by. */
+/** True when the districts are banded by persona: the reader chose it and the tree names a persona. */
+function bandingByPersona() {
+  return MAP.band === 'persona' && canBandByPersona();
+}
+/** The tree says who the journeys are for — some district has a place under a persona. */
+function canBandByPersona() {
+  return !!(MAP.nb.personaOrder && MAP.nb.personaOrder.length && MAP.nb.districts.some((d) => d.places && d.places.length));
+}
+/** *Band by: source · domain · persona* — drawn when the graph has domains or the tree has personas to band by. */
 function bandToolHtml() {
-  if (!canBandByDomain(MAP.nb.districts, S.GRAPH && S.GRAPH.nodes, S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.projects)) return '';
-  const on = bandingByDomain() ? 'domain' : 'source';
+  const dom = canBandByDomain(MAP.nb.districts, S.GRAPH && S.GRAPH.nodes, S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.projects);
+  const per = canBandByPersona();
+  if (!dom && !per) return '';
+  const on = bandingByDomain() ? 'domain' : bandingByPersona() ? 'persona' : 'source';
   const opt = (v, key) => '<button type="button" class="map-tb' + (on === v ? ' on' : '') + '" data-act="band" data-band="' + v + '" aria-pressed="' + (on === v) + '"'
     + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
   return '<span class="map-band-pick" role="group" aria-label="' + esc(t('map.band.by')) + '"><span class="hud-label"' + tipAttrs({ key: 'map.band.by', noFocus: true }) + '>' + esc(t('map.band.by')) + '</span>'
-    + opt('source', 'map.band.source') + opt('domain', 'map.band.domain') + '</span>';
+    + opt('source', 'map.band.source') + (dom ? opt('domain', 'map.band.domain') : '') + (per ? opt('persona', 'map.band.persona') : '') + '</span>';
 }
-/** Band the districts by source or by domain, keep the choice, and lay the board out again. */
+/** Band the districts by source, domain or persona, keep the choice, and lay the board out again. */
 function setBand(v) {
-  MAP.band = v === 'domain' ? 'domain' : 'source';
+  MAP.band = v === 'domain' || v === 'persona' ? v : 'source';
   try { localStorage.setItem(BAND_KEY, MAP.band); } catch { /* private window: the choice holds for this visit */ }
   layout();
   placeDistricts();
@@ -322,7 +337,7 @@ function setBand(v) {
   fitAll(false);
 }
 function readBand() {
-  try { return localStorage.getItem(BAND_KEY) === 'domain' ? 'domain' : 'source'; } catch { return 'source'; }
+  try { const v = localStorage.getItem(BAND_KEY); return v === 'domain' || v === 'persona' ? v : 'source'; } catch { return 'source'; }
 }
 
 function readPlumb() {
@@ -345,7 +360,12 @@ function start() {
     if (gen !== MAP.gen) return;
     const sources = design.designs || design.sources || (Array.isArray(design) ? design : []);
     MAP.designs = Array.isArray(sources) ? sources : [];
-    MAP.nb = neighbourhoodModel(MAP.designs, null);
+    // the organised tree (persona → group) for the persona band; a failure leaves the other two bands
+    return loadJourneyTree(MAP.designs).then((got) => got && got.tree, () => null);
+  }).then((tree) => {
+    if (gen !== MAP.gen || !MAP.designs) return;
+    MAP.tree = tree || null;
+    MAP.nb = neighbourhoodModel(MAP.designs, null, MAP.tree);
     layout();
     renderAll();
     // the band choice is offered only once the districts say whether there are domains to band by
@@ -621,6 +641,20 @@ function layout() {
   // banded by domain: each journey's domain (its flow's project, else its screens' pages), the
   // bands in word order with *no domain* last; banded by source, the model's order as it was
   const byDomain = bandingByDomain();
+  const bw0 = MAP.board ? MAP.board.clientWidth : 0, bh0 = MAP.board ? MAP.board.clientHeight : 0;
+  if (bandingByPersona()) {
+    // banded by persona: the tree's persona order, inside a band its groups then journeys; a journey
+    // for two people draws its street once (the first band) and an echo card in each other band
+    const L = layoutDistricts(ds.map((d) => ({ id: d.id, repo: d.repo || '', places: d.places, ...districtSize(d) })),
+      { aspect: bw0 > 0 && bh0 > 0 ? bw0 / bh0 : 1.6, bandKey: 'persona', personaOrder: MAP.nb.personaOrder, echoW: DMIN });
+    MAP.geom = L.rects;
+    MAP.bands = L.bands;
+    MAP.size = L.size;
+    MAP.echoes = L.echoes || new Map();
+    MAP.bandWords = new Map(L.bands.map((b) => [b.repo, (MAP.nb.personas && MAP.nb.personas.get(b.repo)) || t('portfolio.noPersona')]));
+    return;
+  }
+  MAP.echoes = new Map();
   const dom = new Map(byDomain ? ds.map((d) => [d.id, journeyDomain(d, S.GRAPH.nodes, S.GRAPH.meta && S.GRAPH.meta.projects)]) : []);
   MAP.bandWords = new Map(byDomain ? [...dom.values()].map((v) => [v.key, v.word]) : []);
   let items = ds.map((d) => ({ id: d.id, repo: d.repo || '', band: byDomain ? dom.get(d.id).key : (d.repo || ''), ...districtSize(d) }));
@@ -655,18 +689,45 @@ function placeDistricts() {
     MAP.world.querySelectorAll('.map-band').forEach((el) => el.remove());
     // banded by domain, a band is named by the domain's word (the config's, else the tag in words), and *no domain* is named too
     const byDomain = bandingByDomain();
-    const named = (MAP.bands || []).filter((b) => byDomain || b.repo);
-    const word = (b) => (byDomain ? (b.repo === '\u0000' ? t('map.band.noDomain') : (MAP.bandWords && MAP.bandWords.get(b.repo)) || b.repo) : b.repo);
-    const html = named.map((b) => '<div class="map-band' + (byDomain ? ' dom' : '') + '" style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px"><span>' + esc(word(b)) + '</span></div>').join('');
+    const byPersona = bandingByPersona();
+    const named = (MAP.bands || []).filter((b) => byDomain || byPersona || b.repo);
+    const word = (b) => (byPersona ? (MAP.bandWords && MAP.bandWords.get(b.repo)) || t('portfolio.noPersona')
+      : byDomain ? (b.repo === '\u0000' ? t('map.band.noDomain') : (MAP.bandWords && MAP.bandWords.get(b.repo)) || b.repo) : b.repo);
+    const html = named.map((b) => '<div class="map-band' + (byDomain ? ' dom' : byPersona ? ' per' : '') + '" data-band="' + esc(b.repo) + '" style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px"><span>' + esc(word(b)) + '</span></div>').join('');
     if (html && MAP.links) MAP.links.insertAdjacentHTML('afterend', html);
+    drawEchoes();
   }
   for (const [id, g] of MAP.geom) {
+    if (MAP.echoes.has(id)) continue;
     const el = districtEl(id);
     if (el) el.style.cssText = 'left:' + g.x + 'px;top:' + g.y + 'px;width:' + g.w + 'px;height:' + g.h + 'px';
   }
   if (MAP.links) { MAP.links.setAttribute('width', MAP.size.w); MAP.links.setAttribute('height', MAP.size.h); }
   // the covers' boxes follow their districts' sizes: their chip rows fold again
   foldCoverChips();
+}
+/**
+ * Banded by persona, a journey for two people draws its street once — in the first persona's band — and in
+ * every other band a card that names it and leads there: the journey is one journey, counted once.
+ */
+function drawEchoes() {
+  if (!MAP.world) return;
+  MAP.world.querySelectorAll('.map-echo').forEach((el) => el.remove());
+  if (!MAP.echoes || !MAP.echoes.size) return;
+  let html = '';
+  for (const [slot, id] of MAP.echoes) {
+    const g = MAP.geom.get(slot), home = MAP.geom.get(id);
+    const d = MAP.nb.districts.find((x) => x.id === id);
+    if (!g || !d) continue;
+    const band = (MAP.bands || []).find((b) => home && home.y >= b.y && home.y <= b.y + b.h);
+    const where = band ? (MAP.bandWords.get(band.repo) || t('portfolio.noPersona')) : '';
+    const words = t('map.band.echo').replace('{name}', where);
+    html += '<div class="map-echo" role="button" tabindex="0" data-echo="' + esc(id) + '" aria-label="' + esc(nameWords(d.name) + ' · ' + words) + '"'
+      + ' style="left:' + g.x + 'px;top:' + g.y + 'px;width:' + g.w + 'px;height:' + g.h + 'px"'
+      + tipAttrs({ key: 'map.band.echo', noFocus: true }) + '><div class="map-echo-in"><div class="nm">' + esc(nameWords(d.name)) + '</div>'
+      + '<div class="go">' + esc(words) + ' ›</div></div></div>';
+  }
+  if (html && MAP.links) MAP.links.insertAdjacentHTML('afterend', html);
 }
 function districtEl(id) {
   return MAP.world ? MAP.world.querySelector('.map-district[data-flow="' + cssAttr(id) + '"]') : null;
@@ -1861,17 +1922,25 @@ function onBoardClick(e) {
   if (scr && MAP.cv && MAP.cv.level() === 'st') { openScreenEl(scr); return; }
   const cover = tgt.closest('.map-dcover');
   if (cover && MAP.cv && MAP.cv.level() === 'nb') { closeCard(); enterJourney(cover.dataset.enter, true); return; }
+  const echo = tgt.closest('.map-echo');
+  if (echo) { closeCard(); enterJourney(echo.dataset.echo, true); return; }
   closeCard();
 }
 function onBoardKey(e) {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const tgt = e.target;
-  if (tgt.matches(TIP_SELECTOR) && !tgt.matches('.map-scr,.map-pl,.map-pd,.map-dcover')) return;
+  if (tgt.matches(TIP_SELECTOR) && !tgt.matches('.map-scr,.map-pl,.map-pd,.map-dcover,.map-echo')) return;
   if (tgt.matches('.map-pl,.map-pd')) { e.preventDefault(); showCard(tgt); return; }
   if (tgt.matches('.map-scr')) { e.preventDefault(); openScreenEl(tgt); return; }
   if (tgt.matches('.map-dcover')) {
     e.preventDefault();
     enterCover(tgt);
+    return;
+  }
+  if (tgt.matches('.map-echo')) {
+    e.preventDefault();
+    closeCard();
+    enterJourney(tgt.dataset.echo, true);
   }
 }
 /** Walk into a cover's journey from the keyboard: the street, with the focus on its first screen. */

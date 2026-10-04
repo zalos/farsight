@@ -13,7 +13,13 @@ import { test as base, expect, type Page } from '@playwright/test';
  * `/api/design/image`, which answers 404 when no FIGMA_TOKEN is set. The viewer
  * falls back to its placeholder, but the browser still logs the 404.
  */
-const KNOWN_HTTP_NOISE: RegExp[] = [/\/api\/design\/image\?/];
+const KNOWN_HTTP_NOISE: RegExp[] = [
+  /\/api\/design\/image\?/,
+  // TEMPORARY (lane C of the journey-organisation pass): until the server's
+  // `/api/journeys` route lands, an older server answers 404 or 400 and the viewer folds the same
+  // tree from /api/design (lib/journeys-tree.js). Remove once the route is on main.
+  /\/api\/journeys\?/,
+];
 
 type Fixtures = {
   expectedHttpErrors: RegExp[];
@@ -58,10 +64,11 @@ export async function gotoReady(page: Page, hash = '#/journeys'): Promise<void> 
   await expect(page.locator('#stats')).not.toHaveText('loading…');
 }
 
-/** Open the first journey on the picker (the fixture's `Billing cycle`, marked start here) and wait for its header. */
+/** Open the journey marked start here on the picker (the fixture's `Billing cycle`) and wait for its header. */
 export async function openBillingCycle(page: Page): Promise<void> {
   await gotoReady(page, '#/journeys');
-  await page.getByRole('button', { name: 'Open journey' }).first().click();
+  // the organised front door lists journeys in the manifest's order, the pinned way in where the manifest put it
+  await page.locator('.dsg-flow.pinned').first().getByRole('button', { name: 'Open journey' }).click();
   await expect(page.getByRole('dialog', { name: 'Journey', exact: true })).toBeVisible();
   await expect(page.locator('#jrn-title')).toHaveText('Billing cycle');
 }

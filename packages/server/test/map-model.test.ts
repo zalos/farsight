@@ -221,6 +221,73 @@ test('a band\'s districts share its height, so its rows line up', () => {
   assert.deepEqual(layoutDistricts([]).rects.size, 0);
 });
 
+// ── Band by: persona (journey-organisation §4.4) ──────────────────────────
+const { treeFrom } = await import(join(appDir, 'lib', 'journeys-model.js'));
+const pf = (id: string, extra: Record<string, unknown> = {}) => ({ nodeId: 'r::flow::' + id, id, name: id, screens: ['S-1'], built: 1, total: 1, ...extra });
+const pdesigns = [{
+  repo: 'r', screens: [],
+  personas: [{ id: 'con', name: 'Contractor' }, { id: 'ops', name: 'Operations' }],
+  groups: [{ id: 'access', name: 'Access' }, { id: 'inv', name: 'Invoices' }],
+  flows: [
+    pf('alpha', { persona: 'con', group: 'inv' }),
+    pf('both', { persona: ['con', 'ops'], group: 'inv' }),
+    pf('login', { persona: 'con', group: 'access', order: 1 }),
+    pf('opslogin', { persona: 'ops', group: 'access' }),
+    pf('loose', { screens: ['A-1', 'B-1'] }),
+  ],
+}];
+const ptree = treeFrom(pdesigns, null, { ordinal: (id: string) => ['login', 'alpha', 'both', 'opslogin', 'loose'].indexOf(id.split('::').pop()!) });
+
+test('with a tree, a district carries its personas, its group and its order', () => {
+  const nb = neighbourhoodModel(pdesigns, null, ptree);
+  const by = new Map(nb.districts.map((d: any) => [d.flowId, d]));
+  assert.deepEqual((by.get('both') as any).personaIds, ['con', 'ops']);
+  assert.equal((by.get('login') as any).groupId, 'access');
+  assert.equal((by.get('login') as any).order, 1);
+  assert.deepEqual((by.get('loose') as any).personaIds, ['']);
+  assert.deepEqual(nb.personaOrder, ['con', 'ops', '']);
+  assert.equal(nb.personas.get('ops'), 'Operations');
+  // without a tree nothing changes: the source band's model, no places
+  const plain = neighbourhoodModel(pdesigns);
+  assert.deepEqual(plain.districts.map((d: any) => d.personaIds.length), [0, 0, 0, 0, 0]);
+});
+
+test('banded by persona: bands in the tree\'s persona order, districts by group then journey order', () => {
+  const nb = neighbourhoodModel(pdesigns, null, ptree);
+  const items = nb.districts.map((d: any) => ({ id: d.id, repo: d.repo, places: d.places, w: 880, h: 400 }));
+  const L = layoutDistricts(items, { bandKey: 'persona', personaOrder: nb.personaOrder, aspect: 100 });
+  assert.deepEqual(L.bands.map((b: { repo: string }) => b.repo), ['con', 'ops', '']);
+  // one wide row per band (aspect 100): x order is the band's order
+  const xs = (band: number) => [...L.rects.entries()].filter(([, r]: any) => r.y >= L.bands[band].y && r.y <= L.bands[band].y + L.bands[band].h)
+    .sort((a: any, b: any) => a[1].x - b[1].x).map(([id]: any) => String(id).replace('r::flow::', ''));
+  assert.deepEqual(xs(0), ['login', 'alpha', 'both'], 'Access before Invoices, then the manifest order');
+  assert.deepEqual(xs(1), ['opslogin', 'both\u0001ops'], 'the shared journey is drawn again under ops — as an echo');
+  assert.deepEqual(xs(2), ['loose']);
+  assert.deepEqual([...L.echoes.entries()], [['r::flow::both\u0001ops', 'r::flow::both']]);
+  // the journey is counted once: one district, one street; the echo is a slot, not a district
+  assert.equal(nb.districts.filter((d: any) => d.flowId === 'both').length, 1);
+  // bands do not overlap and no two slots overlap
+  for (let i = 1; i < L.bands.length; i++) assert.ok(L.bands[i].y >= L.bands[i - 1].y + L.bands[i - 1].h);
+  const rs = [...L.rects.values()] as { x: number; y: number; w: number; h: number }[];
+  for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+    const a = rs[i]!, b = rs[j]!;
+    assert.ok(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y, 'two slots overlap');
+  }
+});
+
+test('an echo can be narrower than the street it leads to', () => {
+  const nb = neighbourhoodModel(pdesigns, null, ptree);
+  const items = nb.districts.map((d: any) => ({ id: d.id, repo: d.repo, places: d.places, w: 2400, h: 400 }));
+  const L = layoutDistricts(items, { bandKey: 'persona', personaOrder: nb.personaOrder, echoW: 880 });
+  assert.equal(L.rects.get('r::flow::both')!.w, 2400);
+  assert.equal(L.rects.get('r::flow::both\u0001ops')!.w, 880);
+});
+
+test('the source and domain bands carry no echoes', () => {
+  const L = layoutDistricts([{ id: 'a', repo: 'r', w: 880, h: 438 }]);
+  assert.equal(L.echoes.size, 0);
+});
+
 test('the model survives an empty or older answer', () => {
   const m = streetModel({}, null);
   assert.deepEqual(m.screens, []);

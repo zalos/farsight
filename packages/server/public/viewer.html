@@ -653,6 +653,24 @@
   .dsg-group{margin:8px 0 12px}
   .dsg-persona{display:block;margin:10px 0 5px;color:var(--amber);font-size:9.5px}
   .dsg-flow.pinned{border-left:2px solid var(--amber)}
+  /* the organised section: persona → group → journeys (journey-organisation §4.4) */
+  .jrn-persona{margin:14px 0 18px}
+  .jrn-phead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:8px}
+  .jrn-phead .jrn-pname{font-size:11px;color:var(--accent);text-decoration:none}
+  .jrn-phead .jrn-pname:hover{text-decoration:underline}
+  .jrn-pcount,.jrn-gcount{font-size:11px;color:var(--muted)}
+  .jrn-org-sep{color:var(--dim)}
+  .jrn-org .set-note .jrn-org-n{color:var(--ink)}
+  .jrn-group{margin:0 0 10px}
+  .jrn-ghead{display:flex;align-items:center;gap:10px;margin:8px 0 6px}
+  .jrn-gtoggle{display:inline-flex;align-items:center;gap:7px;background:none;border:0;padding:2px 0;color:var(--ink);cursor:pointer;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px}
+  .jrn-gtoggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+  .jrn-chev{width:0;height:0;border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;transform:rotate(90deg);transition:transform .12s}
+  .jrn-group.folded .jrn-chev{transform:none}
+  .jrn-gbody{padding-left:12px;border-left:1px solid var(--line)}
+  .jrn-org-filter a{color:var(--accent)}
+  .jrn-count .g-org a{color:var(--accent);text-decoration:none}
+  .jrn-count .g-org .jrn-org-also{color:var(--muted)}
   .jrn-start .jrn-startlist{margin:6px 0 10px;padding-left:20px;color:var(--ink);font-size:12.5px;line-height:1.8}
   .jrn-start .jrn-startbtns{display:flex;gap:8px;align-items:center}
   /* both are actions: the accent, never the browser's link blue on the blue-black ground */
@@ -664,6 +682,8 @@
   .pf-table tr.pinned td:first-child{border-left:2px solid var(--amber);padding-left:8px}
   .pf-pin{font-family:var(--hud);text-transform:uppercase;letter-spacing:.09em;font-size:8.5px;color:var(--amber);margin-left:8px}
   .pf-sub{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+  .pf-count{font-family:var(--body);font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:8px}
+  .pf-group{display:block;margin:14px 0 6px;font-size:10.5px;color:var(--ink)}
   .pf-table .dim{color:var(--dim);font-style:italic}
   .pf-table .warn{color:var(--warn)}
   /* the Changes surface (chunk H7): the sync history, the measured difference and
@@ -2174,6 +2194,13 @@
   /* a district: head (street), street, poster cover (neighbourhood) */
   .map-district{position:absolute;border:1.5px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 82%,transparent)}
   .map-district.focus{border-color:var(--accent);box-shadow:0 0 0 6px var(--accent-dim)}
+  /* banded by persona: a journey for two people draws its street once; in the other band a dashed card leads to it */
+  .map-echo{position:absolute;border:1.5px dashed var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 50%,transparent);cursor:pointer;overflow:hidden}
+  .map-echo:hover,.map-echo:focus-visible{border-color:var(--accent);outline:none}
+  .map-echo-in{position:absolute;left:0;top:0;width:calc(100% / var(--map-inv, 1));height:calc(100% / var(--map-inv, 1));transform:scale(var(--map-inv, 1));transform-origin:0 0;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+  .map-echo .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:22px;line-height:1.05;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .map-echo .go{font-size:13px;color:var(--accent)}
+  .map-world.lvl-st .map-echo{opacity:.5}
   .map-dhead{position:absolute;left:0;right:0;top:0;min-height:92px;padding:14px 22px;display:flex;flex-direction:column;gap:4px;border-bottom:1px dashed var(--line-soft);transition:opacity .25s}
   .map-dhead > *{transform:translateX(var(--head-x,0px))}
   .map-dhead.stuck-y{z-index:4}
