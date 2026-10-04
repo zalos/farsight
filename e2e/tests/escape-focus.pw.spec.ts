@@ -38,7 +38,9 @@ test.describe('escape and focus', () => {
     }
     await journey.getByRole('button', { name: 'Close journey' }).click();
     await expect(journey).toBeHidden();
-    const inJourney = await page.evaluate(() => !!document.activeElement?.closest('#journey'));
-    expect(inJourney).toBe(false);
+    // the opener is re-found after the surface re-mounts (focus-trap.js releaseFocus watches it),
+    // so where the focus lands is an eventually-true fact: poll it, never read it once
+    await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('#journey'))).toBe(false);
+    await expect.poll(() => page.evaluate(() => document.activeElement !== document.body && !!document.activeElement?.closest('#surface'))).toBe(true);
   });
 });
