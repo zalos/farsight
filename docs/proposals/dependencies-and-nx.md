@@ -64,6 +64,24 @@ Without NX, `workspaces` globs give projects without tags; without those, one pr
 dependencies are derived from the `imports` edges between their files (plus NX `implicitDependencies`), so the
 project graph is a fold over the one graph, never a second store.
 
+**Addendum 2026-10-04 — computed once, and NX's own graph read when NX wrote one.**
+`projectGraph()` is folded once per loaded graph (a `WeakMap` keyed on the `GraphIndex`, refolded for another
+index or another `meta.projects` object) and a `?repo=` narrows the kept fold by rows; closures walk an adjacency
+built once and are kept, every `ProjectRow` carries its `closure` (the viewer draws an application's tree from
+`/api/projects` alone), and `/api/projects/<name>` reads its node ids from the same fold. When a source is an NX
+workspace, the projects pass also reads the project graph NX wrote — `.nx/workspace-data/project-graph.json`
+(NX ≥ 17), `.nx/cache/project-graph.json`, `node_modules/.cache/nx/project-graph.json`, or the `nx graph
+--file=<path>.json` export named by `farsight.config.json → projects.graphFile` — in either shape (`{ graph:
+{ nodes, dependencies } }` or bare). It is read, never produced: Farsight does not run `nx`. The file is untrusted
+input: it must resolve inside the source (no `..`, no absolute path, no symlink out), stay under 20 MB and parse
+as the shape above; anything else is a note on `meta.projects.notes`. Only names discovery already found count
+(the rest are said as a count), `npm:` targets are left to the dependencies pass, and a project no manifest typed
+takes NX's type (`app` · `lib` · `e2e`). What it records lands on `meta.projects.dependencies` (`via: 'nx-graph'`)
+and `meta.projects.graphFile`; in the project graph a pair NX knows is `nx: true` (with `nxType`), and one only NX
+knows is a dependency with `imports: 0`, counted under its own part (*only in NX's project graph*). The imports
+read from the files stay the primary evidence — NX's graph augments, never replaces (principle 2).
+`examples/nx-workspace/nx-project-graph.json` declares one lazy dependency the imports do not show.
+
 ### 2.3 What the lenses read
 
 - **Code map (lane C):** group by *project* and by any *tag dimension* (a group box per domain, per type …); filters:

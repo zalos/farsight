@@ -20,6 +20,9 @@
  * Project → project imports are read from the import statements of each project's files and resolved the
  * way the TS/JS adapter resolves them (relative paths, tsconfig `paths`, workspace package names), so a
  * type-only import or a constant counts too — the graph's own edges carry calls, not imports.
+ * For an NX source, the project graph NX wrote to disk is read too (`nx-graph.ts`, never by running NX):
+ * its project → project dependencies land on `meta.projects.dependencies`, and a project no manifest
+ * typed takes NX's type before the nodes are stamped.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
