@@ -47,10 +47,10 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — the second release through the release-PR flow, close/reopen still needed without a `RELEASE_TOKEN`), workspace main after the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42; `8ec6a5d` is the last feature merge — the code map's index and toolbar project picker; #42 gave `perf` commits a *Performance* changelog section) |
-| tests | **939** — core 280 · work 59 · parsers 169 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 231 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 190/190** (the `codemap-projects` and `codemap-toolbar` specs start their own two-source server) |
-| string/symbol lint | **1944 entries · 33 sprite symbols · 36 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `8ec6a5d` on 2026-10-04 and re-synced through `POST /api/sync`. Check `lsof` before restarting or measuring on any port. |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`e4bcea5`** after the journey-organisation pass (PRs #45–#48, below) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1001** — core 297 · work 59 · parsers 185 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 54 · server 249 · cli 59, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 198/198** (the `codemap-projects` and `codemap-toolbar` specs start their own two-source server; `journeys-organised` runs on the fixture's declared personas and groups) |
+| string/symbol lint | **1973 entries · 33 sprite symbols · 38 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `e4bcea5` on 2026-10-04 (evening) and re-synced through `POST /api/sync` (4478 sync 63, 4477 sync 102); both prefixes' global `farsight` print `commit e4bcea5`. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -232,6 +232,42 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
     knows is a dependency with `imports: 0` under the new part `count.part.depsNxGraph`; `graph_overview` prints
     `nx graph: N dependencies read`. Imports read from the files stay the primary evidence (principle 2).
 
+11. **Journeys organised by persona and group, and many config files per source** (2026-10-04 evening; proposal
+    `docs/proposals/journey-organisation-and-config-files.md`, PRs #45–#48, three lanes). Four decisions taken with the
+    owner: the manifest declares and a config block overrides; a nested config scopes its own folder; two fixed levels
+    (persona → group → journeys); MCP reads and guides, never writes into a source.
+    - **Config files** (#46): every `farsight.config.json` in a source is read (`parsers/src/shared/config-files.ts`
+      `loadWorkspaceConfig`, root first, then by folder depth; the workspace excludes apply). A nested file's node
+      matchers (`tags`, `glossary`, `guards`, `entrypoints`, `setup`) apply only to nodes under its folder and
+      the nearer file's word wins; its paths (`plumbing`, `design`, `openapi`, `tests` reports, `storybook`, a
+      `path::Class` external import) are rebased to the source root and unioned; `tests.unit|integration|e2e` take
+      one block or a list and `results|coverage|report` take one glob or a list; `externals`/`stores` union with a
+      duplicate recorded as a conflict; `projects` and `tooling` are root-only (a nested value is a note). The six
+      readers consume one `WorkspaceConfig` and all honour `config: false`. `fragment.meta.config: ConfigMeta`
+      (files · conflicts · notes) → `meta.config[repo]`; MCP `config_files` and a `graph_overview` line, `farsight
+      config list`, `GET /api/config`. `examples/nx-workspace` has two nested configs and one deliberate glossary
+      conflict.
+    - **The model** (#47): `screens.json` gains `personas[]` and `groups[]` (ordered; a group with `persona` lives
+      under that persona only), a flow gains `persona: string | string[]`, `group`, `order`; order is `order`, then
+      the config's index, then **manifest order** (the alphabetical sort is gone on purpose; the pinned *start here*
+      stays marked, not moved). A `farsight.config.json → journeys` block (`personas`, `groups`, `flows` by id)
+      overrides field by field, root block first and the nearest nested block last; an id no manifest declares is a
+      note. Folded at ingest into `meta.journeys[repo]` (`core/journeys.ts journeysMetaOf`); `journeyTree(index,
+      metas, scope)` is the one pure fold behind `GET /api/journeys`, MCP `journeys { repo, persona, group, json }`,
+      `farsight journeys`, and the `graph_overview` journeys line; the `journey` tool prints *shown under*. An
+      undeclared persona string (the reference app's *"X and Y"*) is its own persona, flagged *not declared*, never
+      split. Every count is a `Counted` (`docs/COUNTS.md` § Journeys). `design_guide` documents all of it, nested
+      config files included. A multi-manifest fix: an earlier manifest no longer marks a later manifest's page *built,
+      not designed*.
+    - **The viewer** (#48): the Journeys front door shows *Journeys by who uses them* — persona heading with its
+      description and counts, collapsible groups in declared order (remembered per group), the journey cards, an *also
+      for …* chip, `?persona=` / `?group=` filters; the journey header reads *For <persona> · <group>*; the Portfolio
+      is one table per persona → group with a pin per persona; the Map bands by **persona** (a journey under two
+      personas draws its street once and a dashed *echo* card in the other band). `lib/journeys-tree.js` reads
+      `/api/journeys` first and `lib/journeys-model.js treeFrom()` folds the same tree from `/api/design` against an
+      older server (proven equal to `journeyTree()` by test). Verified on the dogfood server: 21 journeys · 5 personas
+      · 6 groups, zero page errors on the front door, the Portfolio and the Map.
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -266,6 +302,18 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   the work usage — the `--help` form of a subcommand should not touch git.
 
 ## Next work, ranked
+
+**The journey-organisation pass left open (2026-10-04), first because it is what the owner asked for:** declare
+`personas` and `groups` in the reference app's own manifest (outside this repo) — today its three persona strings
+are undeclared and every journey sits in *Other journeys*; the pass is only proven when *Access* leads each persona
+there. Then, smaller: a nested config's `stores[]` catch-all still names every unnamed table in the source (declarations
+are not scoped); a nested `storybook` without `configDir` is taken as `<dir>/.storybook`; the root file's own paths
+are not checked for escapes; the Settings page has no *Config files* list (`/api/config` is ready); a flow placed in a
+group that belongs to another persona drops to *Other journeys* with no note; two NX apps on the same route still
+collide under route-only matching; the Map's `h`/`l` keys walk model order, not persona-band order; the echo card's
+dashed border is faint at board zoom; a JSON schema for the config and the manifest (`schemas/`) would let editors
+validate the many files this pass creates.
+
 
 **Reported 2026-10-04 by the reference app's session, after 0.2.0 was installed there — a parser regression, first:**
 a `fetch(url, helper(ctx, { method: 'POST', … }))` call, where the method literal sits in an object-literal argument of a
