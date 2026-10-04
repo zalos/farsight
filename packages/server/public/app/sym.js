@@ -61,6 +61,7 @@ export const UTILITY = [
   { id: 'story', glyph: 'story', replaces: '—', note: 'a story — one component drawn on its own by the repo\u2019s Storybook' },
   { id: 'oneof', glyph: 'oneof', replaces: '—', note: 'one written call with several implementations behind it — exactly one of them runs, and which one is not in the code' },
   { id: 'work', glyph: 'work', replaces: '—', note: 'a work item — a story, task or bug a tracker holds, and the WORK surface that lists them' },
+  { id: 'package', glyph: 'package', replaces: '—', note: 'a dependency — a package the code imports: copper, solid stripe for a library of this workspace, hatched for a third-party package' },
   { id: 'absent', glyph: 'absent', replaces: '—', note: 'nothing here — the word beside it says which kind of nothing: none indexed, not built, not involved' },
 ];
 
