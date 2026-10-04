@@ -24,12 +24,13 @@ export const GROUPS = [
   ['breaking', 'Breaking'],
   ['feat', 'Features'],
   ['fix', 'Fixes'],
+  ['perf', 'Performance'],
   ['docs', 'Docs'],
   ['test', 'Tests'],
   ['chore', 'Chores'],
   ['other', 'Other'],
 ];
-const CHORE_TYPES = new Set(['chore', 'build', 'ci', 'refactor', 'perf', 'style']);
+const CHORE_TYPES = new Set(['chore', 'build', 'ci', 'refactor', 'style']);
 // a release commit (`chore(release): v1.2.3`) describes the release, it is not a change in it
 const RELEASE_SUBJECT = /^v?\d+\.\d+\.\d+/;
 const SUBJECT = /^(?<type>[a-zA-Z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?:\s+(?<subject>.+)$/;
@@ -60,7 +61,7 @@ export function parseCommit({ sha, short, subject, body = '', parents = [] }) {
   let type = 'other';
   if (m) {
     const t = m.groups.type.toLowerCase();
-    type = t === 'feat' || t === 'fix' || t === 'docs' || t === 'test' ? t
+    type = t === 'feat' || t === 'fix' || t === 'perf' || t === 'docs' || t === 'test' ? t
       : t === 'tests' ? 'test'
       : CHORE_TYPES.has(t) ? 'chore' : 'other';
   }

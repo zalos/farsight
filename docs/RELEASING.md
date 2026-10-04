@@ -159,7 +159,7 @@ as before; under protection that tag cannot reach `main`'s history by a push, so
 (then delete the branch and the tag).
 
 - `changelog.mjs` groups conventional-commit subjects (`type(scope)!: subject`, `BREAKING CHANGE:` footers)
-  under *Breaking · Features · Fixes · Docs · Tests · Chores · Other*; merge commits and earlier release
+  under *Breaking · Features · Fixes · Performance · Docs · Tests · Chores · Other*; merge commits and earlier release
   commits are skipped; a subject that is not a conventional commit lands under *Other*. Since PRs are
   squash-merged, each commit on `main` is one PR: the ` (#N)` GitHub appends to the subject is dropped from the
   line and printed as a link to the PR, which is why the **PR title must be a conventional commit** (CI's `commits`
