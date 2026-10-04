@@ -71,6 +71,15 @@ The Claude preview/dev server is defined in `.claude/launch.json` (name: `farsig
 - **Local config is never tracked; each file has a scrubbed `.example` twin** (CONTRIBUTING.md § Local config): `.farsight/settings.json` ← `.farsight/settings.example.json`, `.claude/settings.local.json` ← `.claude/settings.local.example.json`. Copy the example, never commit a value from the local file; a new local config gets its twin in the same change. The server falls back to a one-source workspace without settings.
 - **Secrets live in the keychain only** (2026-09-30): `keychain:farsight/<provider>-<instance>` references in settings, read in-process by `packages/work/src/secrets.ts`, never an env var or a value in a file; the auto-mode classifier refuses a bare `security find-generic-password` in a shell, so a live check runs the tool or a probe script that prints only the outcome. `GET /api/settings` serves the settings file back and the viewer rewrites it wholesale — a value there would leak.
 - **Work keys only count for configured projects.** `detectWorkKeys` reads `INV-01` (a screen name) as a Jira key; the join (`joinWork`) links only keys whose project is in a work source's scope, and a leading-zero key never links.
+- **Never fold the graph per node in the viewer** (2026-10-04): a 7 ms fold called from a per-node predicate is minutes on a
+  21k-node graph (the grouped code map hung). The code map holds one index per graph object (`lib/codemap-model.js`
+  `buildCodemapIndex`) and answers every per-node question — project, group, filtered, test file, rule badges — by a
+  lookup; a filter is set algebra over the index (`passFor`). `store.js indexGuards()` carries the edge indexes
+  (`guardsByTarget`, `validatesByTarget`, `EDGES_OF`). A new per-card scan of `S.GRAPH.edges` or `S.GRAPH.nodes` is the
+  regression; `packages/server/test/codemap-perf.test.ts` guards the fold under 2 s on a synthetic 20k-node graph.
+- **NX's project graph is read, never produced.** `parsers/src/shared/nx-graph.ts` reads the file NX wrote (or
+  `projects.graphFile`) inside the source only, capped at 20 MB, names validated against discovery; Farsight never runs
+  `nx` (`docs/SECURITY.md`). Imports read from the files stay the primary evidence; NX's graph augments.
 - **`farsight.config.json` is applied inside `ingestRepo()`** (function guards/tags/glossary before the OpenAPI pass, route-shaped guards after it). Never call `applyConfig` again on the result — guard renames are not idempotent.
 
 ## Where the detail lives — load on demand
@@ -108,7 +117,7 @@ Blue-black ground `#0A0D14`, panels `#111623`, condensed-uppercase HUD labels (F
 
 ## Current position
 
-The clarity phase is built and merged; three passes have followed it. **`docs/AI-HANDOFF.md` carries the
+The clarity phase is built and merged; four passes have followed it, the last the code map's performance pass (2026-10-04). **`docs/AI-HANDOFF.md` carries the
 verified current state and the ranked next work — read it, not this paragraph.**
 
 The bar the product is judged against, unchanged: *"a person who opens Farsight on a real application understands
