@@ -159,6 +159,11 @@ export function releaseFocus() {
   // a control there — a nav tab, a palette result. The reader has put the focus
   // where they want it; handing it back to the opener would snatch it away.
   if (movedOn(document.activeElement)) return;
+  // focus still on the dialog we just hid: a hidden element keeps the focus until the
+  // engine's next fixup, so a screen reader (and a test) would find it on a control that
+  // is no longer on screen — let go of it now, the re-find below puts it back on the page
+  const held = document.activeElement;
+  if (held && held !== document.body && dialog && (held === dialog || dialog.contains(held))) { try { held.blur(); } catch (err) { /* nothing to let go of */ } }
   if (back && document.contains(back) && !back.closest('[inert]')) { put(back); return; }
   if (!key) return;
   // The control that opened the dialog is usually gone: closing navigates, and
