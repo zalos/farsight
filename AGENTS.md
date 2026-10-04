@@ -104,7 +104,7 @@ number names what it counts and the scope it counts over. Every number and every
 
 ## Design language ("Farsight HUD")
 
-Blue-black ground `#0A0D14`, panels `#111623`, condensed-uppercase HUD labels (Futura/Avenir Next Condensed), SF Mono for code/data. **Two meaning-bearing accents: quest-amber `#F0B44E` = business lens, signal-cyan `#5BC8DD` = code/hybrid lens** — switching lens warms/cools the chrome. Node kind colors: component green `#6FCF8E`, route cyan, function gold `#D8C27A`, table violet `#C287D6`, guard/auth purple `#A78BE0`, rule/warn `#E8A13C`. Light theme exists (`[data-theme="light"]`). Game vocabulary: quest log = saved flows, fog of war = unindexed, fast travel = ⌘K.
+Blue-black ground `#0A0D14`, panels `#111623`, condensed-uppercase HUD labels (Futura/Avenir Next Condensed), SF Mono for code/data. **Two meaning-bearing accents: quest-amber `#F0B44E` = business lens, signal-cyan `#5BC8DD` = code/hybrid lens** — switching lens warms/cools the chrome. Node kind colors: component green `#6FCF8E`, route cyan, function gold `#D8C27A`, table violet `#C287D6`, guard/auth purple `#A78BE0`, rule/warn `#E8A13C`, package copper `#E39A72` (`--pkg`; a solid stripe for a workspace library, a hatched one for a third-party package, `sym('package')`). Light theme exists (`[data-theme="light"]`). Game vocabulary: quest log = saved flows, fog of war = unindexed, fast travel = ⌘K.
 
 ## Current position
 

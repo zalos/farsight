@@ -427,6 +427,20 @@ Domain: Billing 5 · Shared 2 · Operations 1 — Type: …* (the `examples/nx-w
 file of that source that imports it, wherever it sits. The ranges (`DepsRow.versions`: where · range · declaring
 package.json) are facts, not counts, and print beside the row.
 
+### Code map by project and package (`surfaces/codemap-projects.js`, `lib/codemap-model.js`; lane C)
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| parts in a box | `codemap.group.parts` *n parts shown* (both) | `codemap.group.scope` *in this box, as filtered* | `foldGroups()` over `displayNodes()` | the cards one box of the grouped map draws after scope, filters and focus; a folded file group counts each part it folds. Breakdown by kind (`kindWord`) — a partition (the unit test pins it). Not the project's own size: that is *parts of a project* above, on the project's inspector |
+| import statements on an arrow (App and its related) | `count.unit.importStatements` (hybrid/code only) | `count.scope.project` | `/api/projects` `dependencies[].count` | the same `ProjectDependency.count` as the Projects table; an arrow with 0 says *declared only* (`codemap.view.declared`) instead of a number |
+| projects in a tag box | `count.unit.projects` (both) | `count.scope.workspace` | `meta.projects[repo].projects` filtered by the box's value | the projects carrying the value in that dimension, each once (the tag box's inspector) |
+| projects that use this one | `count.unit.projects` (both) | `count.scope.project` | `/api/projects/<name>` `dependents.length` | the projects depending on it, each once (the project inspector's *Used by*) |
+| shown / hidden (status bar) | `chrome.shownOf` | `tip.stats.scope` | `statsBreakdown()` | gains three reasons: `tip.stats.files` (file cards, drawn only with *show files*), `tip.stats.packages` (*hide packages*), `tip.stats.filtered` (a code map filter or view). Still a partition of the graph's total |
+
+The package inspector prints `DepsRow.importers` and `DepsRow.journeys` as they arrive from `/api/deps/where`
+(the Dependencies table); the project inspector prints `ProjectRow.nodes` and `appClosure().count` (the Projects
+table). Nothing on the code map counts packages or projects a second way.
+
 ## 4. Open — found, not changed here
 
 - **The journey prints the typed counts** (`fix/journey-numbers-and-words`, 2026-09-25). The header
