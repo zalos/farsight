@@ -7,6 +7,29 @@ Every release of `farsight-cli`, newest first. Generated from conventional commi
 
 Changes on `main` since the last release: `node scripts/changelog.mjs --dry-run` lists them.
 
+## [0.3.0] — 2026-10-04
+
+### Features
+
+- **core:** the project graph computed once per graph and NX's own project graph read when the workspace wrote one [#39](https://github.com/zalos/farsight/pull/39) ([83b4a3b](https://github.com/zalos/farsight/commit/83b4a3b6cfa6cc2512524b7f93a8baa6225937ac))
+
+### Fixes
+
+- **scripts:** perf commits get a Performance section in the changelog instead of Chores [#42](https://github.com/zalos/farsight/pull/42) ([2a4468b](https://github.com/zalos/farsight/commit/2a4468bb0ca53497195daa2b6d1f95d621e99fdc))
+
+### Performance
+
+- **viewer:** the code map groups and filters from one precomputed index, with a toolbar project picker and app focus [#40](https://github.com/zalos/farsight/pull/40) ([8ec6a5d](https://github.com/zalos/farsight/commit/8ec6a5d75b6785936c612928d0c8c18f1a2fac7f))
+
+### Docs
+
+- the release-PR flow was rehearsed with v0.2.0 ([9d02033](https://github.com/zalos/farsight/commit/9d020338a2cc737f18e3174382ecf947813dba40))
+- the code map performance pass in the handoff and two gotchas in AGENTS.md [#41](https://github.com/zalos/farsight/pull/41) ([79f91cd](https://github.com/zalos/farsight/commit/79f91cd1207f29c3bd468dc125b25bd26ab70712))
+
+### Chores
+
+- **ci:** squash-merge PRs and enforce Conventional Commits with a commits check, a commit-msg hook and a PR template [#38](https://github.com/zalos/farsight/pull/38) ([8b722ce](https://github.com/zalos/farsight/commit/8b722ce87beea8f5bda5cc40bf8ba4b217081e32))
+
 ## [0.2.0] — 2026-10-04
 
 ### Features
