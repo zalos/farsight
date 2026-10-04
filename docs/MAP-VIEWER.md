@@ -19,6 +19,25 @@ gets *none · project*), `groupOf` / `foldGroups` (project · tag value · *no t
 packages*, the catch-alls last; parts by kind sum to the box's count), `dependsOnIds`, `closureColumns`, `versionFor`,
 `journeyDomain` / `canBandByDomain`.
 
+**The index** (2026-10-04, after the code map grouped by project hung a 21k-node graph for minutes: `cmapHide` folded
+every node per node). `buildCodemapIndex(nodes, edges, metas)` makes one pass over the nodes and one over the edges:
+`projectKeyOf` (node id → `repo::name`, through `projectOfItem`, so a workspace package stands in its project),
+`projects` (`repo::name` → `{ repo, name, type, tags, facets, parts }`, the facets computed once per project),
+`partOrder`, `nodesByProject`, `projectsByValue` (dimension → value → project keys), `packageIds`, `importersOf`
+(package → its `imports` sources), `validatesTo`, `testFiles` (the `TEST_FILE` pattern, by path) and `byRepo`.
+`codemap-projects.js` holds one (`CMAP_INDEX`), rebuilt only when `S.GRAPH` is a different object (a sync reload);
+the GROUP choices (`groupChoicesFor(index, repos)`, O(projects), the same list as `groupChoices`) are cached per graph
+and scope. **Filters are set algebra** (`passFor(index, { projects, values, closure, dep, nodeIds })`): the projects
+that pass are the picked keys ∩, per tag dimension, the union of the projects carrying a picked value ∩ the app
+view's closure; the kept nodes are the union of their `nodesByProject`, plus each package a kept node imports
+(packages × their importers); `dep` intersects with `importersOf[dep] ∪ {dep}`. The app view narrows by its closure
+alone — the filter chips are not shown in a view, so a kept filter does not empty it. `groupKeyOf(item, by, index)`
+answers a card's group in O(1), and `foldGroups(items, by, index)` uses it. `codemap-perf.test.ts` holds the set
+algebra to the old per-node predicate on the NX example + invoice app, and a ≈20k-node synthetic graph to under two
+seconds (it takes ~0.1 s). `store.js indexGuards()` also builds `S.validatesByTarget` (rule badges, card heights) and
+`S.EDGES_OF` (node → its edges in graph order, the inspector's relations), and `render()` keeps `S.displayById`, so no
+card and no `select()` scans every edge. `displayNodes()` and `statsBreakdown()` are each one pass with O(1) per node.
+
 graph-render.js asks two questions. `cmapHide(n)` returns `files` (a `module` card, drawn only with *show files* — or in
 the package view), `packages` (*hide packages*) or `filtered` (outside the cached `passSet()` of the filters / view), and
 `statsBreakdown` counts each as its own reason, so the status bar's tip still adds up. `cmapGrouping()` is `project` in a
@@ -29,8 +48,10 @@ into the stage's columns where they end highest. The lanes gained *Files* (`modu
 package cards are `.nk-package.pkg-ws|pkg-tp` (copper `--pkg`, solid or hatched stripe, `sym('package')`, the scope word
 on the kind line, the range as the sub line outside business).
 
-**Views.** *App and its related* (`?view=app&project=<name>[&repo=]`) fetches `/api/projects/<name>` (the closure) and
-`/api/projects?repo=` (the dependencies between its projects); the boxes stand in `closureColumns` columns with
+**Views.** *App and its related* (`?view=app&project=<name>[&repo=]`) draws at once from the graph the page holds —
+`projectClosure(metas, repo, name)` reads `meta.projects` imports, `implicitDependencies` and NX graph `dependencies` the way core
+`appClosure` does — then fetches `/api/projects/<name>` (the closure) and `/api/projects?repo=` (the dependencies
+between its projects, with their `Counted`s, which label the arrows when they arrive); the boxes stand in `closureColumns` columns with
 `.cm-pedge` arrows labelled `.cm-elabel` by `ProjectDependency.count` (*declared only* when 0), third-party packages a
 column of their own; the inspector is the application's project. *Where is <package> included*
 (`?view=package&package=<id|name>`) keeps `dependsOnIds` (files shown), the package card on the left, importers'
@@ -40,7 +61,15 @@ clicks), from a project's inspector (*Show app and its related*) and a package's
 `#cmapctl` chip names the view and closes it.
 
 **Controls and inspector.** `#cmapctl` in the toolbar (hidden off the code map): GROUP `<select>`, *hide packages*,
-*show files*, Views, a *filtered ✕* chip. `cmapScopeHtml()` adds *On the code map* to the scope menu — projects, one list
+*show files*, **Projects** (`#cm-projbtn`, `Projects · n` when n projects are picked; shown when the sources in scope
+have two projects or more), Views, a *filtered ✕* chip. The Projects menu (`#cm-projmenu`, `S.cmap.projMenu`) holds
+kind chips (`.cm-type`: Applications · Libraries · End-to-end tests · Other projects, `S.cmap.barTypes`, none on = every
+kind) that narrow the options of the multi-select `cm-pick-proj-bar` — the same `cmap().projects` filter as the scope
+menu's `cm-pick-proj`, through the same `filtered()` path (chips, `?project=`, localStorage) — and *Focus on an
+application* (`cm-pick-app-bar`, single, applications first), which opens *App and its related*. A pick redraws the
+toolbar and the menu stays open with its pickers' words; a click outside or Esc (window, capture phase, after a
+picker's own Esc clears its words) closes it; opening the Views menu closes it and the reverse. e2e:
+`e2e/tests/codemap-toolbar.pw.spec.ts`. `cmapScopeHtml()` adds *On the code map* to the scope menu — projects, one list
 per dimension, *Depends on* — acting on the code map only. Inspector: `projectSecHtml(n)` (project button, type, tag
 words; raw tags outside business), `packageActionsHtml` + `packageSecHtml(n)` (kind, `DepsRow.importers` /
 `journeys` Counteds, versions by project, the library it resolves to, the external it also is, journeys reached),
