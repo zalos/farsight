@@ -169,6 +169,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.tool.legend': same('Legend', 'What the lines, colours, stripes and marks on the board mean. It opens by itself the first time you visit the map; this button brings it back.'),
   'map.legend.title': same('What the board draws', 'Every line, colour, stripe and mark the map uses, with the word it stands for. Only what is on this board is listed.'),
   'map.legend.close': same('Close the legend'),
+  'map.legend.expand': same('show', 'Open the legend in full: every line, colour and mark this board draws, with its word.'),
   'map.legend.between': same('Between journeys', 'The lines that join one journey to another. Each journey says which journeys it needs first, leads to, or is part of; the board draws what they say and infers nothing.'),
   'map.legend.requires': same('the journey at the point needs the one at the tail first',
     'A journey that requires another is drawn as the other leading to it, once. Read the arrow backwards for requires.'),

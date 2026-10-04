@@ -347,7 +347,9 @@ function start() {
     renderAll();
     // the band choice is offered only once the districts say whether there are domains to band by
     redrawChrome();
-    if (MAP.nb.districts.length && !legendSeen()) { markLegendSeen(); openLegend(); }
+    // a first visit opens it by itself as a narrow strip — collapsed to its title when a link opened the map, since
+    // that reader came to see something — and never takes the focus (round 2)
+    if (MAP.nb.districts.length && !legendSeen()) { markLegendSeen(); openLegend({ auto: true, collapsed: linkOpened(MAP.route) }); }
     fillWork(gen);
     applyRouteTarget(MAP.route, false);
     walk(gen);
@@ -1284,8 +1286,13 @@ function legendSeen() { try { return localStorage.getItem(LEGEND_KEY) === '1'; }
 function markLegendSeen() { try { localStorage.setItem(LEGEND_KEY, '1'); } catch { /* a private window: it opens again next visit */ } }
 /** Open or close the legend (the `?` tool). @group Map */
 export function toggleLegend() { if (MAP.legend) closeLegend(); else openLegend(); }
-function openLegend() {
+/** Whether a link brought the reader here: a journey, a screen or a picture named in it. */
+function linkOpened(route) { return !!(route && (route.param || /[?&](node|z|affected|card)=/.test(String(route.raw || '')))); }
+function openLegend(opts = {}) {
   MAP.legend = true;
+  MAP.legendAuto = !!opts.auto;
+  MAP.legendCollapsed = !!opts.collapsed;
+  if (MAP.affList) toggleAffList(false);
   drawLegend();
   const b = MAP.stage && MAP.stage.querySelector('[data-act="legend"]');
   if (b) { b.classList.add('on'); b.setAttribute('aria-expanded', 'true'); }
@@ -1341,6 +1348,7 @@ function drawLegend() {
   if (!box || !MAP.legend) return;
   const f = legendFacts();
   let html = '<div class="lg-top"><span class="hud-label"' + tipAttrs({ key: 'map.legend.title', noFocus: true }) + '>' + esc(t('map.legend.title')) + '</span>'
+    + (MAP.legendCollapsed ? '<button type="button" class="more" data-act="legend-expand"' + tipAttrs({ key: 'map.legend.expand', noFocus: true }) + '>' + esc(t('map.legend.expand')) + '</button>' : '')
     + '<button type="button" class="x" data-act="legend-close" aria-label="' + esc(t('map.legend.close')) + '">✕</button></div>';
   // between journeys: leads to (its mirror, requires, is the same line read backwards), each other, part of
   const between = [];
@@ -1361,7 +1369,7 @@ function drawLegend() {
   if (f.built) marks.push(lgRow('built', '<span class="lg-stripe"></span>', 'map.legend.built'));
   if (f.planned) marks.push(lgRow('planned', '<span class="lg-stripe planned"></span>', 'map.screen.planned'));
   if (f.again) marks.push(lgRow('again', '<span class="lg-again">' + esc(t('map.call.again')) + '</span>', 'map.call.again', 'map.legend.againSay'));
-  for (const ev of f.ev) if (!biz() || ev !== 'implied') marks.push(lgRow('ev-' + ev, '<span class="lg-call' + (ev === 'implied' ? '' : ' absent') + '"></span>', evKey(ev)));
+  for (const ev of f.ev) if (!biz() || ev !== 'implied') marks.push(lgRow('ev-' + ev, '<span class="lg-call' + (ev === 'implied' ? '' : ' absent') + '" data-evidence="' + esc(ev) + '"></span>', evKey(ev)));
   if (f.times) marks.push(lgRow('times', '<span class="lg-times">' + esc(t('map.legend.times')) + '</span>', 'map.legend.timesSay'));
   html += '<section>' + lgHead('map.legend.screens') + marks.join('') + '</section>';
   // what proves a journey runs: the evidence words the journeys on the board earned
@@ -1383,7 +1391,12 @@ function drawLegend() {
   html += '<p class="lg-hint">' + esc(t('map.legend.hint')) + '</p>';
   box.innerHTML = html;
   box.hidden = false;
-  box.onclick = (e) => { const b = e.target.closest('[data-act="legend-close"]'); if (b) closeLegend(); };
+  box.classList.toggle('auto', !!MAP.legendAuto);
+  box.classList.toggle('collapsed', !!MAP.legendCollapsed);
+  box.onclick = (e) => {
+    if (e.target.closest('[data-act="legend-close"]')) closeLegend();
+    else if (e.target.closest('[data-act="legend-expand"]')) { MAP.legendCollapsed = false; MAP.legendAuto = false; drawLegend(); }
+  };
 }
 
 // ── drawing ──────────────────────────────────────────────────────────────
@@ -2193,7 +2206,17 @@ function stepScreen(delta) {
   const next = Math.max(0, Math.min(j.model.screens.length - 1, index + delta));
   const el = MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"][data-index="' + next + '"]');
   closeCard();
-  centreScreen(flow, next, Math.max(MAP.cv.state().s, LEVEL_NB + 0.02), true);
+  // across only: the screen comes to the middle and the board keeps its height, so the street does not drop and
+  // leave an empty band above it; a screen row off the stage brings the journey's head to the top (round 2)
+  const s0 = Math.max(MAP.cv.state().s, LEVEL_NB + 0.02);
+  const p = screenPos(flow, next), g = MAP.geom.get(flow), b = boardSize(), st = MAP.cv.state();
+  if (p && g) {
+    openedJourney(flow);
+    let ty = s0 === st.s ? st.ty : FRAME_PAD - g.y * s0;
+    const rowTop = (g.y + SY) * s0 + ty, rowBottom = (g.y + SY + SH) * s0 + ty;
+    if (rowTop < 0 || rowBottom > b.h) ty = FRAME_PAD - g.y * s0;
+    MAP.cv.set(b.w / 2 - p.x * s0, ty, s0, true);
+  }
   focusQuiet(el);
   syncHashSoon();
 }
