@@ -24,7 +24,7 @@ import { countedHtml, plainTip } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip } from '../lib/map-chips.js';
+import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, MODE_ORDER } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
@@ -205,6 +205,8 @@ export function mountMap(route, el) {
     onGestureEnd: () => { MAP.autoFit = null; syncHashToBoard(); },
     // the rest of a pinch out that just left a screen does not keep zooming the street
     holdWheel: () => Date.now() < (MAP.holdWheelUntil || 0),
+    // a drag never leaves the board on an empty grid: some of the journeys stay on the stage (round 2)
+    bounds: () => (MAP.size.w ? { x: 0, y: 0, w: MAP.size.w, h: MAP.size.h } : null),
   });
   // the board starts under the chrome row, so nothing draws beneath the toolbar
   const chrome = MAP.stage.querySelector('.map-chrome');
@@ -250,6 +252,7 @@ export function mapRefresh(reason) {
   if (!MAP.el || !MAP.world) return;
   if (reason === 'lens' || reason === 'register') {
     redrawChrome();
+    drawRisk();
     // a call's height follows its words in the lens, so the districts re-lay (the journey in view stays put)
     relayoutKeeping(() => renderAll());
     if (MAP.legend) drawLegend();
@@ -379,6 +382,7 @@ async function ensureJourney(id, gen = MAP.gen) {
   MAP.journeys.set(id, entry);
   relayoutKeeping(() => renderDistrict(id));
   if (MAP.legend) drawLegend();
+  drawRisk();
   if (MAP.autoFit === id && !MAP.prop) enterJourney(id, false);
   return entry;
 }
@@ -683,7 +687,9 @@ function boardScale() {
 }
 function fitAll(anim) {
   if (!MAP.cv || !MAP.size.w) return;
-  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: FRAME_PAD, max: LEVEL_NB * 0.9, anim });
+  // the risk headline sits over the top of the board: the fit leaves it its row
+  const risk = MAP.stage && MAP.stage.querySelector('.map-risk');
+  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: FRAME_PAD, top: risk && !risk.hidden ? risk.offsetHeight + 8 : 0, max: LEVEL_NB * 0.9, anim });
 }
 /** The height a journey's frame holds: its head and screens, and its pathways when plumbing is on. */
 function frameH(g) { return MAP.plumb ? g.h : SY + SH + 70; }
@@ -866,7 +872,8 @@ function onCanvasChange(st) {
   // the board is no journey's: whatever was open is left
   if (st.level === 'nb' && !MAP.prop) MAP.journey = null;
   // a journey the reader opened stays the current one while any of it is on the stage; panned wholly off, it is left
-  if (st.level === 'st' && !MAP.prop && MAP.journey && !journeyInView(MAP.journey)) MAP.journey = null;
+  if (st.level === 'st' && !MAP.prop && MAP.journey && !journeyInView(MAP.journey)) { MAP.leftJourney = MAP.journey; MAP.journey = null; }
+  if (st.level === 'nb' || MAP.journey) MAP.leftJourney = null;
   if (st.level === 'st' && !MAP.prop && MAP.journey) MAP.focus = MAP.journey;
   // nothing open: the journey nearest the middle of the screen stands in
   else if (st.level === 'st' && !MAP.prop) {
@@ -891,6 +898,42 @@ function onCanvasChange(st) {
   drawHint(st);
   applyTabbing();
   drawEdges(st);
+  const risk = MAP.stage.querySelector('.map-risk');
+  if (risk) risk.classList.toggle('off', st.level !== 'nb' || !!MAP.prop);
+}
+/**
+ * The risk headline above the board (round 2): how many journeys are stale, not fully built, or reach the ERP —
+ * each a Counted from the facts the covers print, over every journey on the board, shown once every walk has landed.
+ */
+function riskCounteds() {
+  const ds = MAP.nb.districts || [];
+  if (!ds.length || ds.some((d) => !MAP.journeys.has(d.id))) return null;
+  let stale = 0, notBuilt = 0, erp = 0;
+  for (const d of ds) {
+    const j = MAP.journeys.get(d.id);
+    const sum = j && j.data && j.data.summary;
+    if (!sum) continue;
+    const ew = sum.coverage && sum.coverage.journey && sum.coverage.journey.evidenceWord;
+    if (ew && ew.cls === 'stale') stale++;
+    const b = sum.counted && sum.counted.built;
+    if (b && b.of != null && b.n < b.of) notBuilt++;
+    if (erpReached(sum)) erp++;
+  }
+  const src = 'surfaces/map.js riskCounteds ← each /api/journey summary (coverage.journey.evidenceWord · counted.built · systems)';
+  const c = (n, unit) => ({ n, unit, bizUnit: unit, scope: 'count.scope.workspace', source: src });
+  return [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+}
+function drawRisk() {
+  const el = MAP.stage && MAP.stage.querySelector('.map-risk');
+  if (!el) return;
+  const k = riskCounteds();
+  if (!k || !k.some((x) => x.n)) { el.hidden = true; el.innerHTML = ''; return; }
+  el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
+    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })).join('<span class="sep">·</span>');
+  const appeared = el.hidden;
+  el.hidden = false;
+  // it arrived over a board fitted without it: fit again, leaving it its row
+  if (appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb') { const at = MAP.cv.stopAt(); if (at && at.id === 'board') fitAll(false); }
 }
 /** The screen a zoom in would enter, ringed and named in the hint first, so the snap is never a surprise. */
 function onArm(el) {
@@ -942,6 +985,8 @@ function drawEdges(st) {
 }
 /** A cue slides the board about one board's width toward its side, never past the journey's end. */
 function onEdgeClick(e) {
+  const backTo = e.target.closest && e.target.closest('.map-backto');
+  if (backTo && backTo.dataset.flow) { e.stopPropagation(); MAP.leftJourney = null; enterJourney(backTo.dataset.flow, true); return; }
   const cue = e.target.closest && e.target.closest('.map-edgecue');
   if (!cue || !MAP.cv || !MAP.focus) return;
   e.stopPropagation();
@@ -966,7 +1011,9 @@ function stageHtml() {
     + '<div class="map-chrome">' + chromeHtml() + '</div>'
     + '<div class="map-board"><div class="map-world lvl-nb"><svg class="map-links" aria-hidden="true"></svg></div></div>'
     + '<button type="button" class="map-edgecue l" hidden></button><button type="button" class="map-edgecue r" hidden></button>'
+    + '<div class="map-risk" hidden></div>'
     + '<div class="map-hint" aria-live="polite"></div>'
+    + '<button type="button" class="map-backto" hidden></button>'
     + '<div class="map-zoomro"' + tipAttrs({ key: 'map.zoom', noFocus: true }) + '></div>'
     + '<div class="map-legend" hidden role="dialog" aria-label="' + esc(t('map.legend.title')) + '"></div>'
     + '<div class="map-afflist" hidden role="dialog" data-map-wheel="own" aria-label="' + esc(t('map.affected.listTitle')) + '"></div>'
@@ -1051,6 +1098,18 @@ function drawHint(st) {
   el.textContent = text;
   // the snap is about to be possible: the hint says so in the accent before any zoom can enter
   el.classList.toggle('enter', !MAP.prop && st.level !== 'nb' && !!MAP.near);
+  // the journey the reader opened is wholly off the stage: a way back to it beside the hint (round 2)
+  const back = MAP.stage.querySelector('.map-backto');
+  const left = !MAP.prop && st.level !== 'nb' && MAP.leftJourney && MAP.nb.districts.find((x) => x.id === MAP.leftJourney);
+  if (back) {
+    back.hidden = !left;
+    if (left) {
+      const words = t('map.backTo').replace('{name}', nameWords(left.name));
+      if (back.textContent !== words) back.textContent = words;
+      back.dataset.flow = left.id;
+      back.style.left = (el.offsetLeft + el.offsetWidth + 8) + 'px';
+    }
+  }
 }
 
 function onChromeClick(e) {
@@ -1617,7 +1676,9 @@ function screenHtml(d, m, s, x, y, n) {
     + '<span class="nm">' + esc(s.name) + '</span></div>'
     + '<div class="route map-code">' + esc(s.route || '') + '</div>'
     + (s.state === 'planned' ? '<div class="state"><span class="map-chip k-warn"' + tipAttrs({ key: 'map.screen.planned', noFocus: true }) + '>' + sym('warning') + esc(t('map.screen.planned')) + '</span></div>' : '')
-    + '<div class="map-chips">' + chips + '</div></div></div>';
+    // the numbers are this screen's part of this journey's walk: said, so two journeys printing two numbers for one
+    // screen read as two scopes, not a contradiction (round 2) — plain words, so every lens prints them, with a tip
+    + '<div class="map-chips">' + chips + (chips ? '<span class="map-scope"' + tipAttrs({ key: 'map.screen.onJourney', noFocus: true }) + '>' + esc(t('map.screen.onJourney')) + '</span>' : '') + '</div></div></div>';
 }
 
 /** One call on a screen's pathway: the service bar, its evidence where it is not spec-backed, its name and (not in the business lens) its method and path. */
@@ -1884,7 +1945,11 @@ function drawCard() {
     head = esc(c.service ? c.service.label : t('map.lane.noService')) + (dir ? ' · ' + esc(dir) : '');
     ev = evShown(c.evidence, true) ? '<span class="map-ev"' + tipAttrs({ key: evKey(c.evidence) }) + '>' + esc(t(evKey(c.evidence))) + '</span>' : '';
     name = callWords(c);
-    const handler = c.marker && c.marker.handler ? c.marker.handler.name : '';
+    const h = c.marker && c.marker.handler;
+    // a handler is often named for its verb (a function called GET): its file and line stand beside the name (round 2)
+    const hn = h && S.BYID[h.nodeId];
+    const hloc = (hn && hn.loc) || (h && h.path ? { path: h.path, line: h.line } : null);
+    const handler = h ? h.name + (hloc && hloc.path ? ' (' + hloc.path + (hloc.line ? ':' + hloc.line : '') + ')' : '') : '';
     code = [(c.method + ' ' + c.path).trim(), c.operationId, handler ? t('map.card.handler') + ' ' + handler : ''].filter(Boolean).join(' · ');
     const route = nodeId && S.BYID[nodeId];
     const apiId = route && route.contract && route.contract.apiId;

@@ -385,7 +385,8 @@
   .cm-views{position:relative}
   .cm-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:55;min-width:260px;max-height:60vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:5px;box-shadow:0 12px 40px -8px rgba(0,0,0,.5);padding:6px;display:none}
   .cm-menu.open{display:block}
-  .cm-mhead{display:block;padding:8px 10px 4px;font-size:9.5px}
+  /* round 2: a section's heading stays at the top while its rows scroll, and does not look like a row you can pick */
+  .cm-mhead{display:block;padding:8px 10px 4px;font-size:9.5px;position:sticky;top:-6px;z-index:1;background:var(--panel);color:var(--dim);cursor:default;border-bottom:1px solid var(--line-soft)}
   .cm-mrow{display:flex;align-items:center;gap:6px;width:100%;text-align:left;padding:6px 10px;font-size:12px;border-radius:3px}
   .cm-mrow:hover{background:var(--accent-dim);color:var(--accent)}
   .cm-mrow .sym{width:12px;height:12px;color:var(--pkg)}
@@ -1492,6 +1493,8 @@
   .jrn-tfoot .line .hud-label{font-size:8.5px;color:var(--dim)}
   .jrn-tfoot .cnt{font-family:var(--mono);font-size:10px;color:var(--ink)}
   .jrn-tfoot .rl{font-family:var(--mono);font-size:9.5px;color:var(--dim)}
+  .jrn-tfoot .rl + .rl{margin-left:10px}
+  .jrn-tfoot .rl-proj{display:block;margin-left:0 !important}
   .jrn-tfoot .obs{font-family:var(--mono);font-size:9.5px;color:var(--muted)}
   .jrn-tfoot .biz{font-family:var(--body);font-size:11px;color:var(--ink);line-height:1.45;display:block}
   .jrn-tfoot a{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
@@ -2295,6 +2298,14 @@
   .map-hint{position:absolute;left:12px;bottom:10px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;z-index:6;max-width:calc(100% - 120px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .map-zoomro{position:absolute;right:12px;bottom:10px;font-family:var(--mono);font-size:10.5px;color:var(--dim);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;z-index:6}
   .map-hint.enter{color:var(--accent);border-color:var(--accent)}
+  .map-scope{font-size:10px;color:var(--dim);font-style:italic;align-self:center;white-space:nowrap}
+  .mp-scope{font-size:11px;color:var(--dim);font-style:italic;margin-left:8px;text-transform:none;letter-spacing:0}
+  .map-risk[hidden],.map-risk.off{display:none}
+  .map-risk{position:absolute;left:12px;top:calc(var(--map-chrome-h,52px) + 8px);z-index:5;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:11px}
+  .map-risk .hud-label{color:var(--warn,#E8A13C)}
+  .map-risk .sep{color:var(--dim)}
+  .map-backto[hidden]{display:none}
+  .map-backto{position:absolute;bottom:10px;z-index:6;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10px;color:var(--accent);background:var(--panel);border:1px solid var(--accent);border-radius:4px;padding:5px 10px;cursor:pointer;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .map-stage.in-prop .map-hint,.map-stage.in-prop .map-zoomro,.map-stage.in-prop .map-edgecue{display:none}
   /* the edge cues: screens of the journey in view past the board's edge, counted; a click slides to them */
   .map-edgecue{position:absolute;z-index:5;transform:translateY(-50%);font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;
@@ -2368,9 +2379,14 @@
      row, and the crumb takes a row of its own under them rather than cut the journey's name (whole in its tip) */
   .map-crumb{flex:0 1 auto;min-width:96px}
   .map-tools{flex-wrap:nowrap}
+  /* round 2: with the Affected bar the chrome may wrap, and a crumb sized to its whole name pushed the tools to a second
+     row — its basis is 0 there, so the first row keeps the tools and the crumb takes only the room left (≤ 460 px),
+     its whole trail in its tip */
+  @media (min-width:1281px){ .map-chrome:has(.map-affbar) .map-crumb{flex:1 1 0;max-width:min(40%,460px)} }
   @media (max-width:1280px){
     .map-chrome{gap:6px;flex-wrap:wrap}
     .map-crumb{order:9;max-width:calc(100% - 8px);flex:0 1 auto}
+    .map-affbar{order:10}
     .map-lvls button{padding:7px 8px;letter-spacing:.08em}
     .map-tb{padding:6px 7px;letter-spacing:.06em}
     .map-tools{flex-wrap:nowrap;gap:4px}

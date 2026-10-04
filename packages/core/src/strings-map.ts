@@ -272,7 +272,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
 
   // tests
   'map.prop.tests.head': same('What proves this screen runs', 'The evidence for this screen alone: the word the fold chose, the run behind it and the counts of cases.'),
-  'map.prop.tests.cases': same('Cases that reach it', 'The test cases whose walk reaches a part of this screen, with what each one last said.'),
+  'map.prop.tests.cases': same('Cases that run over this screen', 'The test cases whose walk reaches a part of this screen on this journey, with what each one last said. Not the Affected count: that one counts tests reaching what uses a thing picked, within the distance chosen.'),
   'map.prop.tests.verifiedNote': same('Verified means a results report named a case that ran over these parts. A coverage report alone reads as seen by a coverage run.', 'The difference between a case a run named and a line a coverage run touched.'),
   'map.prop.tests.reports': same('Coverage runs that name no case', 'Reports of a whole run that touched this screen’s code without naming which case did. They are counted apart from the cases.'),
   'map.prop.tests.byRun': same('named by a run', 'A results report named this case and it ran.'),
@@ -440,5 +440,14 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.affected.noMore': same('nothing more past {n}', 'Asking further out finds nothing new: every answer stopped at this distance, so a longer reach would print the same numbers.'),
   'map.affected.within': same('within how far {n}', 'The tests count runs from what uses the thing picked directly out to the distance chosen on the bar — not every test of the application.'),
   'map.affected.onJourneys': same('on {list}', 'The journeys this screen is on that reach the thing picked. The screen is counted once.'),
+  'map.screen.onJourney': same('on this journey', 'These numbers count this screen’s own part of this journey’s walk through the code. The same screen on another journey can print other numbers, because that journey reaches it by another path.'),
+  'map.risk.title': same('at risk', 'The journeys on this board whose evidence is stale, whose screens are not all built, or that reach the ERP — counted from the same facts their covers print.'),
+  'count.unit.riskStale': same('{n} journeys stale', 'Journeys whose tests were last seen by a run made before the code changed: the evidence word on the cover says stale. Each journey once.'),
+  'count.unit.riskStaleOne': one('1 journey stale', 'count.unit.riskStale'),
+  'count.unit.riskNotBuilt': same('{n} not fully built', 'Journeys with at least one screen designed and not built yet: the cover prints fewer built than screens. Each journey once.'),
+  'count.unit.riskNotBuiltOne': one('1 not fully built', 'count.unit.riskNotBuilt'),
+  'count.unit.riskErp': same('{n} reach the ERP', 'Journeys whose calls reach the ERP, so a change on them can change what the finance system receives. Each journey once.'),
+  'count.unit.riskErpOne': one('1 reaches the ERP', 'count.unit.riskErp'),
+  'map.backTo': same('back to {name}', 'The journey you opened is off the stage. This brings it back into view, framed the way it opens.'),
   'map.affected.copyFailed': same('nothing was copied', 'Neither the clipboard nor a selected field would take the rows.'),
 };

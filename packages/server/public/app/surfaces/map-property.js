@@ -699,6 +699,8 @@ function headHtml(pm, ctx) {
   return '<button class="btn mp-back" data-act="back"' + defAttrs('map.prop.back') + '>' + esc(t('map.prop.back')) + '</button>'
     + '<nav class="mp-crumb" aria-label="' + esc(t('map.prop.level')) + '"><span class="hud-label">' + esc(t('map.prop.crumb')) + '</span><span class="sep">›</span>'
     + '<span>' + esc(j.name || '') + '</span><span class="sep">›</span><b>' + esc(pm.screen.name || '') + '</b>'
+    // this screen's numbers are its part of this journey's walk (round 2)
+    + '<span class="mp-scope"' + defAttrs('map.screen.onJourney') + '>' + esc(t('map.screen.onJourney')) + '</span>'
     + (biz() || !pm.tabs.route.route ? '' : '<span class="sep">·</span>' + code(pm.tabs.route.route)) + '</nav>'
     + (pm.node ? '<button type="button" class="btn mp-affact' + (affectedSpec() === pm.node.id ? ' on' : '') + '" data-act="affected" data-seed="' + esc(pm.node.id) + '"' + defAttrs('map.affected.action') + '>' + esc(t('map.affected.action')) + '</button>' : '')
     // while the board is dimmed around something, the head says around what and how much (round 2)

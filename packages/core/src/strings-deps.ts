@@ -49,7 +49,7 @@ export const DEPS_STRINGS: Record<string, StringEntry> = {
   'codemap.group.thirdParty': same('third-party packages',
     'Packages somebody else publishes. They belong to no project of this workspace, so they sit in a box of their own.'),
   'codemap.group.parts': same('{n} parts shown',
-    'The cards this box draws right now, each part counted once: a folded group counts every part it folds. The breakdown splits them by kind and adds up to the number.'),
+    'The cards this box draws right now, each part counted once: a folded group counts every part it folds, under each part’s own kind and only the parts of this box’s project. Tests are not cards here and checks are badges on what they guard, so the inspector’s parts of the code, which counts both, is larger. The breakdown splits them by kind and adds up to the number.'),
   'codemap.group.partsOne': one('1 part shown', 'codemap.group.parts'),
   'codemap.group.scope': same('in this box, as filtered',
     'What the number beside it counts over: the parts one box of the grouped code map draws, after the scope, the code map filters and the focus.'),

@@ -1777,6 +1777,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'tests.detail.suite': same('suite {path}', 'The describe path this case sits under, outermost first — what a report row must match to join it.'),
   'tests.detail.ident': same('{level} · {runner}'),
   'tests.detail.projects': same('projects {list}', 'The runner projects that executed this case. Each one is its own run with its own verdict.'),
+  'journey.tests.runProjects': same('Run in the runner projects {list}.', 'The runner projects that executed this run (a Playwright project, say). Each one is its own run with its own verdict.'),
   'tests.detail.runLevel': same(
     'a run report, not a test case',
     'A coverage report with no per-case attribution is indexed as one node so its observations have somewhere to hang. It is never counted as a test, and it has no author and no claims.',

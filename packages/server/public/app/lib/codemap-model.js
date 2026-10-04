@@ -157,8 +157,10 @@ export function foldGroups(items, by, metas) {
     let row = groups.get(g.key);
     if (!row) groups.set(g.key, (row = { ...g, members: [], byKind: {} }));
     row.members.push(it);
-    const k = it.kind === 'group' ? (it.laneKind || 'function') : it.kind;
-    row.byKind[k] = (row.byKind[k] || 0) + (it.kind === 'group' ? (it.members || []).length : 1);
+    // a folded group counts each part it folds under that part's own kind (round 2: a file's functions were all
+    // counted under the file's lane, so a component file's twenty functions read as twenty components)
+    if (it.kind === 'group') for (const m of it.members || []) { const k = m.kind || it.laneKind || 'function'; row.byKind[k] = (row.byKind[k] || 0) + 1; }
+    else row.byKind[it.kind] = (row.byKind[it.kind] || 0) + 1;
   }
   const name = (n) => String((n && (n.name || n.codename)) || '');
   const list = [...groups.values()];

@@ -92,6 +92,20 @@ export function nextStop(stops, s, dir) {
 }
 
 /**
+ * Keep some of the world on the stage: the translation `(tx, ty)` at scale `s`, moved the least so that at least
+ * `margin` px of the world box `box` stays inside a stage of `w × h` px on each axis (round 2: a drag could leave
+ * the board on an empty grid with nothing to say where it went). A box smaller than the margin keeps all of itself.
+ */
+export function clampPan(tx, ty, s, box, w, h, margin = 120) {
+  if (!box || !(box.w > 0) || !(box.h > 0) || !(w > 0) || !(h > 0)) return { tx, ty };
+  const mx = Math.min(margin, box.w * s, w / 2), my = Math.min(margin, box.h * s, h / 2);
+  // the box's right edge never left of mx, its left edge never right of w − mx (and the same down)
+  const txMin = mx - (box.x + box.w) * s, txMax = w - mx - box.x * s;
+  const tyMin = my - (box.y + box.h) * s, tyMax = h - my - box.y * s;
+  return { tx: Math.min(txMax, Math.max(txMin, tx)), ty: Math.min(tyMax, Math.max(tyMin, ty)) };
+}
+
+/**
  * A move from scale `from` to `to` inside one gesture: the first stop it
  * reaches holds it there — except `skip`, the stop the gesture began at, which
  * it may leave. Returns `{ s, stop }`, `stop` null when no stop was reached.
@@ -117,6 +131,7 @@ export function settle(stops, from, to, skip = null) {
  * - `snapTargets()` → elements a zoom may enter; `snapCover` (0.6); `armFrom()` → the
  *   smallest scale at which one arms; `onArm(el | null)` when the armed target changes;
  *   `onSnap(el)` when one is entered;
+ * - `bounds()` → the world box `{ x, y, w, h }` that must stay partly on the stage (`clampPan`, `boundsMargin` px);
  * - `onGestureEnd()` after every gesture or step; `holdWheel()` → true while wheel
  *   events should be swallowed (the owner finishing a gesture of its own).
  * Returns the board's handle (see the object at the bottom).
@@ -148,6 +163,12 @@ export function attachCanvas(stage, world, opts = {}) {
   };
 
   function apply(anim) {
+    // the owner's world box stays partly on the stage, whatever moved it
+    if (opts.bounds) {
+      const r = rect();
+      const c = clampPan(st.tx, st.ty, st.s, opts.bounds(), r.width, r.height, opts.boundsMargin != null ? opts.boundsMargin : 120);
+      st.tx = c.tx; st.ty = c.ty;
+    }
     if (anim) {
       world.classList.add('anim');
       clearTimeout(animT);
