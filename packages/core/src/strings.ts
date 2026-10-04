@@ -21,6 +21,7 @@
 import { WORK_HUD_STRINGS } from './strings-work-hud.js';
 import { MAP_STRINGS } from './strings-map.js';
 import { DEPS_STRINGS } from './strings-deps.js';
+import { CONFIG_STRINGS } from './strings-config.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -92,6 +93,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...MAP_STRINGS,
   // the dependencies pass's words live in strings-deps.ts (surf.kind.package, count.unit.packages, importers, journeys reached)
   ...DEPS_STRINGS,
+  // the config files pass's words live in strings-config.ts (count.unit.configFiles and its parts)
+  ...CONFIG_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
