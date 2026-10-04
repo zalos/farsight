@@ -41,16 +41,16 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
-## Current state — 2026-10-03
+## Current state — 2026-10-04
 
 `main` is green.
 
 | | |
 |---|---|
-| build | `0.1.2` (GitHub Release v0.1.2), workspace main after the map-view and data-stores passes (PRs #8–#19; `d1fee10` is the last feature merge) |
-| tests | **841** — core 265 · work 59 · parsers 148 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 42 · server 168 · cli 52 and the rest, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 129/129** |
-| string/symbol lint | **1679 entries · 32 sprite symbols · 29 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings, sync 57) and the reference app's own `farsight` on **4477** (the Node 24 global install, started from that workspace, sync 93, `flags.map` on in its local settings). Both `status` up to date on `d1fee10`. Check `lsof` before restarting or measuring on any port. |
+| build | `0.1.2` (GitHub Release v0.1.2), workspace main after the map-view, data-stores and map-pass-2 passes (PRs #8–#30; `bf8f30d` is the last feature merge, `58eee1d` the example-manifest bump) |
+| tests | **918** — core 275 · work 59 · parsers 165 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 219 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 170/170** (the `codemap-projects` spec starts its own two-source server) |
+| string/symbol lint | **1890 entries · 33 sprite symbols · 34 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings, sync 59) and the reference app's own `farsight` on **4477** (the Node 24 global install, started from that workspace, sync 94, `flags.map` on in its local settings). Both `status` up to date on `bf8f30d`. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -153,6 +153,50 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
    stubs 3 → 3 (a mid-pass regression to 49 / 9 was caught by that measurement and fixed in #18). Row keys and table
    ids are unchanged; the fixture graph is byte-identical apart from its `stores` config.
 
+9. **Map pass 2 — the swarm's findings, blast radius, dependencies and NX** (2026-10-03 → 10-04; proposals
+   `docs/proposals/map-pass-2026-10-03.md` and `docs/proposals/dependencies-and-nx.md`; eight lanes, PRs #20–#30).
+   From the eight-persona swarm on the Map (8 × TRIAL, fit 6.25, six of eight would open the Map first; reports
+   outside the repo): **Z** — the canvas engine normalises every input (a mouse notch, a trackpad step, a pinch and
+   the keys all take the same 1.25× step), zoom has soft **stops** (board · journey fitted · calls readable, the last
+   computed from an 11 px label), zoom-to-enter is *earned* (armed only past the calls stop, fired only when one
+   screen is centred and ≥ 60 % of the stage, after a visible hint), Fit fits the level you are on, a journey opens
+   centred under the toolbar with `▸ n more` edge cues, the toolbar is opaque, tips open on hover
+   (`lib/map-canvas.js` exposes `attachCanvas()` for the code map to adopt); **N** — one number with its scope:
+   `14 screens · 10 reached` with `screensReached` typed in core, the footer `screen 4 of 10 reached`, the evidence
+   word beside every tests count, owner and ERP reach on the cover, the Tests page vs code-map chip difference named
+   (`1429 cases · 10 coverage reports`), the Changes tab reading the commit spine for the screen's parts
+   (`GET /api/history/touching`); **L** — a legend (`?`), links routed square through the gaps with one label each,
+   wider columns so nothing truncates, chips that wrap then fold to `+n`, the business lens finished on data nodes
+   (*Postgres · database record*) and gates (*check* / *rule*), Portfolio's switch reads TABLE · BOARD; **K** — Tab
+   reaches every journey, screen, call and data node, Enter/Esc/`j k h l`/arrows, `⌘K` arrives on the Map, the link
+   carries the view (`?z&x&y` as the view's centre in world units) and the open card, `y` / *Copy link*, an *as of*
+   stamp; **I** — the **Affected mode**: `?affected=<node|package:|work:KEY|commit:sha>&ahops=N` from the explore
+   card, the property head and the Work/Changes rows; districts, screens, calls and data dim or carry hop badges at
+   every altitude; an *Affected* tab with four typed `Counted`s from core `affectedReach` (journeys · screens · calls ·
+   tests, partitioned by distance, scope `count.scope.affected`), the floor line and the cut points;
+   `GET /api/impact?reach=1`, `GET /api/history/commit?sha=`; **D** — **dependencies**: `package` nodes (third-party
+   and workspace, versions from the nearest manifest, `imports` edges with specifier and line, `module` nodes kept out
+   of search), `GET /api/deps` and `/deps/where`, `farsight deps list|where`, a package is an impact seed, the
+   tsconfig-paths comment bug fixed (star aliases now resolve); **X** — **NX projects and tags**: `GraphNode.project`
+   on every node under a project root, `meta.projects` (tool nx · workspaces · none, tag dimensions `scope:` → domain,
+   `type:` → type, configurable in `farsight.config.json projects`), a project graph with project → project import
+   counts, `GET /api/projects[/<name>]`, `examples/nx-workspace/` (2 apps, 5 libs, an e2e, two journeys); **C** —
+   the **code map by project and package**: GROUP by project / domain / type, scope filters incl. *depends on*,
+   package cards in copper, *App and its related* and *Where is <package> included* views (`?view=app&project=` ·
+   `?view=package&package=`), inspector sections for project and package, the Map's *Band by: source · domain*.
+   Measured read-only on the reference app: 21 NX projects (3 apps · 17 libs · 1 e2e) all tagged, 32 packages (17
+   workspace, each tied to its project), ERP store seed reaches 12 of 18 journeys, the busiest table 17 of 18 and 45
+   screens, zero page errors. Dependabot's three alerts (example manifests) cleared in #30.
+   **Swarm round 2** (2026-10-04, same eight personas on the merged pass, reports outside the repo): 8 × TRIAL, fit
+   6.25 → 6.5; Map 6.8 → 7.0 · Journeys 6.75 · Portfolio 6.4 · Code map 3.9 → 4.9; the journey-level numbers now
+   agree across views for every persona, the blast radius is credited by every role, *Where is a package included*
+   was called the best panel in the product. One **regression** found by all eight: the Map takes the journey
+   nearest the viewport centre, not the one clicked (a wide journey opened at its fitted-width floor loses to its
+   neighbour) — fixed in `fix/map-round-2` together with the Affected mode's readability at board altitude (fit-to-
+   affected, a list with CSV/JSON), scope words on per-journey counts, the legend covering the toolbar, the zoom
+   anchor and first-notch tooltip, the stepper's feedback, Enter/`?`/`y`, pan bounds, and the code map's spec-file
+   boxes.
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -176,7 +220,22 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**Left open by the map-view and data-stores passes (2026-10-03), in order:**
+**Left open by map pass 2 (2026-10-04), in order:**
+
+1. **Land `fix/map-round-2`** (the round-2 blocker and its convergent findings; `_synthesis.md` in the private review
+   folder has the ranked list), then re-check the widest journey on 4477 by click, link and keys. Still open after it:
+   an export of the affected set for CI (a commit/PR seed with a deduplicated test list, `farsight-affected v1` once
+   frozen), PNG/PDF of the board, screen tabs and *Where is it included* in the URL, a file:line on screen cards, the
+   Tests page's *no source digest* warning on the cover, the word for `sql` stores in the business register.
+2. **Small things the lanes left:** the band label slips under the Affected bar on an already-framed street; the
+   edge cue can overlap a card's evidence chip at ×0.52; the Code lens makes no visible change at journey zoom; the
+   project and tag filters are not in the URL (group and view are); third-party packages in *App and its related* can
+   land behind the inspector; imports from test and story files are not read; Java Maven/Gradle packages; X's
+   project-dependency fold could read D's `imports` edges instead of re-scanning; `farsight-deps` is `v0`, not frozen.
+3. **Journeys defects the comparison surfaced:** the rows / ladder switch is undiscoverable; a journey opens on the
+   Sheet, where business readers give up; the *records* row per store once a journey touches two.
+
+**Left open by the map-view and data-stores passes (2026-10-03), in order (still valid):**
 
 1. **Run the pass swarm** on the dogfood server with the map on (one build, one sync): can a reader new to the
    reference app find a screen from the neighbourhood, say what it does and which stores it touches from the street,
