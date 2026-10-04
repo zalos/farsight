@@ -47,7 +47,7 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 | | |
 |---|---|
-| build | **`0.2.0`** (GitHub Release v0.2.0, 2026-10-04), workspace main after the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#40; `8ec6a5d` is the last feature merge — the code map's index and toolbar project picker) |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — the second release through the release-PR flow, close/reopen still needed without a `RELEASE_TOKEN`), workspace main after the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42; `8ec6a5d` is the last feature merge — the code map's index and toolbar project picker; #42 gave `perf` commits a *Performance* changelog section) |
 | tests | **939** — core 280 · work 59 · parsers 169 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 46 · server 231 · cli 56, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 190/190** (the `codemap-projects` and `codemap-toolbar` specs start their own two-source server) |
 | string/symbol lint | **1944 entries · 33 sprite symbols · 36 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
 | servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `8ec6a5d` on 2026-10-04 and re-synced through `POST /api/sync`. Check `lsof` before restarting or measuring on any port. |
