@@ -31,7 +31,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  GraphStore, buildIndex, stitchHttp, impactOf, IMPACT_MAX_HOPS,
+  GraphStore, buildIndex, stitchHttp, impactOf, IMPACT_MAX_HOPS, affectedReach, countedProblems, COUNT_SCOPES,
   type GraphIndex, type GraphMeta, type GraphNode, type GraphEdge, type ImpactOptions,
 } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
@@ -257,5 +257,53 @@ describe('GET /api/impact — refusals', () => {
     const r = await status(`/api/impact?node=${encodeURIComponent(TABLE)}&direction=sideways`);
     assert.equal(r.code, 400);
     assert.match(r.body.error, /upstream or downstream/);
+  });
+});
+
+describe('?reach=1 — the impact answer placed on the journeys (the Map\'s Affected mode)', () => {
+  const ROUTE = 'invoice-app::route::POST /invoices';
+  const ZOD = 'invoice-app::package::zod';
+  const reachOf = (id: string, hops = 2) => affectedReach(index, impactOf(index, id, { hops, tests: true }));
+
+  test('absent unless asked for, and over the wire the same fold as in process', async () => {
+    assert.equal((await api('/api/impact?node=' + encodeURIComponent(TABLE))).reach, undefined);
+    const body = await api('/api/impact?node=' + encodeURIComponent(TABLE) + '&hops=3&tests=1&reach=1');
+    const here = reachOf(TABLE, 3);
+    assert.deepEqual(body.reach.counted, here.counted);
+    assert.deepEqual(body.reach.screens, here.screens);
+    assert.equal(body.reach.hops, 3);
+  });
+
+  test('a route: the screens whose own path calls it meet it themselves (hop 0); a screen that does not is not reached', () => {
+    const r = reachOf(ROUTE);
+    const billing = r.screens.filter((s) => s.flowId === 'invoice-app::flow::billing-cycle').map((s) => [s.name, s.hop]);
+    assert.deepEqual(billing, [['New invoice', 0], ['Invoice list', 0]]);
+    assert.ok(!r.screens.some((s) => s.name === 'Discard draft'), 'the discard screen never calls it');
+    assert.deepEqual(r.calls.map((c) => [c.nodeId, c.hop]), [[ROUTE, 0]]);
+    assert.ok(r.journeys.every((j) => j.hop === 0 && j.by === ROUTE));
+  });
+
+  test('a package reaches its journeys through what imports it (hop 1), the journeys deps counts', () => {
+    const r = reachOf(ZOD);
+    assert.equal(r.journeys.length, 3);
+    assert.ok(r.journeys.every((j) => j.hop === 1));
+    assert.deepEqual(r.counted.journeys.breakdown, [{ key: 'count.part.reachDirect', n: 3 }]);
+  });
+
+  test('every count is a sound Counted over count.scope.affected whose parts are a partition by distance', () => {
+    assert.ok(COUNT_SCOPES.includes('count.scope.affected'));
+    for (const id of [TABLE, ROUTE, ZOD]) {
+      const r = reachOf(id, 3);
+      for (const [k, c] of Object.entries(r.counted)) {
+        assert.deepEqual(countedProblems(c, k), [], `${id} ${k}`);
+        assert.equal(c.scope, 'count.scope.affected');
+        assert.equal((c.breakdown ?? []).reduce((a, p) => a + p.n, 0), c.n, `${id} ${k} parts add up`);
+      }
+      // the tests are the impact panel's union for hops 1..budget, never a sum of per-hop counts
+      const report = impactOf(index, id, { hops: 3, tests: true });
+      const union = new Set(report.hops.flatMap((h) => h.nodes.flatMap((n) => (n.tests ?? []).map((t) => t.id))));
+      assert.equal(r.counted.tests.n, union.size);
+      assert.equal(r.counted.calls.bizUnit, undefined, 'the business lens prints no count of calls');
+    }
   });
 });

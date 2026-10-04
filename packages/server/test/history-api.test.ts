@@ -758,3 +758,18 @@ describe('/api/history/touching — the Map\'s Changes tab', () => {
     assert.equal((await get('/api/history/touching?repo=app')).status, 400);
   });
 });
+
+describe('/api/history/commit — a commit and the parts it touched (the Map\'s Affected mode)', () => {
+  test('a short sha finds the commit; its parts are the graph parts in the files it changed', async () => {
+    const body = await api('/api/history/commit?sha=' + sha.c2!.slice(0, 7));
+    same('the full sha', body.sha, sha.c2);
+    same('its repository', body.repo, 'app');
+    same('its subject', body.subject, 'two');
+    same('matched by its file', body.parts, [{ node: 'app::src/two.ts::GET /two', how: 'file' }]);
+  });
+  test('an unknown sha is a 404, a missing one a 400, never a 500', async () => {
+    assert.equal((await get('/api/history/commit?sha=ffffffff')).status, 404);
+    assert.equal((await get('/api/history/commit')).status, 400);
+    assert.equal((await get('/api/history/commit?sha=not-a-sha')).status, 404);
+  });
+});

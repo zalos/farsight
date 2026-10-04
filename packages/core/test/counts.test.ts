@@ -45,6 +45,8 @@ function assertSound(v: unknown, label: string): number {
 }
 
 test('every scope a count may carry is in the catalog, defined, and printable in the business lens', () => {
+  // the Map's Affected mode (lane I) added one scope: an impact answer placed on the journeys
+  assert.ok(COUNT_SCOPES.includes('count.scope.affected'));
   for (const k of COUNT_SCOPES) {
     const e = STRINGS[k];
     assert.ok(e, `${k} is not in the catalog`);

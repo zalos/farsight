@@ -182,6 +182,9 @@ export function parseRoute() {
     x: q.get('x'),
     y: q.get('y'),
     card: q.get('card'),
+    // the Map's Affected mode (lane I): the seed the board is dimmed around and how far out it asks
+    affected: q.get('affected'),
+    ahops: q.get('ahops') ? +q.get('ahops') : null,
     raw: location.hash,
   };
 }

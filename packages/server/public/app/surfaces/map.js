@@ -28,6 +28,10 @@ import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip 
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, MODE_ORDER } from '../lib/map-model.js';
 import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
+import {
+  onAffectedChange, affectedOn, affectedSpec, affectedHops, affectedParams, setAffected, setAffectedHops, clearAffected, resetAffected,
+  paintDistrict, affectedBarHtml, screenChipReach,
+} from './map-affected.js';
 import { shareLink } from '../share.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
@@ -196,6 +200,8 @@ export function mountMap(route, el) {
     MAP.chromeRO.observe(chrome);
   }
   MAP.stage.style.setProperty('--map-chrome-h', chrome.offsetHeight + 'px');
+  // the Affected mode (lane I): the bar, the dimming, the card and the property follow it
+  MAP.offAffected = onAffectedChange(onAffected);
   MAP.stage.addEventListener('click', onEdgeClick);
   MAP.board.addEventListener('click', onBoardClick);
   MAP.board.addEventListener('keydown', onBoardKey);
@@ -258,6 +264,8 @@ export function mapUpdate(route) {
 /** Leave: stop every listener, every fetch's effect and the property. @group Map */
 export function unmountMap() {
   MAP.gen++;
+  if (MAP.offAffected) { MAP.offAffected(); MAP.offAffected = null; }
+  resetAffected();
   closeCard();
   closeProperty({ keepHash: true });
   if (MAP.cv) MAP.cv.destroy();
@@ -347,6 +355,7 @@ function routeFlow(route) { return route && route.param ? decode(route.param) : 
 /** Go where the route says: a journey's street, or one of its screens. */
 async function applyRouteTarget(route, animate) {
   if (!MAP.world || !MAP.designs) return;
+  routeAffected(route);
   const flow = routeFlow(route);
   const node = route && route.node;
   const view = routeView(route);
@@ -403,6 +412,8 @@ function writeHash(flow, node) {
     node: node || null, plumb: MAP.plumb ? '1' : null,
     z: v ? v.z : null, x: v ? v.x : null, y: v ? v.y : null,
     card: !node && MAP.card ? MAP.card.spec : null,
+    // the Affected mode is part of the picture (lane I)
+    ...affectedParams(),
   });
   if (h !== location.hash) {
     history.replaceState(null, '', h);
@@ -831,7 +842,9 @@ function chromeHtml() {
     + tool('full', 'map.tool.full', esc(t('map.tool.full')))
     + tool('link', 'map.tool.link', esc(t('map.tool.link')))
     + tool('legend', 'map.tool.legend', '?', MAP.legend ? ' on map-tb-legend' : ' map-tb-legend')
-    + '</div>';
+    + '</div>'
+    // the Affected mode's bar, a row of its own under the toolbar (lane I)
+    + affectedBarHtml();
 }
 function redrawChrome() {
   const c = MAP.stage && MAP.stage.querySelector('.map-chrome');
@@ -904,6 +917,8 @@ function onChromeClick(e) {
     case 'fit': mapFit(); break;
     case 'full': toggleFull(); break;
     case 'link': mapCopyLink(); break;
+    case 'aff-clear': clearAffected(); break;
+    case 'aff-hops': setAffectedHops(+b.dataset.h); break;
     default:
   }
 }
@@ -1161,6 +1176,7 @@ function renderDistrict(id) {
   el.classList.toggle('loaded', !!(j && j.model));
   sizeDistrict(id);
   tabDistrict(el);
+  paintDistrict(el, id, j && j.model);
   // a district drawn before it is placed has no size yet: placeDistricts() folds it once it has one
   if (el.style.width) foldCoverChips(el);
   if (had) focusQuiet(el.querySelector(had));
@@ -1618,15 +1634,17 @@ function drawCard() {
     + store
     + (code ? '<div class="sent map-code">' + esc(code) + '</div>' : '')
     + '<div class="where"><span class="hud-label"' + tipAttrs({ key: 'map.card.on', noFocus: true }) + '>' + esc(t('map.card.on')) + '</span>'
-    + (on.length ? on.map((s) => '<button type="button" class="map-chip go" data-go="' + s.index + '" data-flow="' + esc(tg.flow) + '">' + esc(s.name) + '</button>').join('')
+    + (on.length ? on.map((s) => '<button type="button" class="map-chip go" data-go="' + s.index + '" data-flow="' + esc(tg.flow) + '">' + esc(s.name) + screenChipReach(tg.flow, s.id) + '</button>').join('')
       : '<span class="map-chip k-absent">' + esc(t('map.card.onNone')) + '</span>') + '</div>'
-    + (links.length ? '<div class="acts">' + links.slice(0, 2).map(([h, w], i) => '<a class="map-tb' + (i === 0 ? ' on' : '') + '" href="' + esc(h) + '">' + esc(w) + '</a>').join('') + '</div>' : '');
+    + '<div class="acts">' + (nodeId ? '<button type="button" class="map-tb aff' + (affectedSpec() === nodeId ? ' on' : '') + '" data-act="affected"' + tipAttrs({ key: 'map.affected.action', noFocus: true }) + '>' + esc(t('map.affected.action')) + '</button>' : '')
+    + links.slice(0, 2).map(([h, w]) => '<a class="map-tb" href="' + esc(h) + '">' + esc(w) + '</a>').join('') + '</div>';
   box.setAttribute('aria-label', name);
   box.hidden = false;
   box.onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.act === 'close') { closeCard(); return; }
+    if (b.dataset.act === 'affected') { setAffected(nodeId, { origin: { flow: tg.flow } }); return; }
     if (b.dataset.go != null) { const f = b.dataset.flow, i = +b.dataset.go; closeCard(); openProperty(f, i); }
   };
   // beside its node, kept on screen
@@ -1670,6 +1688,8 @@ function propCtx() {
     onClose: () => closeProperty(),
     onStep: (delta) => stepProperty(delta),
     onOpenScreen: (index) => { if (MAP.prop) openProperty(MAP.prop.flow, index); },
+    // the property's seed actions — its head, its Work and Changes rows (lane I)
+    onAffected: (spec) => setAffected(spec, { origin: p ? { flow: p.flow } : null }),
   };
 }
 /**
@@ -1934,6 +1954,8 @@ export function mapOpen() { return !!MAP.stage; }
  */
 export function mapEscape() {
   if (!MAP.stage) return false;
+  // the Affected mode leaves before anything else (lane I)
+  if (affectedOn()) { clearAffected(); return true; }
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }
   if (MAP.legend) { closeLegend(); return true; }
@@ -2013,6 +2035,30 @@ function designIdOf(nodeId) {
   }
   return null;
 }
+
+// ── the Affected mode (lane I) — surfaces/map-affected.js holds it, the board follows ──
+/** The link names a mode (`?affected=<seed>&ahops=N`) or none: the mode follows the link it was opened from. */
+function routeAffected(route) {
+  const spec = route && route.affected;
+  if (spec) setAffected(spec, { hops: route.ahops });
+  else if (affectedOn() && route && route.raw && !/[?&]affected=/.test(route.raw)) clearAffected();
+}
+/** The mode moved: the bar, every district, the open card and the open screen redraw, and the link follows. */
+function onAffected() {
+  if (!MAP.stage) return;
+  redrawChrome();
+  for (const d of MAP.nb.districts || []) {
+    const el = districtEl(d.id);
+    const j = MAP.journeys.get(d.id);
+    if (el) { paintDistrict(el, d.id, j && j.model); if (el.style.width) foldCoverChips(el); }
+  }
+  if (MAP.card) drawCard();
+  if (MAP.prop && MAP.prop.handle && MAP.prop.handle.update) MAP.prop.handle.update(propCtx());
+  if (MAP.prop) { const sc = propScreen(); if (sc) writeHash(MAP.prop.flow, sc.id); }
+  else if (MAP.cv) writeHash(MAP.cv.level() === 'st' ? MAP.focus : null, null);
+}
+/** The distance the mode is asked at, for the e2e and the keys. @group Map */
+export function mapAffectedHops() { return affectedOn() ? affectedHops() : null; }
 
 /** The node the explore card is open on — what `b` asks *what uses this?* about on the map. @group Map */
 export function mapSelected() {

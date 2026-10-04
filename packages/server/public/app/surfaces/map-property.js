@@ -31,10 +31,17 @@ import {
   jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml,
 } from './journeys.js';
 import { propertyModel } from '../lib/map-property-model.js';
+import { affectedOn, affectedSpec, affectedTabHtml, affectedTabCount, journeyChipReach, pickAffected } from './map-affected.js';
 
 /** The rail's tabs, in order. */
 export const MAP_PROP_TABS = ['overview', 'gates', 'apis', 'ux', 'tests', 'route', 'work', 'changes'];
-const TAB_KEY = (tab) => 'map.prop.tab.' + tab;
+const TAB_KEY = (tab) => (tab === 'affected' ? 'map.affected.tab' : 'map.prop.tab.' + tab);
+/** The tabs on screen: the eight, and the Affected tab while the board is dimmed around something (lane I). */
+function tabsNow() { return affectedOn() ? MAP_PROP_TABS.concat(['affected']) : MAP_PROP_TABS; }
+/** A row's seed action: dim the board around this work item or commit (lane I). */
+function affBtn(spec) {
+  return '<button type="button" class="api-chip mp-affbtn' + (affectedSpec() === spec ? ' on' : '') + '" data-act="affected" data-seed="' + esc(spec) + '"' + defAttrs('map.affected.actionShort') + '>' + esc(t('map.affected.actionShort')) + '</button>';
+}
 const EV_KEY = { 'spec-backed': 'map.prop.ev.specBacked', implied: 'map.prop.ev.implied', declared: 'map.prop.ev.declared', 'not built': 'journey.absent.notBuilt' };
 
 // one answer per screen per sync for the two lazy tabs, shared by every mount
@@ -488,7 +495,7 @@ function workRowsHtml(pm, st, brief) {
   if (w.failed) return lineRow('map.prop.work.failed');
   if (!w.items.length) return absentRow('noneIndexed');
   return capRows(brief ? 'ov-work' : 'work', w.items.map((it) => row(sym('work') + (biz() ? '' : '<b class="mp-key">' + esc(it.key || '') + '</b> ') + esc(it.title || ''),
-    brief ? '' : esc(sourceName(it.source)), stateHtml(it.state), null)), w.counted, '/api/work/links')
+    brief ? '' : esc(sourceName(it.source)), stateHtml(it.state) + (brief ? '' : affBtn('work:' + (it.key || it.id))), null)), w.counted, '/api/work/links')
     + (brief ? '' : '<div class="mp-more"><a href="#/work">' + esc(t('nav.work')) + '</a></div>');
 }
 
@@ -569,7 +576,7 @@ function commitRow(x) {
   ].filter(Boolean).join(' · ');
   const how = parts.some((p) => p.how === 'lines') ? 'lines' : 'file';
   return row(clampHtml('commit-' + x.sha, subject), sub,
-    '<span class="api-chip"' + defAttrs('map.prop.changes.how.' + how) + '>' + esc(t('map.prop.changes.how.' + how)) + '</span>',
+    '<span class="api-chip"' + defAttrs('map.prop.changes.how.' + how) + '>' + esc(t('map.prop.changes.how.' + how)) + '</span>' + (x.sha ? affBtn('commit:' + String(x.sha).slice(0, 12)) : ''),
     { kind: 'node', id: (x.parts && x.parts[0] && x.parts[0].node) || '' });
 }
 
@@ -611,10 +618,10 @@ function changesHtml(pm, st) {
 
 function tabsHtml(pm, st) {
   const count = (tab) => {
-    const c = tab === 'work' ? (st.work && st.work.counted) || null : pm.counts[tab];
-    return c ? countNum(c, tab === 'work' ? '/api/work/links' : '/api/journey') : '';
+    const c = tab === 'work' ? (st.work && st.work.counted) || null : tab === 'affected' ? affectedTabCount() : pm.counts[tab];
+    return c ? countNum(c, tab === 'work' ? '/api/work/links' : tab === 'affected' ? '/api/impact' : '/api/journey') : '';
   };
-  return MAP_PROP_TABS.map((tab) => {
+  return tabsNow().map((tab) => {
     const on = tab === st.tab;
     const n = count(tab);
     return '<button class="mp-tab' + (on ? ' on' : '') + '" role="tab" id="mp-tab-' + tab + '" data-tab="' + tab + '" aria-selected="' + on + '" aria-controls="mp-body" tabindex="' + (on ? '0' : '-1') + '"'
@@ -631,13 +638,15 @@ function bodyHtml(pm, st) {
     case 'route': return routeHtml(pm);
     case 'work': return workHtml(pm, st);
     case 'changes': return changesHtml(pm, st);
+    case 'affected': return affectedTabHtml(st.ctx);
     default: return overviewHtml(pm, st);
   }
 }
 
 /** The other journeys this screen is in: three chips, then one that opens the rest in place, so the bar never outgrows the stage. */
 function alsoChipsHtml(pm) {
-  const chip = (f) => '<a class="api-chip mp-alsochip" href="#/map/' + encodeURIComponent(f.id) + '?node=' + encodeURIComponent(pm.node.id) + '">' + esc(biz() ? plainWords(f.name) || f.name : f.name) + '</a>';
+  // while the board is dimmed around something, each journey says whether its path reaches it (lane I)
+  const chip = (f) => '<a class="api-chip mp-alsochip" href="#/map/' + encodeURIComponent(f.id) + '?node=' + encodeURIComponent(pm.node.id) + (affectedOn() ? '&affected=' + encodeURIComponent(affectedSpec()) : '') + '">' + esc(biz() ? plainWords(f.name) || f.name : f.name) + journeyChipReach(f.id) + '</a>';
   const all = pm.alsoIn;
   if (all.length <= 3) return all.map(chip).join('');
   const open = VIEW.open.has('also');
@@ -691,6 +700,7 @@ function headHtml(pm, ctx) {
     + '<nav class="mp-crumb" aria-label="' + esc(t('map.prop.level')) + '"><span class="hud-label">' + esc(t('map.prop.crumb')) + '</span><span class="sep">›</span>'
     + '<span>' + esc(j.name || '') + '</span><span class="sep">›</span><b>' + esc(pm.screen.name || '') + '</b>'
     + (biz() || !pm.tabs.route.route ? '' : '<span class="sep">·</span>' + code(pm.tabs.route.route)) + '</nav>'
+    + (pm.node ? '<button type="button" class="btn mp-affact' + (affectedSpec() === pm.node.id ? ' on' : '') + '" data-act="affected" data-seed="' + esc(pm.node.id) + '"' + defAttrs('map.affected.action') + '>' + esc(t('map.affected.action')) + '</button>' : '')
     + '<span class="hud-label mp-level"' + defAttrs('map.prop.level') + '>' + esc(t('map.prop.level')) + '</span>';
 }
 
@@ -727,6 +737,7 @@ export function mountMapProperty(host, ctx) {
   function drawBody() { VIEW = st; const el = host.querySelector('.mp-body'); if (el && st.pm) { el.innerHTML = bodyHtml(st.pm, st); el.setAttribute('aria-labelledby', 'mp-tab-' + st.tab); } }
   function render() {
     build();
+    if (st.tab === 'affected' && !affectedOn()) st.tab = 'overview';
     VIEW = st;
     const pm = st.pm;
     if (!pm) { host.innerHTML = '<div class="mp mp-empty">' + absentRow('noneIndexed') + '</div>'; return; }
@@ -741,7 +752,7 @@ export function mountMapProperty(host, ctx) {
     fetchLazy();
   }
   function setTab(tab, focus) {
-    if (!MAP_PROP_TABS.includes(tab)) return;
+    if (!tabsNow().includes(tab)) return;
     st.tab = tab;
     drawTabs();
     drawBody();
@@ -764,6 +775,9 @@ export function mountMapProperty(host, ctx) {
       return;
     }
     const c = st.ctx;
+    // a seed picked here dims the board around it, and the tab that answers opens (lane I)
+    if (act.dataset.act === 'affected' && c.onAffected) { st.tab = 'affected'; c.onAffected(act.dataset.seed); return; }
+    if (act.dataset.act === 'aff-pick') { pickAffected(Number(act.dataset.i)); return; }
     if (act.dataset.act === 'back' && c.onClose) c.onClose();
     else if (act.dataset.act === 'step' && c.onStep) c.onStep(Number(act.dataset.d));
     else if (act.dataset.act === 'go' && c.onOpenScreen) c.onOpenScreen(Number(act.dataset.i));
@@ -771,12 +785,13 @@ export function mountMapProperty(host, ctx) {
   function onKey(e) {
     const tab = e.target.closest && e.target.closest('.mp-tab');
     if (!tab) return;
-    const i = MAP_PROP_TABS.indexOf(st.tab);
+    const tabs = tabsNow();
+    const i = tabs.indexOf(st.tab);
     let next = null;
-    if (e.key === 'ArrowRight') next = MAP_PROP_TABS[(i + 1) % MAP_PROP_TABS.length];
-    else if (e.key === 'ArrowLeft') next = MAP_PROP_TABS[(i - 1 + MAP_PROP_TABS.length) % MAP_PROP_TABS.length];
-    else if (e.key === 'Home') next = MAP_PROP_TABS[0];
-    else if (e.key === 'End') next = MAP_PROP_TABS[MAP_PROP_TABS.length - 1];
+    if (e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length];
+    else if (e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length];
+    else if (e.key === 'Home') next = tabs[0];
+    else if (e.key === 'End') next = tabs[tabs.length - 1];
     if (!next) return;
     e.preventDefault();
     setTab(next, true);
