@@ -21,6 +21,7 @@
 import { WORK_HUD_STRINGS } from './strings-work-hud.js';
 import { MAP_STRINGS } from './strings-map.js';
 import { DEPS_STRINGS } from './strings-deps.js';
+import { CONFIG_STRINGS } from './strings-config.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -92,6 +93,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...MAP_STRINGS,
   // the dependencies pass's words live in strings-deps.ts (surf.kind.package, count.unit.packages, importers, journeys reached)
   ...DEPS_STRINGS,
+  // the config files pass's words live in strings-config.ts (count.unit.configFiles and its parts)
+  ...CONFIG_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
@@ -2068,7 +2071,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'count.scope.node': same('for this part alone',
     'What the number beside it counts over: this one part of the code, not the journey or the screen it sits in.'),
   'count.scope.source': same('in this source',
-    'What the number beside it counts over: everything one source holds at one test level, whether or not it reaches any journey. A journey’s own number counts only the cases that reach it, so it is smaller.'),
+    'What the number beside it counts over: everything one source holds, whether or not it reaches any journey — for tests, at one test level. A journey’s own number counts only the cases that reach it, so it is smaller.'),
   'count.scope.selection': same('in the sources and level selected',
     'What the number beside it counts over: the sources the scope filter selects, at the test level the page is filtered to. Change either filter and every number on the page follows.'),
   'count.scope.workspace': same('across every source in scope',

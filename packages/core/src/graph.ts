@@ -705,6 +705,21 @@ export interface Flow {
   edgeIds: string[];
 }
 
+/**
+ * The farsight.config.json files one source holds and what came of them
+ * (docs/proposals/journey-organisation-and-config-files.md §5.3). The root file speaks for the
+ * whole source; a nested (scoped) file only for the code under its folder, with its paths
+ * relative to that folder.
+ */
+export interface ConfigMeta {
+  /** root first, then by folder depth, then by path; `fields` = the keys the file gave, `ignored` = the ones not applied */
+  files: { path: string; dir: string; root: boolean; fields: string[]; ignored: string[] }[];
+  /** two files said different things about one key; `kept` is the file whose word stands */
+  conflicts: { kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag'; key: string; files: string[]; kept: string }[];
+  /** unreadable files, ignored root-only fields, paths that left the source */
+  notes: string[];
+}
+
 /** What a language adapter returns for one repo. */
 export interface GraphFragment {
   repo: string;
@@ -715,9 +730,9 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
-  /** true when a farsight.config.json at the repo root was applied by ingestRepo */
+  /** true when a farsight.config.json (at the root or nested) was applied by ingestRepo */
   configApplied?: boolean;
 }

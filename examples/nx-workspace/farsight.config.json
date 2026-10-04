@@ -5,5 +5,9 @@
       "domain": { "ops": "Operations" }
     },
     "graphFile": "nx-project-graph.json"
+  },
+  "glossary": {
+    "formatMoney": { "label": "Format an amount", "description": "Writes an amount of money the way the business reads it." },
+    "InvoicesPage": { "label": "Invoices", "description": "A list of invoices." }
   }
 }

@@ -13,10 +13,11 @@
  * becomes a sentence in `meta.tests.blindSpots`.
  */
 import { readFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { parseSync } from 'oxc-parser';
 import type { GraphFragment, GraphNode, GraphEdge, TestRef, TestRun, TestsMeta, TestsConfigBlock, TestReportConfig } from '@farsight/core';
-import { loadConfig } from '@farsight/core';
+import { stringList } from '@farsight/core';
+import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 import { walk, isNode, lineIndex, type AstNode } from '../walk.js';
 import { collectFiles } from '../shared/files.js';
 import { createAliasResolver } from '../aliases.js';
@@ -79,9 +80,32 @@ export function foldGaps(gaps: TestsGap[]): string[] {
   return out;
 }
 
-/** The `tests` block of a repo's farsight.config.json, or nothing. */
-export function testsConfigOf(repoRoot: string): TestsConfigBlock | undefined {
-  return loadConfig(join(repoRoot, 'farsight.config.json'))?.tests;
+/** The `tests` block of a repo's farsight.config.json files (the root's, with every nested file's rebased and unioned), or nothing. */
+export function testsConfigOf(repoRoot: string, options: IngestOptions = {}): TestsConfigBlock | undefined {
+  return loadWorkspaceConfig(repoRoot, options).merged.tests;
+}
+
+/** The blocks one level names: one, or one per config file that gave the level. */
+export function levelBlocks(config: TestsConfigBlock, level: TestRef['level']): TestReportConfig[] {
+  const v = config[level];
+  return (Array.isArray(v) ? v : v ? [v] : []).filter((b): b is TestReportConfig => !!b && typeof b === 'object');
+}
+
+/**
+ * The html report a run links to: the block's only one, or — when a block names several — the one
+ * sharing the longest folder with the results file that produced the run.
+ */
+export function reportLinkOf(block: TestReportConfig, resultsPath: string): string | undefined {
+  const reports = stringList(block.report);
+  if (reports.length <= 1) return reports[0];
+  const shared = (a: string) => {
+    const x = a.split('/').slice(0, -1);
+    const y = resultsPath.split('/').slice(0, -1);
+    let i = 0;
+    while (i < x.length && i < y.length && x[i] === y[i]) i++;
+    return i;
+  };
+  return [...reports].sort((a, b) => shared(b) - shared(a))[0];
 }
 
 /** The claim globs for a repo: the defaults plus whatever its config adds. */
@@ -145,9 +169,9 @@ function testId(repo: string, file: string, fullTitle: string, seen: Set<string>
  * Discover + read the repo's tests into the fragment (in place). Never throws;
  * unreadable reports and unmatched claims are reported, not fatal.
  */
-export function applyTests(fragment: GraphFragment, repoRoot: string, options: IngestOptions = {}): { errors: string[]; meta: TestsMeta } {
+export function applyTests(fragment: GraphFragment, repoRoot: string, options: IngestOptions = {}, workspace?: WorkspaceConfig): { errors: string[]; meta: TestsMeta } {
   const repo = fragment.repo;
-  const config = testsConfigOf(repoRoot);
+  const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged.tests;
   const globs = testGlobsOf(config);
   const errors: string[] = [];
   const gaps: TestsGap[] = [];
@@ -340,11 +364,10 @@ export function importReports(
   // which prior evidence is replaced (03 §3.6) and which globs found nothing
   const planned: { level: TestRef['level']; kind: 'results' | 'coverage'; block: TestReportConfig; glob: string; files: string[] }[] = [];
   for (const level of LEVELS) {
-    const block: TestReportConfig | undefined = config[level];
-    if (!block) continue;
-    for (const [kind, glob] of [['results', block.results], ['coverage', block.coverage]] as const) {
-      if (!glob) continue;
-      planned.push({ level, kind, block, glob, files: findReports(repoRoot, glob) });
+    for (const block of levelBlocks(config, level)) {
+      for (const kind of ['results', 'coverage'] as const) {
+        for (const glob of stringList(block[kind])) planned.push({ level, kind, block, glob, files: findReports(repoRoot, glob) });
+      }
     }
   }
   // re-importing the same reports must not double anything up: drop the run-level
@@ -485,7 +508,7 @@ function clearPriorImport(
   const runIds = new Set<string>();
   const reportPaths = new Set<string>();
   for (const { level, kind, block, files } of planned) {
-    if (kind === 'results' && block.report) reportPaths.add(block.report);
+    if (kind === 'results') for (const r of stringList(block.report)) reportPaths.add(r);
     for (const abs of files) {
       const path = relative(repoRoot, abs);
       if (kind === 'coverage') runIds.add(runNodeId(fragment.repo, level, path));
@@ -591,7 +614,7 @@ function attachRuns(
     freshness,
     stale: freshness === 'changed',
     ...(changedBy ? { changedBy } : {}),
-    ...(block.report ? { report: block.report } : { report: report.path }),
+    report: reportLinkOf(block, report.path) ?? report.path,
   };
 
   // rows by template node, then by project — every row of one template is one run
@@ -706,7 +729,7 @@ function observeCoverage(
         ...(report.sourceCommit ? { commit: report.sourceCommit } : {}),
         freshness, stale: freshness === 'changed',
         ...(changedBy ? { changedBy } : {}),
-        ...(block.report ? { report: block.report } : { report: report.path }),
+        report: reportLinkOf(block, report.path) ?? report.path,
       },
     },
   };

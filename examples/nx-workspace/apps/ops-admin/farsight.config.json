@@ -1,0 +1,7 @@
+{
+  "design": [{ "manifest": "docs/design/screens.json", "name": "Operations console" }],
+  "glossary": {
+    "RunReport": { "label": "Overnight run report", "description": "How much the overnight run collected today." }
+  },
+  "tooling": ["scripts/**"]
+}
