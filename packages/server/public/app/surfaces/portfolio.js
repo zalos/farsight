@@ -18,14 +18,17 @@ import { storiesCatalogueHtml } from '../stories.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapEnabled } from './map.js';
+import { loadJourneyTree } from '../lib/journeys-tree.js';
+import { treeFrom, journeysInOrder } from '../lib/journeys-model.js';
+import { jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 
 /** A catalog word's tip, or nothing when it has no define. */
 function tipOf(key) { return key && def(key) ? defAttrs(key) : ''; }
 
 /** The flow rows, keyed by node id, as the endpoints fill them in. */
 let ROWS = new Map();
-/** The design rows the table is drawn from, kept so a register flip redraws without re-asking. */
-let FLOWS = [];
+/** The journeys organised persona → group (lib/journeys-tree.js), the order the tables are drawn in. */
+let TREE = null;
 let PRODUCT_SURFACES = [];
 /**
  * Which load the page is showing. Every scope change starts a new one, and the
@@ -114,14 +117,15 @@ async function load(gen) {
   const design = await fetch('/api/design?scope=' + encodeURIComponent(scopeParam())).then((r) => r.json());
   if (gen !== GEN) return;
   const sources = design.designs || design.sources || (Array.isArray(design) ? design : []);
-  const flows = [];
   const surfaces = [];
-  for (const d of Array.isArray(sources) ? sources : []) {
-    for (const f of d.flows || []) flows.push({ ...f, repo: d.repo });
-    for (const s of d.surfaces || []) surfaces.push(s);
-  }
+  for (const d of Array.isArray(sources) ? sources : []) for (const s of d.surfaces || []) surfaces.push(s);
+  // the tables follow the organised tree: persona → group → journeys, the order the manifests declare
+  let tree = null;
+  try { tree = (await loadJourneyTree(sources)).tree; } catch { tree = treeFrom(sources); }
+  if (gen !== GEN) return;
+  const flows = journeysInOrder(tree).map((x) => x.row);
   ROWS = new Map(flows.map((f) => [f.nodeId, { flow: f }]));
-  FLOWS = flows; PRODUCT_SURFACES = surfaces;
+  TREE = tree; PRODUCT_SURFACES = surfaces;
   render();
   // the expensive per-flow facts, one flow at a time so the table fills in order
   for (const f of flows) {
@@ -169,49 +173,29 @@ async function fill(f, gen) {
   ROWS.set(f.nodeId, row);
 }
 
-/** Flows grouped by the persona the manifest names, or by their screen ids when it does not. */
-function grouped(flows) {
-  const byPersona = new Map();
-  let derived = false;
-  for (const f of flows) {
-    let key = f.persona;
-    if (!key) {
-      // the screen ids of one product area share a prefix (SCR-07, SCR-14c)
-      const prefixes = [...new Set((f.screens || []).map((s) => String(s).split('-')[0]).filter(Boolean))];
-      key = prefixes.length === 1 ? prefixes[0] : '';
-      if (key) derived = true;
-    }
-    const k = key || t('portfolio.noPersona');
-    if (!byPersona.has(k)) byPersona.set(k, []);
-    byPersona.get(k).push(f);
-  }
-  return { groups: [...byPersona.entries()], derived };
-}
-
 function render() {
-  const flows = FLOWS, surfaces = PRODUCT_SURFACES;
+  const surfaces = PRODUCT_SURFACES;
   const body = document.getElementById('pf-body');
   if (!body) return;
-  // where a reader starts: of the flows nothing else requires, the one that covers
-  // the most of the product — and never one with nothing built behind it, which
-  // would open on a journey that cannot be walked
-  const entries = flows.filter((f) => !(f.requires || []).length);
-  const pinnedId = (entries.filter((f) => (f.built || 0) > 0)
-    .sort((a, b) => (b.total || 0) - (a.total || 0))[0] || entries[0] || flows[0] || {}).nodeId;
-  const { groups, derived } = grouped(flows);
+  const tree = TREE || { personas: [], derived: false };
   let html = '';
-  if (derived) html += '<p class="set-note">' + esc(t('portfolio.personaDerived')) + '</p>';
-  for (const [persona, rows] of groups) {
-    html += '<div class="set-sec"><h2>' + esc(persona) + '</h2>'
-      + '<table class="src-table pf-table"><thead><tr>'
-      // every column header carries its own define, on this page: the operations
-      // column's definition used to exist only on the grammar page, three clicks
-      // away, and it is the one a reader puts in a deck (visual swarm 2026-09-24)
-      + ['flow', 'screens', 'api', 'tested', 'erp', 'owner'].map((c) => '<th' + tipOf('portfolio.col.' + c) + '>' + esc(t('portfolio.col.' + c)) + '</th>').join('')
-      + '</tr></thead><tbody>'
-      + rows.slice().sort((a, b) => (a.nodeId === pinnedId ? -1 : b.nodeId === pinnedId ? 1 : a.name.localeCompare(b.name)))
-        .map((f) => rowHtml(f, f.nodeId === pinnedId)).join('')
-      + '</tbody></table></div>';
+  if (tree.derived) html += '<p class="set-note">' + esc(t('portfolio.personaDerived')) + '</p>';
+  // one table per persona → group, in the tree's order with its pin — the front door's order
+  const head = '<table class="src-table pf-table"><thead><tr>'
+    // every column header carries its own define, on this page: the operations
+    // column's definition used to exist only on the grammar page, three clicks
+    // away, and it is the one a reader puts in a deck (visual swarm 2026-09-24)
+    + ['flow', 'screens', 'api', 'tested', 'erp', 'owner'].map((c) => '<th' + tipOf('portfolio.col.' + c) + '>' + esc(t('portfolio.col.' + c)) + '</th>').join('')
+    + '</tr></thead><tbody>';
+  for (const p of tree.personas) {
+    html += '<div class="set-sec pf-persona" data-persona="' + esc(p.id) + '"><h2>' + esc(jrnPersonaName(p))
+      + ' <span class="pf-count">' + jrnOrgCountsHtml(p.counts) + '</span></h2>';
+    const heads = p.groups.length > 1;
+    for (const g of p.groups) {
+      if (heads) html += '<h3 class="pf-group hud-label" data-group="' + esc(g.id) + '">' + esc(jrnGroupName(g)) + ' <span class="pf-count">' + jrnOrgCountsHtml(g.counts) + '</span></h3>';
+      html += head + g.journeys.map((f) => rowHtml(ROWS.has(f.nodeId) ? ROWS.get(f.nodeId).flow : f, !!f.pinned)).join('') + '</tbody></table>';
+    }
+    html += '</div>';
   }
   if (surfaces.length) {
     html += '<div class="set-sec"><h2>' + esc(t('portfolio.surfaces')) + '</h2><table class="src-table pf-table"><tbody>'

@@ -26,9 +26,17 @@ function getter(graphById) {
  * a source, first the journeys that **contain** another (every screen of a
  * smaller one is one of theirs), then by name. `workByFlow` is optional — a Map
  * or object of `/api/work/flow/<id>` answers keyed by flow node id.
+ *
+ * `tree` is optional — the journeys organised persona → group (`/api/journeys`
+ * or lib/journeys-model.js `treeFrom()`). With it every district carries where
+ * it sits: `personaIds` (in the tree's persona order), `groupId` and `order`
+ * under its first persona, and `places` — one `{ persona, group, rank }` per
+ * persona, `rank` its position in that persona's list (group, then journey
+ * order) — which the *Band by: persona* layout reads. The model also hands on
+ * `personaOrder` and the persona and group names (`personas`, id → name).
  * @group Map
  */
-export function neighbourhoodModel(designs, workByFlow) {
+export function neighbourhoodModel(designs, workByFlow, tree) {
   const work = getter(workByFlow);
   const rows = [];
   const seen = new Set();
@@ -60,7 +68,46 @@ export function neighbourhoodModel(designs, workByFlow) {
   rows.sort((a, b) => (bandOrder.indexOf(a.repo || '') - bandOrder.indexOf(b.repo || ''))
     || (Number(isContainer.get(b.id)) - Number(isContainer.get(a.id)))
     || a.name.localeCompare(b.name));
-  return { districts: rows.map((r, index) => ({ ...r, index, container: !!isContainer.get(r.id) })) };
+  const at = placesFromTree(tree);
+  const districts = rows.map((r, index) => {
+    const places = at.places.get(r.id) || [];
+    return {
+      ...r, index, container: !!isContainer.get(r.id),
+      personaIds: places.map((x) => x.persona),
+      groupId: places.length ? places[0].group : null,
+      order: places.length ? places[0].order : null,
+      places,
+    };
+  });
+  return { districts, personaOrder: at.personaOrder, personas: at.personas, groups: at.groups };
+}
+
+/**
+ * Where each journey sits in the organised tree: flow node id → `[{ persona,
+ * group, order, rank }]` in persona order, plus the persona order and names.
+ * An empty answer without a tree.
+ * @group Map
+ */
+export function placesFromTree(tree) {
+  const places = new Map();
+  const personaOrder = [];
+  const personas = new Map();
+  const groups = new Map();
+  for (const p of (tree && tree.personas) || []) {
+    personaOrder.push(p.id);
+    // a trailing bucket (`key`) is named by the surface, in the register on screen
+    personas.set(p.id, p.key ? '' : p.name || '');
+    let rank = 0;
+    for (const g of p.groups || []) {
+      groups.set(p.id + '/' + g.id, g.key ? '' : g.name || '');
+      for (const j of g.journeys || []) {
+        if (!places.has(j.nodeId)) places.set(j.nodeId, []);
+        const list = places.get(j.nodeId);
+        if (!list.some((x) => x.persona === p.id)) list.push({ persona: p.id, group: g.id, order: typeof j.order === 'number' ? j.order : null, rank: rank++ });
+      }
+    }
+  }
+  return { places, personaOrder, personas, groups };
 }
 
 /**
@@ -81,12 +128,42 @@ export function neighbourhoodModel(designs, workByFlow) {
  * The band a district falls in is `opts.bandKey(item)` — by default its source
  * (`item.repo`); the Map's *Band by: domain* passes the journey's domain. Bands
  * keep the order their first district has in `items`.
- * Returns `{ rects: Map(id → {x, y, w, h}), bands: [{ repo, x, y, w, h }], size: {w, h}, rowW }` —
+ * Returns `{ rects: Map(id → {x, y, w, h}), bands: [{ repo, x, y, w, h }], size: {w, h}, rowW, echoes }` —
  * a band's `repo` is its key, whatever the key is.
+ *
+ * `bandKey: 'persona'` bands by the person a journey is for: each item's
+ * `places` (`[{ persona, rank }]`, from `neighbourhoodModel()` with a tree)
+ * puts it in one band per persona, the bands in `opts.personaOrder`, and inside
+ * a band the items by `rank` (group, then journey order). A journey for two
+ * people is laid out in each band: its first place keeps its id, every other
+ * is an **echo** keyed `<id>\u0001<persona>`, and `echoes` maps each echo key
+ * to the journey's id — the surface draws the street once and a card that leads
+ * to it in the other bands, and counts the journey once. An item with no place
+ * falls in a trailing band keyed ''.
  * @group Map
  */
 export function layoutDistricts(items, opts = {}) {
   const o = { aspect: 1.6, colGap: 200, rowGap: 160, bandGap: 280, labelH: 120, margin: 80, ...opts };
+  const echoes = new Map();
+  if (o.bandKey === 'persona') {
+    const order = Array.isArray(o.personaOrder) ? o.personaOrder : [];
+    const slots = [];
+    (Array.isArray(items) ? items : []).forEach((it, i) => {
+      const places = Array.isArray(it.places) && it.places.length ? it.places : [{ persona: '\u0002', rank: i }];
+      places.forEach((pl, k) => {
+        const id = k === 0 ? it.id : it.id + '\u0001' + pl.persona;
+        if (k > 0) echoes.set(id, it.id);
+        // an echo is a card that leads to the street, not the street: `opts.echoW` narrows it
+        const w = k > 0 && o.echoW > 0 ? Math.min(it.w, o.echoW) : it.w;
+        slots.push({ ...it, id, w, band: pl.persona, rank: typeof pl.rank === 'number' ? pl.rank : i, at: i });
+      });
+    });
+    const bi = (k) => { const x = order.indexOf(k); return x < 0 ? order.length + (k === '\u0002' ? 1 : 0) : x; };
+    slots.sort((a, b) => bi(a.band) - bi(b.band) || a.rank - b.rank || a.at - b.at);
+    const L = layoutDistricts(slots, { ...o, bandKey: (it) => it.band });
+    L.echoes = echoes;
+    return L;
+  }
   const bandKey = typeof o.bandKey === 'function' ? o.bandKey : (it) => it.repo || '';
   const list = Array.isArray(items) ? items : [];
   const bands = [];
@@ -133,6 +210,7 @@ export function layoutDistricts(items, opts = {}) {
     const score = Math.abs(Math.log((r.size.w / r.size.h) / o.aspect));
     if (score < bestScore - 1e-9) { best = r; bestScore = score; }
   }
+  if (best) best.echoes = echoes;
   return best || place(widest);
 }
 
