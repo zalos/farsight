@@ -564,7 +564,7 @@ export const STRINGS: Record<string, StringEntry> = {
     'How many rows the journey’s system band has: the browser, each API, the service, the records, the messages, each third party. One row per system, journey-wide.'),
   'journey.countSystemsOne': one('1 system', 'journey.countSystems'),
   'journey.countStores': same('{n} data stores',
-    'The places this journey keeps or fetches its data, each counted once by name: the database its records live in, and each outside system it reads from or writes to as a store. A store is named only when the code or the project settings say which one; records whose store nobody named are not counted.'),
+    'The places this journey keeps or fetches its data, each counted once by name: the database its records live in, and each outside system it reads from or writes to as a store. A store is named only when the code or the project settings say which one; records whose store nobody named are not counted. A count of stores, not of tables: many tables live in one database, so two stores can hold a dozen tables.'),
   'journey.countStoresOne': one('1 data store', 'journey.countStores'),
   'journey.start': same('start'),
   'journey.end': same('end of tracked flow'),

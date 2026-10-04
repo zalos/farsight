@@ -203,7 +203,7 @@ export function renderGrouped(nodes, memberToGroup, again = false) {
   const items = [];
   nodes.forEach((n) => { if (n.kind === 'group' && n.expanded) n.members.forEach((x) => items.push(x)); else items.push(n); });
   // a folded group whose parts live in several projects is drawn once per project, each with its own parts (round 2:
-  // a project's box counted another project's functions, so its card read 1124 beside the inspector's 807)
+  // a project's box counted another project's functions, so its card read far above the inspector's count)
   for (let i = items.length - 1; i >= 0; i--) {
     const n = items[i];
     if (n.kind !== 'group' || !n.members || n.members.length < 2) continue;

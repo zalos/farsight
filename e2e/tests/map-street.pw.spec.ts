@@ -160,15 +160,16 @@ test.describe('map — neighbourhood and street', () => {
     expect(await writes.count()).toBeGreaterThanOrEqual(1);
     await expect(writes.first()).toBeVisible();
     await expect(page.locator(`.map-pd[data-flow="${FLOW}"][data-si="1"][data-mode="both"]`).first()).toContainText('reads · writes');
-    // Discard draft: one call, planned — dashed, not built, nothing beside it
+    // Discard draft: one call, planned — dotted (round 2: not built reads apart from declared-not-called's dashes
+    // without colour), not built, nothing beside it
     const discard = page.locator(`.map-pl[data-flow="${FLOW}"][data-si="2"]`);
     await expect(discard).toHaveCount(1);
     await expect(discard).toHaveClass(/absent/);
     await expect(discard).toHaveAttribute('data-evidence', 'not built');
     await expect(discard).toContainText('not built');
     await expect(page.locator(`.map-pd[data-flow="${FLOW}"][data-si="2"]`)).toHaveCount(0);
-    const dashed = await discard.evaluate((el) => getComputedStyle(el).borderLeftStyle);
-    expect(dashed).toBe('dashed');
+    const stroke = await discard.evaluate((el) => getComputedStyle(el).borderLeftStyle);
+    expect(stroke).toBe('dotted');
 
     // p hides it again, and the address bar forgets it
     await page.locator('.map-board').click({ position: { x: 20, y: 300 } });

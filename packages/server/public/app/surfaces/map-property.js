@@ -748,7 +748,7 @@ export function mountMapProperty(host, ctx) {
     host.innerHTML = '<div class="mp' + (pm.hero.planned ? ' planned' : '') + '" data-map-wheel="own" data-screen="' + esc(pm.node ? pm.node.id : '') + '">'
       + '<header class="mp-head">' + headHtml(pm, st.ctx) + '</header>'
       + '<div class="mp-hero">' + heroHtml(pm) + '</div>'
-      + '<aside class="mp-side"><div class="mp-tabs" role="tablist" aria-label="' + esc(t('map.prop.tabs')) + '">' + tabsHtml(pm, st) + '</div>'
+      + '<aside class="mp-side" data-tip-place="left"><div class="mp-tabs" role="tablist" aria-label="' + esc(t('map.prop.tabs')) + '">' + tabsHtml(pm, st) + '</div>'
       + '<div class="mp-body" id="mp-body" role="tabpanel" aria-labelledby="mp-tab-' + st.tab + '"></div></aside>'
       + '<footer class="mp-foot">' + footHtml(pm, st.ctx) + '</footer></div>';
     drawBody();

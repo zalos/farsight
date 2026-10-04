@@ -348,6 +348,21 @@ function position() {
   layer.style.left = '0px'; layer.style.top = '0px';
   const r = st.el.getBoundingClientRect();
   const s = { width: layer.offsetWidth, height: layer.offsetHeight };
+  // a rail of rows (the Map property's tabs) keeps its tips beside it, so a tip never covers the rows being read or
+  // clicked (round 2): left of the trigger's container when there is room, else the usual placement
+  const rail = st.el.closest && st.el.closest('[data-tip-place="left"]');
+  if (rail) {
+    const rr = rail.getBoundingClientRect();
+    const left = rr.left - TIP_HOVER_GAP - s.width;
+    if (left >= 8) {
+      const top = Math.max(8, Math.min(window.innerHeight - 8 - s.height, r.top + r.height / 2 - s.height / 2));
+      layer.style.left = left + 'px';
+      layer.style.top = top + 'px';
+      layer.dataset.side = 'left';
+      layer.style.setProperty('--tip-arrow', '0px');
+      return;
+    }
+  }
   const p = placeTip(r, s, { width: window.innerWidth, height: window.innerHeight }, hoverMode(st.el) ? { gap: TIP_HOVER_GAP } : {});
   if (p.maxHeight != null && body) body.style.maxHeight = Math.max(60, p.maxHeight - 20) + 'px';
   layer.style.left = p.left + 'px';
