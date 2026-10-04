@@ -1144,9 +1144,11 @@ function drawRisk() {
   el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
     + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })).join('<span class="sep">·</span>');
   const appeared = el.hidden;
+  // whether the board sits at its fit — asked before the headline shows, since the fit then leaves it its row
+  const at = appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb' ? MAP.cv.stopAt() : null;
   el.hidden = false;
   // it arrived over a board fitted without it: fit again, leaving it its row
-  if (appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb') { const at = MAP.cv.stopAt(); if (at && at.id === 'board') fitAll(false); }
+  if (at && at.id === 'board') fitAll(false);
 }
 /** The screen a zoom in would enter, ringed and named in the hint first, so the snap is never a surprise. */
 function onArm(el) {
