@@ -466,6 +466,14 @@ package.json) are facts, not counts, and print beside the row.
 | projects that use this one | `count.unit.projects` (both) | `count.scope.project` | `/api/projects/<name>` `dependents.length` | the projects depending on it, each once (the project inspector's *Used by*) |
 | shown / hidden (status bar) | `chrome.shownOf` | `tip.stats.scope` | `statsBreakdown()` | gains three reasons: `tip.stats.files` (file cards, drawn only with *show files*), `tip.stats.packages` (*hide packages*), `tip.stats.filtered` (a code map filter or view). Still a partition of the graph's total |
 
+The project picker (`lib/multi-pick.js`) prints three numbers. Its match count, *n of m projects* (also *tag values*,
+*packages*: `codemap.pick.countProjects` · `countTags` · `countPackages`), is plain words with its define as the tip:
+the options the words typed leave, out of every option the list holds over the sources in scope — not a `Counted`. A
+project option's number is *parts of a project* above (`count.unit.parts`, `count.scope.project`), folded on the page
+from `GraphNode.project` the way `projectGraph()` folds `ProjectRow.nodes` (module nodes not counted; breakdown by
+kind). A tag value's number is *projects in a tag box* (`count.unit.projects`, `count.scope.workspace`) over the
+projects in scope.
+
 The package inspector prints `DepsRow.importers` and `DepsRow.journeys` as they arrive from `/api/deps/where`
 (the Dependencies table); the project inspector prints `ProjectRow.nodes` and `appClosure().count` (the Projects
 table). Nothing on the code map counts packages or projects a second way.

@@ -41,7 +41,9 @@ test.describe('on the invoice-app fixture', () => {
   test('depends on zod keeps what imports or uses zod, and zod', async ({ page }) => {
     await gotoReady(page, '#/codemap?group=none');
     await page.locator('#scopebtn').click();
-    await page.locator('#cm-dep').selectOption(zod);
+    // Depends on is a searchable single-select picker: type, Enter
+    await page.locator('[data-mp="cm-pick-dep"] .mpk-q').fill('zod');
+    await page.keyboard.press('Enter');
     await expect(page.locator('#cm-filtered')).toBeVisible();
     const names = await page.locator('#stage .node .codename').allTextContents();
     expect(names.sort()).toEqual(['appEnvSchema', 'draftInvoiceSchema', 'updateInvoiceSchema', 'zod'].sort());
@@ -119,7 +121,7 @@ test.describe('on invoice-app and the NX example together', () => {
   test('App and its related: two clicks from the map, the closure in boxes with labelled arrows', async ({ page }) => {
     await go(page, '#/codemap?group=none&lens=hybrid');
     await page.locator('#cm-viewsbtn').click();
-    await page.locator('#cm-viewsmenu .cm-mrow', { hasText: 'billing-web' }).first().click();
+    await page.locator('#cm-viewsmenu .mpk-opt', { hasText: 'billing-web' }).first().click();
     await expect(page).toHaveURL(/view=app&project=billing-web/);
     await expect(page.locator('.cm-elabel').first()).toBeVisible();
     const boxes = (await titles(page)).filter((x) => x !== 'third-party packages').sort();
