@@ -478,6 +478,18 @@ The package inspector prints `DepsRow.importers` and `DepsRow.journeys` as they 
 (the Dependencies table); the project inspector prints `ProjectRow.nodes` and `appClosure().count` (the Projects
 table). Nothing on the code map counts packages or projects a second way.
 
+### Config files (`/api/config`, MCP `config_files` + `graph_overview`, CLI `farsight config list` → core `config-files.ts` `configCounts()`)
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| config files per source | `count.unit.configFiles` *n config files* (both) | `count.scope.source` | `configCounts().files` over `meta.config[repo].files`, written by parsers `loadWorkspaceConfig` | every `farsight.config.json` of one source that could be read, each once; breakdown `count.part.configRoot` *for the whole source* (0 or 1) · `count.part.configScoped` *for one folder* — a partition. A file that is not valid JSON is not counted; it is a note |
+| conflicts per source | `count.unit.configConflicts` *n conflicts* (both) | `count.scope.source` | `configCounts().conflicts` over `meta.config[repo].conflicts` | one per (kind, key): a glossary key two nesting files word differently, a function one file already made a guard that a later guard rule names, a second declaration of an external import or a store name — however many files take part |
+
+`graph_overview` prints the line only for a source that holds more than its root file (or has a conflict or a note):
+*config: nx-workspace — 3 config files (1 for the whole source · 2 for one folder) · 1 conflict · 1 note(s)* (the
+`examples/nx-workspace` graph). `count.scope.source` was the tests' scope (*at one test level*); its define now says
+what a source holds in general, with the test level as the tests' case.
+
 ## 4. Open — found, not changed here
 
 - **The journey prints the typed counts** (`fix/journey-numbers-and-words`, 2026-09-25). The header

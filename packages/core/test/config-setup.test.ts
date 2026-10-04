@@ -10,8 +10,8 @@
 // `pnpm build` first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyConfig, applySetupOrigin, globToRegExp, applyTooling, glossaryEntryFor, buildIndex, journey } from '../dist/index.js';
-import type { GraphNode, GraphEdge, FarsightConfig } from '../dist/index.js';
+import { applyConfig, applyRouteGuards, scopeOfDir, applySetupOrigin, globToRegExp, applyTooling, glossaryEntryFor, buildIndex, journey, configCounts, configFilesText, configOverviewLines, countedProblems } from '../dist/index.js';
+import type { GraphNode, GraphEdge, FarsightConfig, ConfigMeta } from '../dist/index.js';
 
 const R = 'app';
 const id = (path: string, name: string): string => `${R}::${path}::${name}`;
@@ -199,4 +199,67 @@ test('tooling: tagged, the app’s edges into it demoted to LOW, and a journey f
   assert.deepEqual(fromApp, [id('src/worker.ts', 'Worker.drain'), id('src/container.ts', 'build.log')]);
   const fromScript = journey(index, id('scripts/pilot.ts', 'main')).steps.map((s) => s.nodeId);
   assert.ok(fromScript.includes(id('scripts/pilot.ts', 'main.log')), 'a journey that starts in a script walks as it always did');
+});
+
+// ── a nested farsight.config.json speaks only for its folder (journey-organisation-and-config-files.md §5.2) ──
+
+test('scopeOfDir: the nodes under a folder, never a sibling that shares its prefix; the root is no scope at all', () => {
+  const scope = scopeOfDir('apps/a')!;
+  assert.equal(scope(fn('x', 'apps/a/src/x.ts', 1)), true);
+  assert.equal(scope(fn('x', 'apps/ab/src/x.ts', 1)), false, 'apps/ab is not under apps/a');
+  assert.equal(scope({ id: 'app::table::t', kind: 'table', name: 't', tags: [] } as GraphNode), false, 'a node with no file is under no folder');
+  assert.equal(scopeOfDir('.'), undefined);
+  assert.equal(scopeOfDir(''), undefined);
+  assert.equal(scopeOfDir('.storybook')!(fn('x', '.storybook/main.ts', 1)), true, 'a dot folder keeps its dot');
+});
+
+test('applyConfig with a scope tags, glosses and guards only the nodes in it; a function an earlier file guarded is reported, not renamed', () => {
+  const nodes = [fn('helper', 'apps/a/src/h.ts', 1), fn('helper', 'src/h.ts', 1), fn('withTenant', 'apps/a/src/t.ts', 1)];
+  const edges: GraphEdge[] = [];
+  const root: FarsightConfig = { guards: { tenant: ['withTenant'] } };
+  const first = applyConfig(nodes, root, edges);
+  assert.deepEqual(first.guarded, [id('apps/a/src/t.ts', 'withTenant')]);
+  const heard: string[] = [];
+  const nested: FarsightConfig = { tags: { mine: ['helper'] }, glossary: { helper: { label: 'Mine' } }, guards: { session: ['withTenant'] } };
+  const second = applyConfig(nodes, nested, edges, {
+    scope: scopeOfDir('apps/a'), guarded: new Set(first.guarded), onGuardConflict: (n, label) => heard.push(`${n.id}:${label}`),
+  });
+  assert.deepEqual(second.guarded, []);
+  assert.deepEqual(heard, [`${id('apps/a/src/t.ts', 'withTenant')}:session`]);
+  assert.equal(nodes[2]!.name, 'withTenant: tenant');
+  assert.deepEqual(nodes[0]!.tags, ['mine']);
+  assert.equal(nodes[0]!.facets?.business?.label, 'Mine');
+  assert.deepEqual(nodes[1]!.tags, []);
+  assert.equal(nodes[1]!.facets, undefined);
+});
+
+test('applyRouteGuards with a scope gates only the routes under the folder', () => {
+  const route = (path: string): GraphNode => ({ id: `${R}::${path}::GET /x`, kind: 'route', name: 'GET /x', tags: [], loc: { repo: R, path, line: 1 } }) as GraphNode;
+  const nodes = [route('apps/a/src/routes.ts'), route('apps/b/src/routes.ts')];
+  const edges: GraphEdge[] = [];
+  const added = applyRouteGuards(nodes, { guards: { token: ['GET /x'] } }, edges, scopeOfDir('apps/a'));
+  assert.equal(added, 1);
+  assert.deepEqual(edges.map((e) => e.to), [nodes[0]!.id]);
+});
+
+test('config counts: files split root · scoped, conflicts beside them, every count sound; the overview is silent for a root-only source', () => {
+  const meta: ConfigMeta = {
+    files: [
+      { path: 'farsight.config.json', dir: '.', root: true, fields: ['glossary'], ignored: [] },
+      { path: 'apps/a/farsight.config.json', dir: 'apps/a', root: false, fields: ['glossary'], ignored: ['tooling'] },
+    ],
+    conflicts: [{ kind: 'glossary', key: 'helper', files: ['farsight.config.json', 'apps/a/farsight.config.json'], kept: 'apps/a/farsight.config.json' }],
+    notes: ["tooling is root-only; apps/a/farsight.config.json's was ignored."],
+  };
+  const c = configCounts(meta);
+  assert.equal(c.files.n, 2);
+  assert.equal(c.files.scope, 'count.scope.source');
+  assert.deepEqual(c.files.breakdown!.map((p) => p.n), [1, 1]);
+  assert.deepEqual(countedProblems(c.files), []);
+  assert.deepEqual(countedProblems(c.conflicts), []);
+  assert.deepEqual(configOverviewLines({ app: meta }), ['config: app — 2 config files (1 for the whole source · 1 for one folder) · 1 conflict · 1 note(s) — config_files lists them']);
+  assert.deepEqual(configOverviewLines({ app: { files: [meta.files[0]!], conflicts: [], notes: [] } }), []);
+  const text = configFilesText({ app: meta });
+  assert.equal(text[0], '## app — 2 config files in this source (1 for the whole source · 1 for one folder) · 1 conflict');
+  assert.equal(text[2], 'apps/a/farsight.config.json — scoped to apps/a/ · glossary · ignored: tooling');
 });
