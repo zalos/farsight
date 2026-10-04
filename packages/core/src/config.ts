@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension } from './graph.js';
+import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyPersonaDecl, JourneyGroupDecl, JourneyFlowPlacement } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -52,6 +52,20 @@ export interface FarsightConfig {
   storybook?: StorybookConfig | StorybookConfig[];
   /** how the workspace's project tags group: dimensions added or renamed, and words for tag values (docs/proposals/dependencies-and-nx.md §2.2) */
   projects?: ProjectsConfig;
+  /**
+   * How the journeys are organised across the manifests (journey-organisation-and-config-files.md §4.2):
+   * personas and groups in the order they are shown, and placements that move a flow a manifest
+   * declared. An entry overrides the manifest entry with the same id, field by field.
+   */
+  journeys?: JourneysConfig;
+}
+
+/** `farsight.config.json → journeys`: the same shapes as a manifest's `personas[]` / `groups[]`, plus placements by flow id. */
+export interface JourneysConfig {
+  /** a name left out keeps the manifest's (or the id, when no manifest declares it) */
+  personas?: (Omit<JourneyPersonaDecl, 'name'> & { name?: string })[];
+  groups?: (Omit<JourneyGroupDecl, 'name'> & { name?: string })[];
+  flows?: JourneyFlowPlacement[];
 }
 
 /**
@@ -146,7 +160,7 @@ export interface TestsConfigBlock {
 export function loadConfig(path: string): FarsightConfig | null {
   try {
     const config = JSON.parse(readFileSync(path, 'utf8')) as FarsightConfig;
-    if (config && typeof config === 'object') { sanitizeStores(config); sanitizeProjects(config); }
+    if (config && typeof config === 'object') { sanitizeStores(config); sanitizeProjects(config); sanitizeJourneys(config); }
     return config;
   } catch {
     return null;
@@ -221,6 +235,60 @@ export function sanitizeProjects(config: FarsightConfig): FarsightConfig {
   // kept as written when it is a string; graphFilePath() refuses an escape where a note can be recorded
   if (typeof r.graphFile === 'string' && r.graphFile.trim()) out.graphFile = r.graphFile.trim();
   config.projects = out;
+  return config;
+}
+
+/**
+ * Soft validation of `journeys` (journey-organisation-and-config-files.md §4.2): a persona or group
+ * without a string id is dropped (a missing name keeps the manifest's), a flow placement without an
+ * id is dropped, a persona that is neither a string nor a list of strings, a non-string group and a
+ * non-finite order are left out, and a block of the wrong shape goes away. Never throws — a config
+ * mistake leaves the manifest's own organisation in place.
+ */
+export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
+  if (config.journeys === undefined) return config;
+  const raw = config.journeys as unknown;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { delete config.journeys; return config; }
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const entries = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x)) : []);
+  const out: JourneysConfig = {};
+  if (r.personas !== undefined) {
+    out.personas = entries(r.personas).flatMap((p) => {
+      const id = str(p.id);
+      if (!id) return [];
+      const description = str(p.description);
+      const name = str(p.name);
+      return [{ id, ...(name ? { name } : {}), ...(description ? { description } : {}) }];
+    });
+  }
+  if (r.groups !== undefined) {
+    out.groups = entries(r.groups).flatMap((g) => {
+      const id = str(g.id);
+      if (!id) return [];
+      const description = str(g.description);
+      const persona = str(g.persona);
+      const name = str(g.name);
+      return [{ id, ...(name ? { name } : {}), ...(description ? { description } : {}), ...(persona ? { persona } : {}) }];
+    });
+  }
+  if (r.flows !== undefined) {
+    out.flows = entries(r.flows).flatMap((f) => {
+      const id = str(f.id);
+      if (!id) return [];
+      const persona = typeof f.persona === 'string' ? str(f.persona)
+        : Array.isArray(f.persona) ? f.persona.map(str).filter((x): x is string => !!x) : undefined;
+      const group = str(f.group);
+      const order = typeof f.order === 'number' && Number.isFinite(f.order) ? f.order : undefined;
+      return [{
+        id,
+        ...(persona !== undefined && (typeof persona === 'string' || persona.length) ? { persona: Array.isArray(persona) && persona.length === 1 ? persona[0]! : persona } : {}),
+        ...(group ? { group } : {}),
+        ...(order !== undefined ? { order } : {}),
+      }];
+    });
+  }
+  config.journeys = out;
   return config;
 }
 

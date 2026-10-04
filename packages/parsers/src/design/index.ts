@@ -11,8 +11,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve, basename } from 'node:path';
-import type { GraphFragment, DesignManifest, DesignSource, DesignReconcile } from '@farsight/core';
-import { applyDesignToFragment, designToFragment, isDesignManifest, figmaFileKey, loadConfig } from '@farsight/core';
+import type { GraphFragment, DesignManifest, DesignSource, DesignReconcile, JourneysConfig } from '@farsight/core';
+import { applyDesignToFragment, designToFragment, isDesignManifest, figmaFileKey, loadConfig, journeysMetaOf } from '@farsight/core';
 import { collectFiles } from '../shared/files.js';
 import type { IngestOptions } from '../types.js';
 
@@ -130,7 +130,7 @@ export interface DesignApplication { path: string; origin: 'file' | 'config'; re
 
 /** Discover + reconcile every manifest for the repo into the fragment (in place). Never throws: unreadable manifests are reported in `errors`. */
 export async function applyDesigns(fragment: GraphFragment, repoRoot: string, options: IngestOptions): Promise<{ applied: DesignApplication[]; errors: string[] }> {
-  const config = loadConfig(join(repoRoot, 'farsight.config.json')) as ({ design?: DesignDeclaration[] } | null);
+  const config = loadConfig(join(repoRoot, 'farsight.config.json')) as ({ design?: DesignDeclaration[]; journeys?: JourneysConfig } | null);
   const { manifests, errors } = await discoverManifests(repoRoot, options, config?.design ?? []);
   const applied: DesignApplication[] = [];
   if (!manifests.length) return { applied, errors };
@@ -143,7 +143,18 @@ export async function applyDesigns(fragment: GraphFragment, repoRoot: string, op
   }
   titleDocLinks(fragment, repoRoot);
   fragment.meta = { files: (fragment.meta?.files ?? 0) + manifests.length, sourceHash: hash.digest('hex').slice(0, 12) };
+  foldJourneys(fragment, manifests, config?.journeys);
   return { applied, errors };
+}
+
+/**
+ * The journey organisation of this source (journey-organisation-and-config-files.md §4.3): every
+ * manifest's `personas` / `groups` and the config's `journeys` block, folded once at ingest into
+ * `meta.journeys` — the request-time tree (core `journeyTree`) reads it, never the files.
+ */
+export function foldJourneys(fragment: GraphFragment, manifests: { manifest: DesignManifest; path: string }[], journeys?: JourneysConfig | null, configPath = 'farsight.config.json'): void {
+  if (!manifests.length) return;
+  fragment.meta = { files: fragment.meta?.files ?? 0, sourceHash: fragment.meta?.sourceHash ?? '', ...fragment.meta, journeys: journeysMetaOf(manifests, journeys, configPath) };
 }
 
 /**
@@ -181,5 +192,6 @@ export async function ingestDesign(pathOrUrl: string, options: { repoName?: stri
   const source: DesignSource = { repo, path: pathOrUrl, ...(options.name ? { name: options.name } : {}), ...(parsed.lastModified ? { lastModified: parsed.lastModified, freshness: parsed.freshness } : {}) };
   const fragment = designToFragment(parsed.manifest, source);
   fragment.meta = { files: 1, sourceHash: createHash('sha1').update(parsed.text).digest('hex').slice(0, 12) };
+  foldJourneys(fragment, [{ manifest: parsed.manifest, path: pathOrUrl }]);
   return fragment;
 }

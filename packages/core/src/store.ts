@@ -3,7 +3,7 @@ import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta } from './graph.js';
+import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta, JourneysMeta } from './graph.js';
 
 /** Freshness signals persisted with the snapshot — lets consumers (MCP agents
  * especially) detect a stale graph instead of getting confidently old answers. */
@@ -39,6 +39,8 @@ export interface GraphMeta {
   packages?: Record<string, PackagesMeta>;
   /** per-repo projects pass: the tool (nx · workspaces · none), its projects and tags, the tag dimensions, project → project imports */
   projects?: Record<string, ProjectsMeta>;
+  /** per-repo journey organisation: declared personas and groups in order, the config's placements, notes (journey-organisation-and-config-files.md §4.3) */
+  journeys?: Record<string, JourneysMeta>;
 }
 
 /**
@@ -75,6 +77,9 @@ export class GraphStore {
     }
     if (fragment.meta?.projects) {
       this.meta.projects = { ...this.meta.projects, [fragment.repo]: fragment.meta.projects };
+    }
+    if (fragment.meta?.journeys) {
+      this.meta.journeys = { ...this.meta.journeys, [fragment.repo]: fragment.meta.journeys };
     }
     if (fragment.meta) {
       // a fragment with no content digest but the same sourceHash as the row already

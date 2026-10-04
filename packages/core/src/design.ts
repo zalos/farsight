@@ -10,7 +10,7 @@
  * location, drift is computed ONCE here and stored. Pure — reading files and
  * talking to Figma lives in parsers/server.
  */
-import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink } from './graph.js';
+import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneysMeta } from './graph.js';
 import { t } from './strings.js';
 import { buildIndex, type GraphIndex } from './query.js';
 
@@ -64,16 +64,27 @@ export interface DesignFlow {
   /** linked journeys: flow ids that must happen before this one / that follow it (also derived from a longer flow's screen order) */
   requires?: string[];
   leadsTo?: string[];
-  /** who this flow is for — the front door groups by it (contractor · ops · admin) */
-  persona?: string;
+  /**
+   * who this flow is for — a persona id or name from `personas[]`, or several; a value no
+   * `personas[]` entry declares is a persona of its own (journey-organisation-and-config-files.md §4.1)
+   */
+  persona?: string | string[];
   /** who answers for it; absent prints as an absence word, never a guess */
   owner?: string;
+  /** the group it sits in under its persona(s) — a `groups[]` id or name; absent = the persona's *Other journeys* */
+  group?: string;
+  /** its place in the group, ascending; ties and absences keep the order the flows are written in */
+  order?: number;
   /** work items this flow is for (Jira keys, Azure DevOps ids) — a declared `tracks` link (work-items-sync.md §9) */
   work?: string[];
 }
 
 export interface DesignManifest {
   name?: string;
+  /** who the journeys are for, in the order they are shown */
+  personas?: JourneyPersonaDecl[];
+  /** groups of journeys under a persona, in the order they are shown; one with `persona` exists under that persona only */
+  groups?: JourneyGroupDecl[];
   figma?: { file?: string; token?: string };
   screens: DesignScreen[];
   flows?: DesignFlow[];
@@ -185,16 +196,26 @@ export interface FlowRow {
   status: 'both' | 'design-only';
   built: number;
   total: number;
-  /** who the flow is for, and who answers for it — absent means the manifest does not say */
-  persona?: string;
+  /** who the flow is for (one persona or several), and who answers for it — absent means the manifest does not say */
+  persona?: string | string[];
   owner?: string;
+  /** the manifest's group and order for it (journeyTree applies the config's overrides on top) */
+  group?: string;
+  order?: number;
+  /** where it sits in its manifest's flows (0-based); absent on a graph ingested before the manifest order was kept */
+  position?: number;
+  /** flow ids that must happen before this one / that follow it, as the manifest declares them */
+  requires: string[];
+  leadsTo: string[];
+  /** the source it belongs to */
+  repo: string;
   drift: DesignDrift[];
 }
 
 export interface DesignReconcile {
   design: { id: string; name: string; path: string };
   /** named flows: screens in order, how many are built, drift (unknown screen ids, operations no contract declares) */
-  flows: { flow: DesignFlow; nodeId: string; screenNodeIds: string[]; built: number; drift: DesignDrift[] }[];
+  flows: { flow: DesignFlow; nodeId: string; screenNodeIds: string[]; built: number; drift: DesignDrift[]; position?: number }[];
   /** designed and built: the screen resolved to a page/component in the code */
   matched: { screen: DesignScreen; nodeId: string; drift: DesignDrift[] }[];
   /** designed, not built: no page/component at that route/name */
@@ -336,7 +357,7 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
       for (const fid of ids ?? []) if (!flowIds.has(fid.toLowerCase())) drift.push({ kind: 'flow-unknown', message: `flow ${flow.id} ${field} ${fid}; the manifest defines no such flow` });
     }
     driftTotal += drift.length;
-    flows.push({ flow, nodeId: `${repo}::flow::${flow.id}`, screenNodeIds, built, drift });
+    flows.push({ flow, nodeId: `${repo}::flow::${flow.id}`, screenNodeIds, built, drift, position: flows.length });
   }
 
   return {
@@ -354,6 +375,14 @@ function workTags(keys: string[] | undefined): string[] {
 }
 
 /** The `flow` node for a manifest flow: a journey entry that renders its screens in order. */
+/** A manifest's `persona` as written: a trimmed string, a list of trimmed strings, or nothing (empty values dropped). */
+export function personaValue(v: unknown): string | string[] | undefined {
+  if (typeof v === 'string') return v.trim() || undefined;
+  if (!Array.isArray(v)) return undefined;
+  const list = v.filter((x): x is string => typeof x === 'string' && !!x.trim()).map((x) => x.trim());
+  return list.length > 1 ? list : list[0];
+}
+
 export function flowNodeOf(f: DesignReconcile['flows'][number], source: DesignSource, designId: string): GraphNode {
   const { flow } = f;
   const total = flow.screens?.length ?? 0;
@@ -370,8 +399,11 @@ export function flowNodeOf(f: DesignReconcile['flows'][number], source: DesignSo
       ...(flow.phase ? { phase: String(flow.phase) } : {}),
       ...(flow.requires?.length ? { requires: flow.requires } : {}),
       ...(flow.leadsTo?.length ? { leadsTo: flow.leadsTo } : {}),
-      ...(flow.persona ? { persona: flow.persona } : {}),
+      ...(personaValue(flow.persona) ? { persona: personaValue(flow.persona)! } : {}),
       ...(flow.owner ? { owner: flow.owner } : {}),
+      ...(typeof flow.group === 'string' && flow.group.trim() ? { group: flow.group.trim() } : {}),
+      ...(typeof flow.order === 'number' && Number.isFinite(flow.order) ? { order: flow.order } : {}),
+      ...(f.position != null ? { position: f.position } : {}),
       ...(source.lastModified ? { lastModified: source.lastModified, freshness: source.freshness ?? 'manifest' } : {}),
       ...(f.drift.length ? { drift: f.drift } : {}),
     },
@@ -417,6 +449,17 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
   };
   for (const m of result.matched) {
     const node = byId.get(m.nodeId)!;
+    // a manifest read earlier stamped this page *built, not designed* — it was not that manifest's
+    // screen, and now one manifest designs it: the earlier stamp and its membership go (several
+    // manifests per source, one per NX app, journey-organisation-and-config-files.md §4)
+    const prior = node.design;
+    if (prior?.origin === 'manifest' && prior.status === 'code-only' && prior.designId && prior.designId !== design.id) {
+      for (let i = fragment.edges.length - 1; i >= 0; i--) {
+        const e = fragment.edges[i]!;
+        if (e.kind === 'contains' && e.from === prior.designId && e.to === node.id) fragment.edges.splice(i, 1);
+      }
+      node.tags = node.tags.filter((t) => t !== 'undesigned');
+    }
     node.design = refOf(m.screen, manifest, source, design.id, 'both', m.drift);
     for (const t of [`design:${m.screen.id.toLowerCase()}`, ...workTags(m.screen.work)]) if (!node.tags.includes(t)) node.tags.push(t);
     // the design's name and sentence are the business words for a built screen (a glossary entry or @business still wins)
@@ -443,6 +486,8 @@ export function applyDesignToFragment(fragment: GraphFragment, manifest: DesignM
   for (const c of result.codeOnly) {
     const node = byId.get(c.nodeId)!;
     if (node.design && node.design.origin === 'annotation') continue; // an @design annotation is a design row of its own
+    // another manifest of this source designs this page: it is not *undesigned*, only not this manifest's
+    if (node.design && node.design.origin === 'manifest' && node.design.status !== 'code-only' && node.design.designId !== design.id) continue;
     node.design = { status: 'code-only', origin: 'manifest', designId: design.id, drift: [{ kind: 'code-only', message: 'built; no screen in the design manifest describes this page' }] };
     if (!node.tags.includes('undesigned')) node.tags.push('undesigned');
     contains(node.id);
@@ -521,6 +566,12 @@ function flowRow(index: GraphIndex, n: GraphNode): FlowRow {
     built, total: screens.length,
     ...(d.persona ? { persona: d.persona } : {}),
     ...(d.owner ? { owner: d.owner } : {}),
+    ...(d.group ? { group: d.group } : {}),
+    ...(d.order != null ? { order: d.order } : {}),
+    ...(d.position != null ? { position: d.position } : {}),
+    requires: d.requires ?? [],
+    leadsTo: d.leadsTo ?? [],
+    repo: repoOfNode(n),
     drift: d.drift ?? [],
   };
 }
