@@ -67,7 +67,7 @@ function mapSwitchHtml() {
   return '<span class="hud-label" id="pf-viewsw-label"' + tipOf('map.portfolio.view') + '>' + esc(t('map.portfolio.view')) + '</span>'
     + '<span class="jrn-viewsw pf-viewsw" role="group" aria-labelledby="pf-viewsw-label">'
     + '<button type="button" class="jrn-viewbtn on" aria-pressed="true"' + tipOf('map.portfolio.table') + '>' + esc(t('map.portfolio.table')) + '</button>'
-    + '<button type="button" class="jrn-viewbtn" aria-pressed="false" data-go="map" onclick="location.hash=\'#/map\'"' + tipOf('nav.map') + '>' + esc(t('nav.map')) + '</button></span>';
+    + '<button type="button" class="jrn-viewbtn" aria-pressed="false" data-go="map" onclick="location.hash=\'#/map\'"' + tipOf('map.portfolio.board') + '>' + esc(t('map.portfolio.board')) + '</button></span>';
 }
 
 /**

@@ -221,10 +221,16 @@ test.describe('map — neighbourhood and street', () => {
     await page.mouse.wheel(120, 0);
     await expect.poll(() => world.evaluate((el) => el.style.transform)).not.toBe(before);
     await page.mouse.wheel(-120, 0);
-    // + from the journey: Billing cycle is readable fitted, so the next stop is one screen large, named first
+    // + from the journey goes stop to stop — the calls stop when the fitted journey is below it (lane L's wider
+    // column puts Billing cycle there at this viewport), then one screen large, named first
     const host = page.locator('.map-prop-host');
     const hint = page.locator('.map-hint');
     await page.keyboard.press('+');
+    await page.waitForTimeout(500);
+    if (!/\benter\b/.test((await hint.getAttribute('class')) || '')) {
+      await expect(host).toBeHidden();
+      await page.keyboard.press('+');
+    }
     await expect(hint).toHaveClass(/enter/);
     await expect(hint).toContainText(/Zoom in again to enter/);
     await expect(host).toBeHidden();

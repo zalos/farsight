@@ -26,7 +26,7 @@
 //    (hud !== professional) and which lack a `define` (undefined jargon).
 //
 //  RULE 5 — the business register's words: a catalog key under `journey.biz.*`
-//    or `impact.biz.*` may not carry a developer's unit in either register —
+//    or `impact.biz.*` (or `map.biz.*`, the map's business words) may not carry a developer's unit in either register —
 //    step · cut · seam · beat · moment · truncated · helper · hop. The business
 //    lens prints these keys and only these; the shared keys keep their words
 //    for hybrid and code. `hop` joined the list with the impact words (B5.4):
@@ -176,7 +176,7 @@ for (const id of spriteIds) {
 
 // ── RULE 5: no developer's unit in the business register ────────────────────
 const BIZ_BANNED = /\b(steps?|cuts?|seams?|beats?|moments?|truncated|helpers?|hops?)\b/i;
-const BIZ_PREFIXES = ['journey.biz.', 'impact.biz.', 'count.'];
+const BIZ_PREFIXES = ['journey.biz.', 'impact.biz.', 'count.', 'map.biz.'];
 for (const [key, entry] of Object.entries(STRINGS)) {
   if (!BIZ_PREFIXES.some((p) => key.startsWith(p))) continue;
   for (const register of ['hud', 'professional']) {

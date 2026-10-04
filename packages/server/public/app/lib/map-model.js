@@ -137,6 +137,227 @@ export function layoutDistricts(items, opts = {}) {
 }
 
 /**
+ * The routes of the lines between journeys — pure, so a test can hold them to a
+ * crowded board. Every line runs in the gutters between districts, never across
+ * one: an orthogonal route over the grid of lanes that sit `margin` outside each
+ * district's edges, found by a shortest-path search that charges `bend` for each
+ * turn and a little for a lane another line already uses. A line leaves its
+ * district from the middle of one side and arrives at the middle of a side.
+ * Lines that share a lane are nudged apart (`spread`), and each label is placed
+ * once, on the longest straight run of its own line where its box (`labelW` ×
+ * `labelH` in world units, the size it reaches at the coarsest zoom) clears every
+ * district and every label placed before it; a line with no such run carries no
+ * label rather than one drawn over a cover.
+ *
+ * `links` are `{ from, to, kind, labelW, labelH }`; returns them in order with
+ * `points` (`[{x, y}]`, from the edge of `from` to the edge of `to`) and `label`
+ * (`{ x, y, w, h }`, its centre and size) or null. A link whose end has no rect is
+ * left out.
+ * @group Map
+ */
+export function routeLinks(rects, links, opts = {}) {
+  const o = { margin: 70, bend: 600, reuse: 40, spread: 14, pad: 8, scales: [4, 3, 2, 1.5, 1], ...opts };
+  const R = [...rects.values()];
+  const m = o.margin;
+  const blocked = (x, y) => R.some((r) => x > r.x - m + 0.5 && x < r.x + r.w + m - 0.5 && y > r.y - m + 0.5 && y < r.y + r.h + m - 0.5);
+  const sides = (r) => [
+    { side: 'n', port: { x: r.x + r.w / 2, y: r.y }, exit: { x: r.x + r.w / 2, y: r.y - m }, dir: 0 },
+    { side: 'e', port: { x: r.x + r.w, y: r.y + r.h / 2 }, exit: { x: r.x + r.w + m, y: r.y + r.h / 2 }, dir: 1 },
+    { side: 's', port: { x: r.x + r.w / 2, y: r.y + r.h }, exit: { x: r.x + r.w / 2, y: r.y + r.h + m }, dir: 2 },
+    { side: 'w', port: { x: r.x, y: r.y + r.h / 2 }, exit: { x: r.x - m, y: r.y + r.h / 2 }, dir: 3 },
+  ];
+  // the lanes: every district edge pushed out by the margin, and every port's line
+  const xs = new Set(), ys = new Set();
+  for (const r of R) {
+    xs.add(r.x - m); xs.add(r.x + r.w + m); xs.add(r.x + r.w / 2);
+    ys.add(r.y - m); ys.add(r.y + r.h + m); ys.add(r.y + r.h / 2);
+  }
+  const X = [...xs].sort((a, b) => a - b), Y = [...ys].sort((a, b) => a - b);
+  const NX = X.length, NY = Y.length;
+  const ok = new Uint8Array(NX * NY);
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) ok[j * NX + i] = blocked(X[i], Y[j]) ? 0 : 1;
+  const xi = new Map(X.map((v, i) => [v, i])), yi = new Map(Y.map((v, j) => [v, j]));
+  const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
+  const used = new Map();                      // lane segment → how many lines run on it
+  const segKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
+
+  const route = (ra, rb, only) => {
+    const src = sides(ra).filter((x) => !only || only.includes(x.side)), dst = sides(rb).filter((x) => !only || only.includes(x.side));
+    const dist = new Float64Array(NX * NY * 4).fill(Infinity);
+    const prev = new Int32Array(NX * NY * 4).fill(-1);
+    const heap = [];
+    const push = (c, s) => {
+      heap.push([c, s]);
+      let i = heap.length - 1;
+      while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; }
+    };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        let i = 0;
+        for (;;) {
+          const l = 2 * i + 1, r = l + 1;
+          let k = i;
+          if (l < heap.length && heap[l][0] < heap[k][0]) k = l;
+          if (r < heap.length && heap[r][0] < heap[k][0]) k = r;
+          if (k === i) break;
+          [heap[k], heap[i]] = [heap[i], heap[k]]; i = k;
+        }
+      }
+      return top;
+    };
+    for (const s of src) {
+      const i = xi.get(s.exit.x), j = yi.get(s.exit.y);
+      if (i == null || j == null || !ok[j * NX + i]) continue;
+      const st = (j * NX + i) * 4 + s.dir;
+      if (dist[st] > 0) { dist[st] = 0; prev[st] = -2 - src.indexOf(s); push(0, st); }
+    }
+    const goal = new Map();
+    for (const d of dst) {
+      const i = xi.get(d.exit.x), j = yi.get(d.exit.y);
+      if (i != null && j != null && ok[j * NX + i]) goal.set(j * NX + i, d);
+    }
+    let best = Infinity, bestSt = -1, bestDst = null;
+    while (heap.length) {
+      const [c, st] = pop();
+      if (c > dist[st] || c >= best) continue;
+      const node = st >> 2, dir = st & 3;
+      const g = goal.get(node);
+      if (g) {
+        const inward = (g.dir + 2) & 3;
+        const tot = c + (dir === inward ? 0 : o.bend);
+        if (tot < best) { best = tot; bestSt = st; bestDst = g; }
+      }
+      const i = node % NX, j = (node - i) / NX;
+      for (let nd = 0; nd < 4; nd++) {
+        if (nd === ((dir + 2) & 3)) continue;
+        const ni = i + DX[nd], nj = j + DY[nd];
+        if (ni < 0 || nj < 0 || ni >= NX || nj >= NY || !ok[nj * NX + ni]) continue;
+        const len = Math.abs(X[ni] - X[i]) + Math.abs(Y[nj] - Y[j]);
+        const k = segKey(node, nj * NX + ni);
+        const nc = c + len + (nd === dir ? 0 : o.bend) + (used.get(k) || 0) * o.reuse;
+        const ns = (nj * NX + ni) * 4 + nd;
+        if (nc < dist[ns]) { dist[ns] = nc; prev[ns] = st; push(nc, ns); }
+      }
+    }
+    if (bestSt < 0) return null;
+    const cells = [];
+    let st = bestSt, first = null;
+    while (st >= 0) { cells.push(st >> 2); const p = prev[st]; if (p < -1) first = src[-2 - p]; st = p; }
+    cells.reverse();
+    for (let c = 1; c < cells.length; c++) { const k = segKey(cells[c - 1], cells[c]); used.set(k, (used.get(k) || 0) + 1); }
+    const pts = [first.port, ...cells.map((n) => ({ x: X[n % NX], y: Y[Math.floor(n / NX)] })), bestDst.port];
+    // keep the corners only
+    const out = [pts[0]];
+    for (let c = 1; c < pts.length - 1; c++) {
+      const a = out[out.length - 1], b = pts[c], n = pts[c + 1];
+      if ((a.x === b.x && b.x === n.x) || (a.y === b.y && b.y === n.y)) continue;
+      out.push(b);
+    }
+    out.push(pts[pts.length - 1]);
+    return out.map((p) => ({ x: p.x, y: p.y }));
+  };
+
+  const offRects = (bx) => !R.some((r) => bx.x - bx.w / 2 < r.x + r.w + o.pad && r.x - o.pad < bx.x + bx.w / 2 && bx.y - bx.h / 2 < r.y + r.h + o.pad && r.y - o.pad < bx.y + bx.h / 2);
+  const hasRoom = (pts, w, h) => {
+    for (let k = 0; k < pts.length - 1; k++) {
+      const a = pts[k], b = pts[k + 1];
+      if (a.y !== b.y || Math.abs(a.x - b.x) < w + 2 * o.pad) continue;
+      if (offRects({ x: (a.x + b.x) / 2, y: a.y, w, h })) return true;
+    }
+    return false;
+  };
+  const routed = [];
+  for (const l of links || []) {
+    const a = rects.get(l.from), b = rects.get(l.to);
+    if (!a || !b || l.from === l.to) continue;
+    let points = route(a, b);
+    // a line with no straight run long enough for its label at the coarsest zoom goes round by the gutters
+    // above or below instead (two journeys side by side are joined over the top), when that gives it one
+    const big = Math.max(...o.scales);
+    if (points && l.labelW && !hasRoom(points, l.labelW * big, l.labelH * big)) {
+      const alt = route(a, b, ['n', 's']);
+      if (alt && hasRoom(alt, l.labelW * big, l.labelH * big)) points = alt;
+    }
+    if (points) routed.push({ ...l, points, label: null });
+  }
+
+  // lines that share a lane are spread apart; a run that touches a district's edge stays put
+  for (const axis of ['y', 'x']) {
+    const other = axis === 'y' ? 'x' : 'y';
+    const lanes = new Map();
+    routed.forEach((l, li) => {
+      for (let k = 1; k < l.points.length - 2; k++) {
+        const a = l.points[k], b = l.points[k + 1];
+        if (a[axis] !== b[axis]) continue;
+        const key = a[axis];
+        if (!lanes.has(key)) lanes.set(key, []);
+        lanes.get(key).push({ li, k, lo: Math.min(a[other], b[other]), hi: Math.max(a[other], b[other]) });
+      }
+    });
+    for (const runs of lanes.values()) {
+      if (runs.length < 2) continue;
+      // runs that overlap along the lane share it; each line takes its own track
+      const tracks = [];
+      for (const r of runs.sort((p, q) => p.lo - q.lo)) {
+        let t = tracks.findIndex((tr) => tr.every((x) => x.hi <= r.lo || x.lo >= r.hi || x.li === r.li));
+        if (t < 0) { tracks.push([]); t = tracks.length - 1; }
+        tracks[t].push(r);
+        r.track = t;
+      }
+      if (tracks.length < 2) continue;
+      for (const r of runs) {
+        const off = (r.track - (tracks.length - 1) / 2) * o.spread;
+        const pts = routed[r.li].points;
+        pts[r.k] = { ...pts[r.k], [axis]: pts[r.k][axis] + off };
+        pts[r.k + 1] = { ...pts[r.k + 1], [axis]: pts[r.k + 1][axis] + off };
+      }
+    }
+  }
+
+  // one label per line, on its longest clear straight run
+  const boxes = [];
+  const clear = (bx) => offRects(bx)
+    && !boxes.some((b) => bx.x - bx.w / 2 < b.x + b.w / 2 && b.x - b.w / 2 < bx.x + bx.w / 2 && bx.y - bx.h / 2 < b.y + b.h / 2 && b.y - b.h / 2 < bx.y + bx.h / 2);
+  for (const l of routed) {
+    if (!l.labelW || !l.labelH) continue;
+    // the label grows with the counter-scale up to the largest of `scales`; it is placed at the largest it fits at,
+    // and drawn only while the board is zoomed in at least that far (`label.scale`)
+    for (const sc of [...o.scales].sort((p, q) => q - p)) {
+      const placed = placeLabel(l, l.labelW * sc, l.labelH * sc);
+      if (placed) { placed.scale = sc; boxes.push(placed); l.label = placed; break; }
+    }
+  }
+  return routed;
+
+  function placeLabel(l, w, h) {
+    const runs = [];
+    for (let k = 0; k < l.points.length - 1; k++) {
+      const a = l.points[k], b = l.points[k + 1];
+      const len = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+      runs.push({ a, b, len, flat: a.y === b.y });
+    }
+    runs.sort((p, q) => Number(q.flat) - Number(p.flat) || q.len - p.len);
+    let placed = null;
+    for (const r of runs) {
+      const room = r.flat ? w : h;
+      if (r.len < room + 2 * o.pad) continue;
+      // the middle first, then towards either end
+      for (const f of [0.5, 0.35, 0.65, 0.2, 0.8]) {
+        const bx = { x: r.a.x + (r.b.x - r.a.x) * f, y: r.a.y + (r.b.y - r.a.y) * f, w, h };
+        const lo = r.flat ? Math.min(r.a.x, r.b.x) : Math.min(r.a.y, r.b.y), hi = r.flat ? Math.max(r.a.x, r.b.x) : Math.max(r.a.y, r.b.y);
+        const c = r.flat ? bx.x : bx.y;
+        if (c - room / 2 < lo + o.pad || c + room / 2 > hi - o.pad) continue;
+        if (clear(bx)) { placed = bx; break; }
+      }
+      if (placed) break;
+    }
+    return placed;
+  }
+}
+
+/**
  * The read/write word for one data marker. A message published is written, one listened to is read.
  * When the walk recorded no direction (a third party reached through a call whose method is not a literal),
  * the word is `reached` — never *write* by default (docs/proposals/data-stores.md §3.3).
