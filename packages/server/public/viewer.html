@@ -9,7 +9,7 @@
     --ground:#0A0D14; --panel:#111623; --raised:#182032; --line:#232C42; --line-soft:#1A2135;
     --ink:#DCE4F5; --muted:#99A3BA; --dim:#828DA8;
     --amber:#F0B44E; --cyan:#5BC8DD; --ok:#6FCF8E; --warn:#E8A13C; --auth:#A78BE0; --err:#E06C5F;
-    --fn:#D8C27A; --tbl:#C287D6;
+    --fn:#D8C27A; --tbl:#C287D6; --pkg:#E39A72;
     --accent:var(--cyan); --accent-dim:rgba(91,200,221,.12);
     --hud:'Futura','Avenir Next Condensed','Arial Narrow',sans-serif;
     --body:'Avenir Next','Segoe UI',system-ui,sans-serif;
@@ -29,7 +29,7 @@
        tab you were on. Same hue family, same meaning (amber = business, cyan =
        code), now ≥4.5:1 as text on every light surface and on their own wash. */
     --amber:#7D5915; --cyan:#18677A; --ok:#267448; --warn:#7D5915; --auth:#6D4FC2; --err:#A75047;
-    --fn:#8A6D1F; --tbl:#8A4FA8;
+    --fn:#8A6D1F; --tbl:#8A4FA8; --pkg:#9A4E26;
     --accent-dim:rgba(24,103,122,.1);
   }
   body.lens-business{ --accent:var(--amber); --accent-dim:rgba(240,180,78,.14); }
@@ -353,7 +353,56 @@
   .k-component{color:var(--ok)} .k-page{color:#7FB4F5} .k-route{color:var(--cyan)} .k-function{color:var(--fn)}
   [data-theme="light"] .k-page{color:#2D6BC4}
   .k-table{color:var(--tbl)} .k-rule{color:var(--warn)} .k-guard{color:var(--auth)} .k-queue{color:var(--muted)} .k-external{color:var(--dim)} .k-group{color:var(--accent)}
-  .k-api{color:var(--cyan)} .k-unknown{color:var(--dim)}
+  .k-api{color:var(--cyan)} .k-unknown{color:var(--dim)} .k-package{color:var(--pkg)} .k-module{color:var(--muted)}
+  /* a package: the copper kind colour, and a stripe that says which kind — solid for a library of this
+     workspace, hatched for a third-party package (the word beside the kind says it too) */
+  .node.nk-package{border-left:4px solid var(--pkg);padding-left:8px}
+  .node.nk-package.pkg-tp{border-left:4px solid transparent;border-image:repeating-linear-gradient(180deg,var(--pkg) 0 5px,transparent 5px 9px) 1}
+  .node .kind .sym{width:11px;height:11px}
+  .node.nk-module{border-style:dotted}
+  /* the code map grouped: boxes of small cards, each card carrying its kind as a left stripe */
+  .groupbox.cm-box{border-style:solid;border-width:1px;border-color:var(--line);background:color-mix(in srgb,var(--panel) 55%,transparent)}
+  .groupbox.cm-box.cm-root{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .groupbox.cm-box.cm-thirdParty,.groupbox.cm-box.cm-noTag,.groupbox.cm-box.cm-noProject{border-style:dashed}
+  .cm-ghead{padding:8px 10px 2px!important}
+  .cm-ghead.cm-click{cursor:pointer} .cm-ghead.cm-click:hover .gname{text-decoration:underline}
+  .cm-ghead .sym{width:13px;height:13px;color:var(--pkg)}
+  .cm-gsub{font-family:var(--mono);font-size:9.5px;color:var(--muted);padding:0 10px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cm-ghead .gname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cm-gchips{display:flex;gap:6px;padding:2px 10px 6px}
+  .cm-chip{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--line);border-radius:9px;padding:1px 7px}
+  .node.mini.cm-m{border-left-width:3px} .node.mini.cm-m.nk-component{border-left-color:var(--ok)} .node.mini.cm-m.nk-page{border-left-color:#7FB4F5}
+  .node.mini.cm-m.nk-route,.node.mini.cm-m.nk-api{border-left-color:var(--cyan)} .node.mini.cm-m.nk-function{border-left-color:var(--fn)}
+  .node.mini.cm-m.nk-table{border-left-color:var(--tbl)} .node.mini.cm-m.nk-rule{border-left-color:var(--warn)} .node.mini.cm-m.nk-group{border-left-color:var(--accent)}
+  .node.mini.cm-m.nk-external,.node.mini.cm-m.nk-queue,.node.mini.cm-m.nk-unknown,.node.mini.cm-m.nk-module{border-left-color:var(--dim)}
+  .edge.cm-pedge{stroke:var(--accent);stroke-width:1.6;opacity:.75} .edge.cm-pedge.declared{stroke-dasharray:4 4}
+  .cm-elabel{position:absolute;z-index:3;transform:translate(-50%,-50%);font-family:var(--mono);font-size:9.5px;color:var(--accent);background:var(--ground);border:1px solid var(--accent);border-radius:9px;padding:1px 7px;white-space:nowrap}
+  .cm-elabel.declared{color:var(--muted);border-color:var(--line);border-style:dashed}
+  .cmapctl{display:flex;align-items:center;gap:6px;flex-shrink:0}
+  body:not(.surface-graph) .cmapctl{display:none}
+  .cm-lbl{font-size:9.5px;cursor:help}
+  .cm-select{font:inherit;font-size:11.5px;background:var(--ground);color:var(--ink);border:1px solid var(--line);border-radius:3px;padding:3px 6px;max-width:220px}
+  .cm-views{position:relative}
+  .cm-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:55;min-width:260px;max-height:60vh;overflow-y:auto;background:var(--panel);border:1px solid var(--line);border-radius:5px;box-shadow:0 12px 40px -8px rgba(0,0,0,.5);padding:6px;display:none}
+  .cm-menu.open{display:block}
+  .cm-mhead{display:block;padding:8px 10px 4px;font-size:9.5px}
+  .cm-mrow{display:flex;align-items:center;gap:6px;width:100%;text-align:left;padding:6px 10px;font-size:12px;border-radius:3px}
+  .cm-mrow:hover{background:var(--accent-dim);color:var(--accent)}
+  .cm-mrow .sym{width:12px;height:12px;color:var(--pkg)}
+  .cm-mdim{color:var(--dim);font-family:var(--mono);font-size:9.5px;margin-left:auto}
+  .cm-mnone{padding:6px 10px;color:var(--dim);font-size:11.5px}
+  .cm-viewchip{max-width:360px;overflow:hidden;text-overflow:ellipsis}
+  .cm-scope .cm-sub{padding:6px 10px 2px 14px;font-size:11px;color:var(--muted)}
+  .cm-deprow{padding:4px 10px 6px 22px}
+  .cm-facets{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0;font-size:11.5px}
+  .cm-facet .hud-label{font-size:9px;display:inline!important;margin:0!important}
+  .cm-sublbl{display:block;margin:10px 0 4px!important;font-size:9.5px}
+  .cm-ver{font-family:var(--mono);font-size:10px;margin-bottom:2px}
+  .cm-counts{margin:2px 0 4px;font-size:11.5px}
+  .cm-wgroup{margin-bottom:10px} .cm-whead{font-size:12px;margin-bottom:4px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+  .rel.cm-user{margin-left:14px;border-left-style:dashed}
+  .map-band-pick{display:inline-flex;align-items:center;gap:4px;margin-right:8px}
+  .map-band-pick .hud-label{font-size:9px}
   /* a flow is a business object — the design's named journey, amber like the business lens */
   .k-flow{color:var(--amber)} .node.nk-flow{border-color:rgba(240,180,78,.45)}
   /* "?" stubs: dashed + dim + the ? word — three encodings, none of them colour alone */
@@ -410,6 +459,7 @@
   [data-theme="light"] .tag.tag-deprecated{color:var(--warn);border-color:rgba(179,127,30,.5);background:rgba(179,127,30,.1)}
   .rel{font-size:11.5px;padding:5px 8px;border-left:2px solid var(--line);margin-bottom:4px;cursor:pointer;display:block;width:100%;text-align:left}
   .rel:hover{background:var(--raised)}
+  a.rel{color:inherit;text-decoration:none}
   .rel .rk{font-family:var(--mono);font-size:9px;color:var(--dim);margin-right:6px}
   .rel .qcode{display:block;font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .open-ide{display:flex;justify-content:center;gap:8px;margin:14px 16px;padding:9px;border:1px solid var(--accent);border-radius:3px;color:var(--accent);font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;text-decoration:none}
@@ -2523,6 +2573,7 @@
     <symbol id="sym-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></g></symbol>
     <symbol id="sym-design" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="6" width="16" height="13" rx="2"/><path d="M14.5 6 V3.5 H20 V9 h-2.5"/><path d="M4 15.5 L8.5 11.5 L12 14.5"/></g></symbol>
     <symbol id="sym-work" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="16" rx="2"/><path d="M9 4.5 V3.5 H15 V4.5"/><path d="M8.5 10 L9.8 11.3 L12 9"/><path d="M13.8 10.2 H16"/><path d="M8.5 15 L9.8 16.3 L12 14"/><path d="M13.8 15.2 H16"/></g></symbol>
+    <symbol id="sym-package" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5 L19.5 7.5 V16.5 L12 20.5 L4.5 16.5 V7.5 Z"/><path d="M4.5 7.5 L12 11.5 L19.5 7.5"/><path d="M12 11.5 V20.5"/><path d="M8.2 5.5 L15.8 9.5"/></g></symbol>
     <symbol id="sym-story" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9 H20.5"/><path d="M10 12 L15 14.5 L10 17 Z" fill="currentColor"/></g></symbol>
   </defs>
 </svg>
@@ -2556,6 +2607,7 @@
     </div>
     <button class="chip" id="focuschip" style="display:none" onclick="clearFocus()">✕ exit focus</button>
     <div class="chips" id="chips"></div>
+    <div class="cmapctl" id="cmapctl"></div>
     <div class="lens-switch" role="tablist" aria-label="Lens">
       <button id="lb-business" onclick="setLens('business')">Business</button>
       <button id="lb-hybrid" onclick="setLens('hybrid')">Hybrid</button>

@@ -8,6 +8,7 @@ import { t, def, initRegister, onRegisterChange, toggleRegister } from './string
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf } from './lib/graph-render.js';
 import { mountJourneys, hideJourneyOverlay, journeysRefresh } from './surfaces/journeys.js';
+import { cmapScopeHtml } from './surfaces/codemap-projects.js';
 import { mountCodemap, unmountCodemap, codemapRefresh } from './surfaces/codemap.js';
 import { mountPortfolio, portfolioRefresh } from './surfaces/portfolio.js';
 import { mountChanges, changesRefresh } from './surfaces/changes.js';
@@ -164,6 +165,10 @@ export function parseRoute() {
     biz: q.get('biz'),
     repo: q.get('repo'),
     node: q.get('node'),
+    // the code map's grouping (none | project | a tag dimension) and its two views' subjects
+    group: q.get('group'),
+    project: q.get('project'),
+    package: q.get('package'),
     op: q.get('op'),
     line: q.get('line') ? +q.get('line') : null,
     // what-uses-this, deep-linked: the seed and the distance the reader had open
@@ -636,6 +641,8 @@ export function buildScope() {
   });
   const rest = srcs.map((s) => s.name).filter((n) => !inColl.has(n));
   if (rest.length) html += '<div class="sc-group"><div class="sc-plain hud-label">' + esc(t(colls.length ? 'scope.ungrouped' : 'scope.sources')) + '</div>' + rest.map(row).join('') + '</div>';
+  // on the code map: its own filters — projects, tag values, depends on (surfaces/codemap-projects.js)
+  html += cmapScopeHtml();
   html += '<div class="sc-foot"><button class="sc-save" onclick="saveScopeGroup()" title="' + esc(t('scope.newGroupTitle')) + '">' + esc(t('scope.newGroup')) + '</button></div>';
   menu.innerHTML = html;
   colls.forEach((c, i) => {

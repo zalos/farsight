@@ -70,6 +70,8 @@ const CHROME_FILES = [
   'surfaces/map-property.js', 'lib/map-property-model.js',
   // lane I's Affected mode
   'surfaces/map-affected.js', 'lib/map-affected-model.js',
+  // lane C (code map by project and package)
+  'surfaces/codemap-projects.js', 'lib/codemap-model.js',
 ];
 // journeys.js: only its NEW surface chrome is expected to use t(); its legacy
 // overlay strings are grandfathered line-by-line below.

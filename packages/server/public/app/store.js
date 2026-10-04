@@ -18,6 +18,8 @@ export const S = {
   // a fast-travel pick bound for the code map: focusOn() once the map has mounted (shell.js pick)
   pendingFocus: null,
   expandedGroups: new Set(), scope: 'all',
+  // the code map's projects and packages (surfaces/codemap-projects.js): group, filters, chips, the open view
+  cmap: null,
   guardsByTarget: {}, displayCache: null, BYID: {}, RENDER_PARENTS: {},
   JOURNEY: null, journeyObserver: null, journeyActive: 0,
   JRN_TREE: null, jrnForksOpen: false, mhTimer: null,
@@ -199,6 +201,8 @@ export function bizName(n) {
   // a label that names a file or an identifier is said in words, like any other sentence
   if (own) return /\.[a-z]{2,4}\b|[a-z][A-Z]|_/.test(own) ? unCode(own) : own;
   const name = String(n.name || '');
+  // a package's name is how the code imports it (`@scope/date-fns`): its words drop the scope and the separators
+  if (n.kind === 'package') return humanize(name.replace(/^@[^/]+\//, '').replace(/[/.]/g, ' ')) || name;
   if (n.kind === 'route') return plainClause(n.contract && n.contract.summary) || routeWords(name);
   if (n.kind === 'guard' || n.kind === 'rule') {
     // the label a gate carries after its identifier (`requireX: signed-in contractor`),

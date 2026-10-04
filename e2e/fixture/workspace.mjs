@@ -51,3 +51,24 @@ export function ingest(dir, graph) {
     cwd: dir, stdio: ['ignore', 'ignore', 'pipe'],
   });
 }
+
+/**
+ * A second workspace for the specs that need projects and tags: `examples/invoice-app` and
+ * `examples/nx-workspace` copied side by side, named as two sources in the settings, and
+ * ingested together into one `graph.json` (one `farsight ingest a b`, from the workspace cwd).
+ * The suite's own fixture stays invoice-app alone, so no other spec's numbers move.
+ */
+export function makeProjectsWorkspace(label = 'projects') {
+  const dir = mkdtempSync(join(tmpdir(), `farsight-e2e-${label}-`));
+  const names = [FIXTURE_REPO, 'nx-workspace'];
+  for (const n of names) cpSync(join(REPO_ROOT, 'examples', n), join(dir, n), { recursive: true });
+  mkdirSync(join(dir, '.farsight'), { recursive: true });
+  writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({
+    theme: 'dark', defaultLens: 'hybrid', flags: { map: true },
+    sources: names.map((n) => ({ id: n, name: n, type: 'local', path: n, enabled: true })),
+    collections: [],
+  }, null, 2));
+  const graph = join(dir, 'graph.json');
+  execFileSync(process.execPath, [CLI, 'ingest', ...names, '--out', graph], { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
+  return { dir, graph, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
