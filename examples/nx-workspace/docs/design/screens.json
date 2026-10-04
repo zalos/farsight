@@ -9,9 +9,9 @@
     },
     {
       "id": "OPS-01",
-      "name": "Report runs",
+      "name": "Overnight run",
       "route": "/runs",
-      "description": "The operations team's report runs, with the money each one moved."
+      "description": "The overnight run: how much was collected today."
     }
   ],
   "flows": [
@@ -19,13 +19,17 @@
       "id": "review-open-invoices",
       "name": "Review open invoices",
       "description": "A billing user opens the list of open invoices and reads what is owed.",
-      "screens": ["BIL-01"]
+      "screens": [
+        "BIL-01"
+      ]
     },
     {
       "id": "check-report-runs",
-      "name": "Check the report runs",
-      "description": "An operations user checks the report runs and what each one moved.",
-      "screens": ["OPS-01"]
+      "name": "Check the overnight run",
+      "description": "An operations user checks how much the overnight run collected.",
+      "screens": [
+        "OPS-01"
+      ]
     }
   ]
 }
