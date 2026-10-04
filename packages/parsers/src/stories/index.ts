@@ -19,12 +19,13 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative, resolve, dirname } from 'node:path';
 import { parseSync } from 'oxc-parser';
 import type { GraphFragment, GraphNode, StoryRef, StorybookRef, StoriesMeta, StorybookConfig } from '@farsight/core';
-import { loadConfig, storyIdOf, storyNameFromExport, autoTitleOf, joinRepoPath } from '@farsight/core';
+import { storyIdOf, storyNameFromExport, autoTitleOf, joinRepoPath } from '@farsight/core';
 import { walk, isNode, lineIndex, stringValue, type AstNode } from '../walk.js';
 import { collectFiles, SKIP_DIRS, globToRegExp } from '../shared/files.js';
 import { docCommentAbove } from '../shared/docs.js';
 import { createAliasResolver, resolveFileish } from '../aliases.js';
 import type { IngestOptions } from '../types.js';
+import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 
 const STORY_FILE = /\.(stories|story)\.[cm]?[jt]sx?$/;
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
@@ -333,10 +334,10 @@ function exportsFrom(abs: string, name: string, repoRoot: string, resolveAlias: 
  * Read the repo's story files into the fragment (in place): a `StoryRef` per
  * story on the component node, and `meta.stories`. Never throws.
  */
-export function applyStories(fragment: GraphFragment, repoRoot: string, options: IngestOptions = {}): { errors: string[]; meta: StoriesMeta } {
+export function applyStories(fragment: GraphFragment, repoRoot: string, options: IngestOptions = {}, workspace?: WorkspaceConfig): { errors: string[]; meta: StoriesMeta } {
   const repo = fragment.repo;
-  const config = options.config === false ? null : loadConfig(join(repoRoot, 'farsight.config.json'));
-  const storybooks = storybooksOf(repoRoot, config?.storybook, options);
+  const config = (workspace ?? loadWorkspaceConfig(repoRoot, options)).merged;
+  const storybooks = storybooksOf(repoRoot, config.storybook, options);
   const byId = new Map<string, GraphNode>(fragment.nodes.map((n) => [n.id, n]));
   const resolveAlias = createAliasResolver(repoRoot);
   const errors: string[] = [];

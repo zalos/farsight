@@ -52,7 +52,32 @@ export interface FarsightConfig {
   storybook?: StorybookConfig | StorybookConfig[];
   /** how the workspace's project tags group: dimensions added or renamed, and words for tag values (docs/proposals/dependencies-and-nx.md §2.2) */
   projects?: ProjectsConfig;
+  /**
+   * How the journeys are organised: personas and groups in the order they are shown, and a flow's
+   * placement by id (docs/proposals/journey-organisation-and-config-files.md §4.2). The root file's
+   * block applies to every manifest of the source, a nested file's to the manifests under its folder.
+   */
+  journeys?: JourneysConfig;
 }
+
+/** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
+export const CONFIG_FIELDS = [
+  'tags', 'glossary', 'guards', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
+  'externals', 'stores', 'journeys', 'projects', 'tooling',
+] as const satisfies readonly (keyof FarsightConfig)[];
+
+/** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
+export const ROOT_ONLY_CONFIG_FIELDS = ['projects', 'tooling'] as const satisfies readonly (keyof FarsightConfig)[];
+
+/** `farsight.config.json → journeys`: the same shapes as a manifest's, every field but the id optional (an override gives only what it changes). */
+export interface JourneysConfig {
+  personas?: JourneysConfigPersona[];
+  groups?: JourneysConfigGroup[];
+  flows?: JourneysConfigFlow[];
+}
+export interface JourneysConfigPersona { id: string; name?: string; description?: string }
+export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
+export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
 
 /**
  * `farsight.config.json → projects`. A dimension with the prefix or the key of a default
@@ -125,12 +150,12 @@ export interface StoreDecl {
 /** Where one level's results/coverage reports live. Paths are repo-relative globs; the adapter never runs tests. */
 export interface TestReportConfig {
   runner?: 'vitest' | 'jest' | 'node:test' | 'playwright' | 'cypress' | 'junit' | 'other';
-  /** per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML */
-  results?: string;
-  /** istanbul-shaped coverage-final.json — attributed at the run level unless the report names a test */
-  coverage?: string;
-  /** an html report to deep-link to */
-  report?: string;
+  /** per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML — one glob or several */
+  results?: string | string[];
+  /** istanbul-shaped coverage-final.json — attributed at the run level unless the report names a test; one glob or several */
+  coverage?: string | string[];
+  /** an html report to deep-link to — one, or one per results file (the one sharing the longest folder with the results file is linked) */
+  report?: string | string[];
 }
 
 export interface TestsConfigBlock {
@@ -138,19 +163,80 @@ export interface TestsConfigBlock {
   include?: string[];
   /** globs that un-claim a file the defaults would have taken */
   exclude?: string[];
-  unit?: TestReportConfig;
-  integration?: TestReportConfig;
-  e2e?: TestReportConfig;
+  /** one block, or one per config file that gave this level (nested farsight.config.json files each keep their own runner) */
+  unit?: TestReportConfig | TestReportConfig[];
+  integration?: TestReportConfig | TestReportConfig[];
+  e2e?: TestReportConfig | TestReportConfig[];
 }
 
-export function loadConfig(path: string): FarsightConfig | null {
-  try {
-    const config = JSON.parse(readFileSync(path, 'utf8')) as FarsightConfig;
-    if (config && typeof config === 'object') { sanitizeStores(config); sanitizeProjects(config); }
-    return config;
-  } catch {
-    return null;
+/** A config value that may be one string or several, as a list (blank and non-string entries dropped). */
+export function stringList(v: string | string[] | undefined): string[] {
+  if (v === undefined) return [];
+  return (Array.isArray(v) ? v : [v]).filter((x): x is string => typeof x === 'string' && !!x.trim());
+}
+
+/**
+ * One farsight.config.json read and soft-validated: the config, or why it could not be read
+ * (`missing` when there is no file). Never throws — `loadWorkspaceConfig` turns `error` into a note.
+ */
+export function readConfigFile(path: string): { config: FarsightConfig } | { error: string } | { missing: true } {
+  let text: string;
+  try { text = readFileSync(path, 'utf8'); } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return { missing: true };
+    return { error: `could not be read (${code ?? (err as Error).message})` };
   }
+  let raw: unknown;
+  try { raw = JSON.parse(text); } catch (err) { return { error: `is not valid JSON — ${(err as Error).message.split('\n')[0]}` }; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'is not a JSON object' };
+  const config = raw as FarsightConfig;
+  sanitizeStores(config); sanitizeProjects(config); sanitizeJourneys(config);
+  return { config };
+}
+
+/** The config at `path`, or null when there is none or it cannot be read (`readConfigFile` says why). */
+export function loadConfig(path: string): FarsightConfig | null {
+  const r = readConfigFile(path);
+  return 'config' in r ? r.config : null;
+}
+
+/**
+ * Soft validation of `journeys` (§4.2): an entry without a string id is dropped, a field of the
+ * wrong type is left out, a block of the wrong shape becomes empty. Never throws.
+ */
+export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
+  if (config.journeys === undefined) return config;
+  const raw = config.journeys as unknown;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { delete config.journeys; return config; }
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const entries = (v: unknown): Record<string, unknown>[] =>
+    (Array.isArray(v) ? v : []).filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && !Array.isArray(e) && !!str((e as Record<string, unknown>).id));
+  const out: JourneysConfig = {};
+  if (r.personas !== undefined) {
+    out.personas = entries(r.personas).map((e) => ({
+      id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+    }));
+  }
+  if (r.groups !== undefined) {
+    out.groups = entries(r.groups).map((e) => ({
+      id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+      ...(str(e.persona) ? { persona: str(e.persona)! } : {}),
+    }));
+  }
+  if (r.flows !== undefined) {
+    out.flows = entries(r.flows).map((e) => {
+      const persona = Array.isArray(e.persona) ? e.persona.map(str).filter((x): x is string => !!x) : str(e.persona);
+      return {
+        id: str(e.id)!,
+        ...(persona !== undefined && (!Array.isArray(persona) || persona.length) ? { persona } : {}),
+        ...(str(e.group) ? { group: str(e.group)! } : {}),
+        ...(typeof e.order === 'number' && Number.isFinite(e.order) ? { order: e.order } : {}),
+      };
+    });
+  }
+  config.journeys = out;
+  return config;
 }
 
 const STORE_KINDS: readonly StoreKind[] = ['sql', 'document', 'files', 'erp', 'other'];
@@ -263,14 +349,16 @@ export function globToRegExp(glob: string): RegExp {
  * spec added). Config-declared gates are tagged `declared`: they are a
  * statement about the system, not something the parser observed.
  */
-export function applyRouteGuards(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[]): number {
+export function applyRouteGuards(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[], scope?: ConfigScope): number {
   let added = 0;
   const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const [label, matchers] of Object.entries(config.guards ?? {})) {
     const routes = matchers.map((m) => m.match(ROUTE_MATCHER)).filter((m): m is RegExpMatchArray => !!m).map((m) => `${m[1]} ${routeKey(m[2]!)}`);
     if (!routes.length) continue;
-    for (const node of nodes) {
+    // a snapshot: the guard nodes pushed below are never routes, and the scope must not see them
+    for (const node of [...nodes]) {
       if (node.kind !== 'route') continue;
+      if (scope && !scope(node)) continue;
       const mp = node.name.match(ROUTE_MATCHER);
       if (!mp || !routes.includes(`${mp[1]} ${routeKey(mp[2]!)}`)) continue;
       const repo = node.loc?.repo ?? node.id.split('::')[0]!;
@@ -354,8 +442,41 @@ export function glossaryEntryFor(name: string, glossary: FarsightConfig['glossar
   return undefined;
 }
 
+/**
+ * Which nodes one config file speaks for. The root farsight.config.json speaks for every node
+ * (no scope); a nested one only for the nodes under its folder (`scopeOfDir`).
+ */
+export type ConfigScope = (node: GraphNode) => boolean;
+
+/** The scope of a nested config file at repo-relative `dir`: nodes whose `loc.path` is under `dir/`. `''` = the root = every node. */
+export function scopeOfDir(dir: string): ConfigScope | undefined {
+  const d = dir.replace(/\\/g, '/').replace(/^\.\/?/, '').replace(/\/+$/, '');
+  if (!d) return undefined;
+  const prefix = `${d}/`;
+  return (node) => !!node.loc?.path && node.loc.path.replace(/\\/g, '/').startsWith(prefix);
+}
+
+export interface ApplyConfigOptions {
+  /** only these nodes (a nested config file's folder); every node when absent */
+  scope?: ConfigScope;
+  /**
+   * Functions an earlier config file already turned into guards. A guard rule of this file that
+   * matches one of them does not rename it again (the rename is not idempotent) — `onGuardConflict` hears it.
+   */
+  guarded?: ReadonlySet<string>;
+  onGuardConflict?: (node: GraphNode, label: string) => void;
+}
+
+/** What one `applyConfig` call did that the next file needs to know. */
+export interface ApplyConfigResult {
+  /** node ids this call turned from a function into a guard */
+  guarded: string[];
+}
+
 /** Apply tag rules, plumbing/setup tags, glossary facets, and declared guards/entrypoints to a fragment, in place. */
-export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[] = []): void {
+export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: GraphEdge[] = [], options: ApplyConfigOptions = {}): ApplyConfigResult {
+  const { scope, guarded: already } = options;
+  const guarded: string[] = [];
   const tagRules = Object.entries(config.tags ?? {});
   // function-shaped matchers only here; route-shaped ones are applyRouteGuards()
   const guardRules = Object.entries(config.guards ?? {}).map(([l, ms]) => [l, ms.filter((m) => !ROUTE_MATCHER.test(m))] as const).filter(([, ms]) => ms.length);
@@ -364,6 +485,7 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
   const plumbingGlobs = (config.plumbing ?? []).map(globToRegExp);
   const setupMatchers = config.setup ?? [];
   for (const node of nodes) {
+    if (scope && !scope(node)) continue;
     const hay = `${node.loc?.path ?? ''} ${node.name}`.toLowerCase();
     for (const [tag, matchers] of tagRules) {
       if (!node.tags.includes(tag) && matchers.some((m) => hay.includes(m.toLowerCase()))) {
@@ -387,8 +509,11 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
       node.facets = { ...node.facets, business: { ...node.facets?.business, ...entry } };
     }
     for (const [label, matchers] of guardRules) {
-      if (node.kind !== 'function' || !matchers.some((m) => hay.includes(m.toLowerCase()))) continue;
+      if (!matchers.some((m) => hay.includes(m.toLowerCase()))) continue;
+      if (already?.has(node.id)) { options.onGuardConflict?.(node, label); continue; }
+      if (node.kind !== 'function') continue;
       node.kind = 'guard';
+      guarded.push(node.id);
       node.name = `${node.name}: ${label}`;
       if (!node.tags.includes('auth')) node.tags.push('auth');
       // calls into the wrapper gain a guards edge pointing back at the caller; the calls edge stays,
@@ -407,7 +532,8 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
       }
     }
   }
-  applyRouteGuards(nodes, config, edges);
+  applyRouteGuards(nodes, config, edges, scope);
+  return { guarded };
 }
 
 /** Edge kinds that carry the setup origin outward from the closure — everything a container build actually does. */

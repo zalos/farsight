@@ -10,9 +10,10 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve, basename } from 'node:path';
+import { relative, resolve, basename } from 'node:path';
 import type { GraphFragment, DesignManifest, DesignSource, DesignReconcile } from '@farsight/core';
-import { applyDesignToFragment, designToFragment, isDesignManifest, figmaFileKey, loadConfig } from '@farsight/core';
+import { applyDesignToFragment, designToFragment, isDesignManifest, figmaFileKey } from '@farsight/core';
+import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 import { collectFiles } from '../shared/files.js';
 import type { IngestOptions } from '../types.js';
 
@@ -128,10 +129,15 @@ export async function discoverManifests(repoRoot: string, options: IngestOptions
 
 export interface DesignApplication { path: string; origin: 'file' | 'config'; result: DesignReconcile }
 
-/** Discover + reconcile every manifest for the repo into the fragment (in place). Never throws: unreadable manifests are reported in `errors`. */
-export async function applyDesigns(fragment: GraphFragment, repoRoot: string, options: IngestOptions): Promise<{ applied: DesignApplication[]; errors: string[] }> {
-  const config = loadConfig(join(repoRoot, 'farsight.config.json')) as ({ design?: DesignDeclaration[] } | null);
-  const { manifests, errors } = await discoverManifests(repoRoot, options, config?.design ?? []);
+/**
+ * Discover + reconcile every manifest for the repo into the fragment (in place). Never throws: unreadable
+ * manifests are reported in `errors`. `workspace` is the source's config files as `ingestRepo` read them
+ * (read here when absent): every file's `design[]`, rebased to the repo, is declared; a manifest declared
+ * and also found by name is read once.
+ */
+export async function applyDesigns(fragment: GraphFragment, repoRoot: string, options: IngestOptions, workspace?: WorkspaceConfig): Promise<{ applied: DesignApplication[]; errors: string[] }> {
+  const ws = workspace ?? loadWorkspaceConfig(repoRoot, options);
+  const { manifests, errors } = await discoverManifests(repoRoot, options, (ws.merged.design ?? []) as DesignDeclaration[]);
   const applied: DesignApplication[] = [];
   if (!manifests.length) return { applied, errors };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
