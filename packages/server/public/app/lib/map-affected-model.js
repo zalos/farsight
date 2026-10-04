@@ -131,3 +131,69 @@ export function testEvidenceKey(x) {
   if (x.observedVia === 'declaration') return 'tests.evidence.declaredPassed';
   return x.stale ? 'journey.evidence.stale' : 'journey.evidence.observed';
 }
+
+/**
+ * A screen several journeys share is one screen: the rows of a distance grouped by the page they show, each with
+ * the journeys it is on (in the order met) — the Affected tab and the list name it once (round 2).
+ * @param {{ flowId: string, screenId: string, name: string, hop: number }[]} screens
+ */
+export function groupScreens(screens) {
+  const out = [];
+  const at = new Map();
+  for (const s of screens || []) {
+    let g = at.get(s.screenId);
+    if (!g) { g = { screenId: s.screenId, name: s.name, hop: s.hop, flows: [] }; at.set(s.screenId, g); out.push(g); }
+    if (!g.flows.includes(s.flowId)) g.flows.push(s.flowId);
+    if (s.hop < g.hop) g.hop = s.hop;
+  }
+  return out;
+}
+
+/** The furthest distance any answer still found something at — past it, a longer reach adds nothing. */
+export function furthestHop(entries) {
+  let far = 0;
+  for (const e of entries || []) {
+    const hops = (e && e.report && e.report.hops) || [];
+    for (const h of hops) if ((h.nodes || []).length && h.hop > far) far = h.hop;
+  }
+  return far;
+}
+
+/**
+ * The rows the list panel shows and the CSV / JSON copy carries — the same rows in both: per seed and distance,
+ * the journeys (with their owner), the screens (once, with their journeys), the owners of those journeys, and the
+ * tests first met there. `owner(flowId)` and `journeyName(flowId)` are the board's.
+ * @returns {{ seed: string, distance: number, kind: 'journey'|'screen'|'owner'|'test', id: string, name: string, journeys: string, owner: string, evidence: string }[]}
+ */
+export function affectedRows(entries, { owner = () => '', journeyName = (id) => id, seedName = (id) => id, evidence = () => '' } = {}) {
+  const rows = [];
+  for (const e of entries || []) {
+    const seed = seedName(e.seed);
+    for (const g of hopGroups(e.report)) {
+      const owners = new Set();
+      for (const j of g.journeys) {
+        const o = owner(j.flowId) || '';
+        if (o) owners.add(o);
+        rows.push({ seed, distance: g.hop, kind: 'journey', id: j.flowId, name: journeyName(j.flowId, j.name), journeys: '', owner: o, evidence: '' });
+      }
+      for (const s of groupScreens(g.screens)) {
+        const os = [...new Set(s.flows.map((f) => owner(f)).filter(Boolean))];
+        rows.push({ seed, distance: g.hop, kind: 'screen', id: s.screenId, name: s.name, journeys: s.flows.map((f) => journeyName(f)).join('; '), owner: os.join('; '), evidence: '' });
+      }
+      for (const o of owners) rows.push({ seed, distance: g.hop, kind: 'owner', id: o, name: o, journeys: '', owner: o, evidence: '' });
+      for (const x of g.tests) rows.push({ seed, distance: g.hop, kind: 'test', id: x.id, name: x.name, journeys: '', owner: '', evidence: evidence(x) });
+    }
+  }
+  return rows;
+}
+
+const CSV_COLS = ['seed', 'distance', 'kind', 'id', 'name', 'journeys', 'owner', 'evidence'];
+/** The rows as CSV (RFC 4180 quoting), one header line. */
+export function affectedCsv(rows) {
+  const q = (v) => { const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  return [CSV_COLS.join(','), ...(rows || []).map((r) => CSV_COLS.map((c) => q(r[c])).join(','))].join('\n') + '\n';
+}
+/** The rows as JSON under a header that says what they are — `farsight-affected v0`, not a frozen contract. */
+export function affectedJson(rows, meta = {}) {
+  return JSON.stringify({ format: 'farsight-affected', version: 0, frozen: false, ...meta, rows: rows || [] }, null, 2) + '\n';
+}

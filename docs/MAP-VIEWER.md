@@ -488,14 +488,14 @@ lens or register change calls `update(ctx)` with the new `lens`; closing calls `
 | key | where | does |
 |---|---|---|
 | Tab / Shift-Tab | everywhere | level pills → crumb's as-of → tools → the board: at the neighbourhood one stop per journey (its cover); on the street each screen (and its number chips), then each screen's calls with their data, journey after journey. A stop off the stage pans into view (`onBoardFocus` → `revealEl`) |
-| Enter / Space | the board | a cover walks into the street (the keyboard lands on its first screen); a screen opens its property (focus on Back); a call or data node opens the explore card |
+| Enter / Space | the board | a cover walks into the street (the keyboard lands on its first screen); a screen opens its property (focus on Back); a call or data node opens the explore card; with nothing on the board focused, the cover the keys last walked to (round 2) |
 | Esc | | card → screen (focus back on it) → street → neighbourhood (focus on the journey's cover) |
-| `j` / `k` | street | next / previous screen of the focused (or middle) journey, centred at the reader's zoom |
+| `j` / `k` | street · board | on the street the next / previous screen of the current journey, slid to the middle across at the reader's zoom (the board keeps its height); on the board the next / previous cover, like `l` / `h` (round 2) |
 | `h` / `l` | both | previous / next journey: the cover takes the focus on the neighbourhood, the board walks to its street on the street |
 | arrows | outside the property and card | pan 80 px (Shift: 240) |
 | `[` / `]` | property | previous / next screen |
 | `p` · `+ − 0` · `b` · `y` | | plumbing · the next stop in or out, fit what is in view · what uses the card's node · copy the link |
-| `?` | | opens and closes the legend (`mapToggleLegend` → `toggleLegend`); on a focused word with a tip it opens that tip, as everywhere |
+| `?` | | opens and closes the legend (`mapToggleLegend` → `toggleLegend`) whatever has the focus — `tipKeydown` leaves `?` to a hover-mode surface, so a focused cover's tip never opens on it (round 2); over an open screen it does nothing |
 
 What a level does not show is `inert` (`applyTabbing`, redone when the level or the property changes): the ghosted
 streets and heads at the neighbourhood, the board under an open property; covers are `visibility:hidden` on the
@@ -594,7 +594,7 @@ count with its levels); then *not walked* — the report's stops with *n behind 
 …*). While the mode is on the explore card's *on* chips and the property's *also in* chips carry how each screen or
 journey is reached.
 
-Esc clears the mode before anything else (`mapEscape`). e2e: `e2e/tests/map-affected.pw.spec.ts`; the pure parts:
+Esc closes the list, then clears the mode, before anything else (`mapEscape`). e2e: `e2e/tests/map-affected.pw.spec.ts`; the pure parts:
 `packages/server/test/map-affected-model.test.ts`; the fold over HTTP: `impact-api.test.ts` (`?reach=1`) and
 `history-api.test.ts` (`/api/history/commit`).
 
@@ -676,3 +676,42 @@ test or decision carries `data-map-card="<kind>" data-id="<nodeId>"` for the map
 **e2e.** `e2e/tests/map-property.pw.spec.ts` deep-links through the map: the Invoice list hero and its counts, the
 APIs rows by service, New invoice's case verified by declaration, Discard draft's placeholder, the step bar, and no
 identifier-shaped word on any tab of any screen in the business lens.
+
+#### Round 2 of the map pass (2026-10-04) — what the second swarm found
+
+- **The current journey is the one the reader opened** (`MAP.journey`, `openedJourney()`): a click on a cover,
+  Enter, a deep link, ⌘K, `h` / `l`, a snap, an open screen or an explore card. It holds the crumb, the ring, the
+  link (`writeHash`), Fit, plumbing, the edge cues and the Affected ring until the reader leaves it — Esc, another
+  journey, the board (level `nb`), or a pan that takes all of it off the stage (`journeyInView`), which leaves a
+  **back to <journey>** chip (`.map-backto`) beside the hint. Only while nothing is open does the journey nearest the
+  stage's middle stand in. Before: a fourteen-screen journey opened at its fitted floor had its middle off the stage
+  and its neighbour took the crumb, `j` and the plumbing.
+- **Plumbing** brings the open journey's head back to the top when the pathways grow; **`j` / `k`** slide across
+  only. The open journey's **name rides the stage's edges** (`stickHead`: `--head-x` / `--head-y`), so a zoom at
+  its far end still says whose screens these are.
+- **Zoom**: hover tips hold while a wheel or drag is in flight and 300 ms after (`quietHoverTips` in
+  `lib/tooltip.js`); a gesture that settles on the journey stop makes the least move that frames it
+  (`settleJourney`) — `+` / `−` still frame it as it opens; a link with only `z` is honoured at that scale. The
+  engine's `bounds()` option keeps at least 120 px of the board on the stage (`clampPan`, unit-tested).
+- **The legend** opens by itself as a narrow strip under the chrome (`.auto`), collapsed to its title when a link
+  opened the map (`linkOpened`), never over the toolbar's `?`, never taking the focus. Implied, declared-not-called
+  and not built calls differ by stroke (solid · dashed · dotted and hatched) on the board and in the legend. While
+  the Affected mode is on the legend lists its badges.
+- **The Affected mode at board altitude**: Fit and the bar's **fit these** frame the reached districts
+  (`fitAffected`); lit districts get a counter-scaled frame and a corner badge (`.map-affb.corner`), dimmed ones a
+  dashed stroke; **list these** opens `.map-afflist` — per distance the journeys with owners, each screen once with
+  its journeys, the owners, the tests, the floor line — with **copy as CSV / JSON** (`affectedRows` ·
+  `affectedCsv` · `affectedJson`, `farsight-affected v0`, not frozen). The bar reads screens first, each page once
+  (core `affectedReach` counts distinct pages), then *in N journeys*; a longer reach that finds nothing says
+  *nothing more past N*. The property's head shows the seed and its counts, and its *What's affected* opens the tab.
+  Every copy (the link, the rows) confirms with a toast by the tools (`.map-toast`, 2 s).
+- **Scope words**: a screen's numbers say *on this journey*; the property's Tests heading is *Cases that run over this
+  screen*; the tab's tests carry *within how far N*; a **risk headline** over the board counts journeys stale, not
+  fully built and reaching the ERP (`riskCounteds`, docs/COUNTS.md). The call card names the handler's file and line.
+- **The property's rail** (`data-tip-place="left"`) opens its tips to the left of the rail, never over its rows.
+- **The code map grouped**: a folded group spanning projects is drawn once per project; parts are counted under their
+  own kind; test files are file cards; card rows follow measured heights; the GROUP choices share one casing; the
+  Views menu's headings stay in place.
+
+e2e: `e2e/tests/map-round2.pw.spec.ts` (a twelve-journey board whose first journey is fourteen screens wide).
+

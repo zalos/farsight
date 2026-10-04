@@ -564,7 +564,7 @@ export const STRINGS: Record<string, StringEntry> = {
     'How many rows the journey’s system band has: the browser, each API, the service, the records, the messages, each third party. One row per system, journey-wide.'),
   'journey.countSystemsOne': one('1 system', 'journey.countSystems'),
   'journey.countStores': same('{n} data stores',
-    'The places this journey keeps or fetches its data, each counted once by name: the database its records live in, and each outside system it reads from or writes to as a store. A store is named only when the code or the project settings say which one; records whose store nobody named are not counted.'),
+    'The places this journey keeps or fetches its data, each counted once by name: the database its records live in, and each outside system it reads from or writes to as a store. A store is named only when the code or the project settings say which one; records whose store nobody named are not counted. A count of stores, not of tables: many tables live in one database, so two stores can hold a dozen tables.'),
   'journey.countStoresOne': one('1 data store', 'journey.countStores'),
   'journey.start': same('start'),
   'journey.end': same('end of tracked flow'),
@@ -1777,6 +1777,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'tests.detail.suite': same('suite {path}', 'The describe path this case sits under, outermost first — what a report row must match to join it.'),
   'tests.detail.ident': same('{level} · {runner}'),
   'tests.detail.projects': same('projects {list}', 'The runner projects that executed this case. Each one is its own run with its own verdict.'),
+  'journey.tests.runProjects': same('Run in the runner projects {list}.', 'The runner projects that executed this run (a Playwright project, say). Each one is its own run with its own verdict.'),
   'tests.detail.runLevel': same(
     'a run report, not a test case',
     'A coverage report with no per-case attribution is indexed as one node so its observations have somewhere to hang. It is never counted as a test, and it has no author and no claims.',

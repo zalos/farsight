@@ -304,6 +304,18 @@ let layer = null;
 const st = { el: null, rich: false, pinned: false, via: '', sig: '', describedBy: null };
 let hoverTimer = 0, leaveTimer = 0, pendingEl = null;
 const lastPt = { x: -1, y: -1 };
+/** Until this time (ms) no tip opens on hover — a surface moving under a still pointer is not the reader resting on a word. */
+let quietUntil = 0;
+/**
+ * Hold hover tips for `ms`: a pending one is dropped and an open hover tip closes (a pinned one stays). The Map calls
+ * this on every zoom or pan event, so a tip never opens because the board slid a trigger under the pointer (round 2:
+ * one ⌘-wheel notch over a cover opened its whole description over half the board).
+ */
+export function quietHoverTips(ms = 300) {
+  quietUntil = Math.max(quietUntil, Date.now() + ms);
+  cancelPending();
+  if (st.el && !st.pinned && st.via === 'hover') hideTip();
+}
 
 /** A trigger's identity, so a redraw's copy of it can be found again. */
 function sigOf(el) {
@@ -336,6 +348,21 @@ function position() {
   layer.style.left = '0px'; layer.style.top = '0px';
   const r = st.el.getBoundingClientRect();
   const s = { width: layer.offsetWidth, height: layer.offsetHeight };
+  // a rail of rows (the Map property's tabs) keeps its tips beside it, so a tip never covers the rows being read or
+  // clicked (round 2): left of the trigger's container when there is room, else the usual placement
+  const rail = st.el.closest && st.el.closest('[data-tip-place="left"]');
+  if (rail) {
+    const rr = rail.getBoundingClientRect();
+    const left = rr.left - TIP_HOVER_GAP - s.width;
+    if (left >= 8) {
+      const top = Math.max(8, Math.min(window.innerHeight - 8 - s.height, r.top + r.height / 2 - s.height / 2));
+      layer.style.left = left + 'px';
+      layer.style.top = top + 'px';
+      layer.dataset.side = 'left';
+      layer.style.setProperty('--tip-arrow', '0px');
+      return;
+    }
+  }
   const p = placeTip(r, s, { width: window.innerWidth, height: window.innerHeight }, hoverMode(st.el) ? { gap: TIP_HOVER_GAP } : {});
   if (p.maxHeight != null && body) body.style.maxHeight = Math.max(60, p.maxHeight - 20) + 'px';
   layer.style.left = p.left + 'px';
@@ -444,6 +471,7 @@ function onPointerOver(e) {
   if (trg === st.el) { clearTimeout(leaveTimer); return; }
   if (trg === pendingEl) return;
   if (e.pointerType === 'touch') return;
+  if (Date.now() < quietUntil) return;
   // a trigger that has opened its own menu has a better thing on screen
   if (trg.getAttribute('aria-expanded') === 'true') return;
   cancelPending();
@@ -455,6 +483,7 @@ function onPointerOver(e) {
   hoverTimer = setTimeout(() => {
     let el = pendingEl;
     cancelPending();
+    if (Date.now() < quietUntil) return;
     // the trigger may have been redrawn while the pointer rested on it
     if (el && !el.isConnected) {
       const under = document.elementFromPoint(lastPt.x, lastPt.y);
@@ -527,6 +556,9 @@ export function tipKeydown(e) {
   const a = document.activeElement;
   if (a && a.matches && a.matches(TIP_SELECTOR) && !(layer && layer.contains(a))) {
     const enter = (e.key === 'Enter' || e.key === ' ') && !isInteractive(a);
+    // in a hover-mode container (the Map) `?` is the surface's own key — its legend — and a focused trigger's tip
+    // shows on hover and focus there, never on `?` (round 2: `?` on a focused cover opened its tip, not the legend)
+    if (e.key === '?' && hoverMode(a)) return false;
     if (e.key === '?' || enter) {
       e.preventDefault();
       if (st.el === a) hideTip();

@@ -21,17 +21,17 @@ import { t, def, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip } from '../lib/counted.js';
-import { tipAttrs, TIP_SELECTOR, hideTip } from '../lib/tooltip.js';
+import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip } from '../lib/map-chips.js';
+import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, MODE_ORDER } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { attachCanvas, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import {
   onAffectedChange, affectedOn, affectedSpec, affectedHops, affectedParams, setAffected, setAffectedHops, clearAffected, resetAffected,
-  paintDistrict, affectedBarHtml, screenChipReach,
+  paintDistrict, affectedBarHtml, screenChipReach, affectedFlows, affectedListHtml, affectedExport, affectedReady,
 } from './map-affected.js';
 import { shareLink } from '../share.js';
 
@@ -77,7 +77,15 @@ const MAP = {
   size: { w: 0, h: 0 },
   plumb: false,
   band: 'source',                   // 'source' | 'domain' — what the neighbourhood's bands are (persisted fs-map-band)
-  focus: null,                      // the journey the street is on
+  focus: null,                      // the journey the street is on (the current journey: `journey` when one is open, else the nearest)
+  /**
+   * The journey the reader opened — a click on its cover, Enter, a deep link, ⌘K, h / l, a snap, a screen. It is
+   * the current journey (crumb, ring, link, Fit, plumbing, edge cues, the Affected ring) until the reader leaves
+   * it: Esc, another journey, zooming out to the board, or panning it wholly off the stage. Only while nothing is
+   * open does the journey nearest the middle of the stage stand in (round 2: a wide journey opened at its fitted
+   * floor has its middle off screen, and its neighbour used to win).
+   */
+  journey: null,
   autoFit: null,                    // a street entered from the route, refitted when its walk lands — until the reader moves
   prop: null,                       // { flow, index, host, handle }
   card: null,                       // { kind, nodeId, flow, el }
@@ -197,6 +205,8 @@ export function mountMap(route, el) {
     onGestureEnd: () => { MAP.autoFit = null; syncHashToBoard(); },
     // the rest of a pinch out that just left a screen does not keep zooming the street
     holdWheel: () => Date.now() < (MAP.holdWheelUntil || 0),
+    // a drag never leaves the board on an empty grid: some of the journeys stay on the stage (round 2)
+    bounds: () => (MAP.size.w ? { x: 0, y: 0, w: MAP.size.w, h: MAP.size.h } : null),
   });
   // the board starts under the chrome row, so nothing draws beneath the toolbar
   const chrome = MAP.stage.querySelector('.map-chrome');
@@ -209,6 +219,8 @@ export function mountMap(route, el) {
   MAP.offAffected = onAffectedChange(onAffected);
   MAP.stage.addEventListener('click', onEdgeClick);
   MAP.board.addEventListener('click', onBoardClick);
+  // a zoom or a pan slides triggers under a still pointer: no hover tip opens until it has settled (round 2)
+  MAP.board.addEventListener('wheel', () => quietHoverTips(460), { capture: true, passive: true });
   MAP.board.addEventListener('keydown', onBoardKey);
   MAP.board.addEventListener('pointerover', onDistrictHot);
   MAP.board.addEventListener('focusin', onDistrictHot);
@@ -240,6 +252,7 @@ export function mapRefresh(reason) {
   if (!MAP.el || !MAP.world) return;
   if (reason === 'lens' || reason === 'register') {
     redrawChrome();
+    drawRisk();
     // a call's height follows its words in the lens, so the districts re-lay (the journey in view stays put)
     relayoutKeeping(() => renderAll());
     if (MAP.legend) drawLegend();
@@ -337,7 +350,9 @@ function start() {
     renderAll();
     // the band choice is offered only once the districts say whether there are domains to band by
     redrawChrome();
-    if (MAP.nb.districts.length && !legendSeen()) { markLegendSeen(); openLegend(); }
+    // a first visit opens it by itself as a narrow strip — collapsed to its title when a link opened the map, since
+    // that reader came to see something — and never takes the focus (round 2)
+    if (MAP.nb.districts.length && !legendSeen()) { markLegendSeen(); openLegend({ auto: true, collapsed: linkOpened(MAP.route) }); }
     fillWork(gen);
     applyRouteTarget(MAP.route, false);
     walk(gen);
@@ -367,6 +382,7 @@ async function ensureJourney(id, gen = MAP.gen) {
   MAP.journeys.set(id, entry);
   relayoutKeeping(() => renderDistrict(id));
   if (MAP.legend) drawLegend();
+  drawRisk();
   if (MAP.autoFit === id && !MAP.prop) enterJourney(id, false);
   return entry;
 }
@@ -410,7 +426,7 @@ async function applyRouteTarget(route, animate) {
     if (view) {
       // the link names the picture: put the board there, and never refit it when the walk lands
       MAP.autoFit = null;
-      MAP.focus = flow;
+      openedJourney(flow);
       applyView(view, flow, animate && MAP.fitted);
     } else {
       MAP.autoFit = MAP.journeys.has(flow) ? null : flow;
@@ -481,12 +497,23 @@ function viewParams(flow) {
 function routeView(route) {
   if (!route) return null;
   const z = parseFloat(route.z), x = parseFloat(route.x), y = parseFloat(route.y);
-  return Number.isFinite(z) && z > 0 && Number.isFinite(x) && Number.isFinite(y) ? { z, x, y } : null;
+  if (!(Number.isFinite(z) && z > 0)) return null;
+  // a link that names only the zoom (`?z=0.75`) is honoured as written: framed the way the journey (or board) opens, at that scale
+  return Number.isFinite(x) && Number.isFinite(y) ? { z, x, y } : { z, x: null, y: null };
 }
 /** Put the board where a link says: the world point (x, y) — from the journey's corner on a street — at the middle, at scale z. */
 function applyView(v, flow, anim) {
   if (!MAP.cv || !v) return;
   const g = flow && MAP.geom.get(flow);
+  if (v.x == null) {
+    const b = boardSize();
+    if (g) {
+      // the journey's opening frame (its head at the top, centred across when it fits, else from its first screen), at z
+      const tx = g.w * v.z <= b.w - FRAME_PAD * 2 ? (b.w - g.w * v.z) / 2 - g.x * v.z : FRAME_PAD - g.x * v.z;
+      MAP.cv.set(tx, FRAME_PAD - g.y * v.z, v.z, anim);
+    } else MAP.cv.centerOn(MAP.size.w / 2, MAP.size.h / 2, v.z, anim);
+    return;
+  }
   MAP.cv.centerOn(v.x + (g ? g.x : 0), v.y + (g ? g.y : 0), v.z, anim);
 }
 /** The explore card a link names (`card=<kind>:<nodeId>`): the first node on the journey's street that is that node. */
@@ -660,7 +687,9 @@ function boardScale() {
 }
 function fitAll(anim) {
   if (!MAP.cv || !MAP.size.w) return;
-  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: FRAME_PAD, max: LEVEL_NB * 0.9, anim });
+  // the risk headline sits over the top of the board: the fit leaves it its row
+  const risk = MAP.stage && MAP.stage.querySelector('.map-risk');
+  MAP.cv.fit({ x: 0, y: 0, w: MAP.size.w, h: MAP.size.h }, { pad: FRAME_PAD, top: risk && !risk.hidden ? risk.offsetHeight + 8 : 0, max: LEVEL_NB * 0.9, anim });
 }
 /** The height a journey's frame holds: its head and screens, and its pathways when plumbing is on. */
 function frameH(g) { return MAP.plumb ? g.h : SY + SH + 70; }
@@ -708,7 +737,9 @@ function mapStops(anchor) {
   const id = MAP.cv.level() === 'st' && MAP.focus ? MAP.focus : journeyAt(anchor);
   const js = journeyScale(id), cs = callsScale(), es = enterScale();
   const out = [{ id: 'board', s: boardScale(), frame: () => { fitAll(true); writeHash(null, null); } }];
-  if (id && js) out.push({ id: 'journey', s: js, frame: () => enterJourney(id, true) });
+  // by + / −, the journey framed as it opens; by a gesture, the least move that frames it, so the point under the
+  // pointer stays as near the pointer as the frame allows (round 2: the zoom anchor drifted)
+  if (id && js) out.push({ id: 'journey', s: js, frame: (a, via) => (via === 'step' ? enterJourney(id, true) : settleJourney(id)) });
   // a short journey is readable fitted: the calls stop folds into the journey's
   if (id && cs > js * 1.04) out.push({ id: 'calls', s: cs, frame: (a, via) => { if (via === 'step') frameCalls(id, cs); } });
   if (id && es > Math.max(js, cs) * 1.04) out.push({ id: 'enter', s: es, frame: (a) => frameEnter(id, a, es) });
@@ -721,11 +752,30 @@ function mapStops(anchor) {
 function enterJourney(id, anim) {
   const g = MAP.geom.get(id);
   if (!g || !MAP.cv) return;
-  MAP.focus = id;
+  openedJourney(id);
   const s = journeyScale(id);
   const b = boardSize();
   const tx = g.w * s <= b.w - FRAME_PAD * 2 ? (b.w - g.w * s) / 2 - g.x * s : FRAME_PAD - g.x * s;
   MAP.cv.set(tx, FRAME_PAD - g.y * s, s, anim);
+  writeHash(id, null);
+}
+/**
+ * A gesture settled on a journey's fitted stop: the journey becomes the open one and the board makes the least move
+ * that frames it — the whole district across when it fits (else no gap past either end), its head and screens
+ * down — never the jump `enterJourney` makes, so what was under the pointer stays near it.
+ */
+function settleJourney(id) {
+  const g = MAP.geom.get(id);
+  if (!g || !MAP.cv) return;
+  openedJourney(id);
+  const st = MAP.cv.state(), s = st.s, b = boardSize();
+  const span = (lo0, hi0, v) => Math.min(Math.max(v, Math.min(lo0, hi0)), Math.max(lo0, hi0));
+  // across: fits → the district wholly in view; wider → no empty stage past its first or last screen
+  const tx = span(b.w - FRAME_PAD - (g.x + g.w) * s, FRAME_PAD - g.x * s, st.tx);
+  // down: the head never above the top; the frame (head, screens, pathways with plumbing) in view when it fits
+  const fh = frameH(g) * s;
+  const ty = fh <= b.h - FRAME_PAD * 2 ? span(b.h - FRAME_PAD - (g.y * s + fh), FRAME_PAD - g.y * s, st.ty) : Math.min(st.ty, FRAME_PAD - g.y * s);
+  if (Math.abs(tx - st.tx) > 0.5 || Math.abs(ty - st.ty) > 0.5) MAP.cv.set(tx, ty, s, true);
   writeHash(id, null);
 }
 /** The calls stop by key or button: the world point at the centre stays across, the journey's head at the top. */
@@ -758,10 +808,53 @@ function screenPos(flow, index) {
 function centreScreen(flow, index, scale, anim) {
   const p = screenPos(flow, index);
   if (!p || !MAP.cv) return;
-  MAP.focus = flow;
+  openedJourney(flow);
   MAP.cv.centerOn(p.x, p.y + (MAP.plumb ? 200 : 0), scale, anim);
 }
 
+/** A journey the reader opened becomes the current journey (see `MAP.journey`). */
+function openedJourney(id) {
+  if (!id) return;
+  MAP.journey = id;
+  MAP.focus = id;
+}
+/** Whether any of a journey's district is on the stage. */
+function journeyInView(id) {
+  const g = MAP.geom.get(id);
+  if (!g || !MAP.cv) return false;
+  const c = MAP.cv.viewCenter();
+  return g.x < c.x + c.w / 2 && c.x - c.w / 2 < g.x + g.w && g.y < c.y + c.h / 2 && c.y - c.h / 2 < g.y + g.h;
+}
+/**
+ * The current journey's name never leaves the stage: on the street its head's words slide right with the stage's
+ * left edge (in world units), as far as the district's end allows — a wide journey zoomed at its far end still
+ * says whose screens these are (round 2: the title was clipped at the left edge).
+ */
+function stickHead(st) {
+  const prev = MAP.world.querySelectorAll('.map-dhead.stuck');
+  const g = st.level === 'st' && !MAP.prop && MAP.focus ? MAP.geom.get(MAP.focus) : null;
+  const head = g && districtEl(MAP.focus) && districtEl(MAP.focus).querySelector('.map-dhead');
+  prev.forEach((h) => { if (h !== head) { h.classList.remove('stuck', 'stuck-y'); h.style.removeProperty('--head-x'); h.style.removeProperty('--head-y'); } });
+  if (!head) return;
+  const left = -st.tx / st.s + 12 / st.s - g.x;
+  // the words' own width (the name is a block as wide as the district), measured once per name in world units
+  const words = head.querySelector('.nm');
+  if (words && !(+head.dataset.nmw > 0)) {
+    // offset sizes are layout units, untouched by the world's transform or an animation in flight
+    words.style.width = 'max-content';
+    head.dataset.nmw = String(words.offsetWidth);
+    words.style.width = '';
+  }
+  const room = g.w - Math.max(+head.dataset.nmw || 0, 320) - 44;
+  const x = Math.max(0, Math.min(left, room));
+  // down: the name line alone rides the stage's top edge (with a ground behind it), never below the district
+  const top = -st.ty / st.s + 6 / st.s - g.y - 14;
+  const y = Math.max(0, Math.min(top, g.h - 60));
+  head.classList.toggle('stuck', x > 0 || y > 0);
+  head.classList.toggle('stuck-y', y > 0);
+  head.style.setProperty('--head-x', x.toFixed(1) + 'px');
+  head.style.setProperty('--head-y', y.toFixed(1) + 'px');
+}
 function onCanvasChange(st) {
   if (!MAP.stage) return;
   const lvl = MAP.prop ? 'pr' : st.level;
@@ -772,10 +865,18 @@ function onCanvasChange(st) {
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+  // a drag or a pinch slides triggers under the pointer too
+  if (MAP.cv && MAP.cv.inGesture()) quietHoverTips(300);
   const zr = MAP.stage.querySelector('.map-zoomro');
   if (zr) zr.textContent = '×' + st.s.toFixed(2);
-  // at the street the focused journey is the one nearest the middle of the screen
-  if (st.level === 'st' && !MAP.prop) {
+  // the board is no journey's: whatever was open is left
+  if (st.level === 'nb' && !MAP.prop) MAP.journey = null;
+  // a journey the reader opened stays the current one while any of it is on the stage; panned wholly off, it is left
+  if (st.level === 'st' && !MAP.prop && MAP.journey && !journeyInView(MAP.journey)) { MAP.leftJourney = MAP.journey; MAP.journey = null; }
+  if (st.level === 'nb' || MAP.journey) MAP.leftJourney = null;
+  if (st.level === 'st' && !MAP.prop && MAP.journey) MAP.focus = MAP.journey;
+  // nothing open: the journey nearest the middle of the screen stands in
+  else if (st.level === 'st' && !MAP.prop) {
     const c = MAP.cv ? MAP.cv.viewCenter() : null;
     if (c) {
       let best = null, bd = Infinity;
@@ -788,6 +889,7 @@ function onCanvasChange(st) {
     }
   }
   MAP.world.querySelectorAll('.map-district').forEach((d) => d.classList.toggle('focus', st.level === 'st' && d.dataset.flow === MAP.focus));
+  stickHead(st);
   linkVisibility();
   // the covers' boxes follow the counter-scale; their chip rows re-fold when it has moved
   const inv = Math.min(1 / st.s, INV_MAX);
@@ -796,6 +898,42 @@ function onCanvasChange(st) {
   drawHint(st);
   applyTabbing();
   drawEdges(st);
+  const risk = MAP.stage.querySelector('.map-risk');
+  if (risk) risk.classList.toggle('off', st.level !== 'nb' || !!MAP.prop);
+}
+/**
+ * The risk headline above the board (round 2): how many journeys are stale, not fully built, or reach the ERP —
+ * each a Counted from the facts the covers print, over every journey on the board, shown once every walk has landed.
+ */
+function riskCounteds() {
+  const ds = MAP.nb.districts || [];
+  if (!ds.length || ds.some((d) => !MAP.journeys.has(d.id))) return null;
+  let stale = 0, notBuilt = 0, erp = 0;
+  for (const d of ds) {
+    const j = MAP.journeys.get(d.id);
+    const sum = j && j.data && j.data.summary;
+    if (!sum) continue;
+    const ew = sum.coverage && sum.coverage.journey && sum.coverage.journey.evidenceWord;
+    if (ew && ew.cls === 'stale') stale++;
+    const b = sum.counted && sum.counted.built;
+    if (b && b.of != null && b.n < b.of) notBuilt++;
+    if (erpReached(sum)) erp++;
+  }
+  const src = 'surfaces/map.js riskCounteds ← each /api/journey summary (coverage.journey.evidenceWord · counted.built · systems)';
+  const c = (n, unit) => ({ n, unit, bizUnit: unit, scope: 'count.scope.workspace', source: src });
+  return [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+}
+function drawRisk() {
+  const el = MAP.stage && MAP.stage.querySelector('.map-risk');
+  if (!el) return;
+  const k = riskCounteds();
+  if (!k || !k.some((x) => x.n)) { el.hidden = true; el.innerHTML = ''; return; }
+  el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
+    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })).join('<span class="sep">·</span>');
+  const appeared = el.hidden;
+  el.hidden = false;
+  // it arrived over a board fitted without it: fit again, leaving it its row
+  if (appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb') { const at = MAP.cv.stopAt(); if (at && at.id === 'board') fitAll(false); }
 }
 /** The screen a zoom in would enter, ringed and named in the hint first, so the snap is never a surprise. */
 function onArm(el) {
@@ -847,6 +985,8 @@ function drawEdges(st) {
 }
 /** A cue slides the board about one board's width toward its side, never past the journey's end. */
 function onEdgeClick(e) {
+  const backTo = e.target.closest && e.target.closest('.map-backto');
+  if (backTo && backTo.dataset.flow) { e.stopPropagation(); MAP.leftJourney = null; enterJourney(backTo.dataset.flow, true); return; }
   const cue = e.target.closest && e.target.closest('.map-edgecue');
   if (!cue || !MAP.cv || !MAP.focus) return;
   e.stopPropagation();
@@ -871,9 +1011,13 @@ function stageHtml() {
     + '<div class="map-chrome">' + chromeHtml() + '</div>'
     + '<div class="map-board"><div class="map-world lvl-nb"><svg class="map-links" aria-hidden="true"></svg></div></div>'
     + '<button type="button" class="map-edgecue l" hidden></button><button type="button" class="map-edgecue r" hidden></button>'
+    + '<div class="map-risk" hidden></div>'
     + '<div class="map-hint" aria-live="polite"></div>'
+    + '<button type="button" class="map-backto" hidden></button>'
     + '<div class="map-zoomro"' + tipAttrs({ key: 'map.zoom', noFocus: true }) + '></div>'
     + '<div class="map-legend" hidden role="dialog" aria-label="' + esc(t('map.legend.title')) + '"></div>'
+    + '<div class="map-afflist" hidden role="dialog" data-map-wheel="own" aria-label="' + esc(t('map.affected.listTitle')) + '"></div>'
+    + '<div class="map-toast" role="status" aria-live="polite" hidden></div>'
     + '<div class="map-prop-host" hidden></div>'
     + '</div><div class="map-xcard" hidden role="dialog"></div></div>';
 }
@@ -954,6 +1098,18 @@ function drawHint(st) {
   el.textContent = text;
   // the snap is about to be possible: the hint says so in the accent before any zoom can enter
   el.classList.toggle('enter', !MAP.prop && st.level !== 'nb' && !!MAP.near);
+  // the journey the reader opened is wholly off the stage: a way back to it beside the hint (round 2)
+  const back = MAP.stage.querySelector('.map-backto');
+  const left = !MAP.prop && st.level !== 'nb' && MAP.leftJourney && MAP.nb.districts.find((x) => x.id === MAP.leftJourney);
+  if (back) {
+    back.hidden = !left;
+    if (left) {
+      const words = t('map.backTo').replace('{name}', nameWords(left.name));
+      if (back.textContent !== words) back.textContent = words;
+      back.dataset.flow = left.id;
+      back.style.left = (el.offsetLeft + el.offsetWidth + 8) + 'px';
+    }
+  }
 }
 
 function onChromeClick(e) {
@@ -969,6 +1125,8 @@ function onChromeClick(e) {
     case 'full': toggleFull(); break;
     case 'link': mapCopyLink(); break;
     case 'aff-clear': clearAffected(); break;
+    case 'aff-fit': fitAffected(true); break;
+    case 'aff-list': toggleAffList(); break;
     case 'aff-hops': setAffectedHops(+b.dataset.h); break;
     case 'band': setBand(b.dataset.band); break;
     default:
@@ -1020,6 +1178,13 @@ export function setPlumb(v) {
   const b = MAP.stage.querySelector('[data-act="plumb"]');
   if (b) b.classList.toggle('on', MAP.plumb);
   relayoutKeeping(() => { for (const d of MAP.nb.districts) sizeDistrict(d.id); });
+  // the pathways grow downward: a journey whose head now sits below its framed place comes up to it, so the
+  // stage never shows an empty band above the street (round 2)
+  if (!MAP.prop && MAP.cv && MAP.cv.level() === 'st' && MAP.journey) {
+    const g = MAP.geom.get(MAP.journey);
+    const st = MAP.cv.state();
+    if (g && g.y * st.s + st.ty > FRAME_PAD + 1) MAP.cv.shift(0, FRAME_PAD - (g.y * st.s + st.ty));
+  }
   if (!MAP.prop) writeHash(MAP.cv && MAP.cv.level() === 'st' ? MAP.focus : null, null);
 }
 /**
@@ -1037,6 +1202,8 @@ export function mapCopyLink() {
     const b = MAP.stage && MAP.stage.querySelector('[data-act="link"]');
     const hint = MAP.stage && MAP.stage.querySelector('.map-hint');
     if (hint) hint.textContent = t(key);
+    // the hint line is easy to miss: a toast by the tools says it too, in every path (round 2)
+    toast(t(key));
     if (b) { b.classList.add('on'); setTimeout(() => b.classList.remove('on'), 1500); }
   };
   const fallback = () => {
@@ -1073,6 +1240,8 @@ export function mapZoom(f) { if (MAP.cv && !MAP.prop) { MAP.autoFit = null; MAP.
  */
 export function mapFit() {
   if (!MAP.cv) return;
+  // while the board is dimmed around something, Fit frames what reaches it (round 2)
+  if (!MAP.prop && fitAffected(true)) { closeCard(); return; }
   closeCard();
   const flow = MAP.prop ? MAP.prop.flow : MAP.cv.level() === 'st' ? MAP.focus : null;
   closeProperty({ keepHash: true });
@@ -1081,13 +1250,108 @@ export function mapFit() {
   writeHash(null, null);
 }
 
+/**
+ * Fit-to-affected: frame the districts of the journeys that reach the thing picked — at most the board's own stop,
+ * so they draw as covers — and the link follows. False when the mode has no reached journey on the board.
+ */
+function fitAffected(anim) {
+  if (!MAP.cv || !affectedReady()) return false;
+  const rects = affectedFlows().map((f) => MAP.geom.get(f)).filter(Boolean);
+  if (!rects.length) return false;
+  const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y));
+  const x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
+  // one journey reached: its own stop, the street; several: as large as covers allow
+  if (rects.length === 1) { const id = affectedFlows().find((f) => MAP.geom.has(f)); enterJourney(id, anim); return true; }
+  MAP.cv.fit({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, { pad: FRAME_PAD, max: LEVEL_NB * 0.9, anim });
+  writeHash(null, null);
+  return true;
+}
+
+// ── the Affected list (round 2) ──────────────────────────────────────────
+/** The board's words for a journey, for the list: its name in the lens, its owner. */
+const affBoard = {
+  owner: (f) => { const d = (MAP.nb.districts || []).find((x) => x.id === f); return (d && d.owner) || ''; },
+  name: (f) => { const d = (MAP.nb.districts || []).find((x) => x.id === f); return d ? nameWords(d.name) : ''; },
+};
+function toggleAffList(force) {
+  const box = MAP.stage && MAP.stage.querySelector('.map-afflist');
+  if (!box) return;
+  const open = force != null ? force : box.hidden;
+  MAP.affList = open && affectedOn();
+  if (!MAP.affList) { box.hidden = true; box.innerHTML = ''; return; }
+  if (MAP.legend) closeLegend();
+  drawAffList();
+}
+function drawAffList() {
+  const box = MAP.stage && MAP.stage.querySelector('.map-afflist');
+  if (!box || !MAP.affList) return;
+  box.innerHTML = affectedListHtml(affBoard);
+  box.hidden = false;
+  box.onclick = (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.act === 'aff-list-close') toggleAffList(false);
+    else if (b.dataset.act === 'aff-copy') copyAffected(b.dataset.kind, box);
+  };
+}
+/** Copy the list's rows as CSV or JSON: the clipboard, else a copy command, else a selected field in the panel. */
+function copyAffected(kind, box) {
+  const { text, n } = affectedExport(kind, affBoard);
+  copyText(text, (how) => {
+    const note = box.querySelector('.al-copied');
+    if (how === 'field') {
+      let f = box.querySelector('.al-field');
+      if (!f) { f = document.createElement('textarea'); f.className = 'al-field'; f.readOnly = true; f.setAttribute('aria-label', t('map.affected.copyField')); box.appendChild(f); }
+      f.value = text; f.focus(); f.select();
+    }
+    const words = how === 'none' ? t('map.affected.copyFailed') : how === 'field' ? t('map.affected.copyField') : t('map.affected.copiedRows').replace('{n}', String(n));
+    if (note) note.textContent = words;
+    toast(words);
+  });
+}
+/**
+ * Copy text: the clipboard, then `execCommand('copy')`, then — when neither takes it — the caller's own field.
+ * `done(how)`: 'clipboard' · 'command' · 'field'.
+ */
+function copyText(text, done) {
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    done(ok ? 'command' : 'field');
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done('clipboard'), fallback);
+    else fallback();
+  } catch { fallback(); }
+}
+let toastT = null;
+/** A confirmation near the tools, on screen for 2 s, whatever path the copy took (round 2). */
+function toast(words) {
+  const el = MAP.stage && MAP.stage.querySelector('.map-toast');
+  if (!el) return;
+  el.textContent = words;
+  el.hidden = false;
+  el.classList.add('on');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.classList.remove('on'); el.hidden = true; }, 2000);
+}
+
 // ── the legend (lane L) ──────────────────────────────────────────────────
 function legendSeen() { try { return localStorage.getItem(LEGEND_KEY) === '1'; } catch { return true; } }
 function markLegendSeen() { try { localStorage.setItem(LEGEND_KEY, '1'); } catch { /* a private window: it opens again next visit */ } }
 /** Open or close the legend (the `?` tool). @group Map */
 export function toggleLegend() { if (MAP.legend) closeLegend(); else openLegend(); }
-function openLegend() {
+/** Whether a link brought the reader here: a journey, a screen or a picture named in it. */
+function linkOpened(route) { return !!(route && (route.param || /[?&](node|z|affected|card)=/.test(String(route.raw || '')))); }
+function openLegend(opts = {}) {
   MAP.legend = true;
+  MAP.legendAuto = !!opts.auto;
+  MAP.legendCollapsed = !!opts.collapsed;
+  if (MAP.affList) toggleAffList(false);
   drawLegend();
   const b = MAP.stage && MAP.stage.querySelector('[data-act="legend"]');
   if (b) { b.classList.add('on'); b.setAttribute('aria-expanded', 'true'); }
@@ -1143,6 +1407,7 @@ function drawLegend() {
   if (!box || !MAP.legend) return;
   const f = legendFacts();
   let html = '<div class="lg-top"><span class="hud-label"' + tipAttrs({ key: 'map.legend.title', noFocus: true }) + '>' + esc(t('map.legend.title')) + '</span>'
+    + (MAP.legendCollapsed ? '<button type="button" class="more" data-act="legend-expand"' + tipAttrs({ key: 'map.legend.expand', noFocus: true }) + '>' + esc(t('map.legend.expand')) + '</button>' : '')
     + '<button type="button" class="x" data-act="legend-close" aria-label="' + esc(t('map.legend.close')) + '">✕</button></div>';
   // between journeys: leads to (its mirror, requires, is the same line read backwards), each other, part of
   const between = [];
@@ -1163,7 +1428,7 @@ function drawLegend() {
   if (f.built) marks.push(lgRow('built', '<span class="lg-stripe"></span>', 'map.legend.built'));
   if (f.planned) marks.push(lgRow('planned', '<span class="lg-stripe planned"></span>', 'map.screen.planned'));
   if (f.again) marks.push(lgRow('again', '<span class="lg-again">' + esc(t('map.call.again')) + '</span>', 'map.call.again', 'map.legend.againSay'));
-  for (const ev of f.ev) if (!biz() || ev !== 'implied') marks.push(lgRow('ev-' + ev, '<span class="lg-call' + (ev === 'implied' ? '' : ' absent') + '"></span>', evKey(ev)));
+  for (const ev of f.ev) if (!biz() || ev !== 'implied') marks.push(lgRow('ev-' + ev, '<span class="lg-call' + (ev === 'implied' ? '' : ' absent') + '" data-evidence="' + esc(ev) + '"></span>', evKey(ev)));
   if (f.times) marks.push(lgRow('times', '<span class="lg-times">' + esc(t('map.legend.times')) + '</span>', 'map.legend.timesSay'));
   html += '<section>' + lgHead('map.legend.screens') + marks.join('') + '</section>';
   // what proves a journey runs: the evidence words the journeys on the board earned
@@ -1172,10 +1437,25 @@ function drawLegend() {
       lgRow('evidence-' + (ew.cls || 'none'), '<span class="map-chip k-ev lg-evc ev-' + esc(ew.cls || 'none') + '">'
         + (ew.cls === 'observed' ? sym('live') : ew.cls === 'stale' ? sym('stale') : ew.cls === 'reached' ? sym('step') : '') + '</span>', key)).join('') + '</section>';
   }
+  // while the board is dimmed around something, the badges it draws (round 2)
+  if (affectedReady()) {
+    const badge = (cls, words) => '<span class="map-affb ' + cls + '">' + esc(words) + '</span>';
+    html += '<section>' + lgHead('map.affected.title')
+      + lgRow('aff-seed', badge('seed', '◎'), 'map.affected.seed')
+      + lgRow('aff-self', badge('self', '0'), 'map.affected.self')
+      + (biz() ? lgRow('aff-biz1', badge('', '1'), 'map.affected.bizAt1') + lgRow('aff-biz2', badge('', '2'), 'map.affected.bizAt2')
+        : lgRow('aff-at', badge('', 'n'), 'map.affected.at'))
+      + lgRow('aff-not', badge('not', '–'), 'map.affected.not') + '</section>';
+  }
   html += '<p class="lg-hint">' + esc(t('map.legend.hint')) + '</p>';
   box.innerHTML = html;
   box.hidden = false;
-  box.onclick = (e) => { const b = e.target.closest('[data-act="legend-close"]'); if (b) closeLegend(); };
+  box.classList.toggle('auto', !!MAP.legendAuto);
+  box.classList.toggle('collapsed', !!MAP.legendCollapsed);
+  box.onclick = (e) => {
+    if (e.target.closest('[data-act="legend-close"]')) closeLegend();
+    else if (e.target.closest('[data-act="legend-expand"]')) { MAP.legendCollapsed = false; MAP.legendAuto = false; drawLegend(); }
+  };
 }
 
 // ── drawing ──────────────────────────────────────────────────────────────
@@ -1396,7 +1676,9 @@ function screenHtml(d, m, s, x, y, n) {
     + '<span class="nm">' + esc(s.name) + '</span></div>'
     + '<div class="route map-code">' + esc(s.route || '') + '</div>'
     + (s.state === 'planned' ? '<div class="state"><span class="map-chip k-warn"' + tipAttrs({ key: 'map.screen.planned', noFocus: true }) + '>' + sym('warning') + esc(t('map.screen.planned')) + '</span></div>' : '')
-    + '<div class="map-chips">' + chips + '</div></div></div>';
+    // the numbers are this screen's part of this journey's walk: said, so two journeys printing two numbers for one
+    // screen read as two scopes, not a contradiction (round 2) — plain words, so every lens prints them, with a tip
+    + '<div class="map-chips">' + chips + (chips ? '<span class="map-scope"' + tipAttrs({ key: 'map.screen.onJourney', noFocus: true }) + '>' + esc(t('map.screen.onJourney')) + '</span>' : '') + '</div></div></div>';
 }
 
 /** One call on a screen's pathway: the service bar, its evidence where it is not spec-backed, its name and (not in the business lens) its method and path. */
@@ -1589,14 +1871,19 @@ function onBoardKey(e) {
   if (tgt.matches('.map-scr')) { e.preventDefault(); openScreenEl(tgt); return; }
   if (tgt.matches('.map-dcover')) {
     e.preventDefault();
-    const flow = tgt.dataset.enter;
-    enterJourney(flow, true);
-    // the cover is not drawn on the street: the keyboard lands on the journey's first screen
-    applyTabbing();
-    const first = MAP.world && MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"]');
-    if (first) focusQuiet(first);
-    else ensureJourney(flow).then(() => { if (MAP.focus === flow && MAP.cv && MAP.cv.level() === 'st') focusQuiet(MAP.world && MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"]')); });
+    enterCover(tgt);
   }
+}
+/** Walk into a cover's journey from the keyboard: the street, with the focus on its first screen. */
+function enterCover(tgt) {
+  const flow = tgt.dataset.enter;
+  closeCard();
+  enterJourney(flow, true);
+  // the cover is not drawn on the street: the keyboard lands on the journey's first screen
+  applyTabbing();
+  const first = MAP.world && MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"]');
+  if (first) focusQuiet(first);
+  else ensureJourney(flow).then(() => { if (MAP.focus === flow && MAP.cv && MAP.cv.level() === 'st') focusQuiet(MAP.world && MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"]')); });
 }
 function onDocClick(e) {
   if (!MAP.card) return;
@@ -1628,6 +1915,8 @@ function showCard(el) {
   const tg = cardTarget(el);
   if (!tg) return;
   const nodeId = tg.kind === 'call' ? tg.call.nodeId : tg.data.nodeId;
+  // a card opened on a journey makes it the current one: the link the card writes names it
+  openedJourney(el.dataset.flow);
   MAP.card = { el, tg, spec: tg.kind + ':' + nodeId, key: el.dataset.flow + '|' + el.dataset.si + '|' + el.dataset.ci + '|' + (el.dataset.di || '') + '|' + el.dataset.kind };
   drawCard();
   // the open card is part of the picture the link carries
@@ -1656,7 +1945,11 @@ function drawCard() {
     head = esc(c.service ? c.service.label : t('map.lane.noService')) + (dir ? ' · ' + esc(dir) : '');
     ev = evShown(c.evidence, true) ? '<span class="map-ev"' + tipAttrs({ key: evKey(c.evidence) }) + '>' + esc(t(evKey(c.evidence))) + '</span>' : '';
     name = callWords(c);
-    const handler = c.marker && c.marker.handler ? c.marker.handler.name : '';
+    const h = c.marker && c.marker.handler;
+    // a handler is often named for its verb (a function called GET): its file and line stand beside the name (round 2)
+    const hn = h && S.BYID[h.nodeId];
+    const hloc = (hn && hn.loc) || (h && h.path ? { path: h.path, line: h.line } : null);
+    const handler = h ? h.name + (hloc && hloc.path ? ' (' + hloc.path + (hloc.line ? ':' + hloc.line : '') + ')' : '') : '';
     code = [(c.method + ' ' + c.path).trim(), c.operationId, handler ? t('map.card.handler') + ' ' + handler : ''].filter(Boolean).join(' · ');
     const route = nodeId && S.BYID[nodeId];
     const apiId = route && route.contract && route.contract.apiId;
@@ -1807,7 +2100,7 @@ async function openProperty(flow, index, opts = {}) {
   const host = MAP.stage.querySelector('.map-prop-host');
   const same = MAP.prop && MAP.prop.handle;
   MAP.prop = Object.assign(MAP.prop || {}, { flow, index, host });
-  MAP.focus = flow;
+  openedJourney(flow);
   host.hidden = false;
   MAP.stage.classList.add('in-prop');
   const ctx = propCtx();
@@ -1978,7 +2271,17 @@ function stepScreen(delta) {
   const next = Math.max(0, Math.min(j.model.screens.length - 1, index + delta));
   const el = MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"][data-index="' + next + '"]');
   closeCard();
-  centreScreen(flow, next, Math.max(MAP.cv.state().s, LEVEL_NB + 0.02), true);
+  // across only: the screen comes to the middle and the board keeps its height, so the street does not drop and
+  // leave an empty band above it; a screen row off the stage brings the journey's head to the top (round 2)
+  const s0 = Math.max(MAP.cv.state().s, LEVEL_NB + 0.02);
+  const p = screenPos(flow, next), g = MAP.geom.get(flow), b = boardSize(), st = MAP.cv.state();
+  if (p && g) {
+    openedJourney(flow);
+    let ty = s0 === st.s ? st.ty : FRAME_PAD - g.y * s0;
+    const rowTop = (g.y + SY) * s0 + ty, rowBottom = (g.y + SY + SH) * s0 + ty;
+    if (rowTop < 0 || rowBottom > b.h) ty = FRAME_PAD - g.y * s0;
+    MAP.cv.set(b.w / 2 - p.x * s0, ty, s0, true);
+  }
   focusQuiet(el);
   syncHashSoon();
 }
@@ -1993,8 +2296,12 @@ function panBy(key, big) {
   MAP.cv.shift(dx, dy);
   syncHashSoon();
 }
-/** `?` on the map opens its legend, and closes it again; the keymap panel stays one key away elsewhere. */
-function mapToggleLegend() { if (!MAP.stage || MAP.prop) return false; toggleLegend(); return true; }
+/**
+ * `?` on the map opens its legend and closes it again, whatever has the focus — a focused word's tip is not opened
+ * by it here (lib/tooltip.js leaves `?` to a hover-mode surface), and the keymap sheet stays the header's `?` and
+ * `?` everywhere else. Over an open screen the key does nothing rather than open a sheet the map did not promise.
+ */
+function mapToggleLegend() { if (!MAP.stage) return false; if (!MAP.prop) toggleLegend(); return true; }
 
 // ── keys (keymap.js asks these, only on #/map) ────────────────────────────
 /** Whether the map is the surface on screen. @group Map */
@@ -2006,7 +2313,8 @@ export function mapOpen() { return !!MAP.stage; }
  */
 export function mapEscape() {
   if (!MAP.stage) return false;
-  // the Affected mode leaves before anything else (lane I)
+  // the Affected list closes first, then the mode leaves before anything else (lane I)
+  if (MAP.affList) { toggleAffList(false); return true; }
   if (affectedOn()) { clearAffected(); return true; }
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }
@@ -2037,7 +2345,13 @@ export function mapKey(e) {
   if (!MAP.prop && !inPanel) {
     if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') { panBy(k, e.shiftKey); return true; }
     if ((k === 'j' || k === 'k') && MAP.cv && MAP.cv.level() === 'st') { stepScreen(k === 'j' ? 1 : -1); return true; }
-    if (k === 'h' || k === 'l') { stepJourney(k === 'l' ? 1 : -1); return true; }
+    // on the board j / k walk the covers the way h / l do, so a reader who starts with j is not ignored (round 2)
+    if (k === 'h' || k === 'l' || ((k === 'j' || k === 'k') && MAP.cv && MAP.cv.level() === 'nb')) { stepJourney(k === 'l' || k === 'j' ? 1 : -1); return true; }
+    // Enter with nothing on the board focused opens the journey the keys last walked to (its cover is ringed)
+    if (k === 'Enter' && MAP.cv && MAP.cv.level() === 'nb' && MAP.focus && !(e.target && e.target.closest && e.target.closest('button,a[href],input,select,textarea,[role="button"],.map-board'))) {
+      const cover = MAP.world && MAP.world.querySelector('.map-dcover[data-enter="' + cssAttr(MAP.focus) + '"]');
+      if (cover) { enterCover(cover); return true; }
+    }
   }
   if (k === 'p' || k === 'P') { setPlumb(!MAP.plumb); return true; }
   if (k === '+' || k === '=') { mapZoom(1.35); return true; }
@@ -2105,6 +2419,8 @@ function onAffected() {
     if (el) { paintDistrict(el, d.id, j && j.model); if (el.style.width) foldCoverChips(el); }
   }
   if (MAP.card) drawCard();
+  if (MAP.affList) { if (affectedOn()) drawAffList(); else toggleAffList(false); }
+  if (MAP.legend) drawLegend();
   if (MAP.prop && MAP.prop.handle && MAP.prop.handle.update) MAP.prop.handle.update(propCtx());
   if (MAP.prop) { const sc = propScreen(); if (sc) writeHash(MAP.prop.flow, sc.id); }
   else if (MAP.cv) writeHash(MAP.cv.level() === 'st' ? MAP.focus : null, null);

@@ -3131,7 +3131,8 @@ export function jrnRunLineHtml(run) {
   const when = [(run.at || '').slice(0, 10), t('tests.freshness.' + (run.freshness || 'unknown'))].filter(Boolean).join(' · ');
   return '<div class="line"><span class="hud-label"' + tipAttrs({ key: 'journey.tests.theirRun' }) + '>' + esc(t('journey.tests.theirRun')) + '</span>' + status
     + '<span class="rl">' + esc(when) + '</span>'
-    + (run.projects && run.projects.length ? '<span class="rl">' + esc(t('tests.detail.projects').replace('{list}', run.projects.join(' · '))) + '</span>' : '')
+    // its own sentence: beside the freshness it read as one ungrammatical phrase (round 2)
+    + (run.projects && run.projects.length ? '<span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>' + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span>' : '')
     + '</div>';
 }
 /**

@@ -107,12 +107,21 @@ export function cmapHide(n) {
   const c = cmap();
   const pkgView = c.view && c.view.kind === 'package';
   if (n.kind === 'module' && !c.showModules && !pkgView) return 'files';
+  // grouped, a test file's own cards are not parts of the project's code: like file cards, drawn with *show files* (round 2)
+  if (!c.showModules && !pkgView && cmapGrouping() !== 'none' && isTestFile(n)) return 'files';
   if (n.kind === 'package' && c.hidePackages && !pkgView) return 'packages';
   const keep = passSet();
   if (keep && !keep.has(n.id)) return 'filtered';
   return null;
 }
 
+/** A card from a test file (`*.spec.*`, `*.test.*`, or under a tests folder), by the file it lives in. */
+const TEST_FILE = /(?:\.(?:spec|test|e2e|cy)\.[cm]?[jt]sx?$)|(?:^|\/)(?:__tests__|e2e|tests?)\//;
+function isTestFile(n) {
+  if (!n || n.kind === 'package') return false;
+  const path = (n.loc && n.loc.path) || n.path || (n.members && n.members[0] && n.members[0].loc && n.members[0].loc.path) || '';
+  return TEST_FILE.test(String(path));
+}
 /** What the map is grouped by: a view groups by project; else the reader's choice, when the graph offers it. @group Code map */
 export function cmapGrouping() {
   const c = cmap();
@@ -152,6 +161,29 @@ const CATCH_ALL = { noTag: 'codemap.group.noTag', noProject: 'codemap.group.noPr
 
 // ── the grouped drawing ──────────────────────────────────────────────────
 const ROW_H = 54, HEAD_H = 78, PAD = 10, GAP = 26, ROWS_MAX = 10, TOP_Y = 18, COL_GAP = 120;
+/** A card's row height in a box: a folded file group carries its members line under its name. */
+const GROUP_ROW_H = 108;
+/** …and a part with a check or a rule badge carries a row of badges under its name. */
+const BADGE_ROW_H = 76;
+let BADGED = null;
+function badged() {
+  if (BADGED && BADGED.graph === S.GRAPH) return BADGED.set;
+  const set = new Set(Object.keys(S.guardsByTarget || {}).filter((k) => (S.guardsByTarget[k] || []).length));
+  for (const e of (S.GRAPH && S.GRAPH.edges) || []) if (e.kind === 'validates') set.add(e.to);
+  BADGED = { graph: S.GRAPH, set };
+  return set;
+}
+/** Measured card heights, by node id, for the lens and graph they were measured in. */
+const MEASURED = new Map();
+let MEASURED_FOR = '';
+function cardH(n) {
+  if (!n) return ROW_H;
+  const sig = currentLens() + '|' + ((S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || '');
+  if (sig !== MEASURED_FOR) { MEASURED.clear(); MEASURED_FOR = sig; }
+  if (MEASURED.has(n.id)) return Math.max(MEASURED.get(n.id), ROW_H);
+  if (n.kind === 'group' && !n.expanded) return GROUP_ROW_H;
+  return badged().has(n.id) ? BADGE_ROW_H : ROW_H;
+}
 
 /**
  * Draw the map as boxes: one per group, each a header (its word, what it is,
@@ -163,22 +195,46 @@ const ROW_H = 54, HEAD_H = 78, PAD = 10, GAP = 26, ROWS_MAX = 10, TOP_Y = 18, CO
  * the left and its importers' projects on the right.
  * @group Code map
  */
-export function renderGrouped(nodes, memberToGroup) {
+export function renderGrouped(nodes, memberToGroup, again = false) {
   const stage = document.getElementById('stage');
   const c = cmap();
   const by = cmapGrouping();
   // an opened file group is its members, each a card of its own; a folded one stays one card
   const items = [];
   nodes.forEach((n) => { if (n.kind === 'group' && n.expanded) n.members.forEach((x) => items.push(x)); else items.push(n); });
+  // a folded group whose parts live in several projects is drawn once per project, each with its own parts (round 2:
+  // a project's box counted another project's functions, so its card read far above the inspector's count)
+  for (let i = items.length - 1; i >= 0; i--) {
+    const n = items[i];
+    if (n.kind !== 'group' || !n.members || n.members.length < 2) continue;
+    const parts = new Map();
+    for (const m of n.members) {
+      const p = projectOfItem(m, metas());
+      const k = p ? p.repo + '::' + p.name : '';
+      if (!parts.has(k)) parts.set(k, []);
+      parts.get(k).push(m);
+    }
+    if (parts.size < 2) continue;
+    const anchor = projectOfItem(n, metas());
+    const anchorKey = anchor ? anchor.repo + '::' + anchor.name : '';
+    const split = [...parts.entries()].map(([k, ms]) => {
+      const g = { ...n, members: ms, id: k === anchorKey ? n.id : n.id + '@' + k };
+      if (memberToGroup) for (const m of ms) if (memberToGroup[m.id]) memberToGroup[m.id] = g.id;
+      return g;
+    });
+    items.splice(i, 1, ...split);
+  }
   const pkgView = c.view && c.view.kind === 'package';
   const seed = pkgView ? items.find((n) => n.id === c.view.id) : null;
   const groups = foldGroups(items.filter((n) => n !== seed), by, metas());
   S.positions = {};
   const boxes = groups.map((g) => {
     const m = g.members.length;
-    const rows = Math.min(m, ROWS_MAX) || 1;
     const cols = Math.ceil(m / ROWS_MAX) || 1;
-    return { g, rows, cols, w: PAD + cols * (NODE_W + PAD), h: HEAD_H + rows * ROW_H + PAD };
+    // a folded file group's card is taller than a part's (its members line): each column is as tall as its cards (round 2)
+    const colH = [];
+    g.members.forEach((n, i) => { const k = Math.floor(i / ROWS_MAX); colH[k] = (colH[k] || 0) + cardH(n); });
+    return { g, rows: Math.min(m, ROWS_MAX) || 1, cols, w: PAD + cols * (NODE_W + PAD), h: HEAD_H + (Math.max(ROW_H, ...colH.filter(Boolean)) || ROW_H) + PAD };
   });
   let maxX = 0, maxY = 0;
   const place = (b, x, y) => { b.x = x; b.y = y; maxX = Math.max(maxX, x + b.w); maxY = Math.max(maxY, y + b.h); };
@@ -225,9 +281,12 @@ export function renderGrouped(nodes, memberToGroup) {
   }
   // the members' cards, column by column inside their box
   for (const b of boxes) {
+    let y = 0;
     b.g.members.forEach((n, i) => {
-      const col = Math.floor(i / ROWS_MAX), row = i % ROWS_MAX;
-      S.positions[n.id] = { x: b.x + PAD + col * (NODE_W + PAD), y: b.y + HEAD_H + row * ROW_H, w: NODE_W };
+      const col = Math.floor(i / ROWS_MAX);
+      if (i % ROWS_MAX === 0) y = 0;
+      S.positions[n.id] = { x: b.x + PAD + col * (NODE_W + PAD), y: b.y + HEAD_H + y, w: NODE_W };
+      y += cardH(n);
     });
   }
   stage.style.width = (maxX + 60) + 'px';
@@ -237,6 +296,21 @@ export function renderGrouped(nodes, memberToGroup) {
   stage.querySelectorAll('.cm-elabel').forEach((e) => e.remove());
   for (const b of boxes) stage.appendChild(boxEl(b));
   for (const b of boxes) b.g.members.forEach((n) => renderNode(n, true, 'cm-m'));
+  // a card's height follows its words (a long name wraps, a badge row): measured once drawn, and when any card is
+  // taller than the row it was given the boxes are laid out again with the measured heights (round 2: cards overlapped)
+  let taller = false;
+  for (const b of boxes) for (const n of b.g.members) {
+    const el = document.getElementById('nd-' + cssId(n.id));
+    if (!el) continue;
+    const h = el.offsetHeight + 6;
+    if (h > cardH(n)) taller = true;
+    MEASURED.set(n.id, h);
+  }
+  if (taller && !again) {
+    stage.querySelectorAll('.node,.lanehead,.groupbox').forEach((e) => e.remove());
+    renderGrouped(nodes, memberToGroup, true);
+    return;
+  }
   if (seed) renderNode(seed, false);
   drawEdges(memberToGroup);
   if (c.view && c.view.kind === 'app' && c.view.data) drawProjectArrows(boxes);
@@ -313,7 +387,8 @@ export function buildCmapControls() {
   const c = cmap();
   const ch = choices();
   const by = cmapGrouping();
-  const word = (x) => (x.key === 'none' ? t('codemap.group.none') : x.key === 'project' ? t('codemap.group.project') : x.label);
+  // one casing for every choice: the catalog's words are lower case, and so are the dimensions' labels here (round 2)
+  const word = (x) => (x.key === 'none' ? t('codemap.group.none') : x.key === 'project' ? t('codemap.group.project') : String(x.label || '').toLowerCase());
   const inScopeNodes = S.GRAPH.nodes.filter((n) => inScope(n));
   const hasPkgs = inScopeNodes.some((n) => n.kind === 'package');
   const hasFiles = inScopeNodes.some((n) => n.kind === 'module');

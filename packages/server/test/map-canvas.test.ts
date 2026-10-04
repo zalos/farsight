@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { normaliseWheel, wheelFactor, nextStop, settle, atStop, LINE_PX, NOTCH_STEP, ZOOM_RATE } = await import(join(here, '..', 'public', 'app', 'lib', 'map-canvas.js'));
+const { normaliseWheel, wheelFactor, nextStop, settle, atStop, clampPan, LINE_PX, NOTCH_STEP, ZOOM_RATE } = await import(join(here, '..', 'public', 'app', 'lib', 'map-canvas.js'));
 
 const STOPS = [{ id: 'board', s: 0.13 }, { id: 'journey', s: 0.52 }, { id: 'calls', s: 0.92 }, { id: 'enter', s: 2.2 }];
 
@@ -47,4 +47,16 @@ test('settle holds a move at the first stop it reaches, but lets the gesture lea
   assert.deepEqual(settle(STOPS, 2.17, 2.21), { s: 2.2, stop: STOPS[3] });
   // the stop it began at is left
   assert.deepEqual(settle(STOPS, 0.92, 1.1, STOPS[2]), { s: 1.1, stop: null });
+});
+
+test('a pan keeps some of the world on the stage: never more than the margin of it past an edge', () => {
+  const box = { x: 0, y: 0, w: 1000, h: 500 };
+  // dragged far right: the world's left edge stops at w − margin
+  assert.deepEqual(clampPan(5000, 0, 1, box, 800, 600, 120), { tx: 680, ty: 0 });
+  // dragged far left and up: its right edge stops at margin, its bottom at margin
+  assert.deepEqual(clampPan(-5000, -5000, 1, box, 800, 600, 120), { tx: 120 - 1000, ty: 120 - 500 });
+  // inside the range, nothing moves; at a small scale a box smaller than the margin keeps all of itself on
+  assert.deepEqual(clampPan(10, 20, 1, box, 800, 600, 120), { tx: 10, ty: 20 });
+  const tiny = clampPan(-900, 0, 0.1, box, 800, 600, 120);
+  assert.equal(tiny.tx, 0, 'a 100 px wide world stays wholly on');
 });
