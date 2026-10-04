@@ -23,3 +23,4 @@ export * from './work-graph.js';
 export * from './deps.js';
 export * from './projects.js';
 export * from './config-files.js';
+export * from './journeys.js';

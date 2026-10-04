@@ -10,6 +10,7 @@ import {
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
+  journeyTree, pickJourneys, journeyTreeLines,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
 } from '@farsight/core';
 import type {
@@ -124,6 +125,10 @@ usage:
                                                                scoped to a folder, the fields each gives and any it ignored, then
                                                                the conflicts between them and the notes (--json: per source
                                                                { files, conflicts, notes })
+  farsight journeys [--repo name] [--persona p] [--group g] [--json] [--graph graph.json]
+                                                               the journeys by persona, then by group, in the order the manifests
+                                                               and farsight.config.json declare: status, screens built, the way in
+                                                               and the node id of each (--json: the JourneyTree, as /api/journeys)
   farsight design list [--graph graph.json]                    every design source (screens manifest) with designed / built counts
   farsight design diff --manifest <path|url> [--repo <name>] [--format json|md] [--strict]
                                                                a proposed screens manifest vs the code: not built / undesigned /
@@ -1489,6 +1494,22 @@ switch (command) {
       sub: positional[0], positional: positional.slice(1), workspace: process.cwd(), fail,
       flag: (n) => flag(n), has: (n) => rest.includes(`--${n}`),
     });
+    break;
+  }
+  case 'journeys': {
+    // persona → group → journeys (journey-organisation-and-config-files.md §4.4): the same core
+    // journeyTree() GET /api/journeys and the MCP journeys tool answer with
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const repo = flag('repo');
+    let tree = journeyTree(buildIndex(nodes, edges), store.meta.journeys, repo ? new Set([repo]) : null);
+    const persona = flag('persona');
+    const group = flag('group');
+    if (persona || group) tree = pickJourneys(tree, { ...(persona ? { persona } : {}), ...(group ? { group } : {}) });
+    if (rest.includes('--json')) { console.log(JSON.stringify(tree, null, 2)); break; }
+    console.log(journeyTreeLines(tree).join('\n'));
     break;
   }
   case 'design': {

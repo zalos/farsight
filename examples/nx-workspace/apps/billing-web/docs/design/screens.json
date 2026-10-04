@@ -1,0 +1,28 @@
+{
+  "name": "Billing web — screens",
+  "personas": [
+    { "id": "billing", "name": "Billing", "description": "A customer's billing user, who reads what is owed." }
+  ],
+  "groups": [
+    { "id": "access", "name": "Access", "description": "Ways in and out." }
+  ],
+  "screens": [
+    {
+      "id": "BW-01",
+      "name": "Sign in",
+      "route": "/sign-in",
+      "description": "Sign in with the email address the invoices go to."
+    }
+  ],
+  "flows": [
+    {
+      "id": "billing-sign-in",
+      "name": "Sign in with email",
+      "description": "A billing user signs in before reading their invoices.",
+      "persona": "billing",
+      "group": "access",
+      "order": 1,
+      "screens": ["BW-01"]
+    }
+  ]
+}
