@@ -763,6 +763,72 @@ code, and drift says where they disagree. Nothing is drawn by hand.
   follows it. Farsight also derives the joins from a longer flow's screen order (a flow whose screens
   sit just before / after yours inside "Route 2b" is a prerequisite / what follows) — declare them when
   the order alone does not say it.
+- flows[].owner: who answers for the flow (a team or a person); absent prints as an absence word, never
+  a guess. flows[].work and screens[].work: work-item keys (Jira "KAN-3", Azure DevOps "AB#4711") the
+  flow or screen is built for — a declared link the Work tab and the work_* tools join on.
+- surfaces[]: { id, name, status?: "built" | "partly built" | "not started", description? } — the
+  product surfaces the docs scope, drawn or not; a surface nobody has drawn yet is still a row.
+
+## 1½ · Organise the journeys: who they are for, in groups, in your order
+
+The front door, the Portfolio, the Map, GET /api/journeys, the MCP journeys tool and the CLI
+(farsight journeys) all show the journeys as persona → group → journeys, in the order you declare:
+
+{
+  "personas": [
+    { "id": "contractor", "name": "Contractor", "description": "A vendor who submits and tracks invoices." },
+    { "id": "ops", "name": "Operations", "description": "The team that verifies vendors and approves invoices." }
+  ],
+  "groups": [
+    { "id": "access", "name": "Access", "description": "Ways in and out." },
+    { "id": "vendor-accounts", "name": "Vendor accounts", "persona": "contractor" },
+    { "id": "invoices", "name": "Invoices" }
+  ],
+  "flows": [
+    { "id": "contractor-sign-in", "name": "Sign in with email", "persona": "contractor", "group": "access", "order": 1, "screens": ["CON-01"] },
+    { "id": "vendor-account-creation", "name": "Create a vendor account", "persona": ["contractor", "ops"], "group": "vendor-accounts", "screens": ["CON-03", "OPS-04"] }
+  ]
+}
+
+- personas[] { id, name, description? } — in the order they are shown.
+- groups[] { id, name, description?, persona? } — in the order they are shown inside a persona. A group
+  with "persona" exists under that persona only; one without exists under every persona that has a
+  journey in it (Access under Contractor and Access under Operations are two sections, one word).
+- flows[].persona — a persona id or name, or a list of them: a journey for two kinds of person is
+  shown under each and counted once. A value no personas[] entry declares is a persona of its own,
+  after the declared ones, alphabetically — so "Contractor and Operations" written as one string is a
+  third persona; write ["contractor", "ops"] instead. No persona: the shared prefix of the flow's
+  screen ids stands in (marked derived), else the trailing "Not grouped".
+- flows[].group — a group id or name; undeclared is a group of its own after the declared ones; none,
+  or a group that belongs to another persona, puts the journey in the persona's "Other journeys".
+- flows[].order — a number, ascending inside the group; flows without one follow, and ties keep the
+  order the flows are written in the manifest (never alphabetical).
+- Matching is by id, then by name, case-insensitive and trimmed. One persona per id across every
+  manifest of a source (and across sources): the first manifest to declare it gives its words.
+- The persona's way in ("start here") is computed: the first journey nothing requires that has
+  something built and the most screens.
+
+The same block in farsight.config.json organises across manifests without editing them:
+
+{ "journeys": {
+    "personas": [ { "id": "ops" }, { "id": "contractor" } ],
+    "groups":   [ { "id": "access", "name": "Ways in" } ],
+    "flows":    [ { "id": "vendor-account-creation", "group": "access", "order": 3 } ] } }
+
+The config's arrays are the order; an entry overrides the manifest entry with the same id field by
+field (only the fields it gives); ids it does not name follow in manifest order. flows[] here only
+places flows a manifest declares — an id no manifest declares is a note (journeys tool, notes), never
+a journey.
+
+Several farsight.config.json files: any farsight.config.json below the source root applies to its
+own folder only, and every path in it is relative to that folder (an NX app's
+apps/web/farsight.config.json says "design": [{ "manifest": "docs/design/screens.json" }] for
+apps/web/docs/design/screens.json); lists add up, the nearer file wins for a node under two, and a
+conflict is reported, never silent. Its journeys block organises the manifests under its folder.
+"projects" and "tooling" are read from the root file only. The config_files tool lists the files read.
+
+An agent manages all of this with its own file tools — Farsight never writes into a code source: edit
+the manifest or the config, call refresh_graph, then journeys to check the result.
 
 ## 2 · What the graph does with it (no code needed yet)
 
@@ -790,7 +856,8 @@ code, and drift says where they disagree. Nothing is drawn by hand.
 
 ## 4 · Verify as you go (MCP tools, same facts as the HUD)
 
-1. graph_overview — flows and screens appear under entry points; the graph path names the workspace.
+1. graph_overview — flows and screens appear under entry points; the graph path names the workspace;
+   the journeys line counts them by persona and group. journeys lists them in that order.
 2. design_surface — every screen's status, image on file, Figma link, operations, drift; flows with
    "N of M screens built".
 3. journey entry:"Vendor (contractor) validation" — the feature timeline: each screen (SCREEN band with
@@ -799,7 +866,8 @@ code, and drift says where they disagree. Nothing is drawn by hand.
 4. api_surface / api_drift — the operations the flow spans flip from spec-only to both as handlers land.
 5. design_drift — reconcile a proposed manifest before committing it: design_drift manifest:<path>.
 6. describe_node <screen or flow id> — the design block (status, id, freshness, operations, docs).
-7. CLI equivalents: farsight design list · farsight design diff --manifest <path> --repo <name> --strict.
+7. CLI equivalents: farsight design list · farsight journeys [--persona p] · farsight design diff
+   --manifest <path> --repo <name> --strict.
 
 ## 5 · How a journey is drawn (HUD) and printed (MCP) — the blueprint timeline
 

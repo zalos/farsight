@@ -341,6 +341,14 @@ describe('journeys', () => {
     assert.deepEqual(json.personas.map((p: { id: string }) => p.id), ['billing', 'ops']);
   });
 
+  test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
+    const guide = await call('design_guide');
+    for (const words of ['personas[] { id, name, description? }', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
+      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
+      assert.ok(guide.includes(words), `design_guide does not say ${words}`);
+    }
+  });
+
   test('graph_overview has the journeys line and journey names where a flow sits', async () => {
     const overview = await call('graph_overview');
     assert.match(overview, /^journeys: 3 journeys · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them/m);
