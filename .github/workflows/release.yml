@@ -2,8 +2,9 @@
 # bypass), so this workflow never pushes to it: it runs the gates, commits the
 # version bump + CHANGELOG.md + .github/release-notes/vX.Y.Z.md on a new branch
 # release/vX.Y.Z, smoke-tests the tarball, pushes the branch and opens the PR
-# `chore(release): vX.Y.Z`. Merging that PR (a merge commit) runs publish.yml,
-# which tags, packs and creates the GitHub Release.
+# `chore(release): vX.Y.Z`. Squash-merging that PR (the only merge kind main
+# allows; the PR title becomes the commit) runs publish.yml, which tags that
+# commit, packs and creates the GitHub Release.
 # Run it from the Actions tab or `gh workflow run release.yml -f bump=minor`.
 # docs/RELEASING.md explains each input, the RELEASE_TOKEN secret and the rehearsal.
 name: release
@@ -152,7 +153,7 @@ jobs:
             echo
             echo '---'
             echo
-            echo "**Release PR.** Merge it with a merge commit (not squash); \`publish.yml\` then tags \`$TAG\` on the release commit, packs, smoke-tests and creates the GitHub Release."
+            echo "**Release PR.** Squash-merge it keeping this title (\`gh pr merge --squash\`); \`publish.yml\` then tags \`$TAG\` on the squash commit, packs, smoke-tests and creates the GitHub Release."
             echo
             echo "**Gates already run** on this exact commit by the [release workflow]($RUN_URL): install, build, typecheck, test, lint:strings, pack and the tarball smoke test."
             if [ "$HAS_RELEASE_TOKEN" != "true" ]; then

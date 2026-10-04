@@ -41,6 +41,13 @@ test('parses type, scope, bang and the BREAKING CHANGE footer', () => {
   assert.equal(footer.breakingNote, 'graph.json v2 only');
   assert.equal(parseCommit({ sha: 'a', short: 'a', subject: 'ci: cache pnpm' }).group, 'chore');
   assert.equal(parseCommit({ sha: 'a', short: 'a', subject: 'KAN-5: not conventional' }).group, 'other');
+  const squash = parseCommit({ sha: 'a', short: 'a', subject: 'feat(cli): a thing (#58)' });
+  assert.equal(squash.subject, 'a thing', 'a squash subject loses its PR suffix');
+  assert.equal(squash.pr, 58);
+  assert.equal(parseCommit({ sha: 'a', short: 'a', subject: 'fix: no pr' }).pr, null);
+  const rel = parseCommit({ sha: 'a', short: 'a', subject: 'chore(release): v0.2.1 (#38)' });
+  assert.equal(rel.scope, 'release');
+  assert.equal(rel.subject, 'v0.2.1', 'a squashed release commit is still a release commit');
   assert.equal(parseCommit({ sha: 'a', short: 'a', subject: 'Initial commit' }).subject, 'Initial commit');
 });
 

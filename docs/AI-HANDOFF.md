@@ -209,8 +209,8 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   the tarball (`--version` must print the release commit; an ingest must succeed), pushes, and publishes a GitHub Release
   with `farsight-cli-X.Y.Z.tgz`. npm publish runs only when an `NPM_TOKEN` secret exists. → `docs/RELEASING.md`.
   **v0.1.1** is the first release (2026-10-01); a consumer install from the release URL into a clean prefix printed
-  `farsight 0.1.1 · commit 00b18dd` and ingested the invoice-app example (87 nodes). Do not squash-merge PRs: the
-  changelog reads `<last tag>..HEAD` by commit.
+  `farsight 0.1.1 · commit 00b18dd` and ingested the invoice-app example (87 nodes). (Until 2026-10-04 PRs were
+  merged with merge commits so the changelog could walk every commit; since then PRs are squash-merged, below.)
 - **Since 2026-10-03 a release is a release PR** (`main` is protected, no bypass): `release.yml` opens
   `chore(release): vX.Y.Z` from `release/vX.Y.Z` (version commit + `CHANGELOG.md` + `.github/release-notes/vX.Y.Z.md`,
   gates and smoke test already run); merging it runs `publish.yml`, which tags the release commit, packs, smoke-tests
@@ -218,6 +218,16 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   `RELEASE_TOKEN` PAT (`docs/RELEASING.md`). **Rehearsed for real with v0.2.0 (2026-10-04):** the workflow's gates and smoke test passed, PR #36 opened, its CI did
   not start (no `RELEASE_TOKEN`), a close/reopen started it, a merge commit merged it, publish.yml tagged `v0.2.0` and
   published the Release with `farsight-cli-0.2.0.tgz`. Add a `RELEASE_TOKEN` PAT to drop the close/reopen step.
+- **Since 2026-10-04 PRs are squash-merged and the convention is enforced** (PR #38). `main` accepts only squash
+  merges — GitHub settings: merge commits and rebase merges off, squash title = PR title, squash message = PR body,
+  linear history required, branches deleted on merge — so one PR is one commit on `main` and one changelog line. The
+  PR title must be a Conventional Commit and the body follows `.github/PULL_REQUEST_TEMPLATE.md` (*what changed · why ·
+  how it was checked · left open*). CI's fourth job, **`commits`** (required), lints the PR title against the type and
+  scope lists and every branch commit for shape (`scripts/lint-commits.mjs`, `pnpm lint:commits`); `pnpm install`
+  installs the same lint as a `commit-msg` hook and sets `.gitmessage` as the commit template (`scripts/install-hooks.mjs`
+  copies into `.git/hooks`; the LFS hooks stay). `changelog.mjs` turns a squash subject's ` (#N)` into a PR link;
+  publish.yml finds the release commit as `chore(release): vX.Y.Z (#N)` and tags the squash commit. The lead merges with
+  `gh pr merge <n> --squash`, keeping the title — the project skill `.claude/skills/git-pr-flow` carries the flow.
 - **CI on every push and PR** (`ci.yml`): validate (install, build, typecheck, tests, string lint, ~1 min) and e2e
   (Playwright chromium, 109 specs, ~1.5 min) in parallel on Ubuntu; artifacts on failure; the live tracker tests skip
   there. First run on `main` green. → `docs/CI.md`. Watch: `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19.
@@ -225,6 +235,17 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   the work usage — the `--help` form of a subcommand should not touch git.
 
 ## Next work, ranked
+
+**Reported 2026-10-04 by the reference app's session, after 0.2.0 was installed there — a parser regression, first:**
+a `fetch(url, helper(ctx, { method: 'POST', … }))` call, where the method literal sits in an object-literal argument of a
+wrapper call rather than in fetch's own init, resolves to the **GET** route of the same path (the fallback is *no method
+→ GET*; `apiInit(ctx, { method: 'GET' })` happens to be right). On the reference app design drift went 7 → 19: twelve
+false *unreached POST / undeclared GET* pairs over five client functions (create submission, session from magic link,
+ops invoice, two vendor-account creates). The 2026-10-01 build resolved these correctly on the same code, so it is a
+regression of the data-stores pass (#15–#18). `packages/parsers/src/tsjs.ts`, the `fetch(` site: when the init argument
+is a call expression, read a `method:` string literal from its object-literal arguments (spreads included), the way the
+class-method path already does; a helper whose name is a verb (`post`, `put`, `patch`, `del`) is a fallback. A test with
+that exact shape, then re-measure read-only on the reference app (drift back to 7, http edges to routes still 69).
 
 **Left open by map pass 2 (2026-10-04), in order:**
 

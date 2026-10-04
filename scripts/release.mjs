@@ -8,7 +8,7 @@
 //   node scripts/release.mjs --version 1.0.0 --prerelease beta.1   # → 1.0.0-beta.1
 //   node scripts/release.mjs --bump patch --no-tag --branch 'release/v{version}' --commit-notes
 //       # the release-PR shape the workflow uses: a new branch holding the version
-//       # commit and .github/release-notes/vX.Y.Z.md, no tag (publish.yml tags after merge)
+//       # commit and .github/release-notes/vX.Y.Z.md, no tag (publish.yml tags the squash-merged commit)
 //
 // Only the root package.json carries the release version: scripts/pack.mjs
 // gives it to the farsight-cli tarball and core's buildInfo() reads it in a
@@ -167,7 +167,7 @@ export function release(cwd, opts) {
   } else {
     console.log(`  git push -u origin ${releaseBranch}`);
     console.log(`  gh pr create --base ${branch} --head ${releaseBranch} --title "chore(release): ${tag}" --body-file ${notesFile} --label release`);
-    console.log(`  # merge it (a merge commit, not squash); publish.yml then tags ${tag}, packs and creates the GitHub Release`);
+    console.log(`  # squash-merge it (gh pr merge --squash); publish.yml then tags ${tag} on the squash commit, packs and creates the GitHub Release`);
   }
   return { ...plan, commit, problems: [] };
 }
