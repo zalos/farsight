@@ -779,7 +779,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             // declared system keeps the externals path below.
             const hostBound = !!d.cls && (classHosts.has(d.cls) || declaredClassExternals.has(`${file}::${d.cls}`));
             if (urlInfo?.url && isWrapperUrl(urlInfo.url, url) && !hostBound) {
-              if (!fetchWrappers.has(fromId)) fetchWrappers.set(fromId, { url: urlInfo.url, method: fetchMethodSpec(argInfoOf(args[1], pm), args.length > 1) });
+              if (!fetchWrappers.has(fromId)) fetchWrappers.set(fromId, { url: urlInfo.url, method: isNode(args[1]) && args[1].type === 'CallExpression' ? initCallSpec(args[1], pm) : fetchMethodSpec(argInfoOf(args[1], pm), args.length > 1) });
             }
             else if (url) httpCalls.push({ fromId, method: verb, path: normalizePath(url), line: at, ...f });
             // a class that keeps its base URL in a constant is talking to that host even
@@ -2103,6 +2103,12 @@ function argInfoOf(n: unknown, pm: Map<string, ParamRef>, depth = 0): ArgInfo | 
     }
     return { props, spreads };
   }
+  // an init a helper builds — `apiFetch(path, helper(ctx, { method: 'POST' }))`: what the helper's
+  // object literal (or its verb name) says about the method, so a wrapper reads it as an init
+  if (n.type === 'CallExpression' && depth === 0) {
+    const lit = initCallMethod(n);
+    if (lit) return { props: { method: { url: [lit] } }, spreads: [] };
+  }
   return undefined;
 }
 
@@ -2232,11 +2238,61 @@ function storeOfExternal(name: string, ref: ExternalRef, decl?: ExternalDecl): S
  */
 function fetchMethod(optionsArg: AstNode | undefined): string | undefined {
   if (!isNode(optionsArg)) return 'GET';
+  if (optionsArg.type === 'CallExpression') return initCallMethod(optionsArg);
   if (optionsArg.type !== 'ObjectExpression') return undefined;
   const lit = methodLiteral(optionsArg);
   if (lit !== null) return lit;
   const props = (optionsArg.properties as AstNode[]) ?? [];
   return props.some((p) => p.type === 'SpreadElement') ? undefined : 'GET';
+}
+
+/** Helper names that say the verb themselves: `fetch(url, post(ctx, body))`. */
+const VERB_HELPERS: Record<string, string> = { post: 'POST', put: 'PUT', patch: 'PATCH', del: 'DELETE', delete: 'DELETE' };
+
+/** The plain name a call's callee ends in: `post` for `post(…)` and `http.post(…)`. */
+function calleeTail(call: AstNode): string | undefined {
+  const c = call.callee as AstNode | undefined;
+  if (!isNode(c)) return undefined;
+  if (c.type === 'Identifier') return String(c.name);
+  if ((c.type === 'MemberExpression' || c.type === 'StaticMemberExpression') && !c.computed && isNode(c.property)) return String((c.property as AstNode).name);
+  return undefined;
+}
+
+/**
+ * The method a `fetch(url, helper(ctx, { method: 'POST', … }))` init names: the first `method:`
+ * literal among the helper call's object-literal arguments (spreads beside it included — the
+ * literal is what the code wrote), a nested helper call's one level down, else the helper's own
+ * name when it is a verb (`post`, `put`, `patch`, `del`). Undefined when none says — never a guess.
+ */
+function initCallMethod(call: AstNode, depth = 0): string | undefined {
+  for (const a of ((call.arguments as AstNode[]) ?? [])) {
+    if (!isNode(a)) continue;
+    if (a.type === 'ObjectExpression') {
+      const lit = methodLiteral(a);
+      if (typeof lit === 'string') return lit;
+    } else if (a.type === 'CallExpression' && depth < 1) {
+      const inner = initCallMethod(a, depth + 1);
+      if (inner) return inner;
+    }
+  }
+  const tail = calleeTail(call);
+  return tail ? VERB_HELPERS[tail.toLowerCase()] : undefined;
+}
+
+/**
+ * Inside a fetch wrapper, an init built by a helper call: a literal method (or a verb helper) as
+ * `initCallMethod` reads it, else the parameter its object argument takes the method from
+ * (`helper({ method: init.method })`), else unknown.
+ */
+function initCallSpec(call: AstNode, pm: Map<string, ParamRef>): MethodSpec {
+  const lit = initCallMethod(call);
+  if (lit) return { lit };
+  for (const a of ((call.arguments as AstNode[]) ?? [])) {
+    if (!isNode(a) || a.type !== 'ObjectExpression') continue;
+    const m = methodOfObject(argInfoOf(a, pm) ?? {});
+    if (m && !('lit' in m)) return m;
+  }
+  return { unknown: true };
 }
 
 /**
