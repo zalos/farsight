@@ -829,6 +829,33 @@ apps/web/docs/design/screens.json); lists add up, the nearer file wins for a nod
 conflict is reported, never silent. Its journeys block organises the manifests under its folder.
 "projects" and "tooling" are read from the root file only. The config_files tool lists the files read.
 
+## 1¾ · Storylines: one business thing, end to end, across journeys and personas
+
+A journey is one feature a person moves through. A storyline chains journeys into the whole life of one
+business thing — an invoice from upload to payment, a vendor from creation to approval to removal —
+across features and across personas, in order:
+
+{
+  "storylines": [
+    { "id": "invoice", "name": "An invoice, end to end", "description": "From the contractor's upload to the week it is paid.",
+      "journeys": ["contractor-sign-in", "invoice-submission", "invoice-review", "invoice-paid"] },
+    { "id": "vendor", "name": "A vendor account", "journeys": ["vendor-account-creation", "vendor-account-review"] }
+  ]
+}
+
+- storylines[] { id, name, description?, journeys } — in the order they are shown; journeys are flow
+  ids, in order. A storyline may chain the flows of every manifest of its source (an NX workspace's
+  root manifest chaining its apps' journeys); a journey may be a step of several storylines.
+- An id no manifest declares is a note (journeys tool, notes), never a step; an id named twice is
+  one step, the first. Storylines chain the journeys of one source (across sources is left open).
+- The same "storylines" list in the farsight.config.json journeys block overrides by id, field by
+  field (a journeys list it gives replaces the whole list); its order comes first, the root file's
+  before a nested file's; a nested file's storyline steps only through the manifests under its folder.
+- Where they show: the Journeys front door's Storylines section, the Map's storyline picker (one
+  band in storyline order, a "then" line from each journey to the next, #/map?storyline=<id>), the
+  journey header's "storyline · step n of m" with the journeys before and after, GET /api/journeys
+  (tree.storylines), the MCP journeys tool (storyline: <id>) and farsight journeys --storyline <id>.
+
 An agent manages all of this with its own file tools — Farsight never writes into a code source: edit
 the manifest or the config, call refresh_graph, then journeys to check the result.
 

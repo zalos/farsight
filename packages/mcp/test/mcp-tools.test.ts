@@ -322,7 +322,10 @@ describe('journeys', () => {
   test('text: persona, then group, then one line per journey — the core fold, line for line', async () => {
     const out = await call('journeys');
     assert.equal(out, journeyTreeLines(fold(), { openHint: '(open with journey)' }).join('\n'));
-    assert.match(out, /^3 journeys · 2 personas · 3 groups across every source in scope$/m);
+    assert.match(out, /^3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope$/m);
+    assert.match(out, /^## Storylines — 1 storyline$/m);
+    assert.match(out, /^1\. Start a new invoice — .*`invoice-app::flow::new-invoice` \(open with journey\)$/m);
+    assert.ok(out.indexOf('## Storylines') < out.indexOf('## Billing'), 'the storylines come before the personas');
     assert.match(out, /^## Billing — 3 journeys/m);
     assert.match(out, /^### Invoices — 2 journeys/m);
     assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
@@ -333,7 +336,7 @@ describe('journeys', () => {
 
   test('persona and group filters, and json is the JourneyTree', async () => {
     const ops = await call('journeys', { persona: 'operations' });
-    assert.match(ops, /^1 journey · 1 persona · 1 group /m);
+    assert.match(ops, /^1 journey · 1 storyline · 1 persona · 1 group /m);
     assert.ok(!ops.includes('## Billing'));
     const none = await call('journeys', { group: 'nope' });
     assert.match(none, /no journey under group "nope"/);
@@ -345,16 +348,28 @@ describe('journeys', () => {
   test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
     const guide = await call('design_guide');
     for (const words of ['personas[] { id, name, description? }', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
-      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
+      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
       assert.ok(guide.includes(words), `design_guide does not say ${words}`);
     }
   });
 
   test('graph_overview has the journeys line and journey names where a flow sits', async () => {
     const overview = await call('graph_overview');
-    assert.match(overview, /^journeys: 3 journeys · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them/m);
+    assert.match(overview, /^journeys: 3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
     const j = await call('journey', { entry: 'draft-and-send' });
     assert.match(j, /^shown under: Billing › Review and send · Operations › Review and send \(start here\)$/m);
+    assert.match(j, /^in storyline: An invoice, end to end · step 2 of 3 · before: `invoice-app::flow::new-invoice` · next: `invoice-app::flow::billing-cycle`$/m);
+  });
+
+  test('storyline: one storyline\'s steps and only its journeys; an unknown one says so', async () => {
+    const out = await call('journeys', { storyline: 'invoice' });
+    assert.match(out, /^3 journeys · 1 storyline · /m);
+    assert.match(out, /^### An invoice, end to end \(`invoice`\) — 3 journeys · /m);
+    assert.match(out, /^2\. Draft and send an invoice — /m);
+    assert.match(await call('journeys', { storyline: 'nope' }), /no storyline "nope"/);
+    const json = JSON.parse(await call('journeys', { storyline: 'invoice', json: true }));
+    assert.deepEqual(json.storylines[0].journeys.map((j: { id: string }) => j.id), ['new-invoice', 'draft-and-send', 'billing-cycle']);
+    assert.ok(json.personas.every((p: any) => p.groups.every((g: any) => g.journeys.every((j: any) => j.storylines.includes('invoice')))));
   });
 });
 

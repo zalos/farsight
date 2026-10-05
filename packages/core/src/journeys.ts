@@ -619,7 +619,8 @@ const matches = (x: { id: string; name: string }, q: string) => key(x.id) === ke
 
 /**
  * The tree narrowed to one persona, one group and/or one storyline (each by id or name); the tree's own counts
- * follow what is kept. A storyline keeps that storyline only, and under the personas only its journeys.
+ * follow what is kept. A storyline keeps that storyline only, and under the personas only its journeys; a persona
+ * or a group keeps the storylines with a step among its journeys, whole.
  */
 export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?: string; storyline?: string } = {}): JourneyTree {
   const storylines = (tree.storylines ?? []).filter((s) => !opts.storyline || matches(s, opts.storyline));
@@ -635,7 +636,10 @@ export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?
       return { ...p, groups, counts: groupCounts(groups.flatMap((g) => g.journeys), 'count.scope.persona', p.id) };
     })
     .filter((p) => p.groups.length);
-  return { ...tree, storylines, personas, counts: treeCounts(personas, storylines), derived: personas.some((p) => p.derived) };
+  // narrowed by persona or group: the storylines that have a step among what is kept, each whole (a chain crosses personas)
+  const kept = opts.persona || opts.group ? new Set(personas.flatMap((p) => p.groups.flatMap((g) => g.journeys.map((j) => j.nodeId)))) : null;
+  const shown = kept ? storylines.filter((s) => s.journeys.some((j) => kept.has(j.nodeId))) : storylines;
+  return { ...tree, storylines: shown, personas, counts: treeCounts(personas, shown), derived: personas.some((p) => p.derived) };
 }
 
 /** Where a journey stands in each storyline it is a step of: `{ storyline, step, of, prev?, next? }` (step 1-based). */
