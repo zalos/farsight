@@ -409,9 +409,9 @@ function storylineToolHtml() {
   const opts = opt('', t('map.storyline.all'), { key: 'map.storyline.all' })
     + list.map((x) => opt(x.id, x.name, { text: x.name + (x.description ? ' · ' + sentence(x.description) : '') })).join('');
   const cur = list.find((x) => x.id === on);
-  return '<span class="map-band-pick map-story-pick' + (MAP.storyMenu ? ' open' : '') + (cur ? ' on' : '') + '" role="group" aria-label="' + esc(t('map.storyline.pick')) + '">'
+  return '<span class="map-story-pick' + (MAP.storyMenu ? ' open' : '') + (cur ? ' on' : '') + '" role="group" aria-label="' + esc(t('map.storyline.pick')) + '">'
     + '<span class="hud-label"' + tipAttrs({ key: 'map.storyline.pick', noFocus: true }) + '>' + esc(t('map.storyline.pick')) + '</span>'
-    + '<button type="button" class="map-tb map-band-cur" data-act="storyline-menu" aria-haspopup="true" aria-expanded="' + !!MAP.storyMenu + '"'
+    + '<button type="button" class="map-tb map-story-cur" data-act="storyline-menu" aria-haspopup="true" aria-expanded="' + !!MAP.storyMenu + '"'
     + tipAttrs(cur ? { text: cur.name, noFocus: true } : { key: 'map.storyline.all', noFocus: true }) + '>' + esc(cur ? cur.name : t('map.storyline.all')) + '</button>'
     + '<span class="map-segs">' + opts + '</span></span>';
 }
@@ -1442,7 +1442,7 @@ function onChromeClick(e) {
     case 'band': MAP.bandMenu = false; setBand(b.dataset.band); break;
     case 'storyline': applyStoryline(b.dataset.storyline || null); break;
     case 'storyline-menu': MAP.storyMenu = !MAP.storyMenu; MAP.bandMenu = false; redrawChrome(); if (MAP.storyMenu) { const f = MAP.stage.querySelector('.map-story-pick .map-seg.on') || MAP.stage.querySelector('.map-story-pick .map-seg'); if (f) f.focus(); } break;
-    case 'band-menu': MAP.bandMenu = !MAP.bandMenu; MAP.storyMenu = false; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-band-pick:not(.map-story-pick) .map-segs .map-seg'); if (f) f.focus(); } break;
+    case 'band-menu': MAP.bandMenu = !MAP.bandMenu; MAP.storyMenu = false; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-band-pick .map-segs .map-seg'); if (f) f.focus(); } break;
     default:
   }
 }
@@ -2285,7 +2285,7 @@ function enterCover(tgt) {
 }
 function onDocClick(e) {
   // the folded *Band by* menu closes on a click anywhere else
-  if (MAP.bandMenu && !(e.target.closest && e.target.closest('.map-band-pick:not(.map-story-pick)'))) { MAP.bandMenu = false; redrawChrome(); }
+  if (MAP.bandMenu && !(e.target.closest && e.target.closest('.map-band-pick'))) { MAP.bandMenu = false; redrawChrome(); }
   if (MAP.storyMenu && !(e.target.closest && e.target.closest('.map-story-pick'))) { MAP.storyMenu = false; redrawChrome(); }
   if (!MAP.card) return;
   const card = MAP.el && MAP.el.querySelector('.map-xcard');
@@ -2716,8 +2716,8 @@ export function mapEscape() {
   if (!MAP.stage) return false;
   // the Affected list closes first, then the mode leaves before anything else (lane I)
   if (MAP.affList) { toggleAffList(false); return true; }
-  if (MAP.bandMenu) { MAP.bandMenu = false; redrawChrome(); const c = MAP.stage.querySelector('.map-band-pick:not(.map-story-pick) .map-band-cur'); if (c) c.focus(); return true; }
-  if (MAP.storyMenu) { MAP.storyMenu = false; redrawChrome(); const c = MAP.stage.querySelector('.map-story-pick .map-band-cur'); if (c) c.focus(); return true; }
+  if (MAP.bandMenu) { MAP.bandMenu = false; redrawChrome(); const c = MAP.stage.querySelector('.map-band-cur'); if (c) c.focus(); return true; }
+  if (MAP.storyMenu) { MAP.storyMenu = false; redrawChrome(); const c = MAP.stage.querySelector('.map-story-cur'); if (c) c.focus(); return true; }
   if (affectedOn()) { clearAffected(); return true; }
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }

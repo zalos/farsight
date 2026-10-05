@@ -457,10 +457,12 @@
   .map-seg:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   .map-band-pick .map-band-cur{display:none}
   /* Storyline: the same control as Band by, folding earlier (its words are a storyline's name); a pick is the accent */
-  .map-story-pick .map-band-cur{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .map-story-pick.on .map-band-cur{color:var(--accent);border-color:var(--accent)}
+  .map-story-pick{display:inline-flex;align-items:center;gap:6px;margin-right:8px;position:relative}
+  .map-story-pick .hud-label{font-size:9px;white-space:nowrap}
+  .map-story-pick .map-story-cur{display:none;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .map-story-pick.on .map-story-cur{color:var(--accent);border-color:var(--accent)}
   @media (max-width:1799px){
-    .map-story-pick .map-band-cur{display:inline-block}
+    .map-story-pick .map-story-cur{display:inline-block}
     .map-story-pick .map-segs{display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:8;flex-direction:column;box-shadow:0 6px 18px rgba(0,0,0,.35);max-height:60vh;overflow:auto}
     .map-story-pick.open .map-segs{display:flex}
     .map-story-pick .map-seg + .map-seg{border-left:0;border-top:1px solid var(--line)}
