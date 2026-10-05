@@ -307,6 +307,7 @@ function enrichNode(node: GraphNode) {
 }
 
 const CODE_CAP = 160; // max lines sliced per step
+const SOURCE_WINDOW = 12; // lines /api/source reads from a part that has a line and no span
 const VIA_CAP = 24;   // accessor-borne test refs kept per table step; the total rides beside them
 
 /** Slice loc.line..endLine (1-based inclusive) from disk, fail-soft + path-confined. Null on any miss. */
@@ -901,6 +902,26 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         summary: journeySummary(g.index, jr, screens),
         steps: jr.steps.map((s) => enrichStep(s, g, fileCache)),
         edges: jr.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
+      }));
+    }
+    if ((url === '/api/source' || url.startsWith('/api/source?')) && req.method === 'GET') {
+      // one node's own lines (round 2026-10-05 §3.2: a gate expands to its code). Only a node the
+      // graph names, only inside its source's root — the same slice /api/journey puts on a step
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const id = new URL(url, 'http://localhost').searchParams.get('node');
+      if (!id) return send(400, JSON.stringify({ error: 'missing ?node=<node id>' }));
+      const g = loadJourneyGraph(graphPath);
+      const node = g.index.byId.get(id);
+      if (!node) return send(404, JSON.stringify({ error: `no node ${id} in this graph` }));
+      if (!node.loc) return send(200, JSON.stringify({ id, code: null }));
+      // a part found without a span (a guard named at its call) reads a short window from its line
+      const span = typeof node.loc.endLine === 'number' ? node.loc : { ...node.loc, endLine: node.loc.line + SOURCE_WINDOW - 1 };
+      const sliced = sliceFromDisk(g.roots[node.loc.repo], span, new Map());
+      const code = sliced ? sliced.code : node.snippet ?? null;
+      return send(200, JSON.stringify({
+        id, repo: node.loc.repo, path: node.loc.path, line: node.loc.line,
+        ...(typeof node.loc.endLine === 'number' ? { endLine: node.loc.endLine } : {}),
+        code, ...(sliced && sliced.codeTruncated ? { codeTruncated: true } : {}),
       }));
     }
     // ── Tests surface (docs/proposals/tests-surface.md §3.4) ─────────────

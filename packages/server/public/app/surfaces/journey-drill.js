@@ -21,6 +21,7 @@ import { S, expose, esc, currentLens, humanize } from '../store.js';
 import { t, def, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, linkHtml, designThumbHtml } from '../lib/graph-render.js';
+import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
 import {
   jrnCellTree, jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnScreenNode, jrnSegDecisions,
   jrnGateText, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml,
@@ -712,11 +713,28 @@ function jrnInspHeadHtml(i, mk) {
     + '<div class="nm">' + (mk && mk.method && !biz ? '<b>' + esc(mk.method) + '</b>' : '') + esc(name) + (n.name && n.name !== name && lens === 'hybrid' ? '<span class="jrn-code-name">' + esc(n.name) + '</span>' : '') + '</div>'
     + (n.loc && !biz ? '<div class="loc">' + esc(n.loc.path + ':' + n.loc.line) + vsl(n.repo, n.loc.path, n.loc.line) + (n.repo ? ' · ' + esc(n.repo) : '') + '</div>' : '')
     + (c.spec && c.spec.path && !biz ? '<div class="loc">' + esc(c.spec.path + (c.spec.line ? ':' + c.spec.line : '')) + vsl(n.repo, c.spec.path, c.spec.line || 1) + ' · ' + esc(t('journey.contractHead')) + '</div>' : '')
+    // every detail is a door (round 2026-10-05 §3.2): where this part is read in full
+    + jrnInspDoorsHtml(mk, n)
     + jrnTxLineHtml(mk)
     // what proves this step runs, in the head where the reader already is: the
     // same foot the screen cards and the Verified-by cells draw (B4.2)
     + jrnTestsFootHtml(jrnStepTestFacts(i), { absent: 'journey.insp.noTestStep', tab: true, impact: jrnStepNodeId(i), wider: jrnStepActionFacts(i) })
     + '</div>';
+}
+/**
+ * The doors of the open marker, from the one builder the Map uses
+ * (lib/detail-links.js): a call reads its contract, its spec line and its
+ * handler; a record its card and schema; anything else its code and its card.
+ * @group Journey drill
+ * @business Where to read this part in full — its contract, or the page it is described on.
+ */
+function jrnInspDoorsHtml(mk, n) {
+  const node = (n && n.id && S.BYID[n.id]) || n;
+  if (!node || !node.id) return '';
+  const kind = mk && mk.kind === 'call' ? 'call' : mk && (mk.kind === 'record' || mk.kind === 'message' || mk.kind === 'external') ? mk.kind : node.kind;
+  const entry = (S.JOURNEY && S.JOURNEY.entry) || {};
+  const doors = doorsHtml(doorsFor(kind, node, { handler: (mk && mk.handler) || null, flow: entry.kind === 'flow' ? entry.id : null }));
+  return doors ? '<div class="dd-exp jrn-insp-doors" tabindex="0" data-doors>' + doors + '</div>' : '';
 }
 /** DOCS: the authored description, the links it carries, the gates on this step, the conditions needed to reach it.
  * @group Journey drill

@@ -2763,6 +2763,43 @@
     .mp-step{max-width:none;flex:1 1 0}
     .mp-alsochip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
   }
+  /* ── doors (round 2026-10-05 §3): every detail links to where it is read in full; the Map and the journey open each other */
+  .dd-doors{display:inline-flex;flex-wrap:wrap;gap:5px 6px;align-items:center}
+  .dd-door{display:inline-flex;align-items:center;gap:5px;font-size:11px;line-height:16px;padding:2px 8px;border:1px solid var(--line);border-radius:12px;color:var(--accent);background:var(--accent-dim);text-decoration:none;white-space:nowrap}
+  .dd-door:hover,.dd-door:focus-visible{border-color:var(--accent);color:var(--ink)}
+  .dd-door .sym{width:12px;height:12px}
+  .dd-door.lead{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:10px}
+  .dd-exp{display:flex;flex-direction:column;gap:6px;padding:6px 2px 8px 22px;border-bottom:1px solid var(--line-soft)}
+  .dd-exp:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .dd-words{margin:0;color:var(--ink);font-size:12px;line-height:1.45}
+  .dd-code{max-height:260px;overflow:auto;border:1px solid var(--line-soft);border-radius:6px;background:var(--ground)}
+  .dd-pre{margin:0;padding:6px 8px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--ink);white-space:pre}
+  .dd-pre .ln{display:inline-block;width:3.2em;color:var(--dim);user-select:none}
+  .dd-load{display:block;padding:4px 8px;font-size:11px;color:var(--dim)}
+  .jrn-gl-row{grid-template-columns:13px minmax(0,1fr) 30px 40px}
+  .jrn-gl-go{gap:4px}
+  .jrn-gl-more{font-size:11px;color:var(--muted);padding:0 3px;line-height:1}
+  .jrn-gl-more:hover,.jrn-gl-more[aria-expanded="true"]{color:var(--accent)}
+  .jrn-insp-doors{padding:4px 0 2px;border-bottom:0}
+  .jrn-tomap:empty{display:none}
+  .mp-row{flex-wrap:wrap}
+  .mp-row.has-doors:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .mp-row.has-doors .l{flex:1 1 0}
+  .mp-row .mp-exp{flex-basis:100%;min-width:0;max-width:100%;display:flex;flex-direction:column;gap:6px;padding:4px 0 2px}
+  .dd-exp,.dd-code{min-width:0;max-width:100%}
+  .mp-row .mp-exp[hidden]{display:none}
+  .mp-tojrn{display:inline-flex;align-items:center}
+  .map-scr .map-tojrn{position:absolute;right:6px;top:6px;z-index:2;display:flex}
+  .map-scr .map-tojrn .dd-door{background:var(--panel);box-shadow:0 2px 8px rgba(0,0,0,.35);font-size:9.5px;padding:1px 7px}
+  .map-xcard .tojrn{display:flex}
+  .dd-story{font-size:11.5px;color:var(--muted)}
+  .map-xcard .story{display:flex}
+  .mp-story{margin:0 6px;white-space:nowrap}
+  .map-xcard .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .map-mark.stale{color:var(--muted)}
+  .map-mark.notbuilt{color:var(--warn)}
+  .map-hint .n{font-weight:600}
+  .map-hint.floor{color:var(--ink)}
 </style>
 </head>
 <body class="lens-hybrid">
@@ -2964,6 +3001,7 @@
     <div class="jrn-head-facts">
       <span class="jrn-count" id="jrn-count"></span>
       <span class="jrn-head-chips">
+        <span class="jrn-tomap" id="jrn-tomap"></span>
         <span class="jrn-partof" id="jrn-partof"></span>
         <span class="jrn-work" id="jrn-work"></span>
         <button class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button>

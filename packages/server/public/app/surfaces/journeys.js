@@ -19,7 +19,8 @@ import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGr
 import { t, def, evidenceWord, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { nodeCardHtml, vsl, linkHtml, designChipHtml, designThumbHtml } from '../lib/graph-render.js';
-import { journeyViewHash, isJourneyRoute } from '../lib/route-url.js';
+import { journeyViewHash, isJourneyRoute, withParams, mapScreenHash, stepIndex, journeyStepHash } from '../lib/route-url.js';
+import { doorsFor, doorsHtml, codeSlotHtml, fillCode } from '../lib/detail-doors.js';
 import { trapFocus, releaseFocus, rememberOpener } from '../lib/focus-trap.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/tooltip.js';
@@ -38,12 +39,13 @@ const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
  * open journey has a shareable #/journeys/<id> URL.
  * @group Journey view
  */
-function gotoJourney(id) {
+function gotoJourney(id, step) {
   if (!/^#\/journeys\//.test(location.hash)) S.prevSurfaceHash = location.hash || '#/journeys';
   // the router empties #surface on the way, so the control that is being clicked
   // has to be remembered here — it will not exist when the overlay traps focus
   rememberOpener(document.activeElement);
-  location.hash = '#/journeys/' + encodeURIComponent(id);
+  // a step (the storyline's arrows and its first journey: step 1) opens at that screen, in the view the reader has
+  location.hash = step ? journeyStepHash(id, step, { view: jrnLayout() }) : '#/journeys/' + encodeURIComponent(id);
 }
 
 /**
@@ -64,6 +66,8 @@ function journeyEntries() {
  */
 export function mountJourneys(route, el) {
   renderPicker(el);
+  // a link to one step (`?step=n[&node=id]`, round 2026-10-05 §3.1) is spent once the journey has drawn
+  S.jrnPendingStep = route.param && route.step ? { step: route.step, node: route.node || null } : null;
   if (route.param) openJourney(decodeURIComponent(route.param));
   else hideJourneyOverlay();
 }
@@ -197,7 +201,7 @@ function jrnStorylinesHtml(org) {
       const where = t(stepKey).replace('{n}', i + 1).replace('{m}', steps.length);
       const status = t(j.statusKey || 'journey.status.designedNotBuilt').replace('{n}', j.built || 0).replace('{m}', j.total || 0);
       return (i ? '<span class="jrn-story-then" aria-hidden="true">›</span>' : '')
-        + '<a class="api-chip jrn-story-step ' + cls + '" href="' + esc('#/journeys/' + encodeURIComponent(j.nodeId)) + '"'
+        + '<a class="api-chip jrn-story-step ' + cls + '" href="' + esc(journeyStepHash(j.nodeId, 1, { view: jrnLayout() })) + '"'
         + tipAttrs({ text: where + ' · ' + (j.name || j.id) + ' · ' + status }) + '><b>' + (i + 1) + '</b>' + esc(j.name || j.id) + '</a>';
     }).join('');
     html += '<div class="dsg-flow jrn-story" data-storyline="' + esc(st.id) + '"><div class="dsg-flow-head">'
@@ -207,7 +211,7 @@ function jrnStorylinesHtml(org) {
       + (chips ? '<div class="dsg-chips jrn-story-steps">' + chips + '</div>' : '<p class="set-note">' + esc(t('journeys.storyline.empty')) + '</p>')
       + '<div class="jrn-story-go">'
       + (mapOn ? '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>' : '')
-      + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ')">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
+      + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ', 1)">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
       + '</div></div>';
   }
   return html + '</div>';
@@ -1096,7 +1100,7 @@ export async function openJourney(id) {
   const cutEl = document.getElementById('jrn-cuts'); if (cutEl) cutEl.style.display = 'none';
   const fb = document.getElementById('jrn-forksbtn'); if (fb) fb.style.display = 'none';
   jrnToggleForks(false);
-  S.JOURNEY = null; S.JRN_TREE = null; S.JRN_DRILL = null;
+  S.JOURNEY = null; S.JRN_TREE = null; S.JRN_DRILL = null; S.jrnStep = null;
   jrnShowState(jrnStateHtml(t('journey.loading')));
   try {
     const r = await fetch('/api/journey?entry=' + encodeURIComponent(id));
@@ -1508,7 +1512,44 @@ function jrnGateRowHtml(g, qualifier) {
     + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
     + '<span class="jrn-gl-x"' + (g.count > 1 ? ' title="' + esc(t('journey.gateTimes').replace('{n}', g.count)) + '"' : '') + '>'
     + (g.count > 1 ? '×' + g.count : '') + '</span>'
-    + '<span class="jrn-gl-go">' + (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '') + '</span></div>';
+    + '<span class="jrn-gl-go">' + (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '')
+    + (gn ? '<button type="button" class="jrn-gl-more" aria-expanded="false" data-gate="' + esc(g.id) + '" data-kind="' + esc(g.kind) + '"'
+      + ' onclick="jrnGateExpand(this)" aria-label="' + esc(t('door.expand') + ' · ' + words) + '"' + tipAttrs({ key: 'door.expand', noFocus: true }) + '>▸</button>' : '')
+    + '</span></div>';
+}
+/**
+ * Open a checkpoint in place (round 2026-10-05 §3.2): under its row, the guard's
+ * own lines read from the file (not in the business register, where the gate is
+ * its words) and its doors — the editor at its line and its card on the code
+ * map. A second click folds it.
+ * @group Journey view
+ * @business Opens a check where it is listed: what it says, and where to read it.
+ */
+export function jrnGateExpand(btn) {
+  if (window.event) window.event.stopPropagation();
+  const row = btn.closest('.jrn-gl-row');
+  if (!row) return;
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('dd-exp')) { next.remove(); btn.setAttribute('aria-expanded', 'false'); btn.textContent = '▸'; return; }
+  const id = btn.dataset.gate;
+  const gn = S.BYID[id];
+  if (!gn) return;
+  const biz = currentLens() === 'business';
+  const all = jrnWords(gn.bizDescription || gn.docs || '') || '';
+  // the first sentence, at most a short paragraph: the code and the doors are what this fold is for
+  const first = (all.match(/^[\s\S]*?[.!?](?=\s|$)/) || [all])[0];
+  const words = first.length > 240 ? first.slice(0, 237).replace(/\s+\S*$/, '') + '…' : first;
+  const doors = doorsHtml(doorsFor(btn.dataset.kind === 'rule' ? 'rule' : 'gate', gn));
+  const exp = document.createElement('div');
+  exp.className = 'dd-exp jrn-gl-exp';
+  exp.tabIndex = 0;
+  exp.setAttribute('data-doors', '');
+  exp.innerHTML = doors + (words ? '<p class="dd-words">' + esc(words) + '</p>' : (biz ? '<p class="dd-words">' + esc(row.querySelector('.jrn-gl-w') ? row.querySelector('.jrn-gl-w').textContent : '') + '</p>' : ''))
+    + codeSlotHtml(id);
+  row.after(exp);
+  btn.setAttribute('aria-expanded', 'true');
+  btn.textContent = '▾';
+  fillCode(exp);
 }
 /**
  * One named list of checkpoints: a heading carrying THIS screen's count, then
@@ -4169,9 +4210,88 @@ export function renderJourney(data) {
   // that hid half the layers; on the drill it left 3 of 14 beats. An empty pane
   // is 42px and carries the hint that says what to click, so the affordance is
   // not lost — only the space it was taking without being asked.
-  if (keep) jrnSelect(S.journeyActive, true);
+  const pending = S.jrnPendingStep;
+  S.jrnPendingStep = null;
+  if (pending) { S.journeyActive = -1; jrnDockRender(-1); jrnApplyStep(pending); }
+  else if (keep) jrnSelect(S.journeyActive, true);
   else { S.journeyActive = -1; jrnDockRender(-1); jrnUpdateProgress(); }
+  jrnToMapDraw();
   jrnFitToWindow();
+}
+/**
+ * Arrive at the step a link names (`?step=n`, the 1-based screen ordinal the
+ * Map's `screen` shares): the node's marker when the link names one on that
+ * screen (or a gate met there), else the screen's first marker — and the
+ * screen's head scrolled into view.
+ * @group Journey view
+ * @business Opens the journey at the screen the link was written on.
+ */
+function jrnApplyStep(p) {
+  const sum = S.JOURNEY && S.JOURNEY.summary;
+  const segs = (sum && sum.segments) || [];
+  const si = stepIndex(p.step, segs.length);
+  if (si == null) return;
+  const sg = segs[si];
+  let order = null;
+  if (p.node) {
+    const m = sg.markers.find((x) => x.nodeId === p.node) || segs.flatMap((x) => x.markers).find((x) => x.nodeId === p.node);
+    const g = !m && (sg.gates || []).find((x) => x.id === p.node);
+    order = m ? m.stepOrder : g ? g.stepOrder : null;
+  }
+  if (order != null) jrnScrollTo(order);
+  else jrnSelectSegment(si);
+  // the screen's head to the left edge of the timeline, past the sticky row labels — a wide screen centred
+  // would show its empty middle
+  const head = document.getElementById('jrn-sh-' + si);
+  const tl = document.getElementById('jrn-tl');
+  if (head && tl) {
+    const lab = tl.querySelector('.jrn-lane');
+    const labW = lab ? lab.getBoundingClientRect().width : 190;
+    tl.scrollLeft += head.getBoundingClientRect().left - tl.getBoundingClientRect().left - labW - 8;
+  }
+}
+/** The 1-based screen ordinal a step order sits in, else null. @group Journey view */
+function jrnScreenOrdinal(order) {
+  const segs = (S.JOURNEY && S.JOURNEY.summary && S.JOURNEY.summary.segments) || [];
+  const sg = order >= 0 ? segs.find((x) => order >= x.from && order <= x.to) : null;
+  return sg ? sg.index + 1 : null;
+}
+/**
+ * Keep the address on the step on screen (`?step=n&node=id`), so the bar and
+ * *Copy link* name the screen and the part selected, and redraw the header's
+ * *see it on the Map* for the same place.
+ * @group Journey view
+ */
+function jrnWriteStepHash(order) {
+  const h = location.hash || '';
+  const step = jrnScreenOrdinal(order >= 0 ? order : S.journeyActive);
+  const mk = order >= 0 ? jrnMarkerAt(order) : null;
+  S.jrnStep = step ? { step, node: mk ? mk.nodeId : null } : null;
+  if (isJourneyRoute(h)) {
+    const next = withParams(h, { step: step ? String(step) : null, node: step && mk ? mk.nodeId : null });
+    if (next !== h) history.replaceState(null, '', next);
+  }
+  jrnToMapDraw();
+}
+/** Whether the workspace turned the Map on (surfaces/map.js mapEnabled, read here without importing the surface). */
+function jrnMapOn() { const f = S.SETTINGS && S.SETTINGS.flags; return !!(f && f.map); }
+/**
+ * The header's *see it on the Map*: this journey's street with the step on
+ * screen framed, and — when the selected part is a call or something it reads
+ * or writes — plumbing on with that part's card open.
+ * @group Journey view
+ * @business Opens the same journey on the Map, at the screen you are on.
+ */
+function jrnToMapDraw() {
+  const el = document.getElementById('jrn-tomap');
+  if (!el) return;
+  const entry = (S.JOURNEY && S.JOURNEY.entry) || {};
+  if (entry.kind !== 'flow' || !jrnMapOn()) { el.innerHTML = ''; return; }
+  const st = S.jrnStep || { step: 1, node: null };
+  const mk = st.node ? jrnMarkerAt(S.journeyActive) : null;
+  const kind = mk && mk.kind === 'call' ? 'call' : mk && (mk.kind === 'record' || mk.kind === 'message' || mk.kind === 'external') ? mk.kind : null;
+  const href = mapScreenHash(entry.id, st.step, kind ? { node: mk.nodeId, kind } : {});
+  el.innerHTML = '<a class="dd-door lead jrn-tomap-a" href="' + esc(href) + '"' + tipAttrs({ key: 'door.map', noFocus: true }) + '>' + sym('interchange') + esc(t('door.map')) + '</a>';
 }
 /**
  * Beside the journey's title, for a flow: `For <persona> · <group>`, read from
@@ -4214,7 +4334,7 @@ function jrnFillStoryline(tree, entryId) {
   const where = t(currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf').replace('{n}', a.step).replace('{m}', a.of);
   const others = at.slice(1).map((x) => x.storyline.name + ' · ' + t('journeys.storyline.stepOf').replace('{n}', x.step).replace('{m}', x.of));
   const arrow = (j, glyph, key) => (j
-    ? '<button type="button" class="jrn-story-nav" onclick="openJourney(' + jsArg(j.nodeId) + ')" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"' + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id) }) + '>' + glyph + '</button>'
+    ? '<button type="button" class="jrn-story-nav" onclick="openJourney(' + jsArg(j.nodeId) + ', 1)" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"' + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id) }) + '>' + glyph + '</button>'
     : '<span class="jrn-story-nav off" aria-hidden="true">' + glyph + '</span>');
   el.innerHTML = '<span class="jrn-story-line" data-storyline="' + esc(a.storyline.id) + '">'
     + arrow(a.prev, '‹', 'journeys.storyline.prev')
@@ -4571,6 +4691,7 @@ export function jrnSelect(i, noScroll) {
     if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   jrnImpactRings();
+  jrnWriteStepHash(i);
 }
 /** Select a segment (its header or business step): its first marker, else just highlight it.
  * @group Journey view */
@@ -4579,7 +4700,7 @@ export function jrnSelectSegment(si) {
   const sg = sum && sum.segments[si];
   if (!sg) return;
   if (sg.markers.length) jrnSelect(sg.markers[0].stepOrder);
-  else { S.journeyActive = sg.from; jrnSelect(-1, true); S.journeyActive = sg.from; jrnUpdateProgress(); }
+  else { S.journeyActive = sg.from; jrnSelect(-1, true); S.journeyActive = sg.from; jrnUpdateProgress(); jrnWriteStepHash(sg.from); }
 }
 /**
  * Jump to step i from a chip, a gate or the forks drawer: the step's own
@@ -4730,4 +4851,4 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     S.jrnFitRaf = requestAnimationFrame(() => { S.jrnFitRaf = 0; jrnFitToWindow(); });
   });
 }
-expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf });
+expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf, jrnGateExpand });
