@@ -1488,14 +1488,17 @@ export function jrnGateExpand(btn) {
   const gn = S.BYID[id];
   if (!gn) return;
   const biz = currentLens() === 'business';
-  const words = jrnWords(gn.bizDescription || gn.docs || '') || '';
+  const all = jrnWords(gn.bizDescription || gn.docs || '') || '';
+  // the first sentence, at most a short paragraph: the code and the doors are what this fold is for
+  const first = (all.match(/^[\s\S]*?[.!?](?=\s|$)/) || [all])[0];
+  const words = first.length > 240 ? first.slice(0, 237).replace(/\s+\S*$/, '') + '…' : first;
   const doors = doorsHtml(doorsFor(btn.dataset.kind === 'rule' ? 'rule' : 'gate', gn));
   const exp = document.createElement('div');
   exp.className = 'dd-exp jrn-gl-exp';
   exp.tabIndex = 0;
   exp.setAttribute('data-doors', '');
-  exp.innerHTML = (words ? '<p class="dd-words">' + esc(words) + '</p>' : (biz ? '<p class="dd-words">' + esc(row.querySelector('.jrn-gl-w') ? row.querySelector('.jrn-gl-w').textContent : '') + '</p>' : ''))
-    + codeSlotHtml(id) + doors;
+  exp.innerHTML = doors + (words ? '<p class="dd-words">' + esc(words) + '</p>' : (biz ? '<p class="dd-words">' + esc(row.querySelector('.jrn-gl-w') ? row.querySelector('.jrn-gl-w').textContent : '') + '</p>' : ''))
+    + codeSlotHtml(id);
   row.after(exp);
   btn.setAttribute('aria-expanded', 'true');
   btn.textContent = '▾';
@@ -4188,8 +4191,15 @@ function jrnApplyStep(p) {
   }
   if (order != null) jrnScrollTo(order);
   else jrnSelectSegment(si);
+  // the screen's head to the left edge of the timeline, past the sticky row labels — a wide screen centred
+  // would show its empty middle
   const head = document.getElementById('jrn-sh-' + si);
-  if (head) head.scrollIntoView({ block: 'nearest', inline: 'center' });
+  const tl = document.getElementById('jrn-tl');
+  if (head && tl) {
+    const lab = tl.querySelector('.jrn-lane');
+    const labW = lab ? lab.getBoundingClientRect().width : 190;
+    tl.scrollLeft += head.getBoundingClientRect().left - tl.getBoundingClientRect().left - labW - 8;
+  }
 }
 /** The 1-based screen ordinal a step order sits in, else null. @group Journey view */
 function jrnScreenOrdinal(order) {

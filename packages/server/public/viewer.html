@@ -2721,10 +2721,13 @@
   .jrn-tomap:empty{display:none}
   .mp-row{flex-wrap:wrap}
   .mp-row.has-doors:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-  .mp-row .mp-exp{flex-basis:100%;display:flex;flex-direction:column;gap:6px;padding:4px 0 2px}
+  .mp-row.has-doors .l{flex:1 1 0}
+  .mp-row .mp-exp{flex-basis:100%;min-width:0;max-width:100%;display:flex;flex-direction:column;gap:6px;padding:4px 0 2px}
+  .dd-exp,.dd-code{min-width:0;max-width:100%}
   .mp-row .mp-exp[hidden]{display:none}
   .mp-tojrn{display:inline-flex;align-items:center}
-  .map-scr .map-tojrn{margin-top:auto;display:flex;justify-content:flex-end}
+  .map-scr .map-tojrn{position:absolute;right:6px;top:6px;z-index:2;display:flex}
+  .map-scr .map-tojrn .dd-door{background:var(--panel);box-shadow:0 2px 8px rgba(0,0,0,.35);font-size:9.5px;padding:1px 7px}
   .map-xcard .tojrn{display:flex}
   .map-xcard .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .map-mark.stale{color:var(--muted)}

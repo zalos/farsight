@@ -102,7 +102,7 @@ function toggleRowDetail(rowEl) {
   let pre = '';
   if (kind === 'gate') pre = codeSlotHtml(id);
   else if (kind === 'call' && n && !biz()) pre = jrnContractHtml(n);
-  if (pre) exp.insertAdjacentHTML('afterbegin', '<div class="mp-exp-code">' + pre + '</div>');
+  if (pre) exp.insertAdjacentHTML('beforeend', '<div class="mp-exp-code">' + pre + '</div>');
   fillCode(exp);
 }
 function absentRow(kind) { return '<div class="mp-row none">' + jrnAbsentHtml(kind) + '</div>'; }
