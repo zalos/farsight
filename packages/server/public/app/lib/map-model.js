@@ -143,7 +143,12 @@ export function placesFromTree(tree) {
  * is an **echo** keyed `<id>\u0001<persona>`, and `echoes` maps each echo key
  * to the journey's id — the surface draws the street once and a card that leads
  * to it in the other bands, and counts the journey once. An item with no place
- * falls in a trailing band keyed ''.
+ * falls in a trailing band keyed ''. With `groupRows: true` a persona band reads
+ * as its groups: each group's run of journeys starts on a row of its own after a
+ * gutter of `subW` at the left, and `subs` lists each run — `{ band, key, x, y,
+ * w, h, n }`, `key` the group id — where the surface writes the group's word.
+ * A band with one group keeps no gutter. Any `subKey(item)` does the same for
+ * any band.
  * @group Map
  */
 export function layoutDistricts(items, opts = {}) {
@@ -159,24 +164,30 @@ export function layoutDistricts(items, opts = {}) {
         if (k > 0) echoes.set(id, it.id);
         // an echo is a card that leads to the street, not the street: `opts.echoW` narrows it
         const w = k > 0 && o.echoW > 0 ? Math.min(it.w, o.echoW) : it.w;
-        slots.push({ ...it, id, w, band: pl.persona, rank: typeof pl.rank === 'number' ? pl.rank : i, at: i });
+        slots.push({ ...it, id, w, band: pl.persona, sub: pl.group == null ? '' : String(pl.group), rank: typeof pl.rank === 'number' ? pl.rank : i, at: i });
       });
     });
     const bi = (k) => { const x = order.indexOf(k); return x < 0 ? order.length + (k === '\u0002' ? 1 : 0) : x; };
     slots.sort((a, b) => bi(a.band) - bi(b.band) || a.rank - b.rank || a.at - b.at);
-    const L = layoutDistricts(slots, { ...o, bandKey: (it) => it.band });
+    const L = layoutDistricts(slots, { ...o, bandKey: (it) => it.band, subKey: o.groupRows ? (it) => it.sub : null });
     L.echoes = echoes;
     return L;
   }
   const bandKey = typeof o.bandKey === 'function' ? o.bandKey : (it) => it.repo || '';
+  const subKey = typeof o.subKey === 'function' ? o.subKey : null;
   const list = Array.isArray(items) ? items : [];
   const bands = [];
+  const byKey = new Map();
   for (const it of list) {
     const key = bandKey(it) || '';
-    let b = bands.find((x) => x.repo === key);
-    if (!b) { b = { repo: key, items: [] }; bands.push(b); }
+    let b = byKey.get(key);
+    if (!b) { b = { repo: key, items: [], subs: new Set() }; bands.push(b); byKey.set(key, b); }
     b.items.push(it);
+    if (subKey) b.subs.add(subKey(it) || '');
   }
+  // a band whose items fall in two runs or more (its groups) starts each run on a row of its own, after a gutter
+  // of `subW` at the left where the surface writes the run's word
+  const runs = (b) => !!subKey && b.subs.size > 1;
   const widest = Math.max(0, ...list.map((i) => i.w));
   // every width a row could end at: the running sums of each band's districts
   const cands = new Set([widest]);
@@ -186,16 +197,28 @@ export function layoutDistricts(items, opts = {}) {
       for (let j = i; j < b.items.length; j++) { w += b.items[j].w + (j > i ? o.colGap : 0); if (w >= widest) cands.add(w); }
     }
   }
+  const subW = Number(o.subW) > 0 ? Number(o.subW) : 0;
   const place = (rowW) => {
     const rects = new Map();
     const out = [];
+    const subs = [];
     let y = o.margin, maxW = 0;
     for (const b of bands) {
       const rowH = Math.max(0, ...b.items.map((i) => i.h));
       const top = y;
-      let x = o.margin, rowY = y + o.labelH, bandW = 0;
+      const grouped = runs(b);
+      const x0 = o.margin + (grouped ? subW : 0);
+      let x = x0, rowY = y + o.labelH, bandW = 0, cur = null, run = null;
       for (const it of b.items) {
-        if (x > o.margin && x - o.margin + it.w > rowW) { x = o.margin; rowY += rowH + o.rowGap; }
+        const k = grouped ? subKey(it) || '' : null;
+        // a new run (group) starts a new row; a row past the width wraps
+        if (x > x0 && ((grouped && k !== cur) || x - x0 + it.w > rowW)) { x = x0; rowY += rowH + o.rowGap; }
+        if (grouped && k !== cur) {
+          cur = k;
+          run = { band: b.repo, key: k, x: o.margin, y: rowY, w: subW, h: rowH, n: 0 };
+          subs.push(run);
+        }
+        if (run) { run.n++; run.h = rowY + rowH - run.y; }
         rects.set(it.id, { x, y: rowY, w: it.w, h: rowH });
         x += it.w + o.colGap;
         bandW = Math.max(bandW, x - o.colGap - o.margin);
@@ -208,7 +231,7 @@ export function layoutDistricts(items, opts = {}) {
     // every band's panel spans the board's widest row, so the bands line up as one column of panels
     for (const b of out) b.w = maxW + o.pad * 2;
     const size = { w: maxW + o.margin * 2, h: (bands.length ? y - o.bandGap : o.margin) + o.margin };
-    return { rects, bands: out, size, rowW };
+    return { rects, bands: out, size, rowW, subs };
   };
   let best = null, bestScore = Infinity;
   for (const w of [...cands].sort((a, b) => a - b)) {
@@ -218,6 +241,29 @@ export function layoutDistricts(items, opts = {}) {
   }
   if (best) best.echoes = echoes;
   return best || place(widest);
+}
+
+/**
+ * The board for one storyline (round-2026-10-05 §2.2): of `nb` (`neighbourhoodModel()`'s answer) only the
+ * districts the storyline names, **in its order**, each with `step` (1-based) and `steps` (how many the board
+ * shows); every other journey is left out. `story` is a `JourneyTree` storyline (`{ id, name, journeys }`, each
+ * journey a row with `nodeId`). A step whose journey has no district here (another scope) is skipped, so the
+ * steps the board numbers are the ones it draws. Returns `nb`'s shape plus `storyline: { id, name }` and
+ * `then`: the links from each step to the next (`{ from, to, kind: 'then' }`). O(districts + steps).
+ * @group Map
+ */
+export function storylineModel(nb, story) {
+  const base = nb && Array.isArray(nb.districts) ? nb : { districts: [] };
+  if (!story || !Array.isArray(story.journeys)) return { ...base, storyline: null, then: [] };
+  const byId = new Map(base.districts.map((d) => [d.id, d]));
+  const ids = [];
+  for (const j of story.journeys) {
+    const id = j && j.nodeId;
+    if (id && byId.has(id) && !ids.includes(id)) ids.push(id);
+  }
+  const districts = ids.map((id, i) => ({ ...byId.get(id), index: i, step: i + 1, steps: ids.length }));
+  const then = ids.slice(1).map((id, i) => ({ from: ids[i], to: id, kind: 'then' }));
+  return { ...base, districts, storyline: { id: story.id, name: story.name || story.id }, then };
 }
 
 /**

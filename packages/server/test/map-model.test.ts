@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
-const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, routeLinks, storesOf, mergeMode, boardWidth, MODE_ORDER } = await import(join(appDir, 'lib', 'map-model.js'));
+const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, routeLinks, storesOf, mergeMode, boardWidth, MODE_ORDER, storylineModel } = await import(join(appDir, 'lib', 'map-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle.json'), 'utf8'));
 import { withStores, type AnyRec } from './map-stores-fixture.ts';
 const byId = new Map(fx.nodes.map((n: { id: string }) => [n.id, n]));
@@ -317,6 +317,70 @@ test('an echo can be narrower than the street it leads to', () => {
   const L = layoutDistricts(items, { bandKey: 'persona', personaOrder: nb.personaOrder, echoW: 880 });
   assert.equal(L.rects.get('r::flow::both')!.w, 2400);
   assert.equal(L.rects.get('r::flow::both\u0001ops')!.w, 880);
+});
+
+test('banded by persona with groupRows: each group starts a row of its own after a gutter, and subs name the runs', () => {
+  const nb = neighbourhoodModel(pdesigns, null, ptree);
+  const items = nb.districts.map((d: any) => ({ id: d.id, repo: d.repo, places: d.places, w: 880, h: 400 }));
+  const o = { bandKey: 'persona', personaOrder: nb.personaOrder, aspect: 100, groupRows: true, subW: 300, margin: 80, colGap: 200, rowGap: 160 };
+  const L = layoutDistricts(items, o);
+  const r = (id: string) => L.rects.get('r::flow::' + id)!;
+  // Contractor: Access [login] on one row, Invoices [alpha, both] on the next, both after the gutter
+  assert.equal(r('login').x, o.margin + o.subW);
+  assert.equal(r('alpha').x, o.margin + o.subW, 'a new group starts a new row');
+  assert.ok(r('alpha').y > r('login').y);
+  assert.equal(r('both').y, r('alpha').y, 'inside a group the row runs on');
+  assert.equal(r('both').x, r('alpha').x + 880 + o.colGap);
+  assert.deepEqual(L.subs.map((x: any) => `${x.band}/${x.key}:${x.n}`), ['con/access:1', 'con/inv:2', 'ops/access:1', 'ops/inv:1']);
+  const inv = L.subs[1];
+  assert.deepEqual([inv.x, inv.y, inv.w, inv.h], [o.margin, r('alpha').y, o.subW, 400], 'the run\'s word sits in the gutter left of its first row');
+  // a band of one group (the trailing one here) keeps no gutter and names no run
+  assert.equal(r('loose').x, o.margin);
+  assert.ok(!L.subs.some((x: any) => x.band === '_none'));
+  // the panels still hold every slot, and no two slots overlap
+  for (const [id, rc] of L.rects as Map<string, any>) {
+    const b = L.bands.find((x: any) => rc.y >= x.y && rc.y + rc.h <= x.y + x.h)!;
+    assert.ok(b, `${id} sits inside a panel`);
+    assert.ok(rc.x >= b.x && rc.x + rc.w <= b.x + b.w, `${id} sits inside its panel's width`);
+  }
+  const rs = [...L.rects.values()] as { x: number; y: number; w: number; h: number }[];
+  for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+    const a = rs[i]!, b = rs[j]!;
+    assert.ok(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y, 'two slots overlap');
+  }
+  // without the option the persona band packs as before
+  assert.deepEqual(layoutDistricts(items, { ...o, groupRows: false }).subs, []);
+});
+
+test('a storyline: only its journeys, in its order, numbered, with a then link from each to the next — one band', () => {
+  const tree = treeFrom(pdesigns, { r: { personas: [], groups: [], flows: {}, notes: [], storylines: [
+    { id: 'life', name: 'A life', journeys: ['opslogin', 'both', 'login'], declared: true, from: 'm.json' },
+  ] } }, { ordinal: (id: string) => ['login', 'alpha', 'both', 'opslogin', 'loose'].indexOf(id.split('::').pop()!) });
+  const nb = neighbourhoodModel(pdesigns, null, tree);
+  const sm = storylineModel(nb, tree.storylines[0]);
+  assert.deepEqual(sm.districts.map((d: any) => `${d.step}/${d.steps}:${d.flowId}`), ['1/3:opslogin', '2/3:both', '3/3:login']);
+  assert.deepEqual(sm.districts.map((d: any) => d.index), [0, 1, 2]);
+  assert.deepEqual(sm.then, [
+    { from: 'r::flow::opslogin', to: 'r::flow::both', kind: 'then' },
+    { from: 'r::flow::both', to: 'r::flow::login', kind: 'then' },
+  ]);
+  assert.deepEqual(sm.storyline, { id: 'life', name: 'A life' });
+  assert.equal(sm.personaOrder, nb.personaOrder, 'the rest of the model is handed on');
+  // the band: one, in storyline order, every then link routable between its cards
+  const items = sm.districts.map((d: any) => ({ id: d.id, repo: d.repo, w: 880, h: 400 }));
+  const L = layoutDistricts(items, { bandKey: () => 'story:life', aspect: 100 });
+  assert.equal(L.bands.length, 1);
+  assert.equal(L.bands[0].n, 3);
+  const xs = [...L.rects.entries()].sort((a: any, b: any) => a[1].x - b[1].x).map(([id]: any) => id);
+  assert.deepEqual(xs, sm.districts.map((d: any) => d.id));
+  const routed = routeLinks(L.rects, sm.then);
+  assert.equal(routed.length, 2);
+  for (const l of routed) assert.ok(l.points.length >= 2);
+  // a step whose journey is not on this board is skipped; no storyline leaves the model as it was
+  const fewer = storylineModel({ ...nb, districts: nb.districts.filter((d: any) => d.flowId !== 'both') }, tree.storylines[0]);
+  assert.deepEqual(fewer.districts.map((d: any) => `${d.step}/${d.steps}:${d.flowId}`), ['1/2:opslogin', '2/2:login']);
+  assert.equal(storylineModel(nb, null).districts, nb.districts);
+  assert.deepEqual(storylineModel(nb, null).then, []);
 });
 
 test('the source and domain bands carry no echoes', () => {
