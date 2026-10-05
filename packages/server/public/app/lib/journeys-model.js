@@ -174,6 +174,7 @@ export function treeFrom(designs, metas, opts = {}) {
         const r = {
           ...p.row, designId: p.designId, personaIds: [], personaNames: [], groupId: gb.id, pinned: false,
           statusKey: statusKeyOf(p.row.built || 0, p.row.total != null ? p.row.total : (p.row.screens || []).length),
+          storylines: [],
           ...(p.placedBy ? { placedBy: p.placedBy } : {}),
         };
         if (p.persona !== undefined) r.persona = p.persona; else delete r.persona;
@@ -206,9 +207,12 @@ export function treeFrom(designs, metas, opts = {}) {
   const sections = personas.reduce((n, p) => n + p.groups.length, 0);
   const multi = inScope.length > 1;
   const notes = inScope.flatMap(([repo, m]) => (m.notes || []).map((n) => (multi ? repo + ': ' + n : n)));
+  const storylines = storylinesFold(personas, inScope, notes);
   return {
+    storylines,
     personas,
     counts: {
+      storylines: counted(storylines.length, 'count.unit.storylines', 'count.scope.workspace', SRC + ' → storylines'),
       journeys: counted(uniq.size, 'count.unit.journeys', 'count.scope.workspace', SRC + ' → distinct flow node ids'),
       personas: counted(personas.length, 'count.unit.personas', 'count.scope.workspace', SRC + ' → personas'),
       groups: counted(sections, 'count.unit.groups', 'count.scope.workspace', SRC + ' → personas[].groups (one per persona it is shown under)'),
@@ -216,6 +220,90 @@ export function treeFrom(designs, metas, opts = {}) {
     derived: derivedAny,
     notes,
   };
+}
+
+/**
+ * The storylines of the sources in scope — core `journeyTree()`'s fold, rule for rule: per source in
+ * source order, each declared storyline once by id (a second source's is a note), its journeys the
+ * steps in order (a journey not drawn in this scope is a note), each step its first row in the tree
+ * with `stepIndex`; every row learns the storylines it is a step of. O(journeys + steps).
+ */
+function storylinesFold(personas, inScope, notes) {
+  const firstRow = new Map();
+  const rowsOf = new Map();
+  for (const p of personas) for (const g of p.groups) for (const j of g.journeys) {
+    if (!firstRow.has(j.nodeId)) firstRow.set(j.nodeId, j);
+    if (!rowsOf.has(j.nodeId)) rowsOf.set(j.nodeId, []);
+    rowsOf.get(j.nodeId).push(j);
+  }
+  const declared = [];
+  const seen = new Map();
+  for (const [repo, m] of inScope) {
+    for (const s of (m && m.storylines) || []) {
+      if (!s || !str(s.id)) continue;
+      const k = norm(s.id);
+      if (seen.has(k)) { notes.push('storyline "' + s.id + '" is declared by ' + seen.get(k) + ' and ' + repo + '; the one in ' + seen.get(k) + ' is kept'); continue; }
+      seen.set(k, repo);
+      const own = [...(s.notes || [])];
+      const nodeIds = [];
+      for (const fid of s.journeys || []) {
+        const nodeId = repo + '::flow::' + fid;
+        if (!firstRow.has(nodeId)) { own.push('journey "' + fid + '" is not drawn in this scope — it is not a step here'); continue; }
+        if (!nodeIds.includes(nodeId)) nodeIds.push(nodeId);
+      }
+      declared.push({ repo, s, nodeIds, own });
+    }
+  }
+  const memberOf = new Map();
+  for (const d of declared) for (const nodeId of d.nodeIds) {
+    if (!memberOf.has(nodeId)) memberOf.set(nodeId, []);
+    const list = memberOf.get(nodeId);
+    if (!list.includes(d.s.id)) list.push(d.s.id);
+  }
+  for (const [nodeId, list] of memberOf) for (const r of rowsOf.get(nodeId) || []) r.storylines = list;
+  return declared.map(({ repo, s, nodeIds, own }) => {
+    const journeys = nodeIds.map((nodeId, i) => ({ ...firstRow.get(nodeId), stepIndex: i }));
+    const built = journeys.filter(isBuilt).length;
+    return {
+      id: s.id, name: s.name || s.id, ...(s.description ? { description: s.description } : {}),
+      repo, from: s.from || '',
+      journeys,
+      counts: {
+        journeys: counted(journeys.length, 'count.unit.journeys', 'count.scope.storyline', SRC + ' → storylines[' + s.id + '].journeys'),
+        built: counted(built, 'count.unit.journeysBuilt', 'count.scope.storyline', SRC + ' → storylines[' + s.id + '].journeys where every screen is built', journeys.length),
+      },
+      notes: own,
+    };
+  });
+}
+
+/**
+ * Where one journey stands in the storylines: `[{ storyline, step, of, prev, next }]`, one per storyline it is a
+ * step of, in the tree's storyline order — `step` 1-based, `prev` / `next` the neighbouring steps' rows (null at
+ * an end). `flowId` is the flow's node id (`repo::flow::id`) or its bare id. The explore card, the property head
+ * and the journey header print *in storyline: <name> · step n of m* from it. O(steps).
+ * @group Journey view
+ */
+export function storylineOf(tree, flowId) {
+  const out = [];
+  if (!flowId) return out;
+  const want = String(flowId);
+  for (const s of (tree && tree.storylines) || []) {
+    const i = (s.journeys || []).findIndex((j) => j.nodeId === want || j.id === want);
+    if (i < 0) continue;
+    out.push({ storyline: s, step: i + 1, of: s.journeys.length, prev: i > 0 ? s.journeys[i - 1] : null, next: i < s.journeys.length - 1 ? s.journeys[i + 1] : null });
+  }
+  return out;
+}
+
+/**
+ * One storyline of the tree by id (or name, trimmed and case-insensitive) — `?storyline=` on the Map — else null.
+ * @group Journey view
+ */
+export function findStoryline(tree, id) {
+  if (id == null || id === '') return null;
+  const list = (tree && tree.storylines) || [];
+  return list.find((s) => s.id === id) || list.find((s) => norm(s.id) === norm(id) || norm(s.name) === norm(id)) || null;
 }
 
 /** A design row with what its graph node carries and the row does not. */
