@@ -752,6 +752,8 @@ code, and drift says where they disagree. Nothing is drawn by hand.
   ]
 }
 
+- "$schema": "https://farsight.dev/schemas/farsight-design.schema.json" at the top lets an editor validate and complete
+  the manifest (schemas/farsight-design.schema.json; farsight.config.json has schemas/farsight-config.schema.json).
 - screens[].route is the screen's identity: the page's route path, spelled any way
   (/track/[token] · /track/{token} · /track/:token). Use "component" for a screen that is not a page.
 - screens[].operations: the operationIds (from the OpenAPI spec) the screen uses. Checked against the
