@@ -224,8 +224,11 @@ Field by field:
 - `plumbing`, `design`, `openapi`, `tests` (report globs, `include`, `exclude`) and `storybook` (`configDir`, `root`)
   are added to the root's, rebased to the repo. Each file's `tests.<level>` block keeps its own `runner`, and
   `results`, `coverage` and `report` take one glob or a list.
-- `externals` and `stores` are added to the root's; a second declaration of the same import or store name is a
-  conflict and the first one is kept.
+- `externals` are added to the root's; a second declaration of the same import is a conflict and the first one is
+  kept. `stores` declarations stay **scoped to their folder**: a catch-all (no `tables`) in `apps/a/` names only the
+  unnamed tables under `apps/a/`, a `tables` list only those tables under it, and the root's catch-all covers the rest.
+  For a table under two files the nearer one wins; two files listing the same table under different stores is a
+  conflict.
 - `projects` and `tooling` are **root-only**; a nested file's value is ignored with a note.
 
 `farsight config list` (or MCP `config_files`, or `GET /api/config`) lists every file per source — root or the folder
@@ -233,7 +236,11 @@ it is scoped to, the fields it gives, what was ignored — then the conflicts an
 `config: <source> — 3 config files (1 for the whole source · 2 for one folder) · 1 conflict` when a source holds more
 than its root file. A file that is not valid JSON is a note naming it, never a failed ingest. Discovery honours the
 source's `exclude` globs and skips `node_modules`, `dist` and dot folders. `examples/nx-workspace` carries one in each
-app.
+app. The Settings page lists the same, read only, under *Config files*.
+
+Editors validate and complete the file when it names its schema: add
+`"$schema": "https://farsight.dev/schemas/farsight-config.schema.json"` (or a relative path to
+`schemas/farsight-config.schema.json` in a Farsight checkout) — keys starting with `$` are skipped by ingest.
 
 ## 5. APIs: spec ↔ code
 
@@ -250,7 +257,7 @@ farsight ingest https://petstore3.swagger.io/api/v3/openapi.json --repo petstore
 
 ## 6. Designs: screens ↔ code
 
-The point of Farsight is business and developers walking the **same** journey — screens the business recognises, the code and API calls and rules behind them. Add a screens manifest at `docs/design/screens.json` (or declare it in `farsight.config.json → design`) and ingest reconciles it against the pages and components it found:
+The point of Farsight is business and developers walking the **same** journey — screens the business recognises, the code and API calls and rules behind them. Add a screens manifest at `docs/design/screens.json` (or declare it in `farsight.config.json → design`) and ingest reconciles it against the pages and components it found. Give it `"$schema": "https://farsight.dev/schemas/farsight-design.schema.json"` (`schemas/farsight-design.schema.json` in a Farsight checkout) and an editor validates it as you write:
 
 ```json
 {

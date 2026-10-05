@@ -149,6 +149,11 @@ test('GET /api/config serves every source\'s config files, and ?repo= narrows to
   assert.deepEqual(Object.keys(one.body.config), ['nx-workspace']);
   assert.deepEqual(one.body.config['nx-workspace'].files.map((f: { path: string; root: boolean }) => `${f.path}:${f.root}`), [
     'farsight.config.json:true', 'apps/billing-web/farsight.config.json:false', 'apps/ops-admin/farsight.config.json:false',
+    'libs/billing/data-access/farsight.config.json:false',
   ]);
   assert.equal(one.body.config['nx-workspace'].conflicts[0].kind, 'glossary');
+  // the typed counts ride beside the meta, so the Settings list prints the fold's numbers
+  assert.equal(one.body.counts['nx-workspace'].files.n, 4);
+  assert.deepEqual(one.body.counts['nx-workspace'].files.breakdown.map((p: { n: number }) => p.n), [1, 3]);
+  assert.equal(one.body.counts['nx-workspace'].conflicts.n, 1);
 });

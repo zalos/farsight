@@ -1,0 +1,565 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farsight.dev/schemas/farsight-config.schema.json",
+  "title": "farsight.config.json",
+  "description": "Workspace config for one Farsight source: the file at the source root speaks for the whole source; a farsight.config.json in a folder below it speaks only for the code under that folder, and every path it names is relative to that folder (projects and tooling are root-only). Docs and config augment what parsing found; they never replace it. Any other key is ignored with a note; keys starting with $ are for editors.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^\\$": {
+      "description": "Keys starting with $ ($schema, $comment) are for editors; Farsight skips them."
+    }
+  },
+  "properties": {
+    "tags": {
+      "type": "object",
+      "description": "tag → list of matchers. A node matches on substring of its path or name (case-insensitive).",
+      "additionalProperties": {
+        "type": "array",
+        "description": "Matchers: a substring of a node's path or name.",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "glossary": {
+      "type": "object",
+      "description": "node name (or `METHOD /path` for routes) → business-lens label/description. A class member (`Class.member`) matches, in order: its exact name, then its member part, then its class part.",
+      "additionalProperties": {
+        "$ref": "#/$defs/glossaryEntry"
+      }
+    },
+    "guards": {
+      "type": "object",
+      "description": "guard label → matchers. A function matcher (substring of path or name) turns the function into a guard node and flips calls into it to guards edges on the caller; a route matcher (`GET /api/v1/track/{token}`) declares a gate on that route.",
+      "additionalProperties": {
+        "type": "array",
+        "description": "Matchers: a substring of a function's path or name, or a route.",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "entrypoints": {
+      "type": "object",
+      "description": "entrypoint label → matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs…).",
+      "additionalProperties": {
+        "type": "array",
+        "description": "Matchers: a substring of a node's path or name.",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "setup": {
+      "type": "array",
+      "description": "node ids (or name matchers, the guards shape) of the functions that build the process container — the setup closure's roots.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "plumbing": {
+      "type": "array",
+      "description": "glob(s) whose functions are plumbing regardless of @business: helpers in journeys, out of the coverable set, never entry points.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "design": {
+      "type": "array",
+      "description": "Design manifests (docs/design/screens.json) describing this repo's screens. Discovery by filename still runs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "description": "A repo-relative (or folder-relative, in a nested file) manifest path."
+          },
+          "path": {
+            "type": "string",
+            "description": "The same as manifest, the older spelling."
+          },
+          "url": {
+            "type": "string",
+            "description": "A manifest served at a URL."
+          },
+          "name": {
+            "type": "string",
+            "description": "What to call the design source."
+          }
+        }
+      }
+    },
+    "openapi": {
+      "type": "array",
+      "description": "OpenAPI/Swagger documents describing this repo's HTTP surface — a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "A repo-relative spec path."
+          },
+          "url": {
+            "type": "string",
+            "description": "A spec served at a URL."
+          },
+          "name": {
+            "type": "string",
+            "description": "What to call the spec."
+          }
+        }
+      }
+    },
+    "tests": {
+      "$ref": "#/$defs/tests"
+    },
+    "storybook": {
+      "description": "the repo's Storybook(s) — where the config lives and where it runs when it runs (ADR 9). Discovery of `.storybook/main.*` still runs; this names the URL and the start command.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/storybook"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/storybook"
+          }
+        }
+      ]
+    },
+    "externals": {
+      "type": "array",
+      "description": "third-party systems the parser cannot see by itself, or renames/kinds for ones it can.",
+      "items": {
+        "$ref": "#/$defs/external"
+      }
+    },
+    "stores": {
+      "type": "array",
+      "description": "the data stores the repo's tables live in, when the code does not say — fills the gap, never overrides code. In a nested file a declaration names only the tables under that file's folder; the nearer file wins.",
+      "items": {
+        "$ref": "#/$defs/store"
+      }
+    },
+    "journeys": {
+      "$ref": "#/$defs/journeys"
+    },
+    "projects": {
+      "$ref": "#/$defs/projects"
+    },
+    "tooling": {
+      "type": "array",
+      "description": "glob(s) of tooling — scripts a person runs by hand, not the running app. Default [\"scripts/**\"]; [] turns it off. Root-only.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "glossaryEntry": {
+      "type": "object",
+      "required": [
+        "label"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "description": "The word the business lens shows."
+        },
+        "description": {
+          "type": "string",
+          "description": "One sentence on what it does, in plain words."
+        }
+      }
+    },
+    "testReport": {
+      "type": "object",
+      "description": "Where one level's results/coverage reports live. Paths are repo-relative globs; the adapter never runs tests.",
+      "additionalProperties": false,
+      "properties": {
+        "runner": {
+          "enum": [
+            "vitest",
+            "jest",
+            "node:test",
+            "playwright",
+            "cypress",
+            "junit",
+            "other"
+          ]
+        },
+        "results": {
+          "description": "per-case status/duration: a vitest `json` reporter file, a playwright `json` reporter file, or junit XML — one glob or several",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "coverage": {
+          "description": "istanbul-shaped coverage-final.json — attributed at the run level unless the report names a test; one glob or several",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "report": {
+          "description": "an html report to deep-link to — one, or one per results file",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "testLevel": {
+      "description": "one block, or one per config file that gave this level",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/testReport"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/testReport"
+          }
+        }
+      ]
+    },
+    "tests": {
+      "type": "object",
+      "description": "Test suites and the reports that observed them. Discovery by glob still runs; this adds report locations and extra spec globs.",
+      "additionalProperties": false,
+      "properties": {
+        "include": {
+          "type": "array",
+          "description": "extra globs that claim a file as a test (added to the defaults)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "description": "globs that un-claim a file the defaults would have taken",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unit": {
+          "$ref": "#/$defs/testLevel"
+        },
+        "integration": {
+          "$ref": "#/$defs/testLevel"
+        },
+        "e2e": {
+          "$ref": "#/$defs/testLevel"
+        }
+      }
+    },
+    "storybook": {
+      "type": "object",
+      "description": "One Storybook. Farsight never starts it.",
+      "additionalProperties": false,
+      "properties": {
+        "configDir": {
+          "type": "string",
+          "description": "repo-relative `.storybook` directory; matched against the discovered ones (default: the only one found)"
+        },
+        "url": {
+          "type": "string",
+          "description": "where it is served when it runs (`http://localhost:6006`) — the only origin the viewer will frame"
+        },
+        "root": {
+          "type": "string",
+          "description": "repo-relative directory its `componentPath`s are relative to (default: the config dir's parent)"
+        },
+        "command": {
+          "type": "string",
+          "description": "what a person runs to start it (`npm run storybook`) — printed when it is not reached"
+        },
+        "name": {
+          "type": "string",
+          "description": "What to call it."
+        }
+      }
+    },
+    "external": {
+      "type": "object",
+      "description": "One declared third-party system: the client the calls go through, what to call it, and what kind of system it is.",
+      "required": [
+        "import",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "import": {
+          "type": "string",
+          "description": "a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through"
+        },
+        "name": {
+          "type": "string",
+          "description": "What to call the system."
+        },
+        "kind": {
+          "enum": [
+            "erp",
+            "ocr",
+            "files",
+            "email",
+            "queue",
+            "db",
+            "http"
+          ],
+          "description": "What kind of system it is."
+        },
+        "store": {
+          "type": "boolean",
+          "description": "this external is (true) or is not (false) used as a data store — overrides the default from the kind (erp · db · files are)"
+        }
+      }
+    },
+    "store": {
+      "type": "object",
+      "description": "One declared data store. Without `tables` it names the store of every table the code left unnamed; with `tables` it names only those (by table name). Code always wins.",
+      "required": [
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "What to call the store."
+        },
+        "kind": {
+          "enum": [
+            "sql",
+            "document",
+            "files",
+            "erp",
+            "other"
+          ],
+          "description": "What kind of store it is."
+        },
+        "engine": {
+          "enum": [
+            "postgres",
+            "mysql",
+            "sqlite",
+            "mssql",
+            "mongodb"
+          ],
+          "description": "A database engine, when you know it."
+        },
+        "tables": {
+          "type": "array",
+          "description": "The table names this store holds; absent = every table the code left unnamed.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "journeys": {
+      "type": "object",
+      "description": "How the journeys are organised: personas and groups in the order they are shown, and a flow's placement by id. The root file's block applies to every manifest of the source, a nested file's to the manifests under its folder. The same shapes as a manifest's, every field but the id optional (an override gives only what it changes).",
+      "additionalProperties": false,
+      "properties": {
+        "personas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "The persona's id."
+              },
+              "name": {
+                "type": "string",
+                "description": "Who they are."
+              },
+              "description": {
+                "type": "string",
+                "description": "One sentence on them."
+              }
+            }
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "The group's id."
+              },
+              "name": {
+                "type": "string",
+                "description": "What the group is called."
+              },
+              "description": {
+                "type": "string",
+                "description": "One sentence on it."
+              },
+              "persona": {
+                "type": "string",
+                "description": "The persona it exists under only."
+              }
+            }
+          }
+        },
+        "flows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "The flow id a manifest declared."
+              },
+              "persona": {
+                "description": "Who the flow is for: a persona id or name, or several.",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              },
+              "group": {
+                "type": "string",
+                "description": "The group it sits in."
+              },
+              "order": {
+                "type": "number",
+                "description": "Its place in the group, ascending."
+              }
+            }
+          }
+        },
+        "storylines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "A storyline override: the journeys told one after another as one story. Only the id is needed; the fields given override the manifest's storyline of that id.",
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "The storyline's id."
+              },
+              "name": {
+                "type": "string",
+                "description": "What the storyline is called."
+              },
+              "description": {
+                "type": "string",
+                "description": "One or two sentences on what the story is."
+              },
+              "journeys": {
+                "type": "array",
+                "description": "Flow ids, in the order the story tells them.",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "projects": {
+      "type": "object",
+      "description": "How the workspace's project tags group. A dimension with the prefix or the key of a default (`scope:` → domain, `type:` → type, `platform:` → platform) replaces it; any other is added. Root-only.",
+      "additionalProperties": false,
+      "properties": {
+        "tagDimensions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "prefix",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+                "description": "The dimension's key."
+              },
+              "prefix": {
+                "type": "string",
+                "description": "The tag prefix that gives a value under the key (`scope:`)."
+              },
+              "label": {
+                "type": "string",
+                "description": "What the dimension is called."
+              }
+            }
+          }
+        },
+        "tagValues": {
+          "type": "object",
+          "description": "tagValues[key][value] is the word a lens prints for a tag value.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "graphFile": {
+          "type": "string",
+          "description": "A project-graph file NX wrote (`nx graph --file=<path>.json`), source-relative. Read, never produced: Farsight does not run NX."
+        }
+      }
+    }
+  }
+}
