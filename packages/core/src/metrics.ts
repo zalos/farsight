@@ -166,6 +166,31 @@ export function isCoverable(index: GraphIndex, n: GraphNode): boolean {
     && !isPresentational(index, n);
 }
 
+/** Each node's place in the index's order, folded once per index (a WeakMap: an index nobody holds lets it go). */
+const ORDER = new WeakMap<GraphIndex, Map<string, number>>();
+function orderOf(index: GraphIndex): Map<string, number> {
+  let o = ORDER.get(index);
+  if (!o) {
+    o = new Map();
+    let i = 0;
+    for (const id of index.byId.keys()) o.set(id, i++);
+    ORDER.set(index, o);
+  }
+  return o;
+}
+/**
+ * The nodes a scope can hold, in the index's order: a scope of node ids is looked up id by id (a journey's
+ * scope is a few hundred nodes; walking every node of a thousand-project graph once per journey was most of
+ * the tests catalogue's time), anything else is every node.
+ */
+function scopeNodes(index: GraphIndex, ids: Set<string> | null): Iterable<GraphNode> {
+  if (!ids) return index.byId.values();
+  const order = orderOf(index);
+  const out: GraphNode[] = [];
+  for (const id of ids) { const n = index.byId.get(id); if (n) out.push(n); }
+  return out.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+}
+
 /** Is this node inside the scope? */
 function inScope(node: GraphNode, scope: MetricScope, ids: Set<string> | null): boolean {
   if (ids) return ids.has(node.id);
@@ -278,7 +303,7 @@ export function computeMetric(
   // every node of a coverable *kind* in scope is either a member or excluded for
   // exactly one reason, so the two reconcile (03 §2.4)
   const excluded = { manifestOnly: 0, plumbing: 0, presentational: 0, declaredOnly: 0 };
-  for (const n of index.byId.values()) {
+  for (const n of scopeNodes(index, ids)) {
     if (n.kind === 'test' || !COVERABLE.has(n.kind)) continue;
     if (!inScope(n, scope, ids)) continue;
     if (isCoverable(index, n)) { members.push(n); continue; }

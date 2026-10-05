@@ -6,7 +6,7 @@
 
 import { S, esc, cssId } from '../store.js';
 import { t } from '../strings.js';
-import { render, select, cardOf } from '../lib/graph-render.js';
+import { render, select, cardOf, revealCard } from '../lib/graph-render.js';
 import { cmapFromRoute, buildCmapControls, cmapArrive } from './codemap-projects.js';
 
 /**
@@ -41,7 +41,7 @@ export function mountCodemap(route, el) {
     if (pending === route.node) window.arriveAt(route.node);
     else select(route.node);
     // a gate has no card of its own: the one it sits on is the one in view
-    const el = document.getElementById('nd-' + cssId(cardOf(route.node)));
+    const el = revealCard(cardOf(route.node));
     if (el) el.scrollIntoView({ block: 'center', inline: 'center' });
   }
   // a project box to arrive at (⌘K), kept filters that would hide the arrival, kept filters into the link

@@ -98,11 +98,19 @@ export function embeddedRootOf(n) {
 /** Effective grouping for a node: explicit/file group (parser) or embedded-component container.
  * @group Shell */
 export function effectiveGroup(n) {
-  if (n.group) return { key: repoOf(n) + '::' + n.group, name: groupName(n), codename: n.group, laneKind: n.kind === 'component' ? 'component' : 'function' };
-  const root = embeddedRootOf(n);
-  if (root) return { key: 'emb::' + root.id, name: bizLabel(root) + ' · embedded', codename: 'inside <' + root.name + '>', laneKind: 'component', anchor: root };
-  return null;
+  // answered once per node object: every surface's status bar folds the whole graph through here, and the
+  // name (humanize) was most of that fold on a large graph. A reload brings new node objects, so a new answer.
+  if (EFFECTIVE_GROUP.has(n)) return EFFECTIVE_GROUP.get(n);
+  let out = null;
+  if (n.group) out = { key: repoOf(n) + '::' + n.group, name: groupName(n), codename: n.group, laneKind: n.kind === 'component' ? 'component' : 'function' };
+  else {
+    const root = embeddedRootOf(n);
+    if (root) out = { key: 'emb::' + root.id, name: bizLabel(root) + ' · embedded', codename: 'inside <' + root.name + '>', laneKind: 'component', anchor: root };
+  }
+  EFFECTIVE_GROUP.set(n, out);
+  return out;
 }
+const EFFECTIVE_GROUP = new WeakMap();
 /** @group Shell */
 export function groupName(n) {
   const base = n.group.includes('/') ? n.group.split('/').pop() : n.group;

@@ -23,7 +23,7 @@ export async function stubStores(page: Page) {
     }
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(g) });
   });
-  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle$/, async (r) => {
+  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle(&steps=0)?$/, async (r) => {
     let d: AnyRec;
     try { d = await (await r.fetch()).json(); } catch { return; }
     for (const s of d.summary.segments) for (const m of s.markers || []) if (m.kind === 'record' && !m.store) m.store = { name: DB.name, kind: DB.kind };

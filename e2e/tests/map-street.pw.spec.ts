@@ -320,7 +320,7 @@ test.describe('map — neighbourhood and street', () => {
  * with `page.route` (ADR 8), never a second fixture.
  */
 async function stubLongStreet(page: Page) {
-  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle$/, async (route) => {
+  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle(&steps=0)?$/, async (route) => {
     const res = await route.fetch();
     const data = await res.json();
     const seg = data.summary.segments[1];

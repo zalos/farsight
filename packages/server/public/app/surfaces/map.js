@@ -148,7 +148,8 @@ function syncKey() { return (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || ''
 function fetchJourney(flowId) {
   const key = flowId + '@' + syncKey();
   if (!JOURNEY_CACHE.has(key)) {
-    JOURNEY_CACHE.set(key, fetch('/api/journey?entry=' + encodeURIComponent(flowId))
+    // the summary without the walk's steps: nothing on the board reads them (lane X, perf round 2026-10-05)
+    JOURNEY_CACHE.set(key, fetch('/api/journey?entry=' + encodeURIComponent(flowId) + '&steps=0')
       .then((r) => (r.ok ? r.json() : null)).catch(() => null));
   }
   return JOURNEY_CACHE.get(key);

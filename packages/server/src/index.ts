@@ -17,6 +17,7 @@ import {
 } from '@farsight/core';
 import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest } from './guard.js';
+import { folded, scopeKey, leanMetric, leanCoverage, leanJourneyRow } from './folds.js';
 import { isSecretRef } from '@farsight/work';
 import { writeSpine, syncWork, workSourcesOf, keyOptionsOf, handleWorkRoute } from './work.js';
 import type { SourceConfig as WorkSourceConfig, WorkSettingsSource } from './work.js';
@@ -887,6 +888,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const jr = journey(g.index, entry, Number.isFinite(depth) && depth > 0 ? { maxDepth: depth } : {});
       const fileCache = new Map<string, string[]>(); // per-request only; never held in the module cache
       const screens = screensFor(g.index, entry);
+      // ?steps=0 — the summary without the walk's steps and their code (the board and the Portfolio read the
+      // summary only; on a large graph the steps are most of the answer and every one reads its file)
+      const withSteps = !['0', 'false'].includes(q.get('steps') ?? '');
       return send(200, JSON.stringify({
         entry: enrichNode(entryNode),
         ...(entry !== entryArg ? { resolvedFrom: entryArg } : {}),
@@ -900,7 +904,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         screens: screens.map(enrichNode),
         // the three-band blueprint (what the user sees · business · what the system does) — same fold the MCP prints
         summary: journeySummary(g.index, jr, screens),
-        steps: jr.steps.map((s) => enrichStep(s, g, fileCache)),
+        ...(withSteps ? { steps: jr.steps.map((s) => enrichStep(s, g, fileCache)) } : { stepsOmitted: jr.steps.length }),
         edges: jr.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
       }));
     }
@@ -938,7 +942,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         // the same bytes `farsight tests matrix` prints (docs/contracts/farsight-tests-matrix-v1.md)
         const format = u.searchParams.get('format') ?? 'json';
         if (format !== 'json' && format !== 'csv') return send(400, JSON.stringify({ error: `unknown ?format=${format} — json or csv` }));
-        const doc = testsMatrixV1(g.index, testsSurface(g.index, scope, g.meta.tests), testsIdentity(g.meta));
+        const doc = testsMatrixV1(g.index, folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests)), testsIdentity(g.meta));
         if (format === 'csv') return send(200, testsMatrixCsv(doc.rows), 'text/csv; charset=utf-8');
         return send(200, JSON.stringify(doc));
       }
@@ -961,8 +965,19 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // the level filter reaches the counts and tiles as well as the rows: under ?level=e2e
       // the header used to print every level's cases above e2e rows (pass swarm 2026-09-25)
       const lv = level === 'unit' || level === 'integration' || level === 'e2e' ? level : undefined;
-      const surface = testsSurface(g.index, scope, g.meta.tests, { level: lv });
+      // the fold is the same for every request on this index, scope and level (the Portfolio asks once per journey)
+      const surface = folded(g.index, 'tests', scopeKey(scope) + '|' + (lv ?? 'all'), () => testsSurface(g.index, scope, g.meta.tests, { level: lv }));
       const resolved = flow ? resolveFlowRows(surface.journeys, flow) : undefined;
+      // ?lean=1 — the same numbers without the per-node lists behind them (folds.ts); with ?flow= only the flow's coverage
+      const lean = ['1', 'true'].includes(u.searchParams.get('lean') ?? '');
+      if (lean && flow) {
+        const row = resolved?.rows[0];
+        return send(200, JSON.stringify({
+          generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', identity: testsIdentity(g.meta), flow, lean: true,
+          ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
+          ...(row ? { coverage: leanCoverage(row.coverage) } : {}),
+        }));
+      }
       const filtered = {
         ...surface,
         sources: level ? surface.sources.filter((c) => c.level === level) : surface.sources,
@@ -978,11 +993,11 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         identity: testsIdentity(g.meta),
         ...(level ? { level } : {}), ...(flow ? { flow } : {}),
         ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
-        ...filtered,
+        ...(lean ? { ...filtered, lean: true, metric: leanMetric(filtered.metric), journeys: filtered.journeys.map(leanJourneyRow) } : filtered),
         // the evidence behind the counts: every configured report with its glob and reason,
         // and the gaps as data — absent when the graph recorded none, `[]` when it recorded nothing
         ...testsEvidence(g.meta.tests, scope),
-        ...(flowRow ? { coverage: flowRow.coverage } : {}),
+        ...(flowRow ? { coverage: lean ? leanCoverage(flowRow.coverage) : flowRow.coverage } : {}),
       }));
     }
     // ── Design surface (docs/proposals/design-source.md) ─────────────────

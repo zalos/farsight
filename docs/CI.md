@@ -13,7 +13,7 @@ the pnpm store cached on the lockfile.
 | job | steps | timeout |
 |---|---|---|
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm typecheck` (every package, then `e2e/`) → `pnpm -r test` → `pnpm lint:strings` | 20 min |
-| **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` | 30 min |
+| **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`, ~40 s; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
 
@@ -48,6 +48,15 @@ that `pnpm install` installs (`scripts/install-hooks.mjs`) runs the same check o
 
 `node .claude/skills/e2e-playwright/scripts/check-e2e-setup.mjs` checks the e2e prerequisites before a run.
 Set `CI=1` to get the runner's Playwright behaviour: `test.only` fails the run, and a failed test is retried once.
+
+## The perf suite
+
+`pnpm e2e:perf` (`scripts/e2e-perf.mjs`, `e2e/perf/`) serves a synthetic workspace (`scripts/synth-graph.mjs`)
+with the real `farsight serve` on port 4535 (`FARSIGHT_PERF_PORT`) and measures every surface: first draw, one
+interaction, long tasks and the JS heap, printed as one markdown table and written to `e2e/perf/results.json`.
+The full preset (1,000 projects · ≈250k nodes, the default) holds each row to the budgets of
+`docs/proposals/round-2026-10-05.md` §4 and takes ~10 minutes; CI runs `FARSIGHT_PERF_PRESET=small`, where every
+surface must draw with no page error and no budget applies. It is not part of `pnpm e2e`.
 
 ## The three e2e env knobs
 
