@@ -470,11 +470,20 @@ package.json) are facts, not counts, and print beside the row.
 | journeys under a persona | `count.unit.journeys` (both) | `count.scope.persona` | `JourneyPersona.counts.journeys` | the journeys listed under that persona; equals the sum of its groups' counts. A journey for two personas is counted in each, once in the tree |
 | journeys in a group | `count.unit.journeys` (both) | `count.scope.group` | `JourneyGroup.counts.journeys` | the journeys listed in that group under that persona |
 | built journeys | `count.unit.journeysBuilt` *n of m journeys built* (both) | `count.scope.persona` / `count.scope.group` | `counts.built` on a persona or a group | journeys whose every screen exists in code (`status: both`), of the journeys beside it; a partly built journey is not built |
+| storylines | `count.unit.storylines` *n storylines* (hud *n questlines*) | `count.scope.workspace` | `journeyTree().counts.storylines` | storylines declared by the sources in scope, one per id (a second source's same id is a note) |
+| journeys in a storyline | `count.unit.journeys` (both) | `count.scope.storyline` | `JourneyStoryline.counts.journeys` | the storyline's steps: journeys it names that a manifest declares and the tree draws in scope, each once, in its order |
+| built journeys in a storyline | `count.unit.journeysBuilt` (both) | `count.scope.storyline` | `JourneyStoryline.counts.built` | its steps whose every screen exists in code, of its steps |
+| *step n of m* (journey header, Map card tip) · *journey n of m* (business lens) | `journeys.storyline.stepOf` / `bizStepOf`, `map.storyline.step` | one storyline | `stepIndex + 1` of `storyline.journeys.length` (`storylineOf()` in the viewer, `storylinePlacements()` in core) | a position, not a count — no `Counted`; its tip says what it is |
+| a storyline band's *n journeys* (Map) | `map.band.journeys` | `count.scope.storyline` | `layoutDistricts().bands[0].n` over `storylineModel()` | the steps the board draws (a step out of scope is skipped) |
 
-`count.scope.persona` (*for this persona*) and `count.scope.group` (*in this group*) are new with this table. The
-example graphs: `examples/invoice-app` — *3 journeys · 2 personas · 3 groups* (Billing 3, Operations 1: *Draft and
-send* is under both); `examples/nx-workspace` — *4 journeys · 2 personas · 4 groups*. `pickJourneys()` (the
-`persona` / `group` filters) recounts the tree-level numbers over what it keeps.
+`count.scope.persona` (*for this persona*) and `count.scope.group` (*in this group*) are new with this table;
+`count.scope.storyline` (*in this storyline*, hud *in this questline*) came with storylines (round 2026-10-05 §2). The
+example graphs: `examples/invoice-app` — *3 journeys · 1 storyline · 2 personas · 3 groups* (Billing 3, Operations 1:
+*Draft and send* is under both; the storyline *An invoice, end to end* chains all three); `examples/nx-workspace` — *4
+journeys · 1 storyline · 2 personas · 4 groups* (*A billing day* chains the four across both apps' manifests).
+`pickJourneys()` (the `persona` / `group` / `storyline` filters) recounts the tree-level numbers over what it keeps;
+a storyline is kept whole when a persona or group filter keeps one of its steps. The summary line prints the
+storylines only when there is one.
 
 ### Code map by project and package (`surfaces/codemap-projects.js`, `lib/codemap-model.js`; lane C)
 
