@@ -1,0 +1,361 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farsight.dev/schemas/farsight-design.schema.json",
+  "title": "Farsight design manifest (docs/design/screens.json)",
+  "description": "The screens a product was designed with, the flows through them, and how the journeys are organised. Farsight reconciles it against the pages and components the code holds: the manifest declares intent, the graph supplies the code, and drift says where they disagree. Keys starting with $ are for editors.",
+  "type": "object",
+  "required": [
+    "screens"
+  ],
+  "additionalProperties": false,
+  "patternProperties": {
+    "^\\$": {
+      "description": "Keys starting with $ ($schema, $comment) are for editors; Farsight skips them."
+    }
+  },
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "What to call this design source."
+    },
+    "personas": {
+      "type": "array",
+      "description": "who the journeys are for, in the order they are shown",
+      "items": {
+        "$ref": "#/$defs/persona"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "description": "groups of journeys under a persona, in the order they are shown; one with `persona` exists under that persona only",
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    },
+    "figma": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "The Figma file URL."
+        },
+        "token": {
+          "type": "string",
+          "description": "Where the Figma token comes from (`env:FIGMA_TOKEN`) — never the token itself."
+        }
+      }
+    },
+    "screens": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/screen"
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/flow"
+      }
+    },
+    "surfaces": {
+      "type": "array",
+      "description": "The product surfaces the docs scope, with or without screens — a surface nobody has drawn yet is still a row.",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The surface's id."
+          },
+          "name": {
+            "type": "string",
+            "description": "What it is called."
+          },
+          "status": {
+            "enum": [
+              "built",
+              "partly built",
+              "not started"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "One sentence on it."
+          }
+        }
+      }
+    },
+    "storylines": {
+      "type": "array",
+      "description": "journeys told one after another as one story",
+      "items": {
+        "type": "object",
+        "description": "A storyline: journeys told one after another as one story, in the order listed.",
+        "required": [
+          "id",
+          "name",
+          "journeys"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The storyline's id."
+          },
+          "name": {
+            "type": "string",
+            "description": "What the storyline is called."
+          },
+          "description": {
+            "type": "string",
+            "description": "One or two sentences on what the story is."
+          },
+          "journeys": {
+            "type": "array",
+            "description": "Flow ids, in the order the story tells them.",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "persona": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The persona's id."
+        },
+        "name": {
+          "type": "string",
+          "description": "Who they are."
+        },
+        "description": {
+          "type": "string",
+          "description": "One sentence on them."
+        }
+      }
+    },
+    "group": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The group's id."
+        },
+        "name": {
+          "type": "string",
+          "description": "What the group is called."
+        },
+        "description": {
+          "type": "string",
+          "description": "One sentence on it."
+        },
+        "persona": {
+          "type": "string",
+          "description": "The persona it exists under only; absent = under every persona with a journey in it."
+        }
+      }
+    },
+    "screen": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "the name the docs use — \"SCR-07\""
+        },
+        "name": {
+          "type": "string",
+          "description": "What the screen is called."
+        },
+        "route": {
+          "type": "string",
+          "description": "the page's identity: the route path, spelled any way (`/track/[token]`, `/track/{token}`, `/track/:token`)"
+        },
+        "component": {
+          "type": "string",
+          "description": "a component's name, for a screen that is not a page"
+        },
+        "nodeId": {
+          "type": "string",
+          "description": "Figma node id (\"26-9\" or \"26:9\"), or a URL carrying `node-id`"
+        },
+        "url": {
+          "type": "string",
+          "description": "A link to the screen's design."
+        },
+        "image": {
+          "type": "string",
+          "description": "repo-relative image (png/jpg/svg/webp) — a reference; the server serves it path-confined"
+        },
+        "operations": {
+          "type": "array",
+          "description": "operationIds the design says this screen uses",
+          "items": {
+            "type": "string"
+          }
+        },
+        "phase": {
+          "type": "string",
+          "description": "The delivery phase it belongs to."
+        },
+        "description": {
+          "type": "string",
+          "description": "One or two sentences on the screen."
+        },
+        "steps": {
+          "type": "array",
+          "description": "The numbered steps a screen's spec and its tests refer to — `SCR-07.2`.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "The step id."
+              },
+              "name": {
+                "type": "string",
+                "description": "What the step is."
+              },
+              "operation": {
+                "type": "string",
+                "description": "The operationId the step uses."
+              }
+            }
+          }
+        },
+        "work": {
+          "type": "array",
+          "description": "work items it is for (Jira keys, Azure DevOps ids) — a declared tracks link",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "screens"
+      ],
+      "additionalProperties": false,
+      "description": "A named user flow — a feature the business names: an ordered set of screens, the documents that describe it, the operations it spans. Becomes a flow node and a journey entry.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The flow's id."
+        },
+        "name": {
+          "type": "string",
+          "description": "What the business calls it."
+        },
+        "description": {
+          "type": "string",
+          "description": "One or two sentences on it."
+        },
+        "screens": {
+          "type": "array",
+          "description": "screen ids, in the order a person meets them",
+          "items": {
+            "type": "string"
+          }
+        },
+        "docs": {
+          "type": "array",
+          "description": "repo-relative documents (ADRs, product docs) or URLs that describe the flow",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operations": {
+          "type": "array",
+          "description": "operationIds the flow spans beyond what its screens list",
+          "items": {
+            "type": "string"
+          }
+        },
+        "phase": {
+          "type": "string",
+          "description": "The delivery phase it belongs to."
+        },
+        "requires": {
+          "type": "array",
+          "description": "flow ids that must happen before this one",
+          "items": {
+            "type": "string"
+          }
+        },
+        "leadsTo": {
+          "type": "array",
+          "description": "flow ids that follow this one",
+          "items": {
+            "type": "string"
+          }
+        },
+        "persona": {
+          "description": "who this flow is for — a persona id or name from personas[], or several; a value no personas[] entry declares is a persona of its own",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "owner": {
+          "type": "string",
+          "description": "who answers for it; absent prints as an absence word, never a guess"
+        },
+        "group": {
+          "type": "string",
+          "description": "the group it sits in under its persona(s) — a groups[] id or name; absent = the persona's Other journeys"
+        },
+        "order": {
+          "type": "number",
+          "description": "its place in the group, ascending; ties and absences keep the order the flows are written in"
+        },
+        "work": {
+          "type": "array",
+          "description": "work items it is for (Jira keys, Azure DevOps ids) — a declared tracks link",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

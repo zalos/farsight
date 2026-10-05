@@ -583,6 +583,23 @@
   .set-row label{min-width:120px;color:var(--muted)}
   .set-foot{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap}
   .set-note{color:var(--dim);font-size:11.5px}
+  .cfg-src{margin:0 0 14px}
+  .cfg-src:last-child{margin-bottom:0}
+  .cfg-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12.5px;margin:0 0 4px}
+  .cfg-head b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+  .cfg-head .cnt-n{color:var(--muted)}
+  .cfg-table td{vertical-align:top}
+  .cfg-table .cfg-path{width:34%}
+  .cfg-scope{font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .cfg-scope.cfg-root{color:var(--accent)}
+  .cfg-gives-l,.cfg-ign-l{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9px;color:var(--dim);margin-right:4px}
+  .cfg-field{display:inline-block;font-family:var(--mono);font-size:10.5px;color:var(--ink);background:var(--line-soft);border-radius:3px;padding:1px 5px;margin:1px 2px 1px 0}
+  span.cfg-field{font-family:inherit;font-size:11.5px}
+  .cfg-ign .cfg-field{color:var(--warn,#E8A13C)}
+  .cfg-sub{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--dim);margin:10px 0 4px}
+  .cfg-list{margin:0;padding-left:18px;font-size:12px;color:var(--muted)}
+  .cfg-list li{margin:2px 0}
+  .cfg-conflict{color:var(--ink)}
   .consequence{display:block;font-size:10px;color:var(--dim);margin-top:4px;max-width:260px;line-height:1.45}
   .x{color:var(--dim);font-size:14px;padding:2px 6px} .x:hover{color:var(--err)}
 
@@ -2870,6 +2887,12 @@
         <button class="btn" onclick="addCollection()">+ New group from current scope</button>
       </div>
       <p class="set-note" style="margin:8px 0 0">A collection is a named group of sources — it appears as a checkable group in the source picker, so you can view several systems together (e.g. all invoice apps/APIs) or each on its own.</p>
+    </div>
+
+    <div class="set-sec" id="set-config">
+      <h2 id="set-config-title" tabindex="0">Config files</h2>
+      <p class="set-note" id="set-config-sub" style="margin:0 0 10px"></p>
+      <div id="cfgrows"></div>
     </div>
 
     <div class="set-sec">
