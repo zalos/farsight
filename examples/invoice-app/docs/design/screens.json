@@ -27,6 +27,18 @@
       "description": "Checking a draft and sending it, or discarding it."
     }
   ],
+  "storylines": [
+    {
+      "id": "invoice",
+      "name": "An invoice, end to end",
+      "description": "From a new invoice to a sent one, and the whole cycle around it.",
+      "journeys": [
+        "new-invoice",
+        "draft-and-send",
+        "billing-cycle"
+      ]
+    }
+  ],
   "screens": [
     {
       "id": "INV-01",

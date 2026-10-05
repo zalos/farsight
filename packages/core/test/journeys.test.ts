@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildIndex, applyDesignToFragment, designSurface, journeysMetaOf, journeyTree, pickJourneys, journeyPlacements,
-  journeyTreeLines, journeyTreeSummary, countedProblems, sanitizeJourneys, JOURNEY_NO_PERSONA, JOURNEY_NO_GROUP,
+  journeyTreeLines, journeyTreeSummary, countedProblems, sanitizeJourneys, JOURNEY_NO_PERSONA, JOURNEY_NO_GROUP, storylinePlacements,
 } from '../dist/index.js';
 import type { GraphNode, GraphFragment, DesignManifest, JourneysConfig, JourneyTree, FarsightConfig } from '../dist/index.js';
 
@@ -316,4 +316,109 @@ test('sanitizeJourneys keeps what is well formed and drops the rest, never throw
   });
   assert.equal(sanitizeJourneys({ journeys: [] } as unknown as FarsightConfig).journeys, undefined);
   assert.deepEqual(sanitizeJourneys({}), {});
+});
+
+// ── storylines (round-2026-10-05 §2): a named chain of journeys across features and personas ──
+
+const STORY: DesignManifest = {
+  ...PORTAL,
+  storylines: [
+    { id: 'vendor', name: 'A vendor account', description: 'From the first sign-in to an account Operations has seen.', journeys: ['contractor-sign-in', 'vendor-account-creation', 'ops-sign-in'] },
+    { id: 'leave', name: 'Leaving', journeys: ['vendor-account-creation', 'contractor-sign-out', 'nowhere', 'contractor-sign-out'] },
+  ],
+};
+
+function soundStories(t: JourneyTree): void {
+  assert.deepEqual(countedProblems(t.counts.storylines), [], JSON.stringify(t.counts.storylines));
+  assert.equal(t.counts.storylines.n, t.storylines.length);
+  assert.equal(t.counts.storylines.scope, 'count.scope.workspace');
+  for (const s of t.storylines) {
+    for (const c of [s.counts.journeys, s.counts.built]) {
+      assert.deepEqual(countedProblems(c), [], JSON.stringify(c));
+      assert.equal(c.scope, 'count.scope.storyline');
+    }
+    assert.equal(s.counts.journeys.n, s.journeys.length);
+    assert.equal(s.counts.built.n, s.journeys.filter((j) => j.status === 'both').length);
+    assert.equal(s.counts.built.of, s.journeys.length);
+    s.journeys.forEach((j, i) => assert.equal(j.stepIndex, i, `${s.id}: steps are numbered in order`));
+  }
+}
+
+test('storylines: the declared order, a journey in two storylines, an unknown or repeated id a note never a step, the counts', () => {
+  const t = treeOf(graph([{ manifest: STORY, path: 'docs/design/screens.json' }], ['/sign-in', '/sign-out', '/vendors/new']));
+  assert.deepEqual(t.storylines.map((s) => s.id), ['vendor', 'leave'], 'the order the manifest declares');
+  const [vendor, leave] = t.storylines;
+  assert.deepEqual(vendor!.journeys.map((j) => j.id), ['contractor-sign-in', 'vendor-account-creation', 'ops-sign-in'], 'steps in order — across both personas');
+  assert.equal(vendor!.description, 'From the first sign-in to an account Operations has seen.');
+  assert.equal(vendor!.repo, 'app');
+  assert.equal(vendor!.from, 'docs/design/screens.json');
+  assert.deepEqual(leave!.journeys.map((j) => j.id), ['vendor-account-creation', 'contractor-sign-out']);
+  assert.equal(leave!.notes.length, 2, leave!.notes.join('\n'));
+  assert.ok(t.notes.some((n) => n.includes('"nowhere"') && n.includes('not a step')), t.notes.join('\n'));
+  assert.ok(t.notes.some((n) => n.includes('twice')), t.notes.join('\n'));
+  // multi-membership: every row of a journey names every storyline it is a step of
+  const rows = t.personas.flatMap((p) => p.groups.flatMap((g) => g.journeys)).filter((j) => j.id === 'vendor-account-creation');
+  assert.equal(rows.length, 2, 'shown under both personas');
+  for (const r of rows) assert.deepEqual(r.storylines, ['vendor', 'leave']);
+  assert.deepEqual(t.personas[0]!.groups[0]!.journeys.find((j) => j.id === 'contractor-sign-in')!.storylines, ['vendor']);
+  // the counts: steps, built steps, and the tree's storylines
+  assert.equal(vendor!.counts.journeys.n, 3);
+  assert.equal(vendor!.counts.built.n, 1, 'only the sign-in is wholly built');
+  assert.equal(t.counts.storylines.n, 2);
+  soundStories(t);
+  soundCounts(t);
+  // where a journey stands
+  assert.deepEqual(storylinePlacements(t, 'app::flow::vendor-account-creation'), [
+    { id: 'vendor', name: 'A vendor account', step: 2, of: 3, prev: 'app::flow::contractor-sign-in', next: 'app::flow::ops-sign-in' },
+    { id: 'leave', name: 'Leaving', step: 1, of: 2, next: 'app::flow::contractor-sign-out' },
+  ]);
+});
+
+test('storylines: the config overrides by id field by field, its order wins, a nested block reaches only its manifests, an id it names no manifest declares is a note', () => {
+  const OTHER: DesignManifest = { name: 'other', screens: [screen('X-01', '/x')], flows: [flow('x-flow', ['X-01'], { name: 'X' })] };
+  const config = [
+    { from: 'farsight.config.json', dir: '.', journeys: { storylines: [{ id: 'leave', name: 'Leaving the portal' }, { id: 'config-only', name: 'Declared in config', journeys: ['x-flow', 'contractor-sign-in'] }] } },
+    { from: 'apps/a/farsight.config.json', dir: 'apps/a', journeys: { storylines: [{ id: 'vendor', journeys: ['x-flow', 'contractor-sign-in'] }] } },
+  ];
+  const g = graph([{ manifest: STORY, path: 'docs/design/screens.json' }, { manifest: OTHER, path: 'apps/a/docs/design/screens.json' }], [], config as never);
+  const t = treeOf(g);
+  // the blocks' order first (root then nearest), then the manifests'
+  assert.deepEqual(t.storylines.map((s) => s.id), ['leave', 'config-only', 'vendor']);
+  const leave = t.storylines[0]!;
+  assert.equal(leave.name, 'Leaving the portal', 'the config\'s name');
+  assert.deepEqual(leave.journeys.map((j) => j.id), ['vendor-account-creation', 'contractor-sign-out'], 'the manifest\'s steps — the config gave none');
+  assert.equal(leave.from, 'farsight.config.json');
+  // the root block reaches every manifest of the source
+  assert.deepEqual(t.storylines[1]!.journeys.map((j) => j.id), ['x-flow', 'contractor-sign-in']);
+  // the nested block's list replaces the manifest's, and it reaches only the manifests under apps/a
+  const vendor = t.storylines[2]!;
+  assert.equal(vendor.name, 'A vendor account', 'the manifest fills what the block did not give');
+  assert.deepEqual(vendor.journeys.map((j) => j.id), ['x-flow']);
+  assert.ok(t.notes.some((n) => n.includes('"contractor-sign-in"') && n.includes('under apps/a/')), t.notes.join('\n'));
+  soundStories(t);
+});
+
+test('storylines: scope, pickJourneys by storyline, the text block first, the summary counts them, sanitize keeps the shape', () => {
+  const g = graph([{ manifest: STORY, path: 'm.json' }], ['/sign-in']);
+  const t = treeOf(g);
+  assert.equal(treeOf(g, new Set(['other'])).storylines.length, 0, 'a source out of scope brings no storyline');
+  const picked = pickJourneys(t, { storyline: 'A VENDOR ACCOUNT' });
+  assert.deepEqual(picked.storylines.map((s) => s.id), ['vendor']);
+  assert.deepEqual(shape(picked), [
+    'Contractor: Access[contractor-sign-in] Vendor accounts[vendor-account-creation]',
+    'Operations: Access[ops-sign-in] Other journeys[vendor-account-creation]',
+  ]);
+  assert.equal(picked.counts.journeys.n, 3);
+  assert.equal(picked.counts.storylines.n, 1);
+  soundCounts(picked);
+  const lines = journeyTreeLines(t, { openHint: '(open with journey)' });
+  const at = lines.indexOf('## Storylines — 2 storylines');
+  assert.ok(at > 0 && at < lines.findIndex((l) => l.startsWith('## Contractor')), 'the storylines come before the personas');
+  assert.ok(lines.includes('### A vendor account (`vendor`) — 3 journeys · 1 of 3 journeys built — From the first sign-in to an account Operations has seen.'), lines.join('\n'));
+  assert.ok(lines.includes('2. Create a vendor account — designed, not built · 0 of 2 · `app::flow::vendor-account-creation` (open with journey)'), lines.join('\n'));
+  assert.equal(journeyTreeSummary(t), '4 journeys · 2 storylines · 2 personas · 4 groups across every source in scope — first: Contractor › Access · Operations › Access');
+  // a tree with none says nothing about storylines
+  assert.ok(!journeyTreeLines(treeOf(graph([{ manifest: PORTAL, path: 'm.json' }]))).some((l) => l.includes('Storylines')));
+  const c = sanitizeJourneys({ journeys: { storylines: [{ id: 's', name: 'S', journeys: ['a', 3, '', 'b'] }, { name: 'no id' }, { id: 't', journeys: 'x' }] } } as unknown as FarsightConfig);
+  assert.deepEqual(c.journeys!.storylines, [{ id: 's', name: 'S', journeys: ['a', 'b'] }, { id: 't' }]);
 });

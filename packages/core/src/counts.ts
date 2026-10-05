@@ -75,6 +75,7 @@ export const COUNT_SCOPES = [
   'count.scope.affected',   // one impact answer placed on the journeys (core affected.ts): the seed, what uses it as far out as asked
   'count.scope.persona',    // the journeys shown under one persona (core journeys.ts) — a journey for two personas is in each
   'count.scope.group',      // the journeys of one group under one persona (core journeys.ts)
+  'count.scope.storyline',  // the journeys one storyline chains, each once (core journeys.ts)
 ] as const;
 export type CountScope = typeof COUNT_SCOPES[number];
 

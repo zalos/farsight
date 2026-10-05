@@ -14,6 +14,19 @@
       "persona": "ops"
     }
   ],
+  "storylines": [
+    {
+      "id": "billing-day",
+      "name": "A billing day",
+      "description": "Billing signs in and reads what is owed; Operations signs in and checks what the overnight run collected.",
+      "journeys": [
+        "billing-sign-in",
+        "review-open-invoices",
+        "ops-sign-in",
+        "check-report-runs"
+      ]
+    }
+  ],
   "screens": [
     {
       "id": "BIL-01",

@@ -13,7 +13,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree,
+  counted, journeyTree, configCounts,
 } from '@farsight/core';
 import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest } from './guard.js';
@@ -1204,7 +1204,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const g = loadJourneyGraph(graphPath);
       const repo = u.searchParams.get('repo') || undefined;
       const config = Object.fromEntries(Object.entries(g.meta.config ?? {}).filter(([r]) => !repo || r === repo));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config }));
+      // the typed counts per source (files, conflicts), so the Settings list prints the fold's numbers
+      const counts = Object.fromEntries(Object.entries(config).map(([r, m]) => [r, configCounts(m)]));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts }));
     }
     if (url.startsWith('/api/openapi') && req.method === 'GET') {
       // a spec generated from the code — every inference marked x-farsight-inferred

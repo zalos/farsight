@@ -163,6 +163,32 @@ test('filterTree narrows by persona and group without recounting', () => {
   assert.deepEqual(ids(M.filterTree(tree, null, 'access')).map((x: any) => x[0]), ['contractor', 'ops']);
 });
 
+test('storylines: declared order, steps in order across personas, multi-membership, a journey out of scope a note; storylineOf and findStoryline', () => {
+  const metas = { app: { personas: [], groups: [], flows: {}, notes: [], storylines: [
+    { id: 'vendor', name: 'A vendor account', journeys: ['contractor-sign-in', 'vendor-account-creation', 'ops-sign-in'], declared: true, from: 'm.json' },
+    { id: 'leave', name: 'Leaving', description: 'Out.', journeys: ['vendor-account-creation', 'gone', 'contractor-sign-out'], declared: true, from: 'farsight.config.json' },
+  ] } };
+  const tree = M.treeFrom(designs, metas, { ordinal });
+  assert.deepEqual(tree.storylines.map((s: any) => [s.id, s.journeys.map((j: any) => `${j.stepIndex}:${j.id}`)]), [
+    ['vendor', ['0:contractor-sign-in', '1:vendor-account-creation', '2:ops-sign-in']],
+    ['leave', ['0:vendor-account-creation', '1:contractor-sign-out']],
+  ]);
+  assert.equal(tree.storylines[1].notes.length, 1, 'the journey no row has is a note');
+  assert.equal(tree.counts.storylines.n, 2);
+  assert.equal(tree.counts.storylines.scope, 'count.scope.workspace');
+  assert.deepEqual([tree.storylines[0].counts.journeys.n, tree.storylines[0].counts.built.n, tree.storylines[0].counts.built.of], [3, 2, 3]);
+  assert.equal(tree.storylines[0].counts.journeys.scope, 'count.scope.storyline');
+  const rows = tree.personas.flatMap((p: any) => p.groups.flatMap((g: any) => g.journeys)).filter((j: any) => j.id === 'vendor-account-creation');
+  assert.equal(rows.length, 2);
+  for (const r of rows) assert.deepEqual(r.storylines, ['vendor', 'leave']);
+  const at = M.storylineOf(tree, 'app::flow::vendor-account-creation');
+  assert.deepEqual(at.map((x: any) => [x.storyline.id, x.step, x.of, x.prev && x.prev.id, x.next && x.next.id]), [['vendor', 2, 3, 'contractor-sign-in', 'ops-sign-in'], ['leave', 1, 2, null, 'contractor-sign-out']]);
+  assert.deepEqual(M.storylineOf(tree, 'track'), [], 'a journey in no storyline');
+  assert.equal(M.findStoryline(tree, 'LEAVING').id, 'leave');
+  assert.equal(M.findStoryline(tree, 'nope'), null);
+  assert.deepEqual(M.treeFrom(designs, null, { ordinal }).storylines, [], 'no meta, no storylines');
+});
+
 // ── parity with core: the fallback draws what /api/journeys answers ──────────
 import { GraphStore, buildIndex, designSurface, journeyTree, type GraphNode, type GraphEdge, type GraphMeta } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
@@ -179,10 +205,15 @@ function drawn(tree: any) {
       groups: p.groups.map((g: any) => ({
         id: g.id, name: g.key ? '' : g.name, key: g.key, declared: g.declared, description: g.description,
         counts: [c(g.counts.journeys), c(g.counts.built)],
-        journeys: g.journeys.map((j: any) => [j.nodeId, j.designId, j.groupId, j.pinned, j.statusKey, j.placedBy ?? null, j.personaIds]),
+        journeys: g.journeys.map((j: any) => [j.nodeId, j.designId, j.groupId, j.pinned, j.statusKey, j.placedBy ?? null, j.personaIds, j.storylines]),
       })),
     })),
-    counts: [c(tree.counts.journeys), c(tree.counts.personas), c(tree.counts.groups)],
+    storylines: tree.storylines.map((s: any) => ({
+      id: s.id, name: s.name, description: s.description, repo: s.repo, from: s.from, notes: s.notes,
+      counts: [c(s.counts.journeys), c(s.counts.built)],
+      journeys: s.journeys.map((j: any) => [j.stepIndex, j.nodeId, j.statusKey, j.storylines]),
+    })),
+    counts: [c(tree.counts.journeys), c(tree.counts.personas), c(tree.counts.groups), c(tree.counts.storylines)],
     derived: tree.derived, notes: tree.notes,
   };
 }
@@ -200,6 +231,7 @@ test('on the invoice-app fixture the fallback fold draws exactly what core journ
     const index = buildIndex(data.nodes, data.edges);
     const core = journeyTree(index, data.meta.journeys);
     assert.ok(core.personas.length >= 2 && core.personas[0]!.groups.length >= 1, 'the fixture declares personas and groups');
+    assert.deepEqual(core.storylines.map((s) => s.journeys.map((j) => j.id)), [['new-invoice', 'draft-and-send', 'billing-cycle']], 'the fixture declares one storyline');
     const designs = JSON.parse(JSON.stringify(designSurface(index, null)));
     const nodeOf = (id: string) => index.byId.get(id) ?? null;
     assert.deepEqual(drawn(M.treeFrom(designs, data.meta.journeys, { nodeOf })), drawn(core));

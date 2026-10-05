@@ -125,10 +125,12 @@ usage:
                                                                scoped to a folder, the fields each gives and any it ignored, then
                                                                the conflicts between them and the notes (--json: per source
                                                                { files, conflicts, notes })
-  farsight journeys [--repo name] [--persona p] [--group g] [--json] [--graph graph.json]
-                                                               the journeys by persona, then by group, in the order the manifests
-                                                               and farsight.config.json declare: status, screens built, the way in
-                                                               and the node id of each (--json: the JourneyTree, as /api/journeys)
+  farsight journeys [--repo name] [--persona p] [--group g] [--storyline s] [--json] [--graph graph.json]
+                                                               the storylines (named chains of journeys, in order), then the journeys
+                                                               by persona, then by group, in the order the manifests and
+                                                               farsight.config.json declare: status, screens built, the way in
+                                                               and the node id of each; --storyline keeps one storyline and its
+                                                               journeys (--json: the JourneyTree, as /api/journeys)
   farsight design list [--graph graph.json]                    every design source (screens manifest) with designed / built counts
   farsight design diff --manifest <path|url> [--repo <name>] [--format json|md] [--strict]
                                                                a proposed screens manifest vs the code: not built / undesigned /
@@ -1507,7 +1509,9 @@ switch (command) {
     let tree = journeyTree(buildIndex(nodes, edges), store.meta.journeys, repo ? new Set([repo]) : null);
     const persona = flag('persona');
     const group = flag('group');
-    if (persona || group) tree = pickJourneys(tree, { ...(persona ? { persona } : {}), ...(group ? { group } : {}) });
+    const storyline = flag('storyline');
+    if (persona || group || storyline) tree = pickJourneys(tree, { ...(persona ? { persona } : {}), ...(group ? { group } : {}), ...(storyline ? { storyline } : {}) });
+    if (storyline && !tree.storylines.length) fail(`no storyline "${storyline}" — run \`farsight journeys\` to see the storylines there are`);
     if (rest.includes('--json')) { console.log(JSON.stringify(tree, null, 2)); break; }
     console.log(journeyTreeLines(tree).join('\n'));
     break;

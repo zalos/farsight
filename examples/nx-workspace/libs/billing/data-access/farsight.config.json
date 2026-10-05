@@ -1,0 +1,3 @@
+{
+  "stores": [{ "name": "Billing DB", "kind": "sql", "engine": "postgres" }]
+}

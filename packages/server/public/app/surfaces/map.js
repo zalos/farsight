@@ -25,9 +25,10 @@ import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.
 import { withParams } from '../lib/route-url.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
-import { loadJourneyTree } from '../lib/journeys-tree.js';
+import { loadJourneyTree, jrnGroupName } from '../lib/journeys-tree.js';
+import { findStoryline } from '../lib/journeys-model.js';
 import { attachCanvas, levelOf, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import {
@@ -63,6 +64,8 @@ const BAND_GEOM = {
   nb: { labelH: 30 * BOARD_K, pad: 10 * BOARD_K, bandGap: 14 * BOARD_K, colGap: 22 * BOARD_K, rowGap: 16 * BOARD_K, margin: 14 * BOARD_K },
   st: { labelH: 150, pad: 40, bandGap: 200 },
 };
+/** Banded by persona, each group's run of journeys starts a row after a gutter this wide, where its word sits (world units). */
+const GROUP_W = { nb: 92 * BOARD_K, st: 420 };
 /** The most a cover's words grow over their board px when the board is sparse (a few journeys fit large). */
 const COVER_GROW_MAX = 1.25;
 /** Where a street lands when it is entered or left: a district fits, never above this. */
@@ -107,6 +110,13 @@ const MAP = {
   band: 'source',                   // 'source' | 'domain' | 'persona' — what the neighbourhood's bands are (persisted fs-map-band)
   /** the journeys organised persona → group (lib/journeys-tree.js), when the server or the fold answered */
   tree: null,
+  /** every journey as a district — `nb` is this, or one storyline of it (`storylineModel()`) while a storyline is picked */
+  nbAll: { districts: [] },
+  /** the storyline the board draws (`?storyline=<id>`), or null for every journey */
+  storyline: null,
+  storyMenu: false,
+  /** banded by persona: each group's run (`layoutDistricts()` `subs`) — where the group words sit */
+  subs: [],
   /** banded by persona: echo slot id → the journey it leads to (a journey for two people, drawn once) */
   echoes: new Map(),
   focus: null,                      // the journey the street is on (the current journey: `journey` when one is open, else the nearest)
@@ -218,6 +228,8 @@ export function mountMap(route, el) {
   MAP.route = route;
   MAP.plumb = route && /(?:^|[?&])plumb=1(?:&|$)/.test(String(route.raw || '')) ? true : readPlumb();
   MAP.band = readBand();
+  MAP.storyline = (route && route.storyline) || null;
+  MAP.storyMenu = false;
   MAP.fitted = false;
   MAP.alt = 'nb';
   MAP.lay = null;
@@ -313,6 +325,8 @@ export function mapRefresh(reason) {
 export function mapUpdate(route) {
   MAP.route = route;
   if (/(?:^|[?&])plumb=1(?:&|$)/.test(String(route.raw || ''))) setPlumb(true);
+  // the back button or a link moved the storyline: the board redraws before going where the route says
+  if ((route.storyline || null) !== (MAP.storyline || null) && MAP.designs) applyStoryline(route.storyline || null, { fromRoute: true });
   applyRouteTarget(route, true);
 }
 
@@ -351,6 +365,8 @@ function canBandByPersona() {
 }
 /** *Band by: source · domain · persona* — drawn when the graph has domains or the tree has personas to band by. */
 function bandToolHtml() {
+  // a storyline is its own band: the choice comes back with All
+  if (MAP.nb.storyline) return '';
   const dom = canBandByDomain(MAP.nb.districts, S.GRAPH && S.GRAPH.nodes, S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.projects);
   const per = canBandByPersona();
   if (!dom && !per) return '';
@@ -379,6 +395,56 @@ function readBand() {
   try { const v = localStorage.getItem(BAND_KEY); return v === 'domain' || v === 'persona' ? v : 'source'; } catch { return 'source'; }
 }
 
+// ── storylines (round-2026-10-05 §2.2) ───────────────────────────────────
+/**
+ * *Storyline: All · <name> · …* — drawn when the tree declares a storyline. One segmented control that folds to its
+ * current value and a menu on a narrower window, the way *Band by* does. A storyline's tip is its own sentence.
+ */
+function storylineToolHtml() {
+  const list = (MAP.tree && MAP.tree.storylines) || [];
+  if (!list.length) return '';
+  const on = MAP.nb.storyline ? MAP.nb.storyline.id : '';
+  const opt = (id, words, tip) => '<button type="button" class="map-seg' + (on === id ? ' on' : '') + '" data-act="storyline" data-storyline="' + esc(id) + '" aria-pressed="' + (on === id) + '"'
+    + tipAttrs({ ...tip, noFocus: true }) + '>' + esc(words) + '</button>';
+  const opts = opt('', t('map.storyline.all'), { key: 'map.storyline.all' })
+    + list.map((x) => opt(x.id, x.name, { text: x.name + (x.description ? ' · ' + sentence(x.description) : '') })).join('');
+  const cur = list.find((x) => x.id === on);
+  return '<span class="map-story-pick' + (MAP.storyMenu ? ' open' : '') + (cur ? ' on' : '') + '" role="group" aria-label="' + esc(t('map.storyline.pick')) + '">'
+    + '<span class="hud-label"' + tipAttrs({ key: 'map.storyline.pick', noFocus: true }) + '>' + esc(t('map.storyline.pick')) + '</span>'
+    + '<button type="button" class="map-tb map-story-cur" data-act="storyline-menu" aria-haspopup="true" aria-expanded="' + !!MAP.storyMenu + '"'
+    + tipAttrs(cur ? { text: cur.name, noFocus: true } : { key: 'map.storyline.all', noFocus: true }) + '>' + esc(cur ? cur.name : t('map.storyline.all')) + '</button>'
+    + '<span class="map-segs">' + opts + '</span></span>';
+}
+/** The board model for the storyline in `MAP.storyline` (a storyline the tree does not declare is none). */
+function storylineBoard() {
+  const story = MAP.storyline ? findStoryline(MAP.tree, MAP.storyline) : null;
+  MAP.storyline = story ? story.id : null;
+  return story ? storylineModel(MAP.nbAll, story) : MAP.nbAll;
+}
+/**
+ * Draw one storyline (its id) or, with null, every journey again: the board keeps only that storyline's journeys,
+ * in its order, as one band, with a *then* line from each to the next; the link carries it (`?storyline=`).
+ * The journeys it has not read yet are read now; the Affected mode, when on, paints what is drawn.
+ */
+function applyStoryline(id, opts = {}) {
+  MAP.storyline = id || null;
+  MAP.storyMenu = false;
+  if (!MAP.designs) return;
+  closeCard();
+  if (MAP.prop) closeProperty({ keepHash: true });
+  MAP.nb = storylineBoard();
+  if (MAP.journey && !MAP.nb.districts.some((d) => d.id === MAP.journey)) MAP.journey = null;
+  if (MAP.focus && !MAP.nb.districts.some((d) => d.id === MAP.focus)) MAP.focus = null;
+  layout();
+  renderAll();
+  redrawChrome();
+  if (MAP.legend) drawLegend();
+  fitAll(false);
+  if (!opts.fromRoute) writeHash(null, null);
+  fillWork(MAP.gen);
+  walk(MAP.gen);
+}
+
 function readPlumb() {
   try { return localStorage.getItem(PLUMB_KEY) === '1'; } catch { return false; }
 }
@@ -404,7 +470,8 @@ function start() {
   }).then((tree) => {
     if (gen !== MAP.gen || !MAP.designs) return;
     MAP.tree = tree || null;
-    MAP.nb = neighbourhoodModel(MAP.designs, null, MAP.tree);
+    MAP.nbAll = neighbourhoodModel(MAP.designs, null, MAP.tree);
+    MAP.nb = storylineBoard();
     layout();
     renderAll();
     // the band choice is offered only once the districts say whether there are domains to band by
@@ -524,6 +591,8 @@ function writeHash(flow, node) {
     node: node || null, plumb: MAP.plumb ? '1' : null,
     z: v ? v.z : null, x: v ? v.x : null, y: v ? v.y : null,
     card: !node && MAP.card ? MAP.card.spec : null,
+    // the storyline on the board is part of the picture
+    storyline: MAP.storyline || null,
     // the Affected mode is part of the picture (lane I)
     ...affectedParams(),
   });
@@ -694,12 +763,20 @@ function layout() {
   const bw = MAP.board ? MAP.board.clientWidth : 0, bh = MAP.board ? MAP.board.clientHeight : 0;
   const aspect = bw > 0 && bh > 0 ? bw / bh : 1.6;
   const lay = {};
-  if (bandingByPersona()) {
-    // banded by persona: the tree's persona order, inside a band its groups then journeys; a journey
-    // for two people draws its street once (the first band) and an echo card in each other band
+  if (MAP.nb.storyline) {
+    // one storyline: its journeys in its order as one band, named by the storyline
+    const key = 'story:' + MAP.nb.storyline.id;
+    for (const alt of ['nb', 'st']) {
+      lay[alt] = layoutDistricts(ds.map((d) => ({ id: d.id, repo: d.repo || '', ...districtSize(d, alt) })), { aspect, bandKey: () => key, ...BAND_GEOM[alt] });
+    }
+    MAP.bandWords = new Map([[key, MAP.nb.storyline.name]]);
+  } else if (bandingByPersona()) {
+    // banded by persona: the tree's persona order, inside a band its groups then journeys — each group's run on a row
+    // of its own after its word; a journey for two people draws its street once (the first band) and an echo card in
+    // each other band
     for (const alt of ['nb', 'st']) {
       lay[alt] = layoutDistricts(ds.map((d) => ({ id: d.id, repo: d.repo || '', places: d.places, ...districtSize(d, alt) })),
-        { aspect, bandKey: 'persona', personaOrder: MAP.nb.personaOrder, echoW: DMIN, ...BAND_GEOM[alt] });
+        { aspect, bandKey: 'persona', personaOrder: MAP.nb.personaOrder, echoW: DMIN, groupRows: true, subW: GROUP_W[alt], ...BAND_GEOM[alt] });
     }
     MAP.bandWords = new Map(lay.nb.bands.map((b) => [b.repo, (MAP.nb.personas && MAP.nb.personas.get(b.repo)) || t('portfolio.noPersona')]));
   } else {
@@ -726,6 +803,7 @@ function applyGeom() {
   MAP.bands = L.bands;
   MAP.size = L.size;
   MAP.echoes = L.echoes || new Map();
+  MAP.subs = L.subs || [];
 }
 /** A journey's street rect, whichever altitude is on screen — what a journey's stop and frame are measured on. */
 function stRect(id) { return MAP.lay && MAP.lay.st ? MAP.lay.st.rects.get(id) : MAP.geom.get(id); }
@@ -784,15 +862,19 @@ function placeDistricts() {
     // the band labels: the source each band of journeys comes from
     MAP.world.querySelectorAll('.map-band').forEach((el) => el.remove());
     // banded by domain, a band is named by the domain's word (the config's, else the tag in words), and *no domain* is named too
-    const byDomain = bandingByDomain();
-    const byPersona = bandingByPersona();
-    const named = (MAP.bands || []).filter((b) => byDomain || byPersona || b.repo);
-    const word = (b) => (byPersona ? (MAP.bandWords && MAP.bandWords.get(b.repo)) || t('portfolio.noPersona')
+    const byStory = !!MAP.nb.storyline;
+    const byDomain = !byStory && bandingByDomain();
+    const byPersona = !byStory && bandingByPersona();
+    const named = (MAP.bands || []).filter((b) => byStory || byDomain || byPersona || b.repo);
+    const word = (b) => (byStory ? MAP.nb.storyline.name
+      : byPersona ? (MAP.bandWords && MAP.bandWords.get(b.repo)) || t('portfolio.noPersona')
       : byDomain ? (b.repo === '\u0000' ? t('map.band.noDomain') : (MAP.bandWords && MAP.bandWords.get(b.repo)) || b.repo) : b.repo);
     // each band a faint panel the width of the board's widest row, so the bands line up; its header names it,
     // counts its journeys and — banded by persona — says who that person is, in the words the tree carries
-    const html = named.map((b) => '<div class="map-band' + (byDomain ? ' dom' : byPersona ? ' per' : '') + '" data-band="' + esc(b.repo) + '"'
-      + ' style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px">' + bandHeadHtml(b, word(b), byPersona) + '</div>').join('');
+    const html = named.map((b) => '<div class="map-band' + (byStory ? ' story' : byDomain ? ' dom' : byPersona ? ' per' : '') + '" data-band="' + esc(b.repo) + '"'
+      + ' style="left:' + b.x + 'px;top:' + b.y + 'px;width:' + b.w + 'px;height:' + b.h + 'px">' + bandHeadHtml(b, word(b), byPersona) + '</div>').join('')
+      // banded by persona, each group's word at the left of its run of journeys
+      + (byPersona ? (MAP.subs || []).map(groupWordHtml).join('') : '');
     // under the lines between journeys and the districts: a panel is ground, not a thing on it
     if (html && MAP.links) MAP.links.insertAdjacentHTML('beforebegin', html);
     drawEchoes();
@@ -806,13 +888,24 @@ function placeDistricts() {
   // the covers' boxes follow their districts' sizes: their chip rows fold again
   foldCoverChips();
 }
-/** A band's header: its word, how many journeys it holds (a count with its tip) and, for a person, who they are. */
+/** A group's word in the gutter left of its run of journeys, in a persona band: the tree's group name, or *Other journeys* in the register on screen. */
+function groupWordHtml(sub) {
+  const p = MAP.tree && (MAP.tree.personas || []).find((x) => x.id === sub.band);
+  const g = p && (p.groups || []).find((x) => x.id === sub.key);
+  const word = g ? jrnGroupName(g) : t('journeys.noGroup');
+  const desc = g && g.description ? ' · ' + sentence(g.description) : '';
+  return '<div class="map-band-grp" data-band="' + esc(sub.band) + '" data-group="' + esc(sub.key) + '"'
+    + ' style="left:' + sub.x + 'px;top:' + sub.y + 'px;width:' + sub.w + 'px;height:' + sub.h + 'px">'
+    + '<span class="w"' + tipAttrs({ text: t('map.band.group') + ' · ' + word + desc, noFocus: true }) + '>' + esc(word) + '</span></div>';
+}
+/** A band's header: its word, how many journeys it holds (a count with its tip) and, for a person or a storyline, its sentence. */
 function bandHeadHtml(b, word, byPersona) {
   const n = typeof b.n === 'number' ? b.n : 0;
   const p = byPersona && MAP.tree && (MAP.tree.personas || []).find((x) => x.id === b.repo);
-  const desc = p && p.description ? sentence(p.description) : '';
+  const story = MAP.nb.storyline && findStoryline(MAP.tree, MAP.nb.storyline.id);
+  const desc = p && p.description ? sentence(p.description) : story && story.description ? sentence(story.description) : '';
   return '<div class="map-band-head"><span class="w">' + esc(word) + '</span>'
-    + '<span class="n"' + plainTip(n, 'map.band.journeys', 'map.band.scope', byPersona ? '/api/journeys' : '/api/design').replace(' tabindex="0"', '') + '>'
+    + '<span class="n"' + plainTip(n, 'map.band.journeys', story ? 'count.scope.storyline' : 'map.band.scope', byPersona || story ? '/api/journeys' : '/api/design').replace(' tabindex="0"', '') + '>'
     + esc(countWords('map.band.journeys', n)) + '</span>'
     + (desc ? '<span class="d">' + esc(desc) + '</span>' : '') + '</div>';
 }
@@ -1246,6 +1339,7 @@ function chromeHtml() {
     + '<div class="map-crumb"></div>'
     + '<span class="map-asof"></span>'
     + '<div class="map-tools">'
+    + storylineToolHtml()
     + bandToolHtml()
     + tool('plumb', 'map.tool.plumb', esc(t('map.tool.plumb')), MAP.plumb ? ' on' : '')
     + tool('in', 'map.tool.zoomIn', '+')
@@ -1346,7 +1440,9 @@ function onChromeClick(e) {
     case 'aff-list': toggleAffList(); break;
     case 'aff-hops': setAffectedHops(+b.dataset.h); break;
     case 'band': MAP.bandMenu = false; setBand(b.dataset.band); break;
-    case 'band-menu': MAP.bandMenu = !MAP.bandMenu; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-segs .map-seg'); if (f) f.focus(); } break;
+    case 'storyline': applyStoryline(b.dataset.storyline || null); break;
+    case 'storyline-menu': MAP.storyMenu = !MAP.storyMenu; MAP.bandMenu = false; redrawChrome(); if (MAP.storyMenu) { const f = MAP.stage.querySelector('.map-story-pick .map-seg.on') || MAP.stage.querySelector('.map-story-pick .map-seg'); if (f) f.focus(); } break;
+    case 'band-menu': MAP.bandMenu = !MAP.bandMenu; MAP.storyMenu = false; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-band-pick .map-segs .map-seg'); if (f) f.focus(); } break;
     default:
   }
 }
@@ -1636,6 +1732,7 @@ function drawLegend() {
   if (f.links.has('leadsTo') || !f.links.size) between.push(lgRow('leadsTo', lgLine('leadsTo'), 'map.link.leadsTo') + lgRow('requires', lgLine('leadsTo'), 'map.link.requires', 'map.legend.requires'));
   if (f.links.has('both')) between.push(lgRow('mutual', lgLine('leadsTo', true), 'map.link.both'));
   if (f.links.has('partOf')) between.push(lgRow('partOf', lgLine('partOf'), 'map.link.partOf'));
+  if (f.links.has('then')) between.push(lgRow('then', lgLine('then'), 'map.link.then'));
   html += '<section>' + lgHead('map.legend.between') + between.join('') + '</section>';
   // under each screen: what a call does to the data beside it, the stores by kind
   if (f.calls) {
@@ -1716,7 +1813,8 @@ function renderDistrict(id) {
   const desc = sentence(d.description);
   // a walk landing redraws the district under the keyboard: the focus comes back to the same thing
   const had = el.contains(document.activeElement) ? focusKey(document.activeElement) : null;
-  el.innerHTML = '<div class="map-dhead"><div class="nm">' + esc(nameWords(d.name)) + '</div>'
+  const step = stepBadgeHtml(d);
+  el.innerHTML = '<div class="map-dhead"><div class="nm">' + step + esc(nameWords(d.name)) + '</div>'
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
     + '<div class="agg">' + agg + '</div></div>'
     + '<div class="map-dstreet">' + streetHtml(d, j, g) + '</div>'
@@ -1724,7 +1822,7 @@ function renderDistrict(id) {
     // its whole sentence is the cover's tip
     + '<div class="map-dcover" role="button" tabindex="0" data-enter="' + esc(id) + '" aria-label="' + esc(t('map.cover.enter') + ' · ' + nameWords(d.name)) + '"'
     + tipAttrs({ text: nameWords(d.name) + (desc ? ' · ' + desc : ''), noFocus: true }) + '><div class="map-dcover-in">'
-    + '<div class="nm">' + esc(nameWords(d.name)) + '</div>'
+    + '<div class="nm">' + step + esc(nameWords(d.name)) + '</div>'
     // the board altitude: a card — the name, one status chip and at most two marks; the sentence and every other
     // number are in the journey's header from the journey-fitted stop up (and the sentence in the cover's tip)
     + '<div class="agg">' + coverAggHtml(d, j) + '</div></div></div>';
@@ -1735,6 +1833,12 @@ function renderDistrict(id) {
   // a district drawn before it is placed has no size yet: placeDistricts() folds it once it has one
   if (el.style.width) foldCoverChips(el);
   if (had) focusQuiet(el.querySelector(had));
+}
+/** On a storyline's board, a journey's place in it: its number, with *step n of m* (*journey n of m* in the business lens) as its tip. */
+function stepBadgeHtml(d) {
+  if (!d || !d.step || !MAP.nb.storyline) return '';
+  const words = t(biz() ? 'map.storyline.bizStep' : 'map.storyline.step').split('{n}').join(String(d.step)).split('{m}').join(String(d.steps));
+  return '<span class="map-step" aria-label="' + esc(words) + '"' + tipAttrs({ text: words + ' · ' + MAP.nb.storyline.name, noFocus: true }) + '>' + d.step + '</span>';
 }
 /** A selector that finds the same board element after a redraw. */
 function focusKey(a) {
@@ -2005,6 +2109,8 @@ function drawLinks() {
     for (const r of l.requires || []) edge(r.id, id, 'leadsTo');
     for (const r of l.partOf || []) edge(r.id, id, 'partOf');
   }
+  // a storyline: a then line from each journey to the next, drawn at every altitude
+  for (const l of MAP.nb.then || []) { edge(l.from, l.to, 'then'); const e = byKey.get('then:' + l.from + '>' + l.to); if (e) { e.fromSides = l.fromSides; e.toSides = l.toSides; } }
   const list = [...byKey.values()].map((l) => {
     const word = t(linkWordKey(l));
     const w = labelWidth(word);
@@ -2042,7 +2148,7 @@ function fillLeadMarks(list) {
   });
 }
 const LINK_LABEL_H = 18, LINK_LABEL_PAD = 7, LINK_CORNER = 26;
-function linkWordKey(l) { return l.kind === 'partOf' ? 'map.link.partOf' : l.both ? 'map.link.both' : 'map.link.leadsTo'; }
+function linkWordKey(l) { return l.kind === 'then' ? 'map.link.then' : l.kind === 'partOf' ? 'map.link.partOf' : l.both ? 'map.link.both' : 'map.link.leadsTo'; }
 /** A label's width at the counter-scale of 1, measured once per word on the links layer itself (so the HUD face counts). */
 const LABEL_W = new Map();
 function labelWidth(word) {
@@ -2111,7 +2217,8 @@ function linkVisibility() {
   const ends = new Set();
   MAP.links.querySelectorAll('g[data-link]').forEach((g) => {
     const hot = !!MAP.hot && (g.dataset.from === MAP.hot || g.dataset.to === MAP.hot);
-    const show = board ? hot : g.dataset.link !== 'partOf' || hot || (inView(g.dataset.from) && inView(g.dataset.to));
+    // a storyline's then line is the one the board draws unhovered, at every altitude
+    const show = g.dataset.link === 'then' || (board ? hot : g.dataset.link !== 'partOf' || hot || (inView(g.dataset.from) && inView(g.dataset.to)));
     g.classList.toggle('off', !show);
     g.classList.toggle('hot', hot);
     if (hot) { ends.add(g.dataset.from); ends.add(g.dataset.to); }
@@ -2179,6 +2286,7 @@ function enterCover(tgt) {
 function onDocClick(e) {
   // the folded *Band by* menu closes on a click anywhere else
   if (MAP.bandMenu && !(e.target.closest && e.target.closest('.map-band-pick'))) { MAP.bandMenu = false; redrawChrome(); }
+  if (MAP.storyMenu && !(e.target.closest && e.target.closest('.map-story-pick'))) { MAP.storyMenu = false; redrawChrome(); }
   if (!MAP.card) return;
   const card = MAP.el && MAP.el.querySelector('.map-xcard');
   if (card && card.contains(e.target)) return;
@@ -2609,6 +2717,7 @@ export function mapEscape() {
   // the Affected list closes first, then the mode leaves before anything else (lane I)
   if (MAP.affList) { toggleAffList(false); return true; }
   if (MAP.bandMenu) { MAP.bandMenu = false; redrawChrome(); const c = MAP.stage.querySelector('.map-band-cur'); if (c) c.focus(); return true; }
+  if (MAP.storyMenu) { MAP.storyMenu = false; redrawChrome(); const c = MAP.stage.querySelector('.map-story-cur'); if (c) c.focus(); return true; }
   if (affectedOn()) { clearAffected(); return true; }
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }

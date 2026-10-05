@@ -198,6 +198,106 @@ test.describe('journeys organised by persona and group, as the fixture declares 
   });
 });
 
+test.describe('storylines', () => {
+  const STORY = (MANIFEST.storylines || [])[0] as AnyRec;
+  const STEPS = (STORY.journeys as string[]).map((id) => `invoice-app::flow::${id}`);
+  const NAME = (id: string) => MANIFEST.flows.find((f: AnyRec) => `invoice-app::flow::${f.id}` === id).name;
+  async function mapOn(page: Page): Promise<void> {
+    await page.evaluate(() => {
+      const S = (window as any).S;
+      S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+    });
+  }
+
+  /**
+   * @covers packages/server/public/app/surfaces/journeys.js::jrnStorylinesHtml
+   * @covers GET /api/journeys
+   */
+  test('the front door draws a Storylines section above the personas: the journeys numbered in order, the Map and the first journey', async ({ page }) => {
+    await gotoReady(page, '#/portfolio');
+    await mapOn(page);
+    await page.evaluate(() => { location.hash = '#/journeys'; });
+    const card = page.locator(`.jrn-story[data-storyline="${STORY.id}"]`);
+    await expect(card).toBeVisible();
+    await expect(card.locator('.dsg-flow-name')).toHaveText(STORY.name);
+    await expect(card.locator('.jrn-story-step')).toHaveText(STEPS.map((id, i) => `${i + 1}${NAME(id)}`));
+    await expect(card.locator('.jrn-pcount')).toContainText(`${STEPS.length} journeys`);
+    // above the personas
+    const above = await page.evaluate(() => {
+      const a = document.querySelector('.jrn-stories'), b = document.querySelector('.jrn-org');
+      return !!(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
+    });
+    expect(above).toBe(true);
+    await expect(card.locator('.jrn-story-map')).toHaveAttribute('href', `#/map?storyline=${STORY.id}`);
+    await card.getByRole('button', { name: 'open the first journey' }).click();
+    await expect(page.locator('#jrn-title')).toHaveText(NAME(STEPS[0]!));
+  });
+
+  /** @covers packages/server/public/app/surfaces/journeys.js::jrnFillStoryline */
+  test('the journey header says storyline · step n of m, and ‹ › open the journeys before and after it', async ({ page }) => {
+    await gotoReady(page, '#/journeys/' + encodeURIComponent(STEPS[1]!));
+    const line = page.locator('#jrn-storyline .jrn-story-line');
+    await expect(line).toContainText(STORY.name);
+    await expect(line).toContainText(`step 2 of ${STEPS.length}`);
+    await line.getByRole('button', { name: new RegExp(`after this one.*${NAME(STEPS[2]!)}`) }).click();
+    await expect(page.locator('#jrn-title')).toHaveText(NAME(STEPS[2]!));
+    await expect(page.locator('#jrn-storyline .jrn-story-line')).toContainText(`step 3 of ${STEPS.length}`);
+    await page.locator('#jrn-storyline').getByRole('button', { name: /before this one/ }).click();
+    await expect(page.locator('#jrn-title')).toHaveText(NAME(STEPS[1]!));
+  });
+
+  /**
+   * @covers packages/server/public/app/surfaces/map.js::storylineToolHtml
+   * @covers packages/server/public/app/surfaces/map.js::applyStoryline
+   * @covers packages/server/public/app/lib/map-model.js::storylineModel
+   */
+  test('the Map draws one storyline as one band in its order, numbered, with then lines at the board, and the link carries it', async ({ page }) => {
+    await gotoReady(page, '#/portfolio');
+    await mapOn(page);
+    await page.evaluate(() => { location.hash = '#/map'; });
+    await expect(page.locator('.map-district')).toHaveCount(MANIFEST.flows.length);
+    // at 1440 px the picker is folded to its current value: its menu holds the storylines
+    await page.locator('.map-story-cur').click();
+    await page.locator(`.map-story-pick [data-storyline="${STORY.id}"]`).click();
+    await expect(page.locator('.map-story-cur')).toHaveText(STORY.name);
+    await expect(page).toHaveURL(new RegExp(`[?&]storyline=${STORY.id}(&|$)`));
+    await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
+    await expect(page.locator('.map-band.story .n')).toHaveText(`${STEPS.length} journeys`);
+    // only its journeys, in its order, numbered
+    await expect(page.locator('.map-district')).toHaveCount(STEPS.length);
+    expect(await page.locator('.map-district').evaluateAll((ds) => ds.map((d) => (d as HTMLElement).dataset['flow']))).toEqual(STEPS);
+    await expect(page.locator('.map-dcover .map-step')).toHaveText(STEPS.map((_, i) => String(i + 1)));
+    // at the board altitude the then lines are drawn without a hover — one from each step to the next
+    await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
+    const then = page.locator('.map-links g[data-link="then"]');
+    await expect(then).toHaveCount(STEPS.length - 1);
+    for (let i = 0; i < STEPS.length - 1; i++) {
+      const g = page.locator(`.map-links g[data-link="then"][data-from="${STEPS[i]}"][data-to="${STEPS[i + 1]}"]`);
+      await expect(g).toHaveCount(1);
+      await expect(g).not.toHaveClass(/\boff\b/);
+      await expect(g).not.toHaveCSS('display', 'none');
+      // a straight line has no height of its own: its arrowhead is what shows it is drawn
+      await expect(g.locator('path.head')).toBeVisible();
+    }
+    // the link round-trips: a fresh page on it draws the same band
+    const url = page.url();
+    const fresh = await page.context().newPage();
+    await fresh.goto('/' + '#/portfolio');
+    await expect(fresh.locator('#stats')).not.toHaveText('loading…');
+    await mapOn(fresh);
+    await fresh.evaluate((h) => { location.hash = h; }, url.slice(url.indexOf('#')));
+    await expect(fresh.locator('.map-band.story .w')).toHaveText([STORY.name]);
+    await expect(fresh.locator('.map-district')).toHaveCount(STEPS.length);
+    await fresh.close();
+    // All restores every journey and drops the parameter
+    await page.locator('.map-story-cur').click();
+    await page.locator('.map-story-pick [data-storyline=""]').click();
+    await expect(page.locator('.map-district')).toHaveCount(MANIFEST.flows.length);
+    await expect(page.locator('.map-band.story')).toHaveCount(0);
+    await expect(page).not.toHaveURL(/storyline=/);
+  });
+});
+
 test.describe('journeys organised, on a server with no /api/journeys', () => {
   // an older server (or an older global install) answers 404: the viewer folds the tree itself
   test.use({ expectedHttpErrors: [/\/api\/journeys/] });

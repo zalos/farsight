@@ -19,6 +19,7 @@ import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
 import { mountMap, mapRefresh, mapUpdate, unmountMap, mapEnabled, mapOpen, mapTravel } from './surfaces/map.js';
+import { renderConfigFiles } from './surfaces/settings-config.js';
 import { closeShare } from './share.js';
 import { initKeymap } from './keymap.js';
 import { impactFromRoute } from './impact.js';
@@ -172,6 +173,8 @@ export function parseRoute() {
     project: q.get('project'),
     // the Journeys front door's filters: one persona (`persona=`) and one group of journeys (`group=`, shared with the code map's grouping)
     persona: q.get('persona'),
+    // the Map's storyline (`storyline=<id>`): only that storyline's journeys, in its order, as one band
+    storyline: q.get('storyline'),
     // the code map's tag filter (`tag=domain:billing,type:ui`) and the project box fast travel arrives at
     tag: q.get('tag'),
     box: q.get('box'),
@@ -586,6 +589,8 @@ export function setLens(l, quiet) {
   if (quiet) return;
   renderChrome();
   refreshSurface('lens');
+  // the Config files list names the settings in the lens's words
+  if (settingsOpen()) renderConfigFiles();
 }
 /**
  * Apply a theme: `dark`, `light`, or `system` — the reader's own
@@ -1135,6 +1140,8 @@ export function renderSettings() {
   const vc = document.getElementById('save-consequence'); if (vc) vc.textContent = t('set.saveConsequence');
   const ls = document.getElementById('set-landing-sub'); if (ls) ls.textContent = t('set.landingSub');
   const ll = document.getElementById('set-landing-label'); if (ll) ll.textContent = t('set.landing');
+  // the config files each source holds, read only (GET /api/config)
+  renderConfigFiles();
 }
 /**
  * @group Settings page

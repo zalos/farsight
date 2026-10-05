@@ -5,7 +5,8 @@
 // so a nullable column can say so), const, enum, required, properties,
 // additionalProperties (false, or a schema every other property must match —
 // `farsight-impact-tests v1` keys `select` by runner name), items, minimum,
-// pattern, and local $ref into $defs. Anything a schema file starts using
+// pattern, and local $ref into $defs; anyOf and patternProperties joined with the config and
+// design manifest schemas (schemas/farsight-config, farsight-design). Anything a schema file starts using
 // beyond that must be added here (the test fails loudly on unknown keywords).
 
 type Schema = Record<string, unknown>;
@@ -13,6 +14,7 @@ type Schema = Record<string, unknown>;
 const KNOWN = new Set([
   '$schema', '$id', '$defs', '$ref', 'title', 'description',
   'type', 'const', 'enum', 'required', 'properties', 'additionalProperties', 'items', 'minimum', 'pattern',
+  'anyOf', 'patternProperties',
 ]);
 
 export function validate(value: unknown, schema: Schema, root?: Schema, path = '$'): string[] {
@@ -28,6 +30,11 @@ export function validate(value: unknown, schema: Schema, root?: Schema, path = '
     const target = (root.$defs as Record<string, Schema> | undefined)?.[m[1]!];
     if (!target) return [`${path}: dangling $ref ${schema.$ref}`];
     return validate(value, target, root, path);
+  }
+
+  if (Array.isArray(schema.anyOf)) {
+    const tries = (schema.anyOf as Schema[]).map((s) => validate(value, s, root, path));
+    if (!tries.some((e) => e.length === 0)) errors.push(`${path}: matches none of anyOf (${tries.map((e) => e[0]).join(' | ')})`);
   }
 
   if ('const' in schema && value !== schema.const) {
@@ -69,8 +76,12 @@ export function validate(value: unknown, schema: Schema, root?: Schema, path = '
       if (!(req in obj)) errors.push(`${path}: missing required "${req}"`);
     }
     const extra = schema.additionalProperties;
+    const patterns = Object.entries((schema.patternProperties ?? {}) as Record<string, Schema>);
     for (const [k, v] of Object.entries(obj)) {
+      const byPattern = patterns.filter(([re]) => new RegExp(re).test(k));
+      for (const [, ps] of byPattern) errors.push(...validate(v, ps, root, `${path}.${k}`));
       if (k in props) errors.push(...validate(v, props[k]!, root, `${path}.${k}`));
+      else if (byPattern.length) continue;
       else if (extra === false) errors.push(`${path}: unexpected property "${k}"`);
       // an open map with a value schema: every key the caller invented still has to fit
       else if (typeof extra === 'object' && extra !== null) errors.push(...validate(v, extra as Schema, root, `${path}.${k}`));

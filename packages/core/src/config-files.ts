@@ -13,13 +13,15 @@ const SOURCE = 'parsers shared/config-files.ts loadWorkspaceConfig → meta.conf
 export function configCounts(meta: ConfigMeta): { files: Counted; conflicts: Counted } {
   const root = meta.files.filter((f) => f.root).length;
   return {
+    // the same words in the business lens: a config file is a file a person edits, whoever reads the count
     files: counted(meta.files.length, 'count.unit.configFiles', 'count.scope.source', `${SOURCE}.files`, {
+      bizUnit: 'count.unit.configFiles',
       breakdown: [
         { key: 'count.part.configRoot', n: root },
         { key: 'count.part.configScoped', n: meta.files.length - root },
       ],
     }),
-    conflicts: counted(meta.conflicts.length, 'count.unit.configConflicts', 'count.scope.source', `${SOURCE}.conflicts`),
+    conflicts: counted(meta.conflicts.length, 'count.unit.configConflicts', 'count.scope.source', `${SOURCE}.conflicts`, { bizUnit: 'count.unit.configConflicts' }),
   };
 }
 

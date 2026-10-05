@@ -278,3 +278,73 @@ test('journeys blocks: the root\'s applies to every manifest, a nested one to th
     assert.deepEqual(journeysConfigFor(ws, 'apps/a/docs/design/screens.json')[1]!.journeys.flows, [{ id: 'sign-in', persona: ['ops', 'contractor'], group: 'access', order: 1 }]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// ── nested stores[] scoped to their folder (docs/proposals/round-2026-10-05.md §6) ──
+
+const DRIZZLE = (name: string) => `import { pgTable, text } from 'drizzle-orm/pg-core';\nexport const ${name} = pgTable('${name}', { id: text('id') });\n`;
+const RAW = (table: string) => `export async function q(db: any) { return db.query('SELECT 1 FROM ${table}'); }\n`;
+
+test('stores: a nested catch-all names only the unnamed tables under its folder; the root\'s covers the rest', async () => {
+  const dir = tempRepo({
+    'farsight.config.json': { stores: [{ name: 'Main DB', kind: 'sql', engine: 'postgres' }] },
+    'apps/ledger/farsight.config.json': { stores: [{ name: 'Ledger DB', kind: 'sql', engine: 'mysql' }] },
+    'apps/ledger/src/q.ts': RAW('ledger_lines'),
+    'apps/web/src/q.ts': RAW('sessions'),
+  });
+  try {
+    const g = await ingestRepo(dir, { repoName: 'r' });
+    const store = (name: string) => g.nodes.find((n) => n.kind === 'table' && n.name === name)?.store;
+    assert.deepEqual(store('ledger_lines'), { name: 'Ledger DB', kind: 'sql', engine: 'mysql', via: 'config', ref: 'apps/ledger/farsight.config.json stores: Ledger DB' });
+    assert.deepEqual(store('sessions'), { name: 'Main DB', kind: 'sql', engine: 'postgres', via: 'config', ref: 'farsight.config.json stores: Main DB' });
+    assert.deepEqual(g.meta?.config?.conflicts, []);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('stores: a nested tables list names only those tables, and only under its folder', async () => {
+  const dir = tempRepo({
+    'apps/a/farsight.config.json': { stores: [{ name: 'Archive', kind: 'files', tables: ['blobs', 'sessions'] }] },
+    'apps/a/src/q.ts': RAW('blobs'),
+    'apps/a/src/other.ts': RAW('audit'),
+    'apps/b/src/q.ts': RAW('sessions'),
+  });
+  try {
+    const g = await ingestRepo(dir, { repoName: 'r' });
+    const store = (name: string) => g.nodes.find((n) => n.kind === 'table' && n.name === name)?.store;
+    assert.equal(store('blobs')?.name, 'Archive');
+    assert.equal(store('audit'), undefined, 'a tables list is not a catch-all');
+    assert.equal(store('sessions'), undefined, 'sessions is read from apps/b only, outside apps/a');
+    assert.ok(g.meta?.stores?.notes?.some((n) => n.includes('apps/a/farsight.config.json lists the table sessions') && n.includes('not under apps/a/')));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('stores: for a table under both, the nearer file wins; two files listing it differently is a store conflict', async () => {
+  const dir = tempRepo({
+    'farsight.config.json': { stores: [{ name: 'Main DB', kind: 'sql' }, { name: 'Warehouse', kind: 'sql', tables: ['facts'] }] },
+    'apps/a/farsight.config.json': { stores: [{ name: 'App DB', kind: 'sql' }, { name: 'Lake', kind: 'files', tables: ['facts'] }] },
+    'apps/a/src/q.ts': RAW('orders') + RAW('facts').replace('q(', 'f('),
+    'apps/a/src/schema.ts': DRIZZLE('invoices'),
+  });
+  try {
+    const g = await ingestRepo(dir, { repoName: 'r' });
+    const store = (name: string) => g.nodes.find((n) => n.kind === 'table' && n.name === name)?.store;
+    assert.equal(store('orders')?.name, 'App DB', 'the nearer catch-all wins over the root\'s');
+    assert.equal(store('facts')?.name, 'Lake', 'the nearer list wins over the root\'s');
+    assert.equal((store('invoices') as { via: string }).via, 'factory', 'config never overrides code');
+    assert.deepEqual(g.meta?.config?.conflicts.filter((c) => c.kind === 'store'), [
+      { kind: 'store', key: 'facts', files: ['apps/a/farsight.config.json', 'farsight.config.json'], kept: 'apps/a/farsight.config.json' },
+    ]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('stores: the same store declared again in a nested file is scoped there, not a conflict', () => {
+  const dir = tempRepo({
+    'farsight.config.json': { stores: [{ name: 'Main DB', kind: 'sql' }] },
+    'apps/x/farsight.config.json': { stores: [{ name: 'Main DB', kind: 'sql', tables: ['t'] }] },
+  });
+  try {
+    const ws = loadWorkspaceConfig(dir);
+    assert.deepEqual(ws.meta.conflicts, []);
+    assert.deepEqual(ws.stores.map((s) => [s.name, s.dir, s.from]), [['Main DB', '.', 'farsight.config.json'], ['Main DB', 'apps/x', 'apps/x/farsight.config.json']]);
+    assert.deepEqual(ws.merged.stores!.map((s) => s.name), ['Main DB']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
