@@ -131,6 +131,22 @@ jobs:
 
       - run: pnpm e2e
 
+      # the perf suite on the small synthetic workspace (≈50 projects · ≈20k nodes): every surface must draw with no
+      # page error; budgets apply only to the full preset, run locally with `pnpm e2e:perf` (docs/CI.md)
+      - name: pnpm e2e:perf (small preset)
+        run: pnpm e2e:perf
+        env:
+          FARSIGHT_PERF_PRESET: small
+
+      - name: Upload the perf table
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-perf-results
+          path: e2e/perf/results.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload results.json
         if: always()
         uses: actions/upload-artifact@v7
