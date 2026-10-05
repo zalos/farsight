@@ -83,8 +83,6 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
   'journeys.storyline.openMap': same('open on the Map'),
   'journeys.storyline.openFirst': same('open the first journey'),
   'journeys.storyline.empty': same('No journey of this storyline is in scope.'),
-  'journeys.storyline.notBuilt': same('not built',
-    'The design declares this journey and the code builds none of its screens yet.'),
   'map.storyline.pick': {
     hud: 'Questline', professional: 'Storyline',
     define: 'Draw only the journeys of one storyline, in its order, as one band with a line from each journey to the next. All draws every journey again.',
