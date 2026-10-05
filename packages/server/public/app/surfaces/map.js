@@ -22,7 +22,8 @@ import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
-import { withParams } from '../lib/route-url.js';
+import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
+import { doorsFor, doorsHtml, leadDoorHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER } from '../lib/map-model.js';
@@ -65,6 +66,8 @@ const BAND_GEOM = {
 };
 /** The most a cover's words grow over their board px when the board is sparse (a few journeys fit large). */
 const COVER_GROW_MAX = 1.25;
+// the reading floor (§3.3): no word on a cover under 8 px on screen; a cover's chips are its smallest words, 10 board px
+const FLOOR_PX = 8, COVER_MIN_PX = 10;
 /** Where a street lands when it is entered or left: a district fits, never above this. */
 const STREET_FIT_MAX = 0.95;
 /** …and never below this: under LEVEL_NB the board draws covers, so a journey stop below it would not be a street. */
@@ -462,7 +465,8 @@ const cssAttr = (s) => String(s).replace(/["\\]/g, '\\$&');
 
 // ── the route ────────────────────────────────────────────────────────────
 function decode(s) { try { return decodeURIComponent(s); } catch { return s; } }
-function routeFlow(route) { return route && route.param ? decode(route.param) : null; }
+// a street is `#/map/<flow>`; `?j=<flow>` names the same street for a link written without the path (§3.1)
+function routeFlow(route) { return route && route.param ? decode(route.param) : route && route.j ? route.j : null; }
 
 /** Go where the route says: a journey's street, or one of its screens. */
 async function applyRouteTarget(route, animate) {
@@ -492,6 +496,17 @@ async function applyRouteTarget(route, animate) {
       enterJourney(flow, animate && MAP.fitted);
     }
     MAP.fitted = true;
+    // `?screen=<n>` (§3.1): the street with that step's screen framed — the journey's `step`, the same number
+    if (route.screen && !view) {
+      const j = await ensureJourney(flow);
+      if (gen !== MAP.gen || !j || !j.model) return;
+      const si = screenAtStep(j.model.screens, route.screen);
+      if (si != null) {
+        MAP.autoFit = null;
+        centreScreen(flow, si, STREET_SCALE, false);
+        focusQuiet(MAP.world && MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"][data-index="' + si + '"]'));
+      }
+    }
     if (route.card) {
       const j = await ensureJourney(flow);
       if (gen !== MAP.gen || !j || !j.model) return;
@@ -524,6 +539,8 @@ function writeHash(flow, node) {
     node: node || null, plumb: MAP.plumb ? '1' : null,
     z: v ? v.z : null, x: v ? v.x : null, y: v ? v.y : null,
     card: !node && MAP.card ? MAP.card.spec : null,
+    // the link names the picture from here on: `screen` and `j` were how it was arrived at
+    screen: null, j: null,
     // the Affected mode is part of the picture (lane I)
     ...affectedParams(),
   });
@@ -868,7 +885,14 @@ function boardScale() {
 function coverScale(s) {
   const fit = boardScale();
   if (!(s > 0) || !(fit > 0)) return BOARD_K;
-  return Math.min(BOARD_K, Math.min(BOARD_K * fit, COVER_GROW_MAX) / s);
+  // the floor (§3.3): a cover's smallest words (its chips, COVER_MIN_PX in board px) never draw under FLOOR_PX on
+  // screen — past it the board stops shrinking them, the card clips, and the hint says *zoom in to read*
+  return Math.min(BOARD_K, Math.max(Math.min(BOARD_K * fit, COVER_GROW_MAX) / s, FLOOR_PX / COVER_MIN_PX / s));
+}
+/** Whether the board's fit would draw a cover's smallest words under the floor at scale s. */
+function underFloor(s) {
+  const fit = boardScale();
+  return s > 0 && fit > 0 && Math.min(BOARD_K * fit, COVER_GROW_MAX) / s * s * COVER_MIN_PX < FLOOR_PX - 0.01;
 }
 /** The row the risk headline takes over the top of the board, when it shows. */
 function riskTop() {
@@ -1073,6 +1097,7 @@ function onCanvasChange(st) {
   MAP.world.style.setProperty('--map-cs', String(coverScale(st.s)));
   MAP.world.classList.toggle('lvl-nb', st.level === 'nb');
   MAP.world.classList.toggle('lvl-st', st.level !== 'nb');
+  MAP.world.classList.toggle('floor', st.level === 'nb' && underFloor(st.s));
   MAP.stage.querySelectorAll('.map-lvls button').forEach((b) => {
     const on = b.dataset.l === lvl;
     b.classList.toggle('on', on);
@@ -1309,13 +1334,30 @@ function drawHint(st) {
   if (!el) return;
   let text;
   if (MAP.prop) text = t('map.hint.pr');
+  else if (st.level === 'nb' && underFloor(st.s)) {
+    // the board is past its reading floor: say how many journeys share it, and that zooming in reads them (§3.3)
+    const n = (MAP.nb.districts || []).length;
+    const words = t('map.floor.read').split('{n}');
+    const html = esc(words[0]) + '<span class="n"' + plainTip(n, 'map.floor.read', 'map.floor.scope', '/api/design').replace(' tabindex="0"', '') + '>' + n + '</span>' + esc(words.slice(1).join(String(n)));
+    if (el.dataset.floor !== html) { el.innerHTML = html; el.dataset.floor = html; }
+    el.classList.add('floor');
+    el.classList.remove('enter');
+    return drawBackTo(st);
+  }
   else if (st.level === 'nb') text = t('map.hint.nb');
   else if (MAP.near) text = t('map.hint.near').replace('{name}', MAP.near.dataset.name || '');
   else text = t('map.hint.st');
-  el.textContent = text;
+  if (el.textContent !== text || el.dataset.floor) el.textContent = text;
+  delete el.dataset.floor;
+  el.classList.remove('floor');
   // the snap is about to be possible: the hint says so in the accent before any zoom can enter
   el.classList.toggle('enter', !MAP.prop && st.level !== 'nb' && !!MAP.near);
-  // the journey the reader opened is wholly off the stage: a way back to it beside the hint (round 2)
+  drawBackTo(st);
+}
+/** The journey the reader opened is wholly off the stage: a way back to it beside the hint (round 2). */
+function drawBackTo(st) {
+  const el = MAP.stage && MAP.stage.querySelector('.map-hint');
+  if (!el) return;
   const back = MAP.stage.querySelector('.map-backto');
   const left = !MAP.prop && st.level !== 'nb' && MAP.leftJourney && MAP.nb.districts.find((x) => x.id === MAP.leftJourney);
   if (back) {
@@ -1836,10 +1878,11 @@ function coverAggHtml(d, j) {
     const [key, cls] = b.n >= b.of ? ['map.cover.status.built', 'k-ok'] : b.n === 0 ? ['map.cover.status.none', 'k-absent'] : ['map.cover.status.partly', 'k-warn'];
     status = countedHtml(b, '/api/journey', { cls: 'map-chip k-status ' + cls, words: t(key).split('{n}').join(String(b.n)).split('{m}').join(String(b.of)) });
   }
-  const why = [stale ? t('map.cover.risk.stale') : '', partly ? t('map.cover.risk.notBuilt') : ''].filter(Boolean);
-  const risk = why.length ? '<span class="map-mark risk"' + tipAttrs({ text: t('map.cover.risk') + ' · ' + why.join(' · '), noFocus: true }) + '>'
-    + sym('warning') + esc(t('map.cover.risk')) + '</span>' : '';
-  return status + risk + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
+  // two marks, not one (§3.3): *stale* quiet in the muted colour — the code moved under the tests — and *not built* in
+  // amber — a screen is only designed; one or both, each with its own define
+  const mark = (cls, key, glyph) => '<span class="map-mark ' + cls + '"' + tipAttrs({ key, noFocus: true }) + '>' + (glyph ? sym(glyph) : '') + esc(t(key)) + '</span>';
+  const marks = (stale ? mark('stale', 'map.cover.mark.stale', 'sync') : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
+  return status + marks + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
 }
 
 /** The street of one district: screens in step order, then — with plumbing on — each screen's pathway. */
@@ -1926,7 +1969,10 @@ function screenHtml(d, m, s, x, y, n) {
     + (s.state === 'planned' ? '<div class="state"><span class="map-chip k-warn"' + tipAttrs({ key: 'map.screen.planned', noFocus: true }) + '>' + sym('warning') + esc(t('map.screen.planned')) + '</span></div>' : '')
     // the numbers are this screen's part of this journey's walk: said, so two journeys printing two numbers for one
     // screen read as two scopes, not a contradiction (round 2) — plain words, so every lens prints them, with a tip
-    + '<div class="map-chips">' + chips + (chips ? '<span class="map-scope"' + tipAttrs({ key: 'map.screen.onJourney', noFocus: true }) + '>' + esc(t('map.screen.onJourney')) + '</span>' : '') + '</div></div></div>';
+    + '<div class="map-chips">' + chips + (chips ? '<span class="map-scope"' + tipAttrs({ key: 'map.screen.onJourney', noFocus: true }) + '>' + esc(t('map.screen.onJourney')) + '</span>' : '') + '</div>'
+    // the same screen in the journey's timeline (§3.1)
+    + (s.segment ? '<div class="map-tojrn">' + leadDoorHtml('door.journey', journeyStepHash(d.id, s.segment.index + 1, { lens: currentLens() })) + '</div>' : '')
+    + '</div></div>';
 }
 
 /** One call on a screen's pathway: the service bar, its evidence where it is not spec-backed, its name and (not in the business lens) its method and path. */
@@ -2230,7 +2276,7 @@ function drawCard() {
   if (!box || !MAP.card || !MAP.card.tg) return;
   const tg = MAP.card.tg;
   const nodeId = tg.kind === 'call' ? tg.call.nodeId : tg.data.nodeId;
-  let head, ev = '', name, code, store = '', links = [];
+  let head, ev = '', name, code, store = '', doors = [];
   if (tg.kind === 'call') {
     const c = tg.call;
     const modes = [...new Set(c.data.map((x) => x.mode).filter((x) => x !== 'reached'))];
@@ -2244,10 +2290,9 @@ function drawCard() {
     const hloc = (hn && hn.loc) || (h && h.path ? { path: h.path, line: h.line } : null);
     const handler = h ? h.name + (hloc && hloc.path ? ' (' + hloc.path + (hloc.line ? ':' + hloc.line : '') + ')' : '') : '';
     code = [(c.method + ' ' + c.path).trim(), c.operationId, handler ? t('map.card.handler') + ' ' + handler : ''].filter(Boolean).join(' · ');
+    // every detail is a door (§3.2): the contract, the spec line, the handler, the card on the code map
     const route = nodeId && S.BYID[nodeId];
-    const apiId = route && route.contract && route.contract.apiId;
-    if (apiId) links.push(['#/apis/' + encodeURIComponent(apiId) + '?op=' + encodeURIComponent(nodeId), t('map.card.openApis')]);
-    if (route) links.push(['#/codemap?node=' + encodeURIComponent(nodeId), t('map.card.openCode')]);
+    if (route) doors = doorsFor('call', route, { handler: (c.marker && c.marker.handler) || null, flow: tg.flow });
   } else {
     const dd = tg.data;
     head = esc(dataKindWords(dd)) + ' · ' + esc(modeWord(dd.mode));
@@ -2263,9 +2308,15 @@ function drawCard() {
           + '<span' + tipAttrs({ key: via, noFocus: true }) + '>' + esc(t(via)) + '</span>' + (dd.store.ref ? ' · <code>' + esc(dd.store.ref) + '</code>' : '') + '</span>' : '')
         + '</div>';
     }
-    if (n) links.push(['#/codemap?node=' + encodeURIComponent(dd.nodeId), t('map.card.openCode')]);
+    const dn = S.BYID[dd.nodeId] || n;
+    if (dn) doors = doorsFor(dd.kind, dn, { flow: tg.flow });
   }
   const on = screensUsing(tg.model, tg.kind === 'call' ? 'call' : tg.kind, nodeId);
+  // the same part in the journey's timeline, at the step whose markers include it, selected (§3.1)
+  const jd = MAP.journeys.get(tg.flow);
+  const segs = (jd && jd.data && jd.data.summary && jd.data.summary.segments) || [];
+  const step = nodeId ? stepOfNode(segs, tg.screen && tg.screen.segment ? tg.screen.segment.index : null, nodeId) : null;
+  const toJrn = step ? leadDoorHtml('door.journey', journeyStepHash(tg.flow, step, { node: nodeId, lens: currentLens() })) : '';
   box.innerHTML = '<div class="k"><span class="hud-label">' + head + '</span>' + ev
     + '<button type="button" class="x" data-act="close" aria-label="' + esc(t('map.card.close')) + '">✕</button></div>'
     + '<div class="nm">' + esc(name) + '</div>'
@@ -2275,8 +2326,10 @@ function drawCard() {
     + (on.length ? on.map((s) => '<button type="button" class="map-chip go" data-go="' + s.index + '" data-flow="' + esc(tg.flow) + '">' + esc(s.name) + screenChipReach(tg.flow, s.id) + '</button>').join('')
       : '<span class="map-chip k-absent">' + esc(t('map.card.onNone')) + '</span>') + '</div>'
     + '<div class="acts">' + (nodeId ? '<button type="button" class="map-tb aff' + (affectedSpec() === nodeId ? ' on' : '') + '" data-act="affected"' + tipAttrs({ key: 'map.affected.action', noFocus: true }) + '>' + esc(t('map.affected.action')) + '</button>' : '')
-    + links.slice(0, 2).map(([h, w]) => '<a class="map-tb" href="' + esc(h) + '">' + esc(w) + '</a>').join('') + '</div>';
+    + doorsHtml(doors) + '</div>'
+    + (toJrn ? '<div class="tojrn">' + toJrn + '</div>' : '');
   box.setAttribute('aria-label', name);
+  box.setAttribute('data-doors', '');
   box.hidden = false;
   box.onclick = (e) => {
     const b = e.target.closest('button');

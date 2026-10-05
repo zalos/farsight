@@ -13,6 +13,7 @@ import { mapOpen, mapEscape, mapKey, mapSelected, mapCopyLink } from './surfaces
 import { copyLiveLink, closeShare } from './share.js';
 import { trapTab } from './lib/focus-trap.js';
 import { tipKeydown } from './lib/tooltip.js';
+import { doorKeydown } from './lib/detail-doors.js';
 
 /** The published keymap — the panel renders from this table, nothing else. */
 const KEYS = [
@@ -32,6 +33,7 @@ const KEYS = [
   { keys: '+ / − / 0', desc: 'key.mapZoom' },
   { keys: '[ / ]', desc: 'key.mapStep' },
   { keys: 'y', desc: 'key.mapLink' },
+  { keys: 'enter · o', desc: 'key.doors' },
   { keys: 'f', desc: 'key.f' },
   { keys: 'y', desc: 'key.y' },
   { keys: '?', desc: 'key.help' },
@@ -111,6 +113,8 @@ function onKeydown(e) {
   const tag = (e.target && e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // every detail is a door (round 2026-10-05 §3.2): Enter on a focused detail opens its first door, o the editor
+  if (doorKeydown(e)) { e.preventDefault(); return; }
   // the map's own keys — p plumbing, + − 0 zoom, [ ] the screens of an open screen's journey
   if (mapOpen() && mapKey(e)) { e.preventDefault(); return; }
   if (jOpen && S.JOURNEY && (e.key === 'j' || e.key === 'k')) { e.preventDefault(); jrnNav(e.key === 'j' ? 1 : -1); return; }

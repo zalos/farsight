@@ -28,8 +28,10 @@ import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { workSourcesConfigured, flowWork, stateHtml, sourceName } from '../work-chips.js';
 import {
   jrnGateLabel, jrnGateText, jrnGatesShown, jrnAbsentHtml, jrnWords, jrnRefAnchors,
-  jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml,
+  jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml, jrnContractHtml,
 } from './journeys.js';
+import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode } from '../lib/detail-doors.js';
+import { journeyStepHash } from '../lib/route-url.js';
 import { propertyModel } from '../lib/map-property-model.js';
 import { affectedOn, affectedSpec, affectedTabHtml, affectedTabCount, journeyChipReach, pickAffected, affectedSummaryHtml } from './map-affected.js';
 
@@ -66,11 +68,42 @@ function sec(headKey, body, extra) {
 function secHead(headKey, countHtml) {
   return '<h3 class="hud-label"><span' + defAttrs(headKey) + '>' + esc(t(headKey)) + '</span>' + (countHtml ? ' <span class="mp-hcount">' + countHtml + '</span>' : '') + '</h3>';
 }
+/**
+ * The doors of a row's detail (round 2026-10-05 §3.2), from the one builder the journey uses. A row whose part
+ * the graph names (a node by id) carries them in a fold under it — opened by a click, Enter opens the first, `o`
+ * the editor; a row whose part the graph cannot name has none, and its words stay as they were.
+ */
+function rowDoors(card) {
+  const n = card && card.id ? S.BYID[card.id] : null;
+  if (!n) return '';
+  const kind = card.kind === 'gate' ? n.kind : card.kind;
+  return doorsHtml(doorsFor(kind, n, { flow: (VIEW.ctx && VIEW.ctx.flow) || null, handler: card.handler || null }));
+}
 /** One row of a list: a label and a sub-line on the left, a short fact on the right; `card` makes it addressable by the explore card. */
 function row(label, sub, right, card) {
   const attrs = card && card.id ? ' data-map-card="' + esc(card.kind) + '" data-id="' + esc(card.id) + '"' : '';
-  return '<div class="mp-row' + (card && card.id ? ' card' : '') + '"' + attrs + '><div class="l"><span class="nm">' + label + '</span>'
-    + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>' + (right ? '<div class="r">' + right + '</div>' : '') + '</div>';
+  const doors = rowDoors(card);
+  const det = doors ? ' tabindex="0" data-doors aria-expanded="false"' : '';
+  return '<div class="mp-row' + (card && card.id ? ' card' : '') + (doors ? ' has-doors' : '') + '"' + attrs + det + '><div class="l"><span class="nm">' + label + '</span>'
+    + (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>' + (right ? '<div class="r">' + right + '</div>' : '')
+    + (doors ? '<div class="mp-exp" hidden>' + doors + '</div>' : '') + '</div>';
+}
+/** Open or fold a row's detail: its code (a gate's own lines, a call's contract) where the register reads code, and its doors. */
+function toggleRowDetail(rowEl) {
+  const exp = rowEl.querySelector(':scope > .mp-exp');
+  if (!exp) return;
+  const open = exp.hidden;
+  exp.hidden = !open;
+  rowEl.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (!open || exp.dataset.filled) return;
+  exp.dataset.filled = '1';
+  const kind = rowEl.dataset.mapCard, id = rowEl.dataset.id;
+  const n = S.BYID[id];
+  let pre = '';
+  if (kind === 'gate') pre = codeSlotHtml(id);
+  else if (kind === 'call' && n && !biz()) pre = jrnContractHtml(n);
+  if (pre) exp.insertAdjacentHTML('afterbegin', '<div class="mp-exp-code">' + pre + '</div>');
+  fillCode(exp);
 }
 function absentRow(kind) { return '<div class="mp-row none">' + jrnAbsentHtml(kind) + '</div>'; }
 function lineRow(key) { return '<div class="mp-row none"><span class="mp-note"' + defAttrs(key) + '>' + sym('absent') + esc(t(key)) + '</span></div>'; }
@@ -261,7 +294,7 @@ function callRow(c, brief) {
   const data = (c.data || []).length ? esc(dataWords(c.data)) : (c.evidence === 'not built' || c.evidence === 'declared' ? '' : '<span class="mp-dim"' + defAttrs('map.prop.apis.noData') + '>' + esc(t('map.prop.apis.noData')) + '</span>');
   const again = c.repeat ? ' <span class="mp-dim"' + defAttrs('map.prop.apis.repeat') + '>' + sym('sync') + esc(t('map.prop.apis.repeat')) + '</span>' : '';
   const sub = brief ? verb : [verb, data].filter(Boolean).join(' · ');
-  return row(serviceTag(c) + esc(callWords(c)) + again, sub, evChip(c.evidence), { kind: 'call', id: c.nodeId });
+  return row(serviceTag(c) + esc(callWords(c)) + again, sub, evChip(c.evidence), { kind: 'call', id: c.nodeId, handler: (c.marker && c.marker.handler) || null });
 }
 /**
  * A checkpoint's name in the lens: the business lens says the words somebody wrote, and a permission name
@@ -702,6 +735,8 @@ function headHtml(pm, ctx) {
     // this screen's numbers are its part of this journey's walk (round 2)
     + '<span class="mp-scope"' + defAttrs('map.screen.onJourney') + '>' + esc(t('map.screen.onJourney')) + '</span>'
     + (biz() || !pm.tabs.route.route ? '' : '<span class="sep">·</span>' + code(pm.tabs.route.route)) + '</nav>'
+    // the same screen in the journey's timeline (§3.1)
+    + (pm.screen && pm.screen.segment && ctx.flow ? '<span class="mp-tojrn">' + leadDoorHtml('door.journey', journeyStepHash(ctx.flow, pm.screen.segment.index + 1, { lens: currentLens() })) + '</span>' : '')
     + (pm.node ? '<button type="button" class="btn mp-affact' + (affectedSpec() === pm.node.id ? ' on' : '') + '" data-act="affected" data-seed="' + esc(pm.node.id) + '"' + defAttrs('map.affected.action') + '>' + esc(t('map.affected.action')) + '</button>' : '')
     // while the board is dimmed around something, the head says around what and how much (round 2)
     + affectedSummaryHtml()
@@ -767,6 +802,9 @@ export function mountMapProperty(host, ctx) {
     const tab = e.target.closest('.mp-tab');
     if (tab && host.contains(tab)) { setTab(tab.dataset.tab); return; }
     const act = e.target.closest('[data-act]');
+    // a row whose part the graph names opens in place (its code, its doors); a door inside it is a link
+    const det = !act && e.target.closest('.mp-row[data-doors]');
+    if (det && host.contains(det) && !e.target.closest('a[href]')) { toggleRowDetail(det); return; }
     if (!act || !host.contains(act)) return;
     if (act.dataset.act === 'all' || act.dataset.act === 'more') {
       // a number inside the control opens its tip; the control itself opens or closes what it names
