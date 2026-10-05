@@ -38,6 +38,21 @@ seconds (it takes ~0.1 s). `store.js indexGuards()` also builds `S.validatesByTa
 `S.EDGES_OF` (node → its edges in graph order, the inspector's relations), and `render()` keeps `S.displayById`, so no
 card and no `select()` scans every edge. `displayNodes()` and `statsBreakdown()` are each one pass with O(1) per node.
 
+**The windowed stage and the folds kept once** (2026-10-05, the thousand-project perf round, `e2e/perf/`). Both
+layouts (lanes in `render()`, boxes in `renderGrouped()`) compute every card's place, then hand the stage a list of
+drawables (`stageItems(items, memberToGroup, display, onPaint)`, boxes before their cards); at 1,500 drawables or more
+the stage is cut into 1,024 px cells and `paintStage()` makes only the cards and boxes within one viewport of the
+view, on scroll (one rAF), letting go of the rest. `drawEdges()` then draws the arrows of the cards on the stage (a
+card's `S.EDGES_OF`, a folded group's members'), every height read before the one `innerHTML` write into
+`g.edge-layer`. `revealCard(id)` / `revealOnStage(key, domId)` scroll to and paint a card or box that is not drawn
+(fast travel, `?node=`, `?box=`). The grouped layout measures painted cards and relays out once if one is taller. Below
+the threshold everything is drawn as before. Kept once per graph: `effectiveGroup` (a WeakMap per node), the status
+bar's fold (`refreshStats`, keyed by scope, focus and the code map's filters), the tag chips' counts (`buildChips`),
+and fast travel's index (`lib/search-model.js`: strings folded once, in idle time after boot by `warmSearch()`, a
+query that only grew its last word re-ranks the last matches, the best twelve kept as it scans). The Tests page asks
+`/api/tests?lean=1` (counts instead of per-node lists), the Portfolio `?flow=…&lean=1` and `/api/journey?…&steps=0`,
+the Map `steps=0`; the Map's `routeLinks` closes lane crossings per district.
+
 graph-render.js asks two questions. `cmapHide(n)` returns `files` (a `module` card, drawn only with *show files* — or in
 the package view), `packages` (*hide packages*) or `filtered` (outside the cached `passSet()` of the filters / view), and
 `statsBreakdown` counts each as its own reason, so the status bar's tip still adds up. `cmapGrouping()` is `project` in a
