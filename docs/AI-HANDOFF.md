@@ -41,16 +41,16 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
-## Current state — 2026-10-04
+## Current state — 2026-10-05
 
 `main` is green.
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`4fdfd98`** after the Map clarity pass (PR #50) on the journey-organisation pass (PRs #45–#48, below) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
-| tests | **1003** — core 297 · work 59 · parsers 185 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 54 · server 251 · cli 59, 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 198/198** (the `codemap-projects` and `codemap-toolbar` specs start their own two-source server; `journeys-organised` runs on the fixture's declared personas and groups) |
-| string/symbol lint | **1988 entries · 33 sprite symbols · 38 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both re-synced through `POST /api/sync` on `e4bcea5` (4478 sync 63, 4477 sync 102), then restarted on `4fdfd98` (viewer-only change, no re-sync needed); both prefixes' global `farsight` print `commit 4fdfd98`. Check `lsof` before restarting or measuring on any port. |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`4a44f4c`** after the 2026-10-05 round (PRs #53–#58, item 13 below) on the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1052** — core 305 · work 59 · parsers 196 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 55 · server 278 · cli 60 (+ `pnpm test:scripts` 13), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 212/212** (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand) |
+| string/symbol lint | **2066 entries · 33 sprite symbols · 42 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `4a44f4c` on 2026-10-05 and re-synced through `POST /api/sync` (4478 sync 65, 4477 sync 105); both prefixes' global `farsight` print `commit 4a44f4c`. The reference app's own manifest now declares two personas, six groups, placements on all 18 flows and two storylines (`invoice`, `vendor`); its design drift is back to **7**. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -284,6 +284,59 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
     (was ×0.12) and ×0.14 at 1280×720 (was ×0.08), every chip readable, zero page errors on 44 shots. Then PR #51: a
     closed journey blurs the focus it still held at once (a hidden control kept it for a frame) and the focus spec polls.
 
+13. **The 2026-10-05 round — storylines, the Map and the journey as one, details that link out, a thousand projects**
+    (proposal `docs/proposals/round-2026-10-05.md`, PR #53; five lanes, PRs #54–#58). From the owner's asks: unify the
+    Map and the journey, make every detail click to expand or link, track "verticals" across features, another browser
+    performance round for hundreds to 1000+ NX projects, and the handoff's ranked list.
+    - **The fetch-helper regression** (#54): `fetch(url, helper(ctx, { method: 'POST' }))` keeps the literal from the
+      helper call's object-literal arguments (spreads, one nested call deep), a verb-named helper (`post`·`put`·`patch`·
+      `del`) is the fallback, a non-verb helper with no literal stays `methodAssumed`; wrappers pass it through.
+      Measured read-only on the reference app: drift **19 → 7**, http edges to routes 69 (literal methods 9 → 69,
+      assumed 11 → 0), unknown stubs 3; the invoice-app example's edges byte-identical.
+    - **Config follow-ups** (#55): nested `stores[]` scope to their folder (a listing beats a catch-all, then the nearer
+      file; conflicts recorded as kind `store`); a read-only **Config files** list on the Settings page
+      (`surfaces/settings-config.js` over `/api/config`, which now carries `counts`); `schemas/farsight-config.schema.json`
+      and `schemas/farsight-design.schema.json` (2020-12, hand-written, pinned by a test that validates every example and
+      checks the config schema's keys equal `CONFIG_FIELDS`); the nx example has four config files.
+    - **Storylines** (#56): the word for the owner's *verticals* — a named chain of journeys across features, declared in a
+      manifest's `storylines[]` or `farsight.config.json → journeys.storylines[]` (`{ id, name, description?, journeys[] }`,
+      the same override rule as personas and groups; an undeclared journey id is a note; a journey may be in several);
+      `JourneysMeta.storylines`, `JourneyTree.storylines[]` with `Counted`s (`count.unit.storylines`, `count.scope.storyline`),
+      `JourneyRow.storylines`; MCP `journeys { storyline }`, `graph_overview` counts them, the `journey` tool prints *in
+      storyline · step n of m*; `farsight journeys --storyline`. On the **Map** a *Storyline* picker (`?storyline=<id>`):
+      the board draws only that chain **as one band in order**, step numbers on the cards, a *then* link between steps at
+      every altitude; *All* restores the bands. Persona bands now start each **group on its own row with the group word
+      in a gutter**. The front door has a *Storylines* section (numbered status chips, *open on the Map*, *open the first
+      journey*); the journey header reads ‹ storyline · step n of m ›. The business register says *questline* and
+      *journey n of m*.
+    - **The Map and the journey as one, and every detail a door** (#57): `#/journeys/<flow>?view=timeline&step=n[&node=id]`
+      opens the blueprint timeline at step n with that marker selected; `#/map/<flow>?screen=n[&plumb=1&card=<kind>:<id>]`
+      frames the screen and opens the explore card — two pure, tested functions in `lib/route-url.js`; *see it on the Map*
+      in the journey header, *open the journey here* on street screens, the property head and the explore card; the
+      journey writes `step`/`node` into the address as the selection moves. `lib/detail-links.js detailLinks(kind, node,
+      ctx)` (lookups only, 0.7 µs each) is the one door builder: gates and rules → *open in the editor* (VS Code at the
+      line, code read from the new read-only `GET /api/source?node=`) · *see it on the code map*; route calls → *read the
+      contract* (`#/apis/<id>?op=`) · *read the spec file* · *open the handler in the editor*; records/stores/externals →
+      code map · schema file; tests → *see the cases* (`#/tests?flow=`) · the test file; work → the work board · the
+      tracker; screens → the page · the manifest · Figma; packages → *where is it included*. A door the graph cannot name is
+      not drawn; the business register drops every door into code. Journey gate rows expand in place to their code lines
+      and doors; Enter opens a focused detail's first door, `o` the editor. Board cards now show *stale* (muted) and *not
+      built* (amber) as two marks, and an 8-px reading floor (*n journeys · zoom in to read*).
+    - **A thousand projects** (#58): `scripts/synth-graph.mjs` (seeded; full = 1,000 projects over 20 sources, 244,880
+      nodes, 417,836 edges, 300 journeys in 40 manifests; `--preset small` for CI), `e2e/perf/` + `pnpm e2e:perf` printing
+      one table, `packages/server/test/thousand-perf.test.ts` holding the folds under budget. **Before → after on the full
+      preset (ms):** front door 428 → 217, persona filter 373 → 60; Map board 465 → 236, open a street 195 → 125 with heap
+      1252 → 753 MB, pan/zoom 52 fps; code map grouped by project *did not draw in 120 s* → 421, a filter → 371; Portfolio
+      368 → 154; APIs 348 → 140; Tests 9113 → 252; Changes 338 → 131; Work 351 → 133; ⌘K keystroke 587 → 45. How: the code
+      map builds only the cards near the viewport past 1,500 drawables and reads every height before writing; the status
+      bar's 245k-node scan, each node's group and the tag-chip counts are computed once per graph/scope; ⌘K matches over
+      text prepared once in idle time (`lib/search-model.js`, ranking proven equal to the old scan) and re-ranks a growing
+      query; `routeLinks` blocks only each district's own crossings; server `folds.ts` keeps answers per index (the
+      Portfolio rebuilt the 7 s tests catalogue 300×), `/api/tests?lean=1` (the full answer is 243 MB at this size),
+      `/api/journey?steps=0`; core coverage looks up a journey's nodes instead of scanning all (`testsSurface` 7.9 → 2.1 s).
+      **The ceiling that remains is the payload:** `/graph` is **411 MB** at this size (2.4–2.8 s to load, ~500 MB heap,
+      ~2 s server parse) — the server-side query API round.
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -318,6 +371,14 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
   the work usage — the `--help` form of a subcommand should not touch git.
 
 ## Next work, ranked
+
+**The 2026-10-05 round left open, first:** the `/graph` payload at scale (411 MB for 245k nodes) — a server-side query
+API with the index semantics the viewer folds today is the next ceiling and a round of its own; the Map reads its
+journeys one at a time (300 journeys > 30 s), `/api/tests` without `lean=1` is 243 MB, a code-map card click re-lays
+out the whole map (~0.4 s), the first ⌘K keystroke within 0.5 s of boot waits for the index; the street's number chips
+are not doors yet (a click opens the screen); a non-verb fetch helper that sets the method inside its own body is not
+followed; cross-source storylines; a design row has no address of its own on the front door; the reviewer swarm on
+this build (front door, Map with a storyline, the doors) is the next thing to run.
 
 **The Map clarity pass left open (2026-10-04):** *at risk* shows on 18 of 21 cards on the dogfood graph (most
 journeys there are stale — a second, quieter mark for *stale alone* may read better than one word for two facts);
