@@ -599,6 +599,11 @@ export interface ProjectsMeta {
 export interface JourneyPersonaDecl { id: string; name: string; description?: string }
 /** A group of journeys under a persona; with `persona` it exists under that persona only. */
 export interface JourneyGroupDecl { id: string; name: string; description?: string; persona?: string }
+/**
+ * A storyline — a named chain of journeys across features and personas (round-2026-10-05 §2): the whole life of
+ * one business thing, an invoice from upload to payment. `journeys` are flow ids of the same source, in order.
+ */
+export interface JourneyStorylineDecl { id: string; name: string; description?: string; journeys: string[] }
 /** A config entry that places a flow a manifest declared: only the fields it gives override the manifest's. */
 export interface JourneyFlowPlacement { id: string; persona?: string | string[]; group?: string; order?: number }
 
@@ -613,6 +618,12 @@ export interface JourneysMeta {
   groups: { id: string; name: string; description?: string; persona?: string; declared: boolean; from: string }[];
   /** the config's placements, by flow id — only flows a manifest declared */
   flows: Record<string, { persona?: string | string[]; group?: string; order?: number; from: string; index: number }>;
+  /**
+   * declared storylines in the order they are shown: each a chain of flow ids of this source, in order (only ids a
+   * manifest declares — any other is a note); `from` = the manifest or config path that gave the words. Absent on a
+   * graph ingested before storylines existed.
+   */
+  storylines?: { id: string; name: string; description?: string; journeys: string[]; declared: true; from: string; notes?: string[] }[];
   /** one sentence per thing set aside (a config flow id no manifest declares) */
   notes: string[];
 }

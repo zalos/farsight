@@ -101,3 +101,31 @@ test('a manifest as a source of its own carries its organisation too', async () 
   const g = await ingestDesign(join(dir, 'screens.json'), { repoName: 'd' });
   assert.deepEqual(g.meta?.journeys?.personas.map((p) => p.name), ['People']);
 });
+
+test('storylines at ingest: the NX root manifest chains flows of every app\'s manifest, the invoice app one storyline, a nested config\'s storyline reaches only its folder', async () => {
+  const nx = await ingestRepo(join(EXAMPLES, 'nx-workspace'), { repoName: 'nx-workspace', ...only });
+  assert.deepEqual(nx.meta!.journeys!.storylines, [{
+    id: 'billing-day', name: 'A billing day',
+    description: 'Billing signs in and reads what is owed; Operations signs in and checks what the overnight run collected.',
+    journeys: ['billing-sign-in', 'review-open-invoices', 'ops-sign-in', 'check-report-runs'],
+    declared: true, from: 'docs/design/screens.json',
+  }], 'a storyline in one manifest may chain the flows the apps\' own manifests declare');
+  const inv = await ingestRepo(join(EXAMPLES, 'invoice-app'), { repoName: 'invoice-app', ...only });
+  assert.deepEqual(inv.meta!.journeys!.storylines!.map((s) => `${s.id}: ${s.journeys.join(' → ')}`), ['invoice: new-invoice → draft-and-send → billing-cycle']);
+
+  const app = (id: string) => JSON.stringify({ screens: [{ id: `${id}-1`, route: `/${id}` }], flows: [{ id, name: id, screens: [`${id}-1`] }] });
+  const dir = repo({
+    'apps/a/docs/design/screens.json': app('a-flow'),
+    'apps/b/docs/design/screens.json': app('b-flow'),
+    'apps/a/farsight.config.json': JSON.stringify({ journeys: { storylines: [{ id: 'mine', name: 'Mine', journeys: ['a-flow', 'b-flow'] }] } }),
+    'farsight.config.json': JSON.stringify({ journeys: { storylines: [{ id: 'both', name: 'Both', journeys: ['b-flow', 'a-flow'] }, { id: 'bad', journeys: 'not a list' }] } }),
+  });
+  const g = await ingestRepo(dir, { repoName: 'r', ...only });
+  const m = g.meta!.journeys!;
+  assert.deepEqual(m.storylines!.map((s) => `${s.id}@${s.from}: ${s.journeys.join(',')}`), [
+    'both@farsight.config.json: b-flow,a-flow',
+    'bad@farsight.config.json: ',
+    'mine@apps/a/farsight.config.json: a-flow',
+  ]);
+  assert.ok(m.notes.some((n) => n.includes('"b-flow"') && n.includes('under apps/a/')), m.notes.join('\n'));
+});

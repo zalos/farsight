@@ -385,7 +385,23 @@ name; `jrnOrgCountsHtml` prints `n journeys · n of m journeys built` with tips.
 - **Portfolio** (`surfaces/portfolio.js`): one `.pf-persona` section per persona with its counts, an `h3.pf-group`
   per group when there are several, one table per group in tree order with the tree's pin; the per-flow facts fill
   in tree order (each journey once).
-- **Map**: *Band by: persona* — below.
+- **Map**: *Band by: persona* and the *Storyline* picker — below.
+
+**Storylines** (round 2026-10-05 §2): `JourneyTree.storylines[] { id, name, description?, repo, from, journeys:
+StorylineStep[] (a JourneyRow + stepIndex, 0-based, in order), counts { journeys, built } (scope
+count.scope.storyline), notes }`, tree `counts.storylines`, and every `JourneyRow.storylines: string[]` (the ids it
+is a step of). `treeFrom()` folds the same from `meta.journeys[repo].storylines` (`storylinesFold`, O(journeys +
+steps)); `storylineOf(tree, flowId) → [{ storyline, step, of, prev, next }]` (1-based, `prev` / `next` the neighbouring
+rows or null) is what the explore card, the property head and the journey header print *in storyline: <name> · step
+n of m* from; `findStoryline(tree, id)` matches by id, then by id or name case-insensitively.
+- **Front door** (`jrnStorylinesHtml`, `#jrn-storylines` above `#jrn-organised`): *Storylines* (hud *Questlines*)
+  with the tree's count, one `.jrn-story` card per storyline — name, its two counts, description, the steps as
+  numbered `.jrn-story-step` chips (`ok` built · `warn` partly · `stub` not built; each a link to the journey, its tip
+  *step n of m · name · status*), *open on the Map* (`#/map?storyline=<id>`, only with `flags.map`) and *open the
+  first journey*.
+- **Journey header** (`jrnFillStoryline`, `#jrn-storyline` after `#jrn-orgline`): ‹ *Storyline* · name · *step n of
+  m* (business: *journey n of m*) › — the arrows open the journey before / after it in its first storyline (the
+  others are in the name's tip).
 
 e2e: `e2e/tests/journeys-organised.pw.spec.ts` (structure and the order rule against the manifest on disk; the
 fixture's personas *Billing* and *Operations*, its two groups and the shared, config-placed *Draft and send* on the
@@ -508,6 +524,20 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
   in `L.echoes`. The surface draws the street once and, in the other bands, a dashed `.map-echo` card (`drawEchoes`,
   `map.band.echo` *walk it under <persona>*, click / Enter enters the journey), narrowed to `DMIN`. Districts — and
   every count the board prints — stay one per journey.
+  With `groupRows: true` (the surface passes it, `GROUP_W` per altitude) a persona band reads as its groups: each
+  group's run starts on a row of its own after a gutter of `subW`, and `L.subs` (`{ band, key, x, y, w, h, n }`)
+  places each run's word — `.map-band-grp` (`groupWordHtml`: the tree's group name, *Other journeys* for the trailing
+  bucket, counter-scaled like the band header). A band of one group keeps no gutter.
+- **Storyline** (`MAP.storyline`, `?storyline=<id>` in the hash beside the other view params; `storylineToolHtml`
+  draws the picker when the tree declares a storyline — a segmented *All journeys · <name> · …* that folds to its
+  current value under 1800 px, and with it *Band by* folds there too). `applyStoryline(id)` sets `MAP.nb` to
+  `storylineModel(MAP.nbAll, story)` (`lib/map-model.js`: only the storyline's districts, in its order, each with
+  `step` / `steps`, and `then` — `{ from, to, kind: 'then', fromSides: ['e','s'], toSides: ['w','n'] }`), lays them
+  out as **one band** named by the storyline (`.map-band.story`, its description in the header), puts the step number
+  on each card and street head (`.map-step`, tip *step n of m*), and `drawLinks` adds the `then` lines — routed by
+  `routeLinks` out east or south and in west or north, so the chain reads on — which `linkVisibility` shows at every
+  altitude, the one line the board draws unhovered. *Band by* is hidden while a storyline is drawn; *All* restores
+  the bands. The Affected mode paints whatever is drawn. Every other journey is not drawn (h / l walk the storyline).
 
 Each district has a **cover** (`.map-dcover`) drawn **by altitude** (clarity pass 2026-10-04). At the **board**
 (below `LEVEL_NB`) a cover is a card: the name (two lines, its tip the whole name and sentence), **one status chip**

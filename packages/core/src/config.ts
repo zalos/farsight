@@ -74,7 +74,10 @@ export interface JourneysConfig {
   personas?: JourneysConfigPersona[];
   groups?: JourneysConfigGroup[];
   flows?: JourneysConfigFlow[];
+  /** storylines — named chains of journeys (round-2026-10-05 §2); an entry overrides the manifest's with the same id, field by field */
+  storylines?: JourneysConfigStoryline[];
 }
+export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: string[] }
 export interface JourneysConfigPersona { id: string; name?: string; description?: string }
 export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
 export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
@@ -232,6 +235,15 @@ export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
         ...(persona !== undefined && (!Array.isArray(persona) || persona.length) ? { persona } : {}),
         ...(str(e.group) ? { group: str(e.group)! } : {}),
         ...(typeof e.order === 'number' && Number.isFinite(e.order) ? { order: e.order } : {}),
+      };
+    });
+  }
+  if (r.storylines !== undefined) {
+    out.storylines = entries(r.storylines).map((e) => {
+      const journeys = Array.isArray(e.journeys) ? e.journeys.map(str).filter((x): x is string => !!x) : undefined;
+      return {
+        id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+        ...(journeys ? { journeys } : {}),
       };
     });
   }

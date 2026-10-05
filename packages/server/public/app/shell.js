@@ -172,6 +172,8 @@ export function parseRoute() {
     project: q.get('project'),
     // the Journeys front door's filters: one persona (`persona=`) and one group of journeys (`group=`, shared with the code map's grouping)
     persona: q.get('persona'),
+    // the Map's storyline (`storyline=<id>`): only that storyline's journeys, in its order, as one band
+    storyline: q.get('storyline'),
     // the code map's tag filter (`tag=domain:billing,type:ui`) and the project box fast travel arrives at
     tag: q.get('tag'),
     box: q.get('box'),
