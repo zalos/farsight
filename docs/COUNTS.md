@@ -503,7 +503,7 @@ table). Nothing on the code map counts packages or projects a second way.
 | number | unit / bizUnit | scope | source | counts |
 |---|---|---|---|---|
 | config files per source | `count.unit.configFiles` *n config files* (both) | `count.scope.source` | `configCounts().files` over `meta.config[repo].files`, written by parsers `loadWorkspaceConfig` | every `farsight.config.json` of one source that could be read, each once; breakdown `count.part.configRoot` *for the whole source* (0 or 1) · `count.part.configScoped` *for one folder* — a partition. A file that is not valid JSON is not counted; it is a note |
-| conflicts per source | `count.unit.configConflicts` *n conflicts* (both) | `count.scope.source` | `configCounts().conflicts` over `meta.config[repo].conflicts` | one per (kind, key): a glossary key two nesting files word differently, a function one file already made a guard that a later guard rule names, a second declaration of an external import or a store name — however many files take part |
+| conflicts per source | `count.unit.configConflicts` *n conflicts* (both) | `count.scope.source` | `configCounts().conflicts` over `meta.config[repo].conflicts` | one per (kind, key): a glossary key two nesting files word differently, a function one file already made a guard that a later guard rule names, a second declaration of an external import, a store name declared again as another kind or engine, a table two files list under different stores — however many files take part |
 
 `graph_overview` prints the line only for a source that holds more than its root file (or has a conflict or a note):
 *config: nx-workspace — 3 config files (1 for the whole source · 2 for one folder) · 1 conflict · 1 note(s)* (the

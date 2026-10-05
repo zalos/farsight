@@ -13,10 +13,15 @@
  *                   jdbc prefix, for Java (`lang: 'java'`) tables.
  * 5. `config`     — `farsight.config.json → stores[]`: with `tables` it names those, without it every
  *                   table the code left unnamed. Config never overrides what code found (principle 2).
+ *                   A nested config's declarations reach only the tables under its folder (`loc.path`;
+ *                   a table with no location is under a folder when every piece of code that reads or
+ *                   writes it is). For one table a `tables` list beats a catch-all, then the nearer
+ *                   file wins; two files listing the same table under different stores is a conflict.
  */
 import { readFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import type { GraphFragment, GraphNode, StoreRef, StoreVia, StoresMeta, StoreDecl } from '@farsight/core';
+import type { ScopedStoreDecl } from './shared/config-files.js';
 import type { IngestOptions } from './types.js';
 import { collectFiles } from './shared/files.js';
 import { SQL_DRIVERS } from './tsjs.js';
@@ -91,8 +96,10 @@ export function applyStores(
   fragment: GraphFragment,
   repoRoot: string,
   options: IngestOptions,
-  stores: StoreDecl[] | undefined,
+  stores: (StoreDecl | ScopedStoreDecl)[] | undefined,
   drivers: { spec: string; files: number }[],
+  /** two files list the same table under different stores: the table, the files, the one kept */
+  onConflict?: (key: string, files: string[], kept: string) => void,
 ): StoresMeta {
   const tables = fragment.nodes.filter((n) => n.kind === 'table');
   const notes: string[] = [];
@@ -141,15 +148,44 @@ export function applyStores(
     else if (byJpa) for (const n of tables) if (isJava(n)) give(n, byJpa.store, 'jpa', byJpa.ref);
   }
 
-  // config — named tables first, then the catch-all entry for whatever the code left unnamed
-  const decls = stores ?? [];
-  for (const d of decls) {
-    if (!d.tables) continue;
-    const want = new Set(d.tables);
-    for (const n of tables) if (want.has(n.name)) give(n, storeOfDecl(d), 'config', `farsight.config.json stores: ${d.name}`);
+  // config — for each table still unnamed: a declaration that lists it beats a catch-all, then the
+  // nearer file (deeper folder) wins; a nested file reaches only the tables under its folder
+  const decls = (stores ?? []).map((d, order) => ({
+    d, order, dir: 'dir' in d ? d.dir : '.', from: 'from' in d ? d.from : 'farsight.config.json',
+  }));
+  if (decls.length) {
+    const folders = tableFolders(fragment);
+    const under = (n: GraphNode, dir: string) => dir === '.' || (folders.get(n.id) ?? []).length > 0
+      && folders.get(n.id)!.every((p) => p.startsWith(`${dir}/`));
+    const nearest = <T extends { dir: string; order: number }>(xs: T[]) =>
+      [...xs].sort((a, b) => depthOf(b.dir) - depthOf(a.dir) || a.order - b.order)[0];
+    const refOf = (x: { d: StoreDecl; from: string; dir: string }) =>
+      `${x.dir === '.' ? 'farsight.config.json' : x.from} stores: ${x.d.name}`;
+    for (const n of tables) {
+      if (n.store) continue;
+      const listing = decls.filter((x) => x.d.tables?.includes(n.name) && under(n, x.dir));
+      const pick = listing.length
+        ? nearest(listing)
+        // each file's first catch-all is its catch-all, as for the root before nested files
+        : nearest(decls.filter((x) => !x.d.tables && under(n, x.dir) && decls.find((y) => y.from === x.from && !y.d.tables) === x));
+      if (!pick) continue;
+      give(n, storeOfDecl(pick.d), 'config', refOf(pick));
+      const others = listing.filter((x) => x.from !== pick.from && x.d.name !== pick.d.name);
+      if (others.length && onConflict) {
+        onConflict(n.loc?.path ? `${n.name} (${n.loc.path})` : n.name, [...new Set([pick.from, ...others.map((x) => x.from)])], pick.from);
+      }
+    }
+    // a nested file that lists a table outside its folder: said, not applied
+    for (const x of decls) {
+      if (x.dir === '.' || !x.d.tables) continue;
+      for (const name of x.d.tables) {
+        const named = tables.filter((n) => n.name === name);
+        if (named.length && !named.some((n) => under(n, x.dir))) {
+          notes.push(`${x.from} lists the table ${name} under the store ${x.d.name}, but that table is not under ${x.dir}/, so this file does not name its store.`);
+        }
+      }
+    }
   }
-  const catchAll = decls.find((d) => !d.tables);
-  if (catchAll) for (const n of tables) give(n, storeOfDecl(catchAll), 'config', `farsight.config.json stores: ${catchAll.name}`);
 
   const unnamed = tables.filter((n) => !n.store).length;
   return {
@@ -162,4 +198,27 @@ export function applyStores(
 
 function storeOfDecl(d: StoreDecl): Store {
   return { name: d.name, kind: d.kind, ...(d.engine ? { engine: d.engine } : {}) };
+}
+
+const depthOf = (dir: string) => (dir === '.' ? 0 : dir.split('/').length);
+
+/**
+ * The files each table sits in, for scoping a nested config's stores: the table's own `loc.path`
+ * when it has one, else the files of the code that reads or writes it.
+ */
+function tableFolders(fragment: GraphFragment): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
+  for (const n of fragment.nodes) if (n.kind === 'table' && n.loc?.path) out.set(n.id, [n.loc.path]);
+  for (const e of fragment.edges) {
+    if (e.kind !== 'reads' && e.kind !== 'writes') continue;
+    const t = byId.get(e.to);
+    if (t?.kind !== 'table' || t.loc?.path) continue;
+    const p = byId.get(e.from)?.loc?.path;
+    if (!p) continue;
+    const had = out.get(t.id) ?? [];
+    if (!had.includes(p)) had.push(p);
+    out.set(t.id, had);
+  }
+  return out;
 }
