@@ -23,7 +23,7 @@ import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
-import { doorsFor, doorsHtml, leadDoorHtml } from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel } from '../lib/map-model.js';
@@ -2428,6 +2428,8 @@ function drawCard() {
   box.innerHTML = '<div class="k"><span class="hud-label">' + head + '</span>' + ev
     + '<button type="button" class="x" data-act="close" aria-label="' + esc(t('map.card.close')) + '">✕</button></div>'
     + '<div class="nm">' + esc(name) + '</div>'
+    // where this journey stands in a storyline (lane S), when it is a step of one
+    + (storylineLineHtml(MAP.tree, tg.flow) ? '<div class="story">' + storylineLineHtml(MAP.tree, tg.flow) + '</div>' : '')
     + store
     + (code ? '<div class="sent map-code">' + esc(code) + '</div>' : '')
     + '<div class="where"><span class="hud-label"' + tipAttrs({ key: 'map.card.on', noFocus: true }) + '>' + esc(t('map.card.on')) + '</span>'
@@ -2484,6 +2486,8 @@ function propCtx() {
     screen: propScreen(),
     flow: p ? p.flow : null,
     lens: currentLens(),
+    // the journeys tree, for *in storyline: <name> · step n of m* on the head
+    tree: MAP.tree,
     onClose: () => closeProperty(),
     onStep: (delta) => stepProperty(delta),
     onOpenScreen: (index) => { if (MAP.prop) openProperty(MAP.prop.flow, index); },

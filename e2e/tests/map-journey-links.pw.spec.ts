@@ -89,6 +89,8 @@ test('a route call links to the APIs surface at its operation, its spec line and
   await expect(doors.first()).toHaveAttribute('href', '#/apis/' + enc('invoice-app::api::openapi.yaml') + '?op=' + enc(ROUTE));
   await expect(card.locator('a.dd-door', { hasText: 'read the spec file' })).toHaveAttribute('href', /\?view=spec&line=\d+$/);
   await expect(card.locator('a.dd-door', { hasText: 'open the handler in the editor' })).toHaveAttribute('href', /^vscode:\/\/file\//);
+  // where the journey stands in its storyline (the fixture's invoice storyline ends with Billing cycle)
+  await expect(card.locator('.dd-story')).toHaveText('in storyline: An invoice, end to end · step 3 of 3');
   // the same part in the journey, selected
   await expect(card.locator('.tojrn a')).toHaveAttribute('href', /step=\d&node=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices/);
   await doors.first().click();
@@ -106,6 +108,7 @@ test('on the property a row opens to its doors, and Enter on it opens the first'
   await expect(row).toHaveAttribute('aria-expanded', 'true');
   await expect(row.locator('.mp-exp a.dd-door').first()).toHaveText('read the contract');
   await expect(row.locator('.jrn-contract-card')).toBeVisible();
+  await expect(page.locator('.mp-head .mp-story')).toContainText('step 3 of 3');
   // the head opens the same screen in the journey
   await expect(page.locator('.mp-tojrn a')).toHaveAttribute('href', /#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?view=timeline&step=2/);
   await row.focus();
@@ -135,19 +138,53 @@ test('the board marks stale quietly and not built in amber, each with its own wo
   await expect(card.locator('.map-mark.risk')).toHaveCount(0);
 });
 
-/** @covers packages/server/public/app/surfaces/map.js::coverScale */
-test('past the reading floor the board says so, and zooming in reads it', async ({ page }) => {
-  await page.setViewportSize({ width: 560, height: 420 });
+/**
+ * A board too full to read at its fit: the fixture's design and Billing cycle's walk, stubbed into ninety
+ * journeys with page.route (ADR 8), so the fit would draw a card's words under eight pixels.
+ * @covers packages/server/public/app/surfaces/map.js::coverScale
+ */
+test('past the reading floor the board says so, and no card word draws under it', async ({ page }) => {
+  const N = 90;
+  await page.route(/\/api\/design\?/, async (r) => {
+    let d: any;
+    try { d = await (await r.fetch()).json(); } catch { return; }
+    const src = d.designs[0];
+    const base = src.flows.find((f: any) => f.id === 'billing-cycle');
+    src.flows = Array.from({ length: N }, (_, i) => ({ ...base, nodeId: 'invoice-app::flow::many-' + i, id: 'many-' + i, name: 'Journey number ' + (i + 1) }));
+    await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) });
+  });
+  await page.route(/\/api\/journey\?entry=/, async (r) => {
+    const url = r.request().url();
+    if (!/many-\d+/.test(decodeURIComponent(url))) return r.continue();
+    let d: any;
+    try { d = await (await r.fetch({ url: url.replace(/entry=[^&]*/, 'entry=' + encodeURIComponent(FLOW)) })).json(); } catch { return; }
+    d.summary.links = { requires: [], leadsTo: [], partOf: [] };
+    await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) });
+  });
   await mapOn(page);
   await go(page, '#/map');
-  await expect(page.locator('.map-dcover').first()).toBeVisible();
+  await expect(page.locator('.map-dcover')).toHaveCount(N);
   const hint = page.locator('.map-hint');
   await expect(hint).toHaveClass(/\bfloor\b/);
-  await expect(hint).toContainText('journeys · zoom in to read');
-  // no word on a card draws under 8 px on screen
+  await expect(hint).toHaveText(N + ' journeys · zoom in to read');
+  await expect(page.locator('.map-world')).toHaveClass(/\bfloor\b/);
+  // no word on a card draws under 8 px on screen: the font size times the scale the card is drawn at
   const px = await page.locator('.map-dcover .map-chip').first().evaluate((el) => {
     const h = (el as HTMLElement).offsetHeight;
     return parseFloat(getComputedStyle(el).fontSize) * (h ? el.getBoundingClientRect().height / h : 1);
   });
   expect(px).toBeGreaterThanOrEqual(7.9);
+});
+
+/** @covers packages/server/public/app/surfaces/journeys.js::gotoJourney */
+test('a storyline opens its journeys at their first step', async ({ page }) => {
+  await gotoReady(page, '#/journeys?lens=hybrid');
+  const card = page.locator('.jrn-story[data-storyline="invoice"]');
+  await expect(card.locator('.jrn-story-step').first()).toHaveAttribute('href', /#\/journeys\/invoice-app%3A%3Aflow%3A%3Anew-invoice\?view=\w+&step=1$/);
+  await card.getByRole('button', { name: 'open the first journey' }).click();
+  await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Anew-invoice\?view=\w+&step=1/);
+  await expect(page.locator('#jrn-title')).toHaveText('Start a new invoice');
+  // the header's arrow opens the next journey of the storyline at its first step too
+  await page.locator('#jrn-storyline .jrn-story-nav').last().click();
+  await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Adraft-and-send\?view=\w+&step=1/);
 });

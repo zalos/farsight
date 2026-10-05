@@ -542,8 +542,8 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
 Each district has a **cover** (`.map-dcover`) drawn **by altitude** (clarity pass 2026-10-04). At the **board**
 (below `LEVEL_NB`) a cover is a card: the name (two lines, its tip the whole name and sentence), **one status chip**
 — *built*, *partly built · n of m* or *designed, not built*, the summary's own `counted.built` with its number tip —
-and at most two marks: **at risk** (`sym('warning')` + word, amber; when the journey's evidence word is *stale* or not
-every screen is built, the tip says which — the same facts the risk headline sums) and **→ n**, how many journeys it
+its marks: **stale** (muted) and **not built** (amber), one or both (round 2026-10-05 §3.3, below; they replaced
+the single *at risk* mark — the same facts the risk headline sums) and **→ n**, how many journeys it
 leads to (`fillLeadMarks`, from the lines `drawLinks` routes; its tip names them). Everything else — the sentence,
 screens, tests with their evidence word, ERP, owner, actions, gates, stores, declared-not-called, the work chip — is
 in the journey's **head** (`.map-dhead`, `aggHtml`), drawn from the journey-fitted stop up; nothing is dropped from the
@@ -633,8 +633,8 @@ node's store and kind and what this call does to it), the evidence word, the nam
 with a store its swatch, name and kind and — `.map-code`, so hybrid and code only — *known from* and the `via` in
 words (`map.store.via.*`) with the `ref`, the identifier line
 (`.map-code`: method path · operationId · handled by …; a data node's name and file), *on* — the screens of this
-journey it is drawn under, each opening that screen — and at most two doors: *Open on APIs*
-(`#/apis/<apiId>?op=<routeId>`) and *Open on the code map* (`#/codemap?node=`). `b` on the map asks *what uses
+journey it is drawn under, each opening that screen — and its doors from `detailLinks` (the contract, the spec line, the handler, the code map — see *every detail is a
+door* below) with *open the journey here* under them. `b` on the map asks *what uses
 this?* about the card's node (`mapSelected()`). No number is printed on it in v1: nothing per call is typed yet.
 
 **The property hook** (lane B fills it). Opening a screen — a click, Enter, a snap, `?node=` — makes the stage's
@@ -708,6 +708,61 @@ stores, the card's *known from* in hybrid and hidden in business, the business s
 `e2e/tests/map-stores-stub.ts`, a `page.route` stub that adds stores in the proposal's shapes and skips what the real
 answer already carries. `e2e/tests/map-zoom.pw.spec.ts` (over a `page.route` stub repeating Billing cycle's screens
 twelve-journey board stubbed over the fixture (`/api/design` and `/api/journey` through `page.route`) where every line
+
+#### The Map and the journey open each other; every detail is a door — `lib/route-url.js`, `lib/detail-links.js`, `lib/detail-doors.js` (round 2026-10-05 §3)
+
+**The two addresses.** Both pictures of a journey share one unit of place, the **step**: the 1-based ordinal of a
+screen's segment in `summary.segments` (the journey calls it `step`, the street `screen` — one number). Pure, in
+`lib/route-url.js` and `packages/server/test/route-url.test.ts`:
+
+| function | address | opens |
+|---|---|---|
+| `journeyStepHash(flowId, n, { node?, lens?, view? })` | `#/journeys/<flow>?view=timeline&step=n[&node=<id>]` | the blueprint timeline (a link that names no `view` of its own opens the timeline — `applyRoute`), step n's first marker selected, or the marker (else gate) of `node`, the screen's head scrolled to the timeline's left edge past the sticky row labels (`jrnApplyStep`, spent once from `S.jrnPendingStep`) |
+| `mapScreenHash(flowId, n, { node?, kind? })` | `#/map/<flow>?screen=n[&plumb=1&card=<kind>:<id>]` | the street with step n's screen framed and focused (`screenAtStep`: a step the street folds into the next screen lands there); a node opens its explore card with plumbing on, through the Map's own `card` grammar. `?j=<flow>` names the street for a link written without the path |
+
+The journey keeps the address on the step on screen (`jrnWriteStepHash` on every `jrnSelect`: `step` and `node`, a
+replace), so the bar and `y` name the part selected. Doors between them: the header's **see it on the Map**
+(`#jrn-tomap`, flows only, with the Map flag on; a selected call or data node opens its card), the street's screen
+card and the property head's **open the journey here**, and the explore card's (at the step whose markers include
+the node, `stepOfNode`, the node selected). On the Map, `writeHash` drops `screen` and `j` once the board writes its
+own picture (`z x y`). Storylines (lane S) open their journeys at step 1 — the front door's chips and *open the first
+journey*, the header's ‹ › (`gotoJourney(id, 1)`, in the view the reader has); the explore card and the property head
+print *in storyline: <name> · step n of m* (`storylineLineHtml`, over `storylineOf`).
+
+**The doors rule.** A detail that names something in the graph is a link to where that thing is best read. One pure
+builder, `detailLinks(kind, node, ctx) → [{ word, href, external?, code?, editor? }]` (`lib/detail-links.js`,
+`packages/server/test/detail-links.test.ts`): `word` is a catalog key (`door.*`), a lookup over `ctx.byId` and the
+edge index `ctx.edgesOf` (`S.EDGES_OF`) — never a scan of the graph's edges. The table:
+
+| detail | doors, in order |
+|---|---|
+| gate / rule (`gate` · `guard` · `rule`) | *open in the editor* (its line) · *see it on the code map* |
+| call (`call` · `route`) | *read the contract* (`#/apis/<apiId>?op=<routeId>`) · *read the spec file* (`?view=spec&line=`) · *open the handler in the editor* (the marker's handler, else the route's first `calls` edge) · *see it on the code map* |
+| record / store / third party / message | *see it on the code map* · *open the schema in the editor* |
+| test | *see the cases* (`#/tests?flow=`) · *open the test file in the editor* |
+| work | *see it on the work board* (`#/work/<id>`) · *open in the tracker* (its link, new tab) |
+| screen / page / component | *see the page on the code map* · *open the design file in the editor* · *open in Figma* |
+| package | *see where it is included* (`#/codemap?view=package&package=`) |
+| anything else | *open in the editor* · *see it on the code map* |
+
+A door the graph cannot name (no root, no `loc`, no spec line, no tracker link, not in the graph) is not returned, and
+the surface's absence word stays. Doors into code (`code: true` — the editor, the code map, the spec file) are left
+out in the business register, so a gate there is its words. `lib/detail-doors.js` draws them (`doorsHtml`, the
+`.dd-door` chips with their define as the tip) and answers the keys from `keymap.js` (asked before the Map's):
+**Enter** on a focused detail (`[data-doors]`) opens its first door, **o** its editor door (also with the Map's
+explore card open). Where they are drawn: the journey's gate and rule rows open in place (`jrnGateExpand`, the ▸ in
+`.jrn-gl-go`) to their doors, their first sentence and — not in business — their own lines from
+**`GET /api/source?node=<id>`** (the node's span from disk inside its source's root, or 12 lines from its line when it
+has none; `codeSlotHtml` + `fillCode`, one answer per node per sync; `packages/server/test/source-api.test.ts`); the
+marker inspector's head (`jrnInspDoorsHtml`); the explore card (its `.acts`, contract first); every property row the
+graph names (`.mp-row[data-doors]`: a click opens `.mp-exp` — a gate's lines or a call's contract, then the doors).
+
+**The board's marks and reading floor (§3.3).** A cover carries *stale* (`.map-mark.stale`, muted, the sync glyph —
+the code moved under the tests) and *not built* (`.map-mark.notbuilt`, amber — a screen is only designed), one or
+both, each with its own define (`map.cover.mark.*`); the single *at risk* mark is gone (the risk headline above the
+board still counts). No word on a cover draws under **8 px** on screen (`FLOOR_PX`; a cover's chips, 10 board px, are
+its smallest words): `coverScale` stops shrinking there, the card clips, the world wears `.floor`, and the hint says
+*n journeys · zoom in to read* (`map.floor.read`, the number with its tip). e2e: `e2e/tests/map-journey-links.pw.spec.ts`.
 
 #### Affected — `surfaces/map-affected.js`, `lib/map-affected-model.js` (map pass 2, lane I, 2026-10-03)
 

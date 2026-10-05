@@ -12,6 +12,8 @@ import { t } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs } from './tooltip.js';
 import { detailLinks, editorDoor } from './detail-links.js';
+import { storylineOf } from './journeys-model.js';
+import { defAttrs } from './counted.js';
 
 /** The doors of one detail, with the viewer's own graph, roots, edge index and lens. */
 export function doorsFor(kind, node, extra = {}) {
@@ -44,6 +46,22 @@ export function doorsHtml(doors, lead) {
 export function leadDoorHtml(word, href) {
   if (!href) return '';
   return '<a class="dd-door lead" href="' + esc(href) + '"' + tipAttrs({ key: word, noFocus: true }) + ' onclick="event.stopPropagation()">' + esc(t(word)) + '</a>';
+}
+
+/**
+ * *in storyline: <name> · step n of m* for a journey (lane S's storylines, `storylineOf` over the journeys tree):
+ * the first storyline the journey is a step of, the rest named in the tip; `''` when it is in none.
+ */
+export function storylineLineHtml(tree, flowId) {
+  const at = storylineOf(tree, flowId);
+  if (!at.length) return '';
+  const a = at[0];
+  const stepKey = currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf';
+  const others = at.slice(1).map((x) => x.storyline.name + ' · ' + t(stepKey).replace('{n}', x.step).replace('{m}', x.of));
+  return '<span class="dd-story" data-storyline="' + esc(a.storyline.id) + '">'
+    + '<span' + tipAttrs({ text: t('journeys.storyline.in').replace('{name}', a.storyline.name) + (others.length ? ' · ' + others.join(' · ') : ''), noFocus: true }) + '>'
+    + esc(t('journeys.storyline.in').replace('{name}', a.storyline.name)) + '</span> · '
+    + '<span' + defAttrs(stepKey) + '>' + esc(t(stepKey).replace('{n}', a.step).replace('{m}', a.of)) + '</span></span>';
 }
 
 // ── a gate's own lines ──────────────────────────────────────────────────────

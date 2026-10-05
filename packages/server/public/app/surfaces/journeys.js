@@ -19,7 +19,7 @@ import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGr
 import { t, def, evidenceWord, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { nodeCardHtml, vsl, linkHtml, designChipHtml, designThumbHtml } from '../lib/graph-render.js';
-import { journeyViewHash, isJourneyRoute, withParams, mapScreenHash, stepIndex } from '../lib/route-url.js';
+import { journeyViewHash, isJourneyRoute, withParams, mapScreenHash, stepIndex, journeyStepHash } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, codeSlotHtml, fillCode } from '../lib/detail-doors.js';
 import { trapFocus, releaseFocus, rememberOpener } from '../lib/focus-trap.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
@@ -39,12 +39,13 @@ const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
  * open journey has a shareable #/journeys/<id> URL.
  * @group Journey view
  */
-function gotoJourney(id) {
+function gotoJourney(id, step) {
   if (!/^#\/journeys\//.test(location.hash)) S.prevSurfaceHash = location.hash || '#/journeys';
   // the router empties #surface on the way, so the control that is being clicked
   // has to be remembered here — it will not exist when the overlay traps focus
   rememberOpener(document.activeElement);
-  location.hash = '#/journeys/' + encodeURIComponent(id);
+  // a step (the storyline's arrows and its first journey: step 1) opens at that screen, in the view the reader has
+  location.hash = step ? journeyStepHash(id, step, { view: jrnLayout() }) : '#/journeys/' + encodeURIComponent(id);
 }
 
 /**
@@ -200,7 +201,7 @@ function jrnStorylinesHtml(org) {
       const where = t(stepKey).replace('{n}', i + 1).replace('{m}', steps.length);
       const status = t(j.statusKey || 'journey.status.designedNotBuilt').replace('{n}', j.built || 0).replace('{m}', j.total || 0);
       return (i ? '<span class="jrn-story-then" aria-hidden="true">›</span>' : '')
-        + '<a class="api-chip jrn-story-step ' + cls + '" href="' + esc('#/journeys/' + encodeURIComponent(j.nodeId)) + '"'
+        + '<a class="api-chip jrn-story-step ' + cls + '" href="' + esc(journeyStepHash(j.nodeId, 1, { view: jrnLayout() })) + '"'
         + tipAttrs({ text: where + ' · ' + (j.name || j.id) + ' · ' + status }) + '><b>' + (i + 1) + '</b>' + esc(j.name || j.id) + '</a>';
     }).join('');
     html += '<div class="dsg-flow jrn-story" data-storyline="' + esc(st.id) + '"><div class="dsg-flow-head">'
@@ -210,7 +211,7 @@ function jrnStorylinesHtml(org) {
       + (chips ? '<div class="dsg-chips jrn-story-steps">' + chips + '</div>' : '<p class="set-note">' + esc(t('journeys.storyline.empty')) + '</p>')
       + '<div class="jrn-story-go">'
       + (mapOn ? '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>' : '')
-      + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ')">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
+      + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ', 1)">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
       + '</div></div>';
   }
   return html + '</div>';
@@ -4333,7 +4334,7 @@ function jrnFillStoryline(tree, entryId) {
   const where = t(currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf').replace('{n}', a.step).replace('{m}', a.of);
   const others = at.slice(1).map((x) => x.storyline.name + ' · ' + t('journeys.storyline.stepOf').replace('{n}', x.step).replace('{m}', x.of));
   const arrow = (j, glyph, key) => (j
-    ? '<button type="button" class="jrn-story-nav" onclick="openJourney(' + jsArg(j.nodeId) + ')" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"' + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id) }) + '>' + glyph + '</button>'
+    ? '<button type="button" class="jrn-story-nav" onclick="openJourney(' + jsArg(j.nodeId) + ', 1)" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"' + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id) }) + '>' + glyph + '</button>'
     : '<span class="jrn-story-nav off" aria-hidden="true">' + glyph + '</span>');
   el.innerHTML = '<span class="jrn-story-line" data-storyline="' + esc(a.storyline.id) + '">'
     + arrow(a.prev, '‹', 'journeys.storyline.prev')
