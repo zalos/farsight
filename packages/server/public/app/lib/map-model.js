@@ -262,7 +262,8 @@ export function storylineModel(nb, story) {
     if (id && byId.has(id) && !ids.includes(id)) ids.push(id);
   }
   const districts = ids.map((id, i) => ({ ...byId.get(id), index: i, step: i + 1, steps: ids.length }));
-  const then = ids.slice(1).map((id, i) => ({ from: ids[i], to: id, kind: 'then' }));
+  // a chain reads on: each line leaves a journey east or south and arrives at the next one west or north
+  const then = ids.slice(1).map((id, i) => ({ from: ids[i], to: id, kind: 'then', fromSides: ['e', 's'], toSides: ['w', 'n'] }));
   return { ...base, districts, storyline: { id: story.id, name: story.name || story.id }, then };
 }
 
@@ -290,7 +291,8 @@ export function boardWidth(streetW, min, max) {
  * district and every label placed before it; a line with no such run carries no
  * label rather than one drawn over a cover.
  *
- * `links` are `{ from, to, kind, labelW, labelH }`; returns them in order with
+ * `links` are `{ from, to, kind, labelW, labelH, fromSides?, toSides? }` — the sides (`n e s w`) a link
+ * may leave and arrive by, when it has a direction to read in (a route that cannot is routed freely); returns them in order with
  * `points` (`[{x, y}]`, from the edge of `from` to the edge of `to`) and `label`
  * (`{ x, y, w, h }`, its centre and size) or null. A link whose end has no rect is
  * left out.
@@ -322,8 +324,9 @@ export function routeLinks(rects, links, opts = {}) {
   const used = new Map();                      // lane segment → how many lines run on it
   const segKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
 
-  const route = (ra, rb, only) => {
-    const src = sides(ra).filter((x) => !only || only.includes(x.side)), dst = sides(rb).filter((x) => !only || only.includes(x.side));
+  const route = (ra, rb, only, onlyTo) => {
+    const dOnly = onlyTo === undefined ? only : onlyTo;
+    const src = sides(ra).filter((x) => !only || only.includes(x.side)), dst = sides(rb).filter((x) => !dOnly || dOnly.includes(x.side));
     const dist = new Float64Array(NX * NY * 4).fill(Infinity);
     const prev = new Int32Array(NX * NY * 4).fill(-1);
     const heap = [];
@@ -413,7 +416,8 @@ export function routeLinks(rects, links, opts = {}) {
   for (const l of links || []) {
     const a = rects.get(l.from), b = rects.get(l.to);
     if (!a || !b || l.from === l.to) continue;
-    let points = route(a, b);
+    // a link may name the sides it leaves and arrives by (a storyline's then reads on: out east or south, in west or north)
+    let points = (l.fromSides || l.toSides ? route(a, b, l.fromSides || null, l.toSides || null) : null) || route(a, b);
     // a line with no straight run long enough for its label at the coarsest zoom goes round by the gutters
     // above or below instead (two journeys side by side are joined over the top), when that gives it one
     const big = Math.max(...o.scales);

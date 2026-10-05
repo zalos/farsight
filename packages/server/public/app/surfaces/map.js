@@ -2110,7 +2110,7 @@ function drawLinks() {
     for (const r of l.partOf || []) edge(r.id, id, 'partOf');
   }
   // a storyline: a then line from each journey to the next, drawn at every altitude
-  for (const l of MAP.nb.then || []) edge(l.from, l.to, 'then');
+  for (const l of MAP.nb.then || []) { edge(l.from, l.to, 'then'); const e = byKey.get('then:' + l.from + '>' + l.to); if (e) { e.fromSides = l.fromSides; e.toSides = l.toSides; } }
   const list = [...byKey.values()].map((l) => {
     const word = t(linkWordKey(l));
     const w = labelWidth(word);

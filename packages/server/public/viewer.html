@@ -465,6 +465,12 @@
     .map-story-pick.open .map-segs{display:flex}
     .map-story-pick .map-seg + .map-seg{border-left:0;border-top:1px solid var(--line)}
     .map-story-pick .map-seg{text-align:left}
+    /* with a storyline picker in the toolbar, Band by folds at the same width */
+    .map-tools:has(.map-story-pick) .map-band-pick .map-band-cur{display:inline-flex}
+    .map-tools:has(.map-story-pick) .map-band-pick .map-segs{display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:8;flex-direction:column;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+    .map-tools:has(.map-story-pick) .map-band-pick.open .map-segs{display:flex}
+    .map-tools:has(.map-story-pick) .map-band-pick .map-seg + .map-seg{border-left:0;border-top:1px solid var(--line)}
+    .map-tools:has(.map-story-pick) .map-band-pick .map-seg{text-align:left}
   }
   .map-lvls .lv-short{display:none;align-items:center;gap:5px}
   .map-lvls .lv-short .sym{width:12px;height:12px}
@@ -717,6 +723,8 @@
   .jrn-story-step{text-decoration:none}
   .jrn-story-then{color:var(--dim);margin:0 1px}
   .jrn-story-go{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .jrn-story-go .rel{flex:none;width:auto;margin:0}
+  .jrn-storyline{flex:none}
   .jrn-start .jrn-startlist{margin:6px 0 10px;padding-left:20px;color:var(--ink);font-size:12.5px;line-height:1.8}
   .jrn-start .jrn-startbtns{display:flex;gap:8px;align-items:center}
   /* both are actions: the accent, never the browser's link blue on the blue-black ground */

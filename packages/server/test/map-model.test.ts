@@ -361,8 +361,8 @@ test('a storyline: only its journeys, in its order, numbered, with a then link f
   assert.deepEqual(sm.districts.map((d: any) => `${d.step}/${d.steps}:${d.flowId}`), ['1/3:opslogin', '2/3:both', '3/3:login']);
   assert.deepEqual(sm.districts.map((d: any) => d.index), [0, 1, 2]);
   assert.deepEqual(sm.then, [
-    { from: 'r::flow::opslogin', to: 'r::flow::both', kind: 'then' },
-    { from: 'r::flow::both', to: 'r::flow::login', kind: 'then' },
+    { from: 'r::flow::opslogin', to: 'r::flow::both', kind: 'then', fromSides: ['e', 's'], toSides: ['w', 'n'] },
+    { from: 'r::flow::both', to: 'r::flow::login', kind: 'then', fromSides: ['e', 's'], toSides: ['w', 'n'] },
   ]);
   assert.deepEqual(sm.storyline, { id: 'life', name: 'A life' });
   assert.equal(sm.personaOrder, nb.personaOrder, 'the rest of the model is handed on');
@@ -375,7 +375,17 @@ test('a storyline: only its journeys, in its order, numbered, with a then link f
   assert.deepEqual(xs, sm.districts.map((d: any) => d.id));
   const routed = routeLinks(L.rects, sm.then);
   assert.equal(routed.length, 2);
-  for (const l of routed) assert.ok(l.points.length >= 2);
+  for (const l of routed) {
+    assert.ok(l.points.length >= 2);
+    // out east or south, in west or north: the chain reads on
+    const a = L.rects.get(l.from), b = L.rects.get(l.to), p0 = l.points[0], pn = l.points[l.points.length - 1];
+    assert.ok(p0.x === a.x + a.w || p0.y === a.y + a.h, 'leaves east or south');
+    assert.ok(pn.x === b.x || pn.y === b.y, 'arrives west or north');
+  }
+  // wrapped onto two rows, the line from the end of a row reaches the start of the next by its top
+  const tall = layoutDistricts(items, { bandKey: () => 'story:life', aspect: 0.5 });
+  const wrapped = routeLinks(tall.rects, sm.then);
+  assert.equal(wrapped.length, 2);
   // a step whose journey is not on this board is skipped; no storyline leaves the model as it was
   const fewer = storylineModel({ ...nb, districts: nb.districts.filter((d: any) => d.flowId !== 'both') }, tree.storylines[0]);
   assert.deepEqual(fewer.districts.map((d: any) => `${d.step}/${d.steps}:${d.flowId}`), ['1/2:opslogin', '2/2:login']);
