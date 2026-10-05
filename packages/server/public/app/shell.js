@@ -838,11 +838,16 @@ export function searchNodes(q) {
   const scopeKey = JSON.stringify(S.scope);
   if (SEARCH.scopeKey !== scopeKey) { SEARCH.scopeKey = scopeKey; SEARCH.repos = scopedRepos(); }
   const nodeHits = searchIndex(SEARCH.index, raw, SEARCH.repos).hits;
-  const projectHits = projectTravelItems().map((p) => {
+  // the projects, folded once per graph, scope and lens (their words follow the lens)
+  const projKey = JSON.stringify(S.scope) + '|' + currentLens();
+  if (SEARCH.projGraph !== S.GRAPH || SEARCH.projKey !== projKey) {
+    SEARCH.projects = projectTravelItems().map((p) => ({ p, name: p.name.toLowerCase(), words: p.words.toLowerCase(),
+      tags: [...(p.tags || []), ...p.tagWords].map((x) => String(x).toLowerCase()) }));
+    Object.assign(SEARCH, { projGraph: S.GRAPH, projKey });
+  }
+  const projectHits = SEARCH.projects.map(({ p, name, words, tags }) => {
     // a workspace project (surfaces/codemap-projects.js) is matched on its name, its words and its tags;
     // on a tie an application outranks a library, which outranks a test project
-    const name = p.name.toLowerCase(), words = p.words.toLowerCase();
-    const tags = [...(p.tags || []), ...p.tagWords].map((x) => String(x).toLowerCase());
     let score = 0;
     if (name === raw || words === raw) score += 100;
     for (const term of terms) {
@@ -859,7 +864,7 @@ export function searchNodes(q) {
   return results;
 }
 /** Fast travel's folded index (one per graph) and its last answer. */
-const SEARCH = { graph: null, index: null, scopeKey: null, repos: null, answer: null };
+const SEARCH = { graph: null, index: null, scopeKey: null, repos: null, answer: null, projGraph: null, projKey: '', projects: [] };
 /** The index of the graph in hand, started when the graph changed (lib/search-model.js). */
 function searchIndexOf() {
   if (SEARCH.graph !== S.GRAPH || !SEARCH.index) {

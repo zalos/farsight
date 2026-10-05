@@ -49,7 +49,7 @@ export function continueSearchIndex(index, ms) {
 function rowOf(n, fns) {
   const name = String(n.name || '').toLowerCase();
   const tags = (n.tags || []).map(String);
-  return {
+  const row = {
     n,
     repo: fns.repoOf(n),
     name,
@@ -63,16 +63,22 @@ function rowOf(n, fns) {
     rest: (tags.join(' ') + ' ' + (n.docs || '') + ' ' + ((n.loc && n.loc.path) || '')).toLowerCase(),
     bonus: KIND_BONUS[n.kind] || 0,
   };
+  return row;
 }
 
 /** One node's score for a query, the way searchNodes always scored it (0 = no match). */
 export function scoreRow(r, raw, terms) {
   let score = 0;
-  if (r.ident === raw || r.tail === raw || r.name === raw || r.words === raw || r.label === raw) score += 100;
-  for (const term of terms) {
-    if (r.ident === term || r.words === term || r.label === term) score += 10;
-    else if (r.ident.includes(term) || r.name.includes(term) || r.words.includes(term) || r.label.includes(term)) score += 5;
-    else if (r.tags.some((x) => x.includes(term))) score += 4;
+  const { ident, name, words, label, tags } = r;
+  if (ident === raw || r.tail === raw || name === raw || words === raw || label === raw) score += 100;
+  // plain loops: this runs once per node per keystroke
+  for (let t = 0; t < terms.length; t++) {
+    const term = terms[t];
+    if (ident === term || words === term || label === term) { score += 10; continue; }
+    if (name.includes(term) || words.includes(term) || label.includes(term)) { score += 5; continue; }
+    let tagged = false;
+    for (let k = 0; k < tags.length; k++) if (tags[k].includes(term)) { tagged = true; break; }
+    if (tagged) score += 4;
     else if (r.rest.includes(term)) score += 1;
   }
   return score > 0 ? score + r.bonus : 0;

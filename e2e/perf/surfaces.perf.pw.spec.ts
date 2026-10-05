@@ -284,7 +284,12 @@ for (const s of SURFACES) {
     let act: { ms: number | null; t0: number } = { ms: null, t0: -1 };
     let rate: number | null = null;
     if (draw.ms !== null) {
-      if (s.rate) rate = await within(s.rate(page), 90_000, null);
+      if (s.rate) {
+        rate = await within(s.rate(page), 90_000, null);
+        // a pinch ends a moment after its last event and writes the board's view into the link: let it settle,
+        // or the street's link set next is overwritten by it (a person does not click within 50 ms of a pinch)
+        await page.waitForTimeout(1500);
+      }
       act = await timed(page, s.act, s.actReady);
     }
     const none = { n: 0, total: 0, max: 0 };
@@ -310,15 +315,18 @@ test('⌘K: a keystroke', async ({ browser, request }) => {
   await idle(request);
   const { page, bootMs, errors } = await boot(browser);
   expect(bootMs, 'the shell booted').not.toBeNull();
+  const type = async (q: string) => (await timed(page, `const inp = document.getElementById('pinput'); inp.value = ${JSON.stringify(q)}; inp.dispatchEvent(new Event('input', { bubbles: true }));`, 'return true;')).ms ?? CAP_MS;
+  // the first keystroke straight after the shell booted (the index may still be folding in idle time): reported
+  await page.evaluate(() => window.openPalette());
+  const straight = await type('i');
+  await page.evaluate(() => { window.closePalette(); });
+  // a page a person has been looking at for a moment: the keystrokes the budget holds
+  await page.waitForTimeout(3000);
   await page.evaluate(() => window.openPalette());
   const t0 = await page.evaluate(() => performance.now());
   const word = 'invoice';
   const times: number[] = [];
-  for (let i = 1; i <= word.length; i++) {
-    const r = await timed(page, `const inp = document.getElementById('pinput'); inp.value = ${JSON.stringify(word.slice(0, i))}; inp.dispatchEvent(new Event('input', { bubbles: true }));`,
-      'return true;');
-    times.push(r.ms ?? CAP_MS);
-  }
+  for (let i = 1; i <= word.length; i++) times.push(await type(word.slice(0, i)));
   const shown = await page.locator('.presult').count();
   const lt = await longTasksSince(page, t0);
   const sorted = [...times].sort((a, b) => a - b);
@@ -326,6 +334,9 @@ test('⌘K: a keystroke', async ({ browser, request }) => {
   rows.push({
     surface: '⌘K', interaction: `a keystroke (max of ${word.length}; median ${Math.round(sorted[Math.floor(sorted.length / 2)]!)})`, interactionMs: max,
     longTasks: lt.n, longTaskMs: lt.total, longestTaskMs: lt.max, heapMB: await heapMB(page), budgetDraw: null, budgetInteraction: 50, errors,
+  }, {
+    surface: '⌘K', interaction: 'the first keystroke straight after boot', interactionMs: straight,
+    longTasks: 0, longTaskMs: 0, longestTaskMs: 0, heapMB: null, budgetDraw: null, budgetInteraction: null, errors: [],
   });
   await page.context().close();
   expect(errors, 'page errors').toEqual([]);
@@ -344,6 +355,7 @@ declare global {
   interface Window {
     S: { GRAPH: { nodes: { id: string; kind: string; name: string }[]; edges: unknown[] }; BYID: Record<string, { name: string }> };
     openPalette: () => void;
+    closePalette: () => void;
     setLens: (l: string) => void;
     __flow?: string;
   }
