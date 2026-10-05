@@ -32,3 +32,7 @@ packages/work-fixture/fixtures/**/applied.jsonl
 
 # Codex's mirror of the project skills; .claude/skills is the source, never commit the copy
 .agents/
+
+# the perf suite's table (pnpm e2e:perf) — measured per machine, never committed
+e2e/perf/results.json
+e2e/perf/test-results/
