@@ -8,8 +8,8 @@
 // The table is printed as markdown and written to e2e/perf/results.json. On the full preset a row over
 // its budget (docs/proposals/round-2026-10-05.md §4) fails the run; on the small preset (CI) every surface
 // must still draw, with no page error.
-import { test, expect, type Page, type Browser } from '@playwright/test';
-import { writeFileSync } from 'node:fs';
+import { test, expect, type Page, type Browser, type APIRequestContext } from '@playwright/test';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,7 +36,15 @@ type Row = {
   note?: string;
   errors: string[];
 };
-const rows: Row[] = [];
+// the rows live in results.json as they are measured, so a failed surface (which restarts the worker) loses none
+const RESULTS = join(here, 'results.json');
+function readRows(): Row[] {
+  try { return existsSync(RESULTS) ? (JSON.parse(readFileSync(RESULTS, 'utf8')).rows as Row[]) : []; } catch { return []; }
+}
+function writeRows(rows: Row[]) {
+  writeFileSync(RESULTS, JSON.stringify({ preset: PRESET, at: new Date().toISOString(), rows }, null, 2));
+}
+const rows = { push: (...r: Row[]) => writeRows([...readRows(), ...r]) };
 
 /** Installed before the viewer's own scripts: every long task the page has, with its start. */
 function observeLongTasks() {
@@ -79,6 +87,25 @@ async function timed(page: Page, act: string, ready: string, cap = CAP_MS): Prom
   }, { act, ready, cap });
   const timer = new Promise<{ ms: null; t0: number }>((r) => setTimeout(() => r({ ms: null, t0: -1 }), cap + 10_000));
   return Promise.race([run, timer]);
+}
+
+/** A promise, or the fallback once `ms` have passed (a page whose main thread is blocked answers nothing). */
+function within<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([p.catch(() => fallback), new Promise<T>((r) => setTimeout(() => r(fallback), ms))]);
+}
+
+/**
+ * Wait until the server answers at once — a surface that left requests queued (a page closed while the server
+ * still folds what it asked) must not be billed to the next one. Returns the seconds waited.
+ */
+async function idle(request: APIRequestContext): Promise<number> {
+  const t0 = Date.now();
+  while (Date.now() - t0 < 10 * 60_000) {
+    const t = Date.now();
+    const ok = await request.get('/api/version', { timeout: 60_000 }).then((r) => r.ok(), () => false);
+    if (ok && Date.now() - t < 300) break;
+  }
+  return Math.round((Date.now() - t0) / 1000);
 }
 
 async function longTasksSince(page: Page, t0: number) {
@@ -214,27 +241,26 @@ const SURFACES: Surface[] = [
   },
 ];
 
-test.describe.configure({ mode: 'serial' });
-
-test.afterAll(() => {
+/** True when a row is over one of its budgets. */
+function over(r: Row) {
+  const draw = r.budgetDraw !== null && r.firstDraw !== undefined && (r.firstDraw === null || r.firstDraw > r.budgetDraw);
+  const act = r.budgetInteraction !== null && (r.interactionMs == null || (r.rate ? r.interactionMs < r.budgetInteraction : r.interactionMs > r.budgetInteraction));
+  return draw || act;
+}
+function table(all: Row[]): string {
   const fmt = (n: number | null | undefined) => (n === undefined ? '—' : n === null ? 'did not draw' : String(Math.round(n)));
-  const over = (r: Row) => {
-    const draw = r.budgetDraw !== null && r.firstDraw !== undefined && (r.firstDraw === null || r.firstDraw > r.budgetDraw);
-    const act = r.budgetInteraction !== null && (r.interactionMs == null || (r.rate ? r.interactionMs < r.budgetInteraction : r.interactionMs > r.budgetInteraction));
-    return draw || act;
-  };
-  const lines = [
-    `Preset **${PRESET}** — ${rows[0]?.note ?? ''}`,
+  const boot = all.find((r) => r.surface.startsWith('Boot'));
+  return [
+    `Preset **${PRESET}** — ${boot?.note ?? ''}`,
     '',
     '| surface | first draw ms (budget) | interaction | ms (budget) | long tasks · total ms · longest | JS heap MB | verdict |',
     '|---|---|---|---|---|---|---|',
-    ...rows.map((r) => `| ${r.surface} | ${fmt(r.firstDraw)}${r.budgetDraw !== null ? ` (≤ ${r.budgetDraw})` : ''} | ${r.interaction} | ${fmt(r.interactionMs)}${r.budgetInteraction !== null ? ` (${r.rate ? '≥' : '≤'} ${r.budgetInteraction}${r.rate ? ' fps' : ''})` : ''} | ${r.longTasks} · ${r.longTaskMs} · ${r.longestTaskMs} | ${r.heapMB ?? '—'} | ${r.budgetDraw === null && r.budgetInteraction === null ? 'measured' : over(r) ? '**over**' : 'ok'}${r.errors.length ? ` · ${r.errors.length} page errors` : ''}${r.note && r !== rows[0] ? ` — ${r.note}` : ''} |`),
-  ];
-  console.log('\n' + lines.join('\n') + '\n');
-  writeFileSync(join(here, 'results.json'), JSON.stringify({ preset: PRESET, at: new Date().toISOString(), rows }, null, 2));
-});
+    ...all.map((r) => `| ${r.surface} | ${fmt(r.firstDraw)}${r.budgetDraw !== null ? ` (≤ ${r.budgetDraw})` : ''} | ${r.interaction} | ${fmt(r.interactionMs)}${r.budgetInteraction !== null ? ` (${r.rate ? '≥' : '≤'} ${r.budgetInteraction}${r.rate ? ' fps' : ''})` : ''} | ${r.longTasks} · ${r.longTaskMs} · ${r.longestTaskMs} | ${r.heapMB ?? '—'} | ${r.budgetDraw === null && r.budgetInteraction === null ? 'measured' : over(r) ? '**over**' : 'ok'}${r.errors.length ? ` · ${r.errors.length} page errors` : ''}${r.note && r !== boot ? ` — ${r.note}` : ''} |`),
+  ].join('\n');
+}
 
 test('boot: /graph download, parse and index', async ({ browser, request }) => {
+  writeRows([]);
   const head = await request.get('/graph', { timeout: 5 * 60_000 });
   const bytes = (await head.body()).length;
   const { page, bootMs, errors } = await boot(browser);
@@ -250,19 +276,22 @@ test('boot: /graph download, parse and index', async ({ browser, request }) => {
 });
 
 for (const s of SURFACES) {
-  test(s.name, async ({ browser }) => {
+  test(s.name, async ({ browser, request }) => {
+    const waited = await idle(request);
     const { page, bootMs, errors } = await boot(browser);
     expect(bootMs, 'the shell booted').not.toBeNull();
     const draw = await timed(page, go(s.route), s.ready);
     let act: { ms: number | null; t0: number } = { ms: null, t0: -1 };
     let rate: number | null = null;
     if (draw.ms !== null) {
-      if (s.rate) rate = await s.rate(page);
+      if (s.rate) rate = await within(s.rate(page), 90_000, null);
       act = await timed(page, s.act, s.actReady);
     }
-    const lt = draw.ms !== null ? await longTasksSince(page, draw.t0) : { n: 0, total: 0, max: 0 };
-    const note = draw.ms !== null && act.ms !== null && s.note ? await s.note(page) : '';
-    const heap = draw.ms !== null ? await heapMB(page) : null;
+    const none = { n: 0, total: 0, max: 0 };
+    const lt = draw.ms !== null ? await within(longTasksSince(page, draw.t0), 60_000, none) : none;
+    const said = draw.ms !== null && act.ms !== null && s.note ? await within(s.note(page), 90_000, '') : '';
+    const note = [said, waited > 2 ? `waited ${waited} s for the server to finish the last surface's requests` : ''].filter(Boolean).join('; ');
+    const heap = draw.ms !== null ? await within(heapMB(page), 60_000, null) : null;
     rows.push({
       surface: s.name, firstDraw: draw.ms, interaction: s.interaction, interactionMs: act.ms, longTasks: lt.n, longTaskMs: lt.total, longestTaskMs: lt.max,
       heapMB: heap, budgetDraw: s.budgetDraw, budgetInteraction: s.budgetInteraction, errors, ...(note ? { note } : {}),
@@ -274,15 +303,11 @@ for (const s of SURFACES) {
     expect(errors, 'page errors').toEqual([]);
     expect(draw.ms, `${s.name} drew`).not.toBeNull();
     expect(act.ms, `${s.name}: ${s.interaction}`).not.toBeNull();
-    if (FULL) {
-      expect.soft(draw.ms!, `${s.name} first draw`).toBeLessThanOrEqual(s.budgetDraw);
-      expect.soft(act.ms!, `${s.name}: ${s.interaction}`).toBeLessThanOrEqual(s.budgetInteraction);
-      if (s.rate) expect.soft(rate ?? 0, `${s.name}: pan and zoom fps`).toBeGreaterThanOrEqual(30);
-    }
   });
 }
 
-test('⌘K: a keystroke', async ({ browser }) => {
+test('⌘K: a keystroke', async ({ browser, request }) => {
+  await idle(request);
   const { page, bootMs, errors } = await boot(browser);
   expect(bootMs, 'the shell booted').not.toBeNull();
   await page.evaluate(() => window.openPalette());
@@ -305,7 +330,14 @@ test('⌘K: a keystroke', async ({ browser }) => {
   await page.context().close();
   expect(errors, 'page errors').toEqual([]);
   expect(shown, 'the palette shows results').toBeGreaterThan(0);
-  if (FULL) expect.soft(max, '⌘K keystroke').toBeLessThanOrEqual(50);
+});
+
+// last: the table, and on the full preset every row within its budget
+test('the table, and the budgets', async () => {
+  const all = readRows();
+  console.log('\n' + table(all) + '\n');
+  expect(all.length, 'every surface left a row').toBeGreaterThanOrEqual(SURFACES.length + 2);
+  if (FULL) expect(all.filter(over).map((r) => `${r.surface}: ${r.interaction}`), 'rows over their budget').toEqual([]);
 });
 
 declare global {

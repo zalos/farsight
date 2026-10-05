@@ -322,15 +322,18 @@ const ROUTE_VERBS = new Set<string>(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'H
  * the fold resolve a manifest's operation the same way.
  */
 function makeRouteForOperation(index: GraphIndex): (op: string) => GraphNode | undefined {
-  let opIndex: Map<string, GraphNode> | undefined;
   return (op: string): GraphNode | undefined => {
+    // one index per graph index, not per walk: a thousand-project graph walked once per journey re-scanned every node
+    let opIndex = OP_INDEX.get(index);
     if (!opIndex) {
       opIndex = new Map();
       for (const n of index.byId.values()) { const id = n.contract?.spec?.operationId; if (n.kind === 'route' && id && !opIndex.has(id)) opIndex.set(id, n); }
+      OP_INDEX.set(index, opIndex);
     }
     return opIndex.get(op);
   };
 }
+const OP_INDEX = new WeakMap<GraphIndex, Map<string, GraphNode>>();
 
 /**
  * Linearize "what runs, in what order" from an entry node — the query behind

@@ -3,7 +3,8 @@
 // chrome-owned panels moved from viewer.js (lens/theme/scope/chips, search
 // palette + focus, settings page, Model Hub overlay). Entry module.
 
-import { S, expose, esc, jsArg, loadAll, hydrateScope, indexGuards, collSourceNames, scopedRepos, inScope, bizLabel, bizName, humanize, effectiveGroup, currentLens, cssId } from './store.js';
+import { S, expose, esc, jsArg, loadAll, hydrateScope, indexGuards, collSourceNames, scopedRepos, inScope, bizLabel, bizName, humanize, effectiveGroup, currentLens, cssId, repoOf } from './store.js';
+import { buildSearchIndex, searchIndex } from './lib/search-model.js';
 import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf } from './lib/graph-render.js';
@@ -798,28 +799,19 @@ export function searchNodes(q) {
   const raw = String(q || '').trim().toLowerCase();
   const terms = raw.split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
-  // on a tie the product outranks the plumbing: a journey, then a screen
-  const KIND_BONUS = { flow: 3, page: 2, route: 1, api: 1, work: 1 };
-  // a module node is a file's import list and a package node has no place on a surface yet (the
-  // code map lane draws them): fast travel to either would arrive nowhere visible
-  return S.GRAPH.nodes.filter((n) => inScope(n) && n.kind !== 'module' && n.kind !== 'package').map((n) => {
-    const name = String(n.name || '').toLowerCase();
-    const ident = name.split(':')[0].trim();
-    const tail = String(n.id || '').split('::').pop().toLowerCase();
-    const words = bizName(n).toLowerCase();
-    const label = bizLabel(n).toLowerCase();
-    const hay = (name + ' ' + words + ' ' + label + ' ' + (n.tags || []).join(' ') + ' ' + (n.docs || '') + ' ' + ((n.loc && n.loc.path) || '')).toLowerCase();
-    let score = 0;
-    if (ident === raw || tail === raw || name === raw || words === raw || label === raw) score += 100;
-    for (const term of terms) {
-      if (ident === term || words === term || label === term) score += 10;
-      else if (ident.includes(term) || name.includes(term) || words.includes(term) || label.includes(term)) score += 5;
-      else if ((n.tags || []).some((x) => x.includes(term))) score += 4;
-      else if (hay.includes(term)) score += 1;
-    }
-    if (score > 0) score += KIND_BONUS[n.kind] || 0;
-    return { n, score };
-  }).concat(projectTravelItems().map((p) => {
+  // the palette asks again on every arrow key: the same query on the same graph, scope and lens is the same answer
+  const key = raw + '|' + JSON.stringify(S.scope) + '|' + currentLens();
+  if (SEARCH.answer && SEARCH.answer.graph === S.GRAPH && SEARCH.answer.key === key) return SEARCH.answer.results;
+  // the nodes: folded once per graph (lib/search-model.js), ranked per keystroke over the folded strings
+  if (SEARCH.graph !== S.GRAPH || !SEARCH.index) {
+    SEARCH.graph = S.GRAPH;
+    SEARCH.index = buildSearchIndex(S.GRAPH.nodes, { bizName, bizLabel, repoOf });
+  }
+  // one Set per scope, so a query that only grew its last word re-ranks the last answer's matches
+  const scopeKey = JSON.stringify(S.scope);
+  if (SEARCH.scopeKey !== scopeKey) { SEARCH.scopeKey = scopeKey; SEARCH.repos = scopedRepos(); }
+  const nodeHits = searchIndex(SEARCH.index, raw, SEARCH.repos).hits;
+  const projectHits = projectTravelItems().map((p) => {
     // a workspace project (surfaces/codemap-projects.js) is matched on its name, its words and its tags;
     // on a tie an application outranks a library, which outranks a test project
     const name = p.name.toLowerCase(), words = p.words.toLowerCase();
@@ -833,8 +825,14 @@ export function searchNodes(q) {
     }
     if (score > 0) score += p.type === 'application' ? 2 : p.type === 'library' ? 1 : 0;
     return { n: p, score };
-  })).filter((r) => r.score > 0).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => r.n);
+  }).filter((r) => r.score > 0);
+  // nodes first, then projects, each in its own order: a stable sort keeps that order on a tie
+  const results = nodeHits.concat(projectHits).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => r.n);
+  SEARCH.answer = { graph: S.GRAPH, key, results };
+  return results;
 }
+/** Fast travel's folded index (one per graph) and its last answer. */
+const SEARCH = { graph: null, index: null, scopeKey: null, repos: null, answer: null };
 /**
  * Leave the code map's focus without redrawing it — for when the map is not on
  * screen, where the focus filters nothing but still wrote itself into the
