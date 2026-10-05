@@ -12,8 +12,11 @@
  *   nodes under its folder — so for a node under two files the nearer file's glossary word wins;
  * - path fields (`plumbing`, `design[]`, `openapi[]`, `tests`, `storybook`) are rebased (the folder
  *   is put in front) and unioned into `merged`, which the design, OpenAPI, tests and stories passes read;
- * - `externals[]` and `stores[]` are unioned; a second declaration of the same import or store name
- *   is a conflict and the first (the root's, when it has one) is kept;
+ * - `externals[]` are unioned; a second declaration of the same import is a conflict and the first
+ *   (the root's, when it has one) is kept;
+ * - `stores[]` are kept per file in `stores`, each scoped to its file's folder (the store pass names
+ *   only the tables under it — `stores.ts`); the same store name declared with another kind or engine
+ *   is a conflict and the first is kept;
  * - `projects` and `tooling` are root-only; a nested file's value is ignored with a note;
  * - `journeys` blocks stay per file: `journeysConfigFor` names the blocks that apply to one manifest.
  *
@@ -36,6 +39,12 @@ export const CONFIG_FILE = 'farsight.config.json';
 /** One config file of a source. `dir` is its folder, repo-relative and posix; `'.'` for the root. */
 export interface ConfigFile { path: string; dir: string; config: FarsightConfig; root: boolean }
 
+/**
+ * One `stores[]` declaration and the file that gave it: `dir` is that file's folder (`'.'` for the
+ * root), and the declaration names only tables under it. `from` is the file's path.
+ */
+export type ScopedStoreDecl = StoreDecl & { dir: string; from: string };
+
 export interface WorkspaceConfig {
   /** the root file's config, or null when there is none (or it could not be read) */
   root: FarsightConfig | null;
@@ -43,6 +52,8 @@ export interface WorkspaceConfig {
   files: ConfigFile[];
   /** the root config with every scoped file's list fields unioned and rebased — what the design, OpenAPI, tests and stories passes read */
   merged: FarsightConfig;
+  /** every file's `stores[]`, root first then by depth, each scoped to its folder — what the store pass reads */
+  stores: ScopedStoreDecl[];
   meta: ConfigMeta;
 }
 
@@ -50,7 +61,7 @@ const LEVELS = ['unit', 'integration', 'e2e'] as const;
 
 /** The config of a source with none: nothing merged, nothing to say. */
 export function emptyWorkspaceConfig(): WorkspaceConfig {
-  return { root: null, files: [], merged: {}, meta: { files: [], conflicts: [], notes: [] } };
+  return { root: null, files: [], merged: {}, stores: [], meta: { files: [], conflicts: [], notes: [] } };
 }
 
 const isUrl = (s: string) => /^https?:\/\//i.test(s);
@@ -107,7 +118,7 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
     if (root) ws.root = config;
   }
 
-  ws.merged = mergeConfigs(ws.files, meta);
+  ws.merged = mergeConfigs(ws.files, meta, ws.stores);
   meta.conflicts.push(...glossaryConflicts(ws.files));
   return ws;
 }
@@ -134,7 +145,7 @@ export function rebasePath(dir: string, value: string, where: string, notes: str
 }
 
 /** The root config with every nested file's list fields rebased and unioned, conflicts recorded on `meta`. */
-function mergeConfigs(files: ConfigFile[], meta: ConfigMeta): FarsightConfig {
+function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStoreDecl[]): FarsightConfig {
   const rootFile = files.find((f) => f.root);
   const root = rootFile?.config ?? {};
   // the root's own fields, as written — a source with one file reads exactly as it did before nested files
@@ -158,6 +169,9 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta): FarsightConfig {
   const stores: StoreDecl[] = [...(Array.isArray(root.stores) ? root.stores : [])];
   const externalFrom = new Map<string, string>(externals.map((e) => [e.import, rootFile!.path]));
   const storeFrom = new Map<string, string>(stores.map((s) => [s.name, rootFile!.path]));
+  const storeDecl = new Map<string, StoreDecl>();
+  for (const s of stores) if (!storeDecl.has(s.name)) storeDecl.set(s.name, s);
+  scoped.push(...stores.map((s) => ({ ...s, dir: '.', from: rootFile!.path })));
 
   for (const f of nested) {
     const c = f.config;
@@ -246,8 +260,16 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta): FarsightConfig {
     if (Array.isArray(c.stores)) {
       for (const s of c.stores) {
         const first = storeFrom.get(s.name);
-        if (first) { addConflict(meta, 'store', s.name, [first, f.path], first); continue; }
+        const had = storeDecl.get(s.name);
+        // the same store again, scoped to this folder, is fine; the same name as another kind of store is not
+        if (first && had && (had.kind !== s.kind || (had.engine ?? '') !== (s.engine ?? ''))) {
+          addConflict(meta, 'store', s.name, [first, f.path], first);
+          continue;
+        }
+        scoped.push({ ...s, dir: f.dir, from: f.path });
+        if (first) continue;
         storeFrom.set(s.name, f.path);
+        storeDecl.set(s.name, s);
         stores.push(s);
       }
     }
@@ -265,6 +287,11 @@ function dedupeBy<T>(items: T[], key: (t: T) => string): T[] {
     seen.add(k);
     return true;
   });
+}
+
+/** Record that two files disagree about `key` (for the store pass, which runs after the files are read). */
+export function recordConflict(ws: WorkspaceConfig, kind: ConfigMeta['conflicts'][number]['kind'], key: string, files: string[], kept: string): void {
+  addConflict(ws.meta, kind, key, files, kept);
 }
 
 function addConflict(meta: ConfigMeta, kind: ConfigMeta['conflicts'][number]['kind'], key: string, files: string[], kept: string): void {
