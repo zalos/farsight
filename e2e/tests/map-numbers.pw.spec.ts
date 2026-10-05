@@ -55,7 +55,7 @@ async function stubFewerReached(page: Page) {
     for (const s of d.designs || []) for (const f of s.flows || []) if (f.nodeId === FLOW) f.owner = 'Billing team';
     await r.fulfill({ contentType: 'application/json', body: JSON.stringify(d) }).catch(() => {});
   });
-  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle$/, async (r) => {
+  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle(&steps=0)?$/, async (r) => {
     let d: AnyRec;
     try { d = await (await r.fetch()).json(); } catch { return; }
     const s = d.summary;

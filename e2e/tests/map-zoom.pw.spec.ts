@@ -28,7 +28,7 @@ async function go(page: Page, hash: string) {
 }
 /** Billing cycle with its screens repeated to WIDE: each copy a screen of its own (its id suffixed), calls and all. */
 async function stubWide(page: Page) {
-  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle$/, async (route) => {
+  await page.route(/\/api\/journey\?entry=invoice-app(%3A%3A|::)flow(%3A%3A|::)billing-cycle(&steps=0)?$/, async (route) => {
     let data: any;
     try { data = await (await route.fetch()).json(); } catch { return; }
     const segs = data.summary.segments as any[];
