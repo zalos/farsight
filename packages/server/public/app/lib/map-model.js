@@ -302,7 +302,6 @@ export function routeLinks(rects, links, opts = {}) {
   const o = { margin: 70, bend: 600, reuse: 40, spread: 14, pad: 8, scales: [4, 3, 2, 1.5, 1], ...opts };
   const R = [...rects.values()];
   const m = o.margin;
-  const blocked = (x, y) => R.some((r) => x > r.x - m + 0.5 && x < r.x + r.w + m - 0.5 && y > r.y - m + 0.5 && y < r.y + r.h + m - 0.5);
   const sides = (r) => [
     { side: 'n', port: { x: r.x + r.w / 2, y: r.y }, exit: { x: r.x + r.w / 2, y: r.y - m }, dir: 0 },
     { side: 'e', port: { x: r.x + r.w, y: r.y + r.h / 2 }, exit: { x: r.x + r.w + m, y: r.y + r.h / 2 }, dir: 1 },
@@ -317,8 +316,16 @@ export function routeLinks(rects, links, opts = {}) {
   }
   const X = [...xs].sort((a, b) => a - b), Y = [...ys].sort((a, b) => a - b);
   const NX = X.length, NY = Y.length;
-  const ok = new Uint8Array(NX * NY);
-  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) ok[j * NX + i] = blocked(X[i], Y[j]) ? 0 : 1;
+  // a lane crossing is open unless it lies inside some district's margin: each district closes the crossings
+  // inside its own box (a binary search into the sorted lanes), instead of every crossing asking every district
+  // (lanes² × districts was most of a board's draw at 300 journeys)
+  const ok = new Uint8Array(NX * NY).fill(1);
+  const firstAbove = (A, v) => { let lo = 0, hi = A.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (A[mid] > v) hi = mid; else lo = mid + 1; } return lo; };
+  for (const r of R) {
+    const x0 = r.x - m + 0.5, x1 = r.x + r.w + m - 0.5, y0 = r.y - m + 0.5, y1 = r.y + r.h + m - 0.5;
+    const i0 = firstAbove(X, x0), j0 = firstAbove(Y, y0);
+    for (let j = j0; j < NY && Y[j] < y1; j++) for (let i = i0; i < NX && X[i] < x1; i++) ok[j * NX + i] = 0;
+  }
   const xi = new Map(X.map((v, i) => [v, i])), yi = new Map(Y.map((v, j) => [v, j]));
   const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
   const used = new Map();                      // lane segment → how many lines run on it

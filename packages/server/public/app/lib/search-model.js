@@ -22,27 +22,47 @@ export const LIMIT = 12;
  * @param {{ bizName: (n: object) => string, bizLabel: (n: object) => string, repoOf: (n: object) => string }} fns
  */
 export function buildSearchIndex(nodes, fns) {
-  const rows = [];
-  for (const n of nodes) {
-    if (n.kind === 'module' || n.kind === 'package') continue;
-    const name = String(n.name || '').toLowerCase();
-    const tags = (n.tags || []).map(String);
-    rows.push({
-      n,
-      repo: fns.repoOf(n),
-      name,
-      ident: name.split(':')[0].trim(),
-      tail: String(n.id || '').split('::').pop().toLowerCase(),
-      words: String(fns.bizName(n)).toLowerCase(),
-      label: String(fns.bizLabel(n)).toLowerCase(),
-      tags,
-      // the rest of what a person might type — tags, docs and the file — as one string, scanned last (the name
-      // and the words around it were already tried, so this is what the old haystack added)
-      rest: (tags.join(' ') + ' ' + (n.docs || '') + ' ' + ((n.loc && n.loc.path) || '')).toLowerCase(),
-      bonus: KIND_BONUS[n.kind] || 0,
-    });
+  const index = startSearchIndex(nodes, fns);
+  continueSearchIndex(index, Infinity);
+  return index;
+}
+
+/**
+ * The same index, folded a slice at a time: `startSearchIndex` holds the nodes, `continueSearchIndex` folds
+ * for about `ms` milliseconds and says whether it finished — so the page can fold in idle time after it
+ * boots and the first keystroke finds the index ready. `searchIndex` finishes whatever is left.
+ */
+export function startSearchIndex(nodes, fns) {
+  return { rows: [], nodes, fns, pos: 0, done: false, last: null };
+}
+export function continueSearchIndex(index, ms) {
+  const t0 = Date.now();
+  const { nodes, fns } = index;
+  while (index.pos < nodes.length) {
+    const n = nodes[index.pos++];
+    if (n.kind !== 'module' && n.kind !== 'package') index.rows.push(rowOf(n, fns));
+    if ((index.pos & 511) === 0 && Date.now() - t0 > ms) return false;
   }
-  return { rows, last: null };
+  index.done = true;
+  return true;
+}
+function rowOf(n, fns) {
+  const name = String(n.name || '').toLowerCase();
+  const tags = (n.tags || []).map(String);
+  return {
+    n,
+    repo: fns.repoOf(n),
+    name,
+    ident: name.split(':')[0].trim(),
+    tail: String(n.id || '').split('::').pop().toLowerCase(),
+    words: String(fns.bizName(n)).toLowerCase(),
+    label: String(fns.bizLabel(n)).toLowerCase(),
+    tags,
+    // the rest of what a person might type — tags, docs and the file — as one string, scanned last (the name
+    // and the words around it were already tried, so this is what the old haystack added)
+    rest: (tags.join(' ') + ' ' + (n.docs || '') + ' ' + ((n.loc && n.loc.path) || '')).toLowerCase(),
+    bonus: KIND_BONUS[n.kind] || 0,
+  };
 }
 
 /** One node's score for a query, the way searchNodes always scored it (0 = no match). */
@@ -67,6 +87,7 @@ export function searchIndex(index, q, repos, limit = LIMIT) {
   const raw = String(q || '').trim().toLowerCase();
   const terms = raw.split(/\s+/).filter(Boolean);
   if (!terms.length) { index.last = null; return { hits: [], matched: 0 }; }
+  if (!index.done) continueSearchIndex(index, Infinity);
   // a query that only grew its last word matches a subset of what the last one matched
   const last = index.last;
   const narrow = last && last.repos === repos && raw.startsWith(last.raw) && !/\s/.test(raw.slice(last.raw.length));

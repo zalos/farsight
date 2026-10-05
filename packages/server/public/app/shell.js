@@ -4,7 +4,7 @@
 // palette + focus, settings page, Model Hub overlay). Entry module.
 
 import { S, expose, esc, jsArg, loadAll, hydrateScope, indexGuards, collSourceNames, scopedRepos, inScope, bizLabel, bizName, humanize, effectiveGroup, currentLens, cssId, repoOf } from './store.js';
-import { buildSearchIndex, searchIndex } from './lib/search-model.js';
+import { startSearchIndex, continueSearchIndex, searchIndex } from './lib/search-model.js';
 import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf, revealCard } from './lib/graph-render.js';
@@ -769,8 +769,23 @@ export async function saveScopeGroup() {
  * @group Lens, theme & filters
  */
 export function buildChips() {
-  const counts = {};
-  S.GRAPH.nodes.filter((n) => inScope(n)).forEach((n) => (n.tags || []).forEach((tag) => (counts[tag] = (counts[tag] || 0) + 1)));
+  // one fold per graph and scope (the chrome redraws on every route): each tag's count, and per tag its test
+  // cases and the coverage reports among them, for the tip's split
+  const scopeKey = JSON.stringify(S.scope);
+  if (CHIPS.graph !== S.GRAPH || CHIPS.scope !== scopeKey) {
+    const counts = {}, tests = {}, reports = {};
+    for (const n of S.GRAPH.nodes) {
+      if (!inScope(n)) continue;
+      const isTest = n.kind === 'test', isReport = isTest && n.test && n.test.runLevel;
+      for (const tag of n.tags || []) {
+        counts[tag] = (counts[tag] || 0) + 1;
+        if (isTest) tests[tag] = (tests[tag] || 0) + 1;
+        if (isReport) reports[tag] = (reports[tag] || 0) + 1;
+      }
+    }
+    Object.assign(CHIPS, { graph: S.GRAPH, scope: scopeKey, counts, tests, reports });
+  }
+  const counts = CHIPS.counts;
   // a tag is the code's own label; the business lens keeps only the ones that are
   // words (`deprecated`), never `runner:vitest` or `test:unit`
   const biz = currentLens() === 'business';
@@ -778,16 +793,17 @@ export function buildChips() {
   // a tag on tests counts the coverage reports beside the cases (each is a test node); the Tests page
   // counts cases only, so the tip splits the two and the numbers can be reconciled (docs/COUNTS.md, Chrome)
   const split = (tag, c) => {
-    const tests = S.GRAPH.nodes.filter((n) => n.kind === 'test' && inScope(n) && (n.tags || []).includes(tag));
-    const reports = tests.filter((n) => n.test && n.test.runLevel).length;
+    const tests = CHIPS.tests[tag] || 0;
+    const reports = CHIPS.reports[tag] || 0;
     // only a split that adds up to the chip's number: a tag also carried by parts that are not tests is not split
-    if (!reports || tests.length !== c) return null;
-    return [[t('count.unit.cases').replace('{n}', '').trim(), tests.length - reports], [t('count.unit.runReports').replace('{n}', '').trim(), reports]];
+    if (!reports || tests !== c) return null;
+    return [[t('count.unit.cases').replace('{n}', '').trim(), tests - reports], [t('count.unit.runReports').replace('{n}', '').trim(), reports]];
   };
   document.getElementById('chips').innerHTML = top.map(([tag, c]) =>
     '<button class="chip' + (S.activeTag === tag ? ' on' : '') + '" data-tag="' + esc(tag) + '" onclick="toggleTag(' + jsArg(tag) + ')">' + esc(biz ? humanize(tag) : tag)
     + ' · <span class="cnt"' + plainTip(c, 'surf.tagCount', 'count.scope.workspace', '/graph', split(tag, c), null, { tag }) + '>' + c + '</span></button>').join('');
 }
+const CHIPS = { graph: null, scope: '', counts: {}, tests: {}, reports: {} };
 /**
  * @group Lens, theme & filters
  */
@@ -817,10 +833,7 @@ export function searchNodes(q) {
   const key = raw + '|' + JSON.stringify(S.scope) + '|' + currentLens();
   if (SEARCH.answer && SEARCH.answer.graph === S.GRAPH && SEARCH.answer.key === key) return SEARCH.answer.results;
   // the nodes: folded once per graph (lib/search-model.js), ranked per keystroke over the folded strings
-  if (SEARCH.graph !== S.GRAPH || !SEARCH.index) {
-    SEARCH.graph = S.GRAPH;
-    SEARCH.index = buildSearchIndex(S.GRAPH.nodes, { bizName, bizLabel, repoOf });
-  }
+  searchIndexOf();
   // one Set per scope, so a query that only grew its last word re-ranks the last answer's matches
   const scopeKey = JSON.stringify(S.scope);
   if (SEARCH.scopeKey !== scopeKey) { SEARCH.scopeKey = scopeKey; SEARCH.repos = scopedRepos(); }
@@ -847,6 +860,30 @@ export function searchNodes(q) {
 }
 /** Fast travel's folded index (one per graph) and its last answer. */
 const SEARCH = { graph: null, index: null, scopeKey: null, repos: null, answer: null };
+/** The index of the graph in hand, started when the graph changed (lib/search-model.js). */
+function searchIndexOf() {
+  if (SEARCH.graph !== S.GRAPH || !SEARCH.index) {
+    SEARCH.graph = S.GRAPH;
+    SEARCH.index = startSearchIndex(S.GRAPH.nodes, { bizName, bizLabel, repoOf });
+    SEARCH.answer = null;
+  }
+  return SEARCH.index;
+}
+/**
+ * Fold fast travel's index in idle time once the page has drawn, a slice at a time, so the first ⌘K
+ * keystroke on a large graph does not pay for it (a thousand-project graph took half a second to fold).
+ * @group Search & navigation
+ */
+export function warmSearch() {
+  if (!S.GRAPH) return;
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(() => fn({ timeRemaining: () => 8 }), 30));
+  const step = (deadline) => {
+    const ix = searchIndexOf();
+    if (ix.done) return;
+    if (!continueSearchIndex(ix, Math.max(4, Math.min(12, deadline.timeRemaining())))) idle(step);
+  };
+  idle(step);
+}
 /**
  * Leave the code map's focus without redrawing it — for when the map is not on
  * screen, where the focus filters nothing but still wrote itself into the
@@ -1217,6 +1254,7 @@ export async function syncNow() {
       // a sync replaces the graph under whatever is on screen: the same contract
       // the filters run on, with the reason that says every fact is new
       refreshSurface('sync');
+      warmSearch();
       note.textContent = t('set.syncedStats').replace('{n}', out.stats.nodes).replace('{e}', out.stats.edges);
     }
   } catch (err) { note.textContent = t('set.syncFailedPrefix') + ' ' + err.message; }
@@ -1377,6 +1415,7 @@ async function boot() {
   window.addEventListener('keydown', scopeMenuKey, true);
   applyRoute();
   initKeymap();
+  warmSearch();
 }
 boot();
 

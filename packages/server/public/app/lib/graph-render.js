@@ -551,8 +551,15 @@ export function statsBreakdown() {
  */
 export function refreshStats() {
   if (!S.GRAPH) return;
+  // the count moves only with the graph, the scope, the focus and the code map's own filters: a route change
+  // that moved none of them reuses the last fold (every surface's mount asks)
+  const c = S.cmap;
+  const sig = [JSON.stringify(S.scope), c ? [c.rev, c.hidePackages, c.showModules, c.group, c.view ? JSON.stringify([c.view.kind, c.view.id, c.view.project]) : ''].join('|') : ''].join('#');
+  if (STATS.graph === S.GRAPH && STATS.focus === S.focusSet && STATS.sig === sig) return;
   updateStats(displayNodes().length);
+  Object.assign(STATS, { graph: S.GRAPH, focus: S.focusSet, sig });
 }
+const STATS = { graph: null, focus: null, sig: '' };
 /** @group Graph rendering */
 export function scopeLabel() {
   if (S.scope === 'all' || !S.scope.length) return 'all';
