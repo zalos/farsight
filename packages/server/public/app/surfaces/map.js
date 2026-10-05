@@ -887,7 +887,7 @@ function coverScale(s) {
   if (!(s > 0) || !(fit > 0)) return BOARD_K;
   // the floor (§3.3): a cover's smallest words (its chips, COVER_MIN_PX in board px) never draw under FLOOR_PX on
   // screen — past it the board stops shrinking them, the card clips, and the hint says *zoom in to read*
-  return Math.min(BOARD_K, Math.max(Math.min(BOARD_K * fit, COVER_GROW_MAX) / s, FLOOR_PX / COVER_MIN_PX / s));
+  return Math.max(Math.min(BOARD_K, Math.min(BOARD_K * fit, COVER_GROW_MAX) / s), FLOOR_PX / COVER_MIN_PX / s);
 }
 /** Whether the board's fit would draw a cover's smallest words under the floor at scale s. */
 function underFloor(s) {

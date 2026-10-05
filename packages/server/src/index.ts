@@ -307,6 +307,7 @@ function enrichNode(node: GraphNode) {
 }
 
 const CODE_CAP = 160; // max lines sliced per step
+const SOURCE_WINDOW = 12; // lines /api/source reads from a part that has a line and no span
 const VIA_CAP = 24;   // accessor-borne test refs kept per table step; the total rides beside them
 
 /** Slice loc.line..endLine (1-based inclusive) from disk, fail-soft + path-confined. Null on any miss. */
@@ -913,7 +914,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const node = g.index.byId.get(id);
       if (!node) return send(404, JSON.stringify({ error: `no node ${id} in this graph` }));
       if (!node.loc) return send(200, JSON.stringify({ id, code: null }));
-      const sliced = sliceFromDisk(g.roots[node.loc.repo], node.loc, new Map());
+      // a part found without a span (a guard named at its call) reads a short window from its line
+      const span = typeof node.loc.endLine === 'number' ? node.loc : { ...node.loc, endLine: node.loc.line + SOURCE_WINDOW - 1 };
+      const sliced = sliceFromDisk(g.roots[node.loc.repo], span, new Map());
       const code = sliced ? sliced.code : node.snippet ?? null;
       return send(200, JSON.stringify({
         id, repo: node.loc.repo, path: node.loc.path, line: node.loc.line,
