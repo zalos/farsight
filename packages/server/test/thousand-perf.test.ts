@@ -86,3 +86,13 @@ test('the code map index, its choices, a filter and the grouped fold, and the âŒ
   const si = within('buildSearchIndex', 1500, () => SM.buildSearchIndex(nodes, names));
   for (const q of ['i', 'in', 'inv', 'invo', 'invoi', 'invoic', 'invoice']) within(`search "${q}"`, 50, () => SM.searchIndex(si, q, null));
 });
+
+test('the detail doors (lib/detail-links.js) are lookups: every detail of the workspace within budget', async () => {
+  const D = await import(join(here, '..', 'public', 'app', 'lib', 'detail-links.js'));
+  const byId: AnyRec = {};
+  for (const n of nodes) byId[n.id] = n;
+  const edgesOf = new Map<string, AnyRec[]>();
+  for (const e of edges) for (const id of [e.from, e.to]) { const l = edgesOf.get(id); if (l) l.push(e); else edgesOf.set(id, [e]); }
+  const kinds: AnyRec = { guard: 'gate', rule: 'rule', route: 'route', table: 'record', test: 'test', page: 'screen', component: 'component', function: 'call', package: 'package', external: 'external', work: 'work' };
+  within('detailLinks over every detail', 500, () => { for (const n of nodes) if (kinds[n.kind]) D.detailLinks(kinds[n.kind], n, { byId, edgesOf, roots: {} }); });
+});
