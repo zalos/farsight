@@ -199,11 +199,18 @@ export function parseRoute() {
     card: q.get('card'),
     // the Map's Affected mode (lane I): the seed the board is dimmed around and how far out it asks
     affected: q.get('affected'),
+    // the Map and the journey open each other at the same step (round 2026-10-05 §3.1): the journey's `step` and the
+    // street's `screen` are one 1-based screen ordinal; `j` names the Map's journey for a link written without the path
+    step: q.get('step'),
+    screen: q.get('screen'),
+    j: q.get('j'),
     ahops: q.get('ahops') ? +q.get('ahops') : null,
     raw: location.hash,
   };
 }
 
+/** Whether the hash itself named a view (parseRoute defaults `view` to `map`). @group Shell */
+function q0view(r) { return /[?&]view=/.test(String(r.raw || '')); }
 /**
  * Apply the current hash: unmount the previous surface, set the body's
  * surface class, mount the new surface into #surface (or the graph frame),
@@ -229,6 +236,8 @@ export function applyRoute() {
   if (r.band === 'ladder' || r.band === 'rows') S.jrnView = r.band;
   // …and which journey visual it was written in (the view axis; deep link wins over persistence)
   if (r.surface === 'journeys' && /^(storyboard|timeline|sheet|drill)$/.test(r.view || '')) S.jrnLayout = r.view;
+  // a link to one step opens the blueprint timeline when it names no view of its own
+  else if (r.surface === 'journeys' && r.step && !q0view(r)) S.jrnLayout = 'timeline';
   if (r.surface === 'journeys' && /^(inline|bottom|right)$/.test(r.dock || '')) S.jrnDock = r.dock;
   if (r.surface === 'journeys' && /^(words|gates|decisions)$/.test(r.biz || '')) S.jrnBiz = r.biz;
   // the same surface, a new place inside it: a surface that can follow its own route keeps its state

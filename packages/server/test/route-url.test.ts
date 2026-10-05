@@ -71,11 +71,62 @@ test('the journey view writes the hash through this module and nothing else', ()
   // a static guard on the call site: the rule above is only true of the shipped
   // viewer while `jrnSetLayout` and `jrnSetView` keep calling the writer
   const src = readFileSync(join(appDir, 'surfaces', 'journeys.js'), 'utf8');
-  assert.match(src, /import \{ journeyViewHash, isJourneyRoute \} from '\.\.\/lib\/route-url\.js';/);
+  assert.match(src, /import \{ journeyViewHash, isJourneyRoute[\w, ]*\} from '\.\.\/lib\/route-url\.js';/);
   const writer = /function jrnWriteViewHash\(\)/;
   assert.match(src, writer);
   for (const fn of ['jrnSetLayout', 'jrnSetView']) {
     const body = src.slice(src.indexOf('export function ' + fn + '('));
     assert.ok(body.slice(0, 600).includes('jrnWriteViewHash()'), fn + ' must write the view into the hash');
   }
+});
+
+// ── the Map and the journey open each other (round 2026-10-05 §3.1) ──────────
+const { journeyStepHash, mapScreenHash, stepOrdinal, stepIndex, screenAtStep, stepOfNode } = await import(join(appDir, 'lib', 'route-url.js'));
+const FID = 'example-app::flow::billing-cycle';
+
+test('journeyStepHash opens the timeline at a step, with a node when named', () => {
+  assert.equal(journeyStepHash(FID, 2), '#/journeys/example-app%3A%3Aflow%3A%3Abilling-cycle?view=timeline&step=2');
+  assert.equal(journeyStepHash(FID, 3, { node: 'a::b::GET /x', lens: 'business' }),
+    '#/journeys/example-app%3A%3Aflow%3A%3Abilling-cycle?view=timeline&step=3&node=a%3A%3Ab%3A%3AGET%20%2Fx&lens=business');
+  // a step that is not a 1-based ordinal names no step, and then no node either
+  assert.equal(journeyStepHash(FID, 0, { node: 'x' }), '#/journeys/example-app%3A%3Aflow%3A%3Abilling-cycle?view=timeline');
+  assert.equal(journeyStepHash('', 1), '');
+});
+
+test('mapScreenHash frames a screen on the street, and a node opens its card with plumbing on', () => {
+  assert.equal(mapScreenHash(FID, 2), '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=2');
+  assert.equal(mapScreenHash(FID, '1', { node: 'r::GET /a' }), '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=1&plumb=1&card=call%3Ar%3A%3AGET%20%2Fa');
+  assert.equal(mapScreenHash(FID, 1, { node: 't::invoices', kind: 'record' }), '#/map/example-app%3A%3Aflow%3A%3Abilling-cycle?screen=1&plumb=1&card=record%3At%3A%3Ainvoices');
+});
+
+test('the step and the screen are one ordinal, read back the same way', () => {
+  assert.equal(stepOrdinal('3'), 3);
+  assert.equal(stepOrdinal('x'), null);
+  assert.equal(stepOrdinal(-1), null);
+  assert.equal(stepIndex('2', 3), 1);
+  assert.equal(stepIndex('9', 3), 2, 'clamped to the last screen');
+  assert.equal(stepIndex('1', 0), null);
+});
+
+test('screenAtStep finds the street row of a step; a step folded into the next screen lands there', () => {
+  // the street folds an entry segment with no screen (index 0) into the first screen (segment 1)
+  const screens = [{ segment: { index: 1 } }, { segment: { index: 2 } }, { segment: { index: 4 } }];
+  assert.equal(screenAtStep(screens, 2), 0);
+  assert.equal(screenAtStep(screens, 3), 1);
+  assert.equal(screenAtStep(screens, 1), 0, 'the folded entry lands on the first screen');
+  assert.equal(screenAtStep(screens, 4), 2, 'a step with no row of its own lands on the next one');
+  assert.equal(screenAtStep(screens, 9), 2);
+  assert.equal(screenAtStep([], 1), null);
+});
+
+test('stepOfNode prefers the screen the reader is on, else the first step whose markers include it', () => {
+  const segs = [
+    { index: 0, markers: [{ nodeId: 'a' }] },
+    { index: 1, markers: [{ nodeId: 'b' }, { nodeId: 'a' }] },
+    { index: 2, markers: [] },
+  ];
+  assert.equal(stepOfNode(segs, 1, 'a'), 2);
+  assert.equal(stepOfNode(segs, 2, 'a'), 1);
+  assert.equal(stepOfNode(segs, 2, 'zz'), 3, 'a node no step holds: the screen the reader is on');
+  assert.equal(stepOfNode(segs, null, 'zz'), null);
 });
