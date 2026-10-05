@@ -456,6 +456,24 @@
   .map-seg.on{color:var(--accent);background:var(--accent-dim)}
   .map-seg:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
   .map-band-pick .map-band-cur{display:none}
+  /* Storyline: the same control as Band by, folding earlier (its words are a storyline's name); a pick is the accent */
+  .map-story-pick{display:inline-flex;align-items:center;gap:6px;margin-right:8px;position:relative}
+  .map-story-pick .hud-label{font-size:9px;white-space:nowrap}
+  .map-story-pick .map-story-cur{display:none;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .map-story-pick.on .map-story-cur{color:var(--accent);border-color:var(--accent)}
+  @media (max-width:1799px){
+    .map-story-pick .map-story-cur{display:inline-block}
+    .map-story-pick .map-segs{display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:8;flex-direction:column;box-shadow:0 6px 18px rgba(0,0,0,.35);max-height:60vh;overflow:auto}
+    .map-story-pick.open .map-segs{display:flex}
+    .map-story-pick .map-seg + .map-seg{border-left:0;border-top:1px solid var(--line)}
+    .map-story-pick .map-seg{text-align:left}
+    /* with a storyline picker in the toolbar, Band by folds at the same width */
+    .map-tools:has(.map-story-pick) .map-band-pick .map-band-cur{display:inline-flex}
+    .map-tools:has(.map-story-pick) .map-band-pick .map-segs{display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:8;flex-direction:column;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+    .map-tools:has(.map-story-pick) .map-band-pick.open .map-segs{display:flex}
+    .map-tools:has(.map-story-pick) .map-band-pick .map-seg + .map-seg{border-left:0;border-top:1px solid var(--line)}
+    .map-tools:has(.map-story-pick) .map-band-pick .map-seg{text-align:left}
+  }
   .map-lvls .lv-short{display:none;align-items:center;gap:5px}
   .map-lvls .lv-short .sym{width:12px;height:12px}
   @media (max-width:1359px){
@@ -713,6 +731,19 @@
   .jrn-orgline .jrn-org-for{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;margin-right:2px}
   .jrn-orgline a{color:var(--accent);text-decoration:none}
   .jrn-orgline .jrn-org-also{color:var(--dim)}
+  .jrn-storyline:empty{display:none}
+  .jrn-story-line{display:inline-flex;align-items:center;gap:4px}
+  .jrn-story-nav{background:none;border:1px solid var(--line);border-radius:4px;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:1px 6px}
+  .jrn-story-nav:hover{border-color:var(--accent)}
+  .jrn-story-nav:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .jrn-story-nav.off{color:var(--dim);border-color:transparent;cursor:default}
+  .jrn-story-name{color:var(--ink)}
+  .jrn-story-steps{align-items:center}
+  .jrn-story-step{text-decoration:none}
+  .jrn-story-then{color:var(--dim);margin:0 1px}
+  .jrn-story-go{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .jrn-story-go .rel{flex:none;width:auto;margin:0}
+  .jrn-storyline{flex:none}
   .jrn-start .jrn-startlist{margin:6px 0 10px;padding-left:20px;color:var(--ink);font-size:12.5px;line-height:1.8}
   .jrn-start .jrn-startbtns{display:flex;gap:8px;align-items:center}
   /* both are actions: the accent, never the browser's link blue on the blue-black ground */
@@ -2227,6 +2258,11 @@
   .map-links .lbl.off{display:none}
   .map-links g[data-link]{opacity:.55}
   .map-links g.off{display:none}
+  /* a storyline's then line: the one line the board draws unhovered, at every altitude */
+  .map-links g[data-link="then"]{opacity:.95}
+  .map-links g[data-link="then"] path.ln{stroke:var(--accent);stroke-width:2.5}
+  .map-links g[data-link="then"] .head{stroke:var(--accent)}
+  .map-world.lvl-nb.links-lit .map-links g[data-link="then"]:not(.hot){opacity:.5}
   .map-links g.hot{opacity:1}
   .map-links g.hot path{stroke:var(--accent)}
   .map-links g.hot text{fill:var(--ink)}
@@ -2295,6 +2331,16 @@
   .map-band-head .w{font-family:var(--hud);text-transform:uppercase;letter-spacing:.16em;color:var(--ink);flex:none}
   .map-band-head .n{font-size:11px;color:var(--muted);flex:none}
   .map-band-head .d{font-size:11px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .map-band.story{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
+  /* banded by persona: a group's word in the gutter left of its run of journeys, counter-scaled like the band header */
+  .map-band-grp{position:absolute;pointer-events:none}
+  .map-band-grp .w{position:absolute;left:0;top:0;transform-origin:0 0;transform:scale(var(--map-inv,1));width:calc(100% / var(--map-inv,1));
+    padding:4px 10px 0 0;box-sizing:border-box;pointer-events:auto;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;
+    font-size:10px;line-height:1.35;color:var(--muted);white-space:normal;overflow-wrap:anywhere}
+  .map-world.lvl-nb .map-band-grp .w{transform:scale(var(--map-cs,1));width:calc(100% / var(--map-cs,1))}
+  /* a storyline's step number on a card and a street's head */
+  .map-step{display:inline-flex;align-items:center;justify-content:center;min-width:1.5em;height:1.5em;padding:0 .3em;margin-right:.45em;border-radius:.75em;
+    background:var(--accent);color:var(--bg);font-family:var(--hud);font-size:.85em;letter-spacing:0;vertical-align:.08em;box-sizing:border-box}
   /* the board draws cards, not streets: a card is narrower than its street, which waits for the journey altitude */
   .map-world.lvl-nb .map-dstreet{visibility:hidden;pointer-events:none}
   .map-world.lvl-nb .map-dhead{opacity:0;pointer-events:none}
@@ -2911,6 +2957,7 @@
       <span class="hud-label">Journey</span>
       <h2 id="jrn-title">—</h2>
       <span class="jrn-orgline" id="jrn-orgline"></span>
+      <span class="jrn-orgline jrn-storyline" id="jrn-storyline"></span>
       <span class="jrn-viewslot" id="jrn-layoutsw"></span>
       <button class="x" onclick="closeJourney()" aria-label="Close journey" title="Close (Esc)">✕</button>
     </div>

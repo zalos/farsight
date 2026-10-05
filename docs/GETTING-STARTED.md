@@ -341,12 +341,30 @@ Journeys are shown persona → group → journeys — on the Journeys front door
 
 `farsight.config.json → journeys` takes the same shapes and organises across manifests without editing them: its arrays are the order, an entry overrides the manifest entry with the same id field by field, and `flows[]` places a flow a manifest declared (`{ "id": "vendor-account-creation", "group": "access", "order": 3 }`) — an id no manifest declares is a note, never a journey. In an NX workspace each app can keep its own `apps/<app>/docs/design/screens.json` (discovered by name) and its own `apps/<app>/farsight.config.json`, whose paths are relative to the app's folder and whose `journeys` block applies to the manifests under it; `projects` and `tooling` are read from the root file only. Farsight never writes these files: an agent edits them with its own tools, calls `refresh_graph`, and checks the result with `journeys` (`design_guide` carries the whole schema).
 
-```sh
-farsight journeys                       # persona › group › journeys, with status, screens built and the way in
-farsight journeys --persona ops --json  # one persona, as the JourneyTree document GET /api/journeys returns
+### A business thing end to end: storylines
+
+A journey is one feature. A **storyline** (*questline* in the game register) chains journeys into the whole life of one business thing — an invoice from upload to payment, a vendor from creation to approval — across features and across personas, in order:
+
+```json
+{
+  "storylines": [
+    { "id": "invoice", "name": "An invoice, end to end", "description": "From the contractor's upload to the week it is paid.",
+      "journeys": ["contractor-sign-in", "invoice-submission", "invoice-review", "invoice-paid"] }
+  ]
+}
 ```
 
-`examples/invoice-app/docs/design/screens.json` is the dogfood fixture: two built screens (one with an SVG wireframe), one designed-but-unbuilt screen listing `deleteInvoice`, one page with no design row, one operation the design lists that its page never reaches; two personas (*Billing*, *Operations*), two groups, one journey under both personas, and a `journeys` placement in its `farsight.config.json`. `examples/nx-workspace` keeps one manifest per app (`apps/billing-web/…` found by name, `apps/ops-admin/…` declared by that app's own config; each with an *Access* group) beside the root one, and its root config's `journeys.personas` puts *Billing* before *Operations* whichever manifest is read first.
+- `journeys` are flow ids, in order; a storyline may chain the flows of every manifest of its source (an NX root manifest chaining its apps' journeys), and a journey may be in several storylines. An id no manifest declares, or one named twice, is a note — never a step.
+- `farsight.config.json → journeys.storylines[]` overrides by id, field by field (a `journeys` list replaces the whole list), its order first; a nested config's storyline steps only through the manifests under its folder.
+- Where it shows: a *Storylines* section at the top of the Journeys front door (each journey a numbered chip, *open on the Map*, *open the first journey*); the Map's *Storyline* picker (`#/map?storyline=invoice` draws only those journeys, in order, as one band with a *then* line from each to the next); the open journey's header (*Storyline · An invoice, end to end · step 2 of 4* with ‹ › to the journeys before and after); `GET /api/journeys` (`tree.storylines`), the MCP `journeys` tool (`storyline: "invoice"`) and the CLI.
+
+```sh
+farsight journeys                       # the storylines, then persona › group › journeys, with status, screens built and the way in
+farsight journeys --persona ops --json  # one persona, as the JourneyTree document GET /api/journeys returns
+farsight journeys --storyline invoice   # one storyline's steps, and under the personas only its journeys
+```
+
+`examples/invoice-app/docs/design/screens.json` is the dogfood fixture: two built screens (one with an SVG wireframe), one designed-but-unbuilt screen listing `deleteInvoice`, one page with no design row, one operation the design lists that its page never reaches; two personas (*Billing*, *Operations*), two groups, one journey under both personas, one storyline over its three flows, and a `journeys` placement in its `farsight.config.json`. `examples/nx-workspace` keeps one manifest per app (`apps/billing-web/…` found by name, `apps/ops-admin/…` declared by that app's own config; each with an *Access* group) beside the root one — whose storyline *A billing day* chains the journeys of both apps — and its root config's `journeys.personas` puts *Billing* before *Operations* whichever manifest is read first.
 
 ## Using Farsight in another app (local-only, no registry yet)
 

@@ -27,7 +27,7 @@ import { plainTip, countedHtml, defAttrs } from '../lib/counted.js';
 import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnDrillStep, jrnInspPanelHtml } from './journey-drill.js';
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
-import { filterTree, placesOf } from '../lib/journeys-model.js';
+import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -99,6 +99,7 @@ function renderPicker(el) {
   entries.forEach((n) => (byRepo[repoOf(n)] = byRepo[repoOf(n)] || []).push(n));
   let html = '<div class="set-wrap"><h1>' + esc(t('journeys.pickerTitle')) + '</h1><p class="sub">' + esc(t('journeys.pickerSub')) + '</p>'
     + startHereHtml()
+    + '<div id="jrn-storylines"></div>'
     + '<div id="jrn-organised"></div>'
     + '<div id="jrn-designs"></div>';
   const repos = Object.keys(byRepo).sort();
@@ -164,7 +165,52 @@ async function jrnMountDesigns() {
   const org = document.getElementById('jrn-organised');
   if (!org || !got || !got.tree) return;
   JRN_ORG = { tree: got.tree, designs: data.designs, live: got.live };
+  const stories = document.getElementById('jrn-storylines');
+  if (stories) stories.innerHTML = jrnStorylinesHtml(JRN_ORG);
   org.innerHTML = jrnOrganisedHtml(JRN_ORG, S.route || {});
+}
+
+// ── the storylines: one business thing, end to end (round-2026-10-05 §2.2) ──
+/**
+ * Above the personas: one card per storyline the design declares — its name and
+ * sentence, how many journeys it chains and how many are built, the journeys as
+ * numbered chips in its order (coloured as the screen chips are: built, not
+ * built), and two ways in: the Map drawing only this storyline, and its first
+ * journey. Nothing when the tree declares none.
+ * @group Journey view
+ * @business The whole life of one business thing — an invoice, a vendor — journey by journey, whoever does the work.
+ */
+function jrnStorylinesHtml(org) {
+  const tree = org && org.tree;
+  const list = (tree && tree.storylines) || [];
+  if (!list.length) return '';
+  const mapOn = !!(S.SETTINGS && S.SETTINGS.flags && S.SETTINGS.flags.map);
+  const stepKey = currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf';
+  let html = '<div class="set-sec jrn-stories"><h2' + defAttrs('journeys.storyline.title') + '>' + esc(t('journeys.storyline.title')) + '</h2>'
+    + '<p class="set-note">' + esc(t('journeys.storyline.sub')) + ' '
+    + (tree.counts && tree.counts.storylines ? countedHtml(tree.counts.storylines, '/api/journeys', { cls: 'jrn-org-n' }) : '') + '</p>';
+  for (const st of list) {
+    const steps = st.journeys || [];
+    const chips = steps.map((j, i) => {
+      const built = j.total > 0 && j.built >= j.total;
+      const cls = built ? 'ok' : j.built > 0 ? 'warn' : 'stub';
+      const where = t(stepKey).replace('{n}', i + 1).replace('{m}', steps.length);
+      const status = t(j.statusKey || 'journey.status.designedNotBuilt').replace('{n}', j.built || 0).replace('{m}', j.total || 0);
+      return (i ? '<span class="jrn-story-then" aria-hidden="true">›</span>' : '')
+        + '<a class="api-chip jrn-story-step ' + cls + '" href="' + esc('#/journeys/' + encodeURIComponent(j.nodeId)) + '"'
+        + tipAttrs({ text: where + ' · ' + (j.name || j.id) + ' · ' + status }) + '><b>' + (i + 1) + '</b>' + esc(j.name || j.id) + '</a>';
+    }).join('');
+    html += '<div class="dsg-flow jrn-story" data-storyline="' + esc(st.id) + '"><div class="dsg-flow-head">'
+      + '<span class="dsg-flow-name">' + esc(st.name || st.id) + '</span>'
+      + '<span class="jrn-pcount">' + jrnOrgCountsHtml(st.counts) + '</span></div>'
+      + (st.description ? '<p class="dsg-flow-desc">' + esc(jrnWords(st.description)) + '</p>' : '')
+      + (chips ? '<div class="dsg-chips jrn-story-steps">' + chips + '</div>' : '<p class="set-note">' + esc(t('journeys.storyline.empty')) + '</p>')
+      + '<div class="jrn-story-go">'
+      + (mapOn ? '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>' : '')
+      + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ')">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
+      + '</div></div>';
+  }
+  return html + '</div>';
 }
 
 // ── the organised section: persona → group → journeys ───────────
@@ -4029,6 +4075,8 @@ export function renderJourney(data) {
   // who the journey is for and its group, from the organised tree (a flow only)
   const orgEl = document.getElementById('jrn-orgline');
   if (orgEl) orgEl.innerHTML = '';
+  const storyEl = document.getElementById('jrn-storyline');
+  if (storyEl) storyEl.innerHTML = '';
   if (isFlow && entry.id) jrnFillOrg(entry.id);
   // the trackers' work on this journey, when a work source is configured and anything is linked
   fillJourneyWork(entry);
@@ -4136,6 +4184,7 @@ export function renderJourney(data) {
 function jrnFillOrg(entryId) {
   loadJourneyTree().then((got) => {
     if (!S.JOURNEY || !S.JOURNEY.entry || S.JOURNEY.entry.id !== entryId) return;
+    jrnFillStoryline(got && got.tree, entryId);
     const places = placesOf(got && got.tree, entryId);
     const el = document.getElementById('jrn-orgline');
     if (!places.length || !el) return;
@@ -4147,6 +4196,33 @@ function jrnFillOrg(entryId) {
       + (others.length ? ' <span class="jrn-org-also"' + defAttrs('journeys.persona.alsoUnder') + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
       + '</span>';
   }).catch(() => { /* an older server with no design answer: the header keeps its counts */ });
+}
+/**
+ * Beside who the journey is for: *Storyline · <name> · step n of m* with ‹ ›
+ * that open the journey before and after it in that storyline (at its first
+ * step: the journey opens from the top). The first storyline it is a step of;
+ * the others are named in the tip. Nothing when it is in none.
+ * @group Journey view
+ * @business Says which end-to-end storyline this journey is part of, where it stands in it, and opens the journeys before and after.
+ */
+function jrnFillStoryline(tree, entryId) {
+  const el = document.getElementById('jrn-storyline');
+  if (!el) return;
+  const at = storylineOf(tree, entryId);
+  if (!at.length) { el.innerHTML = ''; return; }
+  const a = at[0];
+  const where = t(currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf').replace('{n}', a.step).replace('{m}', a.of);
+  const others = at.slice(1).map((x) => x.storyline.name + ' · ' + t('journeys.storyline.stepOf').replace('{n}', x.step).replace('{m}', x.of));
+  const arrow = (j, glyph, key) => (j
+    ? '<button type="button" class="jrn-story-nav" onclick="openJourney(' + jsArg(j.nodeId) + ')" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"' + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id) }) + '>' + glyph + '</button>'
+    : '<span class="jrn-story-nav off" aria-hidden="true">' + glyph + '</span>');
+  el.innerHTML = '<span class="jrn-story-line" data-storyline="' + esc(a.storyline.id) + '">'
+    + arrow(a.prev, '‹', 'journeys.storyline.prev')
+    + '<span class="jrn-org-for"' + defAttrs('journeys.storyline.word') + '>' + esc(t('journeys.storyline.word')) + '</span> '
+    + '<span class="jrn-story-name"' + tipAttrs({ text: a.storyline.name + (a.storyline.description ? ' · ' + jrnWords(a.storyline.description) : '') + (others.length ? ' · ' + others.join(' · ') : '') }) + '>' + esc(a.storyline.name) + '</span>'
+    + ' · <span class="jrn-story-at"' + defAttrs('journeys.storyline.stepOf') + '>' + esc(where) + '</span>'
+    + arrow(a.next, '›', 'journeys.storyline.next')
+    + '</span>';
 }
 /**
  * The header count line: five named groups instead of a run of fourteen counts
