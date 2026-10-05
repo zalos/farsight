@@ -10,7 +10,7 @@
  * location, drift is computed ONCE here and stored. Pure — reading files and
  * talking to Figma lives in parsers/server.
  */
-import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneysMeta } from './graph.js';
+import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneyStorylineDecl, JourneysMeta } from './graph.js';
 import { t } from './strings.js';
 import { buildIndex, type GraphIndex } from './query.js';
 
@@ -85,6 +85,8 @@ export interface DesignManifest {
   personas?: JourneyPersonaDecl[];
   /** groups of journeys under a persona, in the order they are shown; one with `persona` exists under that persona only */
   groups?: JourneyGroupDecl[];
+  /** storylines: named chains of journeys across features and personas, each its flow ids in order */
+  storylines?: JourneyStorylineDecl[];
   figma?: { file?: string; token?: string };
   screens: DesignScreen[];
   flows?: DesignFlow[];

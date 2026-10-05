@@ -190,7 +190,99 @@ export function journeysMetaOf(
       };
     }
   }
-  return { personas, groups, flows, notes };
+  const storylines = storylinesOf(manifests, blocks, notes);
+  return { personas, groups, flows, ...(storylines.length ? { storylines } : {}), notes };
+}
+
+/** Every flow id these manifests declare, by its matching key. */
+function flowIdsOf(manifests: { manifest: DesignManifest; path: string }[]): Map<string, string> {
+  const ids = new Map<string, string>();
+  for (const { manifest } of manifests) {
+    for (const f of Array.isArray(manifest.flows) ? manifest.flows : []) {
+      const id = str(f?.id);
+      if (id && !ids.has(key(id))) ids.set(key(id), id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * The storylines of one source (round-2026-10-05 §2.1): the blocks' entries first and in their order, then the
+ * manifests' in manifest order; a block entry overrides an earlier one and the manifest entry with the same id,
+ * field by field (a `journeys` list it gives replaces the whole list). The steps are flow ids a manifest
+ * declares — a manifest's storyline may chain flows of every manifest of the source, a block's the flows of the
+ * manifests it reaches; any other id, or an id named twice, is a note and never a step.
+ */
+function storylinesOf(
+  manifests: { manifest: DesignManifest; path: string }[],
+  blocks: JourneysBlock[],
+  notes: string[],
+): NonNullable<JourneysMeta['storylines']> {
+  const out: NonNullable<JourneysMeta['storylines']> = [];
+  const at = new Map<string, number>();
+  const given = new Map<string, Set<string>>();
+  /** the block whose `journeys` list stands, per storyline (absent: a manifest's) */
+  const listFrom = new Map<string, JourneysBlock>();
+  for (const b of blocks) {
+    for (const s of b.journeys.storylines ?? []) {
+      const k = key(s.id);
+      const g = given.get(k) ?? new Set<string>();
+      given.set(k, g);
+      let i = at.get(k);
+      if (i == null) { i = out.length; at.set(k, i); out.push({ id: s.id, name: s.id, journeys: [], declared: true, from: b.from }); }
+      const e = out[i]!;
+      if (s.name) { e.name = s.name; g.add('name'); }
+      if (s.description) { e.description = s.description; g.add('description'); }
+      if (s.journeys) { e.journeys = s.journeys.slice(); g.add('journeys'); listFrom.set(k, b); }
+      if (s.name || s.description || s.journeys || !g.size) e.from = b.from;
+    }
+  }
+  const first = new Map<string, string>();
+  for (const { manifest, path } of manifests) {
+    for (const raw of Array.isArray(manifest.storylines) ? manifest.storylines : []) {
+      const id = str(raw?.id);
+      if (!id) continue;
+      const name = str(raw.name) ?? id;
+      const description = str(raw.description);
+      const journeys = (Array.isArray(raw.journeys) ? raw.journeys : []).map(str).filter((x): x is string => !!x);
+      const k = key(id);
+      const i = at.get(k);
+      if (i == null) {
+        at.set(k, out.length);
+        first.set(k, path);
+        out.push({ id, name, ...(description ? { description } : {}), journeys, declared: true, from: path });
+        continue;
+      }
+      const g = given.get(k);
+      if (g && !first.has(k)) {
+        first.set(k, path);
+        const e = out[i]!;
+        if (!g.has('name')) e.name = name;
+        if (!g.has('description') && description) e.description = description;
+        if (!g.has('journeys')) e.journeys = journeys;
+      } else if (first.get(k) !== path && !g?.has('journeys')) {
+        notes.push(`storyline "${id}" is declared by ${first.get(k)} and ${path}; the one in ${first.get(k)} is kept`);
+      }
+    }
+  }
+  // the steps: only flows a manifest in reach declares, each once, in the order written
+  const all = flowIdsOf(manifests);
+  for (const s of out) {
+    const b = listFrom.get(key(s.id));
+    const ids = b ? flowIdsOf(manifests.filter((m) => blockReaches(b, m.path))) : all;
+    const where = b && b.dir && b.dir !== '.' ? `under ${b.dir}/ ` : '';
+    const steps: string[] = [];
+    const own: string[] = [];
+    for (const raw of s.journeys) {
+      const id = ids.get(key(raw));
+      if (!id) { own.push(`storyline "${s.id}" names journey "${raw}", which no manifest ${where}declares — it is not a step`); continue; }
+      if (steps.includes(id)) { own.push(`storyline "${s.id}" names journey "${id}" twice — the first is its step`); continue; }
+      steps.push(id);
+    }
+    s.journeys = steps;
+    if (own.length) { s.notes = own; notes.push(...own); }
+  }
+  return out;
 }
 
 // ── request time: the tree ───────────────────────────────────────────────
@@ -211,6 +303,29 @@ export interface JourneyRow extends FlowRow {
   statusKey: string;
   /** the config file whose `journeys.flows` entry moved it; absent when the manifest placed it */
   placedBy?: string;
+  /** every storyline (by id) this journey is a step of, in the tree's storyline order */
+  storylines: string[];
+}
+
+/** One step of a storyline: the journey's row (its first place in the tree) and where it stands in the chain. */
+export interface StorylineStep extends JourneyRow {
+  /** its place in the storyline, 0-based — the surfaces print *step n of m* with n = stepIndex + 1 */
+  stepIndex: number;
+}
+
+/** A storyline — a named chain of journeys across features and personas, in its declared order. */
+export interface JourneyStoryline {
+  id: string;
+  name: string;
+  description?: string;
+  /** the source that declared it (a storyline chains the journeys of one source) */
+  repo: string;
+  /** the manifest or config path whose words it carries */
+  from: string;
+  journeys: StorylineStep[];
+  counts: { journeys: Counted; built: Counted };
+  /** what was set aside for this storyline: a named journey no manifest declares, one named twice, one out of scope */
+  notes: string[];
 }
 
 export interface JourneyGroup {
@@ -238,9 +353,11 @@ export interface JourneyPersona {
 }
 
 export interface JourneyTree {
+  /** the storylines in declared order, each its journeys in step order — drawn above the personas */
+  storylines: JourneyStoryline[];
   personas: JourneyPersona[];
   /** journeys counts each flow ONCE, however many personas show it */
-  counts: { journeys: Counted; personas: Counted; groups: Counted };
+  counts: { journeys: Counted; personas: Counted; groups: Counted; storylines: Counted };
   /** some persona came from a screen-id prefix */
   derived: boolean;
   notes: string[];
@@ -256,10 +373,19 @@ function groupCounts(rows: JourneyRow[], scope: 'count.scope.persona' | 'count.s
   };
 }
 
-function treeCounts(personas: JourneyPersona[]): JourneyTree['counts'] {
+function storylineCounts(steps: JourneyRow[], id: string): { journeys: Counted; built: Counted } {
+  const built = steps.filter((r) => r.status === 'both').length;
+  return {
+    journeys: counted(steps.length, 'count.unit.journeys', 'count.scope.storyline', `${SRC} → storylines[${id}].journeys`, { bizUnit: 'count.unit.journeys' }),
+    built: counted(built, 'count.unit.journeysBuilt', 'count.scope.storyline', `${SRC} → storylines[${id}].journeys where status = both`, { of: steps.length, bizUnit: 'count.unit.journeysBuilt' }),
+  };
+}
+
+function treeCounts(personas: JourneyPersona[], storylines: JourneyStoryline[]): JourneyTree['counts'] {
   const unique = new Set(personas.flatMap((p) => p.groups.flatMap((g) => g.journeys.map((j) => j.nodeId))));
   const sections = personas.reduce((n, p) => n + p.groups.length, 0);
   return {
+    storylines: counted(storylines.length, 'count.unit.storylines', 'count.scope.workspace', `${SRC} → storylines`, { bizUnit: 'count.unit.storylines' }),
     journeys: counted(unique.size, 'count.unit.journeys', 'count.scope.workspace', `${SRC} → distinct flow node ids`, { bizUnit: 'count.unit.journeys' }),
     personas: counted(personas.length, 'count.unit.personas', 'count.scope.workspace', `${SRC} → personas`, { bizUnit: 'count.unit.personas' }),
     groups: counted(sections, 'count.unit.groups', 'count.scope.workspace', `${SRC} → personas[].groups (one per persona it is shown under)`, { bizUnit: 'count.unit.groups' }),
@@ -388,6 +514,7 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
           groupId: gb.id,
           pinned: false,
           statusKey: flowStatusWord(p.row.built, p.row.total).key,
+          storylines: [],
           ...(p.placedBy ? { placedBy: p.placedBy } : {}),
         };
         // the organisation applied: what the tree placed it by, not only what the manifest said
@@ -429,24 +556,101 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
 
   const multi = inScope.length > 1;
   const notes = inScope.flatMap(([repo, m]) => (m.notes ?? []).map((n) => (multi ? `${repo}: ${n}` : n)));
-  return { personas, counts: treeCounts(personas), derived: derivedAny, notes };
+  const storylines = storylinesFold(personas, inScope, notes);
+  return { storylines, personas, counts: treeCounts(personas, storylines), derived: derivedAny, notes };
+}
+
+/**
+ * The storylines of the sources in scope, in source then declared order, each its journeys as steps — the
+ * journey's first row in the tree with its `stepIndex`. One storyline per id: a second source declaring the
+ * same id is a note (storylines chain the journeys of one source). Every row of the tree learns which
+ * storylines it is a step of. O(journeys + steps).
+ */
+function storylinesFold(personas: JourneyPersona[], inScope: [string, JourneysMeta][], notes: string[]): JourneyStoryline[] {
+  const firstRow = new Map<string, JourneyRow>();
+  const rowsOf = new Map<string, JourneyRow[]>();
+  for (const p of personas) for (const g of p.groups) for (const j of g.journeys) {
+    if (!firstRow.has(j.nodeId)) firstRow.set(j.nodeId, j);
+    const list = rowsOf.get(j.nodeId) ?? [];
+    list.push(j);
+    rowsOf.set(j.nodeId, list);
+  }
+  const declared: { repo: string; s: NonNullable<JourneysMeta['storylines']>[number]; nodeIds: string[]; own: string[] }[] = [];
+  const seen = new Map<string, string>();
+  for (const [repo, m] of inScope) {
+    for (const s of m.storylines ?? []) {
+      const k = key(s.id);
+      if (seen.has(k)) { notes.push(`storyline "${s.id}" is declared by ${seen.get(k)} and ${repo}; the one in ${seen.get(k)} is kept`); continue; }
+      seen.set(k, repo);
+      const own = [...(s.notes ?? [])];
+      const nodeIds: string[] = [];
+      for (const fid of s.journeys ?? []) {
+        const nodeId = `${repo}::flow::${fid}`;
+        if (!firstRow.has(nodeId)) { own.push(`journey "${fid}" is not drawn in this scope — it is not a step here`); continue; }
+        if (!nodeIds.includes(nodeId)) nodeIds.push(nodeId);
+      }
+      declared.push({ repo, s, nodeIds, own });
+    }
+  }
+  // every row of a journey shares one list of the storylines it is a step of
+  const memberOf = new Map<string, string[]>();
+  for (const d of declared) for (const nodeId of d.nodeIds) {
+    const list = memberOf.get(nodeId) ?? [];
+    if (!list.includes(d.s.id)) list.push(d.s.id);
+    memberOf.set(nodeId, list);
+  }
+  for (const [nodeId, list] of memberOf) for (const r of rowsOf.get(nodeId) ?? []) r.storylines = list;
+  return declared.map(({ repo, s, nodeIds, own }) => {
+    const journeys: StorylineStep[] = nodeIds.map((nodeId, i) => ({ ...firstRow.get(nodeId)!, stepIndex: i }));
+    return {
+      id: s.id, name: s.name,
+      ...(s.description ? { description: s.description } : {}),
+      repo, from: s.from,
+      journeys,
+      counts: storylineCounts(journeys, s.id),
+      notes: own,
+    };
+  });
 }
 
 // ── reading the tree ─────────────────────────────────────────────────────
 
 const matches = (x: { id: string; name: string }, q: string) => key(x.id) === key(q) || key(x.name) === key(q);
 
-/** The tree narrowed to one persona and/or one group (by id or name); the tree's own counts follow what is kept. */
-export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?: string } = {}): JourneyTree {
+/**
+ * The tree narrowed to one persona, one group and/or one storyline (each by id or name); the tree's own counts
+ * follow what is kept. A storyline keeps that storyline only, and under the personas only its journeys.
+ */
+export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?: string; storyline?: string } = {}): JourneyTree {
+  const storylines = (tree.storylines ?? []).filter((s) => !opts.storyline || matches(s, opts.storyline));
+  const inStory = opts.storyline ? new Set(storylines.flatMap((s) => s.journeys.map((j) => j.nodeId))) : null;
   const personas = tree.personas
     .filter((p) => !opts.persona || matches(p, opts.persona))
     .map((p) => {
-      if (!opts.group) return p;
-      const groups = p.groups.filter((g) => matches(g, opts.group!));
+      if (!opts.group && !inStory) return p;
+      const groups = p.groups
+        .filter((g) => !opts.group || matches(g, opts.group))
+        .map((g) => (inStory ? { ...g, journeys: g.journeys.filter((j) => inStory.has(j.nodeId)), counts: groupCounts(g.journeys.filter((j) => inStory.has(j.nodeId)), 'count.scope.group', `${p.id}/${g.id}`) } : g))
+        .filter((g) => g.journeys.length);
       return { ...p, groups, counts: groupCounts(groups.flatMap((g) => g.journeys), 'count.scope.persona', p.id) };
     })
     .filter((p) => p.groups.length);
-  return { ...tree, personas, counts: treeCounts(personas), derived: personas.some((p) => p.derived) };
+  return { ...tree, storylines, personas, counts: treeCounts(personas, storylines), derived: personas.some((p) => p.derived) };
+}
+
+/** Where a journey stands in each storyline it is a step of: `{ storyline, step, of, prev?, next? }` (step 1-based). */
+export function storylinePlacements(tree: JourneyTree, nodeId: string): { id: string; name: string; step: number; of: number; prev?: string; next?: string }[] {
+  const out: { id: string; name: string; step: number; of: number; prev?: string; next?: string }[] = [];
+  for (const s of tree.storylines ?? []) {
+    const i = s.journeys.findIndex((j) => j.nodeId === nodeId);
+    if (i < 0) continue;
+    out.push({
+      id: s.id, name: s.name, step: i + 1, of: s.journeys.length,
+      ...(i > 0 ? { prev: s.journeys[i - 1]!.nodeId } : {}),
+      ...(i < s.journeys.length - 1 ? { next: s.journeys[i + 1]!.nodeId } : {}),
+    });
+  }
+  return out;
 }
 
 /** Where a journey sits: one persona › group pair per persona it is shown under. */
@@ -459,7 +663,8 @@ export function journeyPlacements(tree: JourneyTree, nodeId: string): { persona:
 /** `18 journeys · 2 personas · 6 groups across every source in scope`, then the first group of each persona. */
 export function journeyTreeSummary(tree: JourneyTree): string {
   const c = tree.counts;
-  const head = `${countedText(c.journeys, { scope: false })} · ${countedText(c.personas, { scope: false })} · ${countedText(c.groups)}`;
+  const stories = c.storylines && c.storylines.n ? `${countedText(c.storylines, { scope: false })} · ` : '';
+  const head = `${countedText(c.journeys, { scope: false })} · ${stories}${countedText(c.personas, { scope: false })} · ${countedText(c.groups)}`;
   const firsts = tree.personas.map((p) => `${p.name} › ${p.groups[0]?.name ?? ''}`);
   return firsts.length ? `${head} — first: ${firsts.join(' · ')}` : head;
 }
@@ -474,6 +679,18 @@ export function journeyTreeLines(tree: JourneyTree, opts: { openHint?: string } 
   if (!tree.personas.length) return ['no journeys in scope — a design manifest (docs/design/screens.json) declares them as flows; design_guide explains how'];
   lines.push(journeyTreeSummary(tree).replace(/ — first: .*$/, ''));
   if (tree.derived) lines.push(`(${t('portfolio.personaDerived', 'professional')})`);
+  if (tree.storylines?.length) {
+    // the storylines first: the whole life of one business thing, across the personas below
+    lines.push('', `## ${t('journeys.storyline.title', 'professional')} — ${countedText(tree.counts.storylines, { scope: false })}`);
+    for (const s of tree.storylines) {
+      lines.push(`### ${s.name} (\`${s.id}\`) — ${countedText(s.counts.journeys, { scope: false })} · ${countedText(s.counts.built, { scope: false })}${s.description ? ` — ${s.description}` : ''}`);
+      for (const j of s.journeys) {
+        const word = flowStatusWord(j.built, j.total);
+        lines.push(`${j.stepIndex + 1}. ${j.name} — ${word.text} · \`${j.nodeId}\`${opts.openHint ? ` ${opts.openHint}` : ''}`);
+      }
+      for (const n of s.notes.filter((x) => !tree.notes.some((y) => y.endsWith(x)))) lines.push(`- note: ${n}`);
+    }
+  }
   for (const p of tree.personas) {
     lines.push('', `## ${p.name}${p.declared ? '' : p.key ? '' : p.derived ? ' (derived from screen ids)' : ' (not declared in personas[])'} — ${countedText(p.counts.journeys, { scope: false })} · ${countedText(p.counts.built, { scope: false })}${p.description ? ` — ${p.description}` : ''}`);
     for (const g of p.groups) {

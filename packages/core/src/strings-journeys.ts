@@ -50,4 +50,53 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
     'Who this journey is for and the group it sits in, as the design manifest or the configuration declares them.'),
   'journeys.persona.alsoUnder': same('also for {names}',
     'This journey is for more than one person, so it is listed under each of them and counted once in the total.'),
+  // storylines (round-2026-10-05 §2): a named chain of journeys across features and personas — questline in
+  // the game register, beside quest log and fast travel; storyline in the professional one
+  'count.scope.storyline': {
+    hud: 'in this questline', professional: 'in this storyline',
+    define: 'What the number beside it counts over: the journeys one storyline chains together, in its order. A journey is counted once however often a storyline names it.',
+  },
+  'count.unit.storylines': {
+    hud: '{n} questlines', professional: '{n} storylines',
+    define: 'Named chains of journeys the design declares: the whole life of one business thing, such as an invoice from upload to payment, across features and kinds of person.',
+  },
+  'count.unit.storylinesOne': { hud: '1 questline', professional: '1 storyline', singularOf: 'count.unit.storylines' },
+  'journeys.storyline.title': {
+    hud: 'Questlines', professional: 'Storylines',
+    define: 'The whole life of one business thing across many journeys and both kinds of person, such as an invoice from upload to payment, as the design manifest or the configuration declares it, journey by journey in order.',
+  },
+  'journeys.storyline.sub': same('Each one follows one thing from start to end, journey by journey, whoever does the work.'),
+  'journeys.storyline.word': {
+    hud: 'Questline', professional: 'Storyline',
+    define: 'A named chain of journeys the design declares in order: the whole life of one business thing across features and kinds of person.',
+  },
+  'journeys.storyline.stepOf': same('step {n} of {m}',
+    'Where this journey stands in the storyline: its place in the order the design declares, out of the journeys the storyline chains.'),
+  'journeys.storyline.bizStepOf': same('journey {n} of {m}',
+    'Where this journey stands in the storyline: its place in the order the design declares, out of the journeys the storyline chains.'),
+  'journeys.storyline.in': {
+    hud: 'in questline: {name}', professional: 'in storyline: {name}',
+    define: 'This journey is part of a storyline the design declares; the number after it says where it stands in that chain.',
+  },
+  'journeys.storyline.prev': same('Open the journey before this one in the storyline'),
+  'journeys.storyline.next': same('Open the journey after this one in the storyline'),
+  'journeys.storyline.openMap': same('open on the Map'),
+  'journeys.storyline.openFirst': same('open the first journey'),
+  'journeys.storyline.empty': same('No journey of this storyline is in scope.'),
+  'journeys.storyline.notBuilt': same('not built',
+    'The design declares this journey and the code builds none of its screens yet.'),
+  'map.storyline.pick': {
+    hud: 'Questline', professional: 'Storyline',
+    define: 'Draw only the journeys of one storyline, in its order, as one band with a line from each journey to the next. All draws every journey again.',
+  },
+  'map.storyline.all': same('All journeys',
+    'Every journey in scope, in the bands chosen beside it: no storyline picked.'),
+  'map.storyline.step': same('step {n} of {m}',
+    'Where this journey stands in the storyline on the board: its place in the order the design declares, out of the journeys the storyline chains.'),
+  'map.storyline.bizStep': same('journey {n} of {m}',
+    'Where this journey stands in the storyline on the board: its place in the order the design declares, out of the journeys the storyline chains.'),
+  'map.link.then': same('then',
+    'The next journey in the storyline on the board: the line runs from each journey to the one the design declares after it.'),
+  'map.band.group': same('group',
+    'A group of journeys under this kind of person, as the design declares it: its journeys start on a row of their own.'),
 };
