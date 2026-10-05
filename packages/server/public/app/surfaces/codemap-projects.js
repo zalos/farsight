@@ -19,7 +19,7 @@ import { sym } from '../sym.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { plainTip, countedHtml, countedAttrs, countedText } from '../lib/counted.js';
 import { pickerHtml, focusPicker, resetPicker, pickerHasQuery } from '../lib/multi-pick.js';
-import { render, select, renderNode, drawEdges, kindWord, NODE_W } from '../lib/graph-render.js';
+import { render, select, makeNode, kindWord, NODE_W, stageItems, clearStage, revealOnStage } from '../lib/graph-render.js';
 import {
   foldGroups, projectOfItem, projectFacets, dimensionsOf,
   closureColumns, versionFor, repoOfNode, buildCodemapIndex, groupChoicesFor, passFor, projectClosure,
@@ -302,27 +302,41 @@ export function renderGrouped(nodes, memberToGroup, again = false) {
   const svg = document.getElementById('edgesvg');
   svg.setAttribute('width', maxX + 60); svg.setAttribute('height', maxY + 60);
   stage.querySelectorAll('.cm-elabel').forEach((e) => e.remove());
-  for (const b of boxes) stage.appendChild(boxEl(b));
-  for (const b of boxes) b.g.members.forEach((n) => renderNode(n, true, 'cm-m'));
-  // a card's height follows its words (a long name wraps, a badge row): measured once drawn, and when any card is
-  // taller than the row it was given the boxes are laid out again with the measured heights (round 2: cards overlapped)
-  let taller = false;
+  // the boxes, then their cards (then the package view's own card): the stage paints the ones in view (graph-render stageItems)
+  const draw = [];
+  for (const b of boxes) draw.push({ key: 'box:' + b.g.key, x: b.x, y: b.y, w: b.w, h: b.h, make: () => boxEl(b) });
   for (const b of boxes) for (const n of b.g.members) {
-    const el = document.getElementById('nd-' + cssId(n.id));
-    if (!el) continue;
-    const h = el.offsetHeight + 6;
-    if (h > cardH(n)) taller = true;
-    MEASURED.set(n.id, h);
+    const p = S.positions[n.id];
+    if (p) draw.push({ key: n.id, n, x: p.x, y: p.y, w: NODE_W, h: cardH(n), make: () => makeNode(n, true, 'cm-m') });
   }
+  if (seed && S.positions[seed.id]) draw.push({ key: seed.id, x: S.positions[seed.id].x, y: S.positions[seed.id].y, w: NODE_W, h: 100, make: () => makeNode(seed, false) });
+  // a card's height follows its words (a long name wraps, a badge row): measured once drawn, and when any card is
+  // taller than the row it was given the boxes are laid out again with the measured heights (round 2: cards overlapped).
+  // On a windowed stage the cards painted later by a scroll are measured as they arrive, and one relayout follows.
+  let first = true;
+  const measure = (added) => {
+    let taller = false;
+    // every height read in one pass after the paint: one layout, not one per card
+    const read = added.filter((it) => it.n).map((it) => [it, document.getElementById('nd-' + cssId(it.key))]).filter(([, el]) => el).map(([it, el]) => [it, el.offsetHeight + 6]);
+    for (const [it, h] of read) {
+      if (h > cardH(it.n)) taller = true;
+      MEASURED.set(it.n.id, h);
+    }
+    if (!taller || first) return taller;
+    clearTimeout(RELAYOUT);
+    RELAYOUT = setTimeout(() => { if (document.body.classList.contains('surface-graph')) render(); }, 250);
+    return taller;
+  };
+  const taller = measure(stageItems(draw, memberToGroup, nodes, (added) => { if (!first) measure(added); }));
+  first = false;
   if (taller && !again) {
-    stage.querySelectorAll('.node,.lanehead,.groupbox').forEach((e) => e.remove());
+    clearStage(stage);
     renderGrouped(nodes, memberToGroup, true);
     return;
   }
-  if (seed) renderNode(seed, false);
-  drawEdges(memberToGroup);
   if (c.view && c.view.kind === 'app' && c.view.data) drawProjectArrows(boxes);
 }
+let RELAYOUT = 0;
 
 /** One group's box: its header and its count; the members are cards drawn over it. */
 function boxEl(b) {
@@ -827,7 +841,7 @@ export function cmapArrive(route) {
   if (!route || c.view) return;
   if (route.box) {
     const key = [...projectsFromLink(route.box)][0];
-    const find = () => key && document.getElementById('cmbox-' + cssId('p::' + key));
+    const find = () => key && revealOnStage('box:p::' + key, 'cmbox-' + cssId('p::' + key));
     // a kept filter that leaves the project out gives way: the arrival is the project
     if (key && !find() && narrowing()) { c.projects = new Set(); c.values = {}; c.dep = null; saveFilters(); redraw(); }
     const el = find();

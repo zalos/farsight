@@ -60,7 +60,7 @@ export function displayNodes() {
   // one pass, O(1) per node: the scope's sources read once, the code map's own reasons a lookup (cmapHide)
   const repos = scopedRepos();
   const raw = S.GRAPH.nodes.filter((n) => n.kind !== 'guard' && (!repos || repos.has(repoOf(n))) && (!S.focusSet || S.focusSet.has(n.id)) && !cmapHide(n));
-  const out = [], groupMap = {};
+  const out = [], groupMap = {}, tagSets = new Map();
   for (const n of raw) {
     const g = effectiveGroup(n);
     if (g) {
@@ -68,12 +68,16 @@ export function displayNodes() {
         groupMap[g.key] = { id: 'group::' + g.key, key: g.key, kind: 'group', laneKind: g.laneKind, expanded: S.expandedGroups.has(g.key),
           name: g.name, codename: g.codename, members: [], tags: [], repo: repoOf(n),
           loc: g.anchor && g.anchor.loc ? { path: g.anchor.loc.path, line: g.anchor.loc.line + 0.5 } : undefined };
+        tagSets.set(groupMap[g.key], new Set());
         out.push(groupMap[g.key]);
       }
       groupMap[g.key].members.push(n);
-      groupMap[g.key].tags = [...new Set([...groupMap[g.key].tags, ...(n.tags || [])])];
+      // one Set per group, made into the list once at the end (rebuilding the list per member was quadratic)
+      const set = tagSets.get(groupMap[g.key]);
+      for (const tag of n.tags || []) set.add(tag);
     } else out.push(n);
   }
+  for (const [grp, set] of tagSets) grp.tags = [...set];
   return out.filter((n) => laneOf(n) >= 0);
 }
 /** Re-route edges to group nodes; drop guard edges (badges instead); dedupe. */
@@ -116,7 +120,8 @@ export function itemHeight(n) {
  */
 export function render() {
   const stage = document.getElementById('stage'), svg = document.getElementById('edgesvg');
-  stage.querySelectorAll('.node,.lanehead,.groupbox').forEach((e) => e.remove());
+  clearStage(stage);
+  svg.innerHTML = '';
   const nodes = displayNodes();
   S.displayCache = nodes;
   S.displayById = new Map(nodes.map((n) => [n.id, n]));
@@ -126,23 +131,29 @@ export function render() {
   // grouped by project or a tag dimension, or one of the two views: boxes of cards (surfaces/codemap-projects.js)
   if (cmapGrouping() !== 'none') { renderGrouped(nodes, memberToGroup); return; }
 
-  nodes.sort((a, b) => ((a.loc && a.loc.path) || a.codename || '').localeCompare((b.loc && b.loc.path) || b.codename || '') || ((a.loc && a.loc.line) || 0) - ((b.loc && b.loc.line) || 0));
-  const laneNodes = LANES.map((l, i) => nodes.filter((n) => laneOf(n) === i)).filter((g) => g.length);
-  const laneLabels = LANES.filter((l, i) => nodes.some((n) => laneOf(n) === i)).map((l) => (l.key ? t(l.key) : l.label));
+  // one sort key per card, compared with one collator (localeCompare per comparison was most of a large draw)
+  const keyOf = new Map(nodes.map((n) => [n, (n.loc && n.loc.path) || n.codename || '']));
+  nodes.sort((a, b) => COLLATE.compare(keyOf.get(a), keyOf.get(b)) || ((a.loc && a.loc.line) || 0) - ((b.loc && b.loc.line) || 0));
+  const laneNodes = LANES.map(() => []);
+  for (const n of nodes) { const i = laneOf(n); if (i >= 0) laneNodes[i].push(n); }
+  const laneLabels = LANES.filter((l, i) => laneNodes[i].length).map((l) => (l.key ? t(l.key) : l.label));
   const head = document.createElement('div'); head.className = 'lanehead'; head.style.display = 'flex';
   S.positions = {};
+  const items = [];
   let colOffset = 0, maxY = 0;
-  laneNodes.forEach((group, gi) => {
+  laneNodes.filter((g) => g.length).forEach((group, gi) => {
     let sub = 0, y = TOP;
     group.forEach((n) => {
       const h = itemHeight(n);
       if (y + h > COL_MAX && y > TOP) { sub++; y = TOP; }
-      S.positions[n.id] = { x: (colOffset + sub) * LANE_W + (LANE_W - NODE_W) / 2, y };
+      const p = S.positions[n.id] = { x: (colOffset + sub) * LANE_W + (LANE_W - NODE_W) / 2, y };
       if (n.kind === 'group' && n.expanded) {
+        items.push({ key: 'gbox:' + n.key, x: p.x - 6, y: p.y, w: NODE_W + 12, h, make: () => makeGroupBox(n) });
         n.members.forEach((m, i) => {
-          S.positions[m.id] = { x: S.positions[n.id].x + GB_PADX, y: y + GB_HEAD + i * GB_ROW, w: NODE_W - GB_PADX * 2 };
+          const q = S.positions[m.id] = { x: p.x + GB_PADX, y: y + GB_HEAD + i * GB_ROW, w: NODE_W - GB_PADX * 2 };
+          items.push({ key: m.id, x: q.x, y: q.y, w: q.w, h: GB_ROW, make: () => makeNode(m, true) });
         });
-      }
+      } else items.push({ key: n.id, x: p.x, y: p.y, w: NODE_W, h, make: () => makeNode(n, false) });
       y += h + GAP; maxY = Math.max(maxY, y);
     });
     const subcols = sub + 1;
@@ -153,14 +164,121 @@ export function render() {
   stage.style.width = Math.max(colOffset, 1) * LANE_W + 'px';
   stage.style.height = (maxY + 40) + 'px';
   svg.setAttribute('width', Math.max(colOffset, 1) * LANE_W); svg.setAttribute('height', maxY + 40);
-
-  nodes.forEach((n) => {
-    if (n.kind === 'group' && n.expanded) { renderGroupBox(n); return; }
-    renderNode(n, false);
-  });
-
-  drawEdges(memberToGroup);
+  stageItems(items, memberToGroup, nodes);
 }
+const COLLATE = new Intl.Collator();
+
+// ── the windowed stage ──────────────────────────────────────────────
+// A thousand-project workspace puts ~150k cards on the code map. The layout (every card's place) is
+// computed for all of them — it is arithmetic — but only the cards and boxes near the viewport are
+// elements: the stage is cut into cells, a scroll paints the cells in view (and one viewport around
+// them) and lets go of the rest, and the arrows are drawn for the cards on the stage. Below
+// WINDOW_AT drawables everything is drawn, as it always was.
+const WINDOW_AT = 1500;
+const CELL = 1024;
+let PAINT = null;
+let PAINT_RAF = 0;
+
+/** Remove every card, box and lane head from the stage, drawn or not. @group Graph rendering */
+export function clearStage(stage) {
+  (stage || document.getElementById('stage')).querySelectorAll('.node,.lanehead,.groupbox').forEach((e) => e.remove());
+  if (PAINT) PAINT.drawn.clear();
+}
+
+/**
+ * Hand the stage its drawables — `{ key, x, y, w, h, make }`, boxes before the cards inside them — and
+ * paint what is in view. `onPaint(added)` is told which drawables were just made (the grouped layout
+ * measures their heights). @group Graph rendering
+ */
+export function stageItems(items, memberToGroup, display, onPaint) {
+  const windowed = items.length >= WINDOW_AT;
+  const grid = new Map();
+  const byKey = new Map();
+  items.forEach((it, i) => {
+    byKey.set(it.key, it);
+    if (!windowed) return;
+    for (let cx = Math.floor(it.x / CELL); cx <= Math.floor((it.x + it.w) / CELL); cx++) {
+      for (let cy = Math.floor(it.y / CELL); cy <= Math.floor((it.y + it.h) / CELL); cy++) {
+        const k = cx + ',' + cy;
+        const l = grid.get(k); if (l) l.push(i); else grid.set(k, [i]);
+      }
+    }
+  });
+  const members = new Map();
+  for (const n of display || []) if (n.kind === 'group' && !n.expanded) members.set(n.id, n.members);
+  PAINT = { items, grid, byKey, windowed, drawn: new Map(), memberToGroup, members, onPaint };
+  bindStageScroll();
+  return paintStage();
+}
+
+/** Paint the drawables in view (all of them below the threshold); returns the ones just made. @group Graph rendering */
+export function paintStage() {
+  const P = PAINT;
+  if (!P) return [];
+  const stage = document.getElementById('stage');
+  let want = P.items;
+  if (P.windowed) {
+    const wrap = stage.parentElement;
+    const vw = (wrap && wrap.clientWidth) || 1400, vh = (wrap && wrap.clientHeight) || 900;
+    const left = wrap ? wrap.scrollLeft : 0, top = wrap ? wrap.scrollTop : 0;
+    const x0 = left - vw, x1 = left + 2 * vw, y0 = top - vh, y1 = top + 2 * vh;
+    const idx = new Set();
+    for (let cx = Math.floor(x0 / CELL); cx <= Math.floor(x1 / CELL); cx++) {
+      for (let cy = Math.floor(y0 / CELL); cy <= Math.floor(y1 / CELL); cy++) {
+        for (const i of P.grid.get(cx + ',' + cy) || []) idx.add(i);
+      }
+    }
+    want = [...idx].sort((a, b) => a - b).map((i) => P.items[i]).filter((it) => it.x < x1 && it.x + it.w > x0 && it.y < y1 && it.y + it.h > y0);
+  }
+  const keep = new Set();
+  const frag = document.createDocumentFragment();
+  const added = [];
+  for (const it of want) {
+    keep.add(it.key);
+    if (P.drawn.has(it.key)) continue;
+    const el = it.make();
+    if (!el) continue;
+    P.drawn.set(it.key, el);
+    frag.appendChild(el);
+    added.push(it);
+  }
+  for (const [k, el] of P.drawn) if (!keep.has(k)) { el.remove(); P.drawn.delete(k); }
+  stage.appendChild(frag);
+  if (P.onPaint && added.length) P.onPaint(added);
+  if (PAINT === P) drawEdges(P.memberToGroup);
+  return added;
+}
+
+function bindStageScroll() {
+  const wrap = document.getElementById('stage') && document.getElementById('stage').parentElement;
+  if (!wrap || wrap.dataset.paints) return;
+  wrap.dataset.paints = '1';
+  const later = () => {
+    if (!PAINT || !PAINT.windowed || PAINT_RAF) return;
+    PAINT_RAF = requestAnimationFrame(() => { PAINT_RAF = 0; paintStage(); });
+  };
+  wrap.addEventListener('scroll', later, { passive: true });
+  window.addEventListener('resize', later);
+}
+
+/**
+ * The element of a card or a box, painting it first when the stage is windowed and it is out of view:
+ * the stage scrolls to it (centred) and paints. `key` is a node id, or `box:<group key>` for a box.
+ * @group Graph rendering
+ */
+export function revealOnStage(key, domId) {
+  const have = document.getElementById(domId);
+  if (have || !PAINT || !PAINT.windowed) return have;
+  const it = PAINT.byKey.get(key);
+  const wrap = document.getElementById('stage').parentElement;
+  if (!it || !wrap) return null;
+  wrap.scrollLeft = Math.max(0, it.x + it.w / 2 - wrap.clientWidth / 2);
+  wrap.scrollTop = Math.max(0, it.y + it.h / 2 - wrap.clientHeight / 2);
+  paintStage();
+  return document.getElementById(domId);
+}
+/** A card's element, painted into view first when the stage is windowed. @group Graph rendering */
+export function revealCard(id) { return revealOnStage(id, 'nd-' + cssId(id)); }
 /**
  * The arrows between the cards on the map, from where `render()` (or the
  * grouped layout) put them: every edge whose two ends are drawn, re-routed to
@@ -169,26 +287,50 @@ export function render() {
  */
 export function drawEdges(memberToGroup) {
   const svg = document.getElementById('edgesvg');
-  svg.innerHTML = '';
-  const visibleIds = new Set(Object.keys(S.positions));
-  displayEdges(visibleIds, memberToGroup).forEach((e) => {
-    const A = S.positions[e.from], B = S.positions[e.to]; if (!A || !B) return;
-    const nA = document.getElementById('nd-' + cssId(e.from)), nB = document.getElementById('nd-' + cssId(e.to));
-    const hA = nA ? nA.offsetHeight : 50, hB = nB ? nB.offsetHeight : 50;
+  let layer = svg.querySelector('g.edge-layer');
+  if (!layer) { layer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); layer.setAttribute('class', 'edge-layer'); svg.insertBefore(layer, svg.firstChild); }
+  const P = PAINT;
+  let edges;
+  if (P && P.windowed) {
+    // the arrows of the cards on the stage: each drawn card's own edges (a folded group's are its members'),
+    // re-routed to the cards they are drawn on — never every edge of the graph
+    const seen = new Set();
+    edges = [];
+    for (const id of P.drawn.keys()) {
+      for (const own of P.members.get(id) || [{ id }]) {
+        for (const e of S.EDGES_OF.get(own.id) || []) {
+          if (e.kind === 'guards') continue;
+          const from = memberToGroup[e.from] || e.from, to = memberToGroup[e.to] || e.to;
+          if (from === to || !S.positions[from] || !S.positions[to]) continue;
+          const key = e.kind + '|' + from + '|' + to;
+          if (seen.has(key)) continue; seen.add(key);
+          edges.push({ kind: e.kind, from, to });
+        }
+      }
+    }
+  } else edges = displayEdges(new Set(Object.keys(S.positions)), memberToGroup);
+  // every height read before anything is written: a read after a write is a layout per arrow
+  const heights = new Map();
+  const hOf = (id) => {
+    if (!heights.has(id)) { const el = document.getElementById('nd-' + cssId(id)); heights.set(id, el ? el.offsetHeight : 50); }
+    return heights.get(id);
+  };
+  let html = '';
+  for (const e of edges) {
+    const A = S.positions[e.from], B = S.positions[e.to]; if (!A || !B) continue;
+    const hA = hOf(e.from), hB = hOf(e.to);
     const wA = A.w || NODE_W, wB = B.w || NODE_W;
     let x1 = A.x + wA, y1 = A.y + hA / 2, x2 = B.x, y2 = B.y + hB / 2;
     if (B.x <= A.x) { x1 = A.x; x2 = B.x + wB; }
     if (Math.abs(A.x - B.x) < LANE_W / 2) { x1 = A.x + wA; x2 = B.x + wB; }
     const mx = (x1 + x2) / 2;
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     const bend = A.x === B.x ? ' C' + (x1 + 40) + ',' + y1 + ' ' + (x2 + 40) + ',' + y2 + ' ' + x2 + ',' + y2 : ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2;
-    path.setAttribute('d', 'M' + x1 + ',' + y1 + bend);
     let cls = 'edge';
     if (e.kind === 'validates') cls += ' validates';
     if (S.selected && (e.from === S.selected || e.to === S.selected)) cls += ' hot';
-    path.setAttribute('class', cls);
-    svg.appendChild(path);
-  });
+    html += '<path d="M' + x1 + ',' + y1 + bend + '" class="' + cls + '"/>';
+  }
+  layer.innerHTML = html;
 }
 /**
  * Shared node-card body markup — kind color bar, biz name, codename, path,
@@ -215,8 +357,12 @@ export function nodeCardHtml(n, mini, name) {
  * @group Graph rendering
  */
 export function renderNode(n, mini, extraCls) {
-  const stage = document.getElementById('stage');
-  const p = S.positions[n.id]; if (!p) return;
+  const el = makeNode(n, mini, extraCls);
+  if (el) document.getElementById('stage').appendChild(el);
+}
+/** A card's element at its place in `S.positions`, not yet on the stage. @group Graph rendering */
+export function makeNode(n, mini, extraCls) {
+  const p = S.positions[n.id]; if (!p) return null;
   const el = document.createElement('div');
   const isGroup = n.kind === 'group';
   el.className = 'node nk-' + cssId(n.kind || '') + (mini ? ' mini' : '') + (extraCls ? ' ' + extraCls : '')
@@ -234,7 +380,7 @@ export function renderNode(n, mini, extraCls) {
   el.ondblclick = () => { if (isGroup) toggleGroup(groupKeyOfDisplay(n)); };
   el.oncontextmenu = (e) => { e.preventDefault(); openCtx(e, n); };
   el.onkeydown = (e) => { if (e.key === 'Enter') select(n.id); };
-  stage.appendChild(el);
+  return el;
 }
 /**
  * A group's member count, with what it counts and its split by kind — the
@@ -251,7 +397,11 @@ function membersTip(n) {
  * @group Graph rendering
  */
 export function renderGroupBox(n) {
-  const stage = document.getElementById('stage');
+  document.getElementById('stage').appendChild(makeGroupBox(n));
+  n.members.forEach((m) => renderNode(m, true));
+}
+/** An opened file group's box (its members are cards of their own). @group Graph rendering */
+export function makeGroupBox(n) {
   const p = S.positions[n.id];
   const box = document.createElement('div');
   box.className = 'groupbox';
@@ -260,8 +410,7 @@ export function renderGroupBox(n) {
   box.innerHTML = '<div class="ghead"' + tipAttrs({ key: 'surf.group.collapse', noFocus: true }) + '><span class="gname">' + esc(groupWords(n.name)) + '</span><span class="gpath">' + esc(n.codename) + '</span><span class="collapse">⊖</span></div>';
   box.querySelector('.ghead').onclick = () => toggleGroup(groupKeyOfDisplay(n));
   box.oncontextmenu = (e) => { e.preventDefault(); openCtx(e, n); };
-  stage.appendChild(box);
-  n.members.forEach((m) => renderNode(m, true));
+  return box;
 }
 /** @group Graph rendering */
 export function groupKeyOfDisplay(n) { return n.key; }

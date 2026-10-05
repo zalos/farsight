@@ -141,7 +141,8 @@ export function mountTests(route, el) {
 /** Fetch the catalogue for the current scope and level, then draw it.
  * @group Tests tab */
 async function load() {
-  const q = '?scope=' + encodeURIComponent(scopeParam()) + (LEVEL !== 'all' ? '&level=' + encodeURIComponent(LEVEL) : '');
+  // lean: the page prints counts, so the per-node lists behind them stay on the server (folds.ts leanJourneyRow)
+  const q = '?scope=' + encodeURIComponent(scopeParam()) + (LEVEL !== 'all' ? '&level=' + encodeURIComponent(LEVEL) : '') + '&lean=1';
   const r = await fetch('/api/tests' + q);
   const d = await r.json().catch(() => null);
   if (!r.ok || !d || d.error) {
@@ -643,8 +644,9 @@ function matrixRowHtml(row, business) {
   const tests = (c.counts && c.counts.tests) || {};
   const e2eCls = row.e2e === 'observed' ? 'observed' : row.e2e === 'reached' ? 'reached'
     : row.e2e === 'declared' ? 'declared' : 'none';
-  const declared = (row.declared || []).length;
-  const reached = (row.inferred || []).length;
+  // a lean answer carries the lists' lengths, a full one the lists
+  const declared = row.declaredCount != null ? row.declaredCount : (row.declared || []).length;
+  const reached = row.inferredCount != null ? row.inferredCount : (row.inferred || []).length;
   const obs = tests.observed || 0;
   const runs = tests.runLevel || 0;
   const decl = tests.declaredPassed || 0;

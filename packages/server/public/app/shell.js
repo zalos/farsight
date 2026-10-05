@@ -7,7 +7,7 @@ import { S, expose, esc, jsArg, loadAll, hydrateScope, indexGuards, collSourceNa
 import { buildSearchIndex, searchIndex } from './lib/search-model.js';
 import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
-import { render, select, scopeLabel, closeCtx, refreshStats, cardOf } from './lib/graph-render.js';
+import { render, select, scopeLabel, closeCtx, refreshStats, cardOf, revealCard } from './lib/graph-render.js';
 import { mountJourneys, hideJourneyOverlay, journeysRefresh } from './surfaces/journeys.js';
 import { cmapScopeHtml, projectTravelItems } from './surfaces/codemap-projects.js';
 import { pickerHasQuery } from './lib/multi-pick.js';
@@ -869,7 +869,8 @@ export function arriveAt(id) {
   const eg = n && effectiveGroup(n);
   if (eg) S.expandedGroups.add(eg.key);
   select(id);
-  const el = document.getElementById('nd-' + cssId(card));
+  // a large map draws only the cards in view: the card is painted where the stage scrolls to
+  const el = revealCard(card);
   if (el) el.scrollIntoView({ block: 'center', inline: 'center' });
 }
 /**

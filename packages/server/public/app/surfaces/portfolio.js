@@ -145,8 +145,10 @@ async function fill(f, gen) {
   const row = ROWS.get(f.nodeId) || { flow: f };
   row.flow = f;
   const [tests, journey, work] = await Promise.all([
-    fetch('/api/tests?flow=' + encodeURIComponent(f.nodeId)).then((r) => r.json()).catch(() => null),
-    fetch('/api/journey?entry=' + encodeURIComponent(f.nodeId)).then((r) => r.json()).catch(() => null),
+    // the flow's coverage alone, and the walk's summary without its steps: the row prints neither the
+    // catalogue nor the code (on a thousand-project workspace each full answer was hundreds of megabytes)
+    fetch('/api/tests?flow=' + encodeURIComponent(f.nodeId) + '&lean=1').then((r) => r.json()).catch(() => null),
+    fetch('/api/journey?entry=' + encodeURIComponent(f.nodeId) + '&steps=0').then((r) => r.json()).catch(() => null),
     // the trackers' items linked to this flow — asked only when a work source is configured
     flowWork(f.nodeId),
   ]);
