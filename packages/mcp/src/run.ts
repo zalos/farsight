@@ -17,7 +17,7 @@ import {
   readModelHubState, resolveModelHubDir,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown, contractLines,
   designSurface, reconcileDesign, designDriftMarkdown, designGuide, flowStatusWord,
-  testsSurface, testDetail, verifiedBy, verifiedThrough, formatMetric, evidenceWord, countedLine, countedText, breakdownText,
+  testsSurface, testDetail, verifiedBy, verifiedThrough, formatMetric, evidenceWord, caseWord, countedLine, countedText, breakdownText,
   impactOf, IMPACT_MAX_HOPS, impactTestsV1, impactTestsReaching, nodesInHunks, flowActions,
   testsMatrixV1, testsMatrixCsv, testsIdentity, stepCoverage,
   SnapshotDb, parseSyncRef, diffGraphs, changeSentence, toSarif, toMarkdown, CHANGE_KINDS,
@@ -1754,8 +1754,8 @@ server.registerTool('test_coverage', {
   // ── the evidence words. A claim nobody ran is never called verified (AGENTS.md); the run is its own fact. ──
   // a coverage report is observed evidence attributed to the run, never *verified* (docs/COUNTS.md)
   // a declared e2e case its results report says passed is observed for what it declares — worded as that
-  const evWord = (e: CoverageTestRef['evidence'], runLevel = false, via?: CoverageTestRef['observedVia']): string =>
-    e === 'observed' ? (via === 'declaration' ? 'passed, by its own declaration' : runLevel ? 'seen by a coverage run' : 'verified by a run') : e === 'static' ? 'reached by tests' : 'declared only';
+  // one case's word is core's `caseWord` — the same rule as a scope's, the case alone as the scope
+  const caseWordText = (r: CoverageTestRef): string => t(caseWord(r).key, 'professional');
   // one evidence word, from the fold: the same key the HUD's chip prints, so an
   // agent and a reader are never told two things about one flow at one sync. It
   // reads `evidenceWord` where the fold carries it — which is where the run-level
@@ -1814,7 +1814,7 @@ server.registerTool('test_coverage', {
     const run = runs
       ? ` · run ${runs}${t.at ? ` ${t.at.slice(0, 10)}` : ''} — ${fresh(t.freshness ?? 'unknown', t.changedBy)}`
       : ' · no run observed';
-    return `  ${t.level === 'e2e' ? '◎' : '○'} ${t.name} — ${level} · ${evWord(t.evidence, t.runLevel, t.observedVia)}${inactive}${run} \`${t.id}\``;
+    return `  ${t.level === 'e2e' ? '◎' : '○'} ${t.name} — ${level} · ${caseWordText(t)}${inactive}${run} \`${t.id}\``;
   };
 
   if (testId) {
@@ -1841,9 +1841,10 @@ server.registerTool('test_coverage', {
   if (node) {
     const n = index.byId.get(node) ?? resolveEntry(index, node, { ...(repo ? { repo } : {}), ...(group ? { group } : {}) });
     if (!n) return text(`nothing in the graph matches: ${node}`);
-    const covers = verifiedBy(index, n.id);
-    // the fold the journey gutter and the inspector read — so an agent and a reader get one answer
+    // the fold the journey gutter and the inspector read — so an agent and a reader get one answer;
+    // its refs include a route's handler at the same file:line (one place in the code, one verdict)
     const step = stepCoverage(index, n.id);
+    const covers = step?.tests.length ? step.tests : verifiedBy(index, n.id);
     if (raw) return text(JSON.stringify({ node: n.id, covers, ...(step ? { coverage: step } : {}) }, null, 2));
     if (!covers.length) {
       // a table is never covered directly: tests reach it through the functions that read and write it
@@ -1862,6 +1863,10 @@ server.registerTool('test_coverage', {
     return text([
       `${n.name} (${n.kind}) \`${n.id}\``,
       `verified by ${covers.length} test(s)${step ? ` — e2e ${step.e2e} · unit/integration ${step.unit}${step.observed ? ' · observed by a run' : ' · no run observed it'}` : ''}:`,
+      // the one verdict of this node — the word the HUD's chip prints — then its cases by their own runs, a count
+      ...(step?.verdict ? [`evidence: ${chipWord({ chip: step.chip ?? 'none', evidenceWord: step.verdict.word, ...(step.observation ? { observation: step.observation } : {}) })}${step.verdict.status ? ` · the run behind it: ${step.verdict.status}` : ''}`,
+        `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})`] : []),
+      ...(step?.sameLoc?.length ? [`read with ${step.sameLoc.map((id) => `\`${id}\``).join(', ')} — the same file:line`] : []),
       ...covers.map(testLine),
       ...(step?.note ? [step.note] : []),
     ].join('\n'));
@@ -1907,9 +1912,10 @@ server.registerTool('test_coverage', {
           : c.observation.by === 'declaration' ? `${c.observation.cases} end-to-end case(s) a results report says passed, by their own declaration (@covers) — no coverage measured which lines they ran`
             : `${c.observation.cases} case(s) a results report named${c.observation.declared ? ` (${c.observation.declared} of them by their own declaration)` : ''}`} · ${c.observation.at.slice(0, 10)} · ${c.observation.status} — ${fresh(c.observation.freshness, c.observation.changedBy)}`
         : 'observed by: nothing — no run reached this flow',
-      c.run
-        ? `the covering tests' own last run: ${c.run.status} ${c.run.at.slice(0, 10)}${c.run.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''} — ${fresh(c.run.freshness, c.run.changedBy)}`
-        : 'run: none observed',
+      // the cases' own runs are a count beside the verdict, never a second verdict (swarm 2026-10-05, finding 1)
+      c.verdict?.runs.n
+        ? `their own last runs: ${countedText(c.verdict.runs)} (${breakdownText({ ...c.verdict.runs, breakdown: (c.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${c.run?.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''}`
+        : 'their own last runs: no case reaches this flow',
       c.note,
       row.gap,
       '',
