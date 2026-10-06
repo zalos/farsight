@@ -24,6 +24,7 @@ import { DEPS_STRINGS } from './strings-deps.js';
 import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { DOOR_STRINGS } from './strings-doors.js';
+import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
 
@@ -103,6 +104,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
+  ...GATE_STRINGS,
   // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)
   ...LIFECYCLE_STRINGS,
   // the chrome's words live in strings-chrome.ts (the read-only session, the legend's key, Esc on a journey)

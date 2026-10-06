@@ -527,6 +527,35 @@ table). Nothing on the code map counts packages or projects a second way.
 `examples/nx-workspace` graph). `count.scope.source` was the tests' scope (*at one test level*); its define now says
 what a source holds in general, with the test level as the tests' case.
 
+### Gate card (`lib/gate-card.js` over `/api/gate` → core `gates.ts` `gateCard()`; MCP `gate`, `describe_node`'s gate section)
+
+Swarm-fixes 2026-10-05, finding 4. One card for every gate click, the same numbers whichever surface opened it.
+Every number is a `Counted` with scope `count.scope.gate` (*for this gate*: the gate itself and the calls a request
+goes through to meet it).
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| calls it guards | `count.unit.gateCalls` *n of m calls* (both) | `count.scope.gate` | `gateCard().calls.length`, `of` = every route in the graph | routes a request goes through to meet the gate, each once: up the `calls` / `renders` edges from what the gate sits on, stopping at the first route on each path (≤ 8 calls up, ≤ 4 000 parts visited — past that the card says *at least these*); breakdown `count.part.gateCallsOwn` *guards directly* (the gate's own `guards` edge lands on the route) · `count.part.gateCallsUnder` *reach it further down* — a partition |
+| pages that meet it | `count.unit.gatePages` *n pages* (both) | `count.scope.gate` | `gateCard().pages.length` | server-rendered pages the same walk stops at — where a config check is usually met |
+| parts it sits on | `count.unit.gateSitsOn` *n parts it sits on* (both) | `count.scope.gate` | `gateCard().sitsOn.length` | the targets of the gate's own `guards` / `validates` edges, each once |
+| tests that reach it | `count.unit.cases` (business `journey.biz.countTests`) | `count.scope.gate` | `gateCard().counted.tests` = `evidenceFacts()` over the tests of the gate and of each guarded call | one row per test, the strongest class it carries on any of those nodes; breakdown by level; the evidence chip beside it is the same fold's `evidenceWord` |
+
+**Config checks** (core `config-check.ts`): a guard whose own text reads the process environment and takes no
+request (`requireSession(req)` reading `env.APP_BASE_URL` is a gate; `resolveOpsDevLogin(requested, env)` is a config
+check). It is no longer one of a screen's gates:
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| config checks (journey) | `count.unit.configChecks` *n config checks* (both) | `journey.scopeAll` | `summary.counts.configChecks` · C:`counted.configChecks` | distinct config checks the walk met, each once |
+| config checks (screen) | same | `journey.scopeHere` | `segments[i].configChecks.length` · C:`segments[i].counted.configChecks` | the screen's own, listed under *Config checks* (journey lists) and *Config checks met on the way* (the Map property's Gates tab) |
+
+**The number that moved, with its evidence.** On the reference app's graph (sync 106) *Submit an invoice with OCR
+confirm* printed `28 gates & rules`; it prints **`25 gates & rules · 3 config checks`**; its first screen 24 → **21**
+and its second 23 → **20**. The three are `resolveEmailDelivery`, `resolveOpsDevLogin` and `resolveOpsOidc`, each
+`guards → loadWebEnv`, which the page reaches through `serverContext()` — not through any of its calls. `checks`
+(meetings) drop by the same meetings. Segment coverage still counts a config check's node (it is code the screen's
+walk runs), so no tests number moves.
+
 ### Lifecycle (`GraphNode.lifecycle` → core `lifecycle.ts` `lifecycleCounts()`; `/api/journey` `lifecycles[]`, the journey header and the Map property's Overview, MCP `describe_node`)
 
 The statuses one field of a record (a table node) may hold, read from the code by parsers `lifecycle.ts`: a SQL `CHECK (status IN (…))` on the column, or a `const … as const` list, a `z.enum`, a string-literal union or a string `enum` a field of that name is declared with, binding the record only when every status written to it fits that one declaration. A move is listed only with the function that writes it; `from` only when that function compares the status to exactly one prior status in an `if` that says what it was. Scope `count.scope.node` — one record, alone.

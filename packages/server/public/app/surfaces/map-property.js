@@ -32,6 +32,7 @@ import {
 } from './journeys.js';
 import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml } from '../lib/detail-doors.js';
 import { journeyStepHash } from '../lib/route-url.js';
+import { gateAttrs } from '../lib/gate-card.js';
 import { lifecycleStripHtml, screenLifecycles } from '../lib/lifecycle-strip.js';
 import { propertyModel } from '../lib/map-property-model.js';
 import { storeShownName } from '../lib/map-model.js';
@@ -84,6 +85,12 @@ function rowDoors(card) {
 /** One row of a list: a label and a sub-line on the left, a short fact on the right; `card` makes it addressable by the explore card. */
 function row(label, sub, right, card) {
   const attrs = card && card.id ? ' data-map-card="' + esc(card.kind) + '" data-id="' + esc(card.id) + '"' : '';
+  // a gate answers its click with the gate card, its doors on the row itself (swarm-fixes 2026-10-05, finding 4)
+  if (card && card.kind === 'gate' && card.id && S.BYID[card.id]) {
+    const gd = rowDoors(card);
+    return '<div class="mp-row card gate"' + attrs + gateAttrs(card.id, { config: card.config }) + '><div class="l"><span class="nm">' + label + '</span>'
+      + (sub ? '<span class="sub">' + sub + '</span>' : '') + (gd ? '<span class="mp-gdoors">' + gd + '</span>' : '') + '</div>' + (right ? '<div class="r">' + right + '</div>' : '') + '</div>';
+  }
   const doors = rowDoors(card);
   const det = doors ? ' tabindex="0" data-doors aria-expanded="false"' : '';
   return '<div class="mp-row' + (card && card.id ? ' card' : '') + (doors ? ' has-doors' : '') + '"' + attrs + det + '><div class="l"><span class="nm">' + label + '</span>'
@@ -307,6 +314,7 @@ function gateWords(g) {
   return biz() && /^[\w.-]+(?::[\w.-]+)+$/.test(label) ? humanize(label.replace(/[:.]/g, ' ')) : label;
 }
 function gateKindKey(g) {
+  if (g.config) return 'gate.kind.config';
   if (biz()) return g.kind === 'guard' ? 'map.biz.check' : 'map.biz.rule';
   return g.kind === 'guard' ? 'map.prop.kind.guard' : 'map.prop.kind.rule';
 }
@@ -317,7 +325,7 @@ function gateRow(g) {
     + (g.planned ? ' · <span' + defAttrs('map.prop.planned') + '>' + esc(t('map.prop.planned')) + '</span>' : '');
   const timesKey = g.merged > 1 ? 'map.prop.timesSame' : 'map.prop.times';
   const times = g.count > 1 ? '<span class="mp-dim"' + plainTip(g.count, timesKey, 'journey.scopeHere', '/api/journey', g.parts) + '>' + esc(t(timesKey).replace('{n}', g.count)) + '</span>' : '';
-  return row(sym(g.kind === 'guard' ? 'gate' : 'warning') + esc(label), sub, times, { kind: 'gate', id: g.id });
+  return row(sym(g.config ? 'gear' : g.kind === 'guard' ? 'gate' : 'warning') + esc(label), sub, times, { kind: 'gate', id: g.id, config: !!g.config });
 }
 /**
  * One row per checkpoint as the reader sees it: two gates the code names apart but the lens says in the same
@@ -392,7 +400,10 @@ function gatesHtml(pm) {
     const sub = biz() ? '' : esc([at ? at.name : '', currentLens() === 'code' && at && at.loc ? at.loc.path + ':' + d.line : ''].filter(Boolean).join(' · '));
     return row(sym('decision') + clampHtml('dec-' + i, d.label), sub, '', { kind: 'decision', id: d.nodeId });
   }), decs.length === g.decisions.length ? g.decisionsCounted : null);
-  return '<section class="mp-sec">' + secHead('map.prop.gates.head', countNum(g.counted)) + gateList(g.rows) + '</section>'
+  // config checks are listed apart, counted apart, and only where the walk met them (swarm-fixes 2026-10-05, finding 4)
+  const cfg = (g.config || []).length ? '<section class="mp-sec mp-config">' + secHead('map.prop.gates.config', countNum(g.configCounted))
+    + capRows('config', dedupeGates(jrnGatesShown(g.config).drawn).map(gateRow)) + '</section>' : '';
+  return '<section class="mp-sec">' + secHead('map.prop.gates.head', countNum(g.counted)) + gateList(g.rows) + '</section>' + cfg
     + '<section class="mp-sec">' + secHead('map.prop.gates.decisions', decs.length === g.decisions.length ? countNum(g.decisionsCounted) : '')
     + (decRows || absentRow('noneIndexed')) + '</section>';
 }

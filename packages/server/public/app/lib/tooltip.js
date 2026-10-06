@@ -603,7 +603,15 @@ function onMutate() {
     if (byId && byId.matches(TIP_SELECTOR) && (byId.dataset.tipId || '') === (old.dataset.tipId || '')) again = byId;
   }
   if (!again) again = [...document.querySelectorAll(TIP_SELECTOR)].find((n) => sigOf(n) === sig && visible(n)) || null;
-  if (!again) { hideTip(); return; }
+  if (!again) {
+    // a card opened on an element that is not itself a trigger (the gate card, lib/gate-card.js) names its anchor:
+    // a redraw that put the same anchor back moves the open card onto it, its content untouched
+    const key = old.getAttribute && old.getAttribute('data-tip-anchor');
+    const same = key ? [...document.querySelectorAll('[data-tip-anchor]')].find((n) => n.getAttribute('data-tip-anchor') === key && visible(n)) : null;
+    if (same) { st.el = same; st.sig = sigOf(same); same.classList.add('tip-on'); position(); return; }
+    hideTip();
+    return;
+  }
   const keep = { pinned: st.pinned, via: st.via };
   st.el = null; st.describedBy = null;
   if (!openFor(again, keep)) hideTip();

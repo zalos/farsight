@@ -2852,6 +2852,52 @@
   .map-xcard .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   .map-mark.stale{color:var(--muted)}
   .map-mark.notbuilt{color:var(--warn)}
+  /* ── the gate card (swarm-fixes 2026-10-05, finding 4): a gate answers its click — one card on every surface ── */
+  [data-gate-card]{cursor:pointer}
+  [data-gate-card]:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .jrn-gl-row{grid-template-columns:13px minmax(0,1fr) 30px}
+  .jrn-gl-row .jrn-gl-go{grid-column:2 / -1;justify-content:flex-start}
+  .jrn-gl-row .jrn-gl-go:empty{display:none}
+  .jrn-gl-row .dd-door,.mp-gdoors .dd-door{font-size:10px;line-height:14px;padding:0 6px}
+  .jrn-gl-row.config>.sym,.mp-row.gate .nm .sym-gear{color:var(--muted)}
+  .jrn-gl-grp.config .jrn-gl-head .hud-label{color:var(--muted)}
+  .mp-gdoors{display:flex;margin-top:3px}
+  .mp-row.gate:hover{background:var(--accent-dim)}
+  .fs-tip.gc-tip{max-width:min(620px,calc(100vw - 16px));width:min(620px,calc(100vw - 16px))}
+  .gc{display:flex;flex-direction:column;gap:8px}
+  .gc-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+  .gc-head .gc-name{margin:0;font-size:13.5px}
+  .gc-kind{display:inline-flex;align-items:center;gap:4px;font-family:var(--hud);font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--auth);border:1px solid rgba(167,139,224,.45);border-radius:2px;padding:1px 6px}
+  .gc-kind .sym{width:11px;height:11px}
+  .gc-kind.k-rule{color:var(--warn);border-color:rgba(232,161,60,.45)}
+  .gc-kind.k-config{color:var(--muted);border-color:var(--line)}
+  .gc-loc{font-family:var(--mono);font-size:10.5px;color:var(--dim);overflow-wrap:anywhere}
+  .gc-doors .dd-doors{gap:4px 5px}
+  .gc-sec{display:flex;flex-direction:column;gap:4px;border-top:1px solid var(--line-soft);padding-top:6px}
+  .gc-h{margin:0;font-family:var(--hud);font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .gc-h .gc-n{font-family:var(--mono);color:var(--accent);letter-spacing:0}
+  .gc-says{margin:0;color:var(--ink);font-size:12.5px;line-height:1.45}
+  .gc-says.none{color:var(--muted)}
+  .gc-who,.gc-config,.gc-docs{margin:0;font-size:11.5px;color:var(--muted);line-height:1.45}
+  .gc-who .sym{width:12px;height:12px;color:var(--warn);margin-right:4px;vertical-align:-2px}
+  .gc-counts{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-size:12px}
+  .gc-counts .gc-n{color:var(--ink)}
+  .gc-dot{color:var(--dim)}
+  .gc-dim{color:var(--dim);font-size:11px}
+  .gc-on{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+  .gc-on code,.gc-rn code{font-family:var(--mono);font-size:10.5px;color:var(--ink)}
+  .gc-code{max-height:300px;overflow:auto;border:1px solid var(--line-soft);border-radius:6px;background:var(--ground)}
+  .gc-pre{padding:6px 8px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--ink)}
+  .gc-l{display:block;white-space:pre-wrap;overflow-wrap:anywhere;padding-left:3.4em;text-indent:-3.4em}
+  .gc-l .ln{display:inline-block;width:3.4em;text-indent:0;color:var(--dim);user-select:none}
+  .gc-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:4px 0;border-bottom:1px solid var(--line-soft)}
+  .gc-row:last-of-type{border-bottom:none}
+  .gc-row .gc-rn{flex:1 1 220px;min-width:0;overflow-wrap:anywhere;font-size:12px}
+  .gc-row .dd-doors{flex-basis:100%}
+  .gc-row .dd-door{font-size:10px;line-height:14px;padding:0 6px}
+  .gc-lvl{font-family:var(--hud);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);border-radius:2px;padding:0 4px}
+  .gc-none,.gc-more{margin:0;font-size:11.5px;color:var(--dim)}
+  .gc-none .sym{width:12px;height:12px;margin-right:4px;vertical-align:-2px}
   .map-hint .n{font-weight:600}
   .map-hint.floor{color:var(--ink)}
 </style>

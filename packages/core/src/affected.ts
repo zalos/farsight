@@ -101,6 +101,7 @@ export function flowWalks(index: GraphIndex): FlowWalk[] {
           for (const g of s.gates) own.add(g.id);
         }
         for (const g of seg.gates) own.add(g.id);
+        for (const g of seg.configChecks ?? []) own.add(g.id);
         for (const m of seg.markers) {
           own.add(m.nodeId);
           for (const c of m.choice?.candidates ?? []) own.add(c.nodeId);

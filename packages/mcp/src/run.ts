@@ -29,7 +29,7 @@ import {
   storybookLive, type StoriesAnswer, type StorybookStatus,
   type ModelHubState, type Activity, buildLine, buildInfo, installState, currencyAdvice,
   projectFacets, projectGraph, projectsSummaryLine,
-  depsRowOf, counted,
+  depsRowOf, counted, gateCard, type GateCard,
 } from '@farsight/core';
 
 /** `changed` said as what moved: a working tree that differs from HEAD is not a new commit (the Changes spine agrees). */
@@ -724,8 +724,64 @@ server.registerTool('describe_node', {
   if (!n) return text(`unknown node id: ${node_id}. Use search_graph to find ids.`);
   const lines = [nodeDetail(n, !!full)];
   lines.push(...(await nodeStoriesLines(n)));
+  if (n.kind === 'guard' || n.kind === 'rule') {
+    const card = gateCard(index, n.id);
+    if (card) lines.push('', ...gateLines(card, { cap: 12 }));
+  }
   if (context !== false) lines.push(...changeContext(n));
   return text(lines.join('\n'));
+});
+
+/** A place in the code as `path:line`, or '' when the graph has none. */
+function atLine(loc: GraphNode['loc'] | undefined): string {
+  return loc ? `${loc.path}:${loc.line}` : '';
+}
+/**
+ * One gate answered, in text (swarm-fixes 2026-10-05, finding 4): the same fold — core `gateCard()` — the HUD's
+ * gate card and `GET /api/gate` read. Its words, whether it is a config check, what it sits on, the calls a
+ * request goes through to meet it (with file:line) and the tests that reach the gate or those calls.
+ */
+function gateLines(c: GateCard, opts: { cap?: number } = {}): string[] {
+  const cap = opts.cap ?? 40;
+  const g = c.gate;
+  const kind = g.configCheck ? 'config check' : g.gateKind === 'rule' ? 'validation rule' : 'gate (guard)';
+  const out = [`## gate — ${kind}${g.declared ? ', declared in farsight.config.json' : ''}`];
+  out.push(`${g.name}${g.loc ? ` — ${atLine(g.loc)}` : ''}`);
+  if (g.business) out.push(`what it allows (written): ${g.business}`);
+  else if (g.phrase && g.ident) out.push(`what it requires (the @guard words): ${g.phrase}`);
+  else out.push(`what it allows: nobody has written it — add a @business line above ${g.ident || g.name}${g.loc ? ` in ${g.loc.path}` : ''}, or name it in farsight.config.json → glossary`);
+  if (g.docs && g.docs !== g.business) out.push(`docs: ${g.docs}`);
+  if (g.configCheck) out.push('config check: it reads the process environment and takes no request — it runs wherever the app reads its settings, so journeys list it apart from a screen\'s gates');
+  out.push(`sits on (${countedText(c.counted.sitsOn, { scope: false })}): ${c.sitsOn.slice(0, cap).map((p) => `${p.name}${p.loc ? ` (${atLine(p.loc)})` : ''}`).join(' · ') || 'nothing'}${c.sitsOn.length > cap ? ` · … ${c.sitsOn.length - cap} more` : ''}`);
+  out.push(`calls it guards: ${countedText(c.counted.calls)} (${breakdownText(c.counted.calls)})${c.truncated ? ' — at least these: the walk stopped at its budget' : ''}`);
+  for (const r of c.calls.slice(0, cap)) {
+    out.push(`  ${r.name}${r.depth ? ` — met ${r.depth} call(s) down` : ' — guarded directly'}${r.loc ? ` · ${atLine(r.loc)}` : ''}${r.summary ? ` · ${r.summary}` : ''} \`${r.id}\``);
+  }
+  if (c.calls.length > cap) out.push(`  … ${c.calls.length - cap} more`);
+  if (c.pages.length) out.push(`pages that meet it while drawing: ${countedText(c.counted.pages, { scope: false })} — ${c.pages.slice(0, cap).map((p) => p.name).join(' · ')}${c.pages.length > cap ? ` · … ${c.pages.length - cap} more` : ''}`);
+  const w = c.evidenceWord;
+  out.push(`tests that reach it: ${countedText(c.counted.tests.tests)} (${breakdownText(c.counted.tests.tests)}) — ${w.cls === 'none' ? 'nothing reaches it' : t(w.key, 'professional')}; ${c.testsOnGate} reach the gate itself`);
+  for (const r of c.tests.slice(0, cap)) {
+    const via = r.reaches.nodeId === g.id ? 'the gate itself' : `through ${r.reaches.name}`;
+    out.push(`  [${r.level}] ${r.name}${r.loc ? ` — ${atLine(r.loc)}` : ''} · ${via} · ${r.evidence === 'observed' ? (r.observedVia === 'declaration' ? 'passed, by its own declaration' : r.runLevel ? 'seen by a coverage run' : 'verified by a run') : r.evidence === 'static' ? 'reached' : 'declared'}${r.status ? ` · last run ${r.status}` : ''}`);
+  }
+  if (c.tests.length > cap) out.push(`  … ${c.tests.length - cap} more`);
+  return out;
+}
+
+server.registerTool('gate', {
+  title: 'One gate — what it allows, the calls it guards, the tests that reach it',
+  description: 'One gate (a guard) or validation rule, answered the way the HUD\'s gate card answers it: the words somebody wrote for it (or who should write them), whether it is a config check (a guard that checks how the app was started — its settings — rather than a request, listed apart from a screen\'s gates), what it sits on directly, every route a request goes through to meet it (nearest first, with file:line and how many calls down), the server-rendered pages that meet it, and the tests that reach the gate itself or one of those calls, each once with its evidence class and last run. Use before changing a guard or rule: who goes through it, and what proves it still works. For a list of gates around a feature use list_rules; for one node\'s full context use describe_node (it prints this section for a guard or rule).',
+  inputSchema: {
+    node_id: z.string().describe('the gate or rule node id (search_graph kind:guard or kind:rule, or a gate named in journey / list_rules output)'),
+    all: z.boolean().optional().describe('list every call and test instead of the first 40 of each'),
+  },
+}, async ({ node_id, all }) => {
+  const n = index.byId.get(node_id) ?? search(index, node_id, { kind: 'guard' })[0] ?? search(index, node_id, { kind: 'rule' })[0];
+  if (!n) return text(`unknown gate: ${node_id}. Use search_graph kind:guard to find ids.`);
+  const card = gateCard(index, n.id);
+  if (!card) return text(`${ref(n)} is not a gate or a rule — describe_node lists the gates in force on it`);
+  return text(gateLines(card, all ? { cap: Number.MAX_SAFE_INTEGER } : {}).join('\n'));
 });
 
 // ── stories (ADR 9): read from the story files; drawn by a running Storybook, never started here ──

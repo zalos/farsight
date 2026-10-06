@@ -280,7 +280,7 @@ test('journeySummary: the three bands — screens in order, business docs/gates/
   // designed and not built, so its operation is a contract-derived planned step that no code
   // performs. Counting both actions as *called* is how a flow with nothing built printed
   // `7 called` for seven operations no code implements (swarm 2026-09-23, blocker 1).
-  assert.deepEqual(sum.counts, { screens: 2, steps: 7, planned: 2, gates: 2, checks: 2, decisions: 0, records: 1, messages: 0, segments: 2, cutPoints: 0, repeats: 0, setup: 0, deferred: 0, called: 1, again: 0, declaredNotCalled: 1, choices: 0 }, 'nothing was cut: no subtree hit the depth or re-visit budget');
+  assert.deepEqual(sum.counts, { screens: 2, steps: 7, planned: 2, gates: 2, checks: 2, decisions: 0, records: 1, messages: 0, segments: 2, cutPoints: 0, repeats: 0, setup: 0, deferred: 0, called: 1, again: 0, declaredNotCalled: 1, choices: 0, configChecks: 0 }, 'nothing was cut: no subtree hit the depth or re-visit budget');
   // the discriminator itself, so a reader of this test sees which action is which
   const acts = sum.segments.flatMap((sg) => sg.moments.filter((mo) => mo.callStep != null));
   assert.equal(acts.length, 2, 'both screens open one action');

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { relative, dirname, resolve as resolvePath } from 'node:path';
 import { parseSync } from 'oxc-parser';
+import { configCheckOf, CONFIG_CHECK_TAG } from '@farsight/core';
 import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta } from '@farsight/core';
 import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
 import { createAliasClassifier, resolveFileish } from './aliases.js';
@@ -655,6 +656,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
           ...autoTags(file, d.name, kind), ...doc.tags,
           ...(isServerAction ? ['server-action'] : []),
           ...(isGuard && !doc.tags.includes('auth') ? ['auth'] : []),
+          // a guard that checks the process — its settings — rather than a request (core config-check.ts)
+          ...(isGuard && configCheckOf(source.slice(d.node.start ?? 0, d.node.end ?? 0)) ? [CONFIG_CHECK_TAG] : []),
           ...(doc.entrypoint ? ['entrypoint', ...doc.entrypoint] : []),
         ],
         ...(doc.business ? { facets: { business: { description: doc.business } } } : {}),
