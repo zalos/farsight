@@ -84,7 +84,9 @@ test('the Map saves its storyline board whole, as a picture and as a PDF, with t
   const text = pdf.bytes.toString('latin1');
   expect(text.startsWith('%PDF-1.4')).toBe(true);
   expect(text).toContain('/Subtype /Image');
-  expect(text).toContain(`/Width ${width} /Height ${height}`);
+  // the PDF holds the picture this save drew (the board may have refitted since the PNG: thumbnails arrive late)
+  const [pw, ph] = (await page.locator('[data-export="map"]').getAttribute('data-export-size'))!.split('x');
+  expect(text).toContain(`/Width ${pw} /Height ${ph}`);
   expect(text.trimEnd().endsWith('%%EOF')).toBe(true);
 
   // the same picture in-page, as a data URL: its size, and the footer facts it was drawn with
