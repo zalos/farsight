@@ -14,6 +14,7 @@ import { copyLiveLink, closeShare } from './share.js';
 import { trapTab } from './lib/focus-trap.js';
 import { tipKeydown } from './lib/tooltip.js';
 import { doorKeydown } from './lib/detail-doors.js';
+import { gateKeydown } from './lib/gate-card.js';
 
 /** The published keymap — the panel renders from this table, nothing else. */
 const KEYS = [
@@ -114,6 +115,8 @@ function onKeydown(e) {
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   // every detail is a door (round 2026-10-05 §3.2): Enter on a focused detail opens its first door, o the editor
+  // a gate answers its key the way it answers its click: Enter or Space opens the gate card (swarm-fixes 2026-10-05)
+  if (gateKeydown(e)) return;
   if (doorKeydown(e)) { e.preventDefault(); return; }
   // the map's own keys — p plumbing, + − 0 zoom, [ ] the screens of an open screen's journey
   if (mapOpen() && mapKey(e)) { e.preventDefault(); return; }

@@ -10,6 +10,7 @@ import { setTip, tipSource, tipAttrs } from './tooltip.js';
 import { storiesSecHtml } from '../stories.js';
 import { defAttrs, plainTip, unCode } from './counted.js';
 import { nodeWorkSecHtml } from '../work-chips.js';
+import { gateAttrs } from './gate-card.js';
 import { cmapHide, cmapGrouping, renderGrouped, projectSecHtml, packageSecHtml, packageActionsHtml, pkgScopeWord } from '../surfaces/codemap-projects.js';
 
 /** True in the business lens — the map and the inspector name things, never identify them. */
@@ -350,7 +351,7 @@ export function nodeCardHtml(n, mini, name) {
     + (c && c.status !== 'both' ? ' · ' + esc(t(c.status === 'spec-only' ? 'apis.status.specOnly' : c.status === 'declared' ? 'apis.status.declared' : 'apis.status.codeOnly')) : '') + '</div>'
     + '<div class="name">' + esc(name != null ? name : bizLabel(n)) + '</div><div class="codename">' + esc(n.name || '') + '</div>'
     + (n.loc && !mini ? '<div class="sub">' + esc(n.loc.path) + ':' + n.loc.line + vsl(repoOf(n), n.loc.path, n.loc.line) + '</div>' : '') + ver
-    + ((guards.length || rules) && !mini ? '<div class="gbadges">' + guards.map((g) => '<span class="gbadge">' + sym('lock') + ' ' + esc(name != null && biz() ? bizName(g) : g.name.replace(/^requireScope: /, '')) + '</span>').join('')
+    + ((guards.length || rules) && !mini ? '<div class="gbadges">' + guards.map((g) => '<span class="gbadge"' + gateAttrs(g.id) + '>' + sym('lock') + ' ' + esc(name != null && biz() ? bizName(g) : g.name.replace(/^requireScope: /, '')) + '</span>').join('')
       + (rules ? '<span class="gbadge rule"' + plainTip(rules, 'count.part.rules', 'count.scope.node', '/graph') + '>' + sym('shield') + ' ' + esc(t(rules === 1 ? 'count.part.rulesOne' : 'count.part.rules').replace('{n}', rules)) + '</span>' : '') + '</div>' : '');
 }
 /**
@@ -667,8 +668,9 @@ export function select(id) {
     // the work items a tracker links to this part: filled when /api/work/links answers, nothing when none
     + nodeWorkSecHtml(n)
     + ((guards.length || validates.length) ? '<div class="insp-sec"><span class="hud-label">' + esc(t('surf.insp.gates')) + gateCount + '</span>'
-      + guards.map((g) => '<div class="rulecard auth">' + sym('lock') + ' ' + esc(business ? bizName(g) : g.name) + (g.loc && !business ? '<div class="rd">' + esc(g.loc.path) + ':' + g.loc.line + vsl(repoOf(g), g.loc.path, g.loc.line) + '</div>' : '') + '</div>').join('')
-      + validates.map((v) => '<div class="rulecard">' + sym('shield') + ' ' + esc(business ? bizName(v) : v.name) + (v.signature && !business ? '<div class="rd">' + esc(v.signature.slice(0, 90)) + '…</div>' : '') + (v.loc && !business ? '<div class="rd">' + esc(v.loc.path) + ':' + v.loc.line + vsl(repoOf(v), v.loc.path, v.loc.line) + '</div>' : '') + '</div>').join('') + '</div>' : '')
+      // a gate answers its click with the gate card (swarm-fixes 2026-10-05, finding 4)
+      + guards.map((g) => '<div class="rulecard auth"' + gateAttrs(g.id) + '>' + sym('lock') + ' ' + esc(business ? bizName(g) : g.name) + (g.loc && !business ? '<div class="rd">' + esc(g.loc.path) + ':' + g.loc.line + vsl(repoOf(g), g.loc.path, g.loc.line) + '</div>' : '') + '</div>').join('')
+      + validates.map((v) => '<div class="rulecard"' + gateAttrs(v.id) + '>' + sym('shield') + ' ' + esc(business ? bizName(v) : v.name) + (v.signature && !business ? '<div class="rd">' + esc(v.signature.slice(0, 90)) + '…</div>' : '') + (v.loc && !business ? '<div class="rd">' + esc(v.loc.path) + ':' + v.loc.line + vsl(repoOf(v), v.loc.path, v.loc.line) + '</div>' : '') + '</div>').join('') + '</div>' : '')
     + (dataEdges.length ? '<div class="insp-sec"><span class="hud-label">' + esc(t('surf.insp.data')) + secCount(dataEdges, 'surf.insp.dataCount') + '</span>'
       + dataEdges.map((e) => {
         const me = e.from === n.id, other = S.BYID[me ? e.to : e.from];

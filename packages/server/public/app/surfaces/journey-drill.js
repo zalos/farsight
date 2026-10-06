@@ -22,6 +22,7 @@ import { t, def, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, linkHtml, designThumbHtml } from '../lib/graph-render.js';
 import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
+import { gateAttrs } from '../lib/gate-card.js';
 import {
   jrnCellTree, jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnScreenNode, jrnSegDecisions,
   jrnGateText, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml,
@@ -406,7 +407,9 @@ function jrnDrillAnswerBoxHtml(a) {
  * @group Journey drill */
 function jrnDrillGateBoxHtml(g, bi, k) {
   const gn = S.BYID[g.id];
-  return '<div class="jrn-bx gate' + (g.planned ? ' planned' : '') + '" id="jrn-bg-' + bi + '-' + k + '" tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')" title="' + esc(g.name || '') + '">'
+  // a click (or Enter) opens the gate card (swarm-fixes 2026-10-05, finding 4); a planned gate is not in the graph, so it walks to its step
+  return '<div class="jrn-bx gate' + (g.planned ? ' planned' : '') + '" id="jrn-bg-' + bi + '-' + k + '"'
+    + (gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
     + '<span class="k">' + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(g.kind === 'rule' ? t('journey.kind.rule') : t('journey.kind.gate')) + (g.count > 1 ? ' ×' + g.count : '') + '</span>'
     + '<span class="n">' + esc(jrnGateLabel(g)) + (gn && gn.loc ? '<span class="loc">' + esc(gn.loc.path + ':' + gn.loc.line) + vsl(gn.repo, gn.loc.path, gn.loc.line) + '</span>' : '') + '</span>'
     + (g.planned ? '<span class="b">' + esc(t('journey.plannedGate')) + '</span>' : '') + '</div>';
@@ -755,7 +758,7 @@ function jrnInspDocsHtml(i) {
   const gs = jrnGatesShown(s.gates || []);
   if (gs.rows.length) html += '<h4>' + esc(t('journey.insp.gatesHere')) + '</h4><div class="list">' + gs.drawn.map((g) => {
     const gn = S.BYID[g.id];
-    return '<div class="r">' + sym(g.kind === 'rule' ? 'shield' : 'lock') + '<b>' + esc(jrnGateLabel(g)) + '</b>' + (g.planned ? '<span class="api-chip stub">' + esc(t('journey.plannedGate')) + '</span>' : '') + (gn && gn.loc ? vsl(gn.repo, gn.loc.path, gn.loc.line) : '') + '</div>';
+    return '<div class="r"' + (S.BYID[g.id] ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') + '>' + sym(g.kind === 'rule' ? 'shield' : 'lock') + '<b>' + esc(jrnGateLabel(g)) + '</b>' + (g.planned ? '<span class="api-chip stub">' + esc(t('journey.plannedGate')) + '</span>' : '') + (gn && gn.loc ? vsl(gn.repo, gn.loc.path, gn.loc.line) : '') + '</div>';
   }).join('') + (gs.mute ? '<div class="r note">' + sym('warning') + esc(t('journey.biz.notInWords').replace('{n}', gs.mute)) + '</div>' : '') + '</div>';
   const req = jrnReqChips(i);
   if (req) html += '<h4>' + esc(t('journey.insp.toGetHere')) + '</h4><div class="list">' + req + '</div>';

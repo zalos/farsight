@@ -34,6 +34,8 @@ export const GATE_STRINGS: Record<string, StringEntry> = {
 
   // ── the card ───────────────────────────────────────────────────────────────
   'gate.card': same('gate', 'One checkpoint, answered: what it allows, where it stands, its code, the calls it guards and the tests that reach them.'),
+  'gate.unnamed': same('a check nobody has put in words',
+    'Its only name is the code’s own, which the business register does not print. The card still says where it stands and what reaches it.'),
   'gate.open': same('open this gate', 'Opens the gate card: what it allows, where it stands, its code, the calls it guards and the tests that reach them.'),
   'gate.kind.guard': { hud: 'gate', professional: 'check',
     define: 'A checkpoint on who may go on: signed in, owns the thing, within the rate limit. Its words are policy.' },
