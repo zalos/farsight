@@ -166,7 +166,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.fold.scopeScreen': same('this screen', 'One screen of this journey.'),
 
   // §L — the legend, the lines between journeys, whole words, and the business lens on the map (lane L)
-  'map.tool.legend': same('Legend', 'What the lines, colours, stripes and marks on the board mean. It opens by itself the first time you visit the map; this button brings it back.'),
+  'map.tool.legend': same('Legend', 'What the lines, colours, stripes and marks on the board mean. It stays closed until you ask: this button or the g key opens and closes it.'),
   'map.legend.title': same('What the board draws', 'Every line, colour, stripe and mark the map uses, with the word it stands for. Only what is on this board is listed.'),
   'map.legend.close': same('Close the legend'),
   'map.legend.expand': same('show', 'Open the legend in full: every line, colour and mark this board draws, with its word.'),
@@ -181,7 +181,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.legend.times': same('×n', 'A checkpoint met more than once on one screen is listed once, with the number of times beside it.'),
   'map.legend.timesSay': same('met this many times on one screen', 'Shown beside a gate or rule in a screen’s list, instead of listing it again.'),
   'map.legend.evidence': same('What proves a journey runs', 'The word each journey’s tests earned: a case a run named, a case that declares what it covers and passed, or a coverage run alone. The words are the Tests page’s.'),
-  'map.legend.hint': same('Shown once on your first visit; the Legend button brings it back.'),
+  'map.legend.hint': same('The legend button or the g key opens and closes this; ? shows every key.'),
   'map.link.requires': same('requires', 'This journey needs the other one finished first. Drawn as the other journey leading to this one.'),
   'map.link.both': same('lead to each other', 'Each of the two journeys says it leads to the other, so the line carries an arrowhead at each end and one label.'),
   'map.cover.more': same('+{n}', 'More numbers about this journey, folded so the cover stays readable. Zoom in to see them all in the journey’s header.'),

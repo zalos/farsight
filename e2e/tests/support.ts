@@ -20,7 +20,7 @@ const KNOWN_HTTP_NOISE: RegExp[] = [
 type Fixtures = {
   expectedHttpErrors: RegExp[];
   pageErrors: string[];
-  /** The map's legend opens by itself on a reader's first visit; specs start as a returning reader unless they set this false. */
+  /** Historic: the map's legend once opened by itself on a first visit (since 2026-10-05 it stays closed until asked); the key is still set for specs that pass true. */
   mapLegendSeen: boolean;
   mapLegendInit: void;
 };

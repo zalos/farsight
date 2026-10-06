@@ -35,7 +35,10 @@ function flag(name: string, fallback?: string): string | undefined {
   const i = rest.indexOf(`--${name}`);
   return i >= 0 ? rest[i + 1] : fallback;
 }
-const positional = rest.filter((a, i) => !a.startsWith('--') && rest[i - 1]?.startsWith('--') !== true);
+/** A flag that takes no value, so the word after it is a positional (`serve --read-only graph.json`). */
+const BOOL_FLAGS = new Set(['--read-only']);
+function hasFlag(name: string): boolean { return rest.includes(`--${name}`); }
+const positional = rest.filter((a, i) => !a.startsWith('--') && (rest[i - 1]?.startsWith('--') !== true || BOOL_FLAGS.has(rest[i - 1] ?? '')));
 
 const USAGE = `farsight — see your software the way you think about it
 ${buildLine()}
@@ -49,7 +52,7 @@ usage:
                                                                parse repo(s) into a semantic graph; a positional that is an
                                                                OpenAPI file or URL is ingested as a spec-only source
                                                                (also records a snapshot in .farsight/farsight.db)
-  farsight serve [graph.json] [--port 4477] [--as-of sync:N]   explore the graph in the HUD
+  farsight serve [graph.json] [--port 4477] [--as-of sync:N] [--read-only]   explore the graph in the HUD (--read-only, and every --as-of, refuses settings, syncs and work writes)
   farsight mcp [--graph graph.json] [--as-of sync:N]           feed the graph to LLM agents (MCP/stdio)
   farsight snapshots [--limit 20] [--pin sync:N] [--prune 10]  list snapshot history (pin / prune retention)
   farsight history [--repo name] [<path>] [--since <date>] [--max 2000] [--releases] [--json]
@@ -581,7 +584,9 @@ switch (command) {
     const asOf = flag('as-of');
     const graph = asOf ? materializeAsOf(asOf) : resolve(positional[0] ?? 'graph.json');
     if (!existsSync(graph)) fail(`no graph at ${graph} — run \`farsight ingest\` first`);
-    serveGraph(graph, Number(flag('port', '4477')));
+    // an --as-of snapshot is history: it is served read-only, and --read-only asks for the same on today's graph
+    const readOnly = asOf ? 'as-of' as const : hasFlag('read-only') ? 'flag' as const : null;
+    serveGraph(graph, Number(flag('port', '4477')), process.cwd(), { readOnly });
     break;
   }
   case 'mcp': {

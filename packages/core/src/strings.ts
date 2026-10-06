@@ -25,6 +25,7 @@ import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { DOOR_STRINGS } from './strings-doors.js';
 import { GATE_STRINGS } from './strings-gate.js';
+import { CHROME_STRINGS } from './strings-chrome.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -104,6 +105,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...DOOR_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
+  // the chrome's words live in strings-chrome.ts (the read-only session, the legend's key, Esc on a journey)
+  ...CHROME_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
@@ -212,7 +215,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'key.y': same('Copy a link to this view'),
   'key.help': same('Show this keymap'),
   'key.tip': same('Details of a dotted-underlined number or word',
-    'Click it, rest the pointer on it, or focus it and press ?. A number’s details say what it counts, what it counts over and where it came from. Esc closes them first.'),
+    'Click it, rest the pointer on it, or focus it and press Enter. A number’s details say what it counts, what it counts over and where it came from. Esc closes them first.'),
   'key.esc': same('Close the top panel'),
   'key.l': same('Rows / ladder in the journey band'),
   'key.v': same('Timeline / sheet / drill — the journey view'),
