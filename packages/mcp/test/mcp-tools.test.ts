@@ -184,6 +184,20 @@ describe('orient and find', () => {
   });
 });
 
+describe('gate — one gate answered (swarm-fixes 2026-10-05, finding 4)', () => {
+  test('the calls it guards with file:line, the tests that reach it, and describe_node prints the same section', async () => {
+    const id = 'invoice-app::guard::requireScope(billing:write)';
+    const out = await call('gate', { node_id: id });
+    assert.match(out, /## gate — gate \(guard\)/);
+    assert.match(out, /calls it guards: 2 of \d+ calls for this gate/);
+    assert.match(out, /POST \/invoices — guarded directly · src\/server\/[\w./-]+:\d+/);
+    assert.match(out, /tests that reach it: /);
+    const node = await call('describe_node', { node_id: id, context: false });
+    assert.match(node, /## gate — gate \(guard\)/);
+    assert.match(await call('gate', { node_id: 'nope::x' }), /unknown gate/);
+  });
+});
+
 describe('describe_node — what to know before changing it', () => {
   test('a route: gates in force, consumers, journeys, and dependents per hop', async () => {
     const out = await call('describe_node', { node_id: FINALIZE });

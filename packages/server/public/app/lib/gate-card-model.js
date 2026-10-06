@@ -82,11 +82,13 @@ export function gateFacts(id, ctx = {}, hint = {}) {
  *
  * A config check adds its own sentence: it checks how the app was started, not a request.
  */
-export function gateSentence(f, inWords, lens) {
+export function gateSentence(f, inWords, lens, plain) {
   if (!f) return null;
   const biz = lens === 'business';
+  // the business register prints only plain words: a sentence that is all code is no sentence there
+  const bizWords = f.business && biz && plain ? plain(f.business) : f.business;
   let says;
-  if (f.business) says = { key: '', words: f.business, source: 'business' };
+  if (bizWords) says = { key: '', words: bizWords, source: 'business' };
   else if (inWords) says = { key: f.gateKind === 'rule' ? 'gate.says.rulePhrase' : 'gate.says.phrase', words: inWords, source: 'phrase' };
   else says = { key: 'gate.says.none', words: '', source: 'none' };
   let who = null;
@@ -118,7 +120,7 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
   const out = {
     id, kind, gateKind: f.gateKind, declared: f.declared,
     facts: f,
-    sentence: gateSentence(f, opts.inWords || '', lens),
+    sentence: gateSentence(f, opts.inWords || '', lens, opts.plain),
     sitsOn: f.sitsOn,
     pending: answer == null,
     failed: answer === false,

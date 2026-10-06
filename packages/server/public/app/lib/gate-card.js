@@ -169,6 +169,7 @@ function modelFor(el, answer) {
   const m = gateCardModel(id, { byId: S.BYID || {}, edgesOf: S.EDGES_OF }, {
     answer, lens: currentLens(), config: el.getAttribute('data-gate-config') === '1',
     inWords: n ? jrnGateInWords(n) : '',
+    plain: plainWords,
   });
   if (m) m.flow = (S.JOURNEY && S.JOURNEY.entry && S.JOURNEY.entry.id) || null;
   return m;
