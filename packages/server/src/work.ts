@@ -142,7 +142,13 @@ export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRea
     const unreachable = gitUnreachable(src.dir, keyed);
     const forgot = unreachable.available ? db.forgetCommitKeys(src.name, unreachable.gone) : 0;
     const resolved = resolveCommitNodes(db, store, src);
-    const parts = [`history ${log.commits.length} commit${log.commits.length === 1 ? '' : 's'} read${log.truncated ? ` (capped at ${log.max})` : ''}`];
+    // the history this source holds, then what this sync added to it: an incremental read of an unchanged
+    // branch reads nothing new, and `history 0 commits read` beside a Changes page of 282 commits read as
+    // "history is not wired up" to four reviewers (swarm 2026-10-05). The total is the spine's own count —
+    // the number the Changes page counts over — so the two surfaces say one fact.
+    const total = db.commitCount(src.name);
+    const added = log.commits.length;
+    const parts = [`history ${total} commit${total === 1 ? '' : 's'} indexed · ${added} new this sync${log.truncated ? ` (capped at ${log.max})` : ''}`];
     if (forgot) parts.push(`${forgot} keyed commit${forgot === 1 ? '' : 's'} no longer in the history, forgotten`);
     if (resolved) parts.push(`${resolved} keyed commit${resolved === 1 ? '' : 's'} resolved to code`);
     return parts.join(' · ');

@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  GraphStore, buildIndex, stitchHttp, testsSurface, testsMatrixV1, testsIdentity, testsMatrixCsv, TESTS_MATRIX_COLUMNS,
+  GraphStore, buildIndex, setFreshnessMeta, stitchHttp, testsSurface, testsMatrixV1, testsIdentity, testsMatrixCsv, TESTS_MATRIX_COLUMNS,
   type GraphIndex, type GraphMeta, type GraphNode, type GraphEdge,
 } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
@@ -97,6 +97,8 @@ before(async () => {
   const data = JSON.parse(readFileSync(graphPath, 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[]; meta: GraphMeta };
   index = buildIndex(data.nodes, data.edges);
   meta = data.meta;
+  // the fold reads the code side of every freshness fact from the graph's meta, as the server does
+  setFreshnessMeta(index, data.meta);
 
   port = await freePort();
   const boot = `const { serveGraph } = await import(${JSON.stringify(serverDist)});\n`

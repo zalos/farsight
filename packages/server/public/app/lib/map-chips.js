@@ -37,7 +37,7 @@ export function mapEvidenceChip(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (!cls || cls === 'none') return '';
-  return '<span class="map-chip k-ev ev-' + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null } }) + '>'
+  return '<span class="map-chip k-ev ev-' + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
     + esc(t(ev.key)) + '</span>';
 }

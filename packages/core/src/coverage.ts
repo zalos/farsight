@@ -21,6 +21,7 @@ import type { GraphIndex, Journey, JourneySummary } from './query.js';
 import { flowScreenIds, isDeclaredOnly, journey } from './query.js';
 import { computeMetric, testsCovering, EVIDENCE_RANK, type MetricValue, type MetricScope, type CoveringTest } from './metrics.js';
 import { counted, type Counted, type CountScope } from './counts.js';
+import { freshnessFact, codeAtOfIndex, type CodeAt, type FreshnessFact } from './freshness.js';
 
 /**
  * The test counts of one scope as typed counts (docs/COUNTS.md): every number
@@ -87,6 +88,8 @@ export interface CoverageTestRef {
   /** `changed` only: a new commit, or the same commit with a working tree that differs from HEAD */
   changedBy?: NonNullable<TestRef['run']>['changedBy'];
   stale?: boolean;
+  /** the commit the run's report stamp recorded, when it recorded one — the run's side of the freshness sentence */
+  commit?: string;
   loc?: Loc;
   /** `.skip`/`.todo`: the case exists and is listed, and it lifts no word and no chip */
   inactive?: boolean;
@@ -174,6 +177,14 @@ export interface CoverageFacts {
   /** the run behind the observed class — present only when something observed */
   observation?: CoverageObservation;
   /**
+   * *stale* as a comparison with both sides (`freshness.ts`): over the runs that
+   * observed this scope (or, where nothing observed, the covering tests' own
+   * runs) — current, stale, no source digest or none, with the sentence key
+   * that names the run's commit and the code's. Every surface that prints
+   * *stale* prints this sentence beside it.
+   */
+  freshness?: FreshnessFact;
+  /**
    * Flow scopes only, and only where there is a chip to qualify: the flow's
    * design declares screens and code implements **none** of them, so every
    * covering test reached code this flow shares with others. The chip's class
@@ -213,6 +224,7 @@ export interface MomentCoverage {
   counted: CoverageCounted;
   observation?: CoverageObservation;
   run?: CoverageFacts['run'];
+  freshness?: FreshnessFact;
 }
 
 export interface JourneyCoverage {
@@ -243,6 +255,8 @@ export interface StepCoverage {
   evidenceWord?: EvidenceWord;
   counted?: CoverageCounted;
   observation?: CoverageObservation;
+  /** the freshness fact over this node's tests (`freshness.ts`) — absent when no run is recorded */
+  freshness?: FreshnessFact;
   /** observed evidence exists for this node: the only class allowed to colour lines */
   observed: boolean;
   note: string;
@@ -285,7 +299,7 @@ export function toCoverageRef(index: GraphIndex, t: CoveringTest, node: GraphNod
     ...(t.confidence ? { confidence: t.confidence } : {}),
     ...(t.note ? { note: t.note } : {}),
     ...(t.loc ? { loc: t.loc } : {}),
-    ...(t.run ? { status: t.run.status, at: t.run.at, freshness: t.run.freshness, stale: t.run.stale, ...(t.run.changedBy ? { changedBy: t.run.changedBy } : {}) } : {}),
+    ...(t.run ? { status: t.run.status, at: t.run.at, freshness: t.run.freshness, stale: t.run.stale, ...(t.run.changedBy ? { changedBy: t.run.changedBy } : {}), ...(t.run.commit ? { commit: t.run.commit } : {}) } : {}),
   };
 }
 
@@ -408,9 +422,10 @@ function chipOf(active: CoverageTestRef[]): CoverageFacts['chip'] {
  * the per-action fold all read this, so the three can never say different
  * things about the same refs.
  */
-export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, source: string): {
+export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, source: string, code?: (repo?: string) => CodeAt | undefined): {
   chip: CoverageFacts['chip']; observedBy?: CoverageFacts['observedBy']; evidenceWord: EvidenceWord;
   counted: CoverageCounted; observation?: CoverageObservation; testCounts: CoverageFacts['counts']['tests'];
+  freshness: FreshnessFact;
 } {
   const active = tests.filter((t) => !t.inactive);
   const chip = chipOf(active);
@@ -478,7 +493,22 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
       ...(observing.some(isDeclaredPass) ? { declared: observing.filter(isDeclaredPass).length } : {}),
     };
   }
-  return { chip, ...(observedBy ? { observedBy } : {}), evidenceWord: evidenceWord(chip, observedBy), counted: countedTests, ...(observation ? { observation } : {}), testCounts };
+  const freshness = scopeFreshness(active, code);
+  return { chip, ...(observedBy ? { observedBy } : {}), evidenceWord: evidenceWord(chip, observedBy), counted: countedTests, ...(observation ? { observation } : {}), testCounts, freshness };
+}
+
+/**
+ * The freshness fact of a scope: over the runs that observed it — the runs the
+ * chip's *stale* is about — or, where nothing observed, over the covering
+ * tests' own runs (*their own last run*). Inactive cases read nothing.
+ */
+export function scopeFreshness(active: CoverageTestRef[], code?: (repo?: string) => CodeAt | undefined): FreshnessFact {
+  const observing = active.filter((t) => t.evidence === 'observed' && t.freshness);
+  const list = observing.length ? observing : active.filter((t) => t.at && t.freshness);
+  return freshnessFact(list.map((t) => ({
+    freshness: t.freshness!, ...(t.changedBy ? { changedBy: t.changedBy } : {}), ...(t.at ? { at: t.at } : {}),
+    ...(t.commit ? { commit: t.commit } : {}), repo: t.id.split('::')[0]!,
+  })), code);
 }
 
 export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricScope, countScope?: CountScope): CoverageFacts {
@@ -538,7 +568,7 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
     : undefined;
 
   // ── the chip, the word, the typed counts and the observing run: one helper for every scope ──
-  const facts = evidenceFacts(tests, countScope ?? COUNT_SCOPE_OF[scope.kind], `coverageFor(${scope.kind})`);
+  const facts = evidenceFacts(tests, countScope ?? COUNT_SCOPE_OF[scope.kind], `coverageFor(${scope.kind})`, codeAtOfIndex(index));
   const chip = facts.chip;
 
   // ── whose evidence is it? A flow whose design declares screens and has built
@@ -591,6 +621,7 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
     evidenceWord: facts.evidenceWord,
     counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
+    ...(facts.freshness.state !== 'none' ? { freshness: facts.freshness } : {}),
     ...(sharedEvidence ? { sharedEvidence } : {}),
     ...(run ? { run } : {}),
     tests,
@@ -640,11 +671,12 @@ export function stepCoverage(index: GraphIndex, nodeId: string): StepCoverage | 
   const node = index.byId.get(nodeId);
   if (!node || isDeclaredOnly(node)) return undefined;
   const tests = testsCovering(index, nodeId).map((t) => toCoverageRef(index, t, node));
-  const facts = evidenceFacts(tests, 'count.scope.node', 'stepCoverage()');
+  const facts = evidenceFacts(tests, 'count.scope.node', 'stepCoverage()', codeAtOfIndex(index));
   const typed = {
     chip: facts.chip, ...(facts.observedBy ? { observedBy: facts.observedBy } : {}),
     evidenceWord: facts.evidenceWord, counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
+    ...(facts.freshness.state !== 'none' ? { freshness: facts.freshness } : {}),
   };
   // nothing reaches it: the chip and the word say so, and six zero counts would only weigh the payload
   if (!tests.length) return { unit: 0, e2e: 0, tests: [], observed: false, note: 'No test reaches this step.', chip: facts.chip, evidenceWord: facts.evidenceWord };
@@ -694,7 +726,7 @@ function momentCoverage(index: GraphIndex, stepNode: Map<number, string>, from: 
     }
   }
   const tests = [...byTest.values()];
-  const facts = evidenceFacts(tests, 'count.scope.action', 'journeySummary().coverage.moments');
+  const facts = evidenceFacts(tests, 'count.scope.action', 'journeySummary().coverage.moments', codeAtOfIndex(index));
   const withRuns = tests.filter((t) => !t.inactive && t.at);
   const run: CoverageFacts['run'] | undefined = withRuns.length ? {
     status: withRuns.reduce((w, t) => (WEAKEST[t.status ?? 'unknown']! > WEAKEST[w]! ? (t.status ?? 'unknown') : w), 'passed' as NonNullable<TestRef['run']>['status']),
@@ -708,6 +740,7 @@ function momentCoverage(index: GraphIndex, stepNode: Map<number, string>, from: 
     evidenceWord: facts.evidenceWord, counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
     ...(run ? { run } : {}),
+    ...(facts.freshness.state !== 'none' ? { freshness: facts.freshness } : {}),
   };
 }
 

@@ -29,6 +29,7 @@ import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOr
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
+import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -3220,7 +3221,7 @@ export function jrnFoldFacts(cov) {
     e2e, unit, integration, observed: n(k.observed, c.observed), runLevel: n(k.runReports, c.runLevel),
     total: k.tests ? k.tests.n : e2e + unit + integration,
     evidenceWord: cov.evidenceWord || null, counted: cov.counted || null, observation: cov.observation || null,
-    chip: cov.chip || 'none', run: cov.run || null, note: cov.note,
+    chip: cov.chip || 'none', run: cov.run || null, note: cov.note, freshness: cov.freshness || null,
   };
 }
 /** The same facts as the server already folded them for a whole scope — read, never recomputed.
@@ -3344,7 +3345,9 @@ function jrnEvidenceTip(el, a) {
   return '<div class="tip-h">' + esc(t(ev.key)) + '</div>'
     + (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '')
     + (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '')
-    + tableTip({ caption: 'tip.journey.obs.head', rows });
+    + tableTip({ caption: 'tip.journey.obs.head', rows })
+    // *stale* as a comparison: the sentence that names the run's side and the code's (core freshness.ts)
+    + (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '');
 }
 registerTip('jrnEvidence', jrnEvidenceTip);
 /** The evidence chip: the core's word, its class for the shape, and its tip.
@@ -3353,7 +3356,7 @@ export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
-  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null } }) + '>'
+  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
     + esc(t(ev.key)) + '</span>';
 }
@@ -4400,12 +4403,14 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
   // built, so no word about it is a claim this flow can earn (blocker 2)
   const evHtml = cov && cov.sharedEvidence
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
+    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
   const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
   g('g-tests', [
     jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }),
     evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
+    // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)
+    cov && !cov.sharedEvidence ? freshLineHtml(cov.freshness, 'jrn-fresh') : '',
   ]);
   // the walk, in the code lens only: its units are a developer's
   if (lens === 'code') {
