@@ -989,7 +989,7 @@ export const STRINGS: Record<string, StringEntry> = {
     'tests: {e2e} e2e · {unit} unit · {int} integration · {obs} observed',
     'Distinct test cases that reach this, counted per level. Integration is its own level and is never folded into unit; a coverage report is not a case and is counted on its own line.',
   ),
-  'journey.tests.open': same('open the list', 'Opens the Tests surface: every test this graph indexes, one row per journey, each with its own scope.'),
+  'journey.tests.open': same('open the list', 'Opens the Tests surface on the cases this cell counts — the same scope, the same evidence word — each case with its own last run.'),
   'journey.tests.listHint': same('↑↓ walk · ↵ opens the test'),
   'journey.tests.noneScreen': same('no test reaches this screen'),
   // One step, two scopes (story swarm 2026-09-25, finding 4): the action's Verified-by
@@ -2234,7 +2234,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.obs.none': same('nothing observed',
     'No run of any kind reached this code: the evidence word beside it is a claim or a reading of the test bodies, and no run stands behind it.'),
   'journey.tests.theirRun': same('their own last run',
-    'The weakest verdict over the covering tests’ own last recorded runs — one skipped or failed case outweighs every passing one. Not the run behind the evidence word: that one is printed beside the word.'),
+    'What the covering tests’ own last recorded runs said, case by case. Not the run behind the evidence word: that one is printed in the word’s tip, and the word is the verdict.'),
   'journey.biz.helpersFolded': same('{n} small parts',
     'Parts this one uses that do not change what the journey does — formatting, wiring, look-ups. They are folded under it; open it to see them.'),
   'journey.biz.helpersFoldedOne': one('1 small part', 'journey.biz.helpersFolded'),
@@ -2396,6 +2396,15 @@ export const STRINGS: Record<string, StringEntry> = {
   'count.part.workInProgress': same('{n} in progress', 'Items the tracker files as started and not finished, by its own status category.'),
   'count.part.workDone': same('{n} done', 'Items the tracker files as finished, by its own status category.'),
   'count.part.workRemoved': same('{n} removed', 'Items the tracker keeps but files as cut from the work.'),
+  // ── one test verdict per cell (swarm 2026-10-05, finding 1) ─────────────
+  // The cell's verdict is the evidence word (core `testVerdict`); the cases'
+  // own runs are a count beside it whose tip says what each run said.
+  'journey.tests.theirRuns': same('their own last runs',
+    'Every test case counted here, by what its own last recorded run said: passed, failed, skipped, flaky, or no run recorded. The parts add up to the cases. It is a count, not a verdict: the verdict of this cell is the evidence word above it, and the run behind that word is in the word’s tip.'),
+  'tests.scoped.head': same('Cases that reach {scope}',
+    'The test cases behind one cell of a journey — the journey, one of its screens, one action, or one part — each with its own evidence and its own last run. The word at the top is the same word the cell prints.'),
+  'tests.scoped.all': same('every journey', 'Drops this scope and lists every journey’s tests again.'),
+  'tests.scoped.journey': same('open the journey', 'Back to the journey this scope belongs to.'),
 };
 
 /**

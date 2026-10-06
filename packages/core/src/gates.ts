@@ -13,7 +13,7 @@
 import type { GraphNode, Loc } from './graph.js';
 import type { GraphIndex } from './query.js';
 import { testsCovering, EVIDENCE_RANK } from './metrics.js';
-import { toCoverageRef, evidenceFacts, type CoverageTestRef, type EvidenceWord, type CoverageCounted, type CoverageFacts } from './coverage.js';
+import { toCoverageRef, evidenceFacts, type CoverageTestRef, type EvidenceWord, type CoverageCounted, type CoverageFacts, type TestVerdict } from './coverage.js';
 import { counted, type Counted } from './counts.js';
 import { isConfigCheck } from './config-check.js';
 
@@ -74,6 +74,8 @@ export interface GateCard {
   testsOnGate: number;
   chip: CoverageFacts['chip'];
   evidenceWord: EvidenceWord;
+  /** the tests' one verdict (`testVerdict()`): the word, what the run behind it said, every case by its own run */
+  verdict: TestVerdict;
   counted: {
     sitsOn: Counted;
     calls: Counted;
@@ -199,6 +201,7 @@ export function gateCard(index: GraphIndex, gateId: string): GateCard | undefine
     testsOnGate: onGate.size,
     chip: facts.chip,
     evidenceWord: facts.evidenceWord,
+    verdict: facts.verdict,
     counted: {
       sitsOn: counted(sitsOn.length, 'count.unit.gateSitsOn', 'count.scope.gate', `${src}.sitsOn.length`),
       calls: counted(callList.length, 'count.unit.gateCalls', 'count.scope.gate', `${src}.calls.length`, {

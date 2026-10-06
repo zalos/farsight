@@ -136,7 +136,7 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
       more: Math.max(0, tests.length - cap), total: tests.length, onGate: answer.testsOnGate || 0,
     };
     out.counted = answer.counted || null;
-    out.evidence = { chip: answer.chip, evidenceWord: answer.evidenceWord };
+    out.evidence = { chip: answer.chip, evidenceWord: answer.evidenceWord, ...(answer.verdict ? { verdict: answer.verdict } : {}) };
     out.truncated = !!answer.truncated;
   }
   return out;

@@ -169,6 +169,8 @@ export interface CoverageFacts {
    * one that needs the words reads this.
    */
   evidenceWord: EvidenceWord;
+  /** the cell's one verdict: the word, what the run behind it said, and every case by its own run — `testVerdict()` */
+  verdict: TestVerdict;
   /** the numbers of this scope, typed, each naming its scope (docs/COUNTS.md) */
   counted?: CoverageCounted;
   /** the run behind the observed class — present only when something observed */
@@ -184,7 +186,13 @@ export interface CoverageFacts {
    * earned is never weakened.
    */
   sharedEvidence?: { screens: number };
-  /** the run fact, kept apart from the chip: the weakest verdict across the covering tests' runs */
+  /**
+   * The covering tests' runs folded to their weakest verdict — kept for
+   * consumers that read it, and **never printed as the cell's verdict**: one
+   * skipped case among a hundred made it *skipped* beside a word a passed run
+   * earned. Surfaces print `verdict` (the word and its own run) and
+   * `verdict.runs` (every case by its run, a breakdown that sums).
+   */
   run?: { status: NonNullable<TestRef['run']>['status']; at: string; freshness: NonNullable<TestRef['run']>['freshness']; changedBy?: NonNullable<TestRef['run']>['changedBy']; projects: string[] };
   tests: CoverageTestRef[];
   /** the most recent run behind any covering test */
@@ -205,11 +213,41 @@ export interface EvidenceWord {
   biz?: string;
 }
 
+/**
+ * **The one test verdict of a cell** (swarm 2026-10-05, finding 1: one action
+ * carried *passed, by its own declaration · stale*, *their own last run:
+ * skipped* and a tip saying *verdict: unknown* at once). Computed here, once,
+ * from the same refs every surface reads, and printed as it is by every one of
+ * them — the journey's chips, the Sheet's *Verified by*, the timeline and the
+ * drill, the Map's property and street, the Tests matrix, MCP and the CLI.
+ *
+ *  - `word` is the cell's one word: the strongest evidence class over the
+ *    active refs (declared < reached < observed), with how it was earned —
+ *    exactly `evidenceWord`, never a fourth class and never a seventh absence;
+ *  - `status` is what the run **behind that word** said, read over the refs
+ *    that earned it and nothing else: a declaration word is earned only by
+ *    passed cases, so it never stands beside *unknown* (a coverage report's
+ *    missing verdict) or *skipped* (another case's run). Absent when no run
+ *    earned the word (*declared only*, *reached by tests*, nothing) or the
+ *    only run behind it is a coverage report, which records no verdict;
+ *  - `runs` is every case in scope by its own last recorded run — passed ·
+ *    failed · skipped · flaky · no run recorded — a breakdown that sums to the
+ *    scope's cases (`counted.tests`). It is a count of cases, printed as a
+ *    number with its tip, never as a second verdict beside the word.
+ */
+export interface TestVerdict {
+  word: EvidenceWord;
+  status?: NonNullable<TestRef['run']>['status'];
+  runs: Counted;
+}
+
 /** One action's tests, slim: the chip, the word, the typed counts and the observing run — no test list, no metric. */
 export interface MomentCoverage {
   chip: CoverageFacts['chip'];
   observedBy?: CoverageFacts['observedBy'];
   evidenceWord: EvidenceWord;
+  /** the cell's one verdict — `testVerdict()` */
+  verdict: TestVerdict;
   counted: CoverageCounted;
   observation?: CoverageObservation;
   run?: CoverageFacts['run'];
@@ -241,8 +279,17 @@ export interface StepCoverage {
   chip?: CoverageFacts['chip'];
   observedBy?: CoverageFacts['observedBy'];
   evidenceWord?: EvidenceWord;
+  /** the cell's one verdict — `testVerdict()` */
+  verdict?: TestVerdict;
   counted?: CoverageCounted;
   observation?: CoverageObservation;
+  /**
+   * The nodes sharing this node's file and line whose tests were read with its
+   * own: a route and the handler it calls at the same `file:line` are one place
+   * in the code, so they carry one verdict (swarm 2026-10-05: `route.ts:24` read
+   * *reached by tests* on the route and *no test reaches this step* on its handler).
+   */
+  sameLoc?: string[];
   /** observed evidence exists for this node: the only class allowed to colour lines */
   observed: boolean;
   note: string;
@@ -392,11 +439,10 @@ const COUNT_SCOPE_OF: Record<MetricScope['kind'], CountScope> = {
   flow: 'journey.scopeAll', segment: 'journey.scopeHere', node: 'count.scope.node',
 };
 
-/** The chip over a scope's active refs — the strongest class, stale only when every observed run is `changed`. */
-function chipOf(active: CoverageTestRef[]): CoverageFacts['chip'] {
-  const observedRefs = active.filter((t) => t.evidence === 'observed');
-  return observedRefs.length
-    ? (observedRefs.every((t) => t.freshness === 'changed') ? 'observed-stale' : 'observed')
+/** The chip over a scope's active refs — the strongest class, stale only when every run behind the word is `changed`. */
+function chipOf(active: CoverageTestRef[], earning: CoverageTestRef[]): CoverageFacts['chip'] {
+  return earning.length
+    ? (earning.every((t) => t.freshness === 'changed') ? 'observed-stale' : 'observed')
     : active.some((t) => t.evidence === 'static') ? 'reached'
       : active.length ? 'declared' : 'none';
 }
@@ -409,11 +455,13 @@ function chipOf(active: CoverageTestRef[]): CoverageFacts['chip'] {
  * things about the same refs.
  */
 export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, source: string): {
-  chip: CoverageFacts['chip']; observedBy?: CoverageFacts['observedBy']; evidenceWord: EvidenceWord;
+  chip: CoverageFacts['chip']; observedBy?: CoverageFacts['observedBy']; evidenceWord: EvidenceWord; verdict: TestVerdict;
   counted: CoverageCounted; observation?: CoverageObservation; testCounts: CoverageFacts['counts']['tests'];
 } {
   const active = tests.filter((t) => !t.inactive);
-  const chip = chipOf(active);
+  // the refs that earned the word decide whether it is stale — never a coverage
+  // report beside a declaration, or a declaration beside a case coverage placed
+  const chip = chipOf(active, earningRefs(active));
   const cases = tests.filter((t) => !t.runLevel);
   const byLevel = (level: TestRef['level']) => cases.filter((t) => t.level === level);
   const isDeclaredPass = (t: CoverageTestRef) => t.evidence === 'observed' && t.observedVia === 'declaration';
@@ -462,8 +510,12 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
     } : {}),
     runReports: counted(testCounts.runLevel, 'count.unit.runReports', countScope, `${source}.counts.tests.runLevel`),
   };
-  // the run that earned the observed class, and only that run
-  const observing = active.filter((t) => t.evidence === 'observed');
+  // the run that earned the observed class, and only that run: the refs behind
+  // the word (`earningRefs`) — a declaration's cases, the cases coverage placed,
+  // or the coverage reports when nothing named a case. A coverage report's
+  // `unknown` beside a declaration's passed cases made the tip say *verdict:
+  // unknown* under *passed, by its own declaration* (swarm 2026-10-05).
+  const observing = earningRefs(active);
   let observation: CoverageObservation | undefined;
   if (observedBy && observing.length) {
     const timed = observing.filter((t) => t.at);
@@ -478,7 +530,49 @@ export function evidenceFacts(tests: CoverageTestRef[], countScope: CountScope, 
       ...(observing.some(isDeclaredPass) ? { declared: observing.filter(isDeclaredPass).length } : {}),
     };
   }
-  return { chip, ...(observedBy ? { observedBy } : {}), evidenceWord: evidenceWord(chip, observedBy), counted: countedTests, ...(observation ? { observation } : {}), testCounts };
+  const word = evidenceWord(chip, observedBy);
+  // a coverage report records no verdict: the word it earns (*seen by a coverage run*) has no run status beside it
+  const verdict = testVerdict(tests, word, observation && observation.by !== 'runs' ? observation.status : undefined, countScope, source);
+  return { chip, ...(observedBy ? { observedBy } : {}), evidenceWord: word, verdict, counted: countedTests, ...(observation ? { observation } : {}), testCounts };
+}
+
+/** The run parts of a verdict's `runs`, in print order — the source cards' parts (`testsSurface().sources[].counted.cases`). */
+const RUN_PARTS = ['passed', 'failed', 'skipped', 'flaky'] as const;
+
+/**
+ * The cell's one verdict from its refs (see `TestVerdict`): the word the fold
+ * chose, the status of the run behind it, and every case by its own last run.
+ * `evidenceFacts` calls it for every scope — a journey, a screen, an action, a
+ * step — so no printer derives a verdict for itself.
+ */
+export function testVerdict(
+  tests: CoverageTestRef[], word: EvidenceWord, status: CoverageObservation['status'] | undefined,
+  countScope: CountScope, source: string,
+): TestVerdict {
+  const cases = tests.filter((t) => !t.runLevel);
+  const n = (s: string) => cases.filter((t) => t.status === s).length;
+  // a verdict nobody recorded and no run at all read as one absence, as on the source cards
+  const noRun = cases.filter((t) => !t.status || !(RUN_PARTS as readonly string[]).includes(t.status)).length;
+  const runs = counted(cases.length, 'count.unit.cases', countScope, `${source}.verdict.runs (each case's own last run)`, {
+    bizUnit: 'journey.biz.countTests',
+    breakdown: [...RUN_PARTS.map((s) => ({ key: `count.part.${s}`, n: n(s) })), { key: 'count.part.noRun', n: noRun }],
+  });
+  return { word, ...(status && word.cls !== 'none' && word.cls !== 'declared' && word.cls !== 'reached' ? { status } : {}), runs };
+}
+
+/**
+ * The refs that earned an observed word, strongest attribution first: the
+ * cases a results report named and coverage placed (with any passed by their
+ * declaration beside them), else the end-to-end cases that passed for what
+ * they declare, else the coverage reports that name no case. Empty when
+ * nothing observed.
+ */
+function earningRefs(active: CoverageTestRef[]): CoverageTestRef[] {
+  const observing = active.filter((t) => t.evidence === 'observed');
+  const isDeclaredPass = (t: CoverageTestRef) => t.observedVia === 'declaration';
+  if (observing.some((t) => !t.runLevel && !isDeclaredPass(t))) return observing.filter((t) => !t.runLevel);
+  if (observing.some(isDeclaredPass)) return observing.filter(isDeclaredPass);
+  return observing;
 }
 
 export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricScope, countScope?: CountScope): CoverageFacts {
@@ -589,6 +683,7 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
     chip,
     ...(observedBy ? { observedBy } : {}),
     evidenceWord: facts.evidenceWord,
+    verdict: facts.verdict,
     counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
     ...(sharedEvidence ? { sharedEvidence } : {}),
@@ -635,19 +730,55 @@ export function evidenceWord(chip: CoverageFacts['chip'], observedBy?: CoverageF
   return { cls: 'none', key: 'journey.absent.noneIndexed' };
 }
 
+/**
+ * The nodes at this node's own `file:line` that are the same place in the code:
+ * a route and the handler it `calls` declared on the route's line (a Next.js
+ * `route.ts` exporting `POST`, say). Nothing else — a module, a sibling export on
+ * another line, or a caller elsewhere stays its own cell.
+ */
+export function sameLocTwins(index: GraphIndex, node: GraphNode): string[] {
+  const at = node.loc;
+  if (!at?.path || at.line == null) return [];
+  const same = (n: GraphNode | undefined): boolean => !!n?.loc && n.loc.path === at.path && n.loc.line === at.line && (n.loc.repo ?? '') === (at.repo ?? '');
+  const out: string[] = [];
+  if (node.kind === 'route') {
+    for (const e of index.out.get(node.id) ?? []) {
+      if (e.kind === 'calls' && index.byId.get(e.to)?.kind === 'function' && same(index.byId.get(e.to))) out.push(e.to);
+    }
+  } else if (node.kind === 'function') {
+    for (const e of index.in.get(node.id) ?? []) {
+      if (e.kind === 'calls' && index.byId.get(e.from)?.kind === 'route' && same(index.byId.get(e.from))) out.push(e.from);
+    }
+  }
+  return [...new Set(out)];
+}
+
 /** One step's coverage — what the journey band's foot and the code gutter read. */
 export function stepCoverage(index: GraphIndex, nodeId: string): StepCoverage | undefined {
   const node = index.byId.get(nodeId);
   if (!node || isDeclaredOnly(node)) return undefined;
-  const tests = testsCovering(index, nodeId).map((t) => toCoverageRef(index, t, node));
+  // one place in the code, one verdict: a route and the handler it calls at the
+  // same file and line read their tests together, each ref once at its strongest
+  const twins = sameLocTwins(index, node);
+  const byTest = new Map<string, CoverageTestRef>();
+  for (const id of [nodeId, ...twins]) {
+    const at = index.byId.get(id);
+    for (const t of testsCovering(index, id)) {
+      const ref = toCoverageRef(index, t, at);
+      const have = byTest.get(t.id);
+      if (!have || EVIDENCE_RANK[have.evidence]! < EVIDENCE_RANK[ref.evidence]!) byTest.set(t.id, ref);
+    }
+  }
+  const tests = [...byTest.values()];
   const facts = evidenceFacts(tests, 'count.scope.node', 'stepCoverage()');
   const typed = {
     chip: facts.chip, ...(facts.observedBy ? { observedBy: facts.observedBy } : {}),
-    evidenceWord: facts.evidenceWord, counted: facts.counted,
+    evidenceWord: facts.evidenceWord, verdict: facts.verdict, counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
+    ...(twins.length ? { sameLoc: twins } : {}),
   };
   // nothing reaches it: the chip and the word say so, and six zero counts would only weigh the payload
-  if (!tests.length) return { unit: 0, e2e: 0, tests: [], observed: false, note: 'No test reaches this step.', chip: facts.chip, evidenceWord: facts.evidenceWord };
+  if (!tests.length) return { unit: 0, e2e: 0, tests: [], observed: false, note: 'No test reaches this step.', chip: facts.chip, evidenceWord: facts.evidenceWord, verdict: facts.verdict };
   const e2e = tests.filter((t) => t.level === 'e2e').length;
   return {
     unit: tests.length - e2e,
@@ -707,10 +838,52 @@ function momentCoverage(index: GraphIndex, stepNode: Map<number, string>, from: 
   } : undefined;
   return {
     chip: facts.chip, ...(facts.observedBy ? { observedBy: facts.observedBy } : {}),
-    evidenceWord: facts.evidenceWord, counted: facts.counted,
+    evidenceWord: facts.evidenceWord, verdict: facts.verdict, counted: facts.counted,
     ...(facts.observation ? { observation: facts.observation } : {}),
     ...(run ? { run } : {}),
   };
+}
+
+/**
+ * The coverage of one screen of a journey (`seg`), or of one action inside it
+ * (`seg` + `action`), with its test list — what the Tests page prints when a
+ * door from the journey opens it scoped to that cell (swarm 2026-10-05: *open
+ * the list* and the Sheet's tests line dropped the scope). Folded over the same
+ * node ids and by the same `evidenceFacts` as `journeyCoverage`'s segment and
+ * moment entries, so the page's verdict is the cell's verdict. Undefined when
+ * the summary has no such segment or action.
+ */
+export function cellCoverage(index: GraphIndex, j: Journey, summary: JourneySummary, seg: number, action?: number): { label: string; facts: CoverageFacts } | undefined {
+  const sg = summary.segments[seg];
+  if (!sg) return undefined;
+  const label = sg.screen?.name ?? `step ${sg.index + 1} of ${summary.entry.name}`;
+  if (action == null) return { label, facts: coverageFor(index, segmentNodeIds(sg), { kind: 'segment', label }) };
+  const mo = sg.moments[action];
+  if (!mo) return undefined;
+  const stepNode = new Map(j.steps.map((st) => [st.order, st.nodeId] as const));
+  const ids: string[] = [];
+  for (let o = mo.from; o <= mo.to; o++) { const id = stepNode.get(o); if (id) ids.push(id); }
+  const here = `${label} · ${mo.label}`;
+  return { label: here, facts: coverageFor(index, ids, { kind: 'segment', label: here }, 'count.scope.action') };
+}
+
+/**
+ * The cases behind a table's accessors (`verifiedThrough`) by their own last
+ * runs — each case once. A table carries no evidence word (no test touches it),
+ * so its foot prints this count and no verdict.
+ */
+export function viaRuns(refs: CoverageTestRef[]): Counted {
+  const once = [...new Map(refs.map((r) => [r.id, r] as const)).values()];
+  return testVerdict(once, { cls: 'none', key: 'journey.absent.noneIndexed' }, undefined, 'count.scope.node', 'verifiedThrough()').runs;
+}
+
+/**
+ * One case's own word, by the same rule as a scope's: the case alone as the
+ * scope. A list of cases prints this beside each name, so a row never words its
+ * evidence differently from the chip above it.
+ */
+export function caseWord(ref: CoverageTestRef): EvidenceWord {
+  return evidenceFacts([{ ...ref, inactive: false }], 'count.scope.node', 'caseWord()').evidenceWord;
 }
 
 /**
