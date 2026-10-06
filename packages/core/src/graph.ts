@@ -302,6 +302,8 @@ export interface TestsMeta {
     reason?: 'ok' | 'no-match' | 'unreadable' | 'empty' | 'no-digest' | 'digest-changed';
     /** `digest-changed` only: a new commit, or the same commit with a working tree that differs (`TestRun.changedBy`) */
     changedBy?: 'commit' | 'working-tree';
+    /** the commit the report's stamp recorded (`farsight.commit`), when it recorded one — the run's side of the freshness sentence */
+    commit?: string;
     mtime?: string;
     runId?: string;
     /** results reports: test cases this report was joined to */
@@ -339,6 +341,12 @@ export interface TestsMeta {
   blindSpots: string[];
   /** the content digest the fragment was ingested at — what a stamped report must equal */
   sourceDigest?: string;
+  /**
+   * HEAD when this read compared a stamped report with the code — the code's side of
+   * every freshness sentence (core `freshness.ts`). Absent when no report recorded a
+   * digest, or git could not be asked.
+   */
+  head?: { sha: string; at?: string };
 }
 
 /**
@@ -650,6 +658,41 @@ export interface NxProjectDependency {
   via: 'nx-graph';
 }
 
+/**
+ * A record's status lifecycle, read from the code (parsers/src/lifecycle.ts): the statuses one
+ * field of the record may hold, in the order the code declares them, and each move between them
+ * that a function performs. Never drawn by hand and never guessed: a status is listed only because
+ * a declaration names it, a transition only with the function that writes it, and `from` only when
+ * that function compares the field to exactly one prior status.
+ */
+export interface RecordLifecycle {
+  /** the field the statuses live in, as the code spells it (`status`, `bc_sync_status`) */
+  field: string;
+  /** in declared order */
+  statuses: string[];
+  transitions: LifecycleTransition[];
+  /** where the statuses are declared; the first is the declaration whose order `statuses` keeps */
+  provenance: LifecycleSource[];
+}
+export interface LifecycleTransition {
+  /** the status the writer checks first, when it compares the field to exactly one */
+  from?: string;
+  to: string;
+  /** node id of the function that writes it */
+  by: string;
+  /** how it writes: `x.status = 'A'`, an update call's patch, a SQL `UPDATE … SET status = 'A'` */
+  via: 'assignment' | 'update-call' | 'sql';
+  /** the write's line in the writer's file */
+  line?: number;
+}
+export interface LifecycleSource {
+  /** a SQL CHECK on the column, a `const … as const` array, a `z.enum`, a string-literal union, a TS `enum` */
+  kind: 'sql-check' | 'const-array' | 'zod-enum' | 'union' | 'ts-enum';
+  name?: string;
+  path: string;
+  line: number;
+}
+
 export interface GraphNode {
   id: string;
   kind: NodeKind;
@@ -677,6 +720,8 @@ export interface GraphNode {
   external?: ExternalRef;
   /** table nodes, and external nodes that are stores: the data store this lives in and how we know — see StoreRef */
   store?: StoreRef;
+  /** table nodes: the statuses one field of the record holds and the functions that move it between them — see RecordLifecycle */
+  lifecycle?: RecordLifecycle;
   /** component/page nodes: the stories that render this component on its own — see StoryRef */
   stories?: StoryRef[];
   /** package nodes only: which dependency this is, where it is declared and at what range — see PackageRef */
@@ -712,7 +757,8 @@ export type ResolutionTechnique =
   | 'sdk-import' //      MEDIUM — a function that uses an imported SDK binding reaches the SDK's system
   | 'constant-host' //   MEDIUM — a non-literal fetch inside a class whose base URL starts with a constant host
   | 'name-match' //     LOW    — last-resort symbol name match
-  | 'work-key'; //       MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
+  | 'work-key' //        MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
+  | 'callback-prop'; //  MEDIUM — a function a parent hands a single-site child component as a prop, credited to the child that runs it (parsers/src/callback-props.ts)
 
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
 

@@ -152,6 +152,21 @@ test.describe('the business register', () => {
   }
 
   /**
+   * The front door's persona, group and journey descriptions are words somebody wrote:
+   * the business register reads them through plainWords (swarm 2026-10-05, the product owner).
+   * @covers packages/server/public/app/strings.js::proseHtml
+   * @covers packages/server/public/app/strings.js::plainWords
+   */
+  test('no identifier in the front door\'s descriptions in business', async ({ page }) => {
+    await gotoReady(page, '#/journeys?lens=business');
+    await expect(page.locator('body')).toHaveClass(/lens-business/);
+    await expect(page.locator('.dsg-flow-desc').first()).toBeVisible({ timeout: 15_000 });
+    const text = (await page.locator('.dsg-flow-desc').allInnerTexts()).join(' ');
+    expect(identifiers(text), 'identifier-shaped tokens in a description').toEqual([]);
+    expect(text, 'no raw backticks').not.toContain('`');
+  });
+
+  /**
    * @covers packages/server/public/app/shell.js::searchNodes
    * @covers packages/server/public/app/shell.js::renderPalette
    * @covers packages/server/public/app/shell.js::travelTarget
@@ -227,7 +242,8 @@ test.describe('chrome', () => {
     await expect(page.locator('#scopemenu')).not.toHaveClass(/open/);
     await expect(journey).toBeVisible();
     await expect(page.locator('#scopebtn')).toHaveAttribute('aria-expanded', 'false');
-    // the next Esc is the journey's again
+    // the next Esc is the journey's again (it asks once, then closes)
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(journey).toBeHidden();
   });
@@ -238,6 +254,7 @@ test.describe('chrome', () => {
    */
   test('closing a journey leaves no focus behind on the surface it returns to', async ({ page }) => {
     await openBillingCycle(page);
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Journey', exact: true })).toBeHidden();
     await expect(page).toHaveURL(/#\/journeys$/);

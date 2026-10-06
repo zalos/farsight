@@ -14,6 +14,8 @@ export interface SqlTable {
   columns: string[];
   /** character offset of the CREATE TABLE inside the text (for a line number) */
   offset: number;
+  /** `CHECK (<col> IN ('A', 'B', …))` lists in the column list, per column, in declared order */
+  checks: { column: string; values: string[] }[];
 }
 
 export interface SqlOp {
@@ -77,7 +79,7 @@ export function sqlTables(text: string): SqlTable[] {
       if (!/^[A-Za-z_][\w$]*$/.test(ident)) continue;
       columns.push(ident);
     }
-    out.push({ name, columns, offset: m.index });
+    out.push({ name, columns, offset: m.index, checks: checkLists(body) });
   }
   return out;
 }
@@ -114,4 +116,14 @@ export function sqlOps(text: string): SqlOp[] {
     push(m[1]!, 'select');
   }
   return ops;
+}
+
+/** The CHECK (<col> IN ('A', …)) lists of a CREATE TABLE column list, per column, in declared order. */
+export function checkLists(body: string): { column: string; values: string[] }[] {
+  const out: { column: string; values: string[] }[] = [];
+  for (const m of body.matchAll(/check\s*\(\s*"?(\w+)"?\s+in\s*\(([^)]*)\)/gi)) {
+    const values = [...m[2]!.matchAll(/'([^']*)'/g)].map((x) => x[1]!);
+    if (values.length >= 2 && !out.some((o) => o.column === m[1])) out.push({ column: m[1]!, values });
+  }
+  return out;
 }

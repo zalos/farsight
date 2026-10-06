@@ -13,6 +13,8 @@ import { autoTags, normalizePath, snippetRange } from './shared/tags.js';
 import { isTestFile } from './tests/cases.js';
 import { isStoryFile } from './stories/index.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
+import { propFactsOf, type PropFacts } from './callback-props.js';
+import { collectEnums, collectStatusFacts, linkLifecycles, type LifecycleFacts } from './lifecycle.js';
 
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
@@ -237,6 +239,10 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const middlewares: { file: string; prefix: string }[] = [];
   // a route that delegates its body to a named function: the handler *is* the route's body
   const routeHandlers: { routeId: string; file: string; handler: string }[] = [];
+  // every JSX-bearing function's props: the ones it runs, hands on, decides on, and what it hands its children
+  const propFacts = new Map<string, PropFacts & { file: string }>();
+  // the record lifecycle's facts (lifecycle.ts): enums declared, status fields, writes, compares, SQL CHECK lists
+  const lifeFacts: LifecycleFacts = { decls: [], uses: [], writes: [], compares: [], checks: new Map() };
   let edgeSeq = 0;
 
   const addNode = (n: GraphNode) => {
@@ -450,6 +456,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       }
     });
 
+    { const en = collectEnums(program, file, line); lifeFacts.decls.push(...en.decls); lifeFacts.uses.push(...en.uses); }
     // declared functions & components & zod schemas
     const declared: { name: string; node: AstNode; body: AstNode | null; kind: NodeKind; cls?: string; clsGroup?: string }[] = [];
     walk(program, (n, parents) => {
@@ -602,6 +609,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         const at = line(n.start ?? 0) + (text.slice(0, tbl.offset).match(/\n/g) ?? []).length;
         const existing = nodes.get(tableId);
         if (existing && existing.loc) continue;
+        if (tbl.checks.length) lifeFacts.checks.set(tableId, tbl.checks);
         nodes.set(tableId, {
           id: tableId, kind: 'table', name: tbl.name, lang: 'sql',
           loc: { repo, path: file, line: at },
@@ -624,6 +632,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       });
       if (hasJsx && /^[A-Z]/.test(d.name)) kind = 'component';
       const id = symbolId(file, d.name);
+      if (hasJsx) { const pf = propFactsOf(d.node, d.body, line); if (pf) propFacts.set(id, { file, ...pf }); }
+      { const sf = collectStatusFacts(d.body, id, line); lifeFacts.writes.push(...sf.writes); lifeFacts.compares.push(...sf.compares); }
       const doc = parseDoc(leadingComment(source, d.node.start ?? 0));
       // @guard — declared auth wrapper (withTenant(clientId, fn)…): a guard
       // node even before an adapter understands the framework it belongs to
@@ -1728,6 +1738,81 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `declared in farsight.config.json → externals as ${decl.import}` });
     }
   }
+
+  // ── callback props (callback-props.ts): the function a parent hands a child, on the child that runs it ──
+  {
+    // JSX sites per component across the repo — the single-site rule: a component rendered from one
+    // place runs one parent's function; a shared one runs a different function at each site
+    const sites = new Map<string, number>();
+    for (const r of pendingRenders) {
+      if (!r.jsx) continue;
+      const t = resolveTarget(r.file, r.callee);
+      if (t) sites.set(t, (sites.get(t) ?? 0) + 1);
+    }
+    const ioFrom = new Set(edges.filter((e) => e.kind === 'http' || e.kind === 'reads' || e.kind === 'writes' || e.kind === 'publishes').map((e) => e.from));
+    const componentAt = (file: string, tag: string): string | undefined => {
+      const t = resolveTarget(file, tag);
+      return t && nodes.get(t)?.kind === 'component' && sites.get(t) === 1 ? t : undefined;
+    };
+    /** a hand-on can go one component further when that child is single-site and does something with the prop */
+    const canTake = (childId: string | undefined, attr: string): childId is string =>
+      !!childId && !!propFacts.get(childId)?.uses.some((u) => u.prop === attr);
+    const credit = (runner: string, targets: string[], useLine: number, attr: string, handedBy: string, tag: string, via: 'callback-prop' | 'prop-value'): void => {
+      const runnerName = nodes.get(runner)?.name ?? tag;
+      const parentName = nodes.get(handedBy)?.name ?? handedBy;
+      for (const t of targets) {
+        const target = nodes.get(t);
+        if (!target || t === runner || target.kind === 'component' || target.kind === 'page') continue;
+        const kind: GraphEdge['kind'] = target.kind === 'rule' ? 'validates' : target.kind === 'guard' ? 'guards' : 'calls';
+        const key = `${kind}|${kind === 'calls' ? runner : t}|${kind === 'calls' ? t : runner}`;
+        if (seenEdge.has(key)) continue;
+        seenEdge.add(key);
+        const note = via === 'callback-prop'
+          ? `${parentName} hands <${runnerName}> the function that runs this as ${attr}; <${runnerName}> is its only renderer's child and runs it`
+          : `${parentName} computes ${attr} with ${target.name}() and hands the answer to <${runnerName}>, which decides on it`;
+        const res: GraphEdge['resolution'] = { status: 'heuristic', technique: 'callback-prop', confidence: 'MEDIUM', note };
+        const meta = { line: useLine, via, prop: attr, handedBy };
+        if (kind === 'calls') addEdge('calls', runner, t, meta, res);
+        else addEdge(kind, t, runner, meta, res);
+      }
+    };
+    /** follow one handoff down the hand-on chain to the component(s) that run it */
+    const deliver = (childId: string, attr: string, targets: string[], handedBy: string, tag: string, depth: number, seen: Set<string>): void => {
+      const k = `${childId}|${attr}`;
+      if (depth > 6 || seen.has(k)) return;
+      seen.add(k);
+      const facts = propFacts.get(childId)!;
+      for (const u of facts.uses) {
+        if (u.prop !== attr) continue;
+        const next = u.via ? componentAt(facts.file, u.via.tag) : undefined;
+        if (u.via && canTake(next, u.via.attr)) deliver(next, u.via.attr, targets, handedBy, tag, depth + 1, seen);
+        else credit(childId, targets, u.line, attr, handedBy, tag, 'callback-prop');
+      }
+    };
+    for (const [fromId, facts] of propFacts) {
+      for (const h of facts.handoffs) {
+        const childId = componentAt(facts.file, h.tag);
+        if (!childId) continue;
+        if (h.boundCall) {
+          // a value the parent computed: the child shows that function's answer when it decides on it
+          const line0 = propFacts.get(childId)?.branched.get(h.attr);
+          const t = resolveTarget(facts.file, h.boundCall);
+          // a function that does I/O (fetches, reads or writes a table, publishes) is the parent's
+          // data load, not an answer the child shows: the walk already has it under the parent
+          if (t && (ioFrom.has(t))) continue;
+          if (line0 != null && t) credit(childId, [t], line0, h.attr, fromId, h.tag, 'prop-value');
+          continue;
+        }
+        if (!canTake(childId, h.attr)) continue;
+        const targets = h.callees
+          ? h.callees.map((c) => resolveTarget(facts.file, c.name)).filter((t): t is string => !!t && t !== fromId)
+          : h.ident ? [resolveTarget(facts.file, h.ident)].filter((t): t is string => !!t && t !== fromId) : [];
+        if (targets.length) deliver(childId, h.attr, [...new Set(targets)], fromId, h.tag, 0, new Set());
+      }
+    }
+  }
+
+  linkLifecycles(repo, nodes, edges, lifeFacts);
 
   const packagesMeta = emitPackages();
 

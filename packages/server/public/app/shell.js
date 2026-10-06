@@ -235,9 +235,10 @@ export function applyRoute() {
   if (r.lens && /^(business|hybrid|code)$/.test(r.lens) && currentLens() !== r.lens) setLens(r.lens, true);
   if (r.band === 'ladder' || r.band === 'rows') S.jrnView = r.band;
   // …and which journey visual it was written in (the view axis; deep link wins over persistence)
-  if (r.surface === 'journeys' && /^(storyboard|timeline|sheet|drill)$/.test(r.view || '')) S.jrnLayout = r.view;
+  // (S.jrnLayoutLens cleared: the link's view holds for the register it opens in — journeys.js jrnLayout)
+  if (r.surface === 'journeys' && /^(storyboard|timeline|sheet|drill)$/.test(r.view || '')) { S.jrnLayout = r.view; S.jrnLayoutLens = null; }
   // a link to one step opens the blueprint timeline when it names no view of its own
-  else if (r.surface === 'journeys' && r.step && !q0view(r)) S.jrnLayout = 'timeline';
+  else if (r.surface === 'journeys' && r.step && !q0view(r)) { S.jrnLayout = 'timeline'; S.jrnLayoutLens = null; }
   if (r.surface === 'journeys' && /^(inline|bottom|right)$/.test(r.dock || '')) S.jrnDock = r.dock;
   if (r.surface === 'journeys' && /^(words|gates|decisions)$/.test(r.biz || '')) S.jrnBiz = r.biz;
   // the same surface, a new place inside it: a surface that can follow its own route keeps its state
@@ -420,13 +421,27 @@ export function renderChrome() {
     + ' onclick="location.hash=\'#/' + s + '\'">' + esc(t('nav.' + s)) + '</button>').join('');
   const sc = document.getElementById('syncchipwrap');
   if (sc) sc.innerHTML = syncChipHtml();
+  // READ-ONLY is a fact the server holds (`serve --read-only`, every `--as-of`), read off /api/version —
+  // the chip used to say it on every server while Settings offered Save and Sync beside it (swarm 2026-10-05)
   const ro = document.getElementById('readonly');
-  if (ro) { ro.textContent = t('sys.readonly'); ro.removeAttribute('title'); setTip(ro, { text: t('sys.readonlySub') }); }
+  const why = readOnlyWhy();
+  if (ro) {
+    ro.hidden = !why;
+    ro.textContent = t('sys.readonly'); ro.removeAttribute('title');
+    if (why) setTip(ro, { text: t(why === 'as-of' ? 'sys.readonly.asOf' : 'sys.readonly.flag') });
+  }
+  applyReadOnly();
   const reg = document.getElementById('regtoggle');
   if (reg) { reg.textContent = t(S.register === 'hud' ? 'chrome.registerToPro' : 'chrome.registerToHud'); setTip(reg, { key: 'surf.chrome.register' }); }
   // the gear opens Settings (it read as a theme toggle): its tip says what is behind it
+  // a gear and the word: the glyph alone read as a theme toggle to seven of eight reviewers (swarm 2026-10-05)
   const gear = document.getElementById('gearbtn');
-  if (gear) { gear.removeAttribute('title'); setTip(gear, { key: 'surf.chrome.settings' }); }
+  if (gear) {
+    gear.removeAttribute('title');
+    gear.innerHTML = sym('gear') + '<span class="gearlbl">' + esc(t('surf.chrome.settings')) + '</span>';
+    gear.setAttribute('aria-label', t('surf.chrome.settings'));
+    setTip(gear, { key: 'surf.chrome.settings' });
+  }
   if (!S.focusSet) document.getElementById('searchlabel').textContent = t('chrome.search');
   document.getElementById('focuschip').innerHTML = '✕ ' + esc(t('chrome.exitFocus'));
   document.getElementById('pinput').placeholder = t('palette.placeholder');
@@ -479,7 +494,7 @@ export function fitTopbar() {
     const host = k === 'sharewrap' && c ? c.closest('.share-wrap') : c;
     if (host && host.parentElement === menu) bar.insertBefore(host, wrap);
   }
-  menu.querySelectorAll('.fs-morelbl').forEach((n) => n.remove());
+  menu.querySelectorAll('.fs-morelbl,.more-settings').forEach((n) => n.remove());
   wrap.style.display = 'none';
   menu.classList.remove('open');
   btn.setAttribute('aria-expanded', 'false');
@@ -496,7 +511,8 @@ export function fitTopbar() {
   const fold = (k) => {
     const c = el(k);
     const host = k === 'sharewrap' && c ? c.closest('.share-wrap') : c;
-    if (!host || host.parentElement === menu) return;
+    // a control the session does not draw (READ-ONLY on a writable server) has nothing to fold
+    if (!host || host.parentElement === menu || host.hidden) return;
     if (!folded) wrap.style.display = '';
     menu.appendChild(host);
     // `?` and the gear carry a glyph and no word — fine beside their neighbours in
@@ -515,15 +531,33 @@ export function fitTopbar() {
   // words (HUD's tabs run 717px at 1100), fold the nav itself. Every rung has a
   // home in the ⋯ menu; the rung that has none — a control simply off the edge —
   // is the defect this replaced.
+  // the gear gives up its word before it folds: a cog in the bar (and Settings in the ⋯ menu) beats a menu row only
+  const gearBtn = document.getElementById('gearbtn');
+  if (gearBtn) gearBtn.classList.remove('compact');
   for (const k of TOPBAR_FOLD) {
     if (k === 'nav') continue;
     if (fits()) break;
+    if (k === 'gearbtn' && gearBtn && gearBtn.parentElement !== menu) {
+      gearBtn.classList.add('compact');
+      if (fits()) break;
+      gearBtn.classList.remove('compact');
+    }
     fold(k);
   }
   if (chip) chip.style.flexShrink = '';
   if (!fits() && chip) chip.style.minWidth = '0';
   if (!fits()) fold('nav');
   if (!folded) { wrap.style.display = 'none'; return; }
+  // Settings is always in the ⋯ menu: folded, the gear is its own row; still in the bar, the menu ends with a
+  // row of its own that opens the same page, because ⋯ is where seven of eight reviewers looked for it first
+  const gearEl = document.getElementById('gearbtn');
+  if (gearEl && gearEl.parentElement !== menu) {
+    const row = document.createElement('button');
+    row.type = 'button'; row.className = 'more-settings';
+    row.innerHTML = sym('gear') + '<span>' + esc(t('surf.chrome.settings')) + '</span>';
+    row.onclick = () => openSettings();
+    menu.appendChild(row);
+  }
   btn.innerHTML = sym('more') + '<span class="cnt">' + folded + '</span>';
   btn.setAttribute('aria-label', t('chrome.more'));
   btn.removeAttribute('title');
@@ -531,7 +565,7 @@ export function fitTopbar() {
   const nameOf = (n) => (n.id === 'nav' ? t('tip.more.nav')
     : n.classList.contains('share-wrap') ? nameOf(n.querySelector('button') || n)
       : (n.getAttribute('aria-label') || n.textContent || '').trim());
-  const names = [...menu.children].map(nameOf).filter(Boolean);
+  const names = [...menu.children].filter((n) => !n.classList.contains('more-settings')).map(nameOf).filter(Boolean);
   setTip(btn, { number: { count: folded, of: 'tip.more.of', scope: 'tip.more.scope', source: 'tip.more.source',
     breakdown: { rows: names.map((x) => [x]) }, grammarKey: 'chrome.more' } });
 }
@@ -664,7 +698,8 @@ export function buildScope() {
   if (rest.length) html += '<div class="sc-group"><div class="sc-plain hud-label">' + esc(t(colls.length ? 'scope.ungrouped' : 'scope.sources')) + '</div>' + rest.map(row).join('') + '</div>';
   // on the code map: its own filters — projects, tag values, depends on (surfaces/codemap-projects.js)
   html += cmapScopeHtml();
-  html += '<div class="sc-foot"><button class="sc-save" onclick="saveScopeGroup()" title="' + esc(t('scope.newGroupTitle')) + '">' + esc(t('scope.newGroup')) + '</button></div>';
+  const ro = !!readOnlyWhy();
+  html += '<div class="sc-foot"><button class="sc-save' + (ro ? ' ro-off" aria-disabled="true' : '') + '" onclick="saveScopeGroup()" title="' + esc(t(ro ? 'sys.readonly.control' : 'scope.newGroupTitle')) + '">' + esc(t('scope.newGroup')) + '</button></div>';
   menu.innerHTML = html;
   colls.forEach((c, i) => {
     const names = collSourceNames(c);
@@ -757,6 +792,7 @@ export function toggleScopeColl(i) {
  * @group Lens, theme & filters
  */
 export async function saveScopeGroup() {
+  if (refusedReadOnly()) return;
   if (S.scope === 'all' || !S.scope.length) return;
   const name = prompt(t('set.groupPrompt'));
   if (!name) return;
@@ -1155,6 +1191,43 @@ export function paletteNav(e) {
   if (e.key === 'Enter' && shown[S.palIndex]) { pick(shown[S.palIndex].id); }
 }
 
+// ── the read-only session ───────────────────────────────────────
+/**
+ * Why this session is read-only — `'flag'` (`serve --read-only`), `'as-of'` (a
+ * past sync) — or null when the server takes changes. Read off `/api/version`'s
+ * `session`, the same fact the server enforces (guard.ts `refuseWrite`); an
+ * older server that does not say is taken as writable, as it always was.
+ * @group Settings page
+ */
+export function readOnlyWhy() {
+  const s = S.VERSION && S.VERSION.session;
+  return s && s.readOnly ? (s.why === 'as-of' ? 'as-of' : 'flag') : null;
+}
+/**
+ * Grey out every control that would change something the server owns, with a
+ * tip saying why — disabled, never hidden: a reader sees what the product can
+ * do and why it will not do it here. Buttons keep their focus and their tip
+ * (`aria-disabled`, their handlers return early); the fields that only feed
+ * them are disabled outright.
+ * @group Settings page
+ */
+export function applyReadOnly() {
+  const ro = !!readOnlyWhy();
+  document.querySelectorAll('[data-write]').forEach((el) => {
+    if (el.tagName === 'BUTTON') {
+      el.classList.toggle('ro-off', ro);
+      if (ro) { el.setAttribute('aria-disabled', 'true'); setTip(el, { text: t('sys.readonly.control') }); }
+      else el.removeAttribute('aria-disabled');
+    } else {
+      el.disabled = ro;
+    }
+  });
+  const banner = document.getElementById('set-ro');
+  if (banner) { banner.hidden = !ro; banner.textContent = ro ? t('sys.readonly.banner') : ''; }
+}
+/** True (and the click is spent) when a write control is pressed in a read-only session. */
+function refusedReadOnly() { return !!readOnlyWhy(); }
+
 // ── settings page ───────────────────────────────────────────────
 /** @group Settings page */
 export function settingsOpen() { return document.getElementById('settings').classList.contains('open'); }
@@ -1173,15 +1246,15 @@ export function closeSettings() { document.getElementById('settings').classList.
 export function renderSettings() {
   if (!S.SETTINGS) return;
   document.getElementById('srcrows').innerHTML = (S.SETTINGS.sources || []).map((s, i) =>
-    '<tr><td><input type="checkbox" ' + (s.enabled ? 'checked' : '') + ' onchange="S.SETTINGS.sources[' + i + '].enabled=this.checked" aria-label="enabled"/></td>'
+    '<tr><td><input type="checkbox" data-write ' + (s.enabled ? 'checked' : '') + ' onchange="S.SETTINGS.sources[' + i + '].enabled=this.checked" aria-label="enabled"/></td>'
     + '<td>' + esc(s.name) + '</td><td>' + s.type + '</td><td class="mono">' + esc(s.path) + '</td>'
-    + '<td><input class="mono" style="width:100%;min-width:120px" value="' + esc((s.exclude || []).join(', ')) + '" placeholder="—" aria-label="exclude globs" onchange="S.SETTINGS.sources[' + i + '].exclude=this.value.split(\',\').map(x=>x.trim()).filter(Boolean)"/></td>'
+    + '<td><input class="mono" data-write style="width:100%;min-width:120px" value="' + esc((s.exclude || []).join(', ')) + '" placeholder="—" aria-label="exclude globs" onchange="S.SETTINGS.sources[' + i + '].exclude=this.value.split(\',\').map(x=>x.trim()).filter(Boolean)"/></td>'
     + '<td class="st ' + ((s.status || '').startsWith('ok') ? 'ok' : (s.status || '').startsWith('error') ? 'err' : '') + '">' + esc(s.status || '—') + '</td>'
-    + '<td><button class="x" onclick="S.SETTINGS.sources.splice(' + i + ',1);renderSettings()" aria-label="remove">✕</button></td></tr>').join('')
+    + '<td><button class="x" data-write onclick="if(!readOnlyWhy()){S.SETTINGS.sources.splice(' + i + ',1);renderSettings()}" aria-label="remove">✕</button></td></tr>').join('')
     || '<tr><td colspan="7" style="color:var(--dim)">' + esc(t('set.noSources')) + '</td></tr>';
   document.getElementById('collrows').innerHTML = (S.SETTINGS.collections || []).map((c, i) =>
     '<div class="coll"><b>' + esc(c.name) + '</b><span class="mono">' + c.sourceIds.map((id) => { const s = S.SETTINGS.sources.find((s) => s.id === id); return s ? s.name : id; }).join(' · ') + '</span>'
-    + '<button class="x" style="margin-left:auto" onclick="S.SETTINGS.collections.splice(' + i + ',1);renderSettings()">✕</button></div>').join('')
+    + '<button class="x" data-write style="margin-left:auto" onclick="if(!readOnlyWhy()){S.SETTINGS.collections.splice(' + i + ',1);renderSettings()}" aria-label="remove">✕</button></div>').join('')
     || '<div class="set-note">' + esc(t('set.noCollections')) + '</div>';
   document.getElementById('set-theme').value = S.themePreview || S.SETTINGS.theme || 'system';
   const tn = document.getElementById('set-theme-note');
@@ -1216,11 +1289,13 @@ export function renderSettings() {
   const ll = document.getElementById('set-landing-label'); if (ll) ll.textContent = t('set.landing');
   // the config files each source holds, read only (GET /api/config)
   renderConfigFiles();
+  applyReadOnly();
 }
 /**
  * @group Settings page
  */
 export function addSource() {
+  if (refusedReadOnly()) return;
   const name = document.getElementById('src-name').value.trim();
   const type = document.getElementById('src-type').value;
   const path = document.getElementById('src-path').value.trim();
@@ -1234,6 +1309,7 @@ export function addSource() {
  * @group Settings page
  */
 export function addCollection() {
+  if (refusedReadOnly()) return;
   const name = document.getElementById('coll-name').value.trim();
   if (!name) return;
   const repos = scopedRepos();
@@ -1244,6 +1320,7 @@ export function addCollection() {
 }
 /** @group Settings page */
 export async function saveSettings() {
+  if (refusedReadOnly()) return;
   S.SETTINGS.theme = document.getElementById('set-theme').value;
   S.SETTINGS.defaultLens = document.getElementById('set-lens').value;
   const surf = document.getElementById('set-surface');
@@ -1267,6 +1344,7 @@ export async function saveSettings() {
 }
 /** @group Settings page */
 export async function syncNow() {
+  if (refusedReadOnly()) return;
   const btn = document.getElementById('syncbtn'), note = document.getElementById('syncnote');
   btn.disabled = true; note.textContent = t('set.syncing');
   await saveSettings();
@@ -1450,6 +1528,6 @@ expose({
   setLens, applyTheme, previewTheme, buildScope, toggleScopeMenu, closeScopeMenu, applyScope, setScopeAll, arriveAt, dropFocus,
   toggleScopeSrc, toggleScopeColl, saveScopeGroup, buildChips, toggleTag,
   searchNodes, focusOn, clearFocus, openPalette, closePalette, renderPalette, pick, travelTarget,
-  openSettings, closeSettings, renderSettings, addSource, addCollection, saveSettings, syncNow,
+  openSettings, closeSettings, renderSettings, readOnlyWhy, addSource, addCollection, saveSettings, syncNow,
   openModelHub, closeModelHub, pollModelHub, toggleMore, closeMore, moreMenuClick,
 });

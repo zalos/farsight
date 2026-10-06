@@ -17,16 +17,17 @@
 // `surfaces/map-property.js`, reached through `openMapProperty(host, ctx)`.
 
 import { S, esc, expose, currentLens, humanize, bizName, unCode } from '../store.js';
-import { t, def, plainWords } from '../strings.js';
+import { t, def, plainWords, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
+import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, placeBranches, storylineEvidence } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
 import { findStoryline, firstScreenOf } from '../lib/journeys-model.js';
@@ -91,7 +92,6 @@ const PLUMB_KEY = 'fs-map-plumb';
 /** What the districts band by: `source` (the default), `domain` (docs/proposals/dependencies-and-nx.md §2.3) or `persona` (journey-organisation §4.4). */
 const BAND_KEY = 'fs-map-band';
 /** Set once the legend has opened by itself, so it does so on a reader's first visit only. */
-const LEGEND_KEY = 'fs-map-legend-seen';
 
 /** The surface's own state. Nothing here is shared with the journey overlay. */
 const MAP = {
@@ -173,7 +173,7 @@ function nameWords(s) {
   return biz() && /[a-z][A-Z]|_|\/|\.[a-z]{2,4}\b/.test(v) ? unCode(v) : v;
 }
 /** A sentence somebody wrote; the business lens reads its plain words only. */
-function sentence(s) { return biz() ? plainWords(s) : String(s || ''); }
+function sentence(s) { return biz() ? plainWords(s) : unTick(s); }
 /** A call's name in the lens: the words written for it, never its identifier in the business lens. */
 function callWords(c) {
   if (!biz()) return c.label || (c.method + ' ' + c.path).trim();
@@ -206,9 +206,18 @@ function storeKindKey(st) { return 'map.store.kind.' + storeKind(st); }
  */
 function dataKindWords(dd) {
   // the business lens says what it is in plain words: Invoice DB · database record, Example ERP · ERP record
-  if (biz()) return (dd.store ? dd.store.name + ' · ' : '') + t(dataBizKey(dd));
+  if (biz()) return (storeShownName(dd.store, true) ? storeShownName(dd.store, true) + ' · ' : '') + t(dataBizKey(dd));
   if (!dd.store) return kindWord(dd.kind);
   return dd.store.name + ' · ' + (dd.kind === 'record' ? kindWord('record') : t(storeKindKey(dd.store)));
+}
+/** A street legend's store name in the register on screen: the legend's rows carry name and kind only, so the
+ * store's own ref (its engine, how it is known) is read off a data node of the street that lives in it. */
+function legendStoreName(m, st) {
+  if (!biz()) return st.name;
+  for (const sc of m.screens) for (const c of sc.calls) for (const d of c.data) {
+    if (d.store && d.store.name === st.name && d.store.kind === st.kind) return storeShownName(d.store, true);
+  }
+  return storeShownName(st, true);
 }
 /** The business lens's word for a data node: by its store's kind when it has one, else by its own kind. */
 function dataBizKey(dd) {
@@ -498,9 +507,11 @@ function start() {
     renderAll();
     // the band choice is offered only once the districts say whether there are domains to band by
     redrawChrome();
-    // a first visit opens it by itself as a narrow strip — collapsed to its title when a link opened the map, since
-    // that reader came to see something — and never takes the focus (round 2)
-    if (MAP.nb.districts.length && !legendSeen()) { markLegendSeen(); openLegend({ auto: true, collapsed: linkOpened(MAP.route) }); }
+    // the legend stays closed until asked for (its button, or g): opened by itself it covered a third of the board on
+    // every first visit, and six of eight reviewers met it before the journeys (swarm 2026-10-05)
+    // the board takes the focus when the Map opens, so the first Tab lands on a journey, not on the header (QA,
+    // swarm 2026-10-05) — only when nothing else holds it, never taken from a reader who is already somewhere
+    focusBoardOnOpen();
     fillWork(gen);
     applyRouteTarget(MAP.route, false);
     walk(gen);
@@ -1286,19 +1297,33 @@ function riskCounteds() {
   const ds = MAP.nb.districts || [];
   if (!ds.length || ds.some((d) => !MAP.journeys.has(d.id))) return null;
   let stale = 0, notBuilt = 0, erp = 0;
+  const why = new Map();
   for (const d of ds) {
     const j = MAP.journeys.get(d.id);
     const sum = j && j.data && j.data.summary;
     if (!sum) continue;
     const ew = sum.coverage && sum.coverage.journey && sum.coverage.journey.evidenceWord;
-    if (ew && ew.cls === 'stale') stale++;
+    if (ew && ew.cls === 'stale') {
+      stale++;
+      // the comparison behind each *stale*, by its sentence: said once on the bar when every one shares it
+      const f = sum.coverage.journey.freshness;
+      if (f && f.state === 'stale') why.set(d.id, f);
+    }
     const b = sum.counted && sum.counted.built;
     if (b && b.of != null && b.n < b.of) notBuilt++;
     if (erpReached(sum)) erp++;
   }
   const src = 'surfaces/map.js riskCounteds ← each /api/journey summary (coverage.journey.evidenceWord · counted.built · systems)';
   const c = (n, unit) => ({ n, unit, bizUnit: unit, scope: 'count.scope.workspace', source: src });
-  return [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+  const out = [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+  // every stale journey compared with one code: name it once on the bar, with the newest run among them
+  const facts = [...why.values()];
+  const codes = new Set(facts.map((f) => (f.codeAt && f.codeAt.commit) || ''));
+  if (facts.length && facts.length === stale && codes.size === 1 && !codes.has('') && facts[0].codeAt.sync != null) {
+    const newest = facts.reduce((a, f) => (!a || (f.ranAt || '') > (a.ranAt || '') ? f : a), null);
+    out[0].fresh = Object.assign({}, newest, { key: 'fresh.risk.against', biz: 'journey.biz.fresh.riskAgainst' });
+  }
+  return out;
 }
 function drawRisk() {
   const el = MAP.stage && MAP.stage.querySelector('.map-risk');
@@ -1306,7 +1331,9 @@ function drawRisk() {
   const k = riskCounteds();
   if (!k || !k.some((x) => x.n)) { el.hidden = true; el.innerHTML = ''; return; }
   el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
-    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })).join('<span class="sep">·</span>');
+    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })
+      // *stale* said once, with what it compares, when every stale journey shares one comparison
+      + (x.fresh ? '<span class="map-risk-why"' + freshAttrs(x.fresh, { noFocus: true }) + '>' + esc(freshSentence(x.fresh)) + '</span>' : '')).join('<span class="sep">·</span>');
   const appeared = el.hidden;
   // whether the board sits at its fit — asked before the headline shows, since the fit then leaves it its row
   const at = appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb' ? MAP.cv.stopAt() : null;
@@ -1418,7 +1445,9 @@ function chromeHtml() {
     + tool('fit', 'map.tool.fit', esc(t('map.tool.fit')))
     + tool('full', 'map.tool.full', esc(t('map.tool.full')))
     + tool('link', 'map.tool.link', esc(t('map.tool.link')))
-    + tool('legend', 'map.tool.legend', '?', MAP.legend ? ' on map-tb-legend' : ' map-tb-legend')
+    // lane E (export, round 2026-10-05): its `tool('export', …)` goes here, before the legend
+    // the legend has a glyph of its own — `?` is the keymap's, everywhere (swarm 2026-10-05: `?` had four jobs)
+    + tool('legend', 'map.tool.legend', sym('legend'), MAP.legend ? ' on map-tb-legend' : ' map-tb-legend')
     + '</div>'
     // the Affected mode's bar, a row of its own under the toolbar (lane I)
     + affectedBarHtml();
@@ -1428,6 +1457,51 @@ function redrawChrome() {
   if (!c) return;
   c.innerHTML = chromeHtml();
   if (MAP.cv) onCanvasChange(MAP.cv.state());
+  fitChrome();
+}
+/**
+ * Fold the toolbar until it fits its stage — measured, never a breakpoint. The
+ * breakpoints it replaced were each true for one toolbar: at 1440 px with a
+ * storyline picker, the as-of stamp and the full level names still showed and
+ * the legend button fell off the right edge, while 1280 (past the next
+ * breakpoint) fitted (swarm 2026-10-05, QA and exec). The rungs, least needed
+ * first: the storyline picker and Band by fold to their current value and a
+ * menu · the as-of stamp goes (its sync is in the header's chip) · the level
+ * buttons shorten to a glyph and a word · and, only on a window too narrow for
+ * all of that, the tools wrap to a second row.
+ * @group Map
+ */
+const CHROME_FOLDS = ['f-story', 'f-band', 'f-asof', 'f-lvl', 'f-wrap'];
+function fitChrome() {
+  const c = MAP.stage && MAP.stage.querySelector('.map-chrome');
+  if (!c) return;
+  c.classList.remove(...CHROME_FOLDS);
+  // the crumb is measured at its own width (it said *JOU* when it was the thing squeezed): a tool folds before
+  // the trail that says where the reader is gives way; past the last rung its ellipsis and tip are the backstop
+  const crumb = c.querySelector('.map-crumb');
+  if (crumb) crumb.style.flexShrink = '0';
+  // measured as one row: a chrome that may wrap (narrow windows, the Affected bar's own row) never overflows, so
+  // its first row is measured with the wrap and the Affected bar set aside
+  const aff = c.querySelector('.map-affbar');
+  c.style.flexWrap = 'nowrap';
+  if (aff) aff.style.display = 'none';
+  const fits = () => c.scrollWidth <= c.clientWidth + 1;
+  for (const f of CHROME_FOLDS) {
+    if (fits()) break;
+    c.classList.add(f);
+  }
+  c.style.flexWrap = c.classList.contains('f-wrap') ? 'wrap' : '';
+  if (aff) aff.style.display = '';
+  if (crumb) crumb.style.flexShrink = '';
+  if (MAP.stage) MAP.stage.style.setProperty('--map-chrome-h', c.offsetHeight + 'px');
+}
+/** The board takes the focus on open when nothing else has it (a link's target or a reader's click keeps theirs). */
+function focusBoardOnOpen() {
+  if (!MAP.board) return;
+  const a = document.activeElement;
+  if (a && a !== document.body && a !== document.documentElement) return;
+  if (!MAP.board.hasAttribute('tabindex')) MAP.board.setAttribute('tabindex', '-1');
+  MAP.board.focus({ preventScroll: true });
 }
 function drawCrumb() {
   const el = MAP.stage && MAP.stage.querySelector('.map-crumb');
@@ -1443,7 +1517,11 @@ function drawCrumb() {
   // on a narrow stage the journey's name may ellipsize: the trail is whole in its tip
   const whole = el.ownerDocument.createElement('div');
   whole.innerHTML = html;
-  el.innerHTML = '<span' + tipAttrs({ text: whole.textContent.replace(/›/g, ' › '), noFocus: true }) + '>' + html + '</span>';
+  if (el.dataset.html !== html) {
+    el.dataset.html = html;
+    el.innerHTML = '<span' + tipAttrs({ text: whole.textContent.replace(/›/g, ' › '), noFocus: true }) + '>' + html + '</span>';
+    fitChrome();
+  }
   drawAsOf();
 }
 /**
@@ -1467,6 +1545,8 @@ function drawAsOf() {
   if (el.dataset.html !== html) {
     el.dataset.html = html;
     el.innerHTML = '<span' + tipAttrs({ key: 'map.asOf', noFocus: true }) + '>' + html + '</span>';
+    // the stamp changed the toolbar's width: fold again
+    fitChrome();
   }
 }
 function drawHint(st) {
@@ -1558,6 +1638,7 @@ function onFullscreen() {
 }
 let resizeT = null;
 function onResize() {
+  fitChrome();
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
     if (!MAP.cv || !MAP.designs) return;
@@ -1747,12 +1828,8 @@ function toast(words) {
 }
 
 // ── the legend (lane L) ──────────────────────────────────────────────────
-function legendSeen() { try { return localStorage.getItem(LEGEND_KEY) === '1'; } catch { return true; } }
-function markLegendSeen() { try { localStorage.setItem(LEGEND_KEY, '1'); } catch { /* a private window: it opens again next visit */ } }
 /** Open or close the legend (the `?` tool). @group Map */
 export function toggleLegend() { if (MAP.legend) closeLegend(); else openLegend(); }
-/** Whether a link brought the reader here: a journey, a screen or a picture named in it. */
-function linkOpened(route) { return !!(route && (route.param || /[?&](node|z|affected|card)=/.test(String(route.raw || '')))); }
 function openLegend(opts = {}) {
   MAP.legend = true;
   MAP.legendAuto = !!opts.auto;
@@ -2067,11 +2144,14 @@ function coverAggHtml(d, j) {
   // two marks, not one (§3.3): *stale* quiet in the muted colour — the code moved under the tests — and *not built* in
   // amber — a screen is only designed; one or both, each with its own define
   const mark = (cls, key, glyph) => '<span class="map-mark ' + cls + '"' + tipAttrs({ key, noFocus: true }) + '>' + (glyph ? sym(glyph) : '') + esc(t(key)) + '</span>';
-  // on a storyline's board the card says its test evidence in the word core decided (evidenceWord) — it names a stale
-  // run itself, so the quiet *stale* mark is not said twice
-  // (lane V's chip: the cell's one verdict, its word and its tip, as the street and the property print it)
+  // on a storyline's board the card says its test evidence with lane V's chip (the cell's one verdict, its word and its
+  // tip); the word names a stale run itself, so the quiet *stale* mark is not said twice
   const ev = MAP.nb.storyline && cov ? mapEvidenceChip(cov) : '';
-  const marks = (stale && !ev ? mark('stale', 'map.cover.mark.stale', 'sync') : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
+  // *stale*'s tip is the comparison itself: the run's commit and the code's (finding 2)
+  const staleMark = () => (cov && cov.freshness && cov.freshness.state === 'stale'
+    ? '<span class="map-mark stale"' + freshAttrs(cov.freshness, { noFocus: true }) + '>' + sym('sync') + esc(t('map.cover.mark.stale')) + '</span>'
+    : mark('stale', 'map.cover.mark.stale', 'sync'));
+  const marks = (stale && !ev ? staleMark() : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
   return status + ev + marks + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
 }
 
@@ -2104,7 +2184,7 @@ function streetHtml(d, j, g) {
       + (reached ? '<span class="rw"' + tipAttrs({ key: 'map.mode.reached', noFocus: true }) + '><b class="r"></b>' + esc(t('map.mode.reached')) + '</span>' : '')
       + (stores.length ? '<span class="stores"><span class="sl"' + tipAttrs({ key: 'map.store.legend', noFocus: true }) + '>' + esc(t('map.store.legend')) + '</span>'
         + stores.map((st) => '<span class="mst st-' + storeKind(st) + '" data-store="' + esc(st.name) + '"' + tipAttrs({ key: storeKindKey(st), noFocus: true }) + '><i></i>'
-          + esc(st.name) + ' · ' + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
+          + (legendStoreName(m, st) ? esc(legendStoreName(m, st)) + ' · ' : '') + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
       + '</span></div>';
   }
   m.screens.forEach((s, si) => {
@@ -2506,7 +2586,7 @@ function drawCard() {
     if (dd.store) {
       const via = dd.store.via ? 'map.store.via.' + dd.store.via : '';
       store = '<div class="store"><span class="mst st-' + storeKind(dd.store) + '"' + tipAttrs({ key: storeKindKey(dd.store) }) + '><i></i>'
-        + esc(dd.store.name) + ' · ' + esc(t(storeKindKey(dd.store))) + '</span>'
+        + (storeShownName(dd.store, biz()) ? esc(storeShownName(dd.store, biz())) + ' · ' : '') + esc(t(storeKindKey(dd.store))) + '</span>'
         + (via && t(via) !== via ? '<span class="map-code via"><span class="hud-label"' + tipAttrs({ key: 'map.store.known', noFocus: true }) + '>' + esc(t('map.store.known')) + '</span> '
           + '<span' + tipAttrs({ key: via, noFocus: true }) + '>' + esc(t(via)) + '</span>' + (dd.store.ref ? ' · <code>' + esc(dd.store.ref) + '</code>' : '') + '</span>' : '')
         + '</div>';
@@ -2894,7 +2974,8 @@ export function mapEscape() {
 export function mapKey(e) {
   if (!MAP.stage) return false;
   const k = e.key;
-  if (k === '?') return mapToggleLegend();
+  // `?` is the keymap's everywhere (keymap.js); the legend is g — its own key, beside its own glyph
+  if (k === 'g' || k === 'G') return mapToggleLegend();
   // the open screen and the explore card keep their own keys; the board's walk keys are the board's
   const inPanel = e.target && e.target.closest && e.target.closest('.map-prop-host,.map-xcard');
   if (!MAP.prop && !inPanel) {
