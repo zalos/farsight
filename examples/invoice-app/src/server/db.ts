@@ -1,3 +1,14 @@
+/** The statuses an invoice moves through: drafted, sent to the customer, approved, paid — or voided. */
+export type InvoiceStatus = 'draft' | 'open' | 'approved' | 'paid' | 'void';
+
+/** One row of the invoices table, as the services read it. */
+export interface InvoiceRow {
+  id: string;
+  customerId: string;
+  status: InvoiceStatus;
+  total: number;
+}
+
 /** Thin data-access layer; each property is one table. */
 export const db = {
   invoices: table('invoices'),

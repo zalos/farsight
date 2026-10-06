@@ -29,6 +29,7 @@ import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOr
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
+import { lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
@@ -4171,6 +4172,9 @@ export function renderJourney(data) {
   const storyEl = document.getElementById('jrn-storyline');
   if (storyEl) storyEl.innerHTML = '';
   if (isFlow && entry.id) jrnFillOrg(entry.id);
+  // the status lifecycle of each record the journey reaches, read from the code
+  const lcEl = document.getElementById('jrn-lifecycle');
+  if (lcEl) lcEl.innerHTML = jrnLifecycleHtml(data);
   // the trackers' work on this journey, when a work source is configured and anything is linked
   fillJourneyWork(entry);
   const ls = document.getElementById('jrn-layoutsw');
@@ -4395,6 +4399,19 @@ function jrnFillStoryline(tree, entryId) {
     + ' · <span class="jrn-story-at"' + defAttrs('journeys.storyline.stepOf') + '>' + esc(where) + '</span>'
     + arrow(a.next, '›', 'journeys.storyline.next')
     + '</span>';
+}
+/**
+ * The journey header's status lifecycle: one strip per record whose statuses the code declares and
+ * that this journey moves (at most two, the rest counted) (`/api/journey` → `lifecycles`, core `journeyLifecycles`) — the statuses in declared
+ * order, each move some code makes as a door to its writer, the moves this journey makes lit.
+ * `''` when no record the journey reaches declares its statuses.
+ * @group Journey view
+ * @business Shows the statuses a record goes through and which part of the system moves it to each one.
+ */
+export function jrnLifecycleHtml(data) {
+  const { shown, more } = headerLifecycles(data && data.lifecycles);
+  return shown.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join('')
+    + (more ? '<span class="lc-more"' + defAttrs('lifecycle.more') + '>' + esc(t('lifecycle.more').replace('{n}', more)) + '</span>' : '');
 }
 /**
  * The header count line: five named groups instead of a run of fourteen counts

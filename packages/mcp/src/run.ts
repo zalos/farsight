@@ -12,6 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
+  lifecycleLines,
   GraphStore, buildIndex, setFreshnessMeta, search, trace, rulesFor, isDeclaredOnly, journey, journeySummary, journeyChoices, journeyTransactions, screensFor, resolveEntry, categorizeBranch, businessSummary,
   t,
   readModelHubState, resolveModelHubDir,
@@ -107,6 +108,8 @@ function nodeDetail(n: GraphNode, full = false): string {
     const st = n.store;
     lines.push(`  store: ${st.name} · ${st.kind}${st.engine ? ` · ${st.engine}` : ''} · known from ${st.via}${st.ref ? ` (${st.ref})` : ''}`);
   }
+  // the record's status lifecycle read from the code: statuses in order, each move with its writer (core lifecycle.ts)
+  if (n.lifecycle) lines.push(...lifecycleLines(n).map((l) => `  ${l}`));
   // the workspace project the node sits in, its type and its tags by dimension (dependencies-and-nx.md §2.2)
   const projRepo = n.loc?.repo ?? n.id.split('::')[0]!;
   if (n.project && store.meta.projects?.[projRepo]?.tool !== 'none') {

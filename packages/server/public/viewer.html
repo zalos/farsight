@@ -745,6 +745,22 @@
   .jrn-orgline a{color:var(--accent);text-decoration:none}
   .jrn-orgline .jrn-org-also{color:var(--dim)}
   .jrn-storyline:empty{display:none}
+  .jrn-lifecycle:empty{display:none}
+  .jrn-lifecycle{display:flex;flex-direction:column;gap:4px;padding:4px 0 2px}
+  .lc-strip{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:11.5px;color:var(--muted);min-width:0}
+  .lc-head{display:flex;align-items:baseline;gap:6px;white-space:nowrap}
+  .lc-word{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px}
+  .lc-rec{color:var(--ink)}
+  .lc-n{color:var(--muted)}
+  .lc-statuses{display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px}
+  .lc-status{font-family:var(--mono);font-size:10.5px;padding:0 5px;border:1px solid var(--line);border-radius:3px;color:var(--ink)}
+  .lc-status.unwritten{border-style:dashed;color:var(--dim)}
+  .lc-sep{color:var(--dim)}
+  .lc-moves{display:flex;flex-wrap:wrap;gap:3px 6px}
+  .lc-move{font-family:var(--mono);font-size:10.5px;padding:0 5px;border-radius:3px;border:1px solid var(--line);color:var(--muted);text-decoration:none}
+  .lc-move.here{border-color:var(--accent);color:var(--ink)}
+  .lc-move .lc-by{color:var(--dim)}
+  .lc-more{font-size:11px;color:var(--dim)}
   .jrn-story-line{display:inline-flex;align-items:center;gap:4px}
   .jrn-story-nav{background:none;border:1px solid var(--line);border-radius:4px;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:1px 6px}
   .jrn-story-nav:hover{border-color:var(--accent)}
@@ -3052,6 +3068,7 @@
         <span class="jrn-layoutsw-wrap" id="jrn-docksw"></span>
       </span>
     </div>
+    <div class="jrn-lifecycle" id="jrn-lifecycle"></div>
   </div>
   <div class="jrn-body" id="jrn-body">
     <div class="jrn-empty" id="jrn-empty" style="display:none"></div>
