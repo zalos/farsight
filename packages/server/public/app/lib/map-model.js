@@ -279,7 +279,7 @@ export function storylineModel(nb, story) {
   }
   // down from the step to the branch below it; back from the branch to the step it rejoins
   const branchLinks = branches.map((b) => ({ from: b.of, to: b.id, kind: 'branch', when: b.when, fromSides: ['s'], toSides: ['n'] }));
-  const rejoinLinks = branches.filter((b) => b.rejoins).map((b) => ({ from: b.id, to: b.rejoins, kind: 'rejoin', fromSides: ['e', 'w', 's'], toSides: ['s', 'e', 'w'] }));
+  const rejoinLinks = branches.filter((b) => b.rejoins).map((b) => ({ from: b.id, to: b.rejoins, kind: 'rejoin', fromSides: ['w', 'e'], toSides: ['w', 'e'] }));
   return { ...base, districts, storyline: { id: story.id, name: story.name || story.id }, then: then.concat(branchLinks, rejoinLinks), branches };
 }
 

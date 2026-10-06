@@ -4384,7 +4384,7 @@ function jrnFillStoryline(tree, entryId) {
     + arrow(a.prev, '‹', 'journeys.storyline.prev')
     + '<span class="jrn-org-for"' + defAttrs('journeys.storyline.word') + '>' + esc(t('journeys.storyline.word')) + '</span> '
     + '<span class="jrn-story-name"' + tipAttrs({ text: a.storyline.name + (a.storyline.description ? ' · ' + jrnWords(a.storyline.description) : '') + (others.length ? ' · ' + others.join(' · ') : '') }) + '>' + esc(a.storyline.name) + '</span>'
-    + ' · <span class="jrn-story-at' + (a.branch ? ' branch' : '') + '"' + defAttrs(a.branch ? 'journeys.storyline.branchOf' : 'journeys.storyline.stepOf') + '>' + (a.branch ? sym('fork') + ' ' : '') + esc(where) + '</span>'
+    + ' · <span class="jrn-story-at' + (a.branch ? ' branch' : '') + '"' + (a.branch ? tipAttrs({ text: where + ' · ' + (a.branch.rejoins ? t('journeys.storyline.rejoins').replace('{name}', a.branch.rejoinsName || '') : t('journeys.storyline.noReturn')) }) : defAttrs('journeys.storyline.stepOf')) + '>' + (a.branch ? sym('fork') + ' ' : '') + esc(where) + '</span>'
     + arrow(a.next, '›', 'journeys.storyline.next')
     + '</span>';
 }

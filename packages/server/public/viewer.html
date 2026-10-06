@@ -746,7 +746,10 @@
   .jrn-story-go .rel{flex:none;width:auto;margin:0}
   .jrn-storyline{flex:none}
   /* storylines, second pass: a card's picture, its branches indented under the chain, the one fast travel arrived at */
-  .jrn-story-thumb{float:right;width:168px;height:104px;margin:0 0 8px 14px;position:relative;border:1px solid var(--line-soft);border-radius:6px;overflow:hidden;background:var(--ground)}
+  .jrn-story.dsg-flow{display:grid;grid-template-columns:minmax(0,1fr) 168px;column-gap:18px;align-content:start}
+  .jrn-story.dsg-flow>*{grid-column:1}
+  .jrn-story.dsg-flow>.jrn-story-thumb{grid-column:2;grid-row:1 / span 6}
+  .jrn-story-thumb{width:168px;height:104px;margin:0;position:relative;border:1px solid var(--line-soft);border-radius:6px;overflow:hidden;background:var(--ground)}
   .jrn-story-thumb img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
   .jrn-story-thumb .ph{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px;text-align:center;color:var(--muted);font-size:11px}
   .jrn-story-thumb .ph .sym{width:20px;height:20px;color:var(--dim)}
@@ -754,7 +757,6 @@
   .jrn-story-thumb .ph .a{font-size:10px;color:var(--dim)}
   .jrn-story-thumb.none img{display:none}
   .jrn-story-thumb.none .ph{display:flex}
-  .jrn-story::after{content:'';display:block;clear:both}
   .jrn-story-branches{list-style:none;margin:6px 0 0;padding:0 0 0 22px;display:flex;flex-direction:column;gap:5px}
   .jrn-story-branch{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
   .jrn-story-branch>.sym{width:14px;height:14px;color:var(--warn)}
@@ -762,7 +764,8 @@
   .jrn-story-branch b{font-weight:600;color:var(--ink)}
   .jrn-story.hot{outline:2px solid var(--accent);outline-offset:2px}
   .jrn-story-at.branch .sym{width:12px;height:12px;vertical-align:-2px;color:var(--warn)}
-  @media (max-width:720px){.jrn-story-thumb{float:none;width:100%;margin:0 0 8px}}
+  @media (max-width:720px){.jrn-story.dsg-flow{grid-template-columns:minmax(0,1fr)}.jrn-story.dsg-flow>.jrn-story-thumb{grid-column:1;grid-row:auto;width:100%}}
+  .jrn-story-at.branch{display:inline-block;max-width:44ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
   .jrn-start .jrn-startlist{margin:6px 0 10px;padding-left:20px;color:var(--ink);font-size:12.5px;line-height:1.8}
   .jrn-start .jrn-startbtns{display:flex;gap:8px;align-items:center}
   /* both are actions: the accent, never the browser's link blue on the blue-black ground */
@@ -2317,6 +2320,7 @@
   .map-chip.map-ev.ev-declared,.map-chip.map-ev.ev-reached{color:var(--warn)}
   .map-chip.map-ev.ev-none{color:var(--dim);border-style:dashed}
   .map-band-head .ev{font-size:11px;color:var(--muted);flex:none}
+  .map-band-head .ev *{font-family:var(--body);font-size:inherit;text-transform:none;letter-spacing:normal;border:none;padding:0}
   /* a storyline nobody declares: the sentence and a door to each one there is */
   .map-story-unknown{pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:640px;text-align:center;color:var(--ink);font-size:14px}
   .map-story-unknown .known{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center}

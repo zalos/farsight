@@ -58,6 +58,8 @@ const DMIN = 880;
  */
 const BOARD_K = 5;
 const CARD_BASE = 48, CARD_SCREEN = 60, CARD_H = 58, COVER_MIN_SCREENS = 2, COVER_MAX_SCREENS = 4;
+/** On a storyline's board, the room a card gives its first screen's picture (board px). */
+const STORY_THUMB_H = 70;
 /** The width a street of `n` screens takes. */
 function streetW(n) { return PAD * 2 + n * COL - (COL - SW); }
 /** Each altitude's layout spacing: the band header strip, the panel's inset, the gaps (world units). */
@@ -774,7 +776,9 @@ function districtSize(d, alt) {
   // the board: a card — the street's width clamped, one height for every cover
   if (alt === 'nb') {
     const card = (n) => (CARD_BASE + n * CARD_SCREEN) * BOARD_K;
-    return { w: boardWidth(card(screenCount(d)), card(COVER_MIN_SCREENS), card(COVER_MAX_SCREENS)), h: CARD_H * BOARD_K };
+    // on a storyline's board a card also holds its first screen's picture (and a branch its condition): taller
+    const h = MAP.nb.storyline ? (CARD_H + STORY_THUMB_H + (d.branch ? 22 : 0)) * BOARD_K : CARD_H * BOARD_K;
+    return { w: boardWidth(card(screenCount(d)), card(COVER_MIN_SCREENS), card(COVER_MAX_SCREENS)), h };
   }
   const j = MAP.journeys.get(d.id);
   const deepest = j && j.model ? Math.max(0, ...j.model.screens.map((s, si) => stackH(d.id, si, s))) : 0;
@@ -2246,7 +2250,8 @@ function drawLinks() {
   }
   const list = [...byKey.values()].map((l) => {
     const word = l.kind === 'branch' ? t('journeys.storyline.when').replace('{when}', l.when || '') : t(linkWordKey(l));
-    const w = labelWidth(word);
+    // a branch's condition is set in the body face, not the condensed capitals the probe measures
+    const w = l.kind === 'branch' ? Math.ceil(word.length * 6.1) : labelWidth(word);
     return { ...l, word, labelW: w + LINK_LABEL_PAD * 2, labelH: LINK_LABEL_H };
   });
   // the board draws no labels and its gutters are narrower: the lanes sit closer to the cards
