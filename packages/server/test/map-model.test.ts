@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appDir = join(here, '..', 'public', 'app');
-const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, routeLinks, storesOf, mergeMode, boardWidth, MODE_ORDER, storylineModel } = await import(join(appDir, 'lib', 'map-model.js'));
+const { streetModel, neighbourhoodModel, screensUsing, layoutDistricts, routeLinks, storesOf, mergeMode, boardWidth, MODE_ORDER, storylineModel, placeBranches, storylineEvidence } = await import(join(appDir, 'lib', 'map-model.js'));
 const fx = JSON.parse(readFileSync(join(here, 'fixtures', 'map-billing-cycle.json'), 'utf8'));
 import { withStores, type AnyRec } from './map-stores-fixture.ts';
 const byId = new Map(fx.nodes.map((n: { id: string }) => [n.id, n]));
@@ -391,6 +391,52 @@ test('a storyline: only its journeys, in its order, numbered, with a then link f
   assert.deepEqual(fewer.districts.map((d: any) => `${d.step}/${d.steps}:${d.flowId}`), ['1/2:opslogin', '2/2:login']);
   assert.equal(storylineModel(nb, null).districts, nb.districts);
   assert.deepEqual(storylineModel(nb, null).then, []);
+});
+
+test('a storyline branch: drawn below the step it leaves from, its condition on the line, a line back to the step it rejoins', () => {
+  const tree = treeFrom(pdesigns, { r: { personas: [], groups: [], flows: {}, notes: [], storylines: [
+    { id: 'life', name: 'A life', journeys: ['opslogin', 'both', 'login'], declared: true, from: 'm.json',
+      branches: [{ id: 'alpha', branchOf: 'both', when: 'it is sent back', rejoins: 'opslogin' }, { id: 'loose', branchOf: 'nowhere', when: 'x' }] },
+  ] } }, { ordinal: (id: string) => ['login', 'alpha', 'both', 'opslogin', 'loose'].indexOf(id.split('::').pop()!) });
+  const st = tree.storylines[0];
+  assert.deepEqual(st.branches.map((b: any) => [b.id, b.branchOf, b.when, b.rejoins]), [['alpha', 'r::flow::both', 'it is sent back', 'r::flow::opslogin']], 'a branch off a journey that is not a step is not drawn');
+  assert.equal(st.counts.journeys.n, 4);
+  assert.deepEqual(st.counts.journeys.breakdown, [{ key: 'count.part.storylineSteps', n: 3 }, { key: 'count.part.storylineBranches', n: 1 }]);
+  const nb = neighbourhoodModel(pdesigns, null, tree);
+  const sm = storylineModel(nb, st);
+  assert.deepEqual(sm.districts.map((d: any) => d.flowId), ['opslogin', 'both', 'login', 'alpha'], 'the steps, then the branch');
+  const br = sm.districts[3];
+  assert.equal(br.step, undefined, 'a branch has no number of its own');
+  assert.deepEqual([br.branch.of, br.branch.when, br.branch.rejoins, br.branch.step], ['r::flow::both', 'it is sent back', 'r::flow::opslogin', 2]);
+  assert.deepEqual(sm.then.filter((l: any) => l.kind !== 'then').map((l: any) => [l.kind, l.from, l.to, l.when]), [
+    ['branch', 'r::flow::both', 'r::flow::alpha', 'it is sent back'],
+    ['rejoin', 'r::flow::alpha', 'r::flow::opslogin', undefined],
+  ]);
+  // the layout: the steps' row, then the branch's own row under its step
+  const size = (d: any) => ({ id: d.id, repo: d.repo, w: 880, h: 400 });
+  const L = layoutDistricts(sm.districts.filter((d: any) => !d.branch).map(size), { bandKey: () => 'story:life', aspect: 100 });
+  const P = placeBranches(L, [{ id: br.id, of: br.branch.of, w: 880, h: 400 }], { gap: 300 });
+  const step = P.rects.get('r::flow::both'), b = P.rects.get(br.id);
+  assert.equal(b.x, step.x, 'under the step it leaves from');
+  assert.equal(b.y, step.y + step.h + 300);
+  assert.ok(P.bands[0].y + P.bands[0].h >= b.y + b.h, 'the band holds it');
+  assert.ok(P.size.h > L.size.h);
+  assert.equal(P.bands[0].n, 4);
+  const routed = routeLinks(P.rects, sm.then);
+  assert.equal(routed.length, 4, 'two then lines, the branch and its way back');
+  // a branch whose step is not on the board leaves the layout as it was
+  assert.equal(placeBranches(L, [{ id: 'x', of: 'nope', w: 1, h: 1 }]), L);
+});
+
+test('a storyline\'s test evidence is one Counted whose breakdown partitions its journeys', () => {
+  const words = new Map<string, any>([['a', { cls: 'observed' }], ['b', { cls: 'stale' }], ['c', { cls: 'declared' }], ['d', { cls: 'none' }]]);
+  const c = storylineEvidence(['a', 'b', 'c', 'd', 'e'], words);
+  assert.equal(c.n, 2);
+  assert.equal(c.of, 5);
+  assert.equal(c.scope, 'count.scope.storyline');
+  assert.deepEqual(c.breakdown, [{ key: 'count.part.evRun', n: 2 }, { key: 'count.part.evPartly', n: 1 }, { key: 'count.part.evNone', n: 1 }, { key: 'count.part.evUnread', n: 1 }]);
+  assert.equal(c.breakdown.reduce((n: number, p: any) => n + p.n, 0), c.of, 'the parts sum to every journey');
+  assert.ok(!storylineEvidence(['a'], words).breakdown.some((p: any) => p.key === 'count.part.evUnread'), 'nothing unread, no unread part');
 });
 
 test('the source and domain bands carry no echoes', () => {

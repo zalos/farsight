@@ -363,7 +363,7 @@ describe('journeys', () => {
   test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
     const guide = await call('design_guide');
     for (const words of ['personas[] { id, name, description? }', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
-      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
+      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', '{ id, branchOf,\n  when, rejoins? }', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
       assert.ok(guide.includes(words), `design_guide does not say ${words}`);
     }
   });
@@ -373,17 +373,24 @@ describe('journeys', () => {
     assert.match(overview, /^journeys: 3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
     const j = await call('journey', { entry: 'draft-and-send' });
     assert.match(j, /^shown under: Billing › Review and send · Operations › Review and send \(start here\)$/m);
-    assert.match(j, /^in storyline: An invoice, end to end · step 2 of 3 · before: `invoice-app::flow::new-invoice` · next: `invoice-app::flow::billing-cycle`$/m);
+    // the fixture declares this journey a branch: what it leaves from, when, and where it comes back
+    assert.match(j, /^in storyline: An invoice, end to end · branch of Start a new invoice \(`invoice-app::flow::new-invoice`\) · when Operations reviews the draft before it is sent · back to Billing cycle \(`invoice-app::flow::billing-cycle`\)$/m);
+    const step = await call('journey', { entry: 'billing-cycle' });
+    assert.match(step, /^in storyline: An invoice, end to end · step 2 of 2 · before: `invoice-app::flow::new-invoice`$/m);
   });
 
   test('storyline: one storyline\'s steps and only its journeys; an unknown one says so', async () => {
     const out = await call('journeys', { storyline: 'invoice' });
     assert.match(out, /^3 journeys · 1 storyline · /m);
-    assert.match(out, /^### An invoice, end to end \(`invoice`\) — 3 journeys · /m);
-    assert.match(out, /^2\. Draft and send an invoice — /m);
-    assert.match(await call('journeys', { storyline: 'nope' }), /no storyline "nope"/);
+    assert.match(out, /^### An invoice, end to end \(`invoice`\) — 3 journeys \(2 on the main path · 1 branch\) · /m);
+    assert.match(out, /^2\. Billing cycle — /m);
+    // the branch, indented under the step it leaves from, with its condition and its way back
+    assert.match(out, /^1\. Start a new invoice — .*\n   ↳ Draft and send an invoice · branch of Start a new invoice · when Operations reviews the draft before it is sent · back to Billing cycle — .*`invoice-app::flow::draft-and-send`/m);
+    assert.equal(await call('journeys', { storyline: 'nope' }), 'No storyline called “nope” is declared here. Storylines declared here: invoice (An invoice, end to end)');
     const json = JSON.parse(await call('journeys', { storyline: 'invoice', json: true }));
-    assert.deepEqual(json.storylines[0].journeys.map((j: { id: string }) => j.id), ['new-invoice', 'draft-and-send', 'billing-cycle']);
+    assert.deepEqual(json.storylines[0].journeys.map((j: { id: string }) => j.id), ['new-invoice', 'billing-cycle']);
+    assert.deepEqual(json.storylines[0].branches.map((b: any) => [b.id, b.branchOf, b.when, b.rejoins]),
+      [['draft-and-send', 'invoice-app::flow::new-invoice', 'Operations reviews the draft before it is sent', 'invoice-app::flow::billing-cycle']]);
     assert.ok(json.personas.every((p: any) => p.groups.every((g: any) => g.journeys.every((j: any) => j.storylines.includes('invoice')))));
   });
 });

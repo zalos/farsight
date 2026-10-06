@@ -26,11 +26,11 @@ import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName } from '../lib/map-model.js';
+import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
-import { loadJourneyTree, jrnGroupName } from '../lib/journeys-tree.js';
-import { findStoryline } from '../lib/journeys-model.js';
+import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
+import { findStoryline, firstScreenOf } from '../lib/journeys-model.js';
 import { attachCanvas, levelOf, LEVEL_NB, MAX_SCALE, SNAP_COVER, INV_MAX } from '../lib/map-canvas.js';
 import { parseRoute } from '../shell.js';
 import {
@@ -60,9 +60,13 @@ const DMIN = 880;
  */
 const BOARD_K = 5;
 const CARD_BASE = 48, CARD_SCREEN = 60, CARD_H = 58, COVER_MIN_SCREENS = 2, COVER_MAX_SCREENS = 4;
+/** On a storyline's board, the room a card gives its first screen's picture (board px). */
+const STORY_THUMB_H = 70;
 /** The width a street of `n` screens takes. */
 function streetW(n) { return PAD * 2 + n * COL - (COL - SW); }
 /** Each altitude's layout spacing: the band header strip, the panel's inset, the gaps (world units). */
+/** On a storyline's board, the room between a step's row and its branches' row: enough for the condition on the line (world units). */
+const BRANCH_GAP_NB = 64 * BOARD_K;
 const BAND_GEOM = {
   nb: { labelH: 30 * BOARD_K, pad: 10 * BOARD_K, bandGap: 14 * BOARD_K, colGap: 22 * BOARD_K, rowGap: 16 * BOARD_K, margin: 14 * BOARD_K },
   st: { labelH: 150, pad: 40, bandGap: 200 },
@@ -432,8 +436,22 @@ function storylineToolHtml() {
 /** The board model for the storyline in `MAP.storyline` (a storyline the tree does not declare is none). */
 function storylineBoard() {
   const story = MAP.storyline ? findStoryline(MAP.tree, MAP.storyline) : null;
+  // a storyline nobody declares is said so — an empty board with a sentence and the ones there are — never every
+  // journey drawn as though nothing was asked (swarm-fixes 2026-10-05 §6); the link keeps what was asked
+  if (MAP.storyline && !story) return { ...MAP.nbAll, districts: [], storyline: null, then: [], unknown: MAP.storyline };
   MAP.storyline = story ? story.id : null;
   return story ? storylineModel(MAP.nbAll, story) : MAP.nbAll;
+}
+/** The sentence for a storyline nobody declares, with a door to each one there is and one to every journey. */
+function unknownStorylineHtml(id) {
+  const list = (MAP.tree && MAP.tree.storylines) || [];
+  const door = (sid, words, tip) => '<button type="button" class="rel map-story-door" data-storyline="' + esc(sid) + '"' + tipAttrs({ ...tip, noFocus: true }) + '>' + esc(words) + '</button>';
+  return '<span class="map-story-unknown"><span' + tipAttrs({ key: 'journeys.storyline.unknown' }) + '>' + esc(t('journeys.storyline.unknown').replace('{id}', id)) + '</span>'
+    + '<span class="known">' + (list.length
+      ? '<span class="hud-label"' + tipAttrs({ key: 'journeys.storyline.known', noFocus: true }) + '>' + esc(t('journeys.storyline.known')) + '</span>'
+        + list.map((x) => door(x.id, x.name, { text: x.name + ' · ' + x.id + (x.description ? ' · ' + sentence(x.description) : '') })).join('')
+      : '<span' + tipAttrs({ key: 'journeys.storyline.noneKnown', noFocus: true }) + '>' + esc(t('journeys.storyline.noneKnown')) + '</span>')
+    + door('', t('map.storyline.all'), { key: 'map.storyline.all' }) + '</span></span>';
 }
 /**
  * Draw one storyline (its id) or, with null, every journey again: the board keeps only that storyline's journeys,
@@ -770,7 +788,9 @@ function districtSize(d, alt) {
   // the board: a card — the street's width clamped, one height for every cover
   if (alt === 'nb') {
     const card = (n) => (CARD_BASE + n * CARD_SCREEN) * BOARD_K;
-    return { w: boardWidth(card(screenCount(d)), card(COVER_MIN_SCREENS), card(COVER_MAX_SCREENS)), h: CARD_H * BOARD_K };
+    // on a storyline's board a card also holds its first screen's picture (and a branch its condition): taller
+    const h = MAP.nb.storyline ? (CARD_H + STORY_THUMB_H + (d.branch ? 22 : 0)) * BOARD_K : CARD_H * BOARD_K;
+    return { w: boardWidth(card(screenCount(d)), card(COVER_MIN_SCREENS), card(COVER_MAX_SCREENS)), h };
   }
   const j = MAP.journeys.get(d.id);
   const deepest = j && j.model ? Math.max(0, ...j.model.screens.map((s, si) => stackH(d.id, si, s))) : 0;
@@ -794,10 +814,15 @@ function layout() {
   const aspect = bw > 0 && bh > 0 ? bw / bh : 1.6;
   const lay = {};
   if (MAP.nb.storyline) {
-    // one storyline: its journeys in its order as one band, named by the storyline
+    // one storyline: its journeys in its order as one band, named by the storyline; its branches each on a row of
+    // their own under the step they leave from (placeBranches), with room on the line for the condition
     const key = 'story:' + MAP.nb.storyline.id;
+    const steps = ds.filter((d) => !d.branch), branches = ds.filter((d) => d.branch);
     for (const alt of ['nb', 'st']) {
-      lay[alt] = layoutDistricts(ds.map((d) => ({ id: d.id, repo: d.repo || '', ...districtSize(d, alt) })), { aspect, bandKey: () => key, ...BAND_GEOM[alt] });
+      const g = { colGap: 200, rowGap: 160, margin: 80, pad: 60, ...BAND_GEOM[alt] };
+      const L = layoutDistricts(steps.map((d) => ({ id: d.id, repo: d.repo || '', ...districtSize(d, alt) })), { aspect, bandKey: () => key, ...BAND_GEOM[alt] });
+      lay[alt] = placeBranches(L, branches.map((d) => ({ id: d.id, of: d.branch.of, ...districtSize(d, alt) })),
+        { gap: alt === 'nb' ? BRANCH_GAP_NB : g.rowGap * 3, colGap: g.colGap, margin: g.margin, pad: g.pad });
     }
     MAP.bandWords = new Map([[key, MAP.nb.storyline.name]]);
   } else if (bandingByPersona()) {
@@ -937,7 +962,27 @@ function bandHeadHtml(b, word, byPersona) {
   return '<div class="map-band-head"><span class="w">' + esc(word) + '</span>'
     + '<span class="n"' + plainTip(n, 'map.band.journeys', story ? 'count.scope.storyline' : 'map.band.scope', byPersona || story ? '/api/journeys' : '/api/design').replace(' tabindex="0"', '') + '>'
     + esc(countWords('map.band.journeys', n)) + '</span>'
+    + (story ? '<span class="ev">' + storyEvidenceHtml() + '</span>' : '')
     + (desc ? '<span class="d">' + esc(desc) + '</span>' : '') + '</div>';
+}
+/** The storyline band's test evidence: one Counted over its journeys (storylineEvidence), with its breakdown in the tip. */
+function storyEvidenceHtml() {
+  const ids = MAP.nb.districts.map((d) => d.id);
+  const words = new Map();
+  for (const id of ids) {
+    const j = MAP.journeys.get(id);
+    const cov = j && j.data && j.data.summary && j.data.summary.coverage && j.data.summary.coverage.journey;
+    if (cov && (cov.verdict || cov.evidenceWord)) words.set(id, (cov.verdict && cov.verdict.word) || cov.evidenceWord);
+    else if (j && j.data && !j.error) words.set(id, { cls: 'none' });
+  }
+  return countedHtml(storylineEvidence(ids, words), '/api/journey', { cls: 'map-ev-count' });
+}
+/** Redraw the band's evidence count as journeys are read (one element; the band itself stays). */
+function fillStoryEvidence() {
+  const el = MAP.world && MAP.world.querySelector('.map-band.story .map-band-head .ev');
+  if (!el) return;
+  const html = storyEvidenceHtml();
+  if (el.innerHTML !== html) el.innerHTML = html;
 }
 /**
  * Banded by persona, a journey for two people draws its street once — in the first persona's band — and in
@@ -1909,8 +1954,14 @@ function renderAll() {
     const msg = MAP.failed ? t('map.failed') : !MAP.designs ? t('map.loading') : t('map.empty');
     const key = MAP.failed ? 'map.failed' : !MAP.designs ? 'map.loading' : 'map.empty';
     let note = MAP.stage.querySelector('.map-note');
-    if (!note) { note = document.createElement('div'); note.className = 'map-note'; MAP.stage.appendChild(note); }
-    note.innerHTML = '<span' + tipAttrs({ key }) + '>' + esc(msg) + '</span>';
+    if (!note) {
+      note = document.createElement('div');
+      note.className = 'map-note';
+      MAP.stage.appendChild(note);
+      // the doors of an unknown storyline's sentence draw the one picked (or every journey)
+      note.addEventListener('click', (e) => { const b = e.target.closest('button[data-storyline]'); if (b) applyStoryline(b.dataset.storyline || null); });
+    }
+    note.innerHTML = !MAP.failed && MAP.designs && MAP.nb.unknown ? unknownStorylineHtml(MAP.nb.unknown) : '<span' + tipAttrs({ key }) + '>' + esc(msg) + '</span>';
     return;
   }
   const note = MAP.stage.querySelector('.map-note');
@@ -1936,6 +1987,7 @@ function renderDistrict(id) {
   const had = el.contains(document.activeElement) ? focusKey(document.activeElement) : null;
   const step = stepBadgeHtml(d);
   el.innerHTML = '<div class="map-dhead"><div class="nm">' + step + esc(nameWords(d.name)) + '</div>'
+    + branchLineHtml(d)
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
     + '<div class="agg">' + agg + '</div></div>'
     + '<div class="map-dstreet">' + streetHtml(d, j, g) + '</div>'
@@ -1944,10 +1996,13 @@ function renderDistrict(id) {
     + '<div class="map-dcover" role="button" tabindex="0" data-enter="' + esc(id) + '" aria-label="' + esc(t('map.cover.enter') + ' · ' + nameWords(d.name)) + '"'
     + tipAttrs({ text: nameWords(d.name) + (desc ? ' · ' + desc : ''), noFocus: true }) + '><div class="map-dcover-in">'
     + '<div class="nm">' + step + esc(nameWords(d.name)) + '</div>'
+    + branchLineHtml(d)
     // the board altitude: a card — the name, one status chip and at most two marks; the sentence and every other
     // number are in the journey's header from the journey-fitted stop up (and the sentence in the cover's tip)
-    + '<div class="agg">' + coverAggHtml(d, j) + '</div></div></div>';
+    + '<div class="agg">' + coverAggHtml(d, j) + '</div>' + storyThumbHtml(d) + '</div></div>';
   el.classList.toggle('loaded', !!(j && j.model));
+  el.classList.toggle('branch', !!d.branch);
+  if (MAP.nb.storyline) fillStoryEvidence();
   sizeDistrict(id);
   tabDistrict(el);
   paintDistrict(el, id, j && j.model);
@@ -1955,8 +2010,34 @@ function renderDistrict(id) {
   if (el.style.width) foldCoverChips(el);
   if (had) focusQuiet(el.querySelector(had));
 }
+/** A branch in words: *branch of <step> · when <condition> · back to <step>* (or *does not come back*). */
+function branchWords(b) {
+  return t('journeys.storyline.branchOf').replace('{name}', nameWords(b.ofName || '')) + ' · ' + t('journeys.storyline.when').replace('{when}', b.when)
+    + ' · ' + (b.rejoins ? t('journeys.storyline.rejoins').replace('{name}', nameWords(b.rejoinsName || '')) : t('journeys.storyline.noReturn'));
+}
+/** On a storyline's board, a branch's card says what it leaves from and when, in a line under its name. */
+function branchLineHtml(d) {
+  if (!d || !d.branch || !MAP.nb.storyline) return '';
+  const b = d.branch;
+  return '<div class="map-branch-when"><span' + tipAttrs({ key: 'journeys.storyline.branchOf', noFocus: true }) + '>' + esc(t('journeys.storyline.branchOf').replace('{name}', nameWords(b.ofName || ''))) + '</span>'
+    + ' · <span' + tipAttrs({ key: 'journeys.storyline.when', noFocus: true }) + '>' + esc(t('journeys.storyline.when').replace('{when}', b.when)) + '</span></div>';
+}
+/**
+ * On a storyline's board, the picture of a journey's first screen — the design manifest's image for it, served by
+ * `/api/design/image` as the property's hero is — or, when the screen has none or it does not load, the placeholder:
+ * the design glyph, the screen's name and the absence word. Never an empty box.
+ */
+function storyThumbHtml(d) {
+  if (!MAP.nb.storyline || !d) return '';
+  return screenThumbHtml(firstScreenOf(MAP.designs, d.id), 'map-thumb');
+}
 /** On a storyline's board, a journey's place in it: its number, with *step n of m* (*journey n of m* in the business lens) as its tip. */
 function stepBadgeHtml(d) {
+  if (d && d.branch && MAP.nb.storyline) {
+    // a branch has no number of its own: the fork glyph, and what it leaves from and when as its tip
+    const words = branchWords(d.branch);
+    return '<span class="map-step branch" aria-label="' + esc(words) + '"' + tipAttrs({ text: words + ' · ' + MAP.nb.storyline.name, noFocus: true }) + '>' + sym('fork') + '</span>';
+  }
   if (!d || !d.step || !MAP.nb.storyline) return '';
   const words = t(biz() ? 'map.storyline.bizStep' : 'map.storyline.step').split('{n}').join(String(d.step)).split('{m}').join(String(d.steps));
   return '<span class="map-step" aria-label="' + esc(words) + '"' + tipAttrs({ text: words + ' · ' + MAP.nb.storyline.name, noFocus: true }) + '>' + d.step + '</span>';
@@ -2064,12 +2145,15 @@ function coverAggHtml(d, j) {
   // two marks, not one (§3.3): *stale* quiet in the muted colour — the code moved under the tests — and *not built* in
   // amber — a screen is only designed; one or both, each with its own define
   const mark = (cls, key, glyph) => '<span class="map-mark ' + cls + '"' + tipAttrs({ key, noFocus: true }) + '>' + (glyph ? sym(glyph) : '') + esc(t(key)) + '</span>';
+  // on a storyline's board the card says its test evidence with lane V's chip (the cell's one verdict, its word and its
+  // tip); the word names a stale run itself, so the quiet *stale* mark is not said twice
+  const ev = MAP.nb.storyline && cov ? mapEvidenceChip(cov) : '';
   // *stale*'s tip is the comparison itself: the run's commit and the code's (finding 2)
   const staleMark = () => (cov && cov.freshness && cov.freshness.state === 'stale'
     ? '<span class="map-mark stale"' + freshAttrs(cov.freshness, { noFocus: true }) + '>' + sym('sync') + esc(t('map.cover.mark.stale')) + '</span>'
     : mark('stale', 'map.cover.mark.stale', 'sync'));
-  const marks = (stale ? staleMark() : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
-  return status + marks + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
+  const marks = (stale && !ev ? staleMark() : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
+  return status + ev + marks + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
 }
 
 /** The street of one district: screens in step order, then — with plumbing on — each screen's pathway. */
@@ -2239,15 +2323,23 @@ function drawLinks() {
     for (const r of l.partOf || []) edge(r.id, id, 'partOf');
   }
   // a storyline: a then line from each journey to the next, drawn at every altitude
-  for (const l of MAP.nb.then || []) { edge(l.from, l.to, 'then'); const e = byKey.get('then:' + l.from + '>' + l.to); if (e) { e.fromSides = l.fromSides; e.toSides = l.toSides; } }
+  // and its branches: down from the step with the condition on the line, and a dashed line back to the step it rejoins
+  for (const l of MAP.nb.then || []) {
+    const kind = l.kind || 'then';
+    edge(l.from, l.to, kind);
+    const e = byKey.get(kind + ':' + l.from + '>' + l.to);
+    if (e) { e.fromSides = l.fromSides; e.toSides = l.toSides; if (l.when) e.when = l.when; }
+  }
   const list = [...byKey.values()].map((l) => {
-    const word = t(linkWordKey(l));
-    const w = labelWidth(word);
+    const word = l.kind === 'branch' ? t('journeys.storyline.when').replace('{when}', l.when || '') : t(linkWordKey(l));
+    // a branch's condition is set in the body face, not the condensed capitals the probe measures
+    const w = l.kind === 'branch' ? Math.ceil(word.length * 6.1) : labelWidth(word);
     return { ...l, word, labelW: w + LINK_LABEL_PAD * 2, labelH: LINK_LABEL_H };
   });
   // the board draws no labels and its gutters are narrower: the lanes sit closer to the cards
   const board = MAP.alt === 'nb';
-  const routed = routeLinks(MAP.geom, board ? list.map((l) => ({ ...l, labelW: 0, labelH: 0 })) : list, board ? { margin: 8 * BOARD_K } : {});
+  // (a branch keeps its condition at the board too: it is the one thing the line says)
+  const routed = routeLinks(MAP.geom, board ? list.map((l) => (l.kind === 'branch' ? l : { ...l, labelW: 0, labelH: 0 })) : list, board ? { margin: 8 * BOARD_K } : {});
   MAP.links.innerHTML = routed.map(linkHtml).join('');
   fillLeadMarks(list);
   linkVisibility();
@@ -2277,7 +2369,7 @@ function fillLeadMarks(list) {
   });
 }
 const LINK_LABEL_H = 18, LINK_LABEL_PAD = 7, LINK_CORNER = 26;
-function linkWordKey(l) { return l.kind === 'then' ? 'map.link.then' : l.kind === 'partOf' ? 'map.link.partOf' : l.both ? 'map.link.both' : 'map.link.leadsTo'; }
+function linkWordKey(l) { return l.kind === 'rejoin' ? 'map.link.rejoin' : l.kind === 'branch' ? 'map.link.branch' : l.kind === 'then' ? 'map.link.then' : l.kind === 'partOf' ? 'map.link.partOf' : l.both ? 'map.link.both' : 'map.link.leadsTo'; }
 /** A label's width at the counter-scale of 1, measured once per word on the links layer itself (so the HUD face counts). */
 const LABEL_W = new Map();
 function labelWidth(word) {
@@ -2325,7 +2417,7 @@ function linkHtml(l) {
     + '<rect x="' + (-l.labelW / 2) + '" y="' + (-l.labelH / 2) + '" width="' + l.labelW + '" height="' + l.labelH + '" rx="3"/>'
     + '<text x="0" y="0.5" text-anchor="middle" dominant-baseline="central">' + esc(l.word) + '</text></g>' : '';
   return '<g data-link="' + l.kind + '"' + (l.both ? ' data-both="1"' : '') + ' data-from="' + esc(l.from) + '" data-to="' + esc(l.to) + '">'
-    + '<path class="ln' + (l.kind === 'partOf' ? ' contains' : '') + '" d="' + roundedPath(p) + '" vector-effect="non-scaling-stroke"/>' + heads + label + '</g>';
+    + '<path class="ln' + (l.kind === 'partOf' || l.kind === 'rejoin' ? ' contains' : '') + '" d="' + roundedPath(p) + '" vector-effect="non-scaling-stroke"/>' + heads + label + '</g>';
 }
 /**
  * Which links show. At the **board** altitude (the covers) no line is drawn but the ones of the journey under the
@@ -2347,12 +2439,13 @@ function linkVisibility() {
   MAP.links.querySelectorAll('g[data-link]').forEach((g) => {
     const hot = !!MAP.hot && (g.dataset.from === MAP.hot || g.dataset.to === MAP.hot);
     // a storyline's then line is the one the board draws unhovered, at every altitude
-    const show = g.dataset.link === 'then' || (board ? hot : g.dataset.link !== 'partOf' || hot || (inView(g.dataset.from) && inView(g.dataset.to)));
+    const story = g.dataset.link === 'then' || g.dataset.link === 'branch' || g.dataset.link === 'rejoin';
+    const show = story || (board ? hot : g.dataset.link !== 'partOf' || hot || (inView(g.dataset.from) && inView(g.dataset.to)));
     g.classList.toggle('off', !show);
     g.classList.toggle('hot', hot);
     if (hot) { ends.add(g.dataset.from); ends.add(g.dataset.to); }
     const lb = g.querySelector('.lbl');
-    if (lb) lb.classList.toggle('off', board || inv > Number(lb.dataset.scale) + 1e-6);
+    if (lb) lb.classList.toggle('off', (board && g.dataset.link !== 'branch') || inv > Number(lb.dataset.scale) + 1e-6);
   });
   // the board: a journey with lines under the pointer lights its ends and dims the rest
   const lit = board && ends.size > 0;

@@ -350,14 +350,16 @@ A journey is one feature. A **storyline** (*questline* in the game register) cha
 {
   "storylines": [
     { "id": "invoice", "name": "An invoice, end to end", "description": "From the contractor's upload to the week it is paid.",
-      "journeys": ["contractor-sign-in", "invoice-submission", "invoice-review", "invoice-paid"] }
+      "journeys": ["contractor-sign-in", "invoice-submission", "invoice-review", "invoice-paid",
+        { "id": "invoice-correction", "branchOf": "invoice-review", "when": "the reviewer asks the contractor to correct it", "rejoins": "invoice-review" }] }
   ]
 }
 ```
 
 - `journeys` are flow ids, in order; a storyline may chain the flows of every manifest of its source (an NX root manifest chaining its apps' journeys), and a journey may be in several storylines. An id no manifest declares, or one named twice, is a note — never a step.
+- A **branch** is a journey a case takes only when a condition holds (a correction, a rejection): write it as `{ "id", "branchOf", "when", "rejoins"? }` — `branchOf` the step it leaves from, `when` the condition in words (required), `rejoins` the step it comes back to (leave it out when the case leaves the storyline). It is never guessed from the code. The Map draws it under its step with the condition on the line and a dashed line back; the front door lists it indented under the chain; its journey's header reads *branch of <journey> · when …*. The storyline's journey count includes it (*3 journeys (2 on the main path · 1 branch)*).
 - `farsight.config.json → journeys.storylines[]` overrides by id, field by field (a `journeys` list replaces the whole list), its order first; a nested config's storyline steps only through the manifests under its folder.
-- Where it shows: a *Storylines* section at the top of the Journeys front door (each journey a numbered chip, *open on the Map*, *open the first journey*); the Map's *Storyline* picker (`#/map?storyline=invoice` draws only those journeys, in order, as one band with a *then* line from each to the next); the open journey's header (*Storyline · An invoice, end to end · step 2 of 4* with ‹ › to the journeys before and after); `GET /api/journeys` (`tree.storylines`), the MCP `journeys` tool (`storyline: "invoice"`) and the CLI.
+- Where it shows: a *Storylines* section at the top of the Journeys front door (each journey a numbered chip, *open on the Map*, *open the first journey*); the Map's *Storyline* picker (`#/map?storyline=invoice` draws only those journeys, in order, as one band with a *then* line from each to the next); the open journey's header (*Storyline · An invoice, end to end · step 2 of 4* with ‹ › to the journeys before and after); `GET /api/journeys` (`tree.storylines`), the MCP `journeys` tool (`storyline: "invoice"`) and the CLI; fast travel (⌘K) finds a storyline by name or id. A storyline id nobody declares (`?storyline=nope`) is said so, with the ones there are.
 
 ```sh
 farsight journeys                       # the storylines, then persona › group › journeys, with status, screens built and the way in

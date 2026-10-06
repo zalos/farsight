@@ -99,7 +99,11 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '3 groups']);
     await expect(billing.locator('.jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
     await expect(ops.locator('.jrn-pcount .jrn-org-n').first()).toHaveText('1 journey');
-    await billing.locator('.jrn-pcount .jrn-org-n').first().click();
+    // scrolled there first: a tip closes when what holds its trigger scrolls (the storylines above push it below the fold)
+    const count = billing.locator('.jrn-pcount .jrn-org-n').first();
+    await count.scrollIntoViewIfNeeded();
+    await expect(count).toBeInViewport();
+    await count.click();
     const tip = page.locator('#fs-tip');
     await expect(tip).toContainText('for this persona');
     await expect(tip).toContainText('/api/journeys');
@@ -200,7 +204,9 @@ test.describe('journeys organised by persona and group, as the fixture declares 
 
 test.describe('storylines', () => {
   const STORY = (MANIFEST.storylines || [])[0] as AnyRec;
-  const STEPS = (STORY.journeys as string[]).map((id) => `invoice-app::flow::${id}`);
+  // the steps are the bare ids; an entry written as { id, branchOf, when } is a branch (swarm-fixes 2026-10-05 §6)
+  const STEPS = (STORY.journeys as (string | AnyRec)[]).filter((e) => typeof e === 'string' || !e.branchOf).map((e) => `invoice-app::flow::${typeof e === 'string' ? e : e.id}`);
+  const BRANCHES = (STORY.journeys as (string | AnyRec)[]).filter((e): e is AnyRec => typeof e !== 'string' && !!e.branchOf);
   const NAME = (id: string) => MANIFEST.flows.find((f: AnyRec) => `invoice-app::flow::${f.id}` === id).name;
   async function mapOn(page: Page): Promise<void> {
     await page.evaluate(() => {
@@ -220,8 +226,8 @@ test.describe('storylines', () => {
     const card = page.locator(`.jrn-story[data-storyline="${STORY.id}"]`);
     await expect(card).toBeVisible();
     await expect(card.locator('.dsg-flow-name')).toHaveText(STORY.name);
-    await expect(card.locator('.jrn-story-step')).toHaveText(STEPS.map((id, i) => `${i + 1}${NAME(id)}`));
-    await expect(card.locator('.jrn-pcount')).toContainText(`${STEPS.length} journeys`);
+    await expect(card.locator('.jrn-story-steps .jrn-story-step')).toHaveText(STEPS.map((id, i) => `${i + 1}${NAME(id)}`));
+    await expect(card.locator('.jrn-pcount')).toContainText(`${STEPS.length + BRANCHES.length} journeys`);
     // above the personas
     const above = await page.evaluate(() => {
       const a = document.querySelector('.jrn-stories'), b = document.querySelector('.jrn-org');
@@ -235,15 +241,15 @@ test.describe('storylines', () => {
 
   /** @covers packages/server/public/app/surfaces/journeys.js::jrnFillStoryline */
   test('the journey header says storyline · step n of m, and ‹ › open the journeys before and after it', async ({ page }) => {
-    await gotoReady(page, '#/journeys/' + encodeURIComponent(STEPS[1]!));
+    await gotoReady(page, '#/journeys/' + encodeURIComponent(STEPS[0]!));
     const line = page.locator('#jrn-storyline .jrn-story-line');
     await expect(line).toContainText(STORY.name);
-    await expect(line).toContainText(`step 2 of ${STEPS.length}`);
-    await line.getByRole('button', { name: new RegExp(`after this one.*${NAME(STEPS[2]!)}`) }).click();
-    await expect(page.locator('#jrn-title')).toHaveText(NAME(STEPS[2]!));
-    await expect(page.locator('#jrn-storyline .jrn-story-line')).toContainText(`step 3 of ${STEPS.length}`);
-    await page.locator('#jrn-storyline').getByRole('button', { name: /before this one/ }).click();
+    await expect(line).toContainText(`step 1 of ${STEPS.length}`);
+    await line.getByRole('button', { name: new RegExp(`after this one.*${NAME(STEPS[1]!)}`) }).click();
     await expect(page.locator('#jrn-title')).toHaveText(NAME(STEPS[1]!));
+    await expect(page.locator('#jrn-storyline .jrn-story-line')).toContainText(`step 2 of ${STEPS.length}`);
+    await page.locator('#jrn-storyline').getByRole('button', { name: /before this one/ }).click();
+    await expect(page.locator('#jrn-title')).toHaveText(NAME(STEPS[0]!));
   });
 
   /**
@@ -262,11 +268,11 @@ test.describe('storylines', () => {
     await expect(page.locator('.map-story-cur')).toHaveText(STORY.name);
     await expect(page).toHaveURL(new RegExp(`[?&]storyline=${STORY.id}(&|$)`));
     await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
-    await expect(page.locator('.map-band.story .n')).toHaveText(`${STEPS.length} journeys`);
-    // only its journeys, in its order, numbered
-    await expect(page.locator('.map-district')).toHaveCount(STEPS.length);
-    expect(await page.locator('.map-district').evaluateAll((ds) => ds.map((d) => (d as HTMLElement).dataset['flow']))).toEqual(STEPS);
-    await expect(page.locator('.map-dcover .map-step')).toHaveText(STEPS.map((_, i) => String(i + 1)));
+    await expect(page.locator('.map-band.story .n')).toHaveText(`${STEPS.length + BRANCHES.length} journeys`);
+    // only its journeys, in its order, numbered (a branch draws after the steps, with no number of its own)
+    await expect(page.locator('.map-district')).toHaveCount(STEPS.length + BRANCHES.length);
+    expect(await page.locator('.map-district').evaluateAll((ds) => ds.map((d) => (d as HTMLElement).dataset['flow']))).toEqual(STEPS.concat(BRANCHES.map((b) => `invoice-app::flow::${b.id}`)));
+    await expect(page.locator('.map-dcover .map-step:not(.branch)')).toHaveText(STEPS.map((_, i) => String(i + 1)));
     // at the board altitude the then lines are drawn without a hover — one from each step to the next
     await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
     const then = page.locator('.map-links g[data-link="then"]');
@@ -287,7 +293,7 @@ test.describe('storylines', () => {
     await mapOn(fresh);
     await fresh.evaluate((h) => { location.hash = h; }, url.slice(url.indexOf('#')));
     await expect(fresh.locator('.map-band.story .w')).toHaveText([STORY.name]);
-    await expect(fresh.locator('.map-district')).toHaveCount(STEPS.length);
+    await expect(fresh.locator('.map-district')).toHaveCount(STEPS.length + BRANCHES.length);
     await fresh.close();
     // All restores every journey and drops the parameter
     await page.locator('.map-story-cur').click();
@@ -295,6 +301,79 @@ test.describe('storylines', () => {
     await expect(page.locator('.map-district')).toHaveCount(MANIFEST.flows.length);
     await expect(page.locator('.map-band.story')).toHaveCount(0);
     await expect(page).not.toHaveURL(/storyline=/);
+  });
+
+  /**
+   * @covers packages/server/public/app/lib/map-model.js::placeBranches
+   * @covers packages/server/public/app/surfaces/map.js::branchLineHtml
+   * @covers packages/server/public/app/surfaces/journeys.js::jrnStorylinesHtml
+   * @covers packages/server/public/app/surfaces/journeys.js::jrnFillStoryline
+   */
+  test('a declared branch draws off its step: below it on the Map with its condition on the line, indented on the front door, and in the header', async ({ page }) => {
+    const B = BRANCHES[0]!;
+    expect(B, 'the example manifest declares a branch').toBeTruthy();
+    const id = `invoice-app::flow::${B.id}`, of = `invoice-app::flow::${B.branchOf}`;
+    await gotoReady(page, '#/portfolio');
+    await mapOn(page);
+    await page.evaluate((s) => { location.hash = '#/map?storyline=' + s; }, STORY.id);
+    const card = page.locator(`.map-district[data-flow="${id}"]`);
+    await expect(card).toHaveClass(/\bbranch\b/);
+    await expect(card.locator('.map-dcover .map-branch-when')).toContainText(`when ${B.when}`);
+    // below the step it leaves from
+    const [a, b] = await Promise.all([page.locator(`.map-district[data-flow="${of}"]`).boundingBox(), card.boundingBox()]);
+    expect(b!.y).toBeGreaterThan(a!.y + a!.height);
+    // the line down carries the condition at the board; a dashed line goes back to the step it rejoins
+    const down = page.locator(`.map-links g[data-link="branch"][data-from="${of}"][data-to="${id}"]`);
+    await expect(down).toHaveCount(1);
+    await expect(down.locator('.lbl')).not.toHaveClass(/\boff\b/);
+    await expect(down.locator('text')).toHaveText(`when ${B.when}`);
+    await expect(page.locator(`.map-links g[data-link="rejoin"][data-from="${id}"][data-to="invoice-app::flow::${B.rejoins}"]`)).toHaveCount(1);
+    // the band's evidence: one count over its journeys
+    await expect(page.locator('.map-band.story .map-band-head .ev')).toContainText(`of ${STEPS.length + BRANCHES.length} journeys with a run`);
+    // every card carries a picture or the placeholder, never an empty box
+    const thumbs = page.locator('.map-dcover .map-thumb');
+    await expect(thumbs).toHaveCount(STEPS.length + BRANCHES.length);
+    // the front door: indented under the chain, with its condition and its way back
+    await page.evaluate(() => { location.hash = '#/journeys'; });
+    const row = page.locator(`.jrn-story[data-storyline="${STORY.id}"] .jrn-story-branch[data-branch="${B.id}"]`);
+    await expect(row).toContainText(`branch of ${NAME(of)}`);
+    await expect(row.locator('.when')).toHaveText(`when ${B.when}`);
+    await expect(row.locator('.back')).toContainText(`back to ${NAME(`invoice-app::flow::${B.rejoins}`)}`);
+    await expect(page.locator(`.jrn-story[data-storyline="${STORY.id}"] .jrn-story-thumb`)).toHaveCount(1);
+    // the journey header names what it branches off and when; ‹ opens that step
+    await row.locator('a.jrn-story-step').click();
+    await expect(page.locator('#jrn-title')).toHaveText(NAME(id));
+    const line = page.locator('#jrn-storyline .jrn-story-line');
+    await expect(line.locator('.jrn-story-at')).toHaveText(`branch of ${NAME(of)} · when ${B.when}`);
+    await line.getByRole('button', { name: /before this one/ }).click();
+    await expect(page.locator('#jrn-title')).toHaveText(NAME(of));
+  });
+
+  /** @covers packages/server/public/app/surfaces/map.js::unknownStorylineHtml */
+  test('a storyline nobody declares is said so, with the ones there are as doors — never every journey', async ({ page }) => {
+    await gotoReady(page, '#/portfolio');
+    await mapOn(page);
+    await page.evaluate(() => { location.hash = '#/map?storyline=nope'; });
+    const note = page.locator('.map-note .map-story-unknown');
+    await expect(note).toContainText('No storyline called “nope” is declared here.');
+    await expect(page.locator('.map-district')).toHaveCount(0);
+    await note.locator(`button[data-storyline="${STORY.id}"]`).click();
+    await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
+    await expect(page).toHaveURL(new RegExp(`[?&]storyline=${STORY.id}(&|$)`));
+  });
+
+  /** @covers packages/server/public/app/lib/search-model.js::storylineTravelItems */
+  test('fast travel finds the storyline and lands on the Map drawing it', async ({ page }) => {
+    await gotoReady(page, '#/portfolio');
+    await mapOn(page);
+    await page.keyboard.press('ControlOrMeta+k');
+    await page.locator('#pinput').fill(STORY.name);
+    const first = page.locator('#presults .presult').first();
+    await expect(first).toHaveClass(/presult-story/);
+    await expect(first.locator('.pname')).toContainText(STORY.name);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`#/map\\?storyline=${STORY.id}$`));
+    await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
   });
 });
 

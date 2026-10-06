@@ -34,8 +34,13 @@
       "description": "From a new invoice to a sent one, and the whole cycle around it.",
       "journeys": [
         "new-invoice",
-        "draft-and-send",
-        "billing-cycle"
+        "billing-cycle",
+        {
+          "id": "draft-and-send",
+          "branchOf": "new-invoice",
+          "when": "Operations reviews the draft before it is sent",
+          "rejoins": "billing-cycle"
+        }
       ]
     }
   ],
