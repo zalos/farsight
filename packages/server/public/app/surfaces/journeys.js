@@ -29,6 +29,7 @@ import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOr
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
+import { exportToolHtml, registerExport } from '../lib/export.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -4283,6 +4284,9 @@ function jrnMapOn() { const f = S.SETTINGS && S.SETTINGS.flags; return !!(f && f
  * @business Opens the same journey on the Map, at the screen you are on.
  */
 function jrnToMapDraw() {
+  // beside the Map door: Save, which draws the journey as its storyboard (lib/export.js)
+  const ex = document.getElementById('jrn-export');
+  if (ex && !ex.firstChild) ex.innerHTML = exportToolHtml('storyboard', 'dd-door lead jrn-export-a'); // str:ok — class names
   const el = document.getElementById('jrn-tomap');
   if (!el) return;
   const entry = (S.JOURNEY && S.JOURNEY.entry) || {};
@@ -4851,4 +4855,22 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     S.jrnFitRaf = requestAnimationFrame(() => { S.jrnFitRaf = 0; jrnFitToWindow(); });
   });
 }
+/**
+ * What the journey's Save control draws: the storyboard, whole — every screen in order, the open screen's actions
+ * and the ledger — switching to it first when another view is on, so the reader sees what is saved.
+ * @group Journey storyboard
+ * @business Saves the journey as its storyboard: every screen in order, as one picture.
+ */
+async function jrnStoryPicture() {
+  if (!S.JOURNEY) return null;
+  if (jrnLayout() !== 'storyboard') {
+    jrnSetLayout('storyboard');
+    await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+  }
+  const el = document.querySelector('#jrn-tl .jrn-story');
+  const entry = S.JOURNEY.entry || {};
+  return el ? { el, title: (document.getElementById('jrn-title') || {}).textContent || entry.name || '', subject: entry.id ? String(entry.id).split('::').pop() : '' } : null;
+}
+registerExport('storyboard', jrnStoryPicture);
+
 expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf, jrnGateExpand });

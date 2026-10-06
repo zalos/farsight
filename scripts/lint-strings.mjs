@@ -76,6 +76,8 @@ const CHROME_FILES = [
   'surfaces/settings-config.js',
   // the project picker (one searchable list wherever a project, a tag value or a package is picked)
   'lib/multi-pick.js', 'lib/multi-pick-model.js',
+  // export: the Save control, its menu and the saved picture's footer (round 2026-10-05, lane E)
+  'lib/export.js', 'lib/export-model.js',
 ];
 // journeys.js: only its NEW surface chrome is expected to use t(); its legacy
 // overlay strings are grandfathered line-by-line below.
