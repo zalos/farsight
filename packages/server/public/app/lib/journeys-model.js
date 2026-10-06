@@ -398,3 +398,22 @@ export function journeysInOrder(tree) {
   }
   return [...out.values()];
 }
+
+/**
+ * The first screen of a journey, for its picture on a storyline's card (swarm-fixes 2026-10-05 §6): of the design
+ * answer (`/api/design`'s `designs`), the flow with `flowNodeId` and its first screen's row — `{ nodeId, designId,
+ * name, hasImage }` — or `{ designId, name }` with no node when the screen is declared and not resolved, or null when
+ * the journey names no screen. One lookup per call; a surface calls it once per card.
+ * @group Journey view
+ */
+export function firstScreenOf(designs, flowNodeId) {
+  for (const d of Array.isArray(designs) ? designs : []) {
+    const f = ((d && d.flows) || []).find((x) => x && x.nodeId === flowNodeId);
+    if (!f) continue;
+    const first = (f.screens || [])[0];
+    if (!first) return null;
+    const scr = ((d && d.screens) || []).find((x) => x && x.designId === first);
+    return scr ? { nodeId: scr.nodeId || null, designId: first, name: scr.name || first, hasImage: !!scr.hasImage } : { nodeId: null, designId: first, name: first, hasImage: false };
+  }
+  return null;
+}

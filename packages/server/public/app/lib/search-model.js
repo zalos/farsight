@@ -10,8 +10,8 @@
 // without a new word only re-ranks the nodes the last one matched, and the best twelve are kept as the
 // scan goes instead of sorting every match.
 
-/** On a tie the product outranks the plumbing: a journey, then a screen. */
-export const KIND_BONUS = { flow: 3, page: 2, route: 1, api: 1, work: 1 };
+/** On a tie the product outranks the plumbing: a storyline, then a journey, then a screen. */
+export const KIND_BONUS = { storyline: 4, flow: 3, page: 2, route: 1, api: 1, work: 1 };
 /** How many results the palette shows. */
 export const LIMIT = 12;
 
@@ -115,4 +115,45 @@ export function searchIndex(index, q, repos, limit = LIMIT) {
   }
   index.last = { raw, repos, matches };
   return { hits: top.map((x) => ({ n: x.r.n, score: x.score })), matched: matches.length };
+}
+
+/**
+ * The storylines fast travel finds (swarm-fixes 2026-10-05 §6), folded once per graph: one row per storyline the
+ * graph's `meta.journeys` declares in a source of `repos` (null = all) — matched on its name, its id and its
+ * sentence. Picking one arrives on the Map drawing only it (`#/map?storyline=<id>`), or on the Journeys front door's
+ * card when the Map is off (`#/journeys?storyline=<id>`). Not graph nodes: the palette's rows carry `kind: 'storyline'`.
+ * @param {Record<string, { storylines?: { id: string, name: string, description?: string }[] }>} metas
+ */
+export function storylineTravelItems(metas, repos, mapOn) {
+  const out = [];
+  const seen = new Set();
+  for (const [repo, m] of Object.entries(metas || {})) {
+    if (repos && !repos.has(repo)) continue;
+    for (const st of (m && m.storylines) || []) {
+      if (!st || !st.id || seen.has(st.id.toLowerCase())) continue;
+      seen.add(st.id.toLowerCase());
+      const q = encodeURIComponent(st.id);
+      out.push({
+        kind: 'storyline', id: 'storyline:' + st.id, storyline: st.id, repo, name: st.name || st.id, description: st.description || '',
+        steps: (st.journeys || []).length, branches: (st.branches || []).length,
+        hash: mapOn ? '#/map?storyline=' + q : '#/journeys?storyline=' + q,
+        // what it is matched on, lower-cased once
+        m: { name: String(st.name || st.id).toLowerCase(), id: String(st.id).toLowerCase(), words: String(st.description || '').toLowerCase() },
+      });
+    }
+  }
+  return out;
+}
+
+/** A storyline row's score for a query, on the node ranking's scale (an exact name or id 100, a word in it 5, its sentence 1). */
+export function scoreStoryline(item, raw, terms) {
+  const { name, id, words } = item.m;
+  let score = 0;
+  if (name === raw || id === raw) score += 100;
+  for (const term of terms) {
+    if (name === term || id === term) score += 10;
+    else if (name.includes(term) || id.includes(term)) score += 5;
+    else if (words.includes(term)) score += 1;
+  }
+  return score > 0 ? score + KIND_BONUS.storyline : 0;
 }

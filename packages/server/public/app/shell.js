@@ -4,7 +4,7 @@
 // palette + focus, settings page, Model Hub overlay). Entry module.
 
 import { S, expose, esc, jsArg, loadAll, hydrateScope, indexGuards, collSourceNames, scopedRepos, inScope, bizLabel, bizName, humanize, effectiveGroup, currentLens, cssId, repoOf } from './store.js';
-import { startSearchIndex, continueSearchIndex, searchIndex } from './lib/search-model.js';
+import { startSearchIndex, continueSearchIndex, searchIndex, storylineTravelItems, scoreStoryline } from './lib/search-model.js';
 import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf, revealCard } from './lib/graph-render.js';
@@ -858,13 +858,21 @@ export function searchNodes(q) {
     if (score > 0) score += p.type === 'application' ? 2 : p.type === 'library' ? 1 : 0;
     return { n: p, score };
   }).filter((r) => r.score > 0);
-  // nodes first, then projects, each in its own order: a stable sort keeps that order on a tie
-  const results = nodeHits.concat(projectHits).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => r.n);
+  // the storylines the graph declares (a chain of journeys, not a node), folded once per graph, scope and Map flag
+  const mapOn = !!(S.SETTINGS && S.SETTINGS.flags && S.SETTINGS.flags.map);
+  const storyKey = scopeKey + '|' + mapOn;
+  if (SEARCH.storyGraph !== S.GRAPH || SEARCH.storyKey !== storyKey) {
+    SEARCH.stories = storylineTravelItems(S.GRAPH.meta && S.GRAPH.meta.journeys, SEARCH.repos, mapOn);
+    Object.assign(SEARCH, { storyGraph: S.GRAPH, storyKey });
+  }
+  const storyHits = SEARCH.stories.map((p) => ({ n: p, score: scoreStoryline(p, raw, terms) })).filter((r) => r.score > 0);
+  // storylines, then nodes, then projects, each in its own order: a stable sort keeps that order on a tie
+  const results = storyHits.concat(nodeHits, projectHits).sort((a, b) => b.score - a.score).slice(0, 12).map((r) => r.n);
   SEARCH.answer = { graph: S.GRAPH, key, results };
   return results;
 }
 /** Fast travel's folded index (one per graph) and its last answer. */
-const SEARCH = { graph: null, index: null, scopeKey: null, repos: null, answer: null, projGraph: null, projKey: '', projects: [] };
+const SEARCH = { graph: null, index: null, scopeKey: null, repos: null, answer: null, projGraph: null, projKey: '', projects: [], storyGraph: null, storyKey: '', stories: [] };
 /** The index of the graph in hand, started when the graph changed (lib/search-model.js). */
 function searchIndexOf() {
   if (SEARCH.graph !== S.GRAPH || !SEARCH.index) {
@@ -990,6 +998,14 @@ export function renderPalette(results) {
   S.palResults = results;
   const owners = ownerLines(results, names);
   document.getElementById('presults').innerHTML = results.map((n, i) => {
+    // a storyline row names its kind and where it lands: the Map drawing only it, or its card on the Journeys page
+    if (n.kind === 'storyline') {
+      const dest = t(n.hash.startsWith('#/map') ? 'nav.map' : 'nav.journeys');
+      return '<div class="presult presult-story' + (i === S.palIndex ? ' hot' : '') + '" data-id="' + esc(n.id) + '" onclick="pick(this.dataset.id)">'
+        + (biz ? '<span class="pk pdest">' + esc(dest) + '</span><span class="pname">' + esc(n.name) + '</span><span class="meta"></span></div>'
+          : '<span class="pk k-storyline">' + esc(t('search.kind.storyline')) + '</span><span class="pname">' + esc(n.name)
+            + '<span class="pid">' + esc(n.storyline) + '</span></span><span class="meta">' + esc(n.repo) + '</span><span class="pdest pto">' + esc(dest) + '</span></div>');
+    }
     // a project row names its kind and where it lands in words: the code map, grouped by project
     if (n.kind === 'project') {
       return '<div class="presult presult-project' + (i === S.palIndex ? ' hot' : '') + '" data-id="' + esc(n.id) + '" onclick="pick(this.dataset.id)">'
@@ -1050,7 +1066,13 @@ export function ownerLines(results, names) {
 export function pick(id) {
   closePalette();
   // a project is not a graph node: it is one of the rows the palette showed
-  const proj = (S.palResults || []).find((x) => x.id === id && x.kind === 'project');
+  const proj = (S.palResults || []).find((x) => x.id === id && (x.kind === 'project' || x.kind === 'storyline'));
+  if (proj && proj.kind === 'storyline') {
+    // already there: the hash would not change, so it is set to where the reader is first and back
+    if (location.hash === proj.hash) history.replaceState(null, '', proj.hash.startsWith('#/map') ? '#/map' : '#/journeys');
+    location.hash = proj.hash;
+    return;
+  }
   if (proj) {
     // already there: the hash would not change, so the map is asked to arrive again
     if (location.hash === proj.hash) history.replaceState(null, '', '#/codemap');
