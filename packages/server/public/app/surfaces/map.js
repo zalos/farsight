@@ -2384,6 +2384,15 @@ function onBoardClick(e) {
   closeCard();
 }
 function onBoardKey(e) {
+  // Tab from the board itself (it holds the focus when the Map opens) goes to the first journey's cover. Left to the
+  // browser it landed on the first tabbable in the board — a band header's count, which the first walk landing
+  // redraws, so the focus fell to <body> about one time in ten (e2e map-round2, 2026-10-06). A cover keeps its
+  // focus through a redraw (`focusKey`), so it is the one stop that is always there.
+  if (e.key === 'Tab' && !e.shiftKey && e.target === MAP.board) {
+    const first = MAP.world && [...MAP.world.querySelectorAll('.map-dcover')].find((c) => !c.closest('[inert]') && c.offsetParent !== null);
+    if (first) { e.preventDefault(); first.focus({ preventScroll: true }); }
+    return;
+  }
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const tgt = e.target;
   if (tgt.matches(TIP_SELECTOR) && !tgt.matches('.map-scr,.map-pl,.map-pd,.map-dcover,.map-echo')) return;
