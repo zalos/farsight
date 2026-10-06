@@ -56,27 +56,7 @@ test('a link to a step and a node selects that part', async ({ page }) => {
   await expect(page.locator('#jrn-dock .jrn-insp-doors a.dd-door').first()).toHaveText('read the contract');
 });
 
-/**
- * @covers packages/server/public/app/surfaces/journeys.js::jrnGateExpand
- * @covers GET /api/source
- */
-test('a gate opens to its own lines and the editor in hybrid, and to its words alone in business', async ({ page }) => {
-  await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&biz=gates&dock=right&lens=hybrid');
-  const more = page.locator('.jrn-gl-more[data-gate="' + GATE + '"]').first();
-  await more.click();
-  const exp = page.locator('.jrn-gl-exp').first();
-  await expect(exp.locator('.dd-pre')).toContainText('requireScope');
-  await expect(exp.locator('a.dd-door.editor')).toHaveAttribute('href', /^vscode:\/\/file\/.+src\/server\/routes\.ts:\d+$/);
-  await expect(exp.locator('a.dd-door', { hasText: 'see it on the code map' })).toHaveAttribute('href', '#/codemap?node=' + enc(GATE));
-  await expect(more).toHaveAttribute('aria-expanded', 'true');
-
-  await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&biz=gates&dock=right&lens=business');
-  await page.locator('.jrn-gl-more[data-gate="' + GATE + '"]').first().click();
-  const biz = page.locator('.jrn-gl-exp').first();
-  await expect(biz.locator('.dd-words')).not.toBeEmpty();
-  await expect(biz.locator('.dd-code')).toHaveCount(0);
-  await expect(biz.locator('a.dd-door')).toHaveCount(0);
-});
+// a gate's click — its code, its doors, the calls it guards and the tests that reach it — is gate-card.pw.spec.ts
 
 /** @covers packages/server/public/app/lib/detail-links.js::detailLinks */
 test('a route call links to the APIs surface at its operation, its spec line and its handler', async ({ page }) => {
@@ -136,6 +116,8 @@ test('the board marks stale quietly and not built in amber, each with its own wo
   const color = (l: typeof stale) => l.evaluate((el) => getComputedStyle(el).color);
   expect(await color(stale)).not.toEqual(await color(notBuilt));
   await expect(card.locator('.map-mark.risk')).toHaveCount(0);
+  // the Map fetches its journeys one at a time: a walk still in flight when the test ends must not fail the run
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 
 /**
@@ -168,12 +150,12 @@ test('past the reading floor the board says so, and no card word draws under it'
   await expect(hint).toHaveClass(/\bfloor\b/);
   await expect(hint).toHaveText(N + ' journeys · zoom in to read');
   await expect(page.locator('.map-world')).toHaveClass(/\bfloor\b/);
-  // no word on a card draws under 8 px on screen: the font size times the scale the card is drawn at
-  const px = await page.locator('.map-dcover .map-chip').first().evaluate((el) => {
+  // no word on a card draws under 8 px on screen: the font size times the scale the card is drawn at — polled, since
+  // the floor class lands a frame before the fit that applies it (a one-shot read failed under load)
+  await expect.poll(() => page.locator('.map-dcover .map-chip').first().evaluate((el) => {
     const h = (el as HTMLElement).offsetHeight;
     return parseFloat(getComputedStyle(el).fontSize) * (h ? el.getBoundingClientRect().height / h : 1);
-  });
-  expect(px).toBeGreaterThanOrEqual(7.9);
+  })).toBeGreaterThanOrEqual(7.9);
 });
 
 /** @covers packages/server/public/app/surfaces/journeys.js::gotoJourney */

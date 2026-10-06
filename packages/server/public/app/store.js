@@ -189,11 +189,26 @@ export function routeWords(name) {
  * @group Shell
  */
 export function unCode(text) {
+  return unCodeAll(text);
+}
+/**
+ * A commit's subject as the business register reads it: the sentence, without its
+ * conventional-commit type and scope (`chore(memory): …`, `fix(core)!: …`), then
+ * unCode(). The type and scope are how the repository files the change; the
+ * sentence after them is what somebody wrote about it (swarm 2026-10-05).
+ * @group Store
+ */
+export function commitWords(subject) {
+  return unCode(String(subject || '').replace(/^\s*[a-z]+(?:\([^)]*\))?!?:\s*/i, ''));
+}
+function unCodeAll(text) {
   const words = (s) => String(s).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
   const file = (p) => words(String(p).split('/').filter(Boolean).pop().replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
   return String(text || '')
-    // a document's id in brackets — (SCR-08.5), (ADR 0006), (PBI #352) — is the docs' handle, not words
-    .replace(/\s*\((?:[^()]*\b(?:[A-Z]{2,6}[- ]?#?\d[\w.]*|ADR|PBI)\b[^()]*)\)/g, '')
+    // a document's id in brackets — (SCR-08.5), (PBI #352) — is the docs' handle, not words;
+    // an ADR number is the citation key a reader quotes the decision by, so a bracket that
+    // cites only ADRs stays in every register (swarm 2026-10-05, the business analyst)
+    .replace(/\s*\((?:[^()]*\b(?:[A-Z]{2,6}[- ]?#?\d[\w.]*|ADR|PBI)\b[^()]*)\)/g, (m) => (/\bADR[\s-]?\d/.test(m) && !/\b(?!ADR)[A-Z]{2,6}[- ]?#?\d|\bPBI\b/.test(m) ? m : ''))
     .replace(/`([^`]*)`/g, (m, x) => (/[/.]/.test(x) ? file(x) : words(x)))
     .replace(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+(\/[\w/:{}.[\]-]*)/g, (m, p) => words(p.split('/').filter((s) => s && !/^(api|v\d+)$/i.test(s) && !/^[:{[]/.test(s)).join(' ')))
     .replace(/(?:[\w.-]+\/)+[\w.-]+/g, (m) => file(m))

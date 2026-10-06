@@ -18,16 +18,17 @@
 // column is the contract's own responses and says so. Untrusted → esc().
 
 import { S, expose, esc, currentLens, humanize } from '../store.js';
-import { t, def, plainWords } from '../strings.js';
+import { t, def, plainWords, proseHtml } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, linkHtml, designThumbHtml } from '../lib/graph-render.js';
 import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
+import { gateAttrs } from '../lib/gate-card.js';
 import {
   jrnCellTree, jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnScreenNode, jrnSegDecisions,
   jrnGateText, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml,
   jrnSchemaChipHtml, jrnFirstSentence, jrnSheetModel, jrnMarkerAt, jrnSelect, jrnSelectSegment, jrnScrollTo, jrnTxLineHtml,
   jrnTestsFootHtml, jrnStepTestFacts, jrnCountedHtml, jrnMoLabel, jrnDesignIdHtml, jrnUntranslatedHtml, jrnActionUntrList, jrnWords, jrnCallWords,
-  jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts,
+  jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts, jrnStopText,
 } from './journeys.js';
 import { tipAttrs, tipSource } from '../lib/tooltip.js';
 import { impactBodyHtml, impactCached, impactFetch, impactHasHops, impactOpts, impactRings, impactHash } from '../impact.js';
@@ -46,9 +47,9 @@ export function jrnDrillEnabled() {
 /** The actions of the journey: every moment of every segment, journey order — the stops of the rail.
  * @group Journey drill */
 function jrnDrillActions(sum) {
-  const cols = [];
-  sum.segments.forEach((sg) => (sg.moments || []).forEach((mo) => cols.push({ index: cols.length, sg, mo, first: mo.index === 0 })));
-  return cols;
+  // the Sheet's columns, in the Sheet's order: stop n on the rail is column n on the
+  // Sheet and `stop n of t` in the drawer — one position, one number
+  return jrnSheetModel(sum).cols;
 }
 /** The rows of the lanes: the sheet's layers minus *verified by* (tests are an inspector tab here).
  * @group Journey drill */
@@ -406,7 +407,9 @@ function jrnDrillAnswerBoxHtml(a) {
  * @group Journey drill */
 function jrnDrillGateBoxHtml(g, bi, k) {
   const gn = S.BYID[g.id];
-  return '<div class="jrn-bx gate' + (g.planned ? ' planned' : '') + '" id="jrn-bg-' + bi + '-' + k + '" tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')" title="' + esc(g.name || '') + '">'
+  // a click (or Enter) opens the gate card (swarm-fixes 2026-10-05, finding 4); a planned gate is not in the graph, so it walks to its step
+  return '<div class="jrn-bx gate' + (g.planned ? ' planned' : '') + '" id="jrn-bg-' + bi + '-' + k + '"'
+    + (gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
     + '<span class="k">' + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(g.kind === 'rule' ? t('journey.kind.rule') : t('journey.kind.gate')) + (g.count > 1 ? ' ×' + g.count : '') + '</span>'
     + '<span class="n">' + esc(jrnGateLabel(g)) + (gn && gn.loc ? '<span class="loc">' + esc(gn.loc.path + ':' + gn.loc.line) + vsl(gn.repo, gn.loc.path, gn.loc.line) + '</span>' : '') + '</span>'
     + (g.planned ? '<span class="b">' + esc(t('journey.plannedGate')) + '</span>' : '') + '</div>';
@@ -698,7 +701,12 @@ function jrnInspHeadHtml(i, mk) {
   // the walk this is — a developer's unit, so the business lens says where it is instead
   const bizWhere = () => (mk && mk.kind === 'call' ? jrnBeatWord({ kind: 'api' })
     : (n.kind === 'component' || n.kind === 'page') ? t('journey.beat.screen') : jrnBeatWord(null));
-  const word = !drill ? (currentLens() === 'business' ? bizWhere() : t('journey.kind.step') + ' ' + (i + 1))
+  // outside the drill the head names the stop the part sits in — the Sheet's column,
+  // the drill's rail — and what kind of part it is; never the walk's own index
+  // (`STEP 232`), which no other surface prints (swarm 2026-10-05, finding 3)
+  const kindWord = mk && mk.kind && S.STRINGS && S.STRINGS['journey.kind.' + mk.kind] ? t('journey.kind.' + mk.kind) : t('journey.kind.step');
+  const stopWords = jrnStopText(i);
+  const word = !drill ? (currentLens() === 'business' ? bizWhere() : (stopWords ? stopWords + ' · ' : '') + kindWord)
     : mk && mk.kind === 'call' ? jrnBeatWord({ kind: 'api' }) : jrnBeatWord(layer);
   // the same words the chip that opened this panel carries — the core's `title`
   // first, so the head and the marker cannot name one step two ways
@@ -718,7 +726,7 @@ function jrnInspHeadHtml(i, mk) {
     + jrnTxLineHtml(mk)
     // what proves this step runs, in the head where the reader already is: the
     // same foot the screen cards and the Verified-by cells draw (B4.2)
-    + jrnTestsFootHtml(jrnStepTestFacts(i), { absent: 'journey.insp.noTestStep', tab: true, impact: jrnStepNodeId(i), wider: jrnStepActionFacts(i) })
+    + jrnTestsFootHtml(jrnStepTestFacts(i), { absent: 'journey.insp.noTestStep', tab: true, impact: jrnStepNodeId(i), wider: jrnStepActionFacts(i), cases: jrnStepNodeId(i) ? { node: jrnStepNodeId(i) } : null })
     + '</div>';
 }
 /**
@@ -748,14 +756,14 @@ function jrnInspDocsHtml(i) {
   const oneof = mk && mk.choice ? jrnChoiceHtml(mk.choice) : '';
   const text = oneof ? '' : jrnWords(n.bizDescription || n.docs || c.description || c.summary || '');
   const refs = jrnRefAnchors(n);
-  let html = oneof || (text ? '<p>' + esc(text) + '</p>' : '<p class="note">' + esc(t('journey.insp.noDocs')) + '</p>');
+  let html = oneof || (text ? '<p>' + proseHtml(text) + '</p>' : '<p class="note">' + esc(t('journey.insp.noDocs')) + '</p>');
   if (refs.length) html += '<div class="jrn-refs">' + refs.join(' ') + '</div>';
   // the same words and the same drawn set as the lanes: a checkpoint this
   // register cannot name is counted here, not printed as its identifier
   const gs = jrnGatesShown(s.gates || []);
   if (gs.rows.length) html += '<h4>' + esc(t('journey.insp.gatesHere')) + '</h4><div class="list">' + gs.drawn.map((g) => {
     const gn = S.BYID[g.id];
-    return '<div class="r">' + sym(g.kind === 'rule' ? 'shield' : 'lock') + '<b>' + esc(jrnGateLabel(g)) + '</b>' + (g.planned ? '<span class="api-chip stub">' + esc(t('journey.plannedGate')) + '</span>' : '') + (gn && gn.loc ? vsl(gn.repo, gn.loc.path, gn.loc.line) : '') + '</div>';
+    return '<div class="r"' + (S.BYID[g.id] ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') + '>' + sym(g.kind === 'rule' ? 'shield' : 'lock') + '<b>' + esc(jrnGateLabel(g)) + '</b>' + (g.planned ? '<span class="api-chip stub">' + esc(t('journey.plannedGate')) + '</span>' : '') + (gn && gn.loc ? vsl(gn.repo, gn.loc.path, gn.loc.line) : '') + '</div>';
   }).join('') + (gs.mute ? '<div class="r note">' + sym('warning') + esc(t('journey.biz.notInWords').replace('{n}', gs.mute)) + '</div>' : '') + '</div>';
   const req = jrnReqChips(i);
   if (req) html += '<h4>' + esc(t('journey.insp.toGetHere')) + '</h4><div class="list">' + req + '</div>';
@@ -789,13 +797,13 @@ function jrnInspReqHtml(i) {
   let html = jrnContractHtml(n);
   const rb = c.requestBody;
   if ((c.params || []).length) html += '<h4>' + esc(t('journey.insp.params')) + '</h4><div class="tree">' + c.params.map((p) =>
-    '<div class="f"><span class="tw">├</span><span class="nm">' + esc(p.name || '') + '</span><span class="ty">' + esc(p.in || '') + (p.schema ? ' · ' + esc(p.schema) : '') + '</span>' + (p.required ? '<span class="req">req</span>' : '') + (p.description ? '<span class="ds">' + esc(p.description) + '</span>' : '') + '</div>').join('') + '</div>';
+    '<div class="f"><span class="tw">├</span><span class="nm">' + esc(p.name || '') + '</span><span class="ty">' + esc(p.in || '') + (p.schema ? ' · ' + esc(p.schema) : '') + '</span>' + (p.required ? '<span class="req">req</span>' : '') + (p.description ? '<span class="ds">' + proseHtml(p.description) + '</span>' : '') + '</div>').join('') + '</div>';
   if (rb) html += '<h4>' + esc(t('journey.insp.request')) + '</h4><div class="tree"><div class="f"><span class="obj">' + esc(rb.schema || rb.contentType || '') + '</span>' + (rb.required ? '<span class="req">' + esc(t('journey.insp.required')) + '</span>' : '') + (rb.contentType && rb.schema ? '<span class="ds">' + esc(rb.contentType) + '</span>' : '') + '</div>'
     + (rb.fields || []).map((f, k, arr) => '<div class="f" style="--d:1"><span class="tw">' + (k === arr.length - 1 ? '└' : '├') + '</span><span class="nm">' + esc(f) + '</span></div>').join('') + '</div>';
   const rs = c.responses || [];
   if (rs.length) html += '<h4>' + esc(t('journey.insp.responses')) + '</h4><div class="list">' + rs.map((r) => {
     const cls = /^2/.test(String(r.status)) ? ' ok' : /^4|^5/.test(String(r.status)) ? ' warn' : '';
-    return '<div class="r"><span class="api-chip st' + cls + '">' + esc(String(r.status)) + '</span>' + (r.schema ? '<b class="mono">' + esc(r.schema) + '</b>' : '') + (r.description ? '<span>' + esc(r.description) + '</span>' : '') + '</div>';
+    return '<div class="r"><span class="api-chip st' + cls + '">' + esc(String(r.status)) + '</span>' + (r.schema ? '<b class="mono">' + esc(r.schema) + '</b>' : '') + (r.description ? '<span>' + proseHtml(r.description) + '</span>' : '') + '</div>';
   }).join('') + '</div>';
   if ((c.security || []).length) html += '<h4>' + esc(t('journey.insp.security')) + '</h4><div class="list"><div class="r">' + c.security.map((x) => sym('lock') + '<b>' + esc(x) + '</b>').join(' ') + '</div></div>';
   html += '<p class="note">' + esc(t('journey.insp.specNote')) + '</p>';

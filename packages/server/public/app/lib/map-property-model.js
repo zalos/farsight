@@ -194,6 +194,9 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
         decisions: seg.decisions || [],
         counted: c.gates || null,
         decisionsCounted: c.decisions || null,
+        // the config checks this screen's code meets on the way (core gates.ts): never one of its gates
+        config: (seg.configChecks || []).slice().sort((a, b) => (a.stepOrder || 0) - (b.stepOrder || 0)).map((g) => ({ ...g, kind: 'guard', config: true })),
+        configCounted: c.configChecks || null,
       },
       apis: {
         calls,

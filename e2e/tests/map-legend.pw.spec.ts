@@ -22,7 +22,7 @@ const IDENTIFIER = new RegExp([
   String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
   String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
   String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+|\bADR\s?\d+`,
+  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
 ].join('|'), 'g');
 /** The contract's and the index's own words, which the business lens does not print (the swarm counted them). */
 const DEV_WORDS = /\bspec-backed\b|\bimplied\b|\bedge confidence\b|\bMEDIUM\b|\bguards?\b|·\s*record\b/i;
@@ -132,12 +132,18 @@ test.describe('map — the legend', () => {
    * @covers packages/server/public/app/surfaces/map.js::drawLegend
    * @covers packages/server/public/app/surfaces/map.js::legendFacts
    */
-  test('opens once on a first visit, lists the kinds the board draws, and comes back from ? and the key', async ({ page }) => {
+  test('stays closed until asked, lists the kinds the board draws, never clips, and g (not ?) toggles it', async ({ page }) => {
     await stubStores(page);
     await mapOn(page);
     await go(page, '#/map');
     await boardReady(page, 3);
     const legend = page.locator('.map-legend');
+    // closed on a first visit: opened by itself it covered a third of the board (swarm 2026-10-05)
+    await expect(legend).toBeHidden();
+    // its button carries its own glyph, not `?`
+    const btn = page.locator('.map-tools [data-act="legend"]');
+    await expect(btn.locator('svg use')).toHaveAttribute('href', '#sym-legend');
+    await btn.click();
     await expect(legend).toBeVisible();
     // the kinds present on the fixture board: its links, read and write, the database and the ERP, built and
     // designed-not-built screens, a call made again, the evidence words its journeys earned
@@ -149,25 +155,22 @@ test.describe('map — the legend', () => {
     expect(await legend.locator('.lg-row .w:not([data-tip])').count()).toBe(0);
     // what the board does not draw is not listed: no two journeys lead to each other on the fixture
     await expect(legend.locator('[data-lg="mutual"]')).toHaveCount(0);
-    await legend.getByRole('button', { name: 'Close the legend' }).click();
-    await expect(legend).toBeHidden();
-
-    // a returning reader is not shown it again; the toolbar's ? and the ? key bring it back, Esc closes it
-    await page.reload();
-    await mapOn(page);
-    await go(page, '#/map');
-    await boardReady(page, 3);
-    await expect(legend).toBeHidden();
-    await page.locator('.map-tools [data-act="legend"]').click();
-    await expect(legend).toBeVisible();
+    // never clipped: it ends inside the stage and scrolls inside itself; it never covers the toolbar
+    const box = await legend.boundingBox();
+    const stage = await page.locator('.map-stage').boundingBox();
+    const tools = await page.locator('.map-chrome').boundingBox();
+    expect(box!.y + box!.height).toBeLessThanOrEqual(stage!.y + stage!.height);
+    expect(box!.y).toBeGreaterThanOrEqual(tools!.y + tools!.height);
     await page.keyboard.press('Escape');
     await expect(legend).toBeHidden();
-    // (on a focused word with a tip, ? opens that tip — the tooltip grammar — so the key is pressed from the page)
+    // g toggles it; ? is the keymap's, here as everywhere
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await page.keyboard.press('?');
+    await page.keyboard.press('g');
     await expect(legend).toBeVisible();
-    await expect(page.locator('#keymap')).not.toHaveClass(/\bopen\b/);
+    await page.keyboard.press('g');
+    await expect(legend).toBeHidden();
     await page.keyboard.press('?');
+    await expect(page.locator('#keymap')).toHaveClass(/\bopen\b/);
     await expect(legend).toBeHidden();
   });
 });

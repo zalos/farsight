@@ -17,10 +17,10 @@
 // a tab whose subject nothing types prints no number. The business lens prints
 // words a person wrote or `humanize()` — never a route, a method, a file or an id.
 
-import { S, esc, currentLens, bizName, repoOf, humanize } from '../store.js';
+import { S, esc, currentLens, bizName, repoOf, humanize, commitWords } from '../store.js';
 import { t, plainWords, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
-import { countedHtml, countedUnit, countedAttrs, defAttrs, plainTip, unCode } from '../lib/counted.js';
+import { countedHtml, countedUnit, countedAttrs, defAttrs, plainTip, unCode, countWords as countPhrase } from '../lib/counted.js';
 import { mapEvidenceChip } from '../lib/map-chips.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { designThumbHtml, linkHtml } from '../lib/graph-render.js';
@@ -32,7 +32,10 @@ import {
 } from './journeys.js';
 import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml } from '../lib/detail-doors.js';
 import { journeyStepHash } from '../lib/route-url.js';
+import { gateAttrs } from '../lib/gate-card.js';
+import { lifecycleStripHtml, screenLifecycles } from '../lib/lifecycle-strip.js';
 import { propertyModel } from '../lib/map-property-model.js';
+import { storeShownName } from '../lib/map-model.js';
 import { affectedOn, affectedSpec, affectedTabHtml, affectedTabCount, journeyChipReach, pickAffected, affectedSummaryHtml } from './map-affected.js';
 
 /** The rail's tabs, in order. */
@@ -82,6 +85,12 @@ function rowDoors(card) {
 /** One row of a list: a label and a sub-line on the left, a short fact on the right; `card` makes it addressable by the explore card. */
 function row(label, sub, right, card) {
   const attrs = card && card.id ? ' data-map-card="' + esc(card.kind) + '" data-id="' + esc(card.id) + '"' : '';
+  // a gate answers its click with the gate card, its doors on the row itself (swarm-fixes 2026-10-05, finding 4)
+  if (card && card.kind === 'gate' && card.id && S.BYID[card.id]) {
+    const gd = rowDoors(card);
+    return '<div class="mp-row card gate"' + attrs + gateAttrs(card.id, { config: card.config }) + '><div class="l"><span class="nm">' + label + '</span>'
+      + (sub ? '<span class="sub">' + sub + '</span>' : '') + (gd ? '<span class="mp-gdoors">' + gd + '</span>' : '') + '</div>' + (right ? '<div class="r">' + right + '</div>' : '') + '</div>';
+  }
   const doors = rowDoors(card);
   const det = doors ? ' tabindex="0" data-doors aria-expanded="false"' : '';
   return '<div class="mp-row' + (card && card.id ? ' card' : '') + (doors ? ' has-doors' : '') + '"' + attrs + det + '><div class="l"><span class="nm">' + label + '</span>'
@@ -305,6 +314,7 @@ function gateWords(g) {
   return biz() && /^[\w.-]+(?::[\w.-]+)+$/.test(label) ? humanize(label.replace(/[:.]/g, ' ')) : label;
 }
 function gateKindKey(g) {
+  if (g.config) return 'gate.kind.config';
   if (biz()) return g.kind === 'guard' ? 'map.biz.check' : 'map.biz.rule';
   return g.kind === 'guard' ? 'map.prop.kind.guard' : 'map.prop.kind.rule';
 }
@@ -315,7 +325,7 @@ function gateRow(g) {
     + (g.planned ? ' · <span' + defAttrs('map.prop.planned') + '>' + esc(t('map.prop.planned')) + '</span>' : '');
   const timesKey = g.merged > 1 ? 'map.prop.timesSame' : 'map.prop.times';
   const times = g.count > 1 ? '<span class="mp-dim"' + plainTip(g.count, timesKey, 'journey.scopeHere', '/api/journey', g.parts) + '>' + esc(t(timesKey).replace('{n}', g.count)) + '</span>' : '';
-  return row(sym(g.kind === 'guard' ? 'gate' : 'warning') + esc(label), sub, times, { kind: 'gate', id: g.id });
+  return row(sym(g.config ? 'gear' : g.kind === 'guard' ? 'gate' : 'warning') + esc(label), sub, times, { kind: 'gate', id: g.id, config: !!g.config });
 }
 /**
  * One row per checkpoint as the reader sees it: two gates the code names apart but the lens says in the same
@@ -362,7 +372,23 @@ function overviewHtml(pm, st) {
     + (glance ? sec('map.prop.ov.glance', '<div class="mp-chips">' + glance + '</div>') : '')
     + sec('map.prop.ov.calls', calls)
     + sec('map.prop.ov.gates', gateList(o.gates, 'ov-gates'))
+    + propLifecycleHtml(pm, st)
     + sec('map.prop.ov.work', workRowsHtml(pm, st, true));
+}
+
+/**
+ * The Overview's status lifecycle: one strip per record whose statuses the code declares and that
+ * this screen's calls reach or one of its steps moves (the journey answer's `lifecycles`, kept to the screen's own data). `''` when
+ * none does — the section is left out rather than drawn empty.
+ * @group Map
+ */
+function propLifecycleHtml(pm, st) {
+  const ids = ((pm.tabs.apis && pm.tabs.apis.records) || []).map((r) => r.nodeId);
+  const data = st.ctx && st.ctx.data;
+  const seg = data && data.summary && pm.screen && pm.screen.segment ? (data.summary.segments || [])[pm.screen.segment.index] : null;
+  const list = screenLifecycles(data && data.lifecycles, ids, ((seg && seg.markers) || []).map((m) => m.nodeId));
+  if (!list.length) return '';
+  return sec('lifecycle.word', list.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join(''));
 }
 
 function gatesHtml(pm) {
@@ -374,7 +400,10 @@ function gatesHtml(pm) {
     const sub = biz() ? '' : esc([at ? at.name : '', currentLens() === 'code' && at && at.loc ? at.loc.path + ':' + d.line : ''].filter(Boolean).join(' · '));
     return row(sym('decision') + clampHtml('dec-' + i, d.label), sub, '', { kind: 'decision', id: d.nodeId });
   }), decs.length === g.decisions.length ? g.decisionsCounted : null);
-  return '<section class="mp-sec">' + secHead('map.prop.gates.head', countNum(g.counted)) + gateList(g.rows) + '</section>'
+  // config checks are listed apart, counted apart, and only where the walk met them (swarm-fixes 2026-10-05, finding 4)
+  const cfg = (g.config || []).length ? '<section class="mp-sec mp-config">' + secHead('map.prop.gates.config', countNum(g.configCounted))
+    + capRows('config', dedupeGates(jrnGatesShown(g.config).drawn).map(gateRow)) + '</section>' : '';
+  return '<section class="mp-sec">' + secHead('map.prop.gates.head', countNum(g.counted)) + gateList(g.rows) + '</section>' + cfg
     + '<section class="mp-sec">' + secHead('map.prop.gates.decisions', decs.length === g.decisions.length ? countNum(g.decisionsCounted) : '')
     + (decRows || absentRow('noneIndexed')) + '</section>';
 }
@@ -405,7 +434,7 @@ function storeGroupHtml(g, gi) {
   const sk = g.store ? (STORE_KINDS.includes(g.store.kind) ? g.store.kind : 'other') : '';
   const plainKey = g.kind === 'message' ? 'map.kind.message' : g.kind === 'external' ? 'map.kind.external' : 'map.kind.record';
   const head = g.store
-    ? '<h4 class="mp-grp st-' + sk + '" data-store="' + esc(g.store.name) + '"><i></i><span>' + esc(g.store.name) + '</span> · <span' + defAttrs('map.store.kind.' + sk) + '>' + esc(t('map.store.kind.' + sk)) + '</span></h4>'
+    ? '<h4 class="mp-grp st-' + sk + '" data-store="' + esc(g.store.name) + '"><i></i>' + (storeShownName(g.store, biz()) ? '<span>' + esc(storeShownName(g.store, biz())) + '</span> · ' : '') + '<span' + defAttrs('map.store.kind.' + sk) + '>' + esc(t('map.store.kind.' + sk)) + '</span></h4>'
     : '<h4 class="mp-grp plain"><span' + defAttrs(plainKey) + '>' + esc(t(plainKey)) + '</span></h4>';
   const rows = g.rows.map((r) => {
     const sk2 = g.store ? sk : '';
@@ -468,7 +497,7 @@ function testsHtml(pm) {
     foot = '<div class="line">' + jrnEvChipHtml(facts) + (obs ? '<span class="obs">' + esc(obs) + '</span>' : '') + '</div>' + jrnFootScopeHtml(facts)
       + '<div class="line"><span class="cnt">' + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
         .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
-      + jrnRunLineHtml(facts.run);
+      + jrnRunLineHtml(facts);
   }
   const { cases, reports } = pm.tabs.tests;
   const reportRow = (x) => row(esc(biz() ? caseWords(x.name) : String(x.name || '')), biz() ? '' : esc([x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · ')),
@@ -597,13 +626,13 @@ function commitRow(x) {
     return { name: nameOf(n, String(p.node).split('::').pop()), how: p.how };
   });
   // the business register reads the sentence, not its conventional-commit type and scope
-  const subject = biz() ? unCode(String(x.subject || '').replace(/^\w+(?:\([^)]*\))?!?:\s*/, '')) : String(x.subject || '');
+  const subject = biz() ? commitWords(x.subject) : String(x.subject || '');
   const sub = [
     esc(dayOf(x.at)),
     biz() ? '' : '<span' + defAttrs('map.prop.changes.by') + '>' + esc(t('map.prop.changes.by').split('{author}').join(x.author || '')) + '</span>',
     esc(parts.slice(0, 3).map((p) => p.name).join(', '))
       + (parts.length > 3 ? ' <span' + plainTip(parts.length - 3, 'map.prop.changes.partsMore', 'journey.scopeHere', '/api/history/touching') + '>'
-        + esc(t('map.prop.changes.partsMore').split('{n}').join(String(parts.length - 3))) + '</span>' : ''),
+        + esc(countPhrase('map.prop.changes.partsMore', parts.length - 3)) + '</span>' : ''),
     biz() ? '' : '<code>' + esc(String(x.sha || '').slice(0, 7)) + '</code>',
     biz() ? '' : (x.keys || []).map((k) => '<b class="mp-key">' + esc(k) + '</b>').join(' '),
   ].filter(Boolean).join(' · ');

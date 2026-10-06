@@ -26,7 +26,7 @@
 // (`changes.hiddenInBusiness`). The code register adds the file, its ⧉ link and
 // the commits that touched it.
 
-import { S, esc, jsArg, expose, currentLens } from '../store.js';
+import { S, esc, jsArg, expose, currentLens, commitWords } from '../store.js';
 import { t, def } from '../strings.js';
 import { sym, symWord } from '../sym.js';
 import { vsl } from '../lib/graph-render.js';
@@ -631,7 +631,7 @@ function commitListHtml(commits) {
     + (code ? '<td class="mono"' + tipAttrs({ text: c.sha }) + '>' + esc(c.sha.slice(0, 7)) + '</td>' : '')
     + '<td class="mono when">' + esc(String(c.at).replace('T', ' ').slice(0, 16)) + '</td>'
     + '<td>' + esc(c.author || '') + '</td>'
-    + '<td class="note">' + esc(said(c.subject || ''))
+    + '<td class="note">' + esc(currentLens() === 'business' ? commitWords(c.subject) : String(c.subject || ''))
     + (c.indexed ? '' : '<span class="pf-sub dim">' + symWord('absent', 'journey.absent.notIndexed') + '</span>')
     + '</td></tr>').join('') + '</tbody></table>';
 }

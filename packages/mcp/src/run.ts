@@ -12,12 +12,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
-  GraphStore, buildIndex, search, trace, rulesFor, isDeclaredOnly, journey, journeySummary, journeyChoices, journeyTransactions, screensFor, resolveEntry, categorizeBranch, businessSummary,
+  lifecycleLines,
+  GraphStore, buildIndex, setFreshnessMeta, search, trace, rulesFor, isDeclaredOnly, journey, journeySummary, journeyChoices, journeyTransactions, screensFor, resolveEntry, categorizeBranch, businessSummary,
   t,
   readModelHubState, resolveModelHubDir,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown, contractLines,
   designSurface, reconcileDesign, designDriftMarkdown, designGuide, flowStatusWord,
-  testsSurface, testDetail, verifiedBy, verifiedThrough, formatMetric, evidenceWord, countedLine, countedText, breakdownText,
+  testsSurface, testDetail, verifiedBy, verifiedThrough, formatMetric, evidenceWord, caseWord, countedLine, countedText, breakdownText,
   impactOf, IMPACT_MAX_HOPS, impactTestsV1, impactTestsReaching, nodesInHunks, flowActions,
   testsMatrixV1, testsMatrixCsv, testsIdentity, stepCoverage,
   SnapshotDb, parseSyncRef, diffGraphs, changeSentence, toSarif, toMarkdown, CHANGE_KINDS,
@@ -28,7 +29,7 @@ import {
   storybookLive, type StoriesAnswer, type StorybookStatus,
   type ModelHubState, type Activity, buildLine, buildInfo, installState, currencyAdvice,
   projectFacets, projectGraph, projectsSummaryLine,
-  depsRowOf, counted,
+  depsRowOf, counted, gateCard, type GateCard,
 } from '@farsight/core';
 
 /** `changed` said as what moved: a working tree that differs from HEAD is not a new commit (the Changes spine agrees). */
@@ -58,6 +59,7 @@ const graphPath = resolve(graphArg ?? process.env.FARSIGHT_GRAPH ?? 'graph.json'
 let store = GraphStore.load(graphPath);
 let { nodes, edges } = store.toJSON();
 let index: GraphIndex = buildIndex(nodes, edges);
+setFreshnessMeta(index, store.meta);
 
 // ── rendering (compact, stable, greppable) ──────────────────────
 
@@ -106,6 +108,8 @@ function nodeDetail(n: GraphNode, full = false): string {
     const st = n.store;
     lines.push(`  store: ${st.name} · ${st.kind}${st.engine ? ` · ${st.engine}` : ''} · known from ${st.via}${st.ref ? ` (${st.ref})` : ''}`);
   }
+  // the record's status lifecycle read from the code: statuses in order, each move with its writer (core lifecycle.ts)
+  if (n.lifecycle) lines.push(...lifecycleLines(n).map((l) => `  ${l}`));
   // the workspace project the node sits in, its type and its tags by dimension (dependencies-and-nx.md §2.2)
   const projRepo = n.loc?.repo ?? n.id.split('::')[0]!;
   if (n.project && store.meta.projects?.[projRepo]?.tool !== 'none') {
@@ -720,8 +724,64 @@ server.registerTool('describe_node', {
   if (!n) return text(`unknown node id: ${node_id}. Use search_graph to find ids.`);
   const lines = [nodeDetail(n, !!full)];
   lines.push(...(await nodeStoriesLines(n)));
+  if (n.kind === 'guard' || n.kind === 'rule') {
+    const card = gateCard(index, n.id);
+    if (card) lines.push('', ...gateLines(card, { cap: 12 }));
+  }
   if (context !== false) lines.push(...changeContext(n));
   return text(lines.join('\n'));
+});
+
+/** A place in the code as `path:line`, or '' when the graph has none. */
+function atLine(loc: GraphNode['loc'] | undefined): string {
+  return loc ? `${loc.path}:${loc.line}` : '';
+}
+/**
+ * One gate answered, in text (swarm-fixes 2026-10-05, finding 4): the same fold — core `gateCard()` — the HUD's
+ * gate card and `GET /api/gate` read. Its words, whether it is a config check, what it sits on, the calls a
+ * request goes through to meet it (with file:line) and the tests that reach the gate or those calls.
+ */
+function gateLines(c: GateCard, opts: { cap?: number } = {}): string[] {
+  const cap = opts.cap ?? 40;
+  const g = c.gate;
+  const kind = g.configCheck ? 'config check' : g.gateKind === 'rule' ? 'validation rule' : 'gate (guard)';
+  const out = [`## gate — ${kind}${g.declared ? ', declared in farsight.config.json' : ''}`];
+  out.push(`${g.name}${g.loc ? ` — ${atLine(g.loc)}` : ''}`);
+  if (g.business) out.push(`what it allows (written): ${g.business}`);
+  else if (g.phrase && g.ident) out.push(`what it requires (the @guard words): ${g.phrase}`);
+  else out.push(`what it allows: nobody has written it — add a @business line above ${g.ident || g.name}${g.loc ? ` in ${g.loc.path}` : ''}, or name it in farsight.config.json → glossary`);
+  if (g.docs && g.docs !== g.business) out.push(`docs: ${g.docs}`);
+  if (g.configCheck) out.push('config check: it reads the process environment and takes no request — it runs wherever the app reads its settings, so journeys list it apart from a screen\'s gates');
+  out.push(`sits on (${countedText(c.counted.sitsOn, { scope: false })}): ${c.sitsOn.slice(0, cap).map((p) => `${p.name}${p.loc ? ` (${atLine(p.loc)})` : ''}`).join(' · ') || 'nothing'}${c.sitsOn.length > cap ? ` · … ${c.sitsOn.length - cap} more` : ''}`);
+  out.push(`calls it guards: ${countedText(c.counted.calls)} (${breakdownText(c.counted.calls)})${c.truncated ? ' — at least these: the walk stopped at its budget' : ''}`);
+  for (const r of c.calls.slice(0, cap)) {
+    out.push(`  ${r.name}${r.depth ? ` — met ${r.depth} call(s) down` : ' — guarded directly'}${r.loc ? ` · ${atLine(r.loc)}` : ''}${r.summary ? ` · ${r.summary}` : ''} \`${r.id}\``);
+  }
+  if (c.calls.length > cap) out.push(`  … ${c.calls.length - cap} more`);
+  if (c.pages.length) out.push(`pages that meet it while drawing: ${countedText(c.counted.pages, { scope: false })} — ${c.pages.slice(0, cap).map((p) => p.name).join(' · ')}${c.pages.length > cap ? ` · … ${c.pages.length - cap} more` : ''}`);
+  const w = c.evidenceWord;
+  out.push(`tests that reach it: ${countedText(c.counted.tests.tests)} (${breakdownText(c.counted.tests.tests)}) — ${w.cls === 'none' ? 'nothing reaches it' : t(w.key, 'professional')}; ${c.testsOnGate} reach the gate itself`);
+  for (const r of c.tests.slice(0, cap)) {
+    const via = r.reaches.nodeId === g.id ? 'the gate itself' : `through ${r.reaches.name}`;
+    out.push(`  [${r.level}] ${r.name}${r.loc ? ` — ${atLine(r.loc)}` : ''} · ${via} · ${r.evidence === 'observed' ? (r.observedVia === 'declaration' ? 'passed, by its own declaration' : r.runLevel ? 'seen by a coverage run' : 'verified by a run') : r.evidence === 'static' ? 'reached' : 'declared'}${r.status ? ` · last run ${r.status}` : ''}`);
+  }
+  if (c.tests.length > cap) out.push(`  … ${c.tests.length - cap} more`);
+  return out;
+}
+
+server.registerTool('gate', {
+  title: 'One gate — what it allows, the calls it guards, the tests that reach it',
+  description: 'One gate (a guard) or validation rule, answered the way the HUD\'s gate card answers it: the words somebody wrote for it (or who should write them), whether it is a config check (a guard that checks how the app was started — its settings — rather than a request, listed apart from a screen\'s gates), what it sits on directly, every route a request goes through to meet it (nearest first, with file:line and how many calls down), the server-rendered pages that meet it, and the tests that reach the gate itself or one of those calls, each once with its evidence class and last run. Use before changing a guard or rule: who goes through it, and what proves it still works. For a list of gates around a feature use list_rules; for one node\'s full context use describe_node (it prints this section for a guard or rule).',
+  inputSchema: {
+    node_id: z.string().describe('the gate or rule node id (search_graph kind:guard or kind:rule, or a gate named in journey / list_rules output)'),
+    all: z.boolean().optional().describe('list every call and test instead of the first 40 of each'),
+  },
+}, async ({ node_id, all }) => {
+  const n = index.byId.get(node_id) ?? search(index, node_id, { kind: 'guard' })[0] ?? search(index, node_id, { kind: 'rule' })[0];
+  if (!n) return text(`unknown gate: ${node_id}. Use search_graph kind:guard to find ids.`);
+  const card = gateCard(index, n.id);
+  if (!card) return text(`${ref(n)} is not a gate or a rule — describe_node lists the gates in force on it`);
+  return text(gateLines(card, all ? { cap: Number.MAX_SAFE_INTEGER } : {}).join('\n'));
 });
 
 // ── stories (ADR 9): read from the story files; drawn by a running Storybook, never started here ──
@@ -1432,6 +1492,7 @@ server.registerTool('refresh_graph', {
   store = fresh;
   ({ nodes, edges } = store.toJSON());
   index = buildIndex(nodes, edges);
+  setFreshnessMeta(index, store.meta);
   const lines = [
     `re-ingested ${roots.length - skipped.length} source root(s): ${nodes.length} nodes, ${edges.length} edges (was ${prev.nodes}/${prev.edges})`,
     `generated: ${store.meta.generatedAt} · source-hash ${store.meta.sourceHash ?? 'n/a'}`,
@@ -1754,8 +1815,8 @@ server.registerTool('test_coverage', {
   // ── the evidence words. A claim nobody ran is never called verified (AGENTS.md); the run is its own fact. ──
   // a coverage report is observed evidence attributed to the run, never *verified* (docs/COUNTS.md)
   // a declared e2e case its results report says passed is observed for what it declares — worded as that
-  const evWord = (e: CoverageTestRef['evidence'], runLevel = false, via?: CoverageTestRef['observedVia']): string =>
-    e === 'observed' ? (via === 'declaration' ? 'passed, by its own declaration' : runLevel ? 'seen by a coverage run' : 'verified by a run') : e === 'static' ? 'reached by tests' : 'declared only';
+  // one case's word is core's `caseWord` — the same rule as a scope's, the case alone as the scope
+  const caseWordText = (r: CoverageTestRef): string => t(caseWord(r).key, 'professional');
   // one evidence word, from the fold: the same key the HUD's chip prints, so an
   // agent and a reader are never told two things about one flow at one sync. It
   // reads `evidenceWord` where the fold carries it — which is where the run-level
@@ -1814,7 +1875,7 @@ server.registerTool('test_coverage', {
     const run = runs
       ? ` · run ${runs}${t.at ? ` ${t.at.slice(0, 10)}` : ''} — ${fresh(t.freshness ?? 'unknown', t.changedBy)}`
       : ' · no run observed';
-    return `  ${t.level === 'e2e' ? '◎' : '○'} ${t.name} — ${level} · ${evWord(t.evidence, t.runLevel, t.observedVia)}${inactive}${run} \`${t.id}\``;
+    return `  ${t.level === 'e2e' ? '◎' : '○'} ${t.name} — ${level} · ${caseWordText(t)}${inactive}${run} \`${t.id}\``;
   };
 
   if (testId) {
@@ -1841,9 +1902,10 @@ server.registerTool('test_coverage', {
   if (node) {
     const n = index.byId.get(node) ?? resolveEntry(index, node, { ...(repo ? { repo } : {}), ...(group ? { group } : {}) });
     if (!n) return text(`nothing in the graph matches: ${node}`);
-    const covers = verifiedBy(index, n.id);
-    // the fold the journey gutter and the inspector read — so an agent and a reader get one answer
+    // the fold the journey gutter and the inspector read — so an agent and a reader get one answer;
+    // its refs include a route's handler at the same file:line (one place in the code, one verdict)
     const step = stepCoverage(index, n.id);
+    const covers = step?.tests.length ? step.tests : verifiedBy(index, n.id);
     if (raw) return text(JSON.stringify({ node: n.id, covers, ...(step ? { coverage: step } : {}) }, null, 2));
     if (!covers.length) {
       // a table is never covered directly: tests reach it through the functions that read and write it
@@ -1862,6 +1924,10 @@ server.registerTool('test_coverage', {
     return text([
       `${n.name} (${n.kind}) \`${n.id}\``,
       `verified by ${covers.length} test(s)${step ? ` — e2e ${step.e2e} · unit/integration ${step.unit}${step.observed ? ' · observed by a run' : ' · no run observed it'}` : ''}:`,
+      // the one verdict of this node — the word the HUD's chip prints — then its cases by their own runs, a count
+      ...(step?.verdict ? [`evidence: ${chipWord({ chip: step.chip ?? 'none', evidenceWord: step.verdict.word, ...(step.observation ? { observation: step.observation } : {}) })}${step.verdict.status ? ` · the run behind it: ${step.verdict.status}` : ''}`,
+        `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})`] : []),
+      ...(step?.sameLoc?.length ? [`read with ${step.sameLoc.map((id) => `\`${id}\``).join(', ')} — the same file:line`] : []),
       ...covers.map(testLine),
       ...(step?.note ? [step.note] : []),
     ].join('\n'));
@@ -1907,9 +1973,10 @@ server.registerTool('test_coverage', {
           : c.observation.by === 'declaration' ? `${c.observation.cases} end-to-end case(s) a results report says passed, by their own declaration (@covers) — no coverage measured which lines they ran`
             : `${c.observation.cases} case(s) a results report named${c.observation.declared ? ` (${c.observation.declared} of them by their own declaration)` : ''}`} · ${c.observation.at.slice(0, 10)} · ${c.observation.status} — ${fresh(c.observation.freshness, c.observation.changedBy)}`
         : 'observed by: nothing — no run reached this flow',
-      c.run
-        ? `the covering tests' own last run: ${c.run.status} ${c.run.at.slice(0, 10)}${c.run.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''} — ${fresh(c.run.freshness, c.run.changedBy)}`
-        : 'run: none observed',
+      // the cases' own runs are a count beside the verdict, never a second verdict (swarm 2026-10-05, finding 1)
+      c.verdict?.runs.n
+        ? `their own last runs: ${countedText(c.verdict.runs)} (${breakdownText({ ...c.verdict.runs, breakdown: (c.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${c.run?.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''}`
+        : 'their own last runs: no case reaches this flow',
       c.note,
       row.gap,
       '',

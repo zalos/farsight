@@ -87,7 +87,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   },
 
   // a screen on the street
-  'map.screen.ordinal': same('step', 'This screen’s place in the journey, counting from the first screen a person meets. A position, not a count.'),
+  'map.screen.ordinal': same('screen', 'This screen’s place in the journey, counting from the first screen a person meets. A position, not a count.'),
   'map.screen.planned': same('designed, not built', 'A design manifest names this screen and no page in the code serves its route yet.'),
   'map.screen.open': same('Open this screen'),
   'map.then': same('then', 'The next screen in the order the journey’s design names them.'),
@@ -166,7 +166,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.fold.scopeScreen': same('this screen', 'One screen of this journey.'),
 
   // §L — the legend, the lines between journeys, whole words, and the business lens on the map (lane L)
-  'map.tool.legend': same('Legend', 'What the lines, colours, stripes and marks on the board mean. It opens by itself the first time you visit the map; this button brings it back.'),
+  'map.tool.legend': same('Legend', 'What the lines, colours, stripes and marks on the board mean. It stays closed until you ask: this button or the g key opens and closes it.'),
   'map.legend.title': same('What the board draws', 'Every line, colour, stripe and mark the map uses, with the word it stands for. Only what is on this board is listed.'),
   'map.legend.close': same('Close the legend'),
   'map.legend.expand': same('show', 'Open the legend in full: every line, colour and mark this board draws, with its word.'),
@@ -181,7 +181,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.legend.times': same('×n', 'A checkpoint met more than once on one screen is listed once, with the number of times beside it.'),
   'map.legend.timesSay': same('met this many times on one screen', 'Shown beside a gate or rule in a screen’s list, instead of listing it again.'),
   'map.legend.evidence': same('What proves a journey runs', 'The word each journey’s tests earned: a case a run named, a case that declares what it covers and passed, or a coverage run alone. The words are the Tests page’s.'),
-  'map.legend.hint': same('Shown once on your first visit; the Legend button brings it back.'),
+  'map.legend.hint': same('The legend button or the g key opens and closes this; ? shows every key.'),
   'map.link.requires': same('requires', 'This journey needs the other one finished first. Drawn as the other journey leading to this one.'),
   'map.link.both': same('lead to each other', 'Each of the two journeys says it leads to the other, so the line carries an arrowhead at each end and one label.'),
   'map.cover.more': same('+{n}', 'More numbers about this journey, folded so the cover stays readable. Zoom in to see them all in the journey’s header.'),
@@ -336,7 +336,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.foot.declared': same('{n} declared, {k} not reached', 'The screens this journey’s design names, reached or not, and how many of them the walk through the code did not reach. The tip on the second number names each one with why: not reached, or not built.'),
   'map.cover.owner': same('owner · {owner}', 'Who owns this journey, as its design manifest says — the same name the Portfolio prints in its Owner column. Absent when the manifest names nobody.'),
   'map.cover.erp': same('reaches the ERP · {via}', 'The walk of this journey reaches an outside system the code or the settings name as an ERP. The Portfolio’s column of the same name says the same.'),
-  'map.cover.erpDeclared': same('ERP hand-off declared, not built', 'The contract declares an approval or a posting step for this journey that no code implements yet — the hand-off to the ERP is planned, not built. The Portfolio says declared in the spec, not built.'),
+  'map.cover.erpDeclared': same('ERP hand-off declared, not built', 'The contract declares an approval or a posting call for this journey that no code implements yet — the hand-off to the ERP is planned, not built. The Portfolio says declared in the spec, not built.'),
   'map.prop.changes.commits': same('Commits that touched this screen’s parts', 'The application’s own commits, newest first, that changed the page, one of its components or a handler its calls reach — read from the commit history Farsight keeps for this source.'),
   'map.prop.changes.countCommits': same('{n} commits', COMMITS),
   'map.prop.changes.countCommitsOne': same('1 commit', COMMITS),
@@ -351,6 +351,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.changes.commitsFailed': same('The commit history did not answer.', 'The request for this screen’s commits failed. Nothing here is a fact about the code.'),
   'map.prop.changes.by': same('by {author}', 'Who made the commit, as git recorded it.'),
   'map.prop.changes.partsMore': same('{n} more parts', 'Other parts of this screen the same commit changed, beyond the three named.'),
+  'map.prop.changes.partsMoreOne': one('1 more part', 'map.prop.changes.partsMore'),
 
   // §K — keyboard reach, fast travel and stable links (lane K)
   'map.asOf': same('as of sync {n}', 'The sync this board is drawn from, with the day it was taken and, outside the business words, the source commit it read. Every number on the map is as of this sync, so a picture of the map says when it was true.'),

@@ -164,7 +164,7 @@ test.describe('map round 2 — keys', () => {
    * @covers packages/server/public/app/surfaces/map.js::enterCover
    * @covers packages/server/public/app/lib/tooltip.js::tipKeydown
    */
-  test('j j Enter on the board opens the second journey; ? toggles the legend with a cover focused, never its tip', async ({ page }) => {
+  test('j j Enter on the board opens the second journey; g toggles the legend with a cover focused, never its tip', async ({ page }) => {
     await stubBoard(page);
     await mapOn(page);
     await go(page, '#/map');
@@ -180,28 +180,33 @@ test.describe('map round 2 — keys', () => {
     await expect(page).toHaveURL(new RegExp('#/map/' + encodeURIComponent(second!).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '|#/map/' + second!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     await page.keyboard.press('Escape');
     await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
-    // a cover has the focus (Esc lands on it): ? is the legend's, both ways
+    // a cover has the focus (Esc lands on it): g is the legend's, both ways (? is the keymap's, everywhere)
     await expect(page.locator('.map-dcover:focus')).toHaveCount(1);
-    await page.keyboard.press('?');
+    await page.keyboard.press('g');
     await expect(page.locator('.map-legend')).toBeVisible();
     await expect(page.locator('#fs-tip')).toBeHidden();
     await expect(page.locator('#keymap')).not.toHaveClass(/\bopen\b/);
-    await page.keyboard.press('?');
+    await page.keyboard.press('g');
     await expect(page.locator('.map-legend')).toBeHidden();
   });
 
   test.describe('first visit', () => {
     test.use({ mapLegendSeen: false });
-    test('the legend that opens by itself takes no focus and leaves the toolbar\'s ? uncovered', async ({ page }) => {
+    /**
+     * @covers packages/server/public/app/surfaces/map.js::focusBoardOnOpen
+     */
+    test('no legend opens by itself, and the board holds the focus so the first Tab lands on the board, not the header', async ({ page }) => {
+      await stubBoard(page);
       await mapOn(page);
       await go(page, '#/map');
-      await expect(page.locator('.map-legend')).toBeVisible();
-      expect(await page.evaluate(() => !!document.activeElement?.closest('.map-legend'))).toBe(false);
-      const [q, lg] = await Promise.all([
-        page.locator('.map-tools [data-act="legend"]').boundingBox(),
-        page.locator('.map-legend').boundingBox(),
-      ]);
-      expect(lg!.y).toBeGreaterThanOrEqual(q!.y + q!.height);
+      await boardReady(page);
+      await expect(page.locator('.map-legend')).toBeHidden();
+      // the board takes the focus once its first draw has settled: wait for it, never read it once
+      await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains('map-board'))).toBe(true);
+      // the first Tab lands on a journey's cover (a stop a redraw keeps), not on the header or a count a walk redraws
+      await page.keyboard.press('Tab');
+      await expect.poll(() => page.evaluate(() => !!document.activeElement?.matches('.map-board .map-dcover'))).toBe(true);
+      await expect(page.locator('.map-dcover:focus')).toHaveCount(1);
     });
   });
 });

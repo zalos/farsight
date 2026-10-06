@@ -16,19 +16,22 @@
 // Everything from the server is untrusted display data → esc().
 
 import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens, cssId } from '../store.js';
-import { t, def, evidenceWord, plainWords } from '../strings.js';
+import { t, def, evidenceWord, plainWords, proseHtml, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { nodeCardHtml, vsl, linkHtml, designChipHtml, designThumbHtml } from '../lib/graph-render.js';
 import { journeyViewHash, isJourneyRoute, withParams, mapScreenHash, stepIndex, journeyStepHash } from '../lib/route-url.js';
-import { doorsFor, doorsHtml, codeSlotHtml, fillCode } from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
+import { gateAttrs } from '../lib/gate-card.js';
 import { trapFocus, releaseFocus, rememberOpener } from '../lib/focus-trap.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/tooltip.js';
-import { plainTip, countedHtml, defAttrs } from '../lib/counted.js';
+import { plainTip, countedHtml, defAttrs, countKey } from '../lib/counted.js';
 import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnDrillStep, jrnInspPanelHtml } from './journey-drill.js';
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
+import { lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
+import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 import { exportToolHtml, registerExport } from '../lib/export.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
@@ -266,7 +269,7 @@ function jrnOrganisedHtml(org, route) {
       + '<div class="jrn-phead"><a class="hud-label jrn-pname" href="' + esc('#/journeys?persona=' + encodeURIComponent(p.id)) + '">' + esc(jrnPersonaName(p)) + '</a>'
       + (p.id && !p.declared ? '<span class="api-chip"' + defAttrs('journeys.persona.undeclared') + '>' + esc(t('journeys.persona.undeclared')) + '</span>' : '')
       + '<span class="jrn-pcount">' + jrnOrgCountsHtml(p.counts) + '</span></div>'
-      + (p.description ? '<p class="dsg-flow-desc">' + esc(p.description) + '</p>' : '');
+      + (p.description ? '<p class="dsg-flow-desc">' + proseHtml(p.description) + '</p>' : '');
     const heads = p.groups.length > 1;
     for (const g of p.groups) {
       const key = p.id + '/' + g.id;
@@ -284,7 +287,7 @@ function jrnOrganisedHtml(org, route) {
         + ' data-key="' + esc(key) + '" onclick="jrnToggleGroup(this)" aria-label="' + esc(t('journeys.persona.toggle') + ' · ' + jrnGroupName(g)) + '"><span class="jrn-chev" aria-hidden="true"></span>'
         + '<span class="jrn-gname">' + esc(jrnGroupName(g)) + '</span></button>'
         + '<span class="jrn-gcount">' + jrnOrgCountsHtml(g.counts) + '</span></div>'
-        + (g.description ? '<p class="dsg-flow-desc">' + esc(g.description) + '</p>' : '')
+        + (g.description ? '<p class="dsg-flow-desc">' + proseHtml(g.description) + '</p>' : '')
         + '<div class="jrn-gbody" id="' + esc(bodyId) + '"' + (isFolded ? ' hidden' : '') + '>' + cards + '</div></div>';
     }
     html += '</section>';
@@ -374,7 +377,10 @@ function jrnFlowCardHtml(f, rows, repo, pinned, extra) {
   const chips = (f.screens || []).map((id, i) => {
     const r = byId[id] || {};
     const cls = r.status === 'both' ? 'ok' : r.status === 'design-only' ? 'stub' : '';
-    return '<span class="api-chip ' + cls + '"><b>' + (i + 1) + '</b>' + esc(id) + (r.name ? ' · ' + esc(r.name) : '') + '</span>';
+    // a design id is how the design files the screen: the business register reads its name
+    // (and the id only when the design gave it no name), as the journey's own header does
+    const words = currentLens() === 'business' ? esc(r.name || id) : esc(id) + (r.name ? ' · ' + esc(r.name) : '');
+    return '<span class="api-chip ' + cls + '"><b>' + (i + 1) + '</b>' + words + '</span>';
   }).join('');
   // the surface carries each doc's title beside its path (R21); an older server sends paths only
   const docs = (f.docLinks || f.docs || []).map((d) => jrnDocLinkHtml(repo, d)).join('');
@@ -395,7 +401,7 @@ function jrnFlowCardHtml(f, rows, repo, pinned, extra) {
     // fully built flow needs the count spelled out beside it
     + (statusKey === 'journey.status.built' ? '<span class="dsg-sub">' + esc(t('design.screensBuilt').replace('{b}', built).replace('{n}', total)) + '</span>' : '')
     + '</div>'
-    + (f.description ? '<p class="dsg-flow-desc">' + esc(f.description) + '</p>' : '')
+    + (f.description && proseHtml(f.description) ? '<p class="dsg-flow-desc">' + proseHtml(f.description) + '</p>' : '')
     + (chips ? '<div class="dsg-chips">' + chips + '</div>' : '')
     + (docs ? '<div class="dsg-docs">' + docs + '</div>' : '')
     + (f.nodeId ? '<button class="rel" onclick="openJourney(' + jsArg(f.nodeId) + ')">' + sym('start') + ' ' + esc(t('journey.openJourney')) + '</button>' : '')
@@ -416,9 +422,13 @@ function jrnDocLinkHtml(repo, link) {
   if (/^https?:\/\//i.test(path)) return linkHtml(path);
   const title0 = link && typeof link === 'object' && link.title ? String(link.title) : '';
   const business = currentLens() === 'business';
-  // a document's title is words somebody wrote; its number (`0021 —`) and a bare
-  // file name are how the repository files it, and the business lens reads neither
-  const title = business ? plainWords(title0.replace(/^\s*\d{2,5}\s*[—–-]\s*/, '')) : title0;
+  // a document's title is words somebody wrote, and its number (`0021 —`) is the
+  // citation key a reader quotes it by — kept in every register (swarm 2026-10-05,
+  // the business analyst: "the number is the citation key I need"); a bare file name
+  // is how the repository files it, and the business lens does not read that
+  const num = (title0.match(/^\s*(\d{2,5})\s*[—–-]\s*/) || [])[1] || '';
+  const rest = plainWords(title0.replace(/^\s*\d{2,5}\s*[—–-]\s*/, ''));
+  const title = business ? (rest ? (num ? num + ' — ' : '') + rest : '') : title0;
   if (business && !title) return '';
   const base = String(path).split('/').pop();
   // the hover keeps the path — and the whole title, since a narrow lane clips it
@@ -481,7 +491,7 @@ export function jrnWords(text) { return currentLens() === 'business' ? plainWord
  * @group Journey view */
 export function jrnMoLabel(mo) {
   if (!mo) return '';
-  if (currentLens() !== 'business') return String(mo.label || '');
+  if (currentLens() !== 'business') return unTick(mo.label);
   return plainWords(mo.label) || plainWords(mo.business) || t('journey.biz.noWords');
 }
 /** A stop the design declares and no call made, named the same way.
@@ -569,7 +579,7 @@ function jrnScreenFootHtml(sg) {
   // its own class, not jrn-cdesc: the code register hides descriptions on a
   // screen card, and what proves the screen runs is not a description
   return '<div class="jrn-cfoot" onclick="event.stopPropagation()">'
-    + jrnTestsFootHtml(segCov ? jrnScopeTestFacts(segCov) : null, { absent: 'journey.tests.noneScreen', open: true })
+    + jrnTestsFootHtml(segCov ? jrnScopeTestFacts(segCov) : null, { absent: 'journey.tests.noneScreen', cases: { seg: sg.index } })
     + '</div>';
 }
 /**
@@ -676,9 +686,12 @@ function jrnCallsInSpan(i, from, to) {
  * @group Journey view */
 function jrnArmOutcome(i, bp, arm) {
   const hits = jrnCallsInSpan(i, arm.line || 0, arm.endLine || 0);
-  if (hits.length) return hits.map((ci) => '<span class="jrn-fk-step" onclick="event.stopPropagation();jrnScrollTo(' + ci + ')">→ step ' + (ci + 1) + ' (' + esc(((S.JOURNEY.steps[ci] || {}).node || {}).name || '') + ')</span>').join(' ');
-  if (arm.exits || (bp.exits && (bp.arms || []).length === 1)) return '<span class="jrn-fk-exit">exits (return/throw)</span>';
-  return '<span class="jrn-fk-none">no tracked calls' + (bp.exits ? ' · may exit' : '') + '</span>';
+  // the arm names the part it reaches and the stop that part sits in — a walk
+  // index (`step 38`) is not a position a reader can find anywhere else
+  if (hits.length) return hits.map((ci) => '<span class="jrn-fk-step" onclick="event.stopPropagation();jrnScrollTo(' + ci + ')">'
+    + esc(t('journey.fork.jump').replace('{name}', ((S.JOURNEY.steps[ci] || {}).node || {}).name || '')) + (jrnStopText(ci) ? ' · ' + esc(jrnStopText(ci)) : '') + '</span>').join(' ');
+  if (arm.exits || (bp.exits && (bp.arms || []).length === 1)) return '<span class="jrn-fk-exit">' + esc(t('journey.fork.exits')) + '</span>';
+  return '<span class="jrn-fk-none">' + esc(t('journey.fork.noCalls')) + (bp.exits ? ' · ' + esc(t('journey.fork.mayExit')) : '') + '</span>';
 }
 /** Inline fork card for branch point bi of step i, toggled from the fork gutter:
  * lens-aware condition (business label + raw), category chip, arms with
@@ -1049,7 +1062,7 @@ function jrnSectionHtml(i) {
   }
   const gateBanners = (s.gates || []).map((g) => {
     const gn = S.BYID[g.id];
-    return '<div class="jrn-gate-banner' + (g.kind === 'rule' ? ' rule' : '') + (g.planned ? ' planned' : '') + '">'
+    return '<div class="jrn-gate-banner' + (g.kind === 'rule' ? ' rule' : '') + (g.planned ? ' planned' : '') + '"' + (gn ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') + '>'
       + sym(g.kind === 'rule' ? 'shield' : 'lock') + ' requires ' + esc(String(g.name || '').replace(/^requireScope: /, ''))
       + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
       + (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '') + '</div>';
@@ -1447,6 +1460,13 @@ export function jrnGateParts(g) {
 }
 /** A token only a developer would write: camelCase, snake_case, SHOUT_CASE, `a=b`. */
 const JRN_DEV_TOKEN = /[a-z][A-Z]|[A-Za-z0-9]_[A-Za-z0-9]|=/;
+/** Labels of the checks every web application has, by the words their authors use — first match wins. */
+const JRN_GATE_SHAPES = [
+  ['returnPath', /\breturn.?to\b.*\bpath\b|\bredirect target\b/i],
+  ['sameOrigin', /^same.?origin\b|\bcsrf\b/i],
+  ['rateLimit', /\brate.?limit/i],
+  ['idShape', /\bid shape\b/i],
+];
 /** A name that is one bare identifier and no prose at all (`uuid`, `problemSchema`). */
 const JRN_BARE_IDENT = /^[A-Za-z0-9_$]+$/;
 /**
@@ -1464,6 +1484,13 @@ const JRN_BARE_IDENT = /^[A-Za-z0-9_$]+$/;
  */
 export function jrnGateInWords(g) {
   const { phrase } = jrnGateParts(g);
+  // a handful of checks every web application has, named the way a developer names
+  // them (*same-origin on mutating routes*, *public-path rate limit*, *path id shape*):
+  // the label is words a person wrote, and still a word a product owner would have to
+  // look up (swarm 2026-10-05). The shape is read off that label — never guessed from
+  // the code — and said with the catalog's sentence for it.
+  const shape = phrase && JRN_GATE_SHAPES.find(([, re]) => re.test(phrase));
+  if (shape) return t('journey.biz.gateShape.' + shape[0]);
   if (!phrase || JRN_BARE_IDENT.test(phrase) || JRN_DEV_TOKEN.test(phrase)) return '';
   return phrase;
 }
@@ -1504,53 +1531,21 @@ export function jrnGatesShown(list) {
 function jrnGateRowHtml(g, qualifier) {
   const gn = S.BYID[g.id];
   const words = jrnGateLabel(g);
-  return '<div class="jrn-gl-row' + (g.kind === 'rule' ? ' rule' : '') + (g.planned ? ' planned' : '') + '"'
-    + ' onclick="jrnScrollTo(' + g.stepOrder + ')" title="' + esc(g.name || '') + '">'
-    + sym(g.kind === 'rule' ? 'shield' : 'lock')
+  // a click (or Enter) opens the gate card; a planned gate is not in the graph, so it still walks to its step
+  const opens = gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config })
+    : ' onclick="jrnScrollTo(' + g.stepOrder + ')"';
+  return '<div class="jrn-gl-row' + (g.kind === 'rule' ? ' rule' : '') + (g.config ? ' config' : '') + (g.planned ? ' planned' : '') + '"'
+    + opens + ' title="' + esc(g.name || '') + '">'
+    + sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock')
     + '<span class="jrn-gl-w">' + esc(words) + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
     // a real space, not only the margin: this row is read in a screenshot and
     // pasted into a ticket as often as it is clicked
     + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
     + '<span class="jrn-gl-x"' + (g.count > 1 ? ' title="' + esc(t('journey.gateTimes').replace('{n}', g.count)) + '"' : '') + '>'
     + (g.count > 1 ? '×' + g.count : '') + '</span>'
-    + '<span class="jrn-gl-go">' + (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '')
-    + (gn ? '<button type="button" class="jrn-gl-more" aria-expanded="false" data-gate="' + esc(g.id) + '" data-kind="' + esc(g.kind) + '"'
-      + ' onclick="jrnGateExpand(this)" aria-label="' + esc(t('door.expand') + ' · ' + words) + '"' + tipAttrs({ key: 'door.expand', noFocus: true }) + '>▸</button>' : '')
+    // the doors on the row itself, not behind a ▸ (the business register draws none: they open code)
+    + '<span class="jrn-gl-go">' + (gn ? doorsHtml(doorsFor(g.kind === 'rule' ? 'rule' : 'gate', gn)) : '')
     + '</span></div>';
-}
-/**
- * Open a checkpoint in place (round 2026-10-05 §3.2): under its row, the guard's
- * own lines read from the file (not in the business register, where the gate is
- * its words) and its doors — the editor at its line and its card on the code
- * map. A second click folds it.
- * @group Journey view
- * @business Opens a check where it is listed: what it says, and where to read it.
- */
-export function jrnGateExpand(btn) {
-  if (window.event) window.event.stopPropagation();
-  const row = btn.closest('.jrn-gl-row');
-  if (!row) return;
-  const next = row.nextElementSibling;
-  if (next && next.classList.contains('dd-exp')) { next.remove(); btn.setAttribute('aria-expanded', 'false'); btn.textContent = '▸'; return; }
-  const id = btn.dataset.gate;
-  const gn = S.BYID[id];
-  if (!gn) return;
-  const biz = currentLens() === 'business';
-  const all = jrnWords(gn.bizDescription || gn.docs || '') || '';
-  // the first sentence, at most a short paragraph: the code and the doors are what this fold is for
-  const first = (all.match(/^[\s\S]*?[.!?](?=\s|$)/) || [all])[0];
-  const words = first.length > 240 ? first.slice(0, 237).replace(/\s+\S*$/, '') + '…' : first;
-  const doors = doorsHtml(doorsFor(btn.dataset.kind === 'rule' ? 'rule' : 'gate', gn));
-  const exp = document.createElement('div');
-  exp.className = 'dd-exp jrn-gl-exp';
-  exp.tabIndex = 0;
-  exp.setAttribute('data-doors', '');
-  exp.innerHTML = doors + (words ? '<p class="dd-words">' + esc(words) + '</p>' : (biz ? '<p class="dd-words">' + esc(row.querySelector('.jrn-gl-w') ? row.querySelector('.jrn-gl-w').textContent : '') + '</p>' : ''))
-    + codeSlotHtml(id);
-  row.after(exp);
-  btn.setAttribute('aria-expanded', 'true');
-  btn.textContent = '▾';
-  fillCode(exp);
 }
 /**
  * One named list of checkpoints: a heading carrying THIS screen's count, then
@@ -1580,7 +1575,7 @@ function jrnBizGroupHtml(key, total, body, mute, cls, scopeKey) {
       + esc(allMuted ? t('journey.biz.noneInWords') : t('journey.biz.notInWords').replace('{n}', mute)) + '</div>' : '')
     + '</div>';
 }
-function jrnGateGroupHtml(list, key, scopeKey) {
+function jrnGateGroupHtml(list, key, scopeKey, cls) {
   if (!list.length) return '';
   const { rows, drawn, mute } = jrnGatesShown(list);
   // Two checkpoints whose developers wrote the same @guard phrase collapse to one
@@ -1603,7 +1598,7 @@ function jrnGateGroupHtml(list, key, scopeKey) {
     return jrnGateRowHtml(g, t('journey.sameWords').replace('{i}', i).replace('{n}', n));
   }).join('');
   return jrnBizGroupHtml(key, rows.length, '<div class="jrn-gl-rows">' + html + '</div>',
-    mute, key === 'journey.bizGroup.rules' ? 'rules' : '', scopeKey);
+    mute, cls || (key === 'journey.bizGroup.rules' ? 'rules' : ''), scopeKey);
 }
 /**
  * The gates and rules of one screen as two aligned lists rather than one cloud
@@ -1613,11 +1608,14 @@ function jrnGateGroupHtml(list, key, scopeKey) {
  * @group Journey view
  * @business What has to be true before this part of the journey goes through.
  */
-function jrnGateListHtml(gates, scopeKey) {
-  if (!gates || !gates.length) return '';
+function jrnGateListHtml(gates, scopeKey, configChecks) {
+  const cfg = (configChecks || []).map((g) => ({ ...g, kind: 'guard', config: true }));
+  if ((!gates || !gates.length) && !cfg.length) return '';
   return '<div class="jrn-gatelist">'
-    + jrnGateGroupHtml(gates.filter((g) => g.kind !== 'rule'), 'journey.bizGroup.gates', scopeKey)
-    + jrnGateGroupHtml(gates.filter((g) => g.kind === 'rule'), 'journey.bizGroup.rules', scopeKey)
+    + jrnGateGroupHtml((gates || []).filter((g) => g.kind !== 'rule'), 'journey.bizGroup.gates', scopeKey)
+    + jrnGateGroupHtml((gates || []).filter((g) => g.kind === 'rule'), 'journey.bizGroup.rules', scopeKey)
+    // the config checks the screen's code meets on the way: listed apart, counted apart (swarm-fixes 2026-10-05, finding 4)
+    + jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config')
     + '</div>';
 }
 /**
@@ -1642,6 +1640,7 @@ function jrnGateListHtml(gates, scopeKey) {
 export function jrnChecksHtml(sg, mo) {
   const tab = jrnBizTab();
   const gates = (sg.gates || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to);
+  const configs = (sg.configChecks || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to);
   const inRange = jrnSegDecisions(sg).filter((d) => d.order >= mo.from && d.order <= mo.to);
   // business draws the decisions somebody wrote; a guard-class condition nobody
   // labelled is a predicate in code and is counted, not named
@@ -1659,7 +1658,7 @@ export function jrnChecksHtml(sg, mo) {
   const decs = tab === 'gates' || !inRange.length ? ''
     : '<div class="jrn-gatelist">' + jrnBizGroupHtml('journey.decisions', inRange.length,
       shown.map(jrnSheetDecChipHtml).join(''), inRange.length - shown.length) + '</div>';
-  const body = (tab === 'decisions' ? '' : jrnGateListHtml(gates)) + decs;
+  const body = (tab === 'decisions' ? '' : jrnGateListHtml(gates, undefined, configs)) + decs;
   return body ? body + untr : (untr || jrnAbsentHtml('noneIndexed'));
 }
 /** What the walk could not put into words, said in the register's own voice — a
@@ -1832,7 +1831,7 @@ function jrnBizCellHtml(sg, last) {
   // rather than leaving a reader to wonder whether it was merely not drawn
   let body = '';
   if (tab === 'gates') {
-    body = jrnGateListHtml(sg.gates, 'journey.scopeHere');
+    body = jrnGateListHtml(sg.gates, 'journey.scopeHere', sg.configChecks);
   } else if (tab === 'decisions') {
     // the flowchart is not deleted, only moved behind the view that asks for it —
     // in every register, including code, which hid it only because it was always on.
@@ -1951,7 +1950,7 @@ export function jrnMarkerText(m) {
   // register, where it has room.
   const short = title && title !== name && (m.titleFrom === 'label' || m.titleFrom === 'route') ? title : '';
   const label = short || ((n.bizLabel && n.bizLabel !== name) ? n.bizLabel : '');
-  return label ? name + ' · ' + label : name;
+  return label ? name + ' · ' + unTick(label) : name;
 }
 /**
  * The words the core chose for this marker, or '' when it chose none. An older
@@ -2071,7 +2070,7 @@ export function jrnSeamCardHtml(m) {
     + '<span class="l1">' + sym('api') + (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') + '<span class="nm">' + esc(name) + '</span>'
     // the code names no method and several endpoints share the address: the read one is shown, and says so
     + (m.methodAssumed ? '<span class="api-chip warn"' + tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) + '>' + esc(t('journey.seam.methodAssumed')) + '</span>' : '')
-    + (summary ? '<span class="sum">' + esc(summary) + '</span>' : '')
+    + (summary ? '<span class="sum">' + proseHtml(summary) + '</span>' : '')
     // whether the spec and the code agree is a developer's question
     + (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>')
     + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
@@ -2114,6 +2113,8 @@ function jrnRowLabel(r) {
  * @group Journey view
  * @business Opens the journey in the shape that suits the reader: the storyboard for the business, the sheet for both, the timeline for code.
  */
+/** Where this browser remembers the journey view a register last chose (one key per register). */
+function jrnLayoutKey(lens) { return 'fs-jrn-layout.' + lens; }
 function jrnDefaultLayout() {
   const lens = currentLens();
   return lens === 'business' ? 'storyboard' : lens === 'code' ? 'timeline' : 'sheet';
@@ -2122,16 +2123,22 @@ function jrnDefaultLayout() {
  * Which visual the journey is drawn as — `storyboard` (the screens and the
  * selected action's ledger), `timeline` (the blueprint timeline), `sheet` (the
  * system sheet) or `drill` (behind its flag). A `?view=` deep link wins (the
- * shell puts it on S.jrnLayout), else what this browser last chose, else the
- * register's own default.
+ * shell puts it on S.jrnLayout), else what this browser last chose in this
+ * register, else the register's own default.
  * @group Journey view
  */
 function jrnLayout() {
+  // the register decides the landing view, and the reader's last choice is remembered per register: one choice
+  // for every register opened the business reader on the Sheet a hybrid session had picked (three swarms running)
+  const lens = currentLens();
+  if (S.jrnLayout && S.jrnLayoutLens && S.jrnLayoutLens !== lens) S.jrnLayout = null;
   if (!S.jrnLayout) {
     let saved = '';
-    try { saved = localStorage.getItem('fs-jrn-layout') || ''; } catch (e) { saved = ''; }
+    try { saved = localStorage.getItem(jrnLayoutKey(lens)) || ''; } catch (e) { saved = ''; }
     S.jrnLayout = /^(storyboard|timeline|sheet|drill)$/.test(saved) ? saved : jrnDefaultLayout();
   }
+  // a `?view=` link's choice holds for the register it was opened in
+  S.jrnLayoutLens = lens;
   // the drill is an experiment: with the flag off, a remembered or deep-linked `drill` reads as the timeline (and share links say so)
   if (S.jrnLayout === 'drill' && !jrnDrillEnabled()) S.jrnLayout = 'timeline';
   return S.jrnLayout;
@@ -2174,7 +2181,8 @@ function jrnLayoutSwitchHtml() {
  */
 export function jrnSetLayout(v) {
   S.jrnLayout = /^(storyboard|sheet)$/.test(v) ? v : (v === 'drill' && jrnDrillEnabled()) ? 'drill' : 'timeline';
-  try { localStorage.setItem('fs-jrn-layout', S.jrnLayout); } catch (e) { /* private mode: the view is just not remembered */ }
+  S.jrnLayoutLens = currentLens();
+  try { localStorage.setItem(jrnLayoutKey(S.jrnLayoutLens), S.jrnLayout); } catch (e) { /* private mode: the view is just not remembered */ }
   jrnWriteViewHash();
   if (S.JOURNEY) renderJourney(S.JOURNEY);
 }
@@ -3126,7 +3134,7 @@ export function jrnSchemaChipHtml(m) {
 /** One gate as a sheet chip — the checkpoint in words and how often this action met it.
  * @group Journey view */
 function jrnSheetGateChipHtml(g) {
-  return '<span class="jrn-mk gate" onclick="jrnScrollTo(' + g.stepOrder + ')" title="' + esc(g.name || '') + '">'
+  return '<span class="jrn-mk gate"' + (S.BYID[g.id] ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
     + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(jrnGateText(g)) + (g.count > 1 ? ' ×' + g.count : '')
     + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '') + '</span>';
 }
@@ -3161,20 +3169,15 @@ function jrnSheetOpen(li, ci, what, btn) {
 // Each chip's opening tag is written out in full: a class attribute assembled
 // from pieces reads as prose to the string lint (RULE 1).
 const JRN_FOOT_EV = '<span class="ev ';
-const JRN_FOOT_ST = '<span class="st ';
 const JRN_FOOT_NONE = '<span class="ev none" title="';
-// The weakest verdict wins, exactly as core's `coverageFor` folds it: one
-// skipped or failing case is not covered by a hundred passing ones.
-const JRN_RUN_WEAK = { failed: 5, flaky: 4, skipped: 3, unknown: 2, passed: 1 };
-const JRN_FRESH_WEAK = { changed: 3, unknown: 2, unchanged: 1 };
-
 /**
  * The facts a foot prints for a list of coverage refs the core did not fold —
  * only a table, which no test touches directly and which is reached through
- * its accessors. Cases per level and coverage reports counted apart, and the
- * weakest of their own runs. No evidence word: the core decides that word and
- * it gave none for this, so the foot says what reached it and claims no class
- * (docs/COUNTS.md §4 — the viewer's own copy of the rule is gone).
+ * its accessors. Cases per level and coverage reports counted apart. No
+ * evidence word and no verdict: the core decides both, and for a table it gave
+ * only its cases by their own runs (`coverageViaRuns`), which the caller adds
+ * (docs/COUNTS.md §4 — the viewer's own copy of the rule is gone, and so is its
+ * fold of a weakest run: swarm 2026-10-05, finding 1).
  * @group Journey view
  */
 function jrnTestFacts(refs) {
@@ -3182,18 +3185,6 @@ function jrnTestFacts(refs) {
   (refs || []).forEach((x) => { if (x && x.id && !by.has(x.id)) by.set(x.id, x); });
   const all = [...by.values()];
   const cases = all.filter((x) => !x.runLevel);
-  const withRuns = all.filter((x) => !x.inactive && x.at);
-  let run = null;
-  if (withRuns.length) {
-    let status = 'passed', freshness = 'unchanged';
-    withRuns.forEach((x) => {
-      const st = x.status || 'unknown', f = x.freshness || 'unknown';
-      if ((JRN_RUN_WEAK[st] || 0) > (JRN_RUN_WEAK[status] || 0)) status = st;
-      if ((JRN_FRESH_WEAK[f] || 0) > (JRN_FRESH_WEAK[freshness] || 0)) freshness = f;
-    });
-    run = { status, freshness, at: withRuns.map((x) => x.at).sort().pop(),
-      projects: [...new Set(withRuns.map((x) => x.project).filter(Boolean))].sort() };
-  }
   return {
     e2e: cases.filter((x) => x.level === 'e2e').length,
     unit: cases.filter((x) => x.level === 'unit').length,
@@ -3201,7 +3192,8 @@ function jrnTestFacts(refs) {
     observed: cases.filter((x) => x.evidence === 'observed').length,
     runLevel: all.length - cases.length,
     total: cases.length,
-    run,
+    run: null,
+    verdict: null,
   };
 }
 /**
@@ -3221,7 +3213,9 @@ export function jrnFoldFacts(cov) {
     e2e, unit, integration, observed: n(k.observed, c.observed), runLevel: n(k.runReports, c.runLevel),
     total: k.tests ? k.tests.n : e2e + unit + integration,
     evidenceWord: cov.evidenceWord || null, counted: cov.counted || null, observation: cov.observation || null,
-    chip: cov.chip || 'none', run: cov.run || null, note: cov.note,
+    // the cell's one verdict (core `testVerdict`): the word, its own run's status, every case by its run
+    verdict: cov.verdict || null,
+    chip: cov.chip || 'none', run: cov.run || null, note: cov.note, freshness: cov.freshness || null,
   };
 }
 /** The same facts as the server already folded them for a whole scope — read, never recomputed.
@@ -3231,14 +3225,12 @@ function jrnScopeTestFacts(cov) { return jrnFoldFacts(cov); }
  * @group Journey view */
 export function jrnStepTestFacts(i) {
   const s = (S.JOURNEY && S.JOURNEY.steps[i]) || {};
-  if (s.coverage && s.coverage.evidenceWord) {
-    const f = jrnFoldFacts(s.coverage);
-    // a step carries its cases as refs; the fold's run is the covering tests' own
-    if (!f.run) f.run = jrnTestFacts(s.coverage.tests || []).run;
-    return f;
-  }
+  if (s.coverage && s.coverage.evidenceWord) return jrnFoldFacts(s.coverage);
   const direct = (s.coverage && s.coverage.tests) || [];
-  return jrnTestFacts(direct.length ? direct : (Array.isArray(s.coverageVia) ? s.coverageVia : []));
+  const f = jrnTestFacts(direct.length ? direct : (Array.isArray(s.coverageVia) ? s.coverageVia : []));
+  // a table's accessors' cases by their own runs, counted in core
+  if (!direct.length && s.coverageViaRuns) f.verdict = { runs: s.coverageViaRuns };
+  return f;
 }
 /** One action's facts: the core's slim entry for it (`coverage.moments[i][k]`), or — on an older server — every test reaching a step inside it.
  * @group Journey view */
@@ -3292,20 +3284,44 @@ function jrnFootWiderHtml(wider) {
   return '<div class="line jrn-twider" data-scope="' + esc(k.scope) + '"' + tipAttrs({ key: 'journey.tests.widerScope' }) + '>'
     + esc(t('journey.tests.widerScope')).replace('{n}', () => jrnCountedHtml(k, { noFocus: true })) + '</div>';
 }
-/** The covering tests' own last run as a line of its own — what it said, when, and whether the code has moved since.
- * It is **their** run, labelled so: the run behind the evidence word is the observation, printed beside the word.
+/**
+ * The covering tests' own last runs as a line of its own: how many cases, as a
+ * number whose tip breaks them down by what each one's run said (core
+ * `testVerdict().runs`, a breakdown that sums), and the runner projects. It is
+ * **never** a verdict: the cell's one verdict is the evidence word beside it,
+ * and printing the weakest run here put *skipped* under *passed, by its own
+ * declaration* for one skipped case among 145 (swarm 2026-10-05, finding 1).
  * @group Journey view */
-export function jrnRunLineHtml(run) {
-  if (!run) return '';
-  // the verdict keeps its chip (a shape and a word), so the line beside it is
-  // the other two facts of `tests.run.line` and never repeats the first
-  const status = JRN_FOOT_ST + esc(run.status) + '" title="' + esc(def('tests.run.' + run.status) || '') + '">' + esc(t('tests.run.' + run.status)) + '</span>';
-  const when = [(run.at || '').slice(0, 10), t('tests.freshness.' + (run.freshness || 'unknown'))].filter(Boolean).join(' · ');
-  return '<div class="line"><span class="hud-label"' + tipAttrs({ key: 'journey.tests.theirRun' }) + '>' + esc(t('journey.tests.theirRun')) + '</span>' + status
-    + '<span class="rl">' + esc(when) + '</span>'
+export function jrnRunLineHtml(facts) {
+  const runs = facts && facts.verdict && facts.verdict.runs;
+  if (!runs || !runs.n) return '';
+  const run = facts.run;
+  return '<div class="line jrn-runs"><span class="hud-label"' + tipAttrs({ key: 'journey.tests.theirRuns' }) + '>' + esc(t('journey.tests.theirRuns')) + '</span>'
+    + jrnCountedHtml(runs, { noFocus: true, cls: 'rl' })
     // its own sentence: beside the freshness it read as one ungrammatical phrase (round 2)
-    + (run.projects && run.projects.length ? '<span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>' + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span>' : '')
+    + (run && run.projects && run.projects.length ? '<span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>' + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span>' : '')
     + '</div>';
+}
+/** The foot's *open the list* door, scoped — '' where the foot has no scope to keep.
+ * @group Journey view */
+function jrnCasesDoorHtml(scope) {
+  if (!scope) return '';
+  return '<div class="line jrn-cases"><a href="' + esc(jrnCasesHref(scope)) + '" title="' + esc(def('journey.tests.open') || '') + '">' + esc(t('journey.tests.open')) + '</a></div>';
+}
+/**
+ * The door from a foot to the cases it counts, keeping the foot's scope: the
+ * journey's screen (`seg`), one action in it (`seg` + `action`), or one step
+ * (`node`). The Tests page opens on exactly those cases, with the same verdict
+ * (swarm 2026-10-05: *open the list* landed on every case of every journey).
+ * @group Journey view
+ */
+export function jrnCasesHref(scope) {
+  const sc = scope || {};
+  const flow = S.JOURNEY && S.JOURNEY.entry && S.JOURNEY.entry.id;
+  if (sc.node) return '#/tests?node=' + encodeURIComponent(sc.node);
+  if (!flow) return '#/tests';
+  return '#/tests?flow=' + encodeURIComponent(flow)
+    + (sc.seg != null ? '&seg=' + sc.seg + (sc.action != null ? '&action=' + sc.action : '') : '');
 }
 /**
  * The run behind an evidence word, in words: who observed it — test cases a
@@ -3338,14 +3354,17 @@ function jrnEvidenceTip(el, a) {
   const rows = o ? [
     ['tip.journey.obs.by', jrnObsWho(o)],
     ['tip.journey.obs.when', (o.at || '').slice(0, 10)],
-    ['tip.journey.obs.verdict', 'tests.run.' + (o.status || 'unknown')],
+    // the cell's verdict (core `testVerdict().status`): none when a coverage report alone earned the word
+    ['tip.journey.obs.verdict', a.verdict ? (a.verdict.status ? 'tests.run.' + a.verdict.status : '') : o.by === 'runs' ? '' : 'tests.run.' + (o.status || 'unknown')],
     ['tip.journey.obs.since', o.freshness === 'changed' && o.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + (o.freshness || 'unknown')],
   ].filter((r) => r[1]) : [['tip.journey.obs.by', 'journey.obs.none']];
   const biz = currentLens() === 'business';
   return '<div class="tip-h">' + esc(t(ev.key)) + '</div>'
     + (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '')
     + (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '')
-    + tableTip({ caption: 'tip.journey.obs.head', rows });
+    + tableTip({ caption: 'tip.journey.obs.head', rows })
+    // *stale* as a comparison: the sentence that names the run's side and the code's (core freshness.ts)
+    + (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '');
 }
 registerTip('jrnEvidence', jrnEvidenceTip);
 /** The evidence chip: the core's word, its class for the shape, and its tip.
@@ -3354,7 +3373,7 @@ export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
-  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null } }) + '>'
+  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
     + esc(t(ev.key)) + '</span>';
 }
@@ -3410,7 +3429,7 @@ export function jrnTestsFootHtml(facts, opts) {
     const runKey = ev.biz || (facts.chip === 'observed-stale' ? 'journey.biz.testsRun.stale' : 'journey.biz.testsRun.none');
     return '<div class="jrn-tfoot"><div class="line">' + chip + '</div>'
       + jrnFootScopeHtml(facts) + '<div class="line biz">' + esc(t('journey.biz.tests')).replace('{n}', () => num(k.tests, facts.total)).replace('{e2e}', () => num(k.e2e, facts.e2e))
-      + ' ' + esc(t(runKey)) + '</div>' + jrnImpactDoorHtml(o.impact) + '</div>';
+      + ' ' + esc(t(runKey)) + '</div>' + jrnCasesDoorHtml(o.cases) + jrnImpactDoorHtml(o.impact) + '</div>';
   }
   const obs = jrnObsText(facts);
   return '<div class="jrn-tfoot">'
@@ -3418,8 +3437,8 @@ export function jrnTestsFootHtml(facts, opts) {
     + jrnFootScopeHtml(facts) + '<div class="line"><span class="cnt">'
     + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
       .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
-    + jrnRunLineHtml(facts.run)
-    + (o.open ? '<div class="line"><a href="#/tests" title="' + esc(def('journey.tests.open') || '') + '">' + esc(t('journey.tests.open')) + '</a></div>' : '')
+    + jrnRunLineHtml(facts)
+    + jrnCasesDoorHtml(o.cases)
     + jrnImpactDoorHtml(o.impact) + '</div>';
 }
 /**
@@ -3433,7 +3452,8 @@ export function jrnTestsFootHtml(facts, opts) {
 function jrnSheetVerifiedHtml(sg, mo) {
   const cov = S.JOURNEY.summary && S.JOURNEY.summary.coverage;
   if (!cov) return '<span class="jrn-mk none" title="' + esc(t('journey.noTestsSub')) + '">' + sym('absent') + esc(t('journey.noTests')) + '</span>';
-  return jrnTestsFootHtml(jrnActionTestFacts(sg, mo), {});
+  const k = (sg.moments || []).indexOf(mo);
+  return jrnTestsFootHtml(jrnActionTestFacts(sg, mo), { cases: { seg: sg.index, action: k >= 0 ? k : mo.index } });
 }
 /**
  * One cell: the layer's part in one action. The user layer draws the moment's
@@ -3559,7 +3579,13 @@ function jrnSheetHtml(sum) {
     html += jrnSheetScreenHtml(sg, at, span);
     at += span;
   });
-  html += '<div class="jrn-slane corner"><span class="hud-label">' + esc(t('journey.sheetCorner')) + '</span></div>'
+  // the corner names what a column is — a stop — and counts them with the core's
+  // own number (`counted.actionStops`, the drill's `stop n of t`), so the columns
+  // and the number above them are one count, not the header's actions
+  const stops = sum.counted && sum.counted.actionStops;
+  const cornerKey = currentLens() === 'business' ? 'journey.biz.sheetCorner' : 'journey.sheetCorner';
+  html += '<div class="jrn-slane corner"><span class="hud-label"' + tipAttrs({ key: cornerKey, noFocus: true }) + '>' + esc(t(cornerKey)) + '</span>'
+    + (stops && stops.n === cols.length ? '<span class="sub">' + jrnCountedHtml(stops, { num: false, noFocus: true }) + '</span>' : '') + '</div>'
     + cols.map(jrnSheetHeadHtml).join('');
   sh.layers.forEach((layer, li) => {
     html += '<div class="jrn-slane ' + esc(layer.cls || '') + '"><span class="hud-label">' + esc(layer.label) + '</span>'
@@ -3971,7 +3997,7 @@ function jrnStoryboardHtml(sum) {
   const desc = sum.business.description || '';
   return '<div class="jrn-story">'
     + (desc || docs.length ? '<div class="jrn-story-intro">'
-      + (desc ? '<p class="jrn-story-blurb">' + esc(desc) + '</p>' : '')
+      + (desc && proseHtml(desc) ? '<p class="jrn-story-blurb">' + proseHtml(desc) + '</p>' : '')
       + '<div class="jrn-story-src"><span class="hud-label">' + esc(t('journey.story.ownWords')) + '</span>'
       + (docs.length ? '<span class="dsg-docs">' + docs.join('') + '</span>' : '') + '</div></div>' : '')
     + jrnStoryLinksHtml(sum)
@@ -4120,6 +4146,9 @@ export function renderJourney(data) {
   const storyEl = document.getElementById('jrn-storyline');
   if (storyEl) storyEl.innerHTML = '';
   if (isFlow && entry.id) jrnFillOrg(entry.id);
+  // the status lifecycle of each record the journey reaches, read from the code
+  const lcEl = document.getElementById('jrn-lifecycle');
+  if (lcEl) lcEl.innerHTML = jrnLifecycleHtml(data);
   // the trackers' work on this journey, when a work source is configured and anything is linked
   fillJourneyWork(entry);
   const ls = document.getElementById('jrn-layoutsw');
@@ -4349,6 +4378,19 @@ function jrnFillStoryline(tree, entryId) {
     + '</span>';
 }
 /**
+ * The journey header's status lifecycle: one strip per record whose statuses the code declares and
+ * that this journey moves (at most two, the rest counted) (`/api/journey` → `lifecycles`, core `journeyLifecycles`) — the statuses in declared
+ * order, each move some code makes as a door to its writer, the moves this journey makes lit.
+ * `''` when no record the journey reaches declares its statuses.
+ * @group Journey view
+ * @business Shows the statuses a record goes through and which part of the system moves it to each one.
+ */
+export function jrnLifecycleHtml(data) {
+  const { shown, more } = headerLifecycles(data && data.lifecycles);
+  return shown.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join('')
+    + (more ? '<span class="lc-more"' + defAttrs('lifecycle.more') + '>' + esc(t('lifecycle.more').replace('{n}', more)) + '</span>' : '');
+}
+/**
  * The header count line: five named groups instead of a run of fourteen counts
  * (pass swarm 2026-09-25 — the staff engineer's *"a run-on of 14 counts"*, and
  * every reviewer's *"none of them names its scope"*). Each group prints one
@@ -4404,12 +4446,14 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
   // built, so no word about it is a claim this flow can earn (blocker 2)
   const evHtml = cov && cov.sharedEvidence
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
+    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
   const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
   g('g-tests', [
     jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }),
     evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
+    // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)
+    cov && !cov.sharedEvidence ? freshLineHtml(cov.freshness, 'jrn-fresh') : '',
   ]);
   // the walk, in the code lens only: its units are a developer's
   if (lens === 'code') {
@@ -4445,7 +4489,7 @@ function jrnCutChip(data, cnt) {
   // the chip is a button (it opens the list); its number carries the tip — what a
   // cut point is, over the journey, split by the budget that ran out
   const c = sum0Cut(data, n, by);
-  el.innerHTML = sym('warning') + esc(t('journey.cutPoints')).replace('{n}', () => '<span class="jrn-num"' + tipAttrs({ number: c, noFocus: true }) + '>' + n + '</span>');
+  el.innerHTML = sym('warning') + esc(t(countKey('journey.cutPoints', n))).replace('{n}', () => '<span class="jrn-num"' + tipAttrs({ number: c, noFocus: true }) + '>' + n + '</span>');
   el.removeAttribute('title');
   jrnCutListFill(data.summary, cnt);
 }
@@ -4512,7 +4556,7 @@ function jrnCutListFill(sum, cnt) {
   const rows = jrnCutRows(sum);
   const by = {};
   rows.forEach((r) => { (by[r.reason] = by[r.reason] || []).push(r); });
-  const head = t('journey.cutPoints').replace('{n}', n);
+  const head = t(countKey('journey.cutPoints', n)).replace('{n}', n);
   d.setAttribute('aria-label', head);
   d.innerHTML = '<div class="jrn-fkp-head"><span class="hud-label">' + sym('warning') + ' ' + esc(head) + '</span>'
     + '<button class="x" onclick="jrnToggleCuts(false)" aria-label="Close">✕</button></div>'
@@ -4571,7 +4615,7 @@ export function jrnContractHtml(n) {
   const statusKey = c.status === 'both' ? 'apis.status.both' : c.status === 'spec-only' ? 'apis.status.specOnly'
     : c.status === 'declared' ? 'apis.status.declared' : c.status === 'code-only' ? 'apis.status.codeOnly' : 'apis.status.implemented';
   let out = '<div class="jrn-contract-card"><span class="hd">' + sym('api') + esc(t('journey.contractHead')) + '</span>';
-  if (c.summary || c.description) out += row(t('journey.contract.does'), esc(c.description || c.summary));
+  if (c.summary || c.description) out += row(t('journey.contract.does'), proseHtml(c.description || c.summary));
   if ((c.security || []).length) out += row(t('journey.contract.requires'), (c.security || []).map((x) => sym('lock') + esc(x)).join(' '));
   const ret = (c.responses || []).filter((r) => /^2/.test(String(r.status)));
   if (ret.length) out += row(t('journey.contract.returns'), ret.map((r) => '<code>' + esc(r.status + (r.schema ? ' ' + r.schema : '')) + '</code>').join(' '));
@@ -4771,6 +4815,34 @@ export function jrnActionStep(d) {
 
 // ── impact rings on the sheet (B5.4 · dependency-impact §4.3) ────
 /**
+ * The stop a part of the walk sits in — its column on the Sheet, its stop on the
+ * drill's rail: `{ n, t }` (1-based, of the journey's stops), or null when the part
+ * belongs to no stop (start-up work, a part before the first screen). A part the
+ * band does not draw takes the stop of the nearest drawn part above it.
+ *
+ * One position, one word (swarm 2026-10-05, finding 3): the drawer used to print
+ * the walk's own index (`STEP 232`), a number no other surface shows; the stop is
+ * the number the Sheet's column, the drill's rail and the storyboard all print.
+ * @group Journey view
+ */
+export function jrnStopOf(order) {
+  const sum = S.JOURNEY && S.JOURNEY.summary;
+  if (!sum || order == null || order < 0) return null;
+  const find = (o) => { for (const sg of sum.segments) { const m = sg.markers.find((x) => x.stepOrder === o); if (m) return { sg, m }; } return null; };
+  let cur = order, hit = find(cur);
+  const parent = S.JRN_TREE && S.JRN_TREE.parent;
+  for (let guard = 0; !hit && parent && cur != null && cur >= 0 && guard < 64; guard++) { cur = parent[cur]; hit = cur != null && cur >= 0 ? find(cur) : null; }
+  if (!hit || hit.m.moment == null) return null;
+  const cols = jrnSheetModel(sum).cols;
+  const at = cols.findIndex((c) => c.sg === hit.sg && c.mo.index === hit.m.moment);
+  return at < 0 ? null : { n: at + 1, t: cols.length };
+}
+/** `stop n of t` for a part of the walk, or `''` when it sits in no stop. @group Journey view */
+export function jrnStopText(order) {
+  const st = jrnStopOf(order);
+  return st ? t('journey.insp.stopOf').replace('{n}', st.n).replace('{t}', st.t) : '';
+}
+/**
  * The step a node is drawn at, so an impact row can jump to it instead of
  * re-seeding the panel. The first step that stands on the node wins — a node
  * the walk met several times is one thing, and the earliest place it was met
@@ -4873,4 +4945,4 @@ async function jrnStoryPicture() {
 }
 registerExport('storyboard', jrnStoryPicture);
 
-expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf, jrnGateExpand });
+expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf });

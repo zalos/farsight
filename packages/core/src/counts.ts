@@ -76,6 +76,7 @@ export const COUNT_SCOPES = [
   'count.scope.persona',    // the journeys shown under one persona (core journeys.ts) — a journey for two personas is in each
   'count.scope.group',      // the journeys of one group under one persona (core journeys.ts)
   'count.scope.storyline',  // the journeys one storyline chains, each once (core journeys.ts)
+  'count.scope.gate',       // one gate: the gate itself and the calls a request goes through to meet it (core gates.ts)
 ] as const;
 export type CountScope = typeof COUNT_SCOPES[number];
 

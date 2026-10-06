@@ -479,3 +479,14 @@ test('captured: the ERP read, written and reached on finalize is one data node t
   assert.deepEqual([erp[0].store.name, erp[0].store.kind], ['Example ERP', 'erp']);
   assert.deepEqual(storesOf(erpModel).map((s: AnyRec) => s.name + ' · ' + s.kind), ['Invoice DB · sql', 'Example ERP · erp']);
 });
+
+test('storeShownName: the business register leaves out an engine read off a driver, never a declared name', async () => {
+  const { storeShownName } = await import(join(appDir, 'lib', 'map-model.js'));
+  // swarm 2026-10-05: *Postgres · database record* was a word a product owner had to look up
+  assert.equal(storeShownName({ name: 'Postgres', engine: 'postgres', via: 'sdk' }, true), '');
+  assert.equal(storeShownName({ name: 'Postgres', engine: 'postgres', via: 'sdk' }, false), 'Postgres');
+  assert.equal(storeShownName({ name: 'Invoice DB', engine: 'postgres', via: 'config' }, true), 'Invoice DB', 'a name the settings declare stays');
+  assert.equal(storeShownName({ name: 'Business Central', kind: 'erp', via: 'config' }, true), 'Business Central');
+  assert.equal(storeShownName({ name: 'Blob Storage', kind: 'files', via: 'sdk' }, true), 'Blob Storage', 'no engine: a product name');
+  assert.equal(storeShownName(null, true), '');
+});

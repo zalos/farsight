@@ -5,18 +5,19 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename, sep } from 'node:path';
 import {
-  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, resolveEntry, buildIndex, categorizeBranch, SnapshotDb, STRINGS,
+  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, journeyLifecycles, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown,
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
-  testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
+  testsSurface, testDetail, stepCoverage, verifiedThrough, cellCoverage, caseWord, viaRuns, testsIdentity, testsMatrixV1, testsMatrixCsv,
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts,
+  counted, journeyTree, configCounts, gateCard,
 } from '@farsight/core';
-import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
-import { refuseRequest } from './guard.js';
+import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
+import { refuseRequest, refuseWrite } from './guard.js';
+import type { ReadOnlyWhy } from './guard.js';
 import { folded, scopeKey, leanMetric, leanCoverage, leanJourneyRow } from './folds.js';
 import { isSecretRef } from '@farsight/work';
 import { writeSpine, syncWork, workSourcesOf, keyOptionsOf, handleWorkRoute } from './work.js';
@@ -278,7 +279,7 @@ function loadJourneyGraph(graphPath: string): JourneyGraph {
     mtimeMs,
     roots: data.roots ?? {},
     meta: data.meta ?? {},
-    index: buildIndex(nodes, edges),
+    index: (() => { const ix = buildIndex(nodes, edges); setFreshnessMeta(ix, data.meta); return ix; })(),
     edgesById: new Map(edges.map((e) => [e.id, e])),
   };
   return journeyGraphCache;
@@ -354,7 +355,11 @@ function enrichStep(step: JourneyStep, g: JourneyGraph, fileCache: Map<string, s
     // What reaches its accessors is the evidence it has: named, capped, and
     // carrying its own total so the cap is visible rather than silent (B4.2).
     const via = verifiedThrough(g.index, step.nodeId);
-    if (via.length) { out.coverageVia = via.slice(0, VIA_CAP); out.coverageViaCount = via.length; }
+    if (via.length) {
+      out.coverageVia = via.slice(0, VIA_CAP); out.coverageViaCount = via.length;
+      // the accessors' cases by their own runs — counted in core, so the foot prints no verdict of its own
+      out.coverageViaRuns = viaRuns(via);
+    }
   }
 
   if (step.via === 'reads' || step.via === 'writes') {
@@ -745,7 +750,14 @@ function testsEvidence(meta: Record<string, TestsMeta> | undefined, scope: Set<s
   return { ...(anyReports ? { reports } : {}), ...(anyGaps ? { gaps } : {}) };
 }
 
-export function serveGraph(graphPath: string, port: number, workspaceDir = process.cwd()): void {
+/** How a server was started beyond its graph and port. */
+export interface ServeOptions {
+  /** refuse every write route (settings, sync, work items) and say so on `/api/version` — `--read-only`, or `'as-of'` for a snapshot */
+  readOnly?: ReadOnlyWhy | null;
+}
+
+export function serveGraph(graphPath: string, port: number, workspaceDir = process.cwd(), opts: ServeOptions = {}): void {
+  const readOnly: ReadOnlyWhy | null = opts.readOnly ?? null;
   const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
   const ws = resolve(workspaceDir);
 
@@ -780,6 +792,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     // loopback names only (DNS rebinding), and no state change from another site (CSRF) — guard.ts
     const refused = refuseRequest(req);
     if (refused) return send(403, JSON.stringify({ error: refused }));
+    // a read-only session refuses what it says it refuses (guard.ts refuseWrite)
+    const roRefused = refuseWrite(readOnly, req.method, url);
+    if (roRefused) return send(403, JSON.stringify({ error: roRefused, readOnly }));
 
     if (url === '/' || url === '/index.html') {
       // frames: only this server and the Storybooks the graph (or a source's settings) recorded —
@@ -834,7 +849,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // plus: is a newer build installed than this process runs, and does the graph match — with the steps to fix either
       const install = installState();
       const currency = currencyAdvice({ role: 'server', running: buildInfo(), install, graph: { farsight: m.farsight, generatedAt: m.generatedAt, sync: m.sync } });
-      return send(200, JSON.stringify({ farsight: buildInfo(), install, currency, graph: { generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: m.graphPath, farsight: m.farsight } }));
+      return send(200, JSON.stringify({ farsight: buildInfo(), install, currency, session: { readOnly: !!readOnly, ...(readOnly ? { why: readOnly } : {}) }, graph: { generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: m.graphPath, farsight: m.farsight } }));
     }
     if ((url === '/api/stories' || url.startsWith('/api/stories?')) && req.method === 'GET') {
       // the Storybooks the graph recorded, whether each answered, how its index mapped onto
@@ -904,6 +919,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         screens: screens.map(enrichNode),
         // the three-band blueprint (what the user sees · business · what the system does) — same fold the MCP prints
         summary: journeySummary(g.index, jr, screens),
+        // the records the walk reaches whose statuses the code declares: statuses, moves, writers (core lifecycle.ts)
+        lifecycles: journeyLifecycles(g.index, jr),
         ...(withSteps ? { steps: jr.steps.map((s) => enrichStep(s, g, fileCache)) } : { stepsOmitted: jr.steps.length }),
         edges: jr.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
       }));
@@ -927,6 +944,18 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         ...(typeof node.loc.endLine === 'number' ? { endLine: node.loc.endLine } : {}),
         code, ...(sliced && sliced.codeTruncated ? { codeTruncated: true } : {}),
       }));
+    }
+    if ((url === '/api/gate' || url.startsWith('/api/gate?')) && req.method === 'GET') {
+      // one gate answered (swarm-fixes 2026-10-05, finding 4): what it is, the words somebody wrote, what it sits on,
+      // the calls a request goes through to meet it and the tests that reach them — core gateCard(), the same fold
+      // the MCP `gate` tool prints. Read-only; one answer per gate per index (folds.ts)
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const id = new URL(url, 'http://localhost').searchParams.get('node');
+      if (!id) return send(400, JSON.stringify({ error: 'missing ?node=<gate id>' }));
+      const g = loadJourneyGraph(graphPath);
+      const card = folded(g.index, 'gate', id, () => gateCard(g.index, id) ?? null, 64);
+      if (!card) return send(404, JSON.stringify({ error: g.index.byId.has(id) ? `${id} is not a gate or a rule` : `no node ${id} in this graph` }));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...card }));
     }
     // ── Tests surface (docs/proposals/tests-surface.md §3.4) ─────────────
     if (url.startsWith('/api/tests') && req.method === 'GET') {
@@ -956,11 +985,31 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const level = u.searchParams.get('level');
       const flow = u.searchParams.get('flow');
       const nodeId = u.searchParams.get('node');
+      // each case of a scoped answer carries its own word, by the scope's rule (core `caseWord`)
+      const withWords = (refs: CoverageTestRef[]) => refs.map((r) => ({ ...r, word: caseWord(r) }));
       // ?node= answers "what verifies this one thing" without walking the catalogue
       if (nodeId) {
         const node = g.index.byId.get(nodeId);
         if (!node) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${nodeId}` }));
-        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, node: enrichNode(node), coverage: stepCoverage(g.index, nodeId) }));
+        const coverage = stepCoverage(g.index, nodeId);
+        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, node: enrichNode(node), coverage, ...(coverage ? { cases: withWords(coverage.tests) } : {}) }));
+      }
+      // ?flow=&seg=n[&action=k] — one screen of a journey, or one action inside it: the cell a
+      // journey's door was opened from, with its cases (swarm 2026-10-05: the doors kept no scope)
+      const segArg = u.searchParams.get('seg');
+      if (flow && segArg != null) {
+        const entryNode = resolveEntry(g.index, flow, {});
+        if (!entryNode) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${flow}` }));
+        const jr = journey(g.index, entryNode.id);
+        const summary = journeySummary(g.index, jr, screensFor(g.index, entryNode.id));
+        const actionArg = u.searchParams.get('action');
+        const cell = cellCoverage(g.index, jr, summary, Number(segArg), actionArg != null ? Number(actionArg) : undefined);
+        if (!cell) return send(404, JSON.stringify({ error: `no ${actionArg != null ? 'action ' + actionArg + ' in ' : ''}screen ${segArg} of ${entryNode.id}` }));
+        return send(200, JSON.stringify({
+          generatedAt: g.meta.generatedAt, identity: testsIdentity(g.meta), flow: entryNode.id, flowName: entryNode.name,
+          seg: Number(segArg), ...(actionArg != null ? { action: Number(actionArg) } : {}), label: cell.label,
+          coverage: leanCoverage(cell.facts), cases: withWords(cell.facts.tests),
+        }));
       }
       // the level filter reaches the counts and tiles as well as the rows: under ?level=e2e
       // the header used to print every level's cases above e2e rows (pass swarm 2026-09-25)
@@ -970,12 +1019,15 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const resolved = flow ? resolveFlowRows(surface.journeys, flow) : undefined;
       // ?lean=1 — the same numbers without the per-node lists behind them (folds.ts); with ?flow= only the flow's coverage
       const lean = ['1', 'true'].includes(u.searchParams.get('lean') ?? '');
+      const wantCases = ['1', 'true'].includes(u.searchParams.get('cases') ?? '');
       if (lean && flow) {
         const row = resolved?.rows[0];
         return send(200, JSON.stringify({
           generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', identity: testsIdentity(g.meta), flow, lean: true,
           ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
-          ...(row ? { coverage: leanCoverage(row.coverage) } : {}),
+          ...(row ? { coverage: leanCoverage(row.coverage), flowName: row.name } : {}),
+          // ?cases=1 — the flow's cases, each with its own word: the Tests page opened from a journey's door
+          ...(row && wantCases ? { cases: withWords(row.coverage.tests) } : {}),
         }));
       }
       const filtered = {
@@ -998,6 +1050,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         // and the gaps as data — absent when the graph recorded none, `[]` when it recorded nothing
         ...testsEvidence(g.meta.tests, scope),
         ...(flowRow ? { coverage: lean ? leanCoverage(flowRow.coverage) : flowRow.coverage } : {}),
+        ...(flowRow && wantCases ? { cases: withWords(flowRow.coverage.tests) } : {}),
       }));
     }
     // ── Design surface (docs/proposals/design-source.md) ─────────────────

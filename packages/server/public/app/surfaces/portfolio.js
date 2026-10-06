@@ -16,6 +16,7 @@ import { t, def, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
 import { storiesCatalogueHtml } from '../stories.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
+import { tipAttrs } from '../lib/tooltip.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapEnabled } from './map.js';
 import { loadJourneyTree } from '../lib/journeys-tree.js';
@@ -321,7 +322,9 @@ function testedCell(row) {
   // ten flows (visual swarm 2026-09-24, and the acceptance's ranked item 3)
   const ev = evidenceWord(c);
   const cls = ev.cls;
-  return '<span class="' + EV_CLS[cls] + '"' + tipOf(ev.key) + '>'
+  // the row's tip is the journey chip's: the word, the run behind it, and — where the word
+  // says *stale* or the run is current — the freshness sentence naming both sides (finding 2)
+  return '<span class="' + EV_CLS[cls] + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: c.observation || null, fresh: c.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : '') + esc(t(ev.key)) + '</span>'
     + levels;
 }

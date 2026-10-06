@@ -147,8 +147,9 @@ function fold(g = threeScreens()): JourneySummary {
 test('every count the journey fold hands out is sound: known words, a define, a listed scope, a partition', () => {
   const sum = fold();
   const n = assertSound(sum.counted, 'journey') + sum.segments.reduce((a, sg) => a + assertSound(sg.counted, `segment ${sg.index}`), 0);
-  // 20 since the data-stores pass: `stores` joined the header counts; 21 since the map pass: `screensReached`
-  assert.equal(n, 21 + 7 * sum.segments.length, 'every header count and every screen count is typed');
+  // 20 since the data-stores pass: `stores` joined the header counts; 21 since the map pass: `screensReached`;
+  // 22 and 8 per screen since the gate card (swarm-fixes 2026-10-05): `configChecks`, counted apart from the gates
+  assert.equal(n, 22 + 8 * sum.segments.length, 'every header count and every screen count is typed');
   for (const sg of sum.segments) assert.ok(sg.counted, `segment ${sg.index} carries no typed counts`);
 });
 
@@ -195,6 +196,21 @@ test('actions and stops are two numbers with two names — and the stops contain
   }
   // the drill's caption names its own unit, not the header's
   assert.match(STRINGS['journey.drill.actionOf']!.professional, /^stop \{n\} of \{t\}/);
+});
+
+test('the Sheet\'s columns are the stops, and actions + again + declared + nothing to call = stops', () => {
+  // swarm 2026-10-05 (finding 3): *5 actions* above a Sheet of 6 numbered columns, *15 actions*
+  // beside *stop 1 of 23*. The columns are the stops (`counted.actionStops`, the number the
+  // Sheet's corner prints); the header's actions are one named part of them.
+  const sum = fold();
+  const q = sum.counted!;
+  const columns = sum.segments.reduce((a, sg) => a + sg.moments.length, 0);
+  assert.equal(q.actionStops.n, columns, 'the number above the Sheet is its columns');
+  const [calledStops, declaredStops, noCall] = q.actionStops.breakdown!.map((p) => p.n);
+  assert.equal(calledStops + declaredStops + noCall, columns, 'the stops\' split adds up to the columns');
+  assert.equal(q.actions.n + q.again.n + declaredStops + noCall, columns,
+    'the header\'s actions reconcile with the columns through named parts — never a silent difference');
+  assert.ok(q.actions.n < columns, 'more columns than actions here, which is why they carry two names');
 });
 
 test('conditions not in plain language are one number in every register, and the screens add up to it', () => {
@@ -387,7 +403,7 @@ test('countedLine says each scope once, before the numbers it scopes, in the len
   const q = fold().counted!;
   const code = countedLine([q.screens, q.actions, q.actionStops, q.steps], { lens: 'code' });
   assert.match(code, /^across this journey: 3 screens · 2 actions · 4 stops \(/);
-  assert.match(code, /steps/);
+  assert.match(code, /visits/);
   const biz = countedLine([q.screens, q.actions, q.steps], { lens: 'business' });
   assert.equal(BIZ_BANNED.test(biz), false, `the business line counts in a developer's unit: ${biz}`);
   assert.match(biz, /2 things the user can do/);

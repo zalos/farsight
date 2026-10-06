@@ -542,8 +542,8 @@ function onFocusIn(e) {
 
 /**
  * The tip's keys, asked **first** by keymap.js's one listener: Esc closes a
- * tip before anything else closes; `?` (and Enter / Space on a trigger that is
- * not a button) opens the focused trigger's tip; Tab walks from a trigger into
+ * tip before anything else closes; Enter / Space on a trigger that is not a
+ * button opens the focused trigger's tip (`?` is the keymap's alone); Tab walks from a trigger into
  * its rich tip's links and back out. Returns true when it handled the key.
  */
 export function tipKeydown(e) {
@@ -556,10 +556,9 @@ export function tipKeydown(e) {
   const a = document.activeElement;
   if (a && a.matches && a.matches(TIP_SELECTOR) && !(layer && layer.contains(a))) {
     const enter = (e.key === 'Enter' || e.key === ' ') && !isInteractive(a);
-    // in a hover-mode container (the Map) `?` is the surface's own key — its legend — and a focused trigger's tip
-    // shows on hover and focus there, never on `?` (round 2: `?` on a focused cover opened its tip, not the legend)
-    if (e.key === '?' && hoverMode(a)) return false;
-    if (e.key === '?' || enter) {
+    // `?` is the keymap's, everywhere (swarm 2026-10-05: on a focused term it opened that term's tip, on the Map the
+    // legend, elsewhere the keymap): a focused trigger's tip opens on Enter / Space, on click, and on hover
+    if (enter) {
       e.preventDefault();
       if (st.el === a) hideTip();
       else openFor(a, { pinned: true, via: 'key' });
@@ -604,7 +603,15 @@ function onMutate() {
     if (byId && byId.matches(TIP_SELECTOR) && (byId.dataset.tipId || '') === (old.dataset.tipId || '')) again = byId;
   }
   if (!again) again = [...document.querySelectorAll(TIP_SELECTOR)].find((n) => sigOf(n) === sig && visible(n)) || null;
-  if (!again) { hideTip(); return; }
+  if (!again) {
+    // a card opened on an element that is not itself a trigger (the gate card, lib/gate-card.js) names its anchor:
+    // a redraw that put the same anchor back moves the open card onto it, its content untouched
+    const key = old.getAttribute && old.getAttribute('data-tip-anchor');
+    const same = key ? [...document.querySelectorAll('[data-tip-anchor]')].find((n) => n.getAttribute('data-tip-anchor') === key && visible(n)) : null;
+    if (same) { st.el = same; st.sig = sigOf(same); same.classList.add('tip-on'); position(); return; }
+    hideTip();
+    return;
+  }
   const keep = { pinned: st.pinned, via: st.via };
   st.el = null; st.describedBy = null;
   if (!openFor(again, keep)) hideTip();

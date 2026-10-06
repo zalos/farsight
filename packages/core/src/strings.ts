@@ -24,6 +24,9 @@ import { DEPS_STRINGS } from './strings-deps.js';
 import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { DOOR_STRINGS } from './strings-doors.js';
+import { GATE_STRINGS } from './strings-gate.js';
+import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
+import { CHROME_STRINGS } from './strings-chrome.js';
 import { EXPORT_STRINGS } from './strings-export.js';
 
 export type Register = 'hud' | 'professional';
@@ -68,7 +71,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'nav.journeys': {
     hud: 'Journeys',
     professional: 'Journeys',
-    define: 'End-to-end walks of what the code does for one trigger — every step, gate and decision in order.',
+    define: 'End-to-end walks of what the code does for one trigger — every screen, call, gate and decision in order.',
   },
   'nav.codemap': {
     hud: 'World Map',
@@ -102,6 +105,12 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
+  ...GATE_STRINGS,
+  // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)
+  ...LIFECYCLE_STRINGS,
+  // the chrome's words live in strings-chrome.ts (the read-only session, the legend's key, Esc on a journey)
+  ...CHROME_STRINGS,
   // export's words live in strings-export.ts (export.*, the saved picture's footer, the pinned link and its note)
   ...EXPORT_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
@@ -188,37 +197,37 @@ export const STRINGS: Record<string, StringEntry> = {
 
   // ── the 12 business symbols (words; drawings live in the SVG sprite) ────
   'sym.start': same('START'),
-  'sym.step': same('STEP'),
+  'sym.step': same('FUNCTION'),
   'sym.decision': same('DECISION'),
-  'sym.gate': same('GATE', 'A permission or validation check that must pass before the step runs. Amber padlock, always.'),
+  'sym.gate': same('GATE', 'A permission or validation check that must pass before the work behind it runs. Amber padlock, always.'),
   'sym.record': same('RECORD'),
   'sym.message': same('MESSAGE'),
   'sym.external': same('EXTERNAL'),
   'sym.screen': same('SCREEN'),
-  'sym.human': same('HUMAN STEP'),
+  'sym.human': same('HUMAN TASK'),
   'sym.automation': same('AUTOMATION'),
-  'sym.interchange': same('INTERCHANGE', 'A step shared with at least one other journey.'),
+  'sym.interchange': same('INTERCHANGE', 'A screen or call shared with at least one other journey.'),
   'sym.hotspot': same('HOTSPOT'),
 
   // ── keymap (published panel; keys bound centrally in app/keymap.js) ─────
   'key.b': {
     hud: 'Blast radius for the selected item',
     professional: 'Change impact — what uses this?',
-    define: 'Opens what uses the selected thing, by distance. Inside a journey it opens the answer for the open step. A path is not a claim that a change travels along it, so the question is "what uses this", never "what does this break".',
+    define: 'Opens what uses the selected thing, by distance. Inside a journey it opens the answer for the open part. A path is not a claim that a change travels along it, so the question is "what uses this", never "what does this break".',
   },
-  'key.jk': same('Next / previous journey step'),
+  'key.jk': same('Next / previous part of the open journey'),
   'key.f': same('Focus the selected item (again to clear)'),
   'key.cmdk': { hud: 'Fast travel', professional: 'Search' },
   'key.y': same('Copy a link to this view'),
   'key.help': same('Show this keymap'),
   'key.tip': same('Details of a dotted-underlined number or word',
-    'Click it, rest the pointer on it, or focus it and press ?. A number’s details say what it counts, what it counts over and where it came from. Esc closes them first.'),
+    'Click it, rest the pointer on it, or focus it and press Enter. A number’s details say what it counts, what it counts over and where it came from. Esc closes them first.'),
   'key.esc': same('Close the top panel'),
   'key.l': same('Rows / ladder in the journey band'),
   'key.v': same('Timeline / sheet / drill — the journey view'),
   'key.brackets': same('Previous / next action in the journey drill'),
   'key.d': same('Code pane in place / bottom / right'),
-  'key.t': same('Tests — the Tests surface, or the tests list of an open journey step', 'Outside a journey it opens the Tests surface; with a journey open it opens that step’s tests list. One key, one question: what proves this runs?'),
+  'key.t': same('Tests — the Tests surface, or the tests list of the open part of a journey', 'Outside a journey it opens the Tests surface; with a journey open it opens the open part’s tests list. One key, one question: what proves this runs?'),
   'keymap.title': same('Keymap'),
   'keymap.sub': same('Every shortcut also has a visible button — keys are the fast path, never the only path.'),
 
@@ -336,7 +345,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'impact.hops.label': {
     hud: 'range',
     professional: 'how far',
-    define: 'How many links out from the part asked about this answer walks. One is what uses it directly; each step further adds what uses those. Five is as far as it goes: past that, "reaches it through others" describes the whole application.',
+    define: 'How many links out from the part asked about this answer walks. One is what uses it directly; each link further adds what uses those. Five is as far as it goes: past that, "reaches it through others" describes the whole application.',
   },
   'impact.hops.button': same('walk {n} links out', 'Asks the same question again, this many links out. The choice rides in the link, so a copied link opens on the same answer.'),
   'impact.hops.buttonOne': one('walk 1 link out', 'impact.hops.button'),
@@ -398,7 +407,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.planned.step': same('does'),
   'journey.planned.returns': same('returns'),
   'journey.plannedCount': same('{n} planned',
-    'Steps walked from the contract rather than from code: the spec declares the operation and nothing implements it. Counted apart from the steps that exist.'),
+    'Parts walked from the contract rather than from code: the spec declares the operation and nothing implements it. Counted apart from the parts that exist.'),
   'journeys.pickerEmpty': same('No entry points in the current scope — routes, pages and @entrypoint-tagged functions appear here.'),
 
   // ── model hub panel ─────────────────────────────────────────────────────
@@ -523,9 +532,9 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.rules': same('Rules'),
   'journey.decisions': same('Decisions'),
   'journey.components': same('Components'),
-  'journey.countSteps': same('{n} steps',
-    'Nodes the walk visited, re-visits included — the walk’s own unit, not a count of anything a person does. On a cell it is that cell’s; on the header it is the journey’s.'),
-  'journey.countStepsOne': one('1 step', 'journey.countSteps'),
+  'journey.countSteps': same('{n} visits',
+    'Every time the walk through the code arrived at a part — a function, a component, a call, a gate — a second arrival at the same part counted again. The walk’s own unit, not a count of anything a person does, and not a position: a part has no number of its own. On a cell it is that cell’s; on the header it is the journey’s.'),
+  'journey.countStepsOne': one('1 visit', 'journey.countSteps'),
   // The same cell in the business register, which does not count in steps:
   // RULE 5 bans the word from `journey.biz.*` in both registers, so the lint
   // guards this pair where it could not guard `journey.countSteps` itself.
@@ -544,7 +553,7 @@ export const STRINGS: Record<string, StringEntry> = {
     'Places this journey can go differently that are drawn as a decision, counted once each across the journey. The business register draws only the ones somebody put in words and folds the rest into its not-written-in-plain-language sentence.'),
   'journey.countDecisionsOne': one('1 decision', 'journey.countDecisions'),
   'journey.kind.screen': same('screen'),
-  'journey.kind.step': same('step'),
+  'journey.kind.step': same('part'),
   'journey.kind.call': same('call'),
   'journey.kind.gate': same('gate'),
   'journey.kind.rule': same('rule'),
@@ -668,8 +677,8 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.decisionsFoldedOne': one('1 decision', 'journey.decisionsFolded'),
   'journey.decisionChip': same('the flow can branch here'),
   'journey.view.rows': same('Rows'),
-  'journey.view.ladder': same('Ladder', 'One segment turned on its side: systems as columns, time running down, one line per step — the sequence diagram behind the same walk.'),
-  'journey.moreSteps': same('{n} more steps'),
+  'journey.view.ladder': same('Ladder', 'One screen turned on its side: systems as columns, time running down, one line per part the walk visited — the sequence diagram behind the same walk.'),
+  'journey.moreSteps': same('{n} more', 'More parts the walk visited on this screen, below the ones shown. Open them to read the rest of the ladder.'),
   'journey.ladder.time': same('time'),
   // A screen's ladder draws the systems it uses; the ones after the last it uses
   // fold into one end column, named with the existing absence words (never a seventh).
@@ -698,7 +707,7 @@ export const STRINGS: Record<string, StringEntry> = {
   // a quiet mark on the button the current register opens in, so a reader who
   // lands somewhere unfamiliar can tell a default from a disappearance
   'journey.layoutDefault': same('Opens here in this register', 'Where a journey opens for the way you are reading: the storyboard for plain words, the sheet for both names, the timeline for code. Your own last choice is remembered and wins over that, and a shared link wins over both — every view stays one click away.'),
-  'journey.layout.drill': same('Drill', 'One action opened into its beats: the layers of the system down the side, an arrow from each beat to the next, and a panel that explains the selected step. An experiment — switched on per workspace in Settings.'),
+  'journey.layout.drill': same('Drill', 'One action opened into its beats: the layers of the system down the side, an arrow from each beat to the next, and a panel that explains the selected part. An experiment — switched on per workspace in Settings.'),
   // ── the action drill (the journey-timeline design reference 02-action-drill · behind the journeyDrill flag) ──
   'journey.beat.screen': same('the screen'),
   'journey.beat.browser': same('the browser'),
@@ -768,8 +777,8 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.insp.tests': same('Tests'),
   'journey.insp.beat': same('beat {n}'),
   'journey.insp.hint': same('click a box for its docs, contract, code, forks and tests'),
-  'journey.insp.noDocs': same('No authored description on this step — the code is the only source.'),
-  'journey.insp.noForks': same('No branch points recorded on this step.'),
+  'journey.insp.noDocs': same('No authored description on this part — the code is the only source.'),
+  'journey.insp.noForks': same('No branch points recorded on this part.'),
   'journey.insp.noContract': same('Not an API call — there is no contract here.'),
   'journey.insp.specNote': same('Expected shape, from the spec. No payload was captured; an observed response would be labelled as such.'),
   'journey.insp.params': same('parameters'),
@@ -777,16 +786,26 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.insp.required': same('required'),
   'journey.insp.responses': same('responses'),
   'journey.insp.security': same('requires'),
-  'journey.insp.gatesHere': same('gates on this step'),
+  'journey.insp.gatesHere': same('gates on this part'),
   'journey.insp.toGetHere': same('to get here'),
-  'journey.insp.noTestStep': same('no test reaches this step'),
+  'journey.insp.noTestStep': same('no test reaches this part'),
+  // The drawer's head names where the open part sits: the stop (the Sheet's column, the
+  // drill's rail), never the walk's own index — `STEP 232` was a number no other surface
+  // printed, beside a storyline header whose *step 2 of 6* meant something else.
+  'journey.insp.stopOf': same('stop {n} of {t}',
+    'The stop this part sits in: one stop each time the journey does something, numbered across the whole journey in the order the Sheet draws its columns and the drill walks its rail. The part itself has no number — it is one of the things that happen in that stop.'),
+  'journey.fork.jump': same('→ {name}', 'A part this path of the branch goes on to call. Click to open it on the journey.'),
+  'journey.fork.exits': same('exits (return or throw)', 'This path of the branch leaves the function: it returns or throws before calling anything the walk tracks.'),
+  'journey.fork.noCalls': same('no tracked calls', 'Nothing this path of the branch calls is a part the walk follows.'),
+  'journey.fork.mayExit': same('may exit', 'Somewhere in this branch the code can return or throw; which path does is not recorded.'),
   'journey.countActions': same('{n} actions',
     'Distinct things a person can do across this journey, counted once each. An action is one call to the API and the work behind it, so the call names the action: the same call reached again on a later screen is the same thing a person can do. It is counted here once and drawn there with ↺; how many of those second visits there are is counted beside it, as the actions that run again later.'),
   'journey.countActionsOne': one('1 action', 'journey.countActions'),
   'journey.countAgain': same('{n} of them run again later',
     'How many of this journey’s actions happen a second time, on a later screen — the same call, the same work behind it. Counted apart from the actions rather than added to them: adding them would count one thing a person can do twice. The actions plus this number is how many times an action is performed.'),
   'journey.countAgainOne': one('1 of them runs again later', 'journey.countAgain'),
-  'journey.sheetCorner': same('layer ↓ · action →'),
+  'journey.sheetCorner': same('layer ↓ · stop →', 'Each column is one stop: one time the journey does something, in order — the same stops the drill walks and numbers. The header counts actions, each thing a person can do once, so a second visit or a call only the design declares is a stop and not another action.'),
+  'journey.biz.sheetCorner': same('part of the system ↓ · stop →', 'Each column is one stop: one time the journey does something, in order. Down the side, the parts of the system that take part in it.'),
   // ── the code pane's dock: in place · bottom · right ──
   'journey.dockSwitch': same('Code pane'),
   'journey.dock.inline': same('In place', 'The contract or code opens under the row that owns the marker, inside the timeline.'),
@@ -832,10 +851,10 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.oneOf.how': same('matched by {technique} · {confidence} confidence', 'How the parser tied this one call to these implementations, and how sure it is. A guess is never drawn as a fact.'),
   'journey.oneOf.unknown': same('which one runs is not in the code — it is chosen as the app runs', 'Farsight reads source, never a run. Nothing in the code at this line says which implementation is wired in, so none is shown as the one that ran.'),
   'journey.countChoicesOne': one('1 place where one of several runs', 'journey.countChoices'),
-  'journey.countChoices': same('{n} places where one of several runs', 'Call sites with more than one implementation behind them. Each is drawn once; the steps count every candidate, as they count every re-visit.'),
+  'journey.countChoices': same('{n} places where one of several runs', 'Call sites with more than one implementation behind them. Each is drawn once; the visits count every candidate, as they count every re-visit.'),
   'journey.biz.oneOf': same('one of {n} ways this can run', 'Several pieces of the system can do this job, and one of them does it each time. Which one is not something this tool can tell from the code.'),
 
-  'journey.inside': same('{n} inside', 'The steps this part called, folded under it — open to drill down one level at a time. The spliced code view shows all of them in order.'),
+  'journey.inside': same('{n} inside', 'The parts this part called, folded under it — open to drill down one level at a time. The spliced code view shows all of them in order.'),
   'journey.schemaChip': same('{req} → {res}'),
   'journey.schemaOut': same('→ {res}'),
   'journey.fromSpec': same('spec', 'Declared in the contract — a status the code may still never return.'),
@@ -864,21 +883,22 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.retry': same('Try again'),
 
   // ── honest chrome (journey-views-pass-2026-09 §2.2) ────────────────────
-  'journey.cutPoints': same('{n} cut points', 'Subtrees the walk did not enter — the depth or step budget ran out there. The rest still walked. Click for the list.'),
+  'journey.cutPoints': same('{n} cut points', 'Subtrees the walk did not enter — the depth or visit budget ran out there. The rest still walked. Click for the list.'),
+  'journey.cutPointsOne': one('1 cut point', 'journey.cutPoints'),
   // The list behind the chip (B4.3). One row per cut, grouped by the budget
   // that ran out; the row says where the walk was standing when it stopped, so
   // a reader can go there. Re-visits are not in it — they were walked once and
   // are counted apart, which is why the chip's define names two budgets, not three.
-  'journey.cutPoint.row': same('under {parent} · action {a} of {screen}',
-    'Where the walk stopped short: the step it was following, and which action of which screen that was. Opens that step on the journey.'),
-  'journey.truncated': same('truncated at {cap}', 'The whole walk stopped at the step cap. Only then — never for a depth cut.'),
-  'journey.repeat': same('↺ already walked', 'A step walked earlier on this journey, drawn again as a ghost, not re-walked.'),
+  'journey.cutPoint.row': same('under {parent} · stop {a} of {screen}',
+    'Where the walk stopped short: the part it was following, and which stop of which screen that was. Opens that part on the journey.'),
+  'journey.truncated': same('truncated at {cap}', 'The whole walk stopped at the visit cap. Only then — never for a depth cut.'),
+  'journey.repeat': same('↺ already walked', 'A part walked earlier on this journey, drawn again as a ghost, not re-walked.'),
   'journey.cutReason.depth': same('depth ×{n}'),
   'journey.cutReason.repeat': same('repeat ×{n}'),
-  'journey.cutReason.steps': same('step budget ×{n}'),
+  'journey.cutReason.steps': same('visit budget ×{n}'),
   'journey.countCut': same('{n} cut',
     'Subtrees the walk did not follow, in this cell or on this screen. The header’s chip counts them for the whole journey and opens the list.'),
-  'journey.countRepeats': same('{n} repeats', 'Steps the walk had already run: shown once, not walked again.'),
+  'journey.countRepeats': same('{n} repeats', 'Parts the walk had already visited: shown once, not walked again.'),
   'journey.countRepeatsOne': one('1 repeat', 'journey.countRepeats'),
   'journey.notFollowed': same('{n} not followed'),
   'journey.untranslated': same('{n} technical conditions not translated',
@@ -941,7 +961,7 @@ export const STRINGS: Record<string, StringEntry> = {
   // survives only as the internal name of an action's column in the fold.
   'journey.unit.action': same('action', 'One thing the user does on a screen and everything it caused — one call to the API and the work behind it.'),
   'journey.unit.beat': same('beat', 'One hop inside an action, in request order: the person, the browser, the seam, the server, the transaction, the hand-offs, the answer.'),
-  'journey.unit.step': same('step', 'One node the walk visited, re-visits included. The word “step” is a developer’s unit and the business register never prints it; the parts themselves are counted there too, as “things happen here” — the same number, under words a reader of that register can use.'),
+  'journey.unit.step': same('visit', 'One arrival of the walk at a part of the code, re-visits included. A developer’s unit the business register never prints; the parts themselves are counted there too, as “things happen here” — the same number, under words a reader of that register can use. A visit is never a position: a journey’s place in a storyline has its own word, and a part sits in a stop.'),
   // What can stop or steer a journey — four kinds, never interchangeable.
   'journey.check.gate': { hud: 'gate', professional: 'guard', define: 'Who may pass — a function marked @guard, declared in config, or detected as an auth check. Its label is policy.' },
   'journey.check.rule': { hud: 'rule', professional: 'validation', define: 'What the data must look like — a schema on a route or a function. Environment schemas are not rules of a journey.' },
@@ -954,9 +974,9 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.countBuilt': same('{n} of {m} built',
     'How many of the screens this journey’s design names exist in code, of how many it names.'),
   'journey.countDeclaredOnly': same('{n} declared, not called',
-    'Operations this journey’s contract or design names that no code in it calls: either the action is a contract-derived planned step, or a screen’s manifest lists an operation no action made. Counted once each across the journey, and never added to the actions — declared is not built. The flow status table prints this number under these words too, from the same fold.'),
+    'Operations this journey’s contract or design names that no code in it calls: either the action is a contract-derived planned call, or a screen’s manifest lists an operation no action made. Counted once each across the journey, and never added to the actions — declared is not built. The flow status table prints this number under these words too, from the same fold.'),
   'journey.countSetup': same('{n} start-up',
-    'Steps that belong to the process starting up, not to this journey’s request — named once and never walked into an action.'),
+    'Parts that belong to the process starting up, not to this journey’s request — named once and never walked into an action.'),
   'journey.countAfterwards': same('{n} afterwards',
     'Work this journey registers that runs later, on its own: hooks and callbacks. Named, never walked, and never counted as part of the request.'),
   'journey.kind.action': same('action'),
@@ -989,7 +1009,7 @@ export const STRINGS: Record<string, StringEntry> = {
     'tests: {e2e} e2e · {unit} unit · {int} integration · {obs} observed',
     'Distinct test cases that reach this, counted per level. Integration is its own level and is never folded into unit; a coverage report is not a case and is counted on its own line.',
   ),
-  'journey.tests.open': same('open the list', 'Opens the Tests surface: every test this graph indexes, one row per journey, each with its own scope.'),
+  'journey.tests.open': same('open the list', 'Opens the Tests surface on the cases this cell counts — the same scope, the same evidence word — each case with its own last run.'),
   'journey.tests.listHint': same('↑↓ walk · ↵ opens the test'),
   'journey.tests.noneScreen': same('no test reaches this screen'),
   // One step, two scopes (story swarm 2026-09-25, finding 4): the action's Verified-by
@@ -1020,7 +1040,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.biz.testsRun.stale': same('A recorded run of these tests reached this code, and the code has changed since — evidence of the past, not of now.',
     'The report was produced from an older version of this code. It is kept and labelled rather than thrown away, because it still says something \u2014 just not about today.'),
   // What is built, and what is only promised.
-  'journey.status.planned': same('planned', 'Declared in the contract and not built; walked from the contract as ⋯ steps.'),
+  'journey.status.planned': same('planned', 'Declared in the contract and not built; walked from the contract as ⋯ parts.'),
   'journey.status.notBuilt': same('not built', 'Said of the screen or route that lacks code — never of a whole flow.'),
   'journey.status.built': same('built', 'Every screen this flow’s design names exists in code.'),
   'journey.status.partly': same('partly built · {n} of {m}', 'Some of the screens this flow’s design names exist in code and some do not; the two numbers say how many of each.'),
@@ -1046,15 +1066,15 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.story.ownWords': same('the flow\'s own words'),
   'journey.story.screens': same('The screens in order'),
   'journey.linked': same('Linked journeys'),
-  'journey.scene.actions': same('actions {from}–{to}'),
-  'journey.scene.again': same('actions {from}–{to} again', 'Every action on this screen was already run on an earlier one — the same calls, the same work, reached a second time.'),
+  'journey.scene.actions': same('stops {from}–{to}', 'The stops on this screen, numbered from the first: one each time the journey does something here. The same stops the Sheet draws as columns.'),
+  'journey.scene.again': same('stops {from}–{to} again', 'Every action on this screen was already run on an earlier one — the same calls, the same work, reached a second time.'),
   'journey.scene.newHere': same('new on this screen'),
   'journey.rail.screenOf': same('screen {n} of {t} · {name}'),
   'journey.rail.prevScreen': same('previous screen'),
   'journey.rail.nextScreen': same('next screen'),
   'journey.rail.unlisted': same('called by the screen — not in the design\'s list'),
-  'journey.ledger.actionOf': same('action {n} of {t} on this screen · {name}',
-    'Where the open action sits among the actions of THIS screen. The drill numbers the actions of the whole journey instead, and says so.'),
+  'journey.ledger.actionOf': same('stop {n} of {t} on this screen · {name}',
+    'Where the open stop sits among the stops of THIS screen. The drill and the Sheet number the stops of the whole journey instead, and say so.'),
   'journey.ledger.checks': same('The checks'),
   'journey.ledgerSub.checks': same('what has to be true · what stops the action'),
   'journey.ledger.recorded': same('What is recorded'),
@@ -1079,6 +1099,17 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.biz.untranslatedOne': one('1 condition in the code was not written in plain language', 'journey.biz.untranslated'),
   'journey.biz.untranslated': same('{n} conditions in the code were not written in plain language',
     'Places where the code decides something and nobody wrote what the decision means. They are counted here, listed behind this sentence by the part of the app each one sits in, and never drawn as a decision of the business \u2014 because nobody said they were one. Two parts sit in this one number: the technical conditions, and the conditions on a gate nobody labelled, which the hybrid and code lenses also draw as decisions. It is the same number every register prints for this journey; only the words differ.'),
+  // The checks every web application has, said for a product owner. Each is read off
+  // the label the team wrote on the gate (`jrnGateInWords`), never off the code: a gate
+  // whose label says *same-origin* reads the first sentence, whatever its code does.
+  'journey.biz.gateShape.sameOrigin': same('only the app’s own pages can make a change here',
+    'Said for a check the team labelled same-origin: a request that changes something is refused unless it comes from the application’s own pages, so another website cannot make the change on a signed-in person’s behalf. The words are read off the label the team wrote; the code view shows the check itself.'),
+  'journey.biz.gateShape.rateLimit': same('a limit on how often anyone can ask',
+    'Said for a check the team labelled a rate limit: too many requests in a short time are refused, which keeps the service up and slows down abuse. The words are read off the label the team wrote; the code view shows the check itself.'),
+  'journey.biz.gateShape.idShape': same('the record asked for must be named correctly',
+    'Said for a check the team labelled an id shape: the record the address names must look like a real record number before anything reads it. The words are read off the label the team wrote; the code view shows the check itself.'),
+  'journey.biz.gateShape.returnPath': same('after signing in, people are only sent back inside the app',
+    'Said for a check the team wrote about where a person returns to after signing in: only an address inside the application is accepted, so a link cannot send someone on to another website. The words are read off the label the team wrote; the code view shows the check itself.'),
   'journey.biz.notBuilt': same('not built yet',
     'Someone designed or declared this and no code answers it yet. A statement about the product, not about a gap in the tool.'),
   'journey.biz.partly': same('partly built · {n} of {m}',
@@ -1984,7 +2015,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'surf.impact.direct': same('{n} things that use it directly', 'Parts of the product that use the one asked about with nothing in between.'),
   'surf.impact.journeys': same('{n} journeys it shows up in', 'Journeys whose screens reach something that uses the part asked about directly.'),
   'surf.impact.testsNear': same('{n} tests on what uses it directly', 'Tests that reach the things using this part with nothing in between.'),
-  'surf.impact.testsFar': same('{n} tests only one step further out', 'Tests that reach only the things further out — they would catch a change here only indirectly.'),
+  'surf.impact.testsFar': same('{n} tests only one link further out', 'Tests that reach only the things further out — they would catch a change here only indirectly.'),
   // the code map and the inspector
   'surf.group.expand': same('Open the group', 'Draw every member of this group as a card of its own, inside the group.'),
   'surf.group.collapse': same('Close the group', 'Fold the group’s members back into one card.'),
@@ -2010,7 +2041,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'surf.kind.component': same('screen part', 'A piece of a screen: a card, a form, a list — drawn inside one or more screens.'),
   'surf.kind.route': same('request', 'A request the product answers: what happens when a screen asks the system for something.'),
   'surf.kind.api': same('API', 'A set of requests one system offers to others, written down as a contract.'),
-  'surf.kind.function': same('logic', 'A piece of the product’s logic: a step the code takes on the way to an answer.'),
+  'surf.kind.function': same('logic', 'A piece of the product’s logic: something the code does on the way to an answer.'),
   'surf.kind.rule': same('validation rule', 'A shape the data has to match before it is accepted.'),
   'surf.kind.guard': same('gate', 'A checkpoint about who may go on: signed in, owns the thing, within the limit.'),
   'surf.kind.table': same('record', 'Data the product keeps: a table in its database.'),
@@ -2234,7 +2265,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.obs.none': same('nothing observed',
     'No run of any kind reached this code: the evidence word beside it is a claim or a reading of the test bodies, and no run stands behind it.'),
   'journey.tests.theirRun': same('their own last run',
-    'The weakest verdict over the covering tests’ own last recorded runs — one skipped or failed case outweighs every passing one. Not the run behind the evidence word: that one is printed beside the word.'),
+    'What the covering tests’ own last recorded runs said, case by case. Not the run behind the evidence word: that one is printed in the word’s tip, and the word is the verdict.'),
   'journey.biz.helpersFolded': same('{n} small parts',
     'Parts this one uses that do not change what the journey does — formatting, wiring, look-ups. They are folded under it; open it to see them.'),
   'journey.biz.helpersFoldedOne': one('1 small part', 'journey.biz.helpersFolded'),
@@ -2396,6 +2427,48 @@ export const STRINGS: Record<string, StringEntry> = {
   'count.part.workInProgress': same('{n} in progress', 'Items the tracker files as started and not finished, by its own status category.'),
   'count.part.workDone': same('{n} done', 'Items the tracker files as finished, by its own status category.'),
   'count.part.workRemoved': same('{n} removed', 'Items the tracker keeps but files as cut from the work.'),
+  // ── freshness: *stale* said once and only when true (swarm-fixes 2026-10-05, finding 2; core freshness.ts) ──
+  // A comparison, so every word below is printed with the sentence that names both sides.
+  'fresh.state.current': same('current', 'A comparison that came out equal: a run recorded a digest of the code it ran on, and that digest is still the code’s. Said with the sync it holds for.'),
+  'fresh.state.stale': same('stale', 'A comparison, never a mood: every run that observed this recorded a digest of the code, and the code has changed since. Always printed with its sentence — the commit the run saw and the commit the code is at now.'),
+  'fresh.state.noDigest': same('no source digest', 'The run recorded no digest of the code it ran on, so it cannot be compared with the code now. Not stale and not current: no answer. Stamping the report right after the run makes it comparable.'),
+  'fresh.state.none': same('no run recorded', 'No results report named a run of these tests, so there is nothing to compare with the code.'),
+  'fresh.sentence.current': same('current as of sync {sync} — the tests ran on the code as it is now', 'A run recorded a digest of the code it ran on, and the code this sync read has the same digest.'),
+  'fresh.sentence.currentNoSync': same('current — the tests ran on the code as it is now', 'A run recorded a digest of the code it ran on, and the code read now has the same digest.'),
+  'fresh.sentence.staleCommit': same('stale — the tests ran on commit {ran} ({ranAt}); the code is at commit {code} now', 'Both sides of the comparison: the commit the run’s report was stamped with, and the commit the code was read at. The commits between them are on the Changes page.'),
+  'fresh.sentence.staleCode': same('stale — the tests ran on {ranAt}, before the code at commit {code}; the run recorded no commit of its own', 'The run’s digest differs from the code’s, and the report named no commit, so only its date can stand for its side.'),
+  'fresh.sentence.staleBare': same('stale — the tests ran on {ranAt}, and the code has changed since', 'The run’s digest differs from the code’s. Neither side named a commit this graph can print.'),
+  'fresh.sentence.staleTree': same('stale — the tests ran on {ranAt} on the commit the code is still at, and the working tree changed after the run', 'Same commit, different files: uncommitted edits made after the run. No commit list shows them, so the Changes page shows the same commit.'),
+  'fresh.sentence.noDigest': same('no source digest was recorded — the tests ran on {ranAt}, and whether the code changed since cannot be told', 'The report carries no digest of the code it ran on. A file’s timestamp is not evidence, so this is neither stale nor current.'),
+  'fresh.sentence.noDigestSome': same('no source digest was recorded for {noDigest} of these runs (the newest {ranAt}); the other {stale} ran before the code last changed', 'Some runs carry no digest, so the scope as a whole cannot be called stale or current; the runs that do carry one are older than the code.'),
+  'fresh.sentence.none': same('no run of these tests is recorded', 'No results report named a run of these tests.'),
+  'fresh.recipe.rerun': same('to make it current: run these tests again on this commit, then sync', 'A run on the code as it is, stamped, and read by the next sync, compares equal — and the word becomes current.'),
+  'fresh.recipe.stamp': same('to make it comparable: stamp the report right after the run (farsight tests import --results <report> --stamp)', 'The stamp writes the code’s digest and commit into the report. Never stamp an old run with today’s digest — that would be false evidence.'),
+  'fresh.tip.against': same('against what', 'The two sides of the comparison: the run, and the code it is compared with.'),
+  'fresh.risk.against': same('against the code at commit {code} (sync {sync}) — every one of these runs is from {ranAt} or before', 'What every stale journey on the board is compared with: one commit of the code, and the newest of the runs that observed them. Each journey’s own mark names its own run.'),
+  'fresh.tip.ran': same('the run', 'The run’s side: the commit its report was stamped with, and the day it ran.'),
+  'fresh.tip.code': same('the code', 'The code’s side: the commit the code was read at.'),
+  'fresh.tip.sync': same('read by sync', 'The sync that read the code this is compared with.'),
+  'fresh.tip.recipe': same('what changes it', 'What would make this answer current, when something would.'),
+  'fresh.tip.runs': same('runs read', 'The runs this answer is computed over, split by what their reports recorded.'),
+  'journey.biz.fresh.current': same('Up to date: the tests last ran on the software as it is now.', 'The record of the last test run matches the software as it is today.'),
+  'journey.biz.fresh.stale': same('Out of date: the tests last ran on {ranAt}, and the software has changed since.', 'The tests are older than the software they checked. Running them again brings this up to date.'),
+  'journey.biz.fresh.staleTree': same('Out of date: the tests last ran on {ranAt}, and files were edited afterwards without being saved as a new version.', 'Edits made after the test run that nobody has saved as a version yet.'),
+  'journey.biz.fresh.noDigest': same('Unknown: the tests last ran on {ranAt}, but that run did not record which version of the software it checked.', 'Without that record nobody can say whether the run still applies.'),
+  'journey.biz.fresh.riskAgainst': same('The tests behind these journeys last ran on {ranAt} or before; the software has changed since.', 'Every journey counted here was last tested before the software’s current version.'),
+  'journey.biz.fresh.none': same('No recorded run of these tests.', 'Nothing says these tests have been run.'),
+  'count.part.freshCurrent': same('{n} current', 'Runs whose recorded digest is still the code’s.'),
+  'count.part.freshStale': same('{n} older than the code', 'Runs whose recorded digest differs from the code’s.'),
+  'count.part.freshNoDigest': same('{n} with no source digest', 'Runs whose report recorded no digest, so they cannot be compared.'),
+  // ── one test verdict per cell (swarm 2026-10-05, finding 1) ─────────────
+  // The cell's verdict is the evidence word (core `testVerdict`); the cases'
+  // own runs are a count beside it whose tip says what each run said.
+  'journey.tests.theirRuns': same('their own last runs',
+    'Every test case counted here, by what its own last recorded run said: passed, failed, skipped, flaky, or no run recorded. The parts add up to the cases. It is a count, not a verdict: the verdict of this cell is the evidence word above it, and the run behind that word is in the word’s tip.'),
+  'tests.scoped.head': same('Cases that reach {scope}',
+    'The test cases behind one cell of a journey — the journey, one of its screens, one action, or one part — each with its own evidence and its own last run. The word at the top is the same word the cell prints.'),
+  'tests.scoped.all': same('every journey', 'Drops this scope and lists every journey’s tests again.'),
+  'tests.scoped.journey': same('open the journey', 'Back to the journey this scope belongs to.'),
 };
 
 /**
