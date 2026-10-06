@@ -542,8 +542,8 @@ function onFocusIn(e) {
 
 /**
  * The tip's keys, asked **first** by keymap.js's one listener: Esc closes a
- * tip before anything else closes; `?` (and Enter / Space on a trigger that is
- * not a button) opens the focused trigger's tip; Tab walks from a trigger into
+ * tip before anything else closes; Enter / Space on a trigger that is not a
+ * button opens the focused trigger's tip (`?` is the keymap's alone); Tab walks from a trigger into
  * its rich tip's links and back out. Returns true when it handled the key.
  */
 export function tipKeydown(e) {
@@ -556,10 +556,9 @@ export function tipKeydown(e) {
   const a = document.activeElement;
   if (a && a.matches && a.matches(TIP_SELECTOR) && !(layer && layer.contains(a))) {
     const enter = (e.key === 'Enter' || e.key === ' ') && !isInteractive(a);
-    // in a hover-mode container (the Map) `?` is the surface's own key — its legend — and a focused trigger's tip
-    // shows on hover and focus there, never on `?` (round 2: `?` on a focused cover opened its tip, not the legend)
-    if (e.key === '?' && hoverMode(a)) return false;
-    if (e.key === '?' || enter) {
+    // `?` is the keymap's, everywhere (swarm 2026-10-05: on a focused term it opened that term's tip, on the Map the
+    // legend, elsewhere the keymap): a focused trigger's tip opens on Enter / Space, on click, and on hover
+    if (enter) {
       e.preventDefault();
       if (st.el === a) hideTip();
       else openFor(a, { pinned: true, via: 'key' });

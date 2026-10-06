@@ -227,7 +227,8 @@ test.describe('chrome', () => {
     await expect(page.locator('#scopemenu')).not.toHaveClass(/open/);
     await expect(journey).toBeVisible();
     await expect(page.locator('#scopebtn')).toHaveAttribute('aria-expanded', 'false');
-    // the next Esc is the journey's again
+    // the next Esc is the journey's again (it asks once, then closes)
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(journey).toBeHidden();
   });
@@ -238,6 +239,7 @@ test.describe('chrome', () => {
    */
   test('closing a journey leaves no focus behind on the surface it returns to', async ({ page }) => {
     await openBillingCycle(page);
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Journey', exact: true })).toBeHidden();
     await expect(page).toHaveURL(/#\/journeys$/);

@@ -7,7 +7,7 @@ import {
   stitchHttp, apiSurface, graphToSpec, reconcile, driftMarkdown,
   storybookLive,
   designSurface, reconcileDesign, designDriftMarkdown, isDesignManifest, buildLine, buildInfo, installState, currencyAdvice,
-  testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts,
+  testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
   journeyTree, pickJourneys, journeyTreeLines,
@@ -35,7 +35,10 @@ function flag(name: string, fallback?: string): string | undefined {
   const i = rest.indexOf(`--${name}`);
   return i >= 0 ? rest[i + 1] : fallback;
 }
-const positional = rest.filter((a, i) => !a.startsWith('--') && rest[i - 1]?.startsWith('--') !== true);
+/** A flag that takes no value, so the word after it is a positional (`serve --read-only graph.json`). */
+const BOOL_FLAGS = new Set(['--read-only']);
+function hasFlag(name: string): boolean { return rest.includes(`--${name}`); }
+const positional = rest.filter((a, i) => !a.startsWith('--') && (rest[i - 1]?.startsWith('--') !== true || BOOL_FLAGS.has(rest[i - 1] ?? '')));
 
 const USAGE = `farsight — see your software the way you think about it
 ${buildLine()}
@@ -49,7 +52,7 @@ usage:
                                                                parse repo(s) into a semantic graph; a positional that is an
                                                                OpenAPI file or URL is ingested as a spec-only source
                                                                (also records a snapshot in .farsight/farsight.db)
-  farsight serve [graph.json] [--port 4477] [--as-of sync:N]   explore the graph in the HUD
+  farsight serve [graph.json] [--port 4477] [--as-of sync:N] [--read-only]   explore the graph in the HUD (--read-only, and every --as-of, refuses settings, syncs and work writes)
   farsight mcp [--graph graph.json] [--as-of sync:N]           feed the graph to LLM agents (MCP/stdio)
   farsight snapshots [--limit 20] [--pin sync:N] [--prune 10]  list snapshot history (pin / prune retention)
   farsight history [--repo name] [<path>] [--since <date>] [--max 2000] [--releases] [--json]
@@ -581,7 +584,9 @@ switch (command) {
     const asOf = flag('as-of');
     const graph = asOf ? materializeAsOf(asOf) : resolve(positional[0] ?? 'graph.json');
     if (!existsSync(graph)) fail(`no graph at ${graph} — run \`farsight ingest\` first`);
-    serveGraph(graph, Number(flag('port', '4477')));
+    // an --as-of snapshot is history: it is served read-only, and --read-only asks for the same on today's graph
+    const readOnly = asOf ? 'as-of' as const : hasFlag('read-only') ? 'flag' as const : null;
+    serveGraph(graph, Number(flag('port', '4477')), process.cwd(), { readOnly });
     break;
   }
   case 'mcp': {
@@ -1403,10 +1408,15 @@ switch (command) {
       // the same bytes `GET /api/tests/matrix?format=csv` serves: one printer in core
       if (format === 'csv') { console.log(testsMatrixCsv(testsMatrixRows(index, surface, identity))); break; }
       if (!surface.journeys.length) { console.log('no flows in the graph — add a screens manifest (docs/proposals/design-source.md) and re-ingest'); break; }
-      console.log('  JOURNEY                                   COVERAGE       E2E  DECL  REACH   OBS  GAP');
+      console.log('  JOURNEY                                   COVERAGE       E2E  DECL  REACH   OBS  EVIDENCE · THEIR OWN LAST RUNS  GAP');
       for (const r of surface.journeys) {
-        // the end-to-end word, never a tick: a header-only `@covers` is a claim, not evidence
-        console.log(`  ${r.name.slice(0, 40).padEnd(40)}  ${formatMetric(r.coverage.metric).padStart(8)}  ${r.e2e.padStart(8)}  ${String(r.declared.length).padStart(4)}  ${String(r.inferred.length).padStart(5)}  ${String(r.observed.length).padStart(4)}  ${r.gap}`);
+        // the end-to-end word, never a tick: a header-only `@covers` is a claim, not evidence. The
+        // evidence column is the cell's one verdict (core testVerdict) — the word the HUD prints — and
+        // the cases' own runs beside it as a count, never as a second verdict (swarm 2026-10-05)
+        const v = r.coverage.verdict;
+        const runs = v.runs.breakdown?.filter((p) => p.n) ?? [];
+        const evidence = `${v.word.cls === 'none' ? 'nothing reaches it' : word(v.word.key, 'professional')} · ${v.runs.n} case(s)${runs.length ? ` (${breakdownText({ ...v.runs, breakdown: runs })})` : ''}`;
+        console.log(`  ${r.name.slice(0, 40).padEnd(40)}  ${formatMetric(r.coverage.metric).padStart(8)}  ${r.e2e.padStart(8)}  ${String(r.declared.length).padStart(4)}  ${String(r.inferred.length).padStart(5)}  ${String(r.observed.length).padStart(4)}  ${evidence}  ${r.gap}`);
       }
       console.log(`\n  coverage is ${formatMetric(surface.metric)} of ${surface.metric.scopeLabel} — declared = an @covers claim · reached = what the test imports or opens · observed = a run reached it`);
       console.log('  e2e = the end-to-end word for the journey: observed (a run saw it) · reached (a test body reaches a route or screen on it) · declared (claimed only) · none');
