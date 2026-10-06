@@ -539,3 +539,60 @@ describe('/api/journey — a table says what reaches its accessors', () => {
     if (customers) assert.equal(customers.coverageVia, undefined, 'an empty list and no list are different facts');
   });
 });
+
+describe('one test verdict per cell, and doors that keep their scope (swarm 2026-10-05, finding 1)', () => {
+  /** the verdict without the name of the fold it came from */
+  const same = (v: any) => ({ word: v.word, status: v.status, n: v.runs.n, parts: v.runs.breakdown });
+
+  test('?flow=&seg=&action= answers one cell of a journey with the verdict the journey prints for it', async () => {
+    const fold = testsSurface(index, null, meta.tests);
+    const row = fold.journeys.find((r) => r.coverage.counted?.tests.n);
+    assert.ok(row, 'the fixture has a flow some test reaches');
+    const j = await api(`/api/journey?entry=${encodeURIComponent(row.flowId)}`);
+    const cov = j.summary.coverage;
+    let checked = 0;
+    for (const sg of j.summary.segments) {
+      const seg = await api(`/api/tests?flow=${encodeURIComponent(row.flowId)}&seg=${sg.index}`);
+      assert.deepEqual(same(seg.coverage.verdict), same(cov.segments[sg.index].verdict), `screen ${sg.index}`);
+      for (let k = 0; k < sg.moments.length; k++) {
+        const cell = await api(`/api/tests?flow=${encodeURIComponent(row.flowId)}&seg=${sg.index}&action=${k}`);
+        assert.deepEqual(same(cell.coverage.verdict), same(cov.moments[sg.index][k].verdict), `screen ${sg.index} action ${k}`);
+        // the cases listed are the cases counted, each with its own word from the catalog
+        assert.equal(cell.cases.length, cell.coverage.testsCount);
+        for (const c of cell.cases) assert.ok(c.word && typeof c.word.key === 'string' && c.word.cls, `${c.name} carries its word`);
+        checked++;
+      }
+    }
+    assert.ok(checked > 0, 'some action was checked');
+    // a cell the journey does not have is a 404 that names it, never another cell
+    const r = await raw(`/api/tests?flow=${encodeURIComponent(row.flowId)}&seg=999`);
+    assert.equal(r.status, 404);
+  });
+
+  test('?flow=&cases=1 lists the journey’s cases; without it the Portfolio’s lean answer stays lean', async () => {
+    const fold = testsSurface(index, null, meta.tests);
+    const row = fold.journeys.find((r) => r.coverage.counted?.tests.n)!;
+    const lean = await api(`/api/tests?flow=${encodeURIComponent(row.flowId)}&lean=1`);
+    assert.equal(lean.cases, undefined);
+    const withCases = await api(`/api/tests?flow=${encodeURIComponent(row.flowId)}&lean=1&cases=1`);
+    assert.equal(withCases.cases.length, row.coverage.tests.length);
+    assert.equal(withCases.coverage.verdict.runs.n, row.coverage.counted!.tests.n);
+  });
+
+  test('a table’s foot gets its accessors’ cases by their own runs, counted in core', async () => {
+    const fold = testsSurface(index, null, meta.tests);
+    let checked = 0;
+    for (const row of fold.journeys) {
+      const j = await api(`/api/journey?entry=${encodeURIComponent(row.flowId)}`);
+      for (const s of j.steps.filter((x: any) => x.coverageVia)) {
+        checked++;
+        const runs = s.coverageViaRuns;
+        assert.ok(runs, `${s.node.id} carries its runs`);
+        const cases = new Set(s.coverageVia.filter((r: any) => !r.runLevel).map((r: any) => r.id));
+        if (s.coverageViaCount === s.coverageVia.length) assert.equal(runs.n, cases.size, `${s.node.id}: each case once`);
+        assert.equal(runs.breakdown.reduce((a: number, p: any) => a + p.n, 0), runs.n, 'the parts sum');
+      }
+    }
+    assert.ok(checked > 0, 'some table step was checked');
+  });
+});

@@ -1,7 +1,10 @@
 // surfaces/tests.js — the Tests surface (03 §1, §4; boards 05 + 08).
 //
 // Routes: #/tests[?view=matrix|suites|orphans|freshness&level=unit|integration|e2e]
-// and #/tests/<testId> — one test's own page, drawn by B3.4.
+// and #/tests/<testId> — one test's own page, drawn by B3.4. A door from a
+// journey keeps its scope: `?flow=<id>` (the journey), `&seg=n` (one screen),
+// `&action=k` (one action in it) or `?node=<id>` (one part) opens the page on
+// the cases of that cell, with the cell's own verdict (swarm 2026-10-05).
 //
 // Everything on this page is a fold `/api/tests` already computed, so the tab,
 // the CLI and an agent quote the same number. The viewer groups, orders and
@@ -74,6 +77,8 @@ let DATA = null;          // the last payload — folds redraw from it, never re
 let VIEW = 'matrix';
 let LEVEL = 'all';
 let DETAIL = null;        // #/tests/<id>
+let SCOPED = null;        // { flow, seg, action, node } — the cell a journey's door was opened from
+let SCOPED_DATA = null;   // its answer: the cell's coverage and its cases, each with its own word
 const OPEN = new Set();   // which folds are open, by key
 
 /** `?scope=` for /api/tests, from the viewer's multi-select scope.
@@ -127,6 +132,8 @@ export function mountTests(route, el) {
   VIEW = VIEWS.includes(route && route.view) ? route.view : 'matrix';
   LEVEL = LEVELS.includes(route && route.level) ? route.level : 'all';
   DETAIL = route && route.param ? decodeURIComponent(route.param) : null;
+  SCOPED = DETAIL ? null : scopedFromHash();
+  SCOPED_DATA = null;
   DATA = null;
   OPEN.clear();
   el.innerHTML = '<div class="tst-wrap">' + stripHtml(null, !!DETAIL) + '<div id="tst-body"><p class="set-note">'
@@ -139,9 +146,37 @@ export function mountTests(route, el) {
   });
 }
 
+/**
+ * The cell a door opened this page on, read from the address: `flow` (+ `seg`,
+ * + `action`) or `node`. Null for the plain catalogue.
+ * @group Tests tab
+ */
+function scopedFromHash() {
+  const h = location.hash || '';
+  const qi = h.indexOf('?');
+  if (qi < 0) return null;
+  const q = new URLSearchParams(h.slice(qi + 1));
+  const flow = q.get('flow'), node = q.get('node');
+  if (!flow && !node) return null;
+  const num = (k) => (q.get(k) != null && /^\d+$/.test(q.get(k)) ? Number(q.get(k)) : null);
+  return { flow, node, seg: num('seg'), action: num('action') };
+}
+
+/** The answer for a scoped cell: one node, one screen or action of a journey, or a whole journey.
+ * @group Tests tab */
+function scopedUrl(sc) {
+  if (sc.node) return '/api/tests?node=' + encodeURIComponent(sc.node);
+  const base = '/api/tests?flow=' + encodeURIComponent(sc.flow);
+  return sc.seg != null ? base + '&seg=' + sc.seg + (sc.action != null ? '&action=' + sc.action : '') : base + '&lean=1&cases=1';
+}
+
 /** Fetch the catalogue for the current scope and level, then draw it.
  * @group Tests tab */
 async function load() {
+  if (SCOPED) {
+    // the cell first: it is what the reader came for, and the catalogue under it is the context
+    SCOPED_DATA = await fetch(scopedUrl(SCOPED)).then((r) => (r.ok ? r.json() : { error: String(r.status) })).catch(() => ({ error: 'fetch' }));
+  }
   // lean: the page prints counts, so the per-node lists behind them stay on the server (folds.ts leanJourneyRow)
   const q = '?scope=' + encodeURIComponent(scopeParam()) + (LEVEL !== 'all' ? '&level=' + encodeURIComponent(LEVEL) : '') + '&lean=1';
   const r = await fetch('/api/tests' + q);
@@ -220,7 +255,7 @@ function renderBody() {
     b.innerHTML = '<div class="tst-sec"><p class="set-note">' + esc(t('tests.empty')) + '</p></div>' + blindSection(d);
     return;
   }
-  b.innerHTML = kpisHtml(d) + sourcesHtml(d)
+  b.innerHTML = scopedHtml() + kpisHtml(d) + sourcesHtml(d)
     + (VIEW === 'matrix' ? matrixHtml(d)
       : VIEW === 'suites' ? suitesHtml(d)
         : VIEW === 'orphans' ? orphansHtml(d)
@@ -557,16 +592,6 @@ function evChipHtml(cls, wordKey) {
   return tagOpen(EV_CLS[cls], wordKey) + glyph + esc(t(wordKey)) + '</span>';
 }
 
-/** What a run said about the tests covering a scope — the weakest verdict of them, said as one.
- * @group Tests tab */
-function runChipHtml(run) {
-  if (!run || !run.status) return '';
-  const cls = ST_CLS[run.status] ? run.status : 'unknown';
-  return tagOpen(ST_CLS[cls], 'tests.run.weakest') + esc(t('tests.run.' + cls)) + '</span>'
-    + '<span class="mono"> ' + esc((run.at || '').slice(0, 10)) + ' </span>' + dgHtml(run.freshness, run.changedBy)
-    + (run.projects && run.projects.length && !biz() ? '<span class="mono"> ' + esc(run.projects.join(' · ')) + '</span>' : '');
-}
-
 /** The freshness word of a card's one fact, with the fact's tip (both sides, the recipe, the runs read).
  * @group Tests tab */
 function freshDgHtml(f) {
@@ -676,8 +701,73 @@ function evidenceCellHtml(row) {
     html += '<span class="tst-lift">' + esc(t(tests.runLevel === 1 ? 'tests.runOnlyOne' : 'tests.runOnly').replace('{n}', String(tests.runLevel))) + '</span>';
   }
   if (chip && !(row.built || 0)) html += '<span class="tst-lift">' + esc(t('tests.row.noScreenBuilt')) + '</span>';
-  if (c.run) html += '<span class="tst-lift">' + runChipHtml(c.run) + '</span>';
+  html += runsLineHtml(c);
   return html;
+}
+
+/**
+ * Beside the cell's one verdict: its cases by their own last runs, as a number
+ * whose tip breaks them down (core `testVerdict().runs`, a breakdown that sums),
+ * then when the run behind the word ran and whether the code moved since, and
+ * the runner projects. Never a second verdict: the weakest run printed here
+ * read *skipped* beside *passed, by its own declaration* on every row (swarm
+ * 2026-10-05, finding 1).
+ * @group Tests tab
+ */
+function runsLineHtml(c) {
+  const runs = c.verdict && c.verdict.runs;
+  const o = c.observation;
+  const bits = [];
+  if (runs && runs.n) bits.push('<span class="hud-label"' + tipOf('journey.tests.theirRuns') + '>' + esc(t('journey.tests.theirRuns')) + '</span> ' + countedHtml(runs, '/api/tests'));
+  if (o && o.at) bits.push('<span class="mono">' + esc(o.at.slice(0, 10)) + ' </span>' + dgHtml(o.freshness, o.changedBy));
+  if (c.run && c.run.projects && c.run.projects.length && !biz()) bits.push('<span class="mono">' + esc(c.run.projects.join(' · ')) + '</span>');
+  return bits.length ? '<span class="tst-lift tst-runs">' + bits.join(' · ') + '</span>' : '';
+}
+
+/**
+ * The cell a journey's door opened this page on: its name, the cell's verdict
+ * (the same word, from the same fold, the journey prints), its cases by their
+ * own runs, and every case with its own word and its own last run. A link back
+ * to the journey and one to every journey.
+ * @group Tests tab
+ */
+function scopedHtml() {
+  if (!SCOPED) return '';
+  const d = SCOPED_DATA;
+  const back = '<a href="#/tests">' + esc(t('tests.scoped.all')) + '</a>';
+  if (!d || d.error) return '<div class="tst-sec tst-scoped"><p class="set-note">' + esc(t('sys.testsFailed')) + ' · ' + back + '</p></div>';
+  const cov = d.coverage || null;
+  const flow = d.flow || SCOPED.flow;
+  const name = d.node ? (biz() ? bizName(d.node) : d.node.name)
+    : d.label ? (d.flowName ? d.flowName + ' · ' : '') + d.label
+      : (flow && S.BYID && S.BYID[flow] ? (biz() ? bizName(S.BYID[flow]) : S.BYID[flow].name) : flow || '');
+  const cases = d.cases || [];
+  const ew = cov ? evidenceWord(cov) : { cls: 'none', key: 'journey.absent.noneIndexed' };
+  const head = '<h2 data-scope="' + esc(cov && cov.counted && cov.counted.tests ? cov.counted.tests.scope : '') + '">'
+    + esc(t('tests.scoped.head').replace('{scope}', name)) + '</h2>';
+  const verdict = '<div class="tst-gap tst-scoped-verdict">' + evChipHtml(ew.cls, ew.key)
+    + (cov ? ' ' + runsLineHtml(cov) : '') + '</div>'
+    + '<p class="tst-gap">' + (flow ? '<a href="#/journeys/' + encodeURIComponent(flow) + '">' + esc(t('tests.scoped.journey')) + '</a> · ' : '') + back + '</p>';
+  const CAP = 200;
+  const list = cases.length
+    ? CASES_OPEN + cases.slice(0, CAP).map(scopedCaseHtml).join('') + '</ul>'
+      + (cases.length > CAP ? '<p class="tst-gap">' + esc(t('journey.moreChips').replace('{n}', String(cases.length - CAP))) + '</p>' : '')
+    : '<p class="set-note">' + esc(t('journey.absent.noneIndexed')) + '</p>';
+  return '<div class="tst-sec tst-scoped">' + head + verdict + list + '</div>';
+}
+
+/** One case of a scoped cell: its name, its own word (core `caseWord`), its own last run, where it sits.
+ * @group Tests tab */
+function scopedCaseHtml(c) {
+  const w = c.word || { cls: 'none', key: 'journey.absent.noneIndexed' };
+  // a declaration word already says the run passed; any other word has the run beside it
+  const implied = w.key === 'tests.evidence.declaredPassed' || w.key === 'tests.evidence.declaredPassedStale';
+  const st = ST_CLS[c.status] ? c.status : c.status ? 'unknown' : 'notrun';
+  const status = implied ? '' : ' ' + tagOpen(ST_CLS[st], 'tests.run.' + (st === 'notrun' ? 'notRun' : st)) + esc(t(st === 'notrun' ? 'tests.run.notRun' : 'tests.run.' + st)) + '</span>';
+  const where = !biz() && c.loc && c.loc.path ? '<span class="loc"> ' + esc(c.loc.path) + (c.loc.line ? ':' + c.loc.line : '') + '</span>' : '';
+  return '<li data-case="' + esc(c.id) + '"><a href="#/tests/' + encodeURIComponent(c.id) + '">' + esc(c.name) + '</a> '
+    + '<span class="mono">' + esc(t('tests.level.' + c.level)) + '</span> '
+    + evChipHtml(w.cls, w.key) + status + where + '</li>';
 }
 
 /** One journey row: what is built, what evidence exists, the metric with its scope, the counts, what is missing.
@@ -725,7 +815,9 @@ function matrixHtml(d) {
   const cols = business
     ? ['journey', 'screens', 'evidence', 'e2e', 'reached', 'missing']
     : ['journey', 'screens', 'evidence', 'e2e', 'reached', 'declared', 'reachedTests', 'observed', 'missing'];
-  const rows = d.journeys || [];
+  const flow = SCOPED && SCOPED_DATA && !SCOPED_DATA.error ? (SCOPED_DATA.flow || SCOPED.flow) : null;
+  const all = d.journeys || [];
+  const rows = flow && all.some((r) => r.flowId === flow) ? all.filter((r) => r.flowId === flow) : all;
   // every word a row can wear, the run-seen pair included: a chip the legend
   // does not show is a chip a reader has to guess at
   const legend = ['declared', 'reached', 'observed', 'stale']
