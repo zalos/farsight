@@ -10,7 +10,7 @@ import {
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
-  journeyTree, pickJourneys, journeyTreeLines,
+  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
 } from '@farsight/core';
 import type {
@@ -129,8 +129,10 @@ usage:
                                                                the storylines (named chains of journeys, in order), then the journeys
                                                                by persona, then by group, in the order the manifests and
                                                                farsight.config.json declare: status, screens built, the way in
-                                                               and the node id of each; --storyline keeps one storyline and its
-                                                               journeys (--json: the JourneyTree, as /api/journeys)
+                                                               and the node id of each; a storyline's branches (when · back to)
+                                                               sit indented under the step they leave from; --storyline keeps one
+                                                               storyline and its journeys (an unknown one names those there are;
+                                                               --json: the JourneyTree, as /api/journeys)
   farsight design list [--graph graph.json]                    every design source (screens manifest) with designed / built counts
   farsight design diff --manifest <path|url> [--repo <name>] [--format json|md] [--strict]
                                                                a proposed screens manifest vs the code: not built / undesigned /
@@ -1506,12 +1508,13 @@ switch (command) {
     const store = GraphStore.load(graphFile);
     const { nodes, edges } = store.toJSON();
     const repo = flag('repo');
-    let tree = journeyTree(buildIndex(nodes, edges), store.meta.journeys, repo ? new Set([repo]) : null);
+    const whole = journeyTree(buildIndex(nodes, edges), store.meta.journeys, repo ? new Set([repo]) : null);
+    let tree = whole;
     const persona = flag('persona');
     const group = flag('group');
     const storyline = flag('storyline');
     if (persona || group || storyline) tree = pickJourneys(tree, { ...(persona ? { persona } : {}), ...(group ? { group } : {}), ...(storyline ? { storyline } : {}) });
-    if (storyline && !tree.storylines.length) fail(`no storyline "${storyline}" — run \`farsight journeys\` to see the storylines there are`);
+    if (storyline && !tree.storylines.length) fail(unknownStorylineText(whole, storyline));
     if (rest.includes('--json')) { console.log(JSON.stringify(tree, null, 2)); break; }
     console.log(journeyTreeLines(tree).join('\n'));
     break;

@@ -285,9 +285,9 @@ describe('?reach=1 — the impact answer placed on the journeys (the Map\'s Affe
 
   test('a package reaches its journeys through what imports it (hop 1), the journeys deps counts', () => {
     const r = reachOf(ZOD);
-    assert.equal(r.journeys.length, 3);
+    assert.equal(r.journeys.length, 4);
     assert.ok(r.journeys.every((j) => j.hop === 1));
-    assert.deepEqual(r.counted.journeys.breakdown, [{ key: 'count.part.reachDirect', n: 3 }]);
+    assert.deepEqual(r.counted.journeys.breakdown, [{ key: 'count.part.reachDirect', n: 4 }]);
   });
 
   test('a screen several journeys share is counted once — by the page it shows — and listed once per journey', () => {

@@ -178,8 +178,8 @@ describe('/api/journeys is journeyTree()', () => {
     const { tree } = await api('/api/journeys');
     same('personas in declared order', tree.personas.map((p: any) => p.name), ['Billing', 'Operations']);
     same('billing groups', tree.personas[0].groups.map((g: any) => `${g.name}: ${g.journeys.map((j: any) => j.id).join(', ')}`),
-      ['Invoices: billing-cycle, new-invoice', 'Review and send: draft-and-send']);
-    same('journeys counted once', tree.counts.journeys.n, 3);
+      ['Invoices: billing-cycle, new-invoice, correct-draft', 'Review and send: draft-and-send']);
+    same('journeys counted once', tree.counts.journeys.n, 4);
     same('the placement says who moved it', tree.personas[1].groups[0].journeys[0].placedBy, 'farsight.config.json');
     // every flow the design surface lists is in the tree, and nothing else is
     const flows = designSurface(index, null).flatMap((d) => d.flows.map((f) => f.nodeId)).sort();

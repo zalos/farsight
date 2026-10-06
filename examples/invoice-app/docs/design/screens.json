@@ -35,7 +35,13 @@
       "journeys": [
         "new-invoice",
         "draft-and-send",
-        "billing-cycle"
+        "billing-cycle",
+        {
+          "id": "correct-draft",
+          "branchOf": "draft-and-send",
+          "when": "Operations sends the draft back for a correction",
+          "rejoins": "draft-and-send"
+        }
       ]
     }
   ],
@@ -137,6 +143,17 @@
         "deleteInvoice"
       ],
       "phase": "1"
+    },
+    {
+      "id": "correct-draft",
+      "name": "Correct a draft",
+      "description": "When Operations sends a draft back, a billing user opens it in the editor, corrects it and saves it for review again.",
+      "persona": "billing",
+      "group": "invoices",
+      "screens": [
+        "INV-02"
+      ],
+      "phase": "2"
     }
   ]
 }

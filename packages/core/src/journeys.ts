@@ -21,10 +21,10 @@
  * *Not grouped* persona; a flow naming no group sits in the persona's trailing
  * *Other journeys* group.
  */
-import type { JourneysMeta, JourneyGroupDecl, JourneyPersonaDecl } from './graph.js';
-import type { JourneysConfig } from './config.js';
+import type { JourneysMeta, JourneyGroupDecl, JourneyPersonaDecl, JourneyStorylineEntryDecl, JourneyStorylineBranch } from './graph.js';
+import { storylineEntry, type JourneysConfig } from './config.js';
 import { designSurface, flowStatusWord, type DesignManifest, type FlowRow } from './design.js';
-import { counted, countedText, type Counted } from './counts.js';
+import { counted, countedText, breakdownText, type Counted } from './counts.js';
 import { t } from './strings.js';
 import type { GraphIndex } from './query.js';
 
@@ -218,7 +218,9 @@ function storylinesOf(
   blocks: JourneysBlock[],
   notes: string[],
 ): NonNullable<JourneysMeta['storylines']> {
-  const out: NonNullable<JourneysMeta['storylines']> = [];
+  // while the declarations fold, `journeys` holds the entries as written (ids and branch objects); the steps pass splits them
+  type Entry = string | JourneyStorylineEntryDecl;
+  const out: (Omit<NonNullable<JourneysMeta['storylines']>[number], 'journeys'> & { journeys: Entry[] })[] = [];
   const at = new Map<string, number>();
   const given = new Map<string, Set<string>>();
   /** the block whose `journeys` list stands, per storyline (absent: a manifest's) */
@@ -244,7 +246,7 @@ function storylinesOf(
       if (!id) continue;
       const name = str(raw.name) ?? id;
       const description = str(raw.description);
-      const journeys = (Array.isArray(raw.journeys) ? raw.journeys : []).map(str).filter((x): x is string => !!x);
+      const journeys = (Array.isArray(raw.journeys) ? raw.journeys : []).map(storylineEntry).filter((x): x is string | JourneyStorylineEntryDecl => !!x);
       const k = key(id);
       const i = at.get(k);
       if (i == null) {
@@ -265,22 +267,58 @@ function storylinesOf(
       }
     }
   }
-  // the steps: only flows a manifest in reach declares, each once, in the order written
+  // the steps: only flows a manifest in reach declares, each once, in the order written; then the branches
   const all = flowIdsOf(manifests);
+  const result: NonNullable<JourneysMeta['storylines']> = [];
   for (const s of out) {
     const b = listFrom.get(key(s.id));
     const ids = b ? flowIdsOf(manifests.filter((m) => blockReaches(b, m.path))) : all;
     const where = b && b.dir && b.dir !== '.' ? `under ${b.dir}/ ` : '';
     const steps: string[] = [];
     const own: string[] = [];
-    for (const raw of s.journeys) {
+    const branchEntries: JourneyStorylineEntryDecl[] = [];
+    for (const entry of s.journeys) {
+      if (typeof entry !== 'string' && entry.branchOf) { branchEntries.push(entry); continue; }
+      const raw = typeof entry === 'string' ? entry : entry.id;
       const id = ids.get(key(raw));
       if (!id) { own.push(`storyline "${s.id}" names journey "${raw}", which no manifest ${where}declares — it is not a step`); continue; }
       if (steps.includes(id)) { own.push(`storyline "${s.id}" names journey "${id}" twice — the first is its step`); continue; }
       steps.push(id);
     }
-    s.journeys = steps;
-    if (own.length) { s.notes = own; notes.push(...own); }
+    const branches = branchesOf(s.id, branchEntries, steps, ids, where, own);
+    if (own.length) notes.push(...own);
+    result.push({ ...s, journeys: steps, ...(branches.length ? { branches } : {}), ...(own.length ? { notes: own } : {}) });
+  }
+  return result;
+}
+
+/**
+ * The branches of one storyline (swarm-fixes 2026-10-05 §6), each a declared fact: its journey a flow in reach that
+ * is not already a step or a branch of it, `branchOf` one of its steps, a `when` sentence, and `rejoins` (optional)
+ * one of its steps. Whatever breaks a rule is a note and never drawn — a branch without its condition, or off a
+ * journey that is not a step, would be a guess.
+ */
+function branchesOf(
+  storyline: string,
+  entries: JourneyStorylineEntryDecl[],
+  steps: string[],
+  ids: Map<string, string>,
+  where: string,
+  own: string[],
+): JourneyStorylineBranch[] {
+  const out: JourneyStorylineBranch[] = [];
+  const stepOf = (raw: string): string | undefined => steps.find((x) => key(x) === key(raw));
+  for (const e of entries) {
+    const id = ids.get(key(e.id));
+    if (!id) { own.push(`storyline "${storyline}" names branch "${e.id}", which no manifest ${where}declares — it is not a branch`); continue; }
+    if (steps.includes(id)) { own.push(`storyline "${storyline}" names "${id}" as a step and as a branch — it is kept as a step`); continue; }
+    if (out.some((x) => x.id === id)) { own.push(`storyline "${storyline}" names branch "${id}" twice — the first is its branch`); continue; }
+    const parent = stepOf(e.branchOf!);
+    if (!parent) { own.push(`storyline "${storyline}": branch "${id}" leaves from "${e.branchOf}", which is not a step of it — it is not drawn`); continue; }
+    if (!e.when) { own.push(`storyline "${storyline}": branch "${id}" says no "when" — a branch is drawn only with the condition that takes it`); continue; }
+    const rejoins = e.rejoins ? stepOf(e.rejoins) : undefined;
+    if (e.rejoins && !rejoins) own.push(`storyline "${storyline}": branch "${id}" rejoins "${e.rejoins}", which is not a step of it — drawn without its way back`);
+    out.push({ id, branchOf: parent, when: e.when, ...(rejoins ? { rejoins } : {}) });
   }
   return out;
 }
@@ -313,6 +351,22 @@ export interface StorylineStep extends JourneyRow {
   stepIndex: number;
 }
 
+/**
+ * A branch of a storyline: a journey that leaves the chain at one step only when its condition holds, and may
+ * come back at a later (or earlier) step — the manifest declares it (`{ id, branchOf, when, rejoins? }`).
+ */
+export interface StorylineBranch extends JourneyRow {
+  /** the step it leaves from (a flow node id of a step of this storyline) */
+  branchOf: string;
+  /** the step's name, for the sentence *branch of <journey>* */
+  branchOfName: string;
+  /** the condition that takes it, in the design's words */
+  when: string;
+  /** the step it comes back at, when it declares one */
+  rejoins?: string;
+  rejoinsName?: string;
+}
+
 /** A storyline — a named chain of journeys across features and personas, in its declared order. */
 export interface JourneyStoryline {
   id: string;
@@ -323,6 +377,9 @@ export interface JourneyStoryline {
   /** the manifest or config path whose words it carries */
   from: string;
   journeys: StorylineStep[];
+  /** its branches, in the order written — journeys of the storyline that are not steps of the chain */
+  branches: StorylineBranch[];
+  /** `journeys` counts the steps and the branches (a breakdown parts them when there is a branch); `built` the same set */
   counts: { journeys: Counted; built: Counted };
   /** what was set aside for this storyline: a named journey no manifest declares, one named twice, one out of scope */
   notes: string[];
@@ -373,11 +430,16 @@ function groupCounts(rows: JourneyRow[], scope: 'count.scope.persona' | 'count.s
   };
 }
 
-function storylineCounts(steps: JourneyRow[], id: string): { journeys: Counted; built: Counted } {
-  const built = steps.filter((r) => r.status === 'both').length;
+function storylineCounts(steps: JourneyRow[], id: string, branches: JourneyRow[] = []): { journeys: Counted; built: Counted } {
+  const all = [...steps, ...branches];
+  const built = all.filter((r) => r.status === 'both').length;
+  const where = branches.length ? `storylines[${id}].journeys + .branches` : `storylines[${id}].journeys`;
+  const breakdown = branches.length
+    ? { breakdown: [{ key: 'count.part.storylineSteps', n: steps.length }, { key: 'count.part.storylineBranches', n: branches.length }] }
+    : {};
   return {
-    journeys: counted(steps.length, 'count.unit.journeys', 'count.scope.storyline', `${SRC} → storylines[${id}].journeys`, { bizUnit: 'count.unit.journeys' }),
-    built: counted(built, 'count.unit.journeysBuilt', 'count.scope.storyline', `${SRC} → storylines[${id}].journeys where status = both`, { of: steps.length, bizUnit: 'count.unit.journeysBuilt' }),
+    journeys: counted(all.length, 'count.unit.journeys', 'count.scope.storyline', `${SRC} → ${where}`, { bizUnit: 'count.unit.journeys', ...breakdown }),
+    built: counted(built, 'count.unit.journeysBuilt', 'count.scope.storyline', `${SRC} → ${where} where status = both`, { of: all.length, bizUnit: 'count.unit.journeysBuilt' }),
   };
 }
 
@@ -575,7 +637,7 @@ function storylinesFold(personas: JourneyPersona[], inScope: [string, JourneysMe
     list.push(j);
     rowsOf.set(j.nodeId, list);
   }
-  const declared: { repo: string; s: NonNullable<JourneysMeta['storylines']>[number]; nodeIds: string[]; own: string[] }[] = [];
+  const declared: { repo: string; s: NonNullable<JourneysMeta['storylines']>[number]; nodeIds: string[]; branchIds: { nodeId: string; b: JourneyStorylineBranch }[]; own: string[] }[] = [];
   const seen = new Map<string, string>();
   for (const [repo, m] of inScope) {
     for (const s of m.storylines ?? []) {
@@ -589,25 +651,46 @@ function storylinesFold(personas: JourneyPersona[], inScope: [string, JourneysMe
         if (!firstRow.has(nodeId)) { own.push(`journey "${fid}" is not drawn in this scope — it is not a step here`); continue; }
         if (!nodeIds.includes(nodeId)) nodeIds.push(nodeId);
       }
-      declared.push({ repo, s, nodeIds, own });
+      // a branch draws when its journey and the step it leaves from are both in scope
+      const branchIds: { nodeId: string; b: JourneyStorylineBranch }[] = [];
+      for (const b of s.branches ?? []) {
+        const nodeId = `${repo}::flow::${b.id}`;
+        if (!firstRow.has(nodeId)) { own.push(`branch "${b.id}" is not drawn in this scope — it is not a branch here`); continue; }
+        if (!nodeIds.includes(`${repo}::flow::${b.branchOf}`)) { own.push(`branch "${b.id}" leaves from "${b.branchOf}", which is not drawn in this scope — it is not a branch here`); continue; }
+        if (nodeIds.includes(nodeId) || branchIds.some((x) => x.nodeId === nodeId)) continue;
+        branchIds.push({ nodeId, b });
+      }
+      declared.push({ repo, s, nodeIds, branchIds, own });
     }
   }
   // every row of a journey shares one list of the storylines it is a step of
   const memberOf = new Map<string, string[]>();
-  for (const d of declared) for (const nodeId of d.nodeIds) {
+  for (const d of declared) for (const nodeId of [...d.nodeIds, ...d.branchIds.map((x) => x.nodeId)]) {
     const list = memberOf.get(nodeId) ?? [];
     if (!list.includes(d.s.id)) list.push(d.s.id);
     memberOf.set(nodeId, list);
   }
   for (const [nodeId, list] of memberOf) for (const r of rowsOf.get(nodeId) ?? []) r.storylines = list;
-  return declared.map(({ repo, s, nodeIds, own }) => {
+  return declared.map(({ repo, s, nodeIds, branchIds, own }) => {
     const journeys: StorylineStep[] = nodeIds.map((nodeId, i) => ({ ...firstRow.get(nodeId)!, stepIndex: i }));
+    const nameOf = (nodeId: string) => firstRow.get(nodeId)?.name ?? nodeId;
+    const branches: StorylineBranch[] = branchIds.map(({ nodeId, b }) => {
+      const parent = `${repo}::flow::${b.branchOf}`;
+      const back = b.rejoins ? `${repo}::flow::${b.rejoins}` : undefined;
+      const rejoins = back && nodeIds.includes(back) ? back : undefined;
+      return {
+        ...firstRow.get(nodeId)!,
+        branchOf: parent, branchOfName: nameOf(parent), when: b.when,
+        ...(rejoins ? { rejoins, rejoinsName: nameOf(rejoins) } : {}),
+      };
+    });
     return {
       id: s.id, name: s.name,
       ...(s.description ? { description: s.description } : {}),
       repo, from: s.from,
       journeys,
-      counts: storylineCounts(journeys, s.id),
+      branches,
+      counts: storylineCounts(journeys, s.id, branches),
       notes: own,
     };
   });
@@ -624,7 +707,7 @@ const matches = (x: { id: string; name: string }, q: string) => key(x.id) === ke
  */
 export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?: string; storyline?: string } = {}): JourneyTree {
   const storylines = (tree.storylines ?? []).filter((s) => !opts.storyline || matches(s, opts.storyline));
-  const inStory = opts.storyline ? new Set(storylines.flatMap((s) => s.journeys.map((j) => j.nodeId))) : null;
+  const inStory = opts.storyline ? new Set(storylines.flatMap((s) => [...s.journeys, ...(s.branches ?? [])].map((j) => j.nodeId))) : null;
   const personas = tree.personas
     .filter((p) => !opts.persona || matches(p, opts.persona))
     .map((p) => {
@@ -638,16 +721,36 @@ export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?
     .filter((p) => p.groups.length);
   // narrowed by persona or group: the storylines that have a step among what is kept, each whole (a chain crosses personas)
   const kept = opts.persona || opts.group ? new Set(personas.flatMap((p) => p.groups.flatMap((g) => g.journeys.map((j) => j.nodeId)))) : null;
-  const shown = kept ? storylines.filter((s) => s.journeys.some((j) => kept.has(j.nodeId))) : storylines;
+  const shown = kept ? storylines.filter((s) => [...s.journeys, ...(s.branches ?? [])].some((j) => kept.has(j.nodeId))) : storylines;
   return { ...tree, storylines: shown, personas, counts: treeCounts(personas, shown), derived: personas.some((p) => p.derived) };
 }
 
-/** Where a journey stands in each storyline it is a step of: `{ storyline, step, of, prev?, next? }` (step 1-based). */
-export function storylinePlacements(tree: JourneyTree, nodeId: string): { id: string; name: string; step: number; of: number; prev?: string; next?: string }[] {
-  const out: { id: string; name: string; step: number; of: number; prev?: string; next?: string }[] = [];
+/** Where a journey stands in a storyline: a step (`step` of `of`, 1-based) or a branch (`branchOf` · `when` · `rejoins?`). */
+export interface StorylinePlacement {
+  id: string; name: string; step: number; of: number; prev?: string; next?: string;
+  /** a branch: the step it leaves from, its name, its condition and the step it comes back at */
+  branch?: { of: string; ofName: string; when: string; rejoins?: string; rejoinsName?: string };
+}
+
+/**
+ * Where a journey stands in each storyline it is part of: `{ storyline, step, of, prev?, next? }` (step 1-based) for a
+ * step; for a branch `step` is its parent step's number and `branch` says what it branches off and when.
+ */
+export function storylinePlacements(tree: JourneyTree, nodeId: string): StorylinePlacement[] {
+  const out: StorylinePlacement[] = [];
   for (const s of tree.storylines ?? []) {
     const i = s.journeys.findIndex((j) => j.nodeId === nodeId);
-    if (i < 0) continue;
+    if (i < 0) {
+      const b = (s.branches ?? []).find((x) => x.nodeId === nodeId);
+      if (!b) continue;
+      const at = s.journeys.findIndex((j) => j.nodeId === b.branchOf);
+      out.push({
+        id: s.id, name: s.name, step: at + 1, of: s.journeys.length,
+        prev: b.branchOf, ...(b.rejoins ? { next: b.rejoins } : {}),
+        branch: { of: b.branchOf, ofName: b.branchOfName, when: b.when, ...(b.rejoins ? { rejoins: b.rejoins, rejoinsName: b.rejoinsName } : {}) },
+      });
+      continue;
+    }
     out.push({
       id: s.id, name: s.name, step: i + 1, of: s.journeys.length,
       ...(i > 0 ? { prev: s.journeys[i - 1]!.nodeId } : {}),
@@ -687,10 +790,13 @@ export function journeyTreeLines(tree: JourneyTree, opts: { openHint?: string } 
     // the storylines first: the whole life of one business thing, across the personas below
     lines.push('', `## ${t('journeys.storyline.title', 'professional')} — ${countedText(tree.counts.storylines, { scope: false })}`);
     for (const s of tree.storylines) {
-      lines.push(`### ${s.name} (\`${s.id}\`) — ${countedText(s.counts.journeys, { scope: false })} · ${countedText(s.counts.built, { scope: false })}${s.description ? ` — ${s.description}` : ''}`);
+      const parts = s.counts.journeys.breakdown ? ` (${breakdownText(s.counts.journeys)})` : '';
+      lines.push(`### ${s.name} (\`${s.id}\`) — ${countedText(s.counts.journeys, { scope: false })}${parts} · ${countedText(s.counts.built, { scope: false })}${s.description ? ` — ${s.description}` : ''}`);
       for (const j of s.journeys) {
         const word = flowStatusWord(j.built, j.total);
         lines.push(`${j.stepIndex + 1}. ${j.name} — ${word.text} · \`${j.nodeId}\`${opts.openHint ? ` ${opts.openHint}` : ''}`);
+        // its branches, indented under the step they leave from
+        for (const b of (s.branches ?? []).filter((x) => x.branchOf === j.nodeId)) lines.push(`   ${storylineBranchText(b)} · \`${b.nodeId}\`${opts.openHint ? ` ${opts.openHint}` : ''}`);
       }
       for (const n of s.notes.filter((x) => !tree.notes.some((y) => y.endsWith(x)))) lines.push(`- note: ${n}`);
     }
@@ -710,4 +816,25 @@ export function journeyTreeLines(tree: JourneyTree, opts: { openHint?: string } 
   }
   if (tree.notes.length) lines.push('', '## notes', ...tree.notes.map((n) => `- ${n}`));
   return lines;
+}
+
+/**
+ * A branch in words, for the CLI, MCP and a tip: `↳ Answer a correction · branch of Review · when the reviewer sends it
+ * back · rejoins Review — built`. The professional register; a surface prints its own register's words.
+ */
+export function storylineBranchText(b: StorylineBranch): string {
+  const word = flowStatusWord(b.built, b.total);
+  const back = b.rejoinsName ? ` · ${t('journeys.storyline.rejoins', 'professional').replace('{name}', b.rejoinsName)}` : '';
+  return `↳ ${b.name} · ${t('journeys.storyline.branchOf', 'professional').replace('{name}', b.branchOfName)} · ${t('journeys.storyline.when', 'professional').replace('{when}', b.when)}${back} — ${word.text}`;
+}
+
+/**
+ * The answer to a storyline nobody declares (`?storyline=nope`, `journeys --storyline nope`): one sentence that says
+ * so and names the storylines there are, by id and name, so the reader can pick one — never every journey instead.
+ * `tree` is the unpicked tree of the scope.
+ */
+export function unknownStorylineText(tree: JourneyTree, q: string): string {
+  const known = (tree.storylines ?? []).map((s) => `${s.id} (${s.name})`);
+  const head = t('journeys.storyline.unknown', 'professional').replace('{id}', q);
+  return known.length ? `${head} ${t('journeys.storyline.known', 'professional')} ${known.join(' · ')}` : `${head} ${t('journeys.storyline.noneKnown', 'professional')}`;
 }

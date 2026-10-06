@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension } from './graph.js';
+import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -77,7 +77,7 @@ export interface JourneysConfig {
   /** storylines — named chains of journeys (round-2026-10-05 §2); an entry overrides the manifest's with the same id, field by field */
   storylines?: JourneysConfigStoryline[];
 }
-export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: string[] }
+export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: (string | JourneyStorylineEntryDecl)[] }
 export interface JourneysConfigPersona { id: string; name?: string; description?: string }
 export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
 export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
@@ -204,6 +204,26 @@ export function loadConfig(path: string): FarsightConfig | null {
 }
 
 /**
+ * One entry of a storyline's `journeys` list, read softly: a non-empty string is a step's flow id; an object with a
+ * string `id` keeps its string `branchOf` / `when` / `rejoins` (anything else is left out); everything else is
+ * dropped (undefined). The manifest reader and the config sanitizer both read entries through it.
+ */
+export function storylineEntry(v: unknown): string | JourneyStorylineEntryDecl | undefined {
+  const s = (x: unknown): string | undefined => (typeof x === 'string' && x.trim() ? x.trim() : undefined);
+  if (typeof v === 'string') return s(v);
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const id = s(o.id);
+  if (!id) return undefined;
+  return {
+    id,
+    ...(s(o.branchOf) ? { branchOf: s(o.branchOf)! } : {}),
+    ...(s(o.when) ? { when: s(o.when)! } : {}),
+    ...(s(o.rejoins) ? { rejoins: s(o.rejoins)! } : {}),
+  };
+}
+
+/**
  * Soft validation of `journeys` (§4.2): an entry without a string id is dropped, a field of the
  * wrong type is left out, a block of the wrong shape becomes empty. Never throws.
  */
@@ -240,7 +260,7 @@ export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
   }
   if (r.storylines !== undefined) {
     out.storylines = entries(r.storylines).map((e) => {
-      const journeys = Array.isArray(e.journeys) ? e.journeys.map(str).filter((x): x is string => !!x) : undefined;
+      const journeys = Array.isArray(e.journeys) ? e.journeys.map(storylineEntry).filter((x): x is string | JourneyStorylineEntryDecl => !!x) : undefined;
       return {
         id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
         ...(journeys ? { journeys } : {}),

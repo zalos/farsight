@@ -9,7 +9,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
-  journeyTree, pickJourneys, journeyTreeLines, journeyTreeSummary, journeyPlacements, storylinePlacements,
+  journeyTree, pickJourneys, journeyTreeLines, journeyTreeSummary, journeyPlacements, storylinePlacements, unknownStorylineText,
   type GraphIndex, type GraphMeta, type JourneyTree,
 } from '@farsight/core';
 
@@ -43,10 +43,11 @@ export function registerJourneysTools(ctx: JourneysToolsContext): JourneysTools 
       json: z.boolean().optional().describe('return the JourneyTree as JSON instead of text'),
     },
   }, async ({ repo, persona, group, storyline, json }) => {
-    let t = tree(repo);
+    const whole = tree(repo);
+    let t = whole;
     if (persona || group || storyline) t = pickJourneys(t, { ...(persona ? { persona } : {}), ...(group ? { group } : {}), ...(storyline ? { storyline } : {}) });
     if (json) return text(JSON.stringify(t, null, 2));
-    if (storyline && !t.storylines.length) return text(`no storyline "${storyline}" — call journeys with no filter to see the storylines there are`);
+    if (storyline && !t.storylines.length) return text(unknownStorylineText(whole, storyline));
     if (!t.personas.length && (persona || group || storyline)) return text(`no journey under ${[persona && `persona "${persona}"`, group && `group "${group}"`, storyline && `storyline "${storyline}"`].filter(Boolean).join(' and ')} — call journeys with no filter to see the personas, groups and storylines there are`);
     return text(journeyTreeLines(t, { openHint: '(open with journey)' }).join('\n'));
   });
@@ -63,7 +64,10 @@ export function registerJourneysTools(ctx: JourneysToolsContext): JourneysTools 
       if (!where.length) return '';
       const stories = storylinePlacements(t, nodeId);
       return `shown under: ${where.map((w) => `${w.persona} › ${w.group}${w.pinned ? ' (start here)' : ''}`).join(' · ')}`
-        + (stories.length ? `\nin storyline: ${stories.map((s) => `${s.name} · step ${s.step} of ${s.of}${s.prev ? ` · before: \`${s.prev}\`` : ''}${s.next ? ` · next: \`${s.next}\`` : ''}`).join(' · ')}` : '');
+        + (stories.length ? `\nin storyline: ${stories.map((s) => (s.branch
+          // a branch: the step it leaves from, the condition that takes it, and where it comes back
+          ? `${s.name} · branch of ${s.branch.ofName} (\`${s.branch.of}\`) · when ${s.branch.when}${s.branch.rejoins ? ` · back to ${s.branch.rejoinsName} (\`${s.branch.rejoins}\`)` : ' · does not come back'}`
+          : `${s.name} · step ${s.step} of ${s.of}${s.prev ? ` · before: \`${s.prev}\`` : ''}${s.next ? ` · next: \`${s.next}\`` : ''}`)).join(' · ')}` : '');
     },
   };
 }

@@ -116,7 +116,7 @@ test('GET /api/deps serves packagesOf whole: rows, the packages count and the bu
   assert.deepEqual(body.meta['invoice-app'].builtins.map((b: any) => b.spec), ['node:fs', 'node:path', 'node:url']);
   const react = body.rows.find((r: any) => r.name === 'react');
   assert.equal(react.version, '^18.3.1');
-  assert.equal(react.journeys.n, 3, 'react reaches the three journeys through the screens that use it');
+  assert.equal(react.journeys.n, 4, 'react reaches the four journeys through the screens that use it');
   assert.equal(body.note, undefined);
 });
 

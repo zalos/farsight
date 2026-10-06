@@ -840,7 +840,9 @@ across features and across personas, in order:
 {
   "storylines": [
     { "id": "invoice", "name": "An invoice, end to end", "description": "From the contractor's upload to the week it is paid.",
-      "journeys": ["contractor-sign-in", "invoice-submission", "invoice-review", "invoice-paid"] },
+      "journeys": ["contractor-sign-in", "invoice-submission", "invoice-review", "invoice-paid",
+        { "id": "invoice-correction", "branchOf": "invoice-review", "when": "the reviewer asks the contractor to correct it",
+          "rejoins": "invoice-review" }] },
     { "id": "vendor", "name": "A vendor account", "journeys": ["vendor-account-creation", "vendor-account-review"] }
   ]
 }
@@ -853,10 +855,23 @@ across features and across personas, in order:
 - The same "storylines" list in the farsight.config.json journeys block overrides by id, field by
   field (a journeys list it gives replaces the whole list); its order comes first, the root file's
   before a nested file's; a nested file's storyline steps only through the manifests under its folder.
-- Where they show: the Journeys front door's Storylines section, the Map's storyline picker (one
-  band in storyline order, a "then" line from each journey to the next, #/map?storyline=<id>), the
-  journey header's "storyline · step n of m" with the journeys before and after, GET /api/journeys
-  (tree.storylines), the MCP journeys tool (storyline: <id>) and farsight journeys --storyline <id>.
+- A branch is a journey a case takes only when a condition holds — a correction, a rejection, a
+  hold — not a step every case goes through. Write it as an object in journeys: { id, branchOf,
+  when, rejoins? } — branchOf a step of the same storyline (the one it leaves from), when the
+  condition in words (required: a branch is never drawn without it), rejoins the step it comes back
+  at (leave it out when the case leaves the storyline there). A bare { id } is a step like "id".
+  Never declare a branch the design did not decide: Farsight draws it as written and does not guess
+  one from the code. A branch whose parent is not a step, with no when, or naming a journey that
+  is already a step is a note and is not drawn; a rejoins that is not a step is dropped with a note.
+  The storyline's journey count includes its branches (a breakdown says how many steps and branches).
+- Where they show: the Journeys front door's Storylines section (a branch indented under its step,
+  with its condition), the Map's storyline picker (one band in storyline order, a "then" line from
+  each journey to the next, a branch below the step it leaves from with its condition on the line and
+  a dashed line back, #/map?storyline=<id>; an id nobody declares says so and lists the ones there
+  are), fast travel (⌘K finds a storyline by name or id), the journey header's "storyline · step n
+  of m" (or "branch of <journey> · when …") with the journeys before and after, GET /api/journeys
+  (tree.storylines[].branches), the MCP journeys tool (storyline: <id>) and farsight journeys
+  --storyline <id>.
 
 An agent manages all of this with its own file tools — Farsight never writes into a code source: edit
 the manifest or the config, call refresh_graph, then journeys to check the result.

@@ -214,7 +214,7 @@ describe('dependencies — packages as nodes', () => {
     const out = await call('describe_node', { node_id: 'invoice-app::package::react' });
     assert.match(out, /^\[package\] react — \(no source loc\)/);
     assert.match(out, /package: third-party · declared \^18\.3\.1 in package\.json/);
-    assert.match(out, /4 files import it for this package · 3 journeys reach it for this package — /);
+    assert.match(out, /4 files import it for this package · 4 journeys reach it for this package — /);
     assert.match(out, /farsight deps where react/);
     const ws = await call('describe_node', { node_id: 'invoice-app::package::@invoice/plumbing' });
     assert.match(ws, /package: workspace · project @invoice\/plumbing · src\/server\/plumbing · resolved by alias or workspace name/);
@@ -322,12 +322,12 @@ describe('journeys', () => {
   test('text: persona, then group, then one line per journey — the core fold, line for line', async () => {
     const out = await call('journeys');
     assert.equal(out, journeyTreeLines(fold(), { openHint: '(open with journey)' }).join('\n'));
-    assert.match(out, /^3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope$/m);
+    assert.match(out, /^4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope$/m);
     assert.match(out, /^## Storylines — 1 storyline$/m);
     assert.match(out, /^1\. Start a new invoice — .*`invoice-app::flow::new-invoice` \(open with journey\)$/m);
     assert.ok(out.indexOf('## Storylines') < out.indexOf('## Billing'), 'the storylines come before the personas');
-    assert.match(out, /^## Billing — 3 journeys/m);
-    assert.match(out, /^### Invoices — 2 journeys/m);
+    assert.match(out, /^## Billing — 4 journeys/m);
+    assert.match(out, /^### Invoices — 3 journeys/m);
     assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
     // the fixture's config moves draft-and-send into Review and send; it is under both personas
     assert.match(out, /^- Draft and send an invoice — .* · also under Operations · placed by farsight\.config\.json · /m);
@@ -348,27 +348,34 @@ describe('journeys', () => {
   test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
     const guide = await call('design_guide');
     for (const words of ['personas[] { id, name, description? }', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
-      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
+      'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', '{ id, branchOf,\n  when, rejoins? }', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
       assert.ok(guide.includes(words), `design_guide does not say ${words}`);
     }
   });
 
   test('graph_overview has the journeys line and journey names where a flow sits', async () => {
     const overview = await call('graph_overview');
-    assert.match(overview, /^journeys: 3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
+    assert.match(overview, /^journeys: 4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
     const j = await call('journey', { entry: 'draft-and-send' });
     assert.match(j, /^shown under: Billing › Review and send · Operations › Review and send \(start here\)$/m);
     assert.match(j, /^in storyline: An invoice, end to end · step 2 of 3 · before: `invoice-app::flow::new-invoice` · next: `invoice-app::flow::billing-cycle`$/m);
+    // a branch says what it leaves from, when, and where it comes back
+    const b = await call('journey', { entry: 'correct-draft' });
+    assert.match(b, /^in storyline: An invoice, end to end · branch of Draft and send an invoice \(`invoice-app::flow::draft-and-send`\) · when Operations sends the draft back for a correction · back to Draft and send an invoice \(`invoice-app::flow::draft-and-send`\)$/m);
   });
 
   test('storyline: one storyline\'s steps and only its journeys; an unknown one says so', async () => {
     const out = await call('journeys', { storyline: 'invoice' });
-    assert.match(out, /^3 journeys · 1 storyline · /m);
-    assert.match(out, /^### An invoice, end to end \(`invoice`\) — 3 journeys · /m);
+    assert.match(out, /^4 journeys · 1 storyline · /m);
+    assert.match(out, /^### An invoice, end to end \(`invoice`\) — 4 journeys \(3 on the main path · 1 branch\) · /m);
     assert.match(out, /^2\. Draft and send an invoice — /m);
-    assert.match(await call('journeys', { storyline: 'nope' }), /no storyline "nope"/);
+    // the branch, indented under the step it leaves from, with its condition and its way back
+    assert.match(out, /^2\. Draft and send an invoice — .*\n   ↳ Correct a draft · branch of Draft and send an invoice · when Operations sends the draft back for a correction · back to Draft and send an invoice — built · `invoice-app::flow::correct-draft`/m);
+    assert.equal(await call('journeys', { storyline: 'nope' }), 'No storyline called “nope” is declared here. Storylines declared here: invoice (An invoice, end to end)');
     const json = JSON.parse(await call('journeys', { storyline: 'invoice', json: true }));
     assert.deepEqual(json.storylines[0].journeys.map((j: { id: string }) => j.id), ['new-invoice', 'draft-and-send', 'billing-cycle']);
+    assert.deepEqual(json.storylines[0].branches.map((b: any) => [b.id, b.branchOf, b.when, b.rejoins]),
+      [['correct-draft', 'invoice-app::flow::draft-and-send', 'Operations sends the draft back for a correction', 'invoice-app::flow::draft-and-send']]);
     assert.ok(json.personas.every((p: any) => p.groups.every((g: any) => g.journeys.every((j: any) => j.storylines.includes('invoice')))));
   });
 });
