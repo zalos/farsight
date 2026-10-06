@@ -45,6 +45,7 @@ const TOOLS = [
   'config_files',
   'describe_node',
   'design_drift', 'design_guide', 'design_surface',
+  'gate',
   'graph_changes', 'graph_overview',
   'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
   'search_graph', 'stories', 'test_coverage', 'trace_flow',

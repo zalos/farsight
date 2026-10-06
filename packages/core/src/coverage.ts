@@ -670,6 +670,8 @@ function segmentNodeIds(segment: JourneySummary['segments'][number]): string[] {
     ...(segment.screen ? [segment.screen.id] : []),
     ...segment.markers.flatMap((m) => (m.choice ? m.choice.candidates.map((c) => c.nodeId) : [m.nodeId])),
     ...segment.gates.map((g) => g.id),
+    // a config check is still code the screen's walk runs: it counts toward what tests reach (gates.ts)
+    ...(segment.configChecks ?? []).map((g) => g.id),
   ];
 }
 

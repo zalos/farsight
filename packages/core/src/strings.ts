@@ -24,6 +24,7 @@ import { DEPS_STRINGS } from './strings-deps.js';
 import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { DOOR_STRINGS } from './strings-doors.js';
+import { GATE_STRINGS } from './strings-gate.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -101,6 +102,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
+  ...GATE_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
