@@ -13,7 +13,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts,
+  counted, journeyTree, configCounts, gateCard,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest, refuseWrite } from './guard.js';
@@ -944,6 +944,18 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         ...(typeof node.loc.endLine === 'number' ? { endLine: node.loc.endLine } : {}),
         code, ...(sliced && sliced.codeTruncated ? { codeTruncated: true } : {}),
       }));
+    }
+    if ((url === '/api/gate' || url.startsWith('/api/gate?')) && req.method === 'GET') {
+      // one gate answered (swarm-fixes 2026-10-05, finding 4): what it is, the words somebody wrote, what it sits on,
+      // the calls a request goes through to meet it and the tests that reach them — core gateCard(), the same fold
+      // the MCP `gate` tool prints. Read-only; one answer per gate per index (folds.ts)
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const id = new URL(url, 'http://localhost').searchParams.get('node');
+      if (!id) return send(400, JSON.stringify({ error: 'missing ?node=<gate id>' }));
+      const g = loadJourneyGraph(graphPath);
+      const card = folded(g.index, 'gate', id, () => gateCard(g.index, id) ?? null, 64);
+      if (!card) return send(404, JSON.stringify({ error: g.index.byId.has(id) ? `${id} is not a gate or a rule` : `no node ${id} in this graph` }));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...card }));
     }
     // ── Tests surface (docs/proposals/tests-surface.md §3.4) ─────────────
     if (url.startsWith('/api/tests') && req.method === 'GET') {

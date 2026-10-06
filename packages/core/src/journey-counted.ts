@@ -36,6 +36,8 @@ export interface JourneyCounted {
   planned: Counted;
   gates: Counted;
   checks: Counted;
+  /** guards that check how the app was started (core gates.ts), met on the walk — never part of `gates` */
+  configChecks: Counted;
   decisions: Counted;
   notInWords: Counted;
   inWords: Counted;
@@ -59,6 +61,8 @@ export interface SegmentCounted {
   actions: Counted;
   gates: Counted;
   checks: Counted;
+  /** the config checks met on this screen (`segment.configChecks`), never part of `gates` */
+  configChecks: Counted;
   decisions: Counted;
   notInWords: Counted;
   inWords: Counted;
@@ -121,6 +125,7 @@ function segmentCounted(j: Journey, sg: JourneySegment, entryBusiness: string | 
       breakdown: [{ key: 'count.part.guards', n: guards }, { key: 'count.part.rules', n: sg.gates.length - guards }],
     }),
     checks: counted(sg.counts.checks, 'journey.countChecks', here, `${s}.counts.checks`, { bizUnit: 'journey.countChecks' }),
+    configChecks: counted(sg.configChecks?.length ?? 0, 'count.unit.configChecks', here, `${s}.configChecks.length`, { bizUnit: 'count.unit.configChecks' }),
     decisions: counted(sg.counts.decisions, 'journey.countDecisions', here, `${s}.counts.decisions`, {
       bizUnit: 'journey.countDecisions',
       breakdown: [
@@ -198,6 +203,7 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
       breakdown: [{ key: 'count.part.guards', n: guardNames }, { key: 'count.part.rules', n: ruleNames }],
     }),
     checks: counted(k.checks, 'journey.countChecks', all, c('checks'), { bizUnit: 'journey.countChecks' }),
+    configChecks: counted(k.configChecks ?? 0, 'count.unit.configChecks', all, c('configChecks'), { bizUnit: 'count.unit.configChecks' }),
     decisions: counted(k.decisions, 'journey.countDecisions', all, c('decisions'), {
       bizUnit: 'journey.countDecisions',
       breakdown: [

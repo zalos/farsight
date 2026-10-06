@@ -45,6 +45,7 @@ const TOOLS = [
   'config_files',
   'describe_node',
   'design_drift', 'design_guide', 'design_surface',
+  'gate',
   'graph_changes', 'graph_overview',
   'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
   'search_graph', 'stories', 'test_coverage', 'trace_flow',
@@ -180,6 +181,20 @@ describe('orient and find', () => {
   test('search_graph returns ids another tool can take', async () => {
     const out = await call('search_graph', { query: 'finalize' });
     assert.ok(out.includes(`\`${FINALIZE}\``) || out.includes('finalize'), out);
+  });
+});
+
+describe('gate — one gate answered (swarm-fixes 2026-10-05, finding 4)', () => {
+  test('the calls it guards with file:line, the tests that reach it, and describe_node prints the same section', async () => {
+    const id = 'invoice-app::guard::requireScope(billing:write)';
+    const out = await call('gate', { node_id: id });
+    assert.match(out, /## gate — gate \(guard\)/);
+    assert.match(out, /calls it guards: 2 of \d+ calls for this gate/);
+    assert.match(out, /POST \/invoices — guarded directly · src\/server\/[\w./-]+:\d+/);
+    assert.match(out, /tests that reach it: /);
+    const node = await call('describe_node', { node_id: id, context: false });
+    assert.match(node, /## gate — gate \(guard\)/);
+    assert.match(await call('gate', { node_id: 'nope::x' }), /unknown gate/);
   });
 });
 

@@ -1,5 +1,6 @@
 import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind } from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
+import { isConfigCheck } from './config-check.js';
 import { withJourneyCounted, type JourneyCounted, type SegmentCounted, type SegmentAbsence, type AbsenceKind, type AbsenceWord } from './journey-counted.js';
 
 /**
@@ -214,8 +215,11 @@ export interface JourneyStep {
   /** the node this step runs — for a planned step, the declared route whose contract produced it */
   nodeId: string;
   crossRepo: boolean;       // repo changed vs parent step
-  /** guards/validates on this node; `planned` = the spec's security requirement on a declared route, not an enforced gate */
-  gates: { id: string; kind: 'guard' | 'rule'; name: string; planned?: true }[];
+  /**
+   * guards/validates on this node; `planned` = the spec's security requirement on a declared route, not an enforced gate;
+   * `config` = a config check (core gates.ts `isConfigCheck`): it checks how the app was started, not this request
+   */
+  gates: { id: string; kind: 'guard' | 'rule'; name: string; planned?: true; config?: true }[];
   repeat: boolean;          // node already appeared earlier in this journey
   cycle: boolean;           // back-reference; traversal did not recurse
   conditions?: PathCondition[]; // forks enclosing THIS hop's call site (this hop only)
@@ -391,7 +395,8 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       // is not a checkpoint on anyone's journey (01 §2.3.6 a)
       if (src.kind === 'rule' && (src.tags?.includes('env-schema') || src.tags?.includes('plumbing'))) continue;
       if ((src.kind === 'guard' || src.kind === 'rule') && !gates.some((g) => g.id === src.id)) {
-        gates.push({ id: src.id, kind: src.kind, name: src.name });
+        // a guard that checks the process (its settings), not the request: kept, and said so (gates.ts)
+        gates.push({ id: src.id, kind: src.kind, name: src.name, ...(isConfigCheck(src) ? { config: true as const } : {}) });
       }
     }
     // a declared route's security requirement is a planned gate: the spec commits to it, no code enforces it yet.
@@ -1079,8 +1084,14 @@ export interface JourneySegment {
   markers: SegmentMarker[];
   /** the segment's sub-columns: one per client-side action, in execution order */
   moments: JourneyMoment[];
-  /** deduped by name within the segment; count = how many steps met it */
+  /** deduped by name within the segment; count = how many steps met it. Config checks are not here: see `configChecks` */
   gates: { id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number }[];
+  /**
+   * the config checks the walk met on this screen (core gates.ts `isConfigCheck`): guards that check how the app
+   * was started — its settings — on the way to a request, never the request itself. Listed apart and counted apart
+   * from `gates`, so a screen's gates are the checkpoints its own requests meet (swarm-fixes 2026-10-05, finding 4)
+   */
+  configChecks: { id: string; name: string; count: number; stepOrder: number }[];
   /** translated decisions only (class business | guard) — the diamonds the business band draws */
   decisions: JourneySummary['business']['decisions'];
   /** technical conditions inside this segment that were not translated (never drawn, always counted) */
@@ -1095,7 +1106,7 @@ export interface JourneySegment {
    * `gates` = distinct checkpoints, `checks` = how many times the walk met one
    * (Σ gate counts); `setup`/`deferred` = the boot and the later work named here.
    */
-  counts: { markers: number; calls: number; planned: number; gates: number; checks: number; decisions: number; records: number; messages: number; cutPoints: number; repeats: number; setup: number; deferred: number };
+  counts: { markers: number; calls: number; planned: number; gates: number; checks: number; decisions: number; records: number; messages: number; cutPoints: number; repeats: number; setup: number; deferred: number; configChecks: number };
   /** this screen's numbers as typed counts, scoped `on this screen` (core/journey-counted.ts, docs/COUNTS.md) */
   counted?: SegmentCounted;
   /**
@@ -1130,6 +1141,8 @@ export interface JourneySummary {
     docs: NonNullable<GraphNode['links']>;
     gates: { id: string; name: string; planned?: true; appliesTo: string }[];
     rules: { id: string; name: string; appliesTo: string }[];
+    /** the config checks the walk met, each once — not gates (`segments[].configChecks`) */
+    configChecks: { id: string; name: string; appliesTo: string }[];
     /** translated decisions only: class business | guard, in walk order, deduped by fork + arm */
     decisions: { nodeId: string; line: number; label: string; arm: string; class: DecisionClass; stepOrder: number }[];
     /**
@@ -1213,7 +1226,7 @@ export interface JourneySummary {
    * and a consumer must say so rather than guess a side.
    */
   txKnown: boolean;
-  counts: { screens: number; steps: number; planned: number; gates: number; checks: number; decisions: number; records: number; messages: number; segments: number; cutPoints: number; repeats: number; setup: number; deferred: number; called: number; again: number; declaredNotCalled: number; choices: number };
+  counts: { screens: number; steps: number; planned: number; gates: number; checks: number; decisions: number; records: number; messages: number; segments: number; cutPoints: number; repeats: number; setup: number; deferred: number; called: number; again: number; declaredNotCalled: number; choices: number; configChecks: number };
   /**
    * Every number the header, the lane's tabs and the drill print, as typed
    * counts: the number, its words in each lens, the scope it counts over and
@@ -1397,6 +1410,7 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   const nameOf = (n: GraphNode) => n.facets?.business?.label ?? n.name;
   const timeline: TimelineItem[] = [];
   const gates = new Map<string, JourneySummary['business']['gates'][number]>();
+  const configChecks = new Map<string, JourneySummary['business']['configChecks'][number]>();
   const rules = new Map<string, JourneySummary['business']['rules'][number]>();
   const decisions: JourneySummary['business']['decisions'] = [];
   const seenDecision = new Set<string>();
@@ -1506,7 +1520,8 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       timeline.push({ order: s.order, depth: s.depth, kind: 'decision', nodeId: c.nodeId, name: label, via: s.via, stepOrder: s.order, ...(c.business ? { business: c.business } : {}) });
     }
     for (const g of s.gates) {
-      if (g.kind === 'guard') gates.set(g.id, { id: g.id, name: g.name, ...(g.planned ? { planned: true as const } : {}), appliesTo: n.id });
+      if (g.config) configChecks.set(g.id, { id: g.id, name: g.name, appliesTo: n.id });
+      else if (g.kind === 'guard') gates.set(g.id, { id: g.id, name: g.name, ...(g.planned ? { planned: true as const } : {}), appliesTo: n.id });
       else rules.set(g.id, { id: g.id, name: g.name, appliesTo: n.id });
       timeline.push({ order: s.order, depth: s.depth, kind: 'gate', nodeId: g.id, name: g.name, via: s.via, stepOrder: s.order, ...(g.planned ? { planned: true as const } : {}) });
     }
@@ -1552,7 +1567,7 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   const systemRows = new Map<string, SystemRow>();
   const segments: JourneySegment[] = [];
   const newSegment = (screen: JourneySummary['user'][number] | null, from: number): JourneySegment =>
-    ({ index: segments.length, screen, from, to: from, markers: [], moments: [], gates: [], decisions: [], untranslated: 0, systems: [], declaredOnly: [], cutPoints: [], counts: { markers: 0, calls: 0, planned: 0, gates: 0, checks: 0, decisions: 0, records: 0, messages: 0, cutPoints: 0, repeats: 0, setup: 0, deferred: 0 } });
+    ({ index: segments.length, screen, from, to: from, markers: [], moments: [], gates: [], configChecks: [], decisions: [], untranslated: 0, systems: [], declaredOnly: [], cutPoints: [], counts: { markers: 0, calls: 0, planned: 0, gates: 0, checks: 0, decisions: 0, records: 0, messages: 0, cutPoints: 0, repeats: 0, setup: 0, deferred: 0, configChecks: 0 } });
   let seg: JourneySegment | null = null;
   for (const row of timeline) {
     const n = index.byId.get(row.nodeId);
@@ -1570,6 +1585,12 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     if (row.kind === 'gate') {
       const st = stepById.get(row.stepOrder);
       const g = st?.gates.find((x) => x.id === row.nodeId);
+      if (g?.config) {
+        const had = seg.configChecks.find((x) => x.id === row.nodeId);
+        if (had) had.count++;
+        else seg.configChecks.push({ id: row.nodeId, name: row.name, count: 1, stepOrder: row.stepOrder });
+        continue;
+      }
       const kind: 'guard' | 'rule' = g?.kind === 'rule' ? 'rule' : 'guard';
       const have = seg.gates.find((x) => x.name === row.name && x.kind === kind);
       if (have) have.count++;
@@ -1667,6 +1688,7 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
   const inSeg = (c: JourneyCutPoint, sg: JourneySegment) => c.parentStep >= sg.from && c.parentStep <= sg.to;
   for (const sg of segments) {
     sg.counts.gates = sg.gates.length;
+    sg.counts.configChecks = sg.configChecks.length;
     // a checkpoint met three times is one gate and three checks — "18 gates · 54 checks"
     sg.counts.checks = sg.gates.reduce((a, g) => a + g.count, 0);
     sg.counts.decisions = sg.decisions.length;
@@ -1858,7 +1880,7 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     business: {
       ...(entryBusiness ? { description: entryBusiness } : {}),
       docs: [...(entry?.links ?? []), ...screens.flatMap((s) => s.links ?? [])].filter((l, i, arr) => arr.findIndex((x) => (x.url ?? x.ref) === (l.url ?? l.ref)) === i),
-      gates: [...gates.values()], rules: [...rules.values()], decisions,
+      gates: [...gates.values()], rules: [...rules.values()], configChecks: [...configChecks.values()], decisions,
       untranslated: {
         count: untranslated.length,
         byCategory: untranslated.reduce<Partial<Record<BranchCategory, number>>>((acc, u) => { acc[u.category] = (acc[u.category] ?? 0) + 1; return acc; }, {}),
@@ -1876,7 +1898,7 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     txKnown: tx.known,
     counts: {
       screens: user.length, steps: j.steps.length - j.plannedCount, planned: j.plannedCount,
-      gates: distinctGates.size, checks: segments.reduce((a, sg) => a + sg.counts.checks, 0),
+      gates: distinctGates.size, checks: segments.reduce((a, sg) => a + sg.counts.checks, 0), configChecks: configChecks.size,
       decisions: decisions.length, records: records.size, messages: messages.size, segments: segments.length,
       cutPoints: cuts.length, repeats: repeats.length,
       // Count call SITES, not markers. `choiceAt` is keyed by step order, so one call

@@ -20,7 +20,8 @@ import { t, def, evidenceWord, plainWords, proseHtml, unTick } from '../strings.
 import { sym } from '../sym.js';
 import { nodeCardHtml, vsl, linkHtml, designChipHtml, designThumbHtml } from '../lib/graph-render.js';
 import { journeyViewHash, isJourneyRoute, withParams, mapScreenHash, stepIndex, journeyStepHash } from '../lib/route-url.js';
-import { doorsFor, doorsHtml, codeSlotHtml, fillCode } from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
+import { gateAttrs } from '../lib/gate-card.js';
 import { trapFocus, releaseFocus, rememberOpener } from '../lib/focus-trap.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/tooltip.js';
@@ -1101,7 +1102,7 @@ function jrnSectionHtml(i) {
   }
   const gateBanners = (s.gates || []).map((g) => {
     const gn = S.BYID[g.id];
-    return '<div class="jrn-gate-banner' + (g.kind === 'rule' ? ' rule' : '') + (g.planned ? ' planned' : '') + '">'
+    return '<div class="jrn-gate-banner' + (g.kind === 'rule' ? ' rule' : '') + (g.planned ? ' planned' : '') + '"' + (gn ? gateAttrs(g.id, { step: s.order, config: g.config }) : '') + '>'
       + sym(g.kind === 'rule' ? 'shield' : 'lock') + ' requires ' + esc(String(g.name || '').replace(/^requireScope: /, ''))
       + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
       + (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '') + '</div>';
@@ -1570,53 +1571,21 @@ export function jrnGatesShown(list) {
 function jrnGateRowHtml(g, qualifier) {
   const gn = S.BYID[g.id];
   const words = jrnGateLabel(g);
-  return '<div class="jrn-gl-row' + (g.kind === 'rule' ? ' rule' : '') + (g.planned ? ' planned' : '') + '"'
-    + ' onclick="jrnScrollTo(' + g.stepOrder + ')" title="' + esc(g.name || '') + '">'
-    + sym(g.kind === 'rule' ? 'shield' : 'lock')
+  // a click (or Enter) opens the gate card; a planned gate is not in the graph, so it still walks to its step
+  const opens = gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config })
+    : ' onclick="jrnScrollTo(' + g.stepOrder + ')"';
+  return '<div class="jrn-gl-row' + (g.kind === 'rule' ? ' rule' : '') + (g.config ? ' config' : '') + (g.planned ? ' planned' : '') + '"'
+    + opens + ' title="' + esc(g.name || '') + '">'
+    + sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock')
     + '<span class="jrn-gl-w">' + esc(words) + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
     // a real space, not only the margin: this row is read in a screenshot and
     // pasted into a ticket as often as it is clicked
     + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
     + '<span class="jrn-gl-x"' + (g.count > 1 ? ' title="' + esc(t('journey.gateTimes').replace('{n}', g.count)) + '"' : '') + '>'
     + (g.count > 1 ? '×' + g.count : '') + '</span>'
-    + '<span class="jrn-gl-go">' + (gn && gn.loc ? vsl(repoOf(gn), gn.loc.path, gn.loc.line) : '')
-    + (gn ? '<button type="button" class="jrn-gl-more" aria-expanded="false" data-gate="' + esc(g.id) + '" data-kind="' + esc(g.kind) + '"'
-      + ' onclick="jrnGateExpand(this)" aria-label="' + esc(t('door.expand') + ' · ' + words) + '"' + tipAttrs({ key: 'door.expand', noFocus: true }) + '>▸</button>' : '')
+    // the doors on the row itself, not behind a ▸ (the business register draws none: they open code)
+    + '<span class="jrn-gl-go">' + (gn ? doorsHtml(doorsFor(g.kind === 'rule' ? 'rule' : 'gate', gn)) : '')
     + '</span></div>';
-}
-/**
- * Open a checkpoint in place (round 2026-10-05 §3.2): under its row, the guard's
- * own lines read from the file (not in the business register, where the gate is
- * its words) and its doors — the editor at its line and its card on the code
- * map. A second click folds it.
- * @group Journey view
- * @business Opens a check where it is listed: what it says, and where to read it.
- */
-export function jrnGateExpand(btn) {
-  if (window.event) window.event.stopPropagation();
-  const row = btn.closest('.jrn-gl-row');
-  if (!row) return;
-  const next = row.nextElementSibling;
-  if (next && next.classList.contains('dd-exp')) { next.remove(); btn.setAttribute('aria-expanded', 'false'); btn.textContent = '▸'; return; }
-  const id = btn.dataset.gate;
-  const gn = S.BYID[id];
-  if (!gn) return;
-  const biz = currentLens() === 'business';
-  const all = jrnWords(gn.bizDescription || gn.docs || '') || '';
-  // the first sentence, at most a short paragraph: the code and the doors are what this fold is for
-  const first = (all.match(/^[\s\S]*?[.!?](?=\s|$)/) || [all])[0];
-  const words = first.length > 240 ? first.slice(0, 237).replace(/\s+\S*$/, '') + '…' : first;
-  const doors = doorsHtml(doorsFor(btn.dataset.kind === 'rule' ? 'rule' : 'gate', gn));
-  const exp = document.createElement('div');
-  exp.className = 'dd-exp jrn-gl-exp';
-  exp.tabIndex = 0;
-  exp.setAttribute('data-doors', '');
-  exp.innerHTML = doors + (words ? '<p class="dd-words">' + esc(words) + '</p>' : (biz ? '<p class="dd-words">' + esc(row.querySelector('.jrn-gl-w') ? row.querySelector('.jrn-gl-w').textContent : '') + '</p>' : ''))
-    + codeSlotHtml(id);
-  row.after(exp);
-  btn.setAttribute('aria-expanded', 'true');
-  btn.textContent = '▾';
-  fillCode(exp);
 }
 /**
  * One named list of checkpoints: a heading carrying THIS screen's count, then
@@ -1646,7 +1615,7 @@ function jrnBizGroupHtml(key, total, body, mute, cls, scopeKey) {
       + esc(allMuted ? t('journey.biz.noneInWords') : t('journey.biz.notInWords').replace('{n}', mute)) + '</div>' : '')
     + '</div>';
 }
-function jrnGateGroupHtml(list, key, scopeKey) {
+function jrnGateGroupHtml(list, key, scopeKey, cls) {
   if (!list.length) return '';
   const { rows, drawn, mute } = jrnGatesShown(list);
   // Two checkpoints whose developers wrote the same @guard phrase collapse to one
@@ -1669,7 +1638,7 @@ function jrnGateGroupHtml(list, key, scopeKey) {
     return jrnGateRowHtml(g, t('journey.sameWords').replace('{i}', i).replace('{n}', n));
   }).join('');
   return jrnBizGroupHtml(key, rows.length, '<div class="jrn-gl-rows">' + html + '</div>',
-    mute, key === 'journey.bizGroup.rules' ? 'rules' : '', scopeKey);
+    mute, cls || (key === 'journey.bizGroup.rules' ? 'rules' : ''), scopeKey);
 }
 /**
  * The gates and rules of one screen as two aligned lists rather than one cloud
@@ -1679,11 +1648,14 @@ function jrnGateGroupHtml(list, key, scopeKey) {
  * @group Journey view
  * @business What has to be true before this part of the journey goes through.
  */
-function jrnGateListHtml(gates, scopeKey) {
-  if (!gates || !gates.length) return '';
+function jrnGateListHtml(gates, scopeKey, configChecks) {
+  const cfg = (configChecks || []).map((g) => ({ ...g, kind: 'guard', config: true }));
+  if ((!gates || !gates.length) && !cfg.length) return '';
   return '<div class="jrn-gatelist">'
-    + jrnGateGroupHtml(gates.filter((g) => g.kind !== 'rule'), 'journey.bizGroup.gates', scopeKey)
-    + jrnGateGroupHtml(gates.filter((g) => g.kind === 'rule'), 'journey.bizGroup.rules', scopeKey)
+    + jrnGateGroupHtml((gates || []).filter((g) => g.kind !== 'rule'), 'journey.bizGroup.gates', scopeKey)
+    + jrnGateGroupHtml((gates || []).filter((g) => g.kind === 'rule'), 'journey.bizGroup.rules', scopeKey)
+    // the config checks the screen's code meets on the way: listed apart, counted apart (swarm-fixes 2026-10-05, finding 4)
+    + jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config')
     + '</div>';
 }
 /**
@@ -1708,6 +1680,7 @@ function jrnGateListHtml(gates, scopeKey) {
 export function jrnChecksHtml(sg, mo) {
   const tab = jrnBizTab();
   const gates = (sg.gates || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to);
+  const configs = (sg.configChecks || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to);
   const inRange = jrnSegDecisions(sg).filter((d) => d.order >= mo.from && d.order <= mo.to);
   // business draws the decisions somebody wrote; a guard-class condition nobody
   // labelled is a predicate in code and is counted, not named
@@ -1725,7 +1698,7 @@ export function jrnChecksHtml(sg, mo) {
   const decs = tab === 'gates' || !inRange.length ? ''
     : '<div class="jrn-gatelist">' + jrnBizGroupHtml('journey.decisions', inRange.length,
       shown.map(jrnSheetDecChipHtml).join(''), inRange.length - shown.length) + '</div>';
-  const body = (tab === 'decisions' ? '' : jrnGateListHtml(gates)) + decs;
+  const body = (tab === 'decisions' ? '' : jrnGateListHtml(gates, undefined, configs)) + decs;
   return body ? body + untr : (untr || jrnAbsentHtml('noneIndexed'));
 }
 /** What the walk could not put into words, said in the register's own voice — a
@@ -1898,7 +1871,7 @@ function jrnBizCellHtml(sg, last) {
   // rather than leaving a reader to wonder whether it was merely not drawn
   let body = '';
   if (tab === 'gates') {
-    body = jrnGateListHtml(sg.gates, 'journey.scopeHere');
+    body = jrnGateListHtml(sg.gates, 'journey.scopeHere', sg.configChecks);
   } else if (tab === 'decisions') {
     // the flowchart is not deleted, only moved behind the view that asks for it —
     // in every register, including code, which hid it only because it was always on.
@@ -3201,7 +3174,7 @@ export function jrnSchemaChipHtml(m) {
 /** One gate as a sheet chip — the checkpoint in words and how often this action met it.
  * @group Journey view */
 function jrnSheetGateChipHtml(g) {
-  return '<span class="jrn-mk gate" onclick="jrnScrollTo(' + g.stepOrder + ')" title="' + esc(g.name || '') + '">'
+  return '<span class="jrn-mk gate"' + (S.BYID[g.id] ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
     + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(jrnGateText(g)) + (g.count > 1 ? ' ×' + g.count : '')
     + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '') + '</span>';
 }
@@ -4994,4 +4967,4 @@ if (typeof window !== 'undefined' && window.addEventListener) {
     S.jrnFitRaf = requestAnimationFrame(() => { S.jrnFitRaf = 0; jrnFitToWindow(); });
   });
 }
-expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf, jrnGateExpand });
+expose({ openJourney: gotoJourney, closeJourney, jrnToggleGroup, jrnStoryGo, jrnStoryKey, jrnScrollTo, jrnSelect, jrnSelectSegment, jrnToggleFork, jrnToggleForks, jrnForkJump, jrnCopyRecipe, jrnExpandRepeat, jrnNav, jrnSetView, jrnSetBizTab, jrnToggleBizDocs, jrnSetLayout, jrnSetDock, jrnDockGrip, jrnSheetOpen, jrnToggleHelpers, jrnLadderMore, jrnToggleCuts, jrnCutJump, jrnImpactRings, jrnStepOf });
