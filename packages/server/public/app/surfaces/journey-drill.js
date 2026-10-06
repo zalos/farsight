@@ -723,7 +723,7 @@ function jrnInspHeadHtml(i, mk) {
     + jrnTxLineHtml(mk)
     // what proves this step runs, in the head where the reader already is: the
     // same foot the screen cards and the Verified-by cells draw (B4.2)
-    + jrnTestsFootHtml(jrnStepTestFacts(i), { absent: 'journey.insp.noTestStep', tab: true, impact: jrnStepNodeId(i), wider: jrnStepActionFacts(i) })
+    + jrnTestsFootHtml(jrnStepTestFacts(i), { absent: 'journey.insp.noTestStep', tab: true, impact: jrnStepNodeId(i), wider: jrnStepActionFacts(i), cases: jrnStepNodeId(i) ? { node: jrnStepNodeId(i) } : null })
     + '</div>';
 }
 /**

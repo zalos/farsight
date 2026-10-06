@@ -572,7 +572,7 @@ function jrnScreenFootHtml(sg) {
   // its own class, not jrn-cdesc: the code register hides descriptions on a
   // screen card, and what proves the screen runs is not a description
   return '<div class="jrn-cfoot" onclick="event.stopPropagation()">'
-    + jrnTestsFootHtml(segCov ? jrnScopeTestFacts(segCov) : null, { absent: 'journey.tests.noneScreen', open: true })
+    + jrnTestsFootHtml(segCov ? jrnScopeTestFacts(segCov) : null, { absent: 'journey.tests.noneScreen', cases: { seg: sg.index } })
     + '</div>';
 }
 /**
@@ -3181,20 +3181,15 @@ function jrnSheetOpen(li, ci, what, btn) {
 // Each chip's opening tag is written out in full: a class attribute assembled
 // from pieces reads as prose to the string lint (RULE 1).
 const JRN_FOOT_EV = '<span class="ev ';
-const JRN_FOOT_ST = '<span class="st ';
 const JRN_FOOT_NONE = '<span class="ev none" title="';
-// The weakest verdict wins, exactly as core's `coverageFor` folds it: one
-// skipped or failing case is not covered by a hundred passing ones.
-const JRN_RUN_WEAK = { failed: 5, flaky: 4, skipped: 3, unknown: 2, passed: 1 };
-const JRN_FRESH_WEAK = { changed: 3, unknown: 2, unchanged: 1 };
-
 /**
  * The facts a foot prints for a list of coverage refs the core did not fold —
  * only a table, which no test touches directly and which is reached through
- * its accessors. Cases per level and coverage reports counted apart, and the
- * weakest of their own runs. No evidence word: the core decides that word and
- * it gave none for this, so the foot says what reached it and claims no class
- * (docs/COUNTS.md §4 — the viewer's own copy of the rule is gone).
+ * its accessors. Cases per level and coverage reports counted apart. No
+ * evidence word and no verdict: the core decides both, and for a table it gave
+ * only its cases by their own runs (`coverageViaRuns`), which the caller adds
+ * (docs/COUNTS.md §4 — the viewer's own copy of the rule is gone, and so is its
+ * fold of a weakest run: swarm 2026-10-05, finding 1).
  * @group Journey view
  */
 function jrnTestFacts(refs) {
@@ -3202,18 +3197,6 @@ function jrnTestFacts(refs) {
   (refs || []).forEach((x) => { if (x && x.id && !by.has(x.id)) by.set(x.id, x); });
   const all = [...by.values()];
   const cases = all.filter((x) => !x.runLevel);
-  const withRuns = all.filter((x) => !x.inactive && x.at);
-  let run = null;
-  if (withRuns.length) {
-    let status = 'passed', freshness = 'unchanged';
-    withRuns.forEach((x) => {
-      const st = x.status || 'unknown', f = x.freshness || 'unknown';
-      if ((JRN_RUN_WEAK[st] || 0) > (JRN_RUN_WEAK[status] || 0)) status = st;
-      if ((JRN_FRESH_WEAK[f] || 0) > (JRN_FRESH_WEAK[freshness] || 0)) freshness = f;
-    });
-    run = { status, freshness, at: withRuns.map((x) => x.at).sort().pop(),
-      projects: [...new Set(withRuns.map((x) => x.project).filter(Boolean))].sort() };
-  }
   return {
     e2e: cases.filter((x) => x.level === 'e2e').length,
     unit: cases.filter((x) => x.level === 'unit').length,
@@ -3221,7 +3204,8 @@ function jrnTestFacts(refs) {
     observed: cases.filter((x) => x.evidence === 'observed').length,
     runLevel: all.length - cases.length,
     total: cases.length,
-    run,
+    run: null,
+    verdict: null,
   };
 }
 /**
@@ -3241,6 +3225,8 @@ export function jrnFoldFacts(cov) {
     e2e, unit, integration, observed: n(k.observed, c.observed), runLevel: n(k.runReports, c.runLevel),
     total: k.tests ? k.tests.n : e2e + unit + integration,
     evidenceWord: cov.evidenceWord || null, counted: cov.counted || null, observation: cov.observation || null,
+    // the cell's one verdict (core `testVerdict`): the word, its own run's status, every case by its run
+    verdict: cov.verdict || null,
     chip: cov.chip || 'none', run: cov.run || null, note: cov.note,
   };
 }
@@ -3251,14 +3237,12 @@ function jrnScopeTestFacts(cov) { return jrnFoldFacts(cov); }
  * @group Journey view */
 export function jrnStepTestFacts(i) {
   const s = (S.JOURNEY && S.JOURNEY.steps[i]) || {};
-  if (s.coverage && s.coverage.evidenceWord) {
-    const f = jrnFoldFacts(s.coverage);
-    // a step carries its cases as refs; the fold's run is the covering tests' own
-    if (!f.run) f.run = jrnTestFacts(s.coverage.tests || []).run;
-    return f;
-  }
+  if (s.coverage && s.coverage.evidenceWord) return jrnFoldFacts(s.coverage);
   const direct = (s.coverage && s.coverage.tests) || [];
-  return jrnTestFacts(direct.length ? direct : (Array.isArray(s.coverageVia) ? s.coverageVia : []));
+  const f = jrnTestFacts(direct.length ? direct : (Array.isArray(s.coverageVia) ? s.coverageVia : []));
+  // a table's accessors' cases by their own runs, counted in core
+  if (!direct.length && s.coverageViaRuns) f.verdict = { runs: s.coverageViaRuns };
+  return f;
 }
 /** One action's facts: the core's slim entry for it (`coverage.moments[i][k]`), or — on an older server — every test reaching a step inside it.
  * @group Journey view */
@@ -3312,20 +3296,44 @@ function jrnFootWiderHtml(wider) {
   return '<div class="line jrn-twider" data-scope="' + esc(k.scope) + '"' + tipAttrs({ key: 'journey.tests.widerScope' }) + '>'
     + esc(t('journey.tests.widerScope')).replace('{n}', () => jrnCountedHtml(k, { noFocus: true })) + '</div>';
 }
-/** The covering tests' own last run as a line of its own — what it said, when, and whether the code has moved since.
- * It is **their** run, labelled so: the run behind the evidence word is the observation, printed beside the word.
+/**
+ * The covering tests' own last runs as a line of its own: how many cases, as a
+ * number whose tip breaks them down by what each one's run said (core
+ * `testVerdict().runs`, a breakdown that sums), and the runner projects. It is
+ * **never** a verdict: the cell's one verdict is the evidence word beside it,
+ * and printing the weakest run here put *skipped* under *passed, by its own
+ * declaration* for one skipped case among 145 (swarm 2026-10-05, finding 1).
  * @group Journey view */
-export function jrnRunLineHtml(run) {
-  if (!run) return '';
-  // the verdict keeps its chip (a shape and a word), so the line beside it is
-  // the other two facts of `tests.run.line` and never repeats the first
-  const status = JRN_FOOT_ST + esc(run.status) + '" title="' + esc(def('tests.run.' + run.status) || '') + '">' + esc(t('tests.run.' + run.status)) + '</span>';
-  const when = [(run.at || '').slice(0, 10), t('tests.freshness.' + (run.freshness || 'unknown'))].filter(Boolean).join(' · ');
-  return '<div class="line"><span class="hud-label"' + tipAttrs({ key: 'journey.tests.theirRun' }) + '>' + esc(t('journey.tests.theirRun')) + '</span>' + status
-    + '<span class="rl">' + esc(when) + '</span>'
+export function jrnRunLineHtml(facts) {
+  const runs = facts && facts.verdict && facts.verdict.runs;
+  if (!runs || !runs.n) return '';
+  const run = facts.run;
+  return '<div class="line jrn-runs"><span class="hud-label"' + tipAttrs({ key: 'journey.tests.theirRuns' }) + '>' + esc(t('journey.tests.theirRuns')) + '</span>'
+    + jrnCountedHtml(runs, { noFocus: true, cls: 'rl' })
     // its own sentence: beside the freshness it read as one ungrammatical phrase (round 2)
-    + (run.projects && run.projects.length ? '<span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>' + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span>' : '')
+    + (run && run.projects && run.projects.length ? '<span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>' + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span>' : '')
     + '</div>';
+}
+/** The foot's *open the list* door, scoped — '' where the foot has no scope to keep.
+ * @group Journey view */
+function jrnCasesDoorHtml(scope) {
+  if (!scope) return '';
+  return '<div class="line jrn-cases"><a href="' + esc(jrnCasesHref(scope)) + '" title="' + esc(def('journey.tests.open') || '') + '">' + esc(t('journey.tests.open')) + '</a></div>';
+}
+/**
+ * The door from a foot to the cases it counts, keeping the foot's scope: the
+ * journey's screen (`seg`), one action in it (`seg` + `action`), or one step
+ * (`node`). The Tests page opens on exactly those cases, with the same verdict
+ * (swarm 2026-10-05: *open the list* landed on every case of every journey).
+ * @group Journey view
+ */
+export function jrnCasesHref(scope) {
+  const sc = scope || {};
+  const flow = S.JOURNEY && S.JOURNEY.entry && S.JOURNEY.entry.id;
+  if (sc.node) return '#/tests?node=' + encodeURIComponent(sc.node);
+  if (!flow) return '#/tests';
+  return '#/tests?flow=' + encodeURIComponent(flow)
+    + (sc.seg != null ? '&seg=' + sc.seg + (sc.action != null ? '&action=' + sc.action : '') : '');
 }
 /**
  * The run behind an evidence word, in words: who observed it — test cases a
@@ -3358,7 +3366,8 @@ function jrnEvidenceTip(el, a) {
   const rows = o ? [
     ['tip.journey.obs.by', jrnObsWho(o)],
     ['tip.journey.obs.when', (o.at || '').slice(0, 10)],
-    ['tip.journey.obs.verdict', 'tests.run.' + (o.status || 'unknown')],
+    // the cell's verdict (core `testVerdict().status`): none when a coverage report alone earned the word
+    ['tip.journey.obs.verdict', a.verdict ? (a.verdict.status ? 'tests.run.' + a.verdict.status : '') : o.by === 'runs' ? '' : 'tests.run.' + (o.status || 'unknown')],
     ['tip.journey.obs.since', o.freshness === 'changed' && o.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + (o.freshness || 'unknown')],
   ].filter((r) => r[1]) : [['tip.journey.obs.by', 'journey.obs.none']];
   const biz = currentLens() === 'business';
@@ -3374,7 +3383,7 @@ export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
-  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null } }) + '>'
+  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
     + esc(t(ev.key)) + '</span>';
 }
@@ -3430,7 +3439,7 @@ export function jrnTestsFootHtml(facts, opts) {
     const runKey = ev.biz || (facts.chip === 'observed-stale' ? 'journey.biz.testsRun.stale' : 'journey.biz.testsRun.none');
     return '<div class="jrn-tfoot"><div class="line">' + chip + '</div>'
       + jrnFootScopeHtml(facts) + '<div class="line biz">' + esc(t('journey.biz.tests')).replace('{n}', () => num(k.tests, facts.total)).replace('{e2e}', () => num(k.e2e, facts.e2e))
-      + ' ' + esc(t(runKey)) + '</div>' + jrnImpactDoorHtml(o.impact) + '</div>';
+      + ' ' + esc(t(runKey)) + '</div>' + jrnCasesDoorHtml(o.cases) + jrnImpactDoorHtml(o.impact) + '</div>';
   }
   const obs = jrnObsText(facts);
   return '<div class="jrn-tfoot">'
@@ -3438,8 +3447,8 @@ export function jrnTestsFootHtml(facts, opts) {
     + jrnFootScopeHtml(facts) + '<div class="line"><span class="cnt">'
     + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
       .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
-    + jrnRunLineHtml(facts.run)
-    + (o.open ? '<div class="line"><a href="#/tests" title="' + esc(def('journey.tests.open') || '') + '">' + esc(t('journey.tests.open')) + '</a></div>' : '')
+    + jrnRunLineHtml(facts)
+    + jrnCasesDoorHtml(o.cases)
     + jrnImpactDoorHtml(o.impact) + '</div>';
 }
 /**
@@ -3453,7 +3462,8 @@ export function jrnTestsFootHtml(facts, opts) {
 function jrnSheetVerifiedHtml(sg, mo) {
   const cov = S.JOURNEY.summary && S.JOURNEY.summary.coverage;
   if (!cov) return '<span class="jrn-mk none" title="' + esc(t('journey.noTestsSub')) + '">' + sym('absent') + esc(t('journey.noTests')) + '</span>';
-  return jrnTestsFootHtml(jrnActionTestFacts(sg, mo), {});
+  const k = (sg.moments || []).indexOf(mo);
+  return jrnTestsFootHtml(jrnActionTestFacts(sg, mo), { cases: { seg: sg.index, action: k >= 0 ? k : mo.index } });
 }
 /**
  * One cell: the layer's part in one action. The user layer draws the moment's
@@ -4427,7 +4437,7 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
   // built, so no word about it is a claim this flow can earn (blocker 2)
   const evHtml = cov && cov.sharedEvidence
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
+    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
   const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
   g('g-tests', [
     jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }),
