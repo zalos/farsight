@@ -62,7 +62,8 @@ test.describe('journey numbers', () => {
   test('every header number carries a tip that says what it counts, and a breakdown that adds up to it', async ({ page }) => {
     for (const lens of ['hybrid', 'business'] as const) {
       await openIn(page, lens, 'timeline');
-      const nums = page.locator('#jrn-count [data-tip-id]');
+      // the freshness sentence is a trigger too, and not a number: its own spec is freshness.pw.spec.ts
+      const nums = page.locator('#jrn-count [data-tip-id]:not(.fresh)');
       const n = await nums.count();
       expect(n, 'the header prints its numbers as tip triggers').toBeGreaterThanOrEqual(3);
       let split = 0;
@@ -179,6 +180,7 @@ test.describe('journey chrome from the keyboard', () => {
     await expect(menu).toBeHidden();
     await expect(journey).toBeVisible();
     await expect(page.getByRole('button', { name: 'Source scope' })).toBeFocused();
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(journey).toBeHidden();
     await expect(page).toHaveURL(/#\/journeys$/);

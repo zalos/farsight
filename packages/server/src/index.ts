@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename, sep } from 'node:path';
 import {
-  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, resolveEntry, buildIndex, categorizeBranch, SnapshotDb, STRINGS,
+  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown,
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
@@ -16,7 +16,8 @@ import {
   counted, journeyTree, configCounts,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
-import { refuseRequest } from './guard.js';
+import { refuseRequest, refuseWrite } from './guard.js';
+import type { ReadOnlyWhy } from './guard.js';
 import { folded, scopeKey, leanMetric, leanCoverage, leanJourneyRow } from './folds.js';
 import { isSecretRef } from '@farsight/work';
 import { writeSpine, syncWork, workSourcesOf, keyOptionsOf, handleWorkRoute } from './work.js';
@@ -278,7 +279,7 @@ function loadJourneyGraph(graphPath: string): JourneyGraph {
     mtimeMs,
     roots: data.roots ?? {},
     meta: data.meta ?? {},
-    index: buildIndex(nodes, edges),
+    index: (() => { const ix = buildIndex(nodes, edges); setFreshnessMeta(ix, data.meta); return ix; })(),
     edgesById: new Map(edges.map((e) => [e.id, e])),
   };
   return journeyGraphCache;
@@ -749,7 +750,14 @@ function testsEvidence(meta: Record<string, TestsMeta> | undefined, scope: Set<s
   return { ...(anyReports ? { reports } : {}), ...(anyGaps ? { gaps } : {}) };
 }
 
-export function serveGraph(graphPath: string, port: number, workspaceDir = process.cwd()): void {
+/** How a server was started beyond its graph and port. */
+export interface ServeOptions {
+  /** refuse every write route (settings, sync, work items) and say so on `/api/version` — `--read-only`, or `'as-of'` for a snapshot */
+  readOnly?: ReadOnlyWhy | null;
+}
+
+export function serveGraph(graphPath: string, port: number, workspaceDir = process.cwd(), opts: ServeOptions = {}): void {
+  const readOnly: ReadOnlyWhy | null = opts.readOnly ?? null;
   const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
   const ws = resolve(workspaceDir);
 
@@ -784,6 +792,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     // loopback names only (DNS rebinding), and no state change from another site (CSRF) — guard.ts
     const refused = refuseRequest(req);
     if (refused) return send(403, JSON.stringify({ error: refused }));
+    // a read-only session refuses what it says it refuses (guard.ts refuseWrite)
+    const roRefused = refuseWrite(readOnly, req.method, url);
+    if (roRefused) return send(403, JSON.stringify({ error: roRefused, readOnly }));
 
     if (url === '/' || url === '/index.html') {
       // frames: only this server and the Storybooks the graph (or a source's settings) recorded —
@@ -838,7 +849,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // plus: is a newer build installed than this process runs, and does the graph match — with the steps to fix either
       const install = installState();
       const currency = currencyAdvice({ role: 'server', running: buildInfo(), install, graph: { farsight: m.farsight, generatedAt: m.generatedAt, sync: m.sync } });
-      return send(200, JSON.stringify({ farsight: buildInfo(), install, currency, graph: { generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: m.graphPath, farsight: m.farsight } }));
+      return send(200, JSON.stringify({ farsight: buildInfo(), install, currency, session: { readOnly: !!readOnly, ...(readOnly ? { why: readOnly } : {}) }, graph: { generatedAt: m.generatedAt, sync: m.sync, workspace: m.workspace, graphPath: m.graphPath, farsight: m.farsight } }));
     }
     if ((url === '/api/stories' || url.startsWith('/api/stories?')) && req.method === 'GET') {
       // the Storybooks the graph recorded, whether each answered, how its index mapped onto

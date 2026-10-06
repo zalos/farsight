@@ -29,6 +29,7 @@ import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOr
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
+import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -2137,6 +2138,8 @@ function jrnRowLabel(r) {
  * @group Journey view
  * @business Opens the journey in the shape that suits the reader: the storyboard for the business, the sheet for both, the timeline for code.
  */
+/** Where this browser remembers the journey view a register last chose (one key per register). */
+function jrnLayoutKey(lens) { return 'fs-jrn-layout.' + lens; }
 function jrnDefaultLayout() {
   const lens = currentLens();
   return lens === 'business' ? 'storyboard' : lens === 'code' ? 'timeline' : 'sheet';
@@ -2145,16 +2148,22 @@ function jrnDefaultLayout() {
  * Which visual the journey is drawn as — `storyboard` (the screens and the
  * selected action's ledger), `timeline` (the blueprint timeline), `sheet` (the
  * system sheet) or `drill` (behind its flag). A `?view=` deep link wins (the
- * shell puts it on S.jrnLayout), else what this browser last chose, else the
- * register's own default.
+ * shell puts it on S.jrnLayout), else what this browser last chose in this
+ * register, else the register's own default.
  * @group Journey view
  */
 function jrnLayout() {
+  // the register decides the landing view, and the reader's last choice is remembered per register: one choice
+  // for every register opened the business reader on the Sheet a hybrid session had picked (three swarms running)
+  const lens = currentLens();
+  if (S.jrnLayout && S.jrnLayoutLens && S.jrnLayoutLens !== lens) S.jrnLayout = null;
   if (!S.jrnLayout) {
     let saved = '';
-    try { saved = localStorage.getItem('fs-jrn-layout') || ''; } catch (e) { saved = ''; }
+    try { saved = localStorage.getItem(jrnLayoutKey(lens)) || ''; } catch (e) { saved = ''; }
     S.jrnLayout = /^(storyboard|timeline|sheet|drill)$/.test(saved) ? saved : jrnDefaultLayout();
   }
+  // a `?view=` link's choice holds for the register it was opened in
+  S.jrnLayoutLens = lens;
   // the drill is an experiment: with the flag off, a remembered or deep-linked `drill` reads as the timeline (and share links say so)
   if (S.jrnLayout === 'drill' && !jrnDrillEnabled()) S.jrnLayout = 'timeline';
   return S.jrnLayout;
@@ -2197,7 +2206,8 @@ function jrnLayoutSwitchHtml() {
  */
 export function jrnSetLayout(v) {
   S.jrnLayout = /^(storyboard|sheet)$/.test(v) ? v : (v === 'drill' && jrnDrillEnabled()) ? 'drill' : 'timeline';
-  try { localStorage.setItem('fs-jrn-layout', S.jrnLayout); } catch (e) { /* private mode: the view is just not remembered */ }
+  S.jrnLayoutLens = currentLens();
+  try { localStorage.setItem(jrnLayoutKey(S.jrnLayoutLens), S.jrnLayout); } catch (e) { /* private mode: the view is just not remembered */ }
   jrnWriteViewHash();
   if (S.JOURNEY) renderJourney(S.JOURNEY);
 }
@@ -3230,7 +3240,7 @@ export function jrnFoldFacts(cov) {
     evidenceWord: cov.evidenceWord || null, counted: cov.counted || null, observation: cov.observation || null,
     // the cell's one verdict (core `testVerdict`): the word, its own run's status, every case by its run
     verdict: cov.verdict || null,
-    chip: cov.chip || 'none', run: cov.run || null, note: cov.note,
+    chip: cov.chip || 'none', run: cov.run || null, note: cov.note, freshness: cov.freshness || null,
   };
 }
 /** The same facts as the server already folded them for a whole scope — read, never recomputed.
@@ -3377,7 +3387,9 @@ function jrnEvidenceTip(el, a) {
   return '<div class="tip-h">' + esc(t(ev.key)) + '</div>'
     + (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '')
     + (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '')
-    + tableTip({ caption: 'tip.journey.obs.head', rows });
+    + tableTip({ caption: 'tip.journey.obs.head', rows })
+    // *stale* as a comparison: the sentence that names the run's side and the code's (core freshness.ts)
+    + (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '');
 }
 registerTip('jrnEvidence', jrnEvidenceTip);
 /** The evidence chip: the core's word, its class for the shape, and its tip.
@@ -3386,7 +3398,7 @@ export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
-  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null } }) + '>'
+  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
     + esc(t(ev.key)) + '</span>';
 }
@@ -4440,12 +4452,14 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
   // built, so no word about it is a claim this flow can earn (blocker 2)
   const evHtml = cov && cov.sharedEvidence
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
+    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
   const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
   g('g-tests', [
     jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }),
     evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
+    // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)
+    cov && !cov.sharedEvidence ? freshLineHtml(cov.freshness, 'jrn-fresh') : '',
   ]);
   // the walk, in the code lens only: its units are a developer's
   if (lens === 'code') {

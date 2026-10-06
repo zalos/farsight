@@ -11,6 +11,10 @@ test.describe('escape and focus', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Search' })).toBeHidden();
     await expect(journey).toBeVisible();
+    // with nothing inside the journey open, the first Esc says what a second does; the second closes it
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#esc-toast')).toHaveText('Esc again closes this journey');
+    await expect(journey).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(journey).toBeHidden();
   });

@@ -12,7 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
-  GraphStore, buildIndex, search, trace, rulesFor, isDeclaredOnly, journey, journeySummary, journeyChoices, journeyTransactions, screensFor, resolveEntry, categorizeBranch, businessSummary,
+  GraphStore, buildIndex, setFreshnessMeta, search, trace, rulesFor, isDeclaredOnly, journey, journeySummary, journeyChoices, journeyTransactions, screensFor, resolveEntry, categorizeBranch, businessSummary,
   t,
   readModelHubState, resolveModelHubDir,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown, contractLines,
@@ -58,6 +58,7 @@ const graphPath = resolve(graphArg ?? process.env.FARSIGHT_GRAPH ?? 'graph.json'
 let store = GraphStore.load(graphPath);
 let { nodes, edges } = store.toJSON();
 let index: GraphIndex = buildIndex(nodes, edges);
+setFreshnessMeta(index, store.meta);
 
 // ── rendering (compact, stable, greppable) ──────────────────────
 
@@ -1432,6 +1433,7 @@ server.registerTool('refresh_graph', {
   store = fresh;
   ({ nodes, edges } = store.toJSON());
   index = buildIndex(nodes, edges);
+  setFreshnessMeta(index, store.meta);
   const lines = [
     `re-ingested ${roots.length - skipped.length} source root(s): ${nodes.length} nodes, ${edges.length} edges (was ${prev.nodes}/${prev.edges})`,
     `generated: ${store.meta.generatedAt} · source-hash ${store.meta.sourceHash ?? 'n/a'}`,
