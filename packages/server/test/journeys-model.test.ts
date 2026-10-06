@@ -231,7 +231,8 @@ test('on the invoice-app fixture the fallback fold draws exactly what core journ
     const index = buildIndex(data.nodes, data.edges);
     const core = journeyTree(index, data.meta.journeys);
     assert.ok(core.personas.length >= 2 && core.personas[0]!.groups.length >= 1, 'the fixture declares personas and groups');
-    assert.deepEqual(core.storylines.map((s) => s.journeys.map((j) => j.id)), [['new-invoice', 'draft-and-send', 'billing-cycle']], 'the fixture declares one storyline');
+    assert.deepEqual(core.storylines.map((s) => s.journeys.map((j) => j.id)), [['new-invoice', 'billing-cycle']], 'the fixture declares one storyline');
+    assert.deepEqual(core.storylines.map((s) => s.branches.map((b) => b.id)), [['draft-and-send']], 'with one branch');
     const designs = JSON.parse(JSON.stringify(designSurface(index, null)));
     const nodeOf = (id: string) => index.byId.get(id) ?? null;
     assert.deepEqual(drawn(M.treeFrom(designs, data.meta.journeys, { nodeOf })), drawn(core));

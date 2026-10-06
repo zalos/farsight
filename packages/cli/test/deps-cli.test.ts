@@ -68,7 +68,7 @@ test('deps where: every importing file with its line and specifier, and the code
   assert.equal(r.status, 0, r.err);
   const fold = importersOf(index, 'invoice-app::package::react')!;
   assert.match(r.out, /^react · third-party · \^18\.3\.1 · invoice-app/);
-  assert.match(r.out, new RegExp(`${fold.importers.n} files import it for this package · 4 journeys reach it — `));
+  assert.match(r.out, new RegExp(`${fold.importers.n} files import it for this package · 3 journeys reach it — `));
   for (const i of fold.groups.flatMap((g) => g.importers)) assert.ok(r.out.includes(`${i.path}:${i.line}  react`), i.path);
   assert.match(r.out, /used by CreateInvoiceForm \(component\) at line 11/);
   const json = JSON.parse(run(['deps', 'where', 'date-fns', '--json']).out);
