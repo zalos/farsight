@@ -698,7 +698,8 @@ export type ResolutionTechnique =
   | 'sdk-import' //      MEDIUM — a function that uses an imported SDK binding reaches the SDK's system
   | 'constant-host' //   MEDIUM — a non-literal fetch inside a class whose base URL starts with a constant host
   | 'name-match' //     LOW    — last-resort symbol name match
-  | 'work-key'; //       MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
+  | 'work-key' //        MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
+  | 'callback-prop'; //  MEDIUM — a function a parent hands a single-site child component as a prop, credited to the child that runs it (parsers/src/callback-props.ts)
 
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
 
