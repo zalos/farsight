@@ -25,7 +25,7 @@ import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
+import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, placeBranches, storylineEvidence } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
@@ -960,7 +960,7 @@ function storyEvidenceHtml() {
   for (const id of ids) {
     const j = MAP.journeys.get(id);
     const cov = j && j.data && j.data.summary && j.data.summary.coverage && j.data.summary.coverage.journey;
-    if (cov && cov.evidenceWord) words.set(id, cov.evidenceWord);
+    if (cov && (cov.verdict || cov.evidenceWord)) words.set(id, (cov.verdict && cov.verdict.word) || cov.evidenceWord);
     else if (j && j.data && !j.error) words.set(id, { cls: 'none' });
   }
   return countedHtml(storylineEvidence(ids, words), '/api/journey', { cls: 'map-ev-count' });
@@ -2069,7 +2069,8 @@ function coverAggHtml(d, j) {
   const mark = (cls, key, glyph) => '<span class="map-mark ' + cls + '"' + tipAttrs({ key, noFocus: true }) + '>' + (glyph ? sym(glyph) : '') + esc(t(key)) + '</span>';
   // on a storyline's board the card says its test evidence in the word core decided (evidenceWord) — it names a stale
   // run itself, so the quiet *stale* mark is not said twice
-  const ev = MAP.nb.storyline && ew ? '<span class="map-chip map-ev ev-' + esc(ew.cls) + '" data-ev="' + esc(ew.cls) + '"' + tipAttrs({ key: ew.key, noFocus: true }) + '>' + esc(t(ew.key)) + '</span>' : '';
+  // (lane V's chip: the cell's one verdict, its word and its tip, as the street and the property print it)
+  const ev = MAP.nb.storyline && cov ? mapEvidenceChip(cov) : '';
   const marks = (stale && !ev ? mark('stale', 'map.cover.mark.stale', 'sync') : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
   return status + ev + marks + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
 }

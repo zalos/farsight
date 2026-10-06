@@ -763,6 +763,8 @@
   .jrn-story-branch .when{color:var(--warn)}
   .jrn-story-branch b{font-weight:600;color:var(--ink)}
   .jrn-story.hot{outline:2px solid var(--accent);outline-offset:2px}
+  .jrn-story-unknown{color:var(--ink)}
+  .jrn-story-unknown a{color:var(--accent)}
   .jrn-story-at.branch .sym{width:12px;height:12px;vertical-align:-2px;color:var(--warn)}
   @media (max-width:720px){.jrn-story.dsg-flow{grid-template-columns:minmax(0,1fr)}.jrn-story.dsg-flow>.jrn-story-thumb{grid-column:1;grid-row:auto;width:100%}}
   .jrn-story-at.branch{display:inline-block;max-width:44ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
@@ -2313,12 +2315,6 @@
   .map-thumb .ph .a{font-size:10px;color:var(--dim)}
   .map-thumb.none img{display:none}
   .map-thumb.none .ph{display:flex}
-  /* a storyline card's evidence word, in the closed set of classes core decides */
-  .map-chip.map-ev{border-style:solid}
-  .map-chip.map-ev.ev-observed{color:var(--ok);border-color:var(--ok)}
-  .map-chip.map-ev.ev-stale{color:var(--muted)}
-  .map-chip.map-ev.ev-declared,.map-chip.map-ev.ev-reached{color:var(--warn)}
-  .map-chip.map-ev.ev-none{color:var(--dim);border-style:dashed}
   .map-band-head .ev{font-size:11px;color:var(--muted);flex:none}
   .map-band-head .ev *{font-family:var(--body);font-size:inherit;text-transform:none;letter-spacing:normal;border:none;padding:0}
   /* a storyline nobody declares: the sentence and a door to each one there is */
