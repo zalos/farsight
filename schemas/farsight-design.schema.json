@@ -118,9 +118,16 @@
           },
           "journeys": {
             "type": "array",
-            "description": "Flow ids, in the order the story tells them.",
+            "description": "Flow ids, in the order the story tells them; an entry written as an object with branchOf and when is a branch off that step.",
             "items": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/storylineEntry"
+                }
+              ]
             }
           }
         }
@@ -354,6 +361,32 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "storylineEntry": {
+      "type": "object",
+      "description": "One entry of a storyline's journeys written as an object. With only an id it is a step, like a bare flow id. With branchOf it is a branch: a journey a case takes only when the condition in when holds, leaving the storyline at the step branchOf names and, when rejoins names a step, coming back there. A branch is declared, never guessed from the code.",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The flow id of the journey."
+        },
+        "branchOf": {
+          "type": "string",
+          "description": "The step of this storyline (a flow id in its journeys) the branch leaves from."
+        },
+        "when": {
+          "type": "string",
+          "description": "The condition that takes a case down the branch, in words. Required for a branch: one without it is a note and is not drawn."
+        },
+        "rejoins": {
+          "type": "string",
+          "description": "The step of this storyline the branch comes back to; leave it out when the case leaves the storyline there."
         }
       }
     }

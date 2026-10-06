@@ -28,8 +28,8 @@ import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/to
 import { plainTip, countedHtml, defAttrs, countKey } from '../lib/counted.js';
 import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnDrillStep, jrnInspPanelHtml } from './journey-drill.js';
 import { fillJourneyWork } from '../work-chips.js';
-import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
-import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
+import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml, screenThumbHtml } from '../lib/journeys-tree.js';
+import { filterTree, placesOf, storylineOf, findStoryline, firstScreenOf } from '../lib/journeys-model.js';
 import { lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 
@@ -173,7 +173,7 @@ async function jrnMountDesigns() {
   if (!org || !got || !got.tree) return;
   JRN_ORG = { tree: got.tree, designs: data.designs, live: got.live };
   const stories = document.getElementById('jrn-storylines');
-  if (stories) stories.innerHTML = jrnStorylinesHtml(JRN_ORG);
+  if (stories) { stories.innerHTML = jrnStorylinesHtml(JRN_ORG); jrnShowStoryline(stories, got.tree, (S.route || {}).storyline); }
   org.innerHTML = jrnOrganisedHtml(JRN_ORG, S.route || {});
 }
 
@@ -207,17 +207,58 @@ function jrnStorylinesHtml(org) {
         + '<a class="api-chip jrn-story-step ' + cls + '" href="' + esc(journeyStepHash(j.nodeId, 1, { view: jrnLayout() })) + '"'
         + tipAttrs({ text: where + ' · ' + (j.name || j.id) + ' · ' + status }) + '><b>' + (i + 1) + '</b>' + esc(j.name || j.id) + '</a>';
     }).join('');
-    html += '<div class="dsg-flow jrn-story" data-storyline="' + esc(st.id) + '"><div class="dsg-flow-head">'
+    // its branches (swarm-fixes 2026-10-05 §6), indented under the chain: the step each leaves from, its condition,
+    // its journey and the step it comes back to
+    const branches = (st.branches || []).map((b) => {
+      const at = steps.findIndex((j) => j.nodeId === b.branchOf);
+      const back = b.rejoins ? steps.findIndex((j) => j.nodeId === b.rejoins) : -1;
+      const built = b.total > 0 && b.built >= b.total;
+      const cls = built ? 'ok' : b.built > 0 ? 'warn' : 'stub';
+      const status = t(b.statusKey || 'journey.status.designedNotBuilt').replace('{n}', b.built || 0).replace('{m}', b.total || 0);
+      return '<li class="jrn-story-branch" data-branch="' + esc(b.id) + '" data-of="' + esc(b.branchOf) + '">' + sym('fork')
+        + '<span class="of"' + defAttrs('journeys.storyline.branchOf') + '>' + (at >= 0 ? '<b>' + (at + 1) + '</b> ' : '') + esc(t('journeys.storyline.branchOf').replace('{name}', b.branchOfName || '')) + '</span>'
+        + '<span class="when"' + defAttrs('journeys.storyline.when') + '>' + esc(t('journeys.storyline.when').replace('{when}', b.when)) + '</span>'
+        + '<a class="api-chip jrn-story-step ' + cls + '" href="' + esc(journeyStepHash(b.nodeId, 1, { view: jrnLayout() })) + '"'
+        + tipAttrs({ text: t('journeys.storyline.branch') + ' · ' + (b.name || b.id) + ' · ' + status }) + '>' + esc(b.name || b.id) + '</a>'
+        + '<span class="back"' + defAttrs(b.rejoins ? 'journeys.storyline.rejoins' : 'journeys.storyline.noReturn') + '>'
+        + (b.rejoins ? (back >= 0 ? '<b>' + (back + 1) + '</b> ' : '') + esc(t('journeys.storyline.rejoins').replace('{name}', b.rejoinsName || '')) : esc(t('journeys.storyline.noReturn'))) + '</span></li>';
+    }).join('');
+    // its picture: the first journey's first screen, or the placeholder — never an empty box
+    const thumb = steps.length ? screenThumbHtml(firstScreenOf(org.designs, steps[0].nodeId), 'jrn-story-thumb') : '';
+    html += '<div class="dsg-flow jrn-story" data-storyline="' + esc(st.id) + '">' + thumb + '<div class="dsg-flow-head">'
       + '<span class="dsg-flow-name">' + esc(st.name || st.id) + '</span>'
       + '<span class="jrn-pcount">' + jrnOrgCountsHtml(st.counts) + '</span></div>'
       + (st.description ? '<p class="dsg-flow-desc">' + esc(jrnWords(st.description)) + '</p>' : '')
       + (chips ? '<div class="dsg-chips jrn-story-steps">' + chips + '</div>' : '<p class="set-note">' + esc(t('journeys.storyline.empty')) + '</p>')
+      + (branches ? '<ul class="jrn-story-branches">' + branches + '</ul>' : '')
       + '<div class="jrn-story-go">'
       + (mapOn ? '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>' : '')
       + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ', 1)">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
       + '</div></div>';
   }
   return html + '</div>';
+}
+
+/**
+ * `#/journeys?storyline=<id>` (fast travel to a storyline with the Map off): the card of that storyline is marked and
+ * scrolled to; a storyline nobody declares is said so above the cards, with a door to each one there is.
+ */
+function jrnShowStoryline(host, tree, id) {
+  if (!id) return;
+  const story = findStoryline(tree, id);
+  if (story) {
+    const card = [...host.querySelectorAll('.jrn-story[data-storyline]')].find((el) => el.dataset.storyline === story.id);
+    if (card) { card.classList.add('hot'); card.scrollIntoView({ block: 'center' }); }
+    return;
+  }
+  const list = (tree && tree.storylines) || [];
+  const sec = host.querySelector('.jrn-stories') || host;
+  const note = '<p class="set-note jrn-story-unknown"><span' + defAttrs('journeys.storyline.unknown') + '>' + esc(t('journeys.storyline.unknown').replace('{id}', id)) + '</span> '
+    + (list.length ? '<span' + defAttrs('journeys.storyline.known') + '>' + esc(t('journeys.storyline.known')) + '</span> '
+      + list.map((x) => '<a href="' + esc('#/journeys?storyline=' + encodeURIComponent(x.id)) + '">' + esc(x.name) + '</a>').join(' · ')
+      : '<span' + defAttrs('journeys.storyline.noneKnown') + '>' + esc(t('journeys.storyline.noneKnown')) + '</span>') + '</p>';
+  if (sec.classList && sec.classList.contains('jrn-stories')) sec.querySelector('h2').insertAdjacentHTML('afterend', note);
+  else sec.insertAdjacentHTML('afterbegin', '<div class="set-sec jrn-stories">' + note + '</div>');
 }
 
 // ── the organised section: persona → group → journeys ───────────
@@ -4360,7 +4401,10 @@ function jrnFillStoryline(tree, entryId) {
   const at = storylineOf(tree, entryId);
   if (!at.length) { el.innerHTML = ''; return; }
   const a = at[0];
-  const where = t(currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf').replace('{n}', a.step).replace('{m}', a.of);
+  // a branch is not a step: it reads *branch of <journey> · when …*, ‹ opens the step it leaves from and › the one it rejoins
+  const where = a.branch
+    ? t('journeys.storyline.branchOf').replace('{name}', a.branch.branchOfName || (a.prev && a.prev.name) || '') + ' · ' + t('journeys.storyline.when').replace('{when}', a.branch.when)
+    : t(currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf').replace('{n}', a.step).replace('{m}', a.of);
   const others = at.slice(1).map((x) => x.storyline.name + ' · ' + t('journeys.storyline.stepOf').replace('{n}', x.step).replace('{m}', x.of));
   const arrow = (j, glyph, key) => (j
     ? '<button type="button" class="jrn-story-nav" onclick="openJourney(' + jsArg(j.nodeId) + ', 1)" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"' + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id) }) + '>' + glyph + '</button>'
@@ -4369,7 +4413,7 @@ function jrnFillStoryline(tree, entryId) {
     + arrow(a.prev, '‹', 'journeys.storyline.prev')
     + '<span class="jrn-org-for"' + defAttrs('journeys.storyline.word') + '>' + esc(t('journeys.storyline.word')) + '</span> '
     + '<span class="jrn-story-name"' + tipAttrs({ text: a.storyline.name + (a.storyline.description ? ' · ' + jrnWords(a.storyline.description) : '') + (others.length ? ' · ' + others.join(' · ') : '') }) + '>' + esc(a.storyline.name) + '</span>'
-    + ' · <span class="jrn-story-at"' + defAttrs('journeys.storyline.stepOf') + '>' + esc(where) + '</span>'
+    + ' · <span class="jrn-story-at' + (a.branch ? ' branch' : '') + '"' + (a.branch ? tipAttrs({ text: where + ' · ' + (a.branch.rejoins ? t('journeys.storyline.rejoins').replace('{name}', a.branch.rejoinsName || '') : t('journeys.storyline.noReturn')) }) : defAttrs('journeys.storyline.stepOf')) + '>' + (a.branch ? sym('fork') + ' ' : '') + esc(where) + '</span>'
     + arrow(a.next, '›', 'journeys.storyline.next')
     + '</span>';
 }

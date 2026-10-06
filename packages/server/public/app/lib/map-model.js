@@ -264,7 +264,96 @@ export function storylineModel(nb, story) {
   const districts = ids.map((id, i) => ({ ...byId.get(id), index: i, step: i + 1, steps: ids.length }));
   // a chain reads on: each line leaves a journey east or south and arrives at the next one west or north
   const then = ids.slice(1).map((id, i) => ({ from: ids[i], to: id, kind: 'then', fromSides: ['e', 's'], toSides: ['w', 'n'] }));
-  return { ...base, districts, storyline: { id: story.id, name: story.name || story.id }, then };
+  // the branches (swarm-fixes 2026-10-05 §6): each leaves a step it is drawn below, with its condition on the line,
+  // and a dashed line back to the step it rejoins; a branch whose journey or step is not drawn here is left out
+  const branches = [];
+  for (const b of Array.isArray(story.branches) ? story.branches : []) {
+    const id = b && b.nodeId;
+    if (!id || !byId.has(id) || ids.includes(id) || branches.some((x) => x.id === id) || !ids.includes(b.branchOf)) continue;
+    const rejoins = b.rejoins && ids.includes(b.rejoins) ? b.rejoins : null;
+    branches.push({ id, of: b.branchOf, ofName: b.branchOfName || '', when: String(b.when || ''), rejoins, rejoinsName: rejoins ? b.rejoinsName || '' : '' });
+  }
+  const steps = ids.length;
+  for (const b of branches) {
+    districts.push({ ...byId.get(b.id), index: districts.length, steps, branch: { of: b.of, ofName: b.ofName, when: b.when, rejoins: b.rejoins, rejoinsName: b.rejoinsName, step: ids.indexOf(b.of) + 1 } });
+  }
+  // down from the step to the branch below it; back from the branch to the step it rejoins
+  const branchLinks = branches.map((b) => ({ from: b.of, to: b.id, kind: 'branch', when: b.when, fromSides: ['s'], toSides: ['n'] }));
+  const rejoinLinks = branches.filter((b) => b.rejoins).map((b) => ({ from: b.id, to: b.rejoins, kind: 'rejoin', fromSides: ['w', 'e'], toSides: ['w', 'e'] }));
+  return { ...base, districts, storyline: { id: story.id, name: story.name || story.id }, then: then.concat(branchLinks, rejoinLinks), branches };
+}
+
+/**
+ * A storyline band's branches placed below the steps they leave from (swarm-fixes 2026-10-05 §6) — pure, on the
+ * answer of `layoutDistricts()` for the steps alone. Under each row of steps that has a branch, a row of its own:
+ * each branch at its step's x (pushed right past the branch before it), `gap` below the step row; every row under it
+ * moves down by that row's height and gap, and the band and the board grow to hold it. `branches` are
+ * `[{ id, of, w, h }]` (`of` the step's id). Returns a new layout (`rects`, `bands`, `size` copied); one whose
+ * branches have no step in it is returned unchanged. O(districts + branches).
+ * @group Map
+ */
+export function placeBranches(L, branches, opts = {}) {
+  const list = (Array.isArray(branches) ? branches : []).filter((b) => b && L && L.rects && L.rects.has(b.of));
+  if (!list.length) return L;
+  const o = { gap: 160, colGap: 200, margin: 80, pad: 60, ...opts };
+  const rects = new Map([...L.rects].map(([k, r]) => [k, { ...r }]));
+  // the rows of steps, top to bottom, each with the branches that leave from it
+  const rowTops = [...new Set([...rects.values()].map((r) => r.y))].sort((a, b) => a - b);
+  let shift = 0;
+  const placed = new Map();
+  for (const top of rowTops) {
+    const row = [...rects.entries()].filter(([, r]) => r.y === top);
+    for (const [, r] of row) r.y = top + shift;
+    const under = list.filter((b) => row.some(([k]) => k === b.of)).sort((a, b) => rects.get(a.of).x - rects.get(b.of).x);
+    if (!under.length) continue;
+    const rowH = Math.max(...row.map(([, r]) => r.h));
+    const y = top + shift + rowH + o.gap;
+    let right = -Infinity;
+    let h = 0;
+    for (const b of under) {
+      const x = Math.max(rects.get(b.of).x, right + o.colGap);
+      placed.set(b.id, { x, y, w: b.w, h: b.h });
+      right = x + b.w;
+      h = Math.max(h, b.h);
+    }
+    shift += h + o.gap;
+  }
+  for (const [k, r] of placed) rects.set(k, r);
+  const right = Math.max(...[...rects.values()].map((r) => r.x + r.w));
+  const bottom = Math.max(...[...rects.values()].map((r) => r.y + r.h));
+  const bands = (L.bands || []).map((b) => ({ ...b, w: Math.max(b.w, right - b.x + o.pad), h: Math.max(b.h, bottom - b.y + o.pad), n: (b.n || 0) + placed.size }));
+  const size = { w: Math.max(L.size.w, right + o.margin), h: Math.max(L.size.h, bottom + o.pad + o.margin) };
+  return { ...L, rects, bands, size };
+}
+
+/**
+ * The test evidence of a storyline's journeys, as one `Counted` (swarm-fixes 2026-10-05 §6): `n` the journeys a run
+ * observed (their evidence class `observed` or `stale`), `of` every journey of the storyline, and a breakdown that
+ * partitions them — with a run's evidence · declared or reached only · with no test · not read yet. `words` maps a
+ * journey id to its evidence word (`{ cls }`, core `evidenceWord()`, read from each journey's summary) or nothing
+ * while it has not been read. O(journeys).
+ * @group Map
+ */
+/** Where the storyline's evidence count comes from (a tip's *from* line). */
+const EVIDENCE_SRC = ['storylineEvidence', '/api/journey', 'summary.coverage.journey.evidenceWord'].join(' → ');
+export function storylineEvidence(ids, words) {
+  const all = Array.isArray(ids) ? ids : [];
+  const part = { run: 0, partly: 0, none: 0, unread: 0 };
+  for (const id of all) {
+    const w = words && typeof words.get === 'function' ? words.get(id) : null;
+    const cls = w && w.cls;
+    if (!cls) part.unread++;
+    else if (cls === 'observed' || cls === 'stale') part.run++;
+    else if (cls === 'declared' || cls === 'reached') part.partly++;
+    else part.none++;
+  }
+  const breakdown = [
+    { key: 'count.part.evRun', n: part.run },
+    { key: 'count.part.evPartly', n: part.partly },
+    { key: 'count.part.evNone', n: part.none },
+    ...(part.unread ? [{ key: 'count.part.evUnread', n: part.unread }] : []),
+  ];
+  return { n: part.run, of: all.length, unit: 'count.unit.storylineObserved', bizUnit: 'count.unit.storylineObserved', scope: 'count.scope.storyline', source: EVIDENCE_SRC, breakdown };
 }
 
 /**

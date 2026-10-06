@@ -251,26 +251,48 @@ function storylinesFold(personas, inScope, notes) {
         if (!firstRow.has(nodeId)) { own.push('journey "' + fid + '" is not drawn in this scope — it is not a step here'); continue; }
         if (!nodeIds.includes(nodeId)) nodeIds.push(nodeId);
       }
-      declared.push({ repo, s, nodeIds, own });
+      // a branch draws when its journey and the step it leaves from are both in scope (core: the same rule)
+      const branchIds = [];
+      for (const b of s.branches || []) {
+        if (!b || !str(b.id) || !str(b.branchOf) || !str(b.when)) continue;
+        const nodeId = repo + '::flow::' + b.id;
+        if (!firstRow.has(nodeId)) { own.push('branch "' + b.id + '" is not drawn in this scope — it is not a branch here'); continue; }
+        if (!nodeIds.includes(repo + '::flow::' + b.branchOf)) { own.push('branch "' + b.id + '" leaves from "' + b.branchOf + '", which is not drawn in this scope — it is not a branch here'); continue; }
+        if (nodeIds.includes(nodeId) || branchIds.some((x) => x.nodeId === nodeId)) continue;
+        branchIds.push({ nodeId, b });
+      }
+      declared.push({ repo, s, nodeIds, branchIds, own });
     }
   }
   const memberOf = new Map();
-  for (const d of declared) for (const nodeId of d.nodeIds) {
+  for (const d of declared) for (const nodeId of [...d.nodeIds, ...d.branchIds.map((x) => x.nodeId)]) {
     if (!memberOf.has(nodeId)) memberOf.set(nodeId, []);
     const list = memberOf.get(nodeId);
     if (!list.includes(d.s.id)) list.push(d.s.id);
   }
   for (const [nodeId, list] of memberOf) for (const r of rowsOf.get(nodeId) || []) r.storylines = list;
-  return declared.map(({ repo, s, nodeIds, own }) => {
+  return declared.map(({ repo, s, nodeIds, branchIds, own }) => {
     const journeys = nodeIds.map((nodeId, i) => ({ ...firstRow.get(nodeId), stepIndex: i }));
-    const built = journeys.filter(isBuilt).length;
+    const nameOf = (nodeId) => (firstRow.get(nodeId) && firstRow.get(nodeId).name) || nodeId;
+    const branches = branchIds.map(({ nodeId, b }) => {
+      const parent = repo + '::flow::' + b.branchOf;
+      const back = b.rejoins ? repo + '::flow::' + b.rejoins : null;
+      const rejoins = back && nodeIds.includes(back) ? back : null;
+      return { ...firstRow.get(nodeId), branchOf: parent, branchOfName: nameOf(parent), when: b.when, ...(rejoins ? { rejoins, rejoinsName: nameOf(rejoins) } : {}) };
+    });
+    const all = journeys.concat(branches);
+    const built = all.filter(isBuilt).length;
+    const where = branches.length ? '.journeys + .branches' : '.journeys';
+    const total = counted(all.length, 'count.unit.journeys', 'count.scope.storyline', SRC + ' → storylines[' + s.id + ']' + where);
+    if (branches.length) total.breakdown = [{ key: 'count.part.storylineSteps', n: journeys.length }, { key: 'count.part.storylineBranches', n: branches.length }];
     return {
       id: s.id, name: s.name || s.id, ...(s.description ? { description: s.description } : {}),
       repo, from: s.from || '',
       journeys,
+      branches,
       counts: {
-        journeys: counted(journeys.length, 'count.unit.journeys', 'count.scope.storyline', SRC + ' → storylines[' + s.id + '].journeys'),
-        built: counted(built, 'count.unit.journeysBuilt', 'count.scope.storyline', SRC + ' → storylines[' + s.id + '].journeys where every screen is built', journeys.length),
+        journeys: total,
+        built: counted(built, 'count.unit.journeysBuilt', 'count.scope.storyline', SRC + ' → storylines[' + s.id + ']' + where + ' where every screen is built', all.length),
       },
       notes: own,
     };
@@ -278,8 +300,8 @@ function storylinesFold(personas, inScope, notes) {
 }
 
 /**
- * Where one journey stands in the storylines: `[{ storyline, step, of, prev, next }]`, one per storyline it is a
- * step of, in the tree's storyline order — `step` 1-based, `prev` / `next` the neighbouring steps' rows (null at
+ * Where one journey stands in the storylines: `[{ storyline, step, of, prev, next, branch? }]`, one per storyline it is
+ * part of (`branch`: the storyline's branch row when the journey is a branch, not a step), in the tree's storyline order — `step` 1-based, `prev` / `next` the neighbouring steps' rows (null at
  * an end). `flowId` is the flow's node id (`repo::flow::id`) or its bare id. The explore card, the property head
  * and the journey header print *in storyline: <name> · step n of m* from it. O(steps).
  * @group Journey view
@@ -290,7 +312,15 @@ export function storylineOf(tree, flowId) {
   const want = String(flowId);
   for (const s of (tree && tree.storylines) || []) {
     const i = (s.journeys || []).findIndex((j) => j.nodeId === want || j.id === want);
-    if (i < 0) continue;
+    if (i < 0) {
+      // a branch: `step` is the step it leaves from, `prev` that step, `next` the step it comes back at (or null)
+      const b = (s.branches || []).find((x) => x.nodeId === want || x.id === want);
+      if (!b) continue;
+      const at = s.journeys.findIndex((j) => j.nodeId === b.branchOf);
+      const back = b.rejoins ? s.journeys.find((j) => j.nodeId === b.rejoins) || null : null;
+      out.push({ storyline: s, step: at + 1, of: s.journeys.length, prev: at >= 0 ? s.journeys[at] : null, next: back, branch: b });
+      continue;
+    }
     out.push({ storyline: s, step: i + 1, of: s.journeys.length, prev: i > 0 ? s.journeys[i - 1] : null, next: i < s.journeys.length - 1 ? s.journeys[i + 1] : null });
   }
   return out;
@@ -367,4 +397,23 @@ export function journeysInOrder(tree) {
     });
   }
   return [...out.values()];
+}
+
+/**
+ * The first screen of a journey, for its picture on a storyline's card (swarm-fixes 2026-10-05 §6): of the design
+ * answer (`/api/design`'s `designs`), the flow with `flowNodeId` and its first screen's row — `{ nodeId, designId,
+ * name, hasImage }` — or `{ designId, name }` with no node when the screen is declared and not resolved, or null when
+ * the journey names no screen. One lookup per call; a surface calls it once per card.
+ * @group Journey view
+ */
+export function firstScreenOf(designs, flowNodeId) {
+  for (const d of Array.isArray(designs) ? designs : []) {
+    const f = ((d && d.flows) || []).find((x) => x && x.nodeId === flowNodeId);
+    if (!f) continue;
+    const first = (f.screens || [])[0];
+    if (!first) return null;
+    const scr = ((d && d.screens) || []).find((x) => x && x.designId === first);
+    return scr ? { nodeId: scr.nodeId || null, designId: first, name: scr.name || first, hasImage: !!scr.hasImage } : { nodeId: null, designId: first, name: first, hasImage: false };
+  }
+  return null;
 }

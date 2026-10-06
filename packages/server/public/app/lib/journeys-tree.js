@@ -7,7 +7,8 @@
 // by the Journeys front door, the Portfolio, the Map and the open journey's
 // header, so the four cannot disagree.
 
-import { S } from '../store.js';
+import { S, esc } from '../store.js';
+import { sym } from '../sym.js';
 import { treeFrom } from './journeys-model.js';
 import { t } from '../strings.js';
 import { countedHtml } from './counted.js';
@@ -89,4 +90,18 @@ export function jrnOrgCountsHtml(counts) {
   if (!counts) return '';
   return [counts.journeys, counts.built].filter(Boolean)
     .map((c) => countedHtml(c, '/api/journeys', { cls: 'jrn-org-n' })).join('<span class="jrn-org-sep"> · </span>');
+}
+
+/**
+ * A journey's picture on a storyline's card (the Map's board and the front door): its first screen's design image,
+ * served by `/api/design/image` as the property's hero is, or — when the screen has no picture or it does not load —
+ * the placeholder: the design glyph, the screen's name and the absence word. Never an empty box. `scr` is
+ * `firstScreenOf()`'s answer (lib/journeys-model.js).
+ */
+export function screenThumbHtml(scr, cls) {
+  const name = scr ? scr.name || scr.designId || '' : '';
+  const ph = '<span class="ph">' + sym('design') + (name ? '<span class="w">' + esc(name) + '</span>' : '')
+    + '<span class="a">' + esc(t(scr && scr.hasImage ? 'design.noImage' : 'journey.absent.notIndexed')) + '</span></span>';
+  if (!scr || !scr.hasImage || !scr.nodeId) return '<div class="' + cls + ' story-thumb none">' + ph + '</div>';
+  return '<div class="' + cls + ' story-thumb"><img src="/api/design/image?node=' + encodeURIComponent(scr.nodeId) + '" alt="' + esc(name) + '" loading="lazy" onerror="this.parentElement.classList.add(\'none\')"/>' + ph + '</div>';
 }

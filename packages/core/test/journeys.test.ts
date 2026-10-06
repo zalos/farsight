@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   buildIndex, applyDesignToFragment, designSurface, journeysMetaOf, journeyTree, pickJourneys, journeyPlacements,
   journeyTreeLines, journeyTreeSummary, countedProblems, sanitizeJourneys, JOURNEY_NO_PERSONA, JOURNEY_NO_GROUP, storylinePlacements,
+  unknownStorylineText,
 } from '../dist/index.js';
 import type { GraphNode, GraphFragment, DesignManifest, JourneysConfig, JourneyTree, FarsightConfig } from '../dist/index.js';
 
@@ -337,9 +338,13 @@ function soundStories(t: JourneyTree): void {
       assert.deepEqual(countedProblems(c), [], JSON.stringify(c));
       assert.equal(c.scope, 'count.scope.storyline');
     }
-    assert.equal(s.counts.journeys.n, s.journeys.length);
-    assert.equal(s.counts.built.n, s.journeys.filter((j) => j.status === 'both').length);
-    assert.equal(s.counts.built.of, s.journeys.length);
+    // a branch is a journey of the storyline: the count holds the steps and the branches, and a breakdown parts them
+    const all = [...s.journeys, ...(s.branches ?? [])];
+    assert.equal(s.counts.journeys.n, all.length);
+    assert.equal(s.counts.built.n, all.filter((j) => j.status === 'both').length);
+    assert.equal(s.counts.built.of, all.length);
+    if (s.branches?.length) assert.deepEqual(s.counts.journeys.breakdown, [{ key: 'count.part.storylineSteps', n: s.journeys.length }, { key: 'count.part.storylineBranches', n: s.branches.length }]);
+    else assert.equal(s.counts.journeys.breakdown, undefined, 'no branch, no breakdown');
     s.journeys.forEach((j, i) => assert.equal(j.stepIndex, i, `${s.id}: steps are numbered in order`));
   }
 }
@@ -421,4 +426,92 @@ test('storylines: scope, pickJourneys by storyline, the text block first, the su
   assert.ok(!journeyTreeLines(treeOf(graph([{ manifest: PORTAL, path: 'm.json' }]))).some((l) => l.includes('Storylines')));
   const c = sanitizeJourneys({ journeys: { storylines: [{ id: 's', name: 'S', journeys: ['a', 3, '', 'b'] }, { name: 'no id' }, { id: 't', journeys: 'x' }] } } as unknown as FarsightConfig);
   assert.deepEqual(c.journeys!.storylines, [{ id: 's', name: 'S', journeys: ['a', 'b'] }, { id: 't' }]);
+});
+
+// ── storylines, second pass (swarm-fixes 2026-10-05 §6): a branch is declared, never guessed ──
+
+const BRANCHED: DesignManifest = {
+  ...PORTAL,
+  storylines: [
+    {
+      id: 'vendor', name: 'A vendor account',
+      journeys: [
+        'contractor-sign-in', 'vendor-account-creation', 'ops-sign-in',
+        { id: 'contractor-sign-out', branchOf: 'vendor-account-creation', when: 'the contractor gives up before saving', rejoins: 'contractor-sign-in' },
+        // set aside, each with a note: an unknown journey, a parent that is not a step, no condition, a step named as a branch
+        { id: 'nowhere', branchOf: 'ops-sign-in', when: 'never' },
+        { id: 'contractor-sign-out', branchOf: 'ops-sign-in', when: 'twice' },
+        { id: 'ops-sign-in', branchOf: 'contractor-sign-in', when: 'already a step' },
+      ],
+    },
+    {
+      id: 'leave', name: 'Leaving',
+      journeys: ['contractor-sign-in', { id: 'vendor-account-creation' }, { id: 'contractor-sign-out', branchOf: 'ops-sign-in', when: 'x' }, { id: 'ops-sign-in', branchOf: 'contractor-sign-in' }],
+    },
+  ],
+};
+
+test('a storyline branch: declared off a step with its condition and its way back; what breaks a rule is a note, never drawn', () => {
+  const g = graph([{ manifest: BRANCHED, path: 'docs/design/screens.json' }], ['/sign-in', '/sign-out']);
+  // at ingest: the steps stay a list of ids, the branches beside them
+  const metaVendor = g.meta.storylines!.find((s) => s.id === 'vendor')!;
+  assert.deepEqual(metaVendor.journeys, ['contractor-sign-in', 'vendor-account-creation', 'ops-sign-in']);
+  assert.deepEqual(metaVendor.branches, [{ id: 'contractor-sign-out', branchOf: 'vendor-account-creation', when: 'the contractor gives up before saving', rejoins: 'contractor-sign-in' }]);
+  assert.equal(metaVendor.notes!.length, 3, metaVendor.notes!.join('\n'));
+  assert.ok(metaVendor.notes!.some((n) => n.includes('"nowhere"') && n.includes('not a branch')));
+  assert.ok(metaVendor.notes!.some((n) => n.includes('"contractor-sign-out" twice')));
+  assert.ok(metaVendor.notes!.some((n) => n.includes('"ops-sign-in" as a step and as a branch')));
+  // { id } alone is a step; a parent that is not a step, or no condition, is a note
+  const metaLeave = g.meta.storylines!.find((s) => s.id === 'leave')!;
+  assert.deepEqual(metaLeave.journeys, ['contractor-sign-in', 'vendor-account-creation']);
+  assert.equal(metaLeave.branches, undefined);
+  assert.ok(metaLeave.notes!.some((n) => n.includes('"ops-sign-in", which is not a step of it')), metaLeave.notes!.join('\n'));
+  assert.ok(metaLeave.notes!.some((n) => n.includes('says no "when"')), metaLeave.notes!.join('\n'));
+
+  const t = treeOf(g);
+  const vendor = t.storylines.find((s) => s.id === 'vendor')!;
+  assert.deepEqual(vendor.journeys.map((j) => j.id), ['contractor-sign-in', 'vendor-account-creation', 'ops-sign-in'], 'a branch is not a step');
+  assert.deepEqual(vendor.branches.map((b) => [b.id, b.branchOf, b.branchOfName, b.when, b.rejoins, b.rejoinsName]), [
+    ['contractor-sign-out', 'app::flow::vendor-account-creation', 'Create a vendor account', 'the contractor gives up before saving', 'app::flow::contractor-sign-in', 'Sign in with email'],
+  ]);
+  assert.equal(vendor.counts.journeys.n, 4, 'three steps and a branch');
+  soundStories(t);
+  soundCounts(t);
+  // the branch's rows know the storyline they are part of
+  const out = t.personas.flatMap((p) => p.groups.flatMap((g2) => g2.journeys)).find((j) => j.id === 'contractor-sign-out')!;
+  assert.ok(out.storylines.includes('vendor'));
+  // where it stands: a branch of a step, with its condition and its way back
+  assert.deepEqual(storylinePlacements(t, 'app::flow::contractor-sign-out').find((x) => x.id === 'vendor'), {
+    id: 'vendor', name: 'A vendor account', step: 2, of: 3, prev: 'app::flow::vendor-account-creation', next: 'app::flow::contractor-sign-in',
+    branch: { of: 'app::flow::vendor-account-creation', ofName: 'Create a vendor account', when: 'the contractor gives up before saving', rejoins: 'app::flow::contractor-sign-in', rejoinsName: 'Sign in with email' },
+  });
+  // the text: indented under its step, its breakdown on the heading
+  const lines = journeyTreeLines(t);
+  const at = lines.findIndex((l) => l.startsWith('2. Create a vendor account'));
+  assert.match(lines[at + 1]!, /^ {3}↳ Sign out · branch of Create a vendor account · when the contractor gives up before saving · back to Sign in with email — /);
+  assert.ok(lines.some((l) => l.startsWith('### A vendor account (`vendor`) — 4 journeys (3 on the main path · 1 branch) · ')), lines.join('\n'));
+  // picking the storyline keeps the branch's journey under its persona
+  const picked = pickJourneys(t, { storyline: 'vendor' });
+  assert.ok(picked.personas.some((p) => p.groups.some((g2) => g2.journeys.some((j) => j.id === 'contractor-sign-out'))));
+  // a branch whose step is out of scope is not drawn
+  const scoped = treeOf(graph([{ manifest: { ...BRANCHED, flows: BRANCHED.flows!.filter((f) => f.id !== 'vendor-account-creation') }, path: 'm.json' }]));
+  assert.ok(!scoped.storylines.find((s) => s.id === 'vendor')!.branches.some((b) => b.branchOf.endsWith('vendor-account-creation')));
+});
+
+test('a storyline branch in the config block: the list it gives replaces the manifest\'s, branches included; sanitize keeps the entry\'s shape', () => {
+  const config = [{ from: 'farsight.config.json', dir: '.', journeys: { storylines: [{ id: 'vendor', journeys: ['contractor-sign-in', 'ops-sign-in', { id: 'vendor-account-creation', branchOf: 'contractor-sign-in', when: 'the contractor has no account yet', rejoins: 'ops-sign-in' }] }] } }];
+  const t = treeOf(graph([{ manifest: BRANCHED, path: 'docs/design/screens.json' }], [], config as never));
+  const vendor = t.storylines.find((s) => s.id === 'vendor')!;
+  assert.equal(vendor.from, 'farsight.config.json');
+  assert.deepEqual(vendor.journeys.map((j) => j.id), ['contractor-sign-in', 'ops-sign-in']);
+  assert.deepEqual(vendor.branches.map((b) => [b.id, b.branchOf, b.rejoins]), [['vendor-account-creation', 'app::flow::contractor-sign-in', 'app::flow::ops-sign-in']]);
+  soundStories(t);
+  const c = sanitizeJourneys({ journeys: { storylines: [{ id: 's', journeys: ['a', { id: 'b', branchOf: 'a', when: ' w ', rejoins: 3, extra: 1 }, { branchOf: 'a' }, 4] }] } } as unknown as FarsightConfig);
+  assert.deepEqual(c.journeys!.storylines, [{ id: 's', journeys: ['a', { id: 'b', branchOf: 'a', when: 'w' }] }]);
+});
+
+test('an unknown storyline is said so, with the ones there are', () => {
+  const t = treeOf(graph([{ manifest: STORY, path: 'm.json' }]));
+  assert.equal(unknownStorylineText(t, 'nope'), 'No storyline called “nope” is declared here. Storylines declared here: vendor (A vendor account) · leave (Leaving)');
+  assert.equal(unknownStorylineText(treeOf(graph([{ manifest: PORTAL, path: 'm.json' }])), 'x'), 'No storyline called “x” is declared here. No storyline is declared in scope.');
 });

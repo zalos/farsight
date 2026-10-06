@@ -70,7 +70,7 @@ test('a route call links to the APIs surface at its operation, its spec line and
   await expect(card.locator('a.dd-door', { hasText: 'read the spec file' })).toHaveAttribute('href', /\?view=spec&line=\d+$/);
   await expect(card.locator('a.dd-door', { hasText: 'open the handler in the editor' })).toHaveAttribute('href', /^vscode:\/\/file\//);
   // where the journey stands in its storyline (the fixture's invoice storyline ends with Billing cycle)
-  await expect(card.locator('.dd-story')).toHaveText('in storyline: An invoice, end to end · step 3 of 3');
+  await expect(card.locator('.dd-story')).toHaveText('in storyline: An invoice, end to end · step 2 of 2');
   // the same part in the journey, selected
   await expect(card.locator('.tojrn a')).toHaveAttribute('href', /step=\d&node=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices/);
   await doors.first().click();
@@ -88,7 +88,7 @@ test('on the property a row opens to its doors, and Enter on it opens the first'
   await expect(row).toHaveAttribute('aria-expanded', 'true');
   await expect(row.locator('.mp-exp a.dd-door').first()).toHaveText('read the contract');
   await expect(row.locator('.jrn-contract-card')).toBeVisible();
-  await expect(page.locator('.mp-head .mp-story')).toContainText('step 3 of 3');
+  await expect(page.locator('.mp-head .mp-story')).toContainText('step 2 of 2');
   // the head opens the same screen in the journey
   await expect(page.locator('.mp-tojrn a')).toHaveAttribute('href', /#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?view=timeline&step=2/);
   await row.focus();
@@ -166,7 +166,7 @@ test('a storyline opens its journeys at their first step', async ({ page }) => {
   await card.getByRole('button', { name: 'open the first journey' }).click();
   await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Anew-invoice\?view=\w+&step=1/);
   await expect(page.locator('#jrn-title')).toHaveText('Start a new invoice');
-  // the header's arrow opens the next journey of the storyline at its first step too
+  // the header's arrow opens the next journey of the storyline at its first step too (the draft review is a branch, not a step)
   await page.locator('#jrn-storyline .jrn-story-nav').last().click();
-  await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Adraft-and-send\?view=\w+&step=1/);
+  await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?view=\w+&step=1/);
 });

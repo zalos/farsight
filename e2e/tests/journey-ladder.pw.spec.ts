@@ -59,6 +59,8 @@ test.describe('journey ladder', () => {
   /** @covers packages/server/public/app/surfaces/journeys.js::jrnLadderCellHtml */
   test('a screen that reaches every system draws every column as before', async ({ page }) => {
     await gotoReady(page, LADDER);
+    // the ladder draws after the journey: read its columns once they are there (the handoff's known race)
+    await expect(page.locator('.jrn-laddercell[data-seg="1"] .jrn-lhead > .lc').first()).toBeVisible();
     const heads = await headWidths(page, 1);
     expect(heads.map((h) => h.text)).toEqual([
       expect.stringMatching(/screen asks/i), expect.stringMatching(/^API/), expect.stringMatching(/service does/i),

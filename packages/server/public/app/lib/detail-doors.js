@@ -58,10 +58,13 @@ export function storylineLineHtml(tree, flowId) {
   const a = at[0];
   const stepKey = currentLens() === 'business' ? 'journeys.storyline.bizStepOf' : 'journeys.storyline.stepOf';
   const others = at.slice(1).map((x) => x.storyline.name + ' · ' + t(stepKey).replace('{n}', x.step).replace('{m}', x.of));
+  // a branch is not a step: *branch of <journey> · when …* in place of *step n of m*
+  const at0 = a.branch
+    ? '<span' + defAttrs('journeys.storyline.branchOf') + '>' + esc(t('journeys.storyline.branchOf').replace('{name}', a.branch.branchOfName || '') + ' · ' + t('journeys.storyline.when').replace('{when}', a.branch.when)) + '</span>'
+    : '<span' + defAttrs(stepKey) + '>' + esc(t(stepKey).replace('{n}', a.step).replace('{m}', a.of)) + '</span>';
   return '<span class="dd-story" data-storyline="' + esc(a.storyline.id) + '">'
     + '<span' + tipAttrs({ text: t('journeys.storyline.in').replace('{name}', a.storyline.name) + (others.length ? ' · ' + others.join(' · ') : ''), noFocus: true }) + '>'
-    + esc(t('journeys.storyline.in').replace('{name}', a.storyline.name)) + '</span> · '
-    + '<span' + defAttrs(stepKey) + '>' + esc(t(stepKey).replace('{n}', a.step).replace('{m}', a.of)) + '</span></span>';
+    + esc(t('journeys.storyline.in').replace('{name}', a.storyline.name)) + '</span> · ' + at0 + '</span>';
 }
 
 // ── a gate's own lines ──────────────────────────────────────────────────────

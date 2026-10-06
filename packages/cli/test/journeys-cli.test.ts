@@ -60,16 +60,18 @@ test('journeys --storyline: that storyline\'s steps first, under the personas on
   assert.equal(r.status, 0, r.err);
   assert.match(r.out, /^3 journeys · 1 storyline · /);
   assert.match(r.out, /^## Storylines — 1 storyline$/m);
-  assert.match(r.out, /^### An invoice, end to end \(`invoice`\) — 3 journeys · /m);
+  assert.match(r.out, /^### An invoice, end to end \(`invoice`\) — 3 journeys \(2 on the main path · 1 branch\) · /m);
+  // the branch sits indented under the step it leaves from
+  assert.match(r.out, /^1\. Start a new invoice — .*\n   ↳ Draft and send an invoice · branch of Start a new invoice · when Operations reviews the draft before it is sent · back to Billing cycle — /m);
   assert.match(r.out, /^1\. Start a new invoice — .*`invoice-app::flow::new-invoice`$/m);
-  assert.match(r.out, /^3\. Billing cycle — /m);
+  assert.match(r.out, /^2\. Billing cycle — /m);
   assert.ok(r.out.indexOf('## Storylines') < r.out.indexOf('## Billing'), 'the storylines come first');
   const json = JSON.parse(run(['journeys', '--storyline', 'An invoice, end to end', '--json']).out);
   assert.deepEqual(json.storylines.map((s: { id: string }) => s.id), ['invoice']);
-  assert.deepEqual(json.storylines[0].journeys.map((j: { id: string; stepIndex: number }) => `${j.stepIndex}:${j.id}`), ['0:new-invoice', '1:draft-and-send', '2:billing-cycle']);
+  assert.deepEqual(json.storylines[0].journeys.map((j: { id: string; stepIndex: number }) => `${j.stepIndex}:${j.id}`), ['0:new-invoice', '1:billing-cycle']);
   const none = run(['journeys', '--storyline', 'nope']);
   assert.equal(none.status, 1);
-  assert.match(none.err, /no storyline "nope"/);
+  assert.match(none.err, /No storyline called “nope” is declared here\. Storylines declared here: invoice \(An invoice, end to end\)/);
 });
 
 test('the usage names the command, and a missing graph says so', () => {

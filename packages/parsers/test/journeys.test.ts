@@ -111,7 +111,8 @@ test('storylines at ingest: the NX root manifest chains flows of every app\'s ma
     declared: true, from: 'docs/design/screens.json',
   }], 'a storyline in one manifest may chain the flows the apps\' own manifests declare');
   const inv = await ingestRepo(join(EXAMPLES, 'invoice-app'), { repoName: 'invoice-app', ...only });
-  assert.deepEqual(inv.meta!.journeys!.storylines!.map((s) => `${s.id}: ${s.journeys.join(' → ')}`), ['invoice: new-invoice → draft-and-send → billing-cycle']);
+  assert.deepEqual(inv.meta!.journeys!.storylines!.map((s) => `${s.id}: ${s.journeys.join(' → ')}`), ['invoice: new-invoice → billing-cycle']);
+  assert.deepEqual(inv.meta!.journeys!.storylines![0]!.branches, [{ id: 'draft-and-send', branchOf: 'new-invoice', when: 'Operations reviews the draft before it is sent', rejoins: 'billing-cycle' }]);
 
   const app = (id: string) => JSON.stringify({ screens: [{ id: `${id}-1`, route: `/${id}` }], flows: [{ id, name: id, screens: [`${id}-1`] }] });
   const dir = repo({

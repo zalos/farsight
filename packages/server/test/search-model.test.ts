@@ -80,3 +80,27 @@ test('a keystroke over the folded strings is well under the palette budget', () 
   const per = (performance.now() - t0) / 7;
   assert.ok(per < 25, `a keystroke took ${per.toFixed(1)} ms over ${nodes.length} nodes`);
 });
+
+test('fast travel finds a storyline by its name or id, outranks a journey on a tie, and lands on the Map (or the front door with the Map off)', () => {
+  const metas = {
+    app: { storylines: [{ id: 'invoice', name: 'An invoice, end to end', description: 'From upload to payment.', journeys: ['a', 'b'], branches: [{ id: 'c' }] }] },
+    other: { storylines: [{ id: 'invoice', name: 'A duplicate id' }, { id: 'vendor', name: 'A vendor account', journeys: ['x'] }] },
+  };
+  const items = M.storylineTravelItems(metas, null, true);
+  assert.deepEqual(items.map((x: AnyRec) => [x.id, x.repo, x.hash, x.steps, x.branches]), [
+    ['storyline:invoice', 'app', '#/map?storyline=invoice', 2, 1],
+    ['storyline:vendor', 'other', '#/map?storyline=vendor', 1, 0],
+  ], 'one row per storyline id');
+  assert.equal(M.storylineTravelItems(metas, null, false)[0].hash, '#/journeys?storyline=invoice');
+  assert.deepEqual(M.storylineTravelItems(metas, new Set(['other']), true).map((x: AnyRec) => x.storyline), ['invoice', 'vendor'], 'scope narrows');
+  const inv = items[0];
+  const score = (q: string) => { const raw = q.toLowerCase(); return M.scoreStoryline(inv, raw, raw.split(/\s+/)); };
+  assert.ok(score('invoice') > 0);
+  assert.ok(score('invoice') > 100, 'an exact id is an exact hit');
+  assert.ok(score('end to end') > 0);
+  assert.ok(score('payment') > 0, 'its sentence counts, a little');
+  assert.equal(score('nothing'), 0);
+  // a word in the name scores as a journey's would, plus a higher kind bonus: the storyline leads a tie
+  assert.equal(score('end'), 5 + M.KIND_BONUS.storyline);
+  assert.ok(M.KIND_BONUS.storyline > M.KIND_BONUS.flow);
+});

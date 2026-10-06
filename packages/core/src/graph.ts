@@ -611,7 +611,16 @@ export interface JourneyGroupDecl { id: string; name: string; description?: stri
  * A storyline — a named chain of journeys across features and personas (round-2026-10-05 §2): the whole life of
  * one business thing, an invoice from upload to payment. `journeys` are flow ids of the same source, in order.
  */
-export interface JourneyStorylineDecl { id: string; name: string; description?: string; journeys: string[] }
+export interface JourneyStorylineDecl { id: string; name: string; description?: string; journeys: (string | JourneyStorylineEntryDecl)[] }
+/**
+ * One entry of a storyline's `journeys` list written as an object (swarm-fixes 2026-10-05 §6): `{ id }` alone is a
+ * step like a bare id; with `branchOf` it is a **branch** — a journey that leaves the chain at that step only when
+ * `when` holds (a correction, a rejection, a hold), and comes back at `rejoins` when it gives one. A branch is a fact
+ * the design declares, never guessed from the code.
+ */
+export interface JourneyStorylineEntryDecl { id: string; branchOf?: string; when?: string; rejoins?: string }
+/** A declared branch of a storyline, its ids resolved to flow ids the source declares. */
+export interface JourneyStorylineBranch { id: string; branchOf: string; when: string; rejoins?: string }
 /** A config entry that places a flow a manifest declared: only the fields it gives override the manifest's. */
 export interface JourneyFlowPlacement { id: string; persona?: string | string[]; group?: string; order?: number }
 
@@ -631,7 +640,12 @@ export interface JourneysMeta {
    * manifest declares — any other is a note); `from` = the manifest or config path that gave the words. Absent on a
    * graph ingested before storylines existed.
    */
-  storylines?: { id: string; name: string; description?: string; journeys: string[]; declared: true; from: string; notes?: string[] }[];
+  storylines?: {
+    id: string; name: string; description?: string; journeys: string[];
+    /** the branches it declares, in the order written: each leaves the chain at a step of `journeys` (absent: none) */
+    branches?: JourneyStorylineBranch[];
+    declared: true; from: string; notes?: string[];
+  }[];
   /** one sentence per thing set aside (a config flow id no manifest declares) */
   notes: string[];
 }
