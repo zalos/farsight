@@ -113,7 +113,8 @@ export function openExportMenu(btn) {
   if (first) first.focus();
 }
 
-document.addEventListener('click', (e) => {
+// a module the server's tests import under a stand-in document: the listener only where there is a real one
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') document.addEventListener('click', (e) => {
   const btn = e.target.closest && e.target.closest('[data-export]');
   if (btn) { e.preventDefault(); openExportMenu(btn); return; }
   if (MENU && !MENU.el.contains(e.target)) closeMenu(false);

@@ -152,8 +152,9 @@ export function drawPinNote() {
   }
 }
 // the chip is redrawn by the shell whenever the chrome is (a load, a sync, a register flip): the note follows it
-window.addEventListener('hashchange', drawPinNote);
+if (typeof window.addEventListener === 'function') window.addEventListener('hashchange', drawPinNote);
 (function watchChip() {
+  if (typeof document.getElementById !== 'function' || typeof MutationObserver === 'undefined') return;
   const chip = document.getElementById('syncchipwrap');
   if (!chip) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchChip, { once: true }); return; }
   new MutationObserver(drawPinNote).observe(chip, { childList: true, subtree: true, characterData: true });
