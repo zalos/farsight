@@ -100,18 +100,18 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
   // storylines, second pass (swarm-fixes 2026-10-05 §6): a branch the design declares, an unknown storyline said
   // so, fast travel to a storyline, and the test evidence of its journeys
   'journeys.storyline.branch': same('branch',
-    'A journey that leaves the storyline at one of its steps only when a condition holds, such as a correction or a rejection, and may come back at a step. The design declares it with the step it leaves from and the condition; it is never guessed from the code.'),
+    'A journey that leaves the storyline at one of its journeys only when a condition holds, such as a correction or a rejection, and may come back into the chain later. The design declares it with the journey it leaves from and the condition; it is never guessed from the code.'),
   'journeys.storyline.branchOf': same('branch of {name}',
-    'This journey is not a step every case goes through: it leaves the storyline at the step named here, only when the condition beside it holds.'),
+    'Not every case goes through this journey: it leaves the storyline at the journey named here, only when the condition beside it holds.'),
   'journeys.storyline.when': same('when {when}',
     'The condition that takes a case down this branch, in the words the design wrote.'),
   'journeys.storyline.rejoins': same('back to {name}',
-    'The step of the storyline this branch comes back to, as the design declares it.'),
+    'The journey of the storyline this branch comes back to, as the design declares it.'),
   'journeys.storyline.noReturn': same('does not come back',
-    'The design names no step this branch returns to: a case that takes it leaves the storyline here.'),
+    'The design names no journey this branch returns to: a case that takes it leaves the storyline here.'),
   'count.part.storylineSteps': same('{n} on the main path', 'The journeys the storyline chains in order, the ones every case goes through.'),
   'count.part.storylineStepsOne': one('1 on the main path', 'count.part.storylineSteps'),
-  'count.part.storylineBranches': same('{n} branches', 'The journeys a case takes only when a condition holds, each leaving the storyline at one of its steps.'),
+  'count.part.storylineBranches': same('{n} branches', 'The journeys a case takes only when a condition holds, each leaving the storyline at one of its journeys.'),
   'count.part.storylineBranchesOne': one('1 branch', 'count.part.storylineBranches'),
   'journeys.storyline.unknown': {
     hud: 'No questline called “{id}” is declared here.', professional: 'No storyline called “{id}” is declared here.',
@@ -140,7 +140,7 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
   'count.part.evUnread': same('{n} not read yet', 'Journeys the board has not read yet, so their evidence is not known here.'),
   'count.part.evUnreadOne': one('1 not read yet', 'count.part.evUnread'),
   'map.link.branch': same('when',
-    'A line from a step of the storyline down to a branch: a case takes the branch only when the condition written on the line holds.'),
+    'A line from a journey of the storyline down to a branch: a case takes the branch only when the condition written on the line holds.'),
   'map.link.rejoin': same('back to',
-    'A dashed line from a branch back to the step of the storyline it comes back to.'),
+    'A dashed line from a branch back to the journey of the storyline it comes back to.'),
 };
