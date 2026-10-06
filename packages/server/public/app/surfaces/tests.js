@@ -29,6 +29,7 @@ import { t, def, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs } from '../lib/tooltip.js';
+import { freshLineHtml, freshAttrs } from '../lib/freshness.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
 
 /** True while the business lens is on: file names, runners, globs and hashes stay out.
@@ -371,7 +372,8 @@ function levelTotals(d) {
   const by = {};
   for (const s of d.sources || []) {
     const k = s.level;
-    if (!by[k]) by[k] = { cases: 0, files: 0, runners: new Set(), lastRun: null };
+    if (!by[k]) by[k] = { cases: 0, files: 0, runners: new Set(), lastRun: null, cards: [] };
+    by[k].cards.push(s);
     by[k].cases += s.cases || 0;
     by[k].files += s.files || 0;
     if (s.runner) by[k].runners.add(s.runner);
@@ -453,7 +455,11 @@ function kpisHtml(d) {
     + '<span class="v">' + (newest ? esc(newest.at.slice(0, 10))
       : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') + sym('absent') + esc(t('journey.absent.notIndexed')) + '</span>') + '</span>'
     + '<span class="s">' + levels.map((l) => esc(t('tests.level.' + l)) + ' · '
-      + (by[l].lastRun ? esc(by[l].lastRun.at.slice(0, 10)) + ' ' + dgHtml(by[l].lastRun.freshness, by[l].lastRun.changedBy)
+      + (by[l].cards.some((c) => c.fresh)
+        // one answer per card — a level with two runners has two runs, each with its own freshness fact
+        ? by[l].cards.filter((c) => c.fresh && c.fresh.ranAt).map((c) => (by[l].cards.length > 1 && !biz() ? '<span class="mono">' + esc(c.runner) + '</span> ' : '')
+          + esc(c.fresh.ranAt.slice(0, 10)) + ' ' + freshDgHtml(c.fresh)).join(' · ')
+        : by[l].lastRun ? esc(by[l].lastRun.at.slice(0, 10)) + ' ' + dgHtml(by[l].lastRun.freshness, by[l].lastRun.changedBy)
         : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') + esc(t('journey.absent.notIndexed')) + '</span>')).join('<br>') + '</span></div>';
   // 5 — what could not be read, by kind: the artefacts first
   html += gapsKpiHtml(d);
@@ -514,7 +520,7 @@ function verdictLineHtml(c) {
       + esc(words) + '</span>';
   });
   if (!bits.length) return '';
-  return '<div class="tst-verdict">' + bits.join(' · ') + (c.lastRun ? ' · ' + dgHtml(c.lastRun.freshness, c.lastRun.changedBy) : '') + '</div>'
+  return '<div class="tst-verdict">' + bits.join(' · ') + (c.fresh ? ' · ' + freshDgHtml(c.fresh) : c.lastRun ? ' · ' + dgHtml(c.lastRun.freshness, c.lastRun.changedBy) : '') + '</div>'
     + declaredLineHtml(c);
 }
 
@@ -555,16 +561,20 @@ function sourcesHtml(d) {
       const cases = k.cases ? countedHtml(k.cases, api) : esc(countWords('count.unit.cases', c.cases));
       const line = (biz() ? cases : files + ' · ' + cases)
         + (projects.length ? ' · ' + esc(projects.join(' · ')) : '');
-      const gaps = (d.gaps || []).filter((g) => g.repo === c.repo && (!g.level || g.level === c.level));
+      const gaps = cardGaps(d.gaps || [], c);
       return '<div class="tst-card"><div class="t">' + esc(c.repo) + ' · ' + esc(t('tests.level.' + c.level))
         + (biz() ? '' : tagOpen('ev reached', 'tests.runner') + esc(c.runner) + '</span>') + '</div>'
         + verdictLineHtml(c)
         + '<div class="sub">' + line + '</div>'
-        + '<div class="kv">' + (c.lastRun
+        + '<div class="kv">' + (c.fresh && c.fresh.ranAt
+          ? '<span>' + esc(c.fresh.ranAt.slice(0, 10)) + '</span>' + freshDgHtml(c.fresh)
+          : c.lastRun
           ? '<span>' + esc(c.lastRun.at.slice(0, 10)) + '</span>' + dgHtml(c.lastRun.freshness, c.lastRun.changedBy)
           : tagOpen(EV_CLS.none, 'journey.absent.notIndexed') + sym('absent') + esc(t('journey.absent.notIndexed')) + '</span>') + '</div>'
-        // the fold's own sentence about this card's freshness, printed verbatim
-        + '<p class="tst-gap">' + mdCode(c.freshness) + '</p>'
+        // the card's one freshness fact as its sentence — both sides of *stale*, or *current as of sync N*, or
+        // *no source digest* with the recipe — never two answers on one card (finding 2)
+        + (c.fresh ? freshLineHtml(c.fresh) + (c.fresh.recipe && !(biz() && c.fresh.recipe === 'fresh.recipe.stamp') ? '<p class="tst-gap">' + esc(t(c.fresh.recipe)) + '</p>' : '')
+          : '<p class="tst-gap">' + mdCode(c.freshness) + '</p>')
         // one line per finding's shape, with how many artefacts carry it: the unit
         // card used to repeat one sentence per coverage report
         + foldGaps(gaps).map((g) => '<p class="tst-gap bad">' + sym('warning') + ' ' + mdCode(g.text)
@@ -580,6 +590,37 @@ function sourcesHtml(d) {
 function evChipHtml(cls, wordKey) {
   const glyph = cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'none' ? sym('absent') : '';
   return tagOpen(EV_CLS[cls], wordKey) + glyph + esc(t(wordKey)) + '</span>';
+}
+
+/** The freshness word of a card's one fact, with the fact's tip (both sides, the recipe, the runs read).
+ * @group Tests tab */
+function freshDgHtml(f) {
+  const map = { current: 'unchanged', stale: 'changed', 'no-digest': 'unknown' };
+  const fr = map[f.state] || 'unknown';
+  const key = fr === 'changed' && f.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + fr;
+  return '<span class="' + esc(DG_CLS[fr]) + '"' + freshAttrs(f, { noFocus: true }) + '>'
+    + (fr === 'unchanged' ? sym('live') : fr === 'changed' ? sym('stale') : sym('warning')) + esc(t(key)) + '</span>';
+}
+
+/**
+ * The blind spots that belong to one card: its level's, minus the freshness findings of results reports
+ * whose runs belong to another card, plus those of the reports its own runs came from — so an e2e card
+ * of Playwright runs never carries a Vitest report's *no source digest* (SDET, swarm 2026-10-05).
+ * @group Tests tab
+ */
+function cardGaps(all, c) {
+  const mine = new Set(c.reports || []);
+  const freshKinds = new Set(['no-digest', 'digest-changed']);
+  return all.filter((g) => {
+    if (g.repo !== c.repo) return false;
+    const paths = g.paths || [];
+    const ownRun = paths.some((p) => mine.has(p));
+    if (ownRun) return true;
+    if (g.level && g.level !== c.level) return false;
+    // a results report's freshness finding speaks for the card its runs are on, not for every card of the level
+    if (c.reports && freshKinds.has(g.kind) && g.reportKind === 'results') return false;
+    return true;
+  });
 }
 
 /** Whether a run still speaks for this code: glyph and word, from the report's own digest.
@@ -652,7 +693,10 @@ function evidenceCellHtml(row) {
   // of this word read one answer (visual swarm 2026-09-24). Nothing on this tab
   // changes: it is the other three that move to what this one already said.
   const word = evidenceWord(c).key;
-  let html = evChipHtml(cls, word);
+  let html = c.freshness && c.freshness.state !== 'none'
+    ? '<span class="' + esc(EV_CLS[cls]) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev: evidenceWord(c), obs: c.observation || null, fresh: c.freshness } }) + '>'
+      + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'none' ? sym('absent') : '') + esc(t(word)) + '</span>'
+    : evChipHtml(cls, word);
   if (runOnly) {
     html += '<span class="tst-lift">' + esc(t(tests.runLevel === 1 ? 'tests.runOnlyOne' : 'tests.runOnly').replace('{n}', String(tests.runLevel))) + '</span>';
   }

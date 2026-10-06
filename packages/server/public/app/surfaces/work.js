@@ -751,7 +751,7 @@ export function workImpact() {
 /** One commit: subject, author and when, how it names the item, its files, and its change on demand. @group Work */
 function commitHtml(c, biz) {
   const open = OPEN_DIFF.has(c.sha);
-  const subj = biz ? plainWords(c.subject) || t('work.hud.via.commit') : c.subject;
+  const subj = biz ? plainWords(String(c.subject || '').replace(/^\s*[a-z]+(?:\([^)]*\))?!?:\s*/i, '')) || t('work.hud.via.commit') : c.subject;
   return '<div class="wk-commit" data-sha="' + esc(c.sha) + '">'
     + '<div class="subj">' + esc(subj) + '</div>'
     + '<div class="meta">' + esc(c.author || '') + ' · ' + esc(whenWords(c.at))

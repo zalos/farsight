@@ -116,6 +116,8 @@ test('the board marks stale quietly and not built in amber, each with its own wo
   const color = (l: typeof stale) => l.evaluate((el) => getComputedStyle(el).color);
   expect(await color(stale)).not.toEqual(await color(notBuilt));
   await expect(card.locator('.map-mark.risk')).toHaveCount(0);
+  // the Map fetches its journeys one at a time: a walk still in flight when the test ends must not fail the run
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 
 /**

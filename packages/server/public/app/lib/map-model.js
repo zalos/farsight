@@ -772,3 +772,20 @@ export function screensUsing(model, kind, nodeId) {
     ? c.nodeId === nodeId
     : c.data.some((d) => d.nodeId === nodeId))));
 }
+
+/**
+ * The name a store is printed under in a register, or `''` for none. A store's name
+ * is a product name or a word somebody wrote in the settings, so hybrid and code
+ * always print it; the business register leaves out a database engine the parser
+ * read off a driver (`Postgres` from `pg`) — a developer's word for where a table
+ * lives, which a product owner would have to look up (swarm 2026-10-05) — and says
+ * the kind instead (*database record*). A name the settings declare stays.
+ * @param {{name?:string, engine?:string, via?:string}|null|undefined} st
+ * @param {boolean} business
+ * @returns {string}
+ */
+export function storeShownName(st, business) {
+  if (!st || !st.name) return '';
+  if (business && st.engine && st.via !== 'config') return '';
+  return String(st.name);
+}

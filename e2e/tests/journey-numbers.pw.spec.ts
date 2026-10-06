@@ -17,7 +17,7 @@ const IDENTIFIER = new RegExp([
   String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
   String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
   String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+|\bADR\s?\d+`,
+  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
 ].join('|'), 'g');
 
 /**
@@ -62,7 +62,8 @@ test.describe('journey numbers', () => {
   test('every header number carries a tip that says what it counts, and a breakdown that adds up to it', async ({ page }) => {
     for (const lens of ['hybrid', 'business'] as const) {
       await openIn(page, lens, 'timeline');
-      const nums = page.locator('#jrn-count [data-tip-id]');
+      // the freshness sentence is a trigger too, and not a number: its own spec is freshness.pw.spec.ts
+      const nums = page.locator('#jrn-count [data-tip-id]:not(.fresh)');
       const n = await nums.count();
       expect(n, 'the header prints its numbers as tip triggers').toBeGreaterThanOrEqual(3);
       let split = 0;
@@ -131,6 +132,36 @@ test.describe('journey numbers', () => {
       expect(hits, `identifier-shaped words in the business ${view}`).toEqual([]);
       await page.keyboard.press('Escape');
     }
+  });
+});
+
+test.describe('one word per position', () => {
+  /**
+   * @covers packages/server/public/app/surfaces/journeys.js::jrnStopOf
+   * @covers packages/server/public/app/surfaces/journeys.js::jrnStopText
+   * @covers packages/server/public/app/surfaces/journey-drill.js::jrnInspHeadHtml
+   * @covers packages/server/public/app/surfaces/journeys.js::jrnSheetHtml
+   */
+  test('the Sheet counts its columns as stops, and the drawer names the stop a part sits in — never a walk index', async ({ page }) => {
+    // swarm 2026-10-05 (six roles): *5 actions* above six columns; the drawer's *STEP 232*
+    await openIn(page, 'hybrid', 'sheet');
+    const cols = await page.locator('#jrn-tl .jrn-sbh').count();
+    expect(cols).toBeGreaterThan(0);
+    const corner = page.locator('#jrn-tl .jrn-slane.corner');
+    await expect(corner).toContainText(/stop/i);
+    await expect(corner.locator('.sub')).toContainText(new RegExp('^' + cols + ' stops?$'));
+    // open the first call: the drawer's head is `stop n of <cols> · call`
+    const order = await page.evaluate(() => {
+      const sum = (window as any).S.JOURNEY.summary;
+      for (const sg of sum.segments) for (const m of sg.markers) if (m.kind === 'call') return m.stepOrder;
+      return -1;
+    });
+    expect(order).toBeGreaterThanOrEqual(0);
+    await page.evaluate((o) => (window as any).jrnSelect(o), order);
+    const head = page.locator('#jrn-dock .sel .hud-label, #journey .jrn-insp .sel .hud-label').first();
+    await expect(head).toHaveText(new RegExp('^stop \\d+ of ' + cols + ' · call$', 'i'));
+    const words = await visibleWords(page);
+    expect(words, 'no bare walk index').not.toMatch(/\bstep \d+\b(?! of)/i);
   });
 });
 
@@ -273,7 +304,7 @@ test.describe('journey absence words', () => {
     await page.evaluate(() => { const S = (window as any).S; S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: { journeyDrill: true } }); });
     await page.evaluate(() => (window as any).jrnSetLayout('drill'));
     await page.evaluate((o) => (window as any).jrnSelect(o), pick!.order);
-    const head = page.locator('.jrn-tfoot').filter({ hasText: 'no test reaches this step' }).first();
+    const head = page.locator('.jrn-tfoot').filter({ hasText: 'no test reaches this part' }).first();
     await expect(head).toBeVisible();
     const wider = head.locator('.jrn-twider');
     await expect(wider).toHaveAttribute('data-scope', 'count.scope.action');

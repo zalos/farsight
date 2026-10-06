@@ -16,7 +16,7 @@
 // Everything from the server is untrusted display data → esc().
 
 import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens, cssId } from '../store.js';
-import { t, def, evidenceWord, plainWords } from '../strings.js';
+import { t, def, evidenceWord, plainWords, proseHtml, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { nodeCardHtml, vsl, linkHtml, designChipHtml, designThumbHtml } from '../lib/graph-render.js';
 import { journeyViewHash, isJourneyRoute, withParams, mapScreenHash, stepIndex, journeyStepHash } from '../lib/route-url.js';
@@ -25,11 +25,13 @@ import { gateAttrs } from '../lib/gate-card.js';
 import { trapFocus, releaseFocus, rememberOpener } from '../lib/focus-trap.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/tooltip.js';
-import { plainTip, countedHtml, defAttrs } from '../lib/counted.js';
+import { plainTip, countedHtml, defAttrs, countKey } from '../lib/counted.js';
 import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnDrillStep, jrnInspPanelHtml } from './journey-drill.js';
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
+import { lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
+import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -266,7 +268,7 @@ function jrnOrganisedHtml(org, route) {
       + '<div class="jrn-phead"><a class="hud-label jrn-pname" href="' + esc('#/journeys?persona=' + encodeURIComponent(p.id)) + '">' + esc(jrnPersonaName(p)) + '</a>'
       + (p.id && !p.declared ? '<span class="api-chip"' + defAttrs('journeys.persona.undeclared') + '>' + esc(t('journeys.persona.undeclared')) + '</span>' : '')
       + '<span class="jrn-pcount">' + jrnOrgCountsHtml(p.counts) + '</span></div>'
-      + (p.description ? '<p class="dsg-flow-desc">' + esc(p.description) + '</p>' : '');
+      + (p.description ? '<p class="dsg-flow-desc">' + proseHtml(p.description) + '</p>' : '');
     const heads = p.groups.length > 1;
     for (const g of p.groups) {
       const key = p.id + '/' + g.id;
@@ -284,7 +286,7 @@ function jrnOrganisedHtml(org, route) {
         + ' data-key="' + esc(key) + '" onclick="jrnToggleGroup(this)" aria-label="' + esc(t('journeys.persona.toggle') + ' · ' + jrnGroupName(g)) + '"><span class="jrn-chev" aria-hidden="true"></span>'
         + '<span class="jrn-gname">' + esc(jrnGroupName(g)) + '</span></button>'
         + '<span class="jrn-gcount">' + jrnOrgCountsHtml(g.counts) + '</span></div>'
-        + (g.description ? '<p class="dsg-flow-desc">' + esc(g.description) + '</p>' : '')
+        + (g.description ? '<p class="dsg-flow-desc">' + proseHtml(g.description) + '</p>' : '')
         + '<div class="jrn-gbody" id="' + esc(bodyId) + '"' + (isFolded ? ' hidden' : '') + '>' + cards + '</div></div>';
     }
     html += '</section>';
@@ -374,7 +376,10 @@ function jrnFlowCardHtml(f, rows, repo, pinned, extra) {
   const chips = (f.screens || []).map((id, i) => {
     const r = byId[id] || {};
     const cls = r.status === 'both' ? 'ok' : r.status === 'design-only' ? 'stub' : '';
-    return '<span class="api-chip ' + cls + '"><b>' + (i + 1) + '</b>' + esc(id) + (r.name ? ' · ' + esc(r.name) : '') + '</span>';
+    // a design id is how the design files the screen: the business register reads its name
+    // (and the id only when the design gave it no name), as the journey's own header does
+    const words = currentLens() === 'business' ? esc(r.name || id) : esc(id) + (r.name ? ' · ' + esc(r.name) : '');
+    return '<span class="api-chip ' + cls + '"><b>' + (i + 1) + '</b>' + words + '</span>';
   }).join('');
   // the surface carries each doc's title beside its path (R21); an older server sends paths only
   const docs = (f.docLinks || f.docs || []).map((d) => jrnDocLinkHtml(repo, d)).join('');
@@ -395,7 +400,7 @@ function jrnFlowCardHtml(f, rows, repo, pinned, extra) {
     // fully built flow needs the count spelled out beside it
     + (statusKey === 'journey.status.built' ? '<span class="dsg-sub">' + esc(t('design.screensBuilt').replace('{b}', built).replace('{n}', total)) + '</span>' : '')
     + '</div>'
-    + (f.description ? '<p class="dsg-flow-desc">' + esc(f.description) + '</p>' : '')
+    + (f.description && proseHtml(f.description) ? '<p class="dsg-flow-desc">' + proseHtml(f.description) + '</p>' : '')
     + (chips ? '<div class="dsg-chips">' + chips + '</div>' : '')
     + (docs ? '<div class="dsg-docs">' + docs + '</div>' : '')
     + (f.nodeId ? '<button class="rel" onclick="openJourney(' + jsArg(f.nodeId) + ')">' + sym('start') + ' ' + esc(t('journey.openJourney')) + '</button>' : '')
@@ -416,9 +421,13 @@ function jrnDocLinkHtml(repo, link) {
   if (/^https?:\/\//i.test(path)) return linkHtml(path);
   const title0 = link && typeof link === 'object' && link.title ? String(link.title) : '';
   const business = currentLens() === 'business';
-  // a document's title is words somebody wrote; its number (`0021 —`) and a bare
-  // file name are how the repository files it, and the business lens reads neither
-  const title = business ? plainWords(title0.replace(/^\s*\d{2,5}\s*[—–-]\s*/, '')) : title0;
+  // a document's title is words somebody wrote, and its number (`0021 —`) is the
+  // citation key a reader quotes it by — kept in every register (swarm 2026-10-05,
+  // the business analyst: "the number is the citation key I need"); a bare file name
+  // is how the repository files it, and the business lens does not read that
+  const num = (title0.match(/^\s*(\d{2,5})\s*[—–-]\s*/) || [])[1] || '';
+  const rest = plainWords(title0.replace(/^\s*\d{2,5}\s*[—–-]\s*/, ''));
+  const title = business ? (rest ? (num ? num + ' — ' : '') + rest : '') : title0;
   if (business && !title) return '';
   const base = String(path).split('/').pop();
   // the hover keeps the path — and the whole title, since a narrow lane clips it
@@ -481,7 +490,7 @@ export function jrnWords(text) { return currentLens() === 'business' ? plainWord
  * @group Journey view */
 export function jrnMoLabel(mo) {
   if (!mo) return '';
-  if (currentLens() !== 'business') return String(mo.label || '');
+  if (currentLens() !== 'business') return unTick(mo.label);
   return plainWords(mo.label) || plainWords(mo.business) || t('journey.biz.noWords');
 }
 /** A stop the design declares and no call made, named the same way.
@@ -676,9 +685,12 @@ function jrnCallsInSpan(i, from, to) {
  * @group Journey view */
 function jrnArmOutcome(i, bp, arm) {
   const hits = jrnCallsInSpan(i, arm.line || 0, arm.endLine || 0);
-  if (hits.length) return hits.map((ci) => '<span class="jrn-fk-step" onclick="event.stopPropagation();jrnScrollTo(' + ci + ')">→ step ' + (ci + 1) + ' (' + esc(((S.JOURNEY.steps[ci] || {}).node || {}).name || '') + ')</span>').join(' ');
-  if (arm.exits || (bp.exits && (bp.arms || []).length === 1)) return '<span class="jrn-fk-exit">exits (return/throw)</span>';
-  return '<span class="jrn-fk-none">no tracked calls' + (bp.exits ? ' · may exit' : '') + '</span>';
+  // the arm names the part it reaches and the stop that part sits in — a walk
+  // index (`step 38`) is not a position a reader can find anywhere else
+  if (hits.length) return hits.map((ci) => '<span class="jrn-fk-step" onclick="event.stopPropagation();jrnScrollTo(' + ci + ')">'
+    + esc(t('journey.fork.jump').replace('{name}', ((S.JOURNEY.steps[ci] || {}).node || {}).name || '')) + (jrnStopText(ci) ? ' · ' + esc(jrnStopText(ci)) : '') + '</span>').join(' ');
+  if (arm.exits || (bp.exits && (bp.arms || []).length === 1)) return '<span class="jrn-fk-exit">' + esc(t('journey.fork.exits')) + '</span>';
+  return '<span class="jrn-fk-none">' + esc(t('journey.fork.noCalls')) + (bp.exits ? ' · ' + esc(t('journey.fork.mayExit')) : '') + '</span>';
 }
 /** Inline fork card for branch point bi of step i, toggled from the fork gutter:
  * lens-aware condition (business label + raw), category chip, arms with
@@ -1447,6 +1459,13 @@ export function jrnGateParts(g) {
 }
 /** A token only a developer would write: camelCase, snake_case, SHOUT_CASE, `a=b`. */
 const JRN_DEV_TOKEN = /[a-z][A-Z]|[A-Za-z0-9]_[A-Za-z0-9]|=/;
+/** Labels of the checks every web application has, by the words their authors use — first match wins. */
+const JRN_GATE_SHAPES = [
+  ['returnPath', /\breturn.?to\b.*\bpath\b|\bredirect target\b/i],
+  ['sameOrigin', /^same.?origin\b|\bcsrf\b/i],
+  ['rateLimit', /\brate.?limit/i],
+  ['idShape', /\bid shape\b/i],
+];
 /** A name that is one bare identifier and no prose at all (`uuid`, `problemSchema`). */
 const JRN_BARE_IDENT = /^[A-Za-z0-9_$]+$/;
 /**
@@ -1464,6 +1483,13 @@ const JRN_BARE_IDENT = /^[A-Za-z0-9_$]+$/;
  */
 export function jrnGateInWords(g) {
   const { phrase } = jrnGateParts(g);
+  // a handful of checks every web application has, named the way a developer names
+  // them (*same-origin on mutating routes*, *public-path rate limit*, *path id shape*):
+  // the label is words a person wrote, and still a word a product owner would have to
+  // look up (swarm 2026-10-05). The shape is read off that label — never guessed from
+  // the code — and said with the catalog's sentence for it.
+  const shape = phrase && JRN_GATE_SHAPES.find(([, re]) => re.test(phrase));
+  if (shape) return t('journey.biz.gateShape.' + shape[0]);
   if (!phrase || JRN_BARE_IDENT.test(phrase) || JRN_DEV_TOKEN.test(phrase)) return '';
   return phrase;
 }
@@ -1923,7 +1949,7 @@ export function jrnMarkerText(m) {
   // register, where it has room.
   const short = title && title !== name && (m.titleFrom === 'label' || m.titleFrom === 'route') ? title : '';
   const label = short || ((n.bizLabel && n.bizLabel !== name) ? n.bizLabel : '');
-  return label ? name + ' · ' + label : name;
+  return label ? name + ' · ' + unTick(label) : name;
 }
 /**
  * The words the core chose for this marker, or '' when it chose none. An older
@@ -2043,7 +2069,7 @@ export function jrnSeamCardHtml(m) {
     + '<span class="l1">' + sym('api') + (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') + '<span class="nm">' + esc(name) + '</span>'
     // the code names no method and several endpoints share the address: the read one is shown, and says so
     + (m.methodAssumed ? '<span class="api-chip warn"' + tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) + '>' + esc(t('journey.seam.methodAssumed')) + '</span>' : '')
-    + (summary ? '<span class="sum">' + esc(summary) + '</span>' : '')
+    + (summary ? '<span class="sum">' + proseHtml(summary) + '</span>' : '')
     // whether the spec and the code agree is a developer's question
     + (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>')
     + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
@@ -3188,7 +3214,7 @@ export function jrnFoldFacts(cov) {
     evidenceWord: cov.evidenceWord || null, counted: cov.counted || null, observation: cov.observation || null,
     // the cell's one verdict (core `testVerdict`): the word, its own run's status, every case by its run
     verdict: cov.verdict || null,
-    chip: cov.chip || 'none', run: cov.run || null, note: cov.note,
+    chip: cov.chip || 'none', run: cov.run || null, note: cov.note, freshness: cov.freshness || null,
   };
 }
 /** The same facts as the server already folded them for a whole scope — read, never recomputed.
@@ -3335,7 +3361,9 @@ function jrnEvidenceTip(el, a) {
   return '<div class="tip-h">' + esc(t(ev.key)) + '</div>'
     + (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '')
     + (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '')
-    + tableTip({ caption: 'tip.journey.obs.head', rows });
+    + tableTip({ caption: 'tip.journey.obs.head', rows })
+    // *stale* as a comparison: the sentence that names the run's side and the code's (core freshness.ts)
+    + (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '');
 }
 registerTip('jrnEvidence', jrnEvidenceTip);
 /** The evidence chip: the core's word, its class for the shape, and its tip.
@@ -3344,7 +3372,7 @@ export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
-  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null } }) + '>'
+  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
     + esc(t(ev.key)) + '</span>';
 }
@@ -3550,7 +3578,13 @@ function jrnSheetHtml(sum) {
     html += jrnSheetScreenHtml(sg, at, span);
     at += span;
   });
-  html += '<div class="jrn-slane corner"><span class="hud-label">' + esc(t('journey.sheetCorner')) + '</span></div>'
+  // the corner names what a column is — a stop — and counts them with the core's
+  // own number (`counted.actionStops`, the drill's `stop n of t`), so the columns
+  // and the number above them are one count, not the header's actions
+  const stops = sum.counted && sum.counted.actionStops;
+  const cornerKey = currentLens() === 'business' ? 'journey.biz.sheetCorner' : 'journey.sheetCorner';
+  html += '<div class="jrn-slane corner"><span class="hud-label"' + tipAttrs({ key: cornerKey, noFocus: true }) + '>' + esc(t(cornerKey)) + '</span>'
+    + (stops && stops.n === cols.length ? '<span class="sub">' + jrnCountedHtml(stops, { num: false, noFocus: true }) + '</span>' : '') + '</div>'
     + cols.map(jrnSheetHeadHtml).join('');
   sh.layers.forEach((layer, li) => {
     html += '<div class="jrn-slane ' + esc(layer.cls || '') + '"><span class="hud-label">' + esc(layer.label) + '</span>'
@@ -3962,7 +3996,7 @@ function jrnStoryboardHtml(sum) {
   const desc = sum.business.description || '';
   return '<div class="jrn-story">'
     + (desc || docs.length ? '<div class="jrn-story-intro">'
-      + (desc ? '<p class="jrn-story-blurb">' + esc(desc) + '</p>' : '')
+      + (desc && proseHtml(desc) ? '<p class="jrn-story-blurb">' + proseHtml(desc) + '</p>' : '')
       + '<div class="jrn-story-src"><span class="hud-label">' + esc(t('journey.story.ownWords')) + '</span>'
       + (docs.length ? '<span class="dsg-docs">' + docs.join('') + '</span>' : '') + '</div></div>' : '')
     + jrnStoryLinksHtml(sum)
@@ -4111,6 +4145,9 @@ export function renderJourney(data) {
   const storyEl = document.getElementById('jrn-storyline');
   if (storyEl) storyEl.innerHTML = '';
   if (isFlow && entry.id) jrnFillOrg(entry.id);
+  // the status lifecycle of each record the journey reaches, read from the code
+  const lcEl = document.getElementById('jrn-lifecycle');
+  if (lcEl) lcEl.innerHTML = jrnLifecycleHtml(data);
   // the trackers' work on this journey, when a work source is configured and anything is linked
   fillJourneyWork(entry);
   const ls = document.getElementById('jrn-layoutsw');
@@ -4337,6 +4374,19 @@ function jrnFillStoryline(tree, entryId) {
     + '</span>';
 }
 /**
+ * The journey header's status lifecycle: one strip per record whose statuses the code declares and
+ * that this journey moves (at most two, the rest counted) (`/api/journey` → `lifecycles`, core `journeyLifecycles`) — the statuses in declared
+ * order, each move some code makes as a door to its writer, the moves this journey makes lit.
+ * `''` when no record the journey reaches declares its statuses.
+ * @group Journey view
+ * @business Shows the statuses a record goes through and which part of the system moves it to each one.
+ */
+export function jrnLifecycleHtml(data) {
+  const { shown, more } = headerLifecycles(data && data.lifecycles);
+  return shown.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join('')
+    + (more ? '<span class="lc-more"' + defAttrs('lifecycle.more') + '>' + esc(t('lifecycle.more').replace('{n}', more)) + '</span>' : '');
+}
+/**
  * The header count line: five named groups instead of a run of fourteen counts
  * (pass swarm 2026-09-25 — the staff engineer's *"a run-on of 14 counts"*, and
  * every reviewer's *"none of them names its scope"*). Each group prints one
@@ -4392,12 +4442,14 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
   // built, so no word about it is a claim this flow can earn (blocker 2)
   const evHtml = cov && cov.sharedEvidence
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
+    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
   const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
   g('g-tests', [
     jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }),
     evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
+    // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)
+    cov && !cov.sharedEvidence ? freshLineHtml(cov.freshness, 'jrn-fresh') : '',
   ]);
   // the walk, in the code lens only: its units are a developer's
   if (lens === 'code') {
@@ -4433,7 +4485,7 @@ function jrnCutChip(data, cnt) {
   // the chip is a button (it opens the list); its number carries the tip — what a
   // cut point is, over the journey, split by the budget that ran out
   const c = sum0Cut(data, n, by);
-  el.innerHTML = sym('warning') + esc(t('journey.cutPoints')).replace('{n}', () => '<span class="jrn-num"' + tipAttrs({ number: c, noFocus: true }) + '>' + n + '</span>');
+  el.innerHTML = sym('warning') + esc(t(countKey('journey.cutPoints', n))).replace('{n}', () => '<span class="jrn-num"' + tipAttrs({ number: c, noFocus: true }) + '>' + n + '</span>');
   el.removeAttribute('title');
   jrnCutListFill(data.summary, cnt);
 }
@@ -4500,7 +4552,7 @@ function jrnCutListFill(sum, cnt) {
   const rows = jrnCutRows(sum);
   const by = {};
   rows.forEach((r) => { (by[r.reason] = by[r.reason] || []).push(r); });
-  const head = t('journey.cutPoints').replace('{n}', n);
+  const head = t(countKey('journey.cutPoints', n)).replace('{n}', n);
   d.setAttribute('aria-label', head);
   d.innerHTML = '<div class="jrn-fkp-head"><span class="hud-label">' + sym('warning') + ' ' + esc(head) + '</span>'
     + '<button class="x" onclick="jrnToggleCuts(false)" aria-label="Close">✕</button></div>'
@@ -4559,7 +4611,7 @@ export function jrnContractHtml(n) {
   const statusKey = c.status === 'both' ? 'apis.status.both' : c.status === 'spec-only' ? 'apis.status.specOnly'
     : c.status === 'declared' ? 'apis.status.declared' : c.status === 'code-only' ? 'apis.status.codeOnly' : 'apis.status.implemented';
   let out = '<div class="jrn-contract-card"><span class="hd">' + sym('api') + esc(t('journey.contractHead')) + '</span>';
-  if (c.summary || c.description) out += row(t('journey.contract.does'), esc(c.description || c.summary));
+  if (c.summary || c.description) out += row(t('journey.contract.does'), proseHtml(c.description || c.summary));
   if ((c.security || []).length) out += row(t('journey.contract.requires'), (c.security || []).map((x) => sym('lock') + esc(x)).join(' '));
   const ret = (c.responses || []).filter((r) => /^2/.test(String(r.status)));
   if (ret.length) out += row(t('journey.contract.returns'), ret.map((r) => '<code>' + esc(r.status + (r.schema ? ' ' + r.schema : '')) + '</code>').join(' '));
@@ -4758,6 +4810,34 @@ export function jrnActionStep(d) {
 }
 
 // ── impact rings on the sheet (B5.4 · dependency-impact §4.3) ────
+/**
+ * The stop a part of the walk sits in — its column on the Sheet, its stop on the
+ * drill's rail: `{ n, t }` (1-based, of the journey's stops), or null when the part
+ * belongs to no stop (start-up work, a part before the first screen). A part the
+ * band does not draw takes the stop of the nearest drawn part above it.
+ *
+ * One position, one word (swarm 2026-10-05, finding 3): the drawer used to print
+ * the walk's own index (`STEP 232`), a number no other surface shows; the stop is
+ * the number the Sheet's column, the drill's rail and the storyboard all print.
+ * @group Journey view
+ */
+export function jrnStopOf(order) {
+  const sum = S.JOURNEY && S.JOURNEY.summary;
+  if (!sum || order == null || order < 0) return null;
+  const find = (o) => { for (const sg of sum.segments) { const m = sg.markers.find((x) => x.stepOrder === o); if (m) return { sg, m }; } return null; };
+  let cur = order, hit = find(cur);
+  const parent = S.JRN_TREE && S.JRN_TREE.parent;
+  for (let guard = 0; !hit && parent && cur != null && cur >= 0 && guard < 64; guard++) { cur = parent[cur]; hit = cur != null && cur >= 0 ? find(cur) : null; }
+  if (!hit || hit.m.moment == null) return null;
+  const cols = jrnSheetModel(sum).cols;
+  const at = cols.findIndex((c) => c.sg === hit.sg && c.mo.index === hit.m.moment);
+  return at < 0 ? null : { n: at + 1, t: cols.length };
+}
+/** `stop n of t` for a part of the walk, or `''` when it sits in no stop. @group Journey view */
+export function jrnStopText(order) {
+  const st = jrnStopOf(order);
+  return st ? t('journey.insp.stopOf').replace('{n}', st.n).replace('{t}', st.t) : '';
+}
 /**
  * The step a node is drawn at, so an impact row can jump to it instead of
  * re-seeding the panel. The first step that stands on the node wins — a node

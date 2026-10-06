@@ -116,7 +116,7 @@ Columns: **printed** (the reference app's POC unless noted) · **source** (core 
 |---|---|---|---|---|
 | `11 screens` | `summary.counts.screens` · C:`counted.screens` | screens the journey runs through (a screen met twice is one) | journey | business `11 screens`: same number |
 | `6 of 11 built` | viewer rule over `summary.user` · C:`counted.built` (`of`) | screens whose design reconciled to code (else: a source location) | journey | Journeys list `11 built` = the **manifest's** 18 screens, not this flow's; business `6 built` = same number (now same form) |
-| `943 steps` (code) | `counts.steps` · C:`counted.steps` (no `bizUnit`) | walk nodes, re-visits included, planned excluded | journey | never printed in business |
+| `943 visits` (code; was *steps* until 2026-10-05) | `counts.steps` · C:`counted.steps` (no `bizUnit`) | walk nodes, re-visits included, planned excluded | journey | never printed in business; a count, never a position — *step* is the storyline's word only |
 | `30 planned` | `counts.planned` · C:`counted.planned` | walk steps from the contract, not code | journey | not the 14 *declared, not called* (operations) nor the 14 declared stops (moments) |
 | `34 gates` → **`34 gates & rules`** | `counts.gates` · C:`counted.gates` | distinct guards + rules by name (25 · 9) | journey | lane tab *Gates & rules 34*: same number |
 | `146 checks` | `counts.checks` · C:`counted.checks` | meetings of those 34 (Σ per-screen counts) | journey | not the 118 conditions |
@@ -159,8 +159,10 @@ should print `counted.{screens, built, actions}` with their `bizUnit` (fixes `6 
 | business `Checked by tests — 35 tests reach this, 13 of them from end to end. A run reached this code…` | `counts.tests` + viewer `runKey` → `evidenceWord.biz` | cases (every level), e2e cases | screen | the run clause now comes from `evidenceWord.biz` |
 | Sheet *Verified by* cell `IN THIS ACTION` + `tests: 3 e2e · 69 unit …` / business `Checked by tests — 72 tests reach this…` | `coverage.moments[i][k]` · C:`counted.tests` (scope `count.scope.action`) | every case reaching **any** step of the action | action — printed as the label above the counts (`jrnFootScopeHtml`, from the `Counted`'s own scope) | the step's own foot below; the viewer's copy of the evidence rule (`strings.js evidenceWord`) should go |
 | step foot (drill inspector head, TESTS tab) `FOR THIS PART ALONE` + counts, or `no test reaches this step` | `steps[i].coverage` (`stepCoverage()`) · C:`counted.tests` (scope `count.scope.node`) | cases reaching this one node | node | **2026-09-27:** when it is `0` and the action's is not, the foot prints `journey.tests.widerScope` — *72 test cases reach the action it belongs to — none of them reaches this part itself* (`jrnStepActionFacts`, the action's `Counted` with its tip). The reference app's submit handler read *no test reaches this step* beside the action's *72* with neither scope named (story swarm finding 4). Impact's *1 tests reach them* is a third scope — the things that use this part, hop 1 — worded by `impact.js` (another lane) |
-| Storyboard `Actions 1–9` / `1–10` | `segments[i].moments.length` | stops on the screen | screen | C:`segments[i].counted.actionStops`; `.actions` is the distinct ones |
-| Drill `action 1 of 31` → **`stop 1 of 31 on this journey`** | `jrnDrillActions(sum).length` = Σ moments · C:`counted.actionStops` | §2 #1 | journey | — |
+| Storyboard `stops 1–9` (was *actions 1–9*) · ledger `stop 3 of 9 on this screen` | `segments[i].moments.length` | stops on the screen | screen | C:`segments[i].counted.actionStops`; `.actions` is the distinct ones |
+| Drill `action 1 of 31` → **`stop 1 of 31 on this journey`** | `jrnDrillActions(sum)` = the Sheet's columns (`jrnSheetModel(sum).cols`, each screen in rank order) = Σ moments · C:`counted.actionStops` | §2 #1 | journey | since 2026-10-05 the rail walks the Sheet's order, so stop n is column n |
+| Sheet corner `layer ↓ · stop →` + `6 stops` (business `part of the system ↓ · stop →`) | C:`summary.counted.actionStops` | the Sheet's columns | journey | **2026-10-05 (swarm finding 3):** *5 actions* sat above six numbered columns (*15 actions* beside *stop 1 of 23*). The columns are stops; the header's actions are one named part of them: `actions + again + declared + nothing to call = stops = columns` (pinned in `core/test/counts.test.ts`) |
+| drawer head `stop 2 of 6 · call` (was `STEP 232`) | `jrnStopOf(order)`: the marker's moment → its index in `jrnSheetModel(sum).cols` | the stop a part sits in | journey | the walk's own index is no longer printed anywhere; a part outside every stop prints its kind word alone |
 | absence word in an empty cell — `not involved` / `not reached` / `none indexed` (business: `takes no part in this` / `the walk did not get there` / `nothing of this kind was found here`) | `segments[i].absent.moments[mo][systemKey]`, `.kinds[mo][kind]`, `.screen[systemKey]`, `summary.absentKinds` — core `journeyAbsence()` | a word, not a number: one per (action, layer) fact | action · screen (ladder folds) · journey (drill's always-present rows) | **2026-09-27, one word per fact:** the reference app's submission flow printed *not involved* (Timeline) and *none indexed* (Sheet) on 43 of the 60 cells both draw. The rule now lives once in core `absenceWord()`: `none indexed` only for a kind the whole journey has none of; `not reached` when a cut inside the action sits on an earlier system; else `not involved`. Rows, sheet, ladder, drill lanes and storyboard ledger all print `jrnAbsentWord()` / `jrnAbsentKindWord()` |
 | `n cut` / `n cut points` | `counts.cutPoints`, `segments[i].counts.cutPoints`, `marker.cut` | subtrees not followed (depth/steps) | journey / screen / marker | repeats counted apart |
 | `n of m built` on linked journeys | `summary.links.*.{built, screens}` | the linked flow's screens with a source location | that flow | same rule as `counted.built` bar the design-status branch |
@@ -215,6 +217,11 @@ not list*. A screen row's `⚠ n drift` has the same tip over that screen (`desi
 
 ### Changes (`/api/changes`, `/api/history` → `history.ts`)
 
+The **sync status line** a source carries in Settings (`settings.sources[].status`, written by `POST /api/sync`) says
+`history N commits indexed · k new this sync` — N is `SnapshotDb.commitCount(repo)`, the same rows the Changes notes
+count over (*242 of 282 never ingested*: 282 is N), k what this sync's incremental read added. Until 2026-10-05 it
+said `history 0 commits read` (k alone) beside a Changes page of 282 commits (swarm 2026-10-05, four roles).
+
 `51 of 66 commits were never ingested by any sync` (`spine.unindexed` of `spine.commits`, scope: the commit range
 read), `n files touched`, `n renamed`, `n of them byte-identical`, `n shown of t` (`chrome.shownOf`, the table's
 fold). Not typed yet. A spine row on the same commit as the sync before it whose recorded content digest differs
@@ -237,7 +244,8 @@ history holds for the repository (see `### Map`, Property).
 | KPI *Journeys with e2e* `9 · reached 9 · observed 0 · declared 0 · none 1` (the reference app) | `journeys[].e2e` tallied in the viewer | flows by e2e rung | selection | — |
 | card `example-app · e2e · 15 spec files · 91 cases` | `sources[]` · C:`sources[].counted.cases` | cases in one source at one level | source | now with verdicts: `91 with no run recorded`; farsight e2e `37 passed` |
 | card `89 passed in the report · 89 declare something this workspace knows` (e2e only) | C:`sources[].counted.passedByDeclaration` | passed cases by what they declare (known · only unmatched · nothing) | source | a flow's `n passed, by their own declaration` counts the part of *declare something known* that lands in its scope (§2 #13) |
-| card freshness sentence | `sources[].freshness` (`freshnessSentence(freshness, changedBy)`) | the level's newest run | source | `changed` on the run's own commit reads *the working tree differs from HEAD* (§2 #14) |
+| card freshness sentence | `sources[].fresh` (core `freshness.ts` `freshnessFact()`) → `fresh.sentence.*`; `sources[].freshness` is the same answer as one line | the card's cases' own runs, one state: *current as of sync N* · *stale — ran on commit X; the code is at Y* · *no source digest* + the stamp recipe | source | **one card per source × level × runner** since 2026-10-05 (an e2e level of Playwright runs was badged VITEST by 21 vitest specs under `e2e/`, and said *no source digest* and *changed since the run* at once); a run-level report joins its runner's card or its level's biggest; the card's blind spots are its level's minus the freshness findings of results reports whose runs sit on another card; `counts.sources` counts these cards |
+| KPI *Last runs* per level | each card's `fresh` | one date + one freshness word per card | source × level | a level with two runners prints both, the runner named (code lenses) |
 | matrix *Observed* `0 tests · 75 passed, by their own declaration · 13 run reports` | `coverage.counts.tests.{observed, declaredPassed, runLevel}` | observed cases split by how, and reports | journey | `tests.observedSplitDecl`; `tests.observedSplit` when nothing passed by declaration |
 | suites row `3 passed · date · digest matches` | `suites[].counts` | one spec file's cases by verdict | file | — |
 | *Orphans · n* | `counts.orphans` | tests covering nothing + unresolved claims | selection | follows the level now |
@@ -547,6 +555,35 @@ and its second 23 → **20**. The three are `resolveEmailDelivery`, `resolveOpsD
 `guards → loadWebEnv`, which the page reaches through `serverContext()` — not through any of its calls. `checks`
 (meetings) drop by the same meetings. Segment coverage still counts a config check's node (it is code the screen's
 walk runs), so no tests number moves.
+
+### Lifecycle (`GraphNode.lifecycle` → core `lifecycle.ts` `lifecycleCounts()`; `/api/journey` `lifecycles[]`, the journey header and the Map property's Overview, MCP `describe_node`)
+
+The statuses one field of a record (a table node) may hold, read from the code by parsers `lifecycle.ts`: a SQL `CHECK (status IN (…))` on the column, or a `const … as const` list, a `z.enum`, a string-literal union or a string `enum` a field of that name is declared with, binding the record only when every status written to it fits that one declaration. A move is listed only with the function that writes it; `from` only when that function compares the status to exactly one prior status in an `if` that says what it was. Scope `count.scope.node` — one record, alone.
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| statuses | `lifecycle.count.statuses` *n statuses* (both) | `count.scope.node` | `lifecycleCounts().statuses` over `lifecycle.statuses` | the declared statuses of the record's status field, each once, in declared order; breakdown `lifecycle.part.written` *some code moves to* · `lifecycle.part.unwritten` *no code moves to* — a partition |
+| moves with a writer | `lifecycle.count.transitions` *n moves with a writer* (both) | `count.scope.node` | `lifecycleCounts().transitions` over `lifecycle.transitions` | one per (from, to, writer): the same move by two functions is two, the same move written twice in one function is one; breakdown `lifecycle.part.withFrom` *check the status first* · `lifecycle.part.noFrom` — a partition |
+| statuses no code moves to | `lifecycle.count.unwritten` *n statuses no code moves to* (both) | `count.scope.node` | `lifecycleCounts().unwritten` = statuses − `transitions[].to` | the declared statuses no function writes (an initial status set by a column default or an INSERT parameter is one of them — the literal is not in the code) |
+
+### Freshness — *stale* is a comparison (core `freshness.ts`; swarm-fixes 2026-10-05, finding 2)
+
+Freshness is a sentence with two sides, never a bare word and never a number of its own. `freshnessFact(runs, code)`
+decides one state for any list of runs: **current** (some run's recorded digest is still the code's) · **stale**
+(every run is older than the code — the same rule as the chip's `observed-stale`) · **no source digest** (no run
+compared; *not* stale) · **none**. The fact carries the run's side (`ranAt`, `ranOn.commit` from the report stamp's
+`farsight.commit`) and the code's (`codeAt.commit` = `meta.tests[repo].head`, else a one-source graph's
+`meta.commit`; `codeAt.sync` = `meta.sync`), and the catalog keys of its word, its sentence (`fresh.sentence.*`), its
+business sentence (`journey.biz.fresh.*`) and its recipe (`fresh.recipe.rerun` · `fresh.recipe.stamp`). The code side is
+registered per index (`setFreshnessMeta`) by the server, MCP and the CLI.
+
+| printed | source | compares | scope | where |
+|---|---|---|---|---|
+| `stale — the tests ran on commit ffe2759 (2026-10-04); the code is at commit 4632734 now` | `coverage.freshness` | the runs that observed the scope (else the covering tests' own runs) vs the code read | journey · segment · action · step | journey header (`.jrn-fresh`), the evidence chip's tip (journey, Map, Portfolio row, Tests matrix) |
+| `current as of sync 106 — the tests ran on the code as it is now` | `coverage.freshness` | as above | as above | as above — a current journey says so instead of saying nothing |
+| `no source digest was recorded — the tests ran on …` + the stamp recipe | `sources[].fresh` / `coverage.freshness` | runs with no recorded digest | source card · scope | Tests cards |
+| `runs read: n current · n older than the code · n with no source digest` | `fresh.runs` | the runs the answer is computed over; sums to them | the fact's scope | the freshness tip (`count.part.fresh*`) |
+| Map *at risk* `18 journeys stale` + `against the code at commit X (sync N) — every one of these runs is from D or before` | each journey's `coverage.journey.freshness` | printed once when every stale journey compares with one commit | board | `riskCounteds()`; each card's *stale* mark carries its own journey's fact as its tip |
 
 ### One test verdict per cell (swarm 2026-10-05, finding 1 — core `coverage.ts` `testVerdict()`)
 

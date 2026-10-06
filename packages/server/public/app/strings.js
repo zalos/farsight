@@ -3,7 +3,7 @@
 // truth); this module only resolves keys against the current register and
 // owns the register toggle + the print/export professional-register rule.
 
-import { S, expose, humanize } from './store.js';
+import { S, expose, humanize, esc, currentLens } from './store.js';
 
 /**
  * Resolve a catalog key in the current register. sys.* / invariant entries
@@ -94,10 +94,13 @@ export function evidenceWord(facts) {
 // A document reference: a design id, a backlog or decision record, a route of a
 // design, a spec section. They are how the authors cross-reference each other,
 // and they read as noise to anyone who is not one of them.
-const DOC_REF = /\b(?:PBI\s?#?\d+|ADR[\s-]?\d+|[A-Z]{2,5}-\d+(?:\.\d+)?[a-z]?|Route\s\d+[a-z]?|RFC\s?\d+|MVP)\b|§\s?\d+[a-z]?/;
+// An ADR number is not one of them: it is the citation key a reader quotes the
+// decision by, so it stays in every register (swarm 2026-10-05, the business analyst).
+// A one-letter id (`D6`, `G8`) is a plan's own numbering of its decisions and goals.
+const DOC_REF = /\b(?:PBI\s?#?\d+|(?!ADR-)[A-Z]{2,5}-\d+(?:\.\d+)?[a-z]?|Route\s\d+[a-z]?|RFC\s?\d+|MVP|(?:[Dd]ecision\s+)?[A-Z]\d{1,2}[a-z]?)\b|§\s?\d+[a-z]?/;
 const DOC_REF_G = new RegExp(DOC_REF.source, 'g');
 // A piece of code in prose: a backticked span, a path, a URL path, a file name, an HTTP verb.
-const CODE_BIT = /`[^`]*`|(?:^|[\s(])\/[\w{}:.\-]+|\b[\w-]+\/[\w./-]*\w\.\w+|\b\w+\.(?:tsx?|jsx?|mjs|json|md|ya?ml)\b|\b(?:GET|POST|PUT|PATCH|DELETE)\b|=>|\w\(\)/;
+const CODE_BIT = /`[^`]*`|(?:^|[\s(])\/[\w{}:.\-]+|\b[\w-]+\/[\w./-]*\w\.\w+|\b\w+\.(?:tsx?|jsx?|mjs|json|md|ya?ml)\b|\b(?:GET|POST|PUT|PATCH|DELETE)s?\b|=>|\w\(\)/;
 const IDENT = /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+(?:_[a-z0-9]+)+\b|\b[A-Z0-9]+(?:_[A-Z0-9]+)+\b/g;
 
 /**
@@ -138,6 +141,28 @@ export function plainWords(text) {
   s = s.replace(IDENT, (w) => humanize(w).toLowerCase());
   return s.replace(/\s+([,.;:!?])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ')
     .replace(/\s+—\s*([.,;]|$)/g, '$1').replace(/^[\s,;:—–-]+/, '').trim();
+}
+
+/**
+ * A label somebody wrote, as plain text without its markdown: a backticked span
+ * keeps its words and loses the two backticks, for a chip or a heading that is
+ * escaped as text and has no room for a code face (swarm 2026-10-05, QA).
+ * @group Grammar
+ */
+export function unTick(text) {
+  return String(text || '').replace(/`([^`\n]+)`/g, '$1');
+}
+/**
+ * A sentence somebody wrote, as HTML for the lens on screen. The business lens
+ * reads `plainWords()`; hybrid and code keep every word and draw a backticked
+ * span as code — the writer's markdown, not two raw backticks in the middle of
+ * a sentence (swarm 2026-10-05, QA). Returns escaped HTML; `''` when nothing is
+ * left to print.
+ * @group Grammar
+ */
+export function proseHtml(text) {
+  if (currentLens() === 'business') return esc(plainWords(text));
+  return esc(String(text || '')).replace(/`([^`\n]+)`/g, '<code class="tick">$1</code>');
 }
 
 expose({ toggleRegister });

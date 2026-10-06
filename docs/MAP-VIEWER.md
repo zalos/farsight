@@ -202,6 +202,21 @@ every register. The scope menu's Esc is caught on the window in the capture phas
 keymap. The theme previews on choose (`previewTheme`) and is written only by *Save settings*; `system` (and a
 settings file with no theme) follows `prefers-color-scheme`.
 
+### Freshness — `lib/freshness.js` (2026-10-05)
+
+*Stale* is a comparison, printed only with its sentence. The core decides the fact (`freshness.ts`
+`freshnessFact()`: current · stale · no source digest · none, the run's commit and date, the code's commit and sync,
+the catalog keys); this module only prints it. `freshSentence(fact)` fills the sentence in the lens's register (the
+business lens prints `fact.biz`), `freshLineHtml(fact, cls)` is the inline line (`.fresh .fresh-<state>`, '' for
+*none*), `freshAttrs(fact)` makes any element a trigger for the registered `fresh` tip — the word, the sentence, a
+*against what* table (the run · the code · read by sync, code lenses only), *what changes it* (the stamp recipe is
+dropped in business) and the runs read split by state. Printers: the journey header (`.jrn-fresh` after the evidence
+chip; skipped where the evidence is shared), `jrnEvidenceTip` (the chip tip on the journey, Map, Portfolio row and
+the Tests matrix all pass `fresh: facts.freshness`), the Tests source cards (`freshDgHtml` + the sentence + the
+recipe; `cardGaps()` keeps a results report's freshness finding on the card its runs belong to) and the *Last runs*
+KPI, the Map cover's *stale* mark (its tip is the journey's fact) and the *at risk* bar (`fresh.risk.against`, once,
+when every stale journey compares with one commit). No surface derives a freshness word itself.
+
 ### Change impact — `impact.js` (distance control, tests per distance, 2026-09-27)
 
 The drawer (`openImpact`, `b`) and the journey's IMPACT tab draw one body, `impactBodyHtml(entry, redraw)`. In the
@@ -321,6 +336,17 @@ The journey reaches it through `jrnWords`, `jrnMoLabel`, `jrnDeclLabel`, `jrnCal
 business lens also drops design ids (`jrnDesignIdHtml`), routes, HTTP verbs, contract chips and code links, folds
 parts the code tags `plumbing` (`jrnHelperTest`), and names the drill's places as *the request* / *the service*.
 `e2e/tests/journey-numbers.pw.spec.ts` holds the business views to zero identifier-shaped tokens.
+
+**One word per position (2026-10-05).** *Step* is a journey's place in a storyline and nothing else (business:
+*journey n of m*); a **stop** is one time the journey does something — a Sheet column, the drill's rail (which walks the
+Sheet's order, `jrnDrillActions` = `jrnSheetModel(sum).cols`), the storyboard's *stops 1–n*, the drawer's
+*stop n of t* (`jrnStopOf` / `jrnStopText`); a **beat** is one hop inside a stop (drill); a **visit** is the walk's
+count (`983 visits`), never a position. `core/test/position-words.test.ts` holds the catalog to it. Prose somebody
+wrote goes through `proseHtml()` (business: `plainWords()`; hybrid/code: a backticked span drawn as `<code class="tick">`)
+or `unTick()` for a chip; `plainWords()` keeps ADR numbers (a citation key, every register) and drops one-letter plan
+ids (*decision D6*). Business also strips a commit's conventional type (`commitWords()`), says four common gate
+labels in words (`jrnGateInWords` → `journey.biz.gateShape.*`: same-origin, rate limit, id shape, return path), and
+leaves out a driver-derived database engine name (`storeShownName()` in `lib/map-model.js`).
 
 **Absence words — one per fact (2026-09-27).** An empty (action, layer) cell's word is decided once, in core
 `journeyAbsence()` (`core/journey-counted.ts`), and shipped on the summary: `segments[i].absent.moments[mo.index][key]`

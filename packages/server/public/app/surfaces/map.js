@@ -17,16 +17,17 @@
 // `surfaces/map-property.js`, reached through `openMapProperty(host, ctx)`.
 
 import { S, esc, expose, currentLens, humanize, bizName, unCode } from '../store.js';
-import { t, def, plainWords } from '../strings.js';
+import { t, def, plainWords, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
+import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName } from '../lib/journeys-tree.js';
 import { findStoryline } from '../lib/journeys-model.js';
@@ -168,7 +169,7 @@ function nameWords(s) {
   return biz() && /[a-z][A-Z]|_|\/|\.[a-z]{2,4}\b/.test(v) ? unCode(v) : v;
 }
 /** A sentence somebody wrote; the business lens reads its plain words only. */
-function sentence(s) { return biz() ? plainWords(s) : String(s || ''); }
+function sentence(s) { return biz() ? plainWords(s) : unTick(s); }
 /** A call's name in the lens: the words written for it, never its identifier in the business lens. */
 function callWords(c) {
   if (!biz()) return c.label || (c.method + ' ' + c.path).trim();
@@ -201,9 +202,18 @@ function storeKindKey(st) { return 'map.store.kind.' + storeKind(st); }
  */
 function dataKindWords(dd) {
   // the business lens says what it is in plain words: Invoice DB · database record, Example ERP · ERP record
-  if (biz()) return (dd.store ? dd.store.name + ' · ' : '') + t(dataBizKey(dd));
+  if (biz()) return (storeShownName(dd.store, true) ? storeShownName(dd.store, true) + ' · ' : '') + t(dataBizKey(dd));
   if (!dd.store) return kindWord(dd.kind);
   return dd.store.name + ' · ' + (dd.kind === 'record' ? kindWord('record') : t(storeKindKey(dd.store)));
+}
+/** A street legend's store name in the register on screen: the legend's rows carry name and kind only, so the
+ * store's own ref (its engine, how it is known) is read off a data node of the street that lives in it. */
+function legendStoreName(m, st) {
+  if (!biz()) return st.name;
+  for (const sc of m.screens) for (const c of sc.calls) for (const d of c.data) {
+    if (d.store && d.store.name === st.name && d.store.kind === st.kind) return storeShownName(d.store, true);
+  }
+  return storeShownName(st, true);
 }
 /** The business lens's word for a data node: by its store's kind when it has one, else by its own kind. */
 function dataBizKey(dd) {
@@ -1242,19 +1252,33 @@ function riskCounteds() {
   const ds = MAP.nb.districts || [];
   if (!ds.length || ds.some((d) => !MAP.journeys.has(d.id))) return null;
   let stale = 0, notBuilt = 0, erp = 0;
+  const why = new Map();
   for (const d of ds) {
     const j = MAP.journeys.get(d.id);
     const sum = j && j.data && j.data.summary;
     if (!sum) continue;
     const ew = sum.coverage && sum.coverage.journey && sum.coverage.journey.evidenceWord;
-    if (ew && ew.cls === 'stale') stale++;
+    if (ew && ew.cls === 'stale') {
+      stale++;
+      // the comparison behind each *stale*, by its sentence: said once on the bar when every one shares it
+      const f = sum.coverage.journey.freshness;
+      if (f && f.state === 'stale') why.set(d.id, f);
+    }
     const b = sum.counted && sum.counted.built;
     if (b && b.of != null && b.n < b.of) notBuilt++;
     if (erpReached(sum)) erp++;
   }
   const src = 'surfaces/map.js riskCounteds ← each /api/journey summary (coverage.journey.evidenceWord · counted.built · systems)';
   const c = (n, unit) => ({ n, unit, bizUnit: unit, scope: 'count.scope.workspace', source: src });
-  return [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+  const out = [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+  // every stale journey compared with one code: name it once on the bar, with the newest run among them
+  const facts = [...why.values()];
+  const codes = new Set(facts.map((f) => (f.codeAt && f.codeAt.commit) || ''));
+  if (facts.length && facts.length === stale && codes.size === 1 && !codes.has('') && facts[0].codeAt.sync != null) {
+    const newest = facts.reduce((a, f) => (!a || (f.ranAt || '') > (a.ranAt || '') ? f : a), null);
+    out[0].fresh = Object.assign({}, newest, { key: 'fresh.risk.against', biz: 'journey.biz.fresh.riskAgainst' });
+  }
+  return out;
 }
 function drawRisk() {
   const el = MAP.stage && MAP.stage.querySelector('.map-risk');
@@ -1262,7 +1286,9 @@ function drawRisk() {
   const k = riskCounteds();
   if (!k || !k.some((x) => x.n)) { el.hidden = true; el.innerHTML = ''; return; }
   el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
-    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })).join('<span class="sep">·</span>');
+    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })
+      // *stale* said once, with what it compares, when every stale journey shares one comparison
+      + (x.fresh ? '<span class="map-risk-why"' + freshAttrs(x.fresh, { noFocus: true }) + '>' + esc(freshSentence(x.fresh)) + '</span>' : '')).join('<span class="sep">·</span>');
   const appeared = el.hidden;
   // whether the board sits at its fit — asked before the headline shows, since the fit then leaves it its row
   const at = appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb' ? MAP.cv.stopAt() : null;
@@ -2037,7 +2063,11 @@ function coverAggHtml(d, j) {
   // two marks, not one (§3.3): *stale* quiet in the muted colour — the code moved under the tests — and *not built* in
   // amber — a screen is only designed; one or both, each with its own define
   const mark = (cls, key, glyph) => '<span class="map-mark ' + cls + '"' + tipAttrs({ key, noFocus: true }) + '>' + (glyph ? sym(glyph) : '') + esc(t(key)) + '</span>';
-  const marks = (stale ? mark('stale', 'map.cover.mark.stale', 'sync') : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
+  // *stale*'s tip is the comparison itself: the run's commit and the code's (finding 2)
+  const staleMark = () => (cov && cov.freshness && cov.freshness.state === 'stale'
+    ? '<span class="map-mark stale"' + freshAttrs(cov.freshness, { noFocus: true }) + '>' + sym('sync') + esc(t('map.cover.mark.stale')) + '</span>'
+    : mark('stale', 'map.cover.mark.stale', 'sync'));
+  const marks = (stale ? staleMark() : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
   return status + marks + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
 }
 
@@ -2070,7 +2100,7 @@ function streetHtml(d, j, g) {
       + (reached ? '<span class="rw"' + tipAttrs({ key: 'map.mode.reached', noFocus: true }) + '><b class="r"></b>' + esc(t('map.mode.reached')) + '</span>' : '')
       + (stores.length ? '<span class="stores"><span class="sl"' + tipAttrs({ key: 'map.store.legend', noFocus: true }) + '>' + esc(t('map.store.legend')) + '</span>'
         + stores.map((st) => '<span class="mst st-' + storeKind(st) + '" data-store="' + esc(st.name) + '"' + tipAttrs({ key: storeKindKey(st), noFocus: true }) + '><i></i>'
-          + esc(st.name) + ' · ' + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
+          + (legendStoreName(m, st) ? esc(legendStoreName(m, st)) + ' · ' : '') + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
       + '</span></div>';
   }
   m.screens.forEach((s, si) => {
@@ -2463,7 +2493,7 @@ function drawCard() {
     if (dd.store) {
       const via = dd.store.via ? 'map.store.via.' + dd.store.via : '';
       store = '<div class="store"><span class="mst st-' + storeKind(dd.store) + '"' + tipAttrs({ key: storeKindKey(dd.store) }) + '><i></i>'
-        + esc(dd.store.name) + ' · ' + esc(t(storeKindKey(dd.store))) + '</span>'
+        + (storeShownName(dd.store, biz()) ? esc(storeShownName(dd.store, biz())) + ' · ' : '') + esc(t(storeKindKey(dd.store))) + '</span>'
         + (via && t(via) !== via ? '<span class="map-code via"><span class="hud-label"' + tipAttrs({ key: 'map.store.known', noFocus: true }) + '>' + esc(t('map.store.known')) + '</span> '
           + '<span' + tipAttrs({ key: via, noFocus: true }) + '>' + esc(t(via)) + '</span>' + (dd.store.ref ? ' · <code>' + esc(dd.store.ref) + '</code>' : '') + '</span>' : '')
         + '</div>';

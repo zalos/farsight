@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename, sep } from 'node:path';
 import {
-  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, resolveEntry, buildIndex, categorizeBranch, SnapshotDb, STRINGS,
+  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, journeyLifecycles, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown,
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
@@ -279,7 +279,7 @@ function loadJourneyGraph(graphPath: string): JourneyGraph {
     mtimeMs,
     roots: data.roots ?? {},
     meta: data.meta ?? {},
-    index: buildIndex(nodes, edges),
+    index: (() => { const ix = buildIndex(nodes, edges); setFreshnessMeta(ix, data.meta); return ix; })(),
     edgesById: new Map(edges.map((e) => [e.id, e])),
   };
   return journeyGraphCache;
@@ -919,6 +919,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         screens: screens.map(enrichNode),
         // the three-band blueprint (what the user sees · business · what the system does) — same fold the MCP prints
         summary: journeySummary(g.index, jr, screens),
+        // the records the walk reaches whose statuses the code declares: statuses, moves, writers (core lifecycle.ts)
+        lifecycles: journeyLifecycles(g.index, jr),
         ...(withSteps ? { steps: jr.steps.map((s) => enrichStep(s, g, fileCache)) } : { stepsOmitted: jr.steps.length }),
         edges: jr.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
       }));
