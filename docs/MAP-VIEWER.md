@@ -765,8 +765,8 @@ the surface's absence word stays. Doors into code (`code: true` — the editor, 
 out in the business register, so a gate there is its words. `lib/detail-doors.js` draws them (`doorsHtml`, the
 `.dd-door` chips with their define as the tip) and answers the keys from `keymap.js` (asked before the Map's):
 **Enter** on a focused detail (`[data-doors]`) opens its first door, **o** its editor door (also with the Map's
-explore card open). Where they are drawn: the journey's gate and rule rows open in place (`jrnGateExpand`, the ▸ in
-`.jrn-gl-go`) to their doors, their first sentence and — not in business — their own lines from
+explore card open). Where they are drawn: the journey's gate and rule rows carry their doors on the row itself
+(`.jrn-gl-go`; the ▸ and `jrnGateExpand` are gone — a gate's click opens the gate card, below) and the card reads its own lines from
 **`GET /api/source?node=<id>`** (the node's span from disk inside its source's root, or 12 lines from its line when it
 has none; `codeSlotHtml` + `fillCode`, one answer per node per sync; `packages/server/test/source-api.test.ts`); the
 marker inspector's head (`jrnInspDoorsHtml`); the explore card (its `.acts`, contract first); every property row the
@@ -778,6 +778,45 @@ both, each with its own define (`map.cover.mark.*`); the single *at risk* mark i
 board still counts). No word on a cover draws under **8 px** on screen (`FLOOR_PX`; a cover's chips, 10 board px, are
 its smallest words): `coverScale` stops shrinking there, the card clips, the world wears `.floor`, and the hint says
 *n journeys · zoom in to read* (`map.floor.read`, the number with its tip). e2e: `e2e/tests/map-journey-links.pw.spec.ts`.
+
+#### The gate card — `lib/gate-card.js`, `lib/gate-card-model.js` (swarm-fixes 2026-10-05, finding 4)
+
+A gate answers its click. Clicking a gate anywhere — a row of the journey's gate lists (timeline *Gates & rules*
+tab, the Sheet's and the storyboard's *Gates & business* cell, the ladder; `jrnGateRowHtml`), a gate banner of the
+spliced timeline, the drill's gate box (`jrnDrillGateBoxHtml`) and its inspector's *gates on this step*, a row of
+the Map property's Gates tab (`map-property.js row()` for `kind: 'gate'`), the code map's gate badge and the
+inspector's *Rules & gates* cards (`graph-render.js`) — opens **one card**, the same whichever surface opened it.
+A surface opts in with `gateAttrs(id, { step, config })` on the element that names the gate (`data-gate-card`, a
+tab stop, `role="button"`, `onclick="openGateCard(this, event)"`, which stops the click from also selecting the
+step or the card underneath). **Enter** or **Space** on a focused gate opens it (`gateKeydown`, asked by `keymap.js`
+before the doors' keys), **Esc** closes it and the focus goes back to the gate (the tip layer's own Esc).
+
+The card is a pinned rich tip (`showTip`, class `gc-tip`, up to 620 px wide): portalled to `<body>`, never clipped by
+the rail or the band. It holds, top to bottom:
+
+| part | from | business register |
+|---|---|---|
+| kind (*check* · *rule* · *config check*, *declared in the config*), the name, `path:line` | the node (`S.BYID`) | the name is `jrnGateInWords()` in plain words, else *a check nobody has put in words*; no `path:line` |
+| the doors — *show it in the journey* (when opened in a journey: `jrnScrollTo(step)`), *open in the editor*, *see it on the code map* | `detailLinks('gate' \| 'rule')` | the code doors are left out (the doors rule) |
+| **What it allows** — the authored `@business` sentence, else *Lets a request through only when: …* (the `@guard` words, by `jrnGateInWords`), else *Nobody has written down what this allows* with **who should write it** (business: the team that owns the project's code; elsewhere: a business line above the function at its file, or the config file); a config check adds *Checks how the application was started, not a request*; the doc comment's first sentence | `gateSentence()` | yes (no doc comment) |
+| **Where it stands** — *n of m calls* · *n pages* (typed, with tips), *it sits on …* | `/api/gate` `counted.calls` / `.pages`, `sitsOn` from `S.EDGES_OF` | yes (no *sits on* identifiers) |
+| **Its code** — the gate's own lines, each wrapping under its own number (never cut at a column), up to 80 | `GET /api/source?node=` (`fetchSource`) | no |
+| **The calls it guards** — nearest first, *guards it directly* / *n calls down*, `path:line`, each with its doors (contract, spec, handler, code map) | `/api/gate` `calls` | the spec's summary in words; the contract door stays |
+| **The tests that reach it** — count + the fold's evidence chip (`mapEvidenceChip`), level · name · *reaches the check itself* / *through <call>* · `path:line` · the test file door | `/api/gate` `tests`, `evidenceWord` | yes (no `path:line`, no file door) |
+
+`lib/gate-card-model.js` is pure (`packages/server/test/gate-card-model.test.ts`): `gateFacts(id, ctx, hint)` reads the
+node and its own edges through `ctx.edgesOf` — one lookup, never a scan of `S.GRAPH.edges` — `gateSentence()` picks
+the sentence, `gateCardModel()` folds the service's answer (`null` while on its way: *reading what reaches it…*;
+`false`: *the service could not say*), capping calls and tests at `GATE_CARD_CAP` (8) with *n more*. The answer is
+fetched once per gate per sync; the card waits 350 ms for it, else opens and redraws whole when it lands.
+
+**Config checks.** A guard that reads the process environment and takes no request (core `config-check.ts`) is a
+*config check*: the journey lists it under its own heading (*Config checks*, `journey.bizGroup.configChecks`, the gear
+glyph, muted) after the gates and rules of the screen it was met on, and the Map property's Gates tab under *Config
+checks met on the way* — never counted with the screen's gates (`segments[].configChecks`, `counted.configChecks`;
+docs/COUNTS.md § Gate card). On the reference app's submit screen these are the three ops sign-in and email settings
+checks the page meets through `serverContext() → loadWebEnv()`; their card says they reach 63 of 75 calls.
+e2e: `e2e/tests/gate-card.pw.spec.ts`.
 
 #### Affected — `surfaces/map-affected.js`, `lib/map-affected-model.js` (map pass 2, lane I, 2026-10-03)
 
