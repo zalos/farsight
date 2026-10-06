@@ -17,7 +17,7 @@
 // `surfaces/map-property.js`, reached through `openMapProperty(host, ctx)`.
 
 import { S, esc, expose, currentLens, humanize, bizName, unCode } from '../store.js';
-import { t, def, plainWords } from '../strings.js';
+import { t, def, plainWords, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
@@ -27,7 +27,7 @@ import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/ro
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName } from '../lib/map-model.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName } from '../lib/journeys-tree.js';
 import { findStoryline } from '../lib/journeys-model.js';
@@ -169,7 +169,7 @@ function nameWords(s) {
   return biz() && /[a-z][A-Z]|_|\/|\.[a-z]{2,4}\b/.test(v) ? unCode(v) : v;
 }
 /** A sentence somebody wrote; the business lens reads its plain words only. */
-function sentence(s) { return biz() ? plainWords(s) : String(s || ''); }
+function sentence(s) { return biz() ? plainWords(s) : unTick(s); }
 /** A call's name in the lens: the words written for it, never its identifier in the business lens. */
 function callWords(c) {
   if (!biz()) return c.label || (c.method + ' ' + c.path).trim();
@@ -202,9 +202,18 @@ function storeKindKey(st) { return 'map.store.kind.' + storeKind(st); }
  */
 function dataKindWords(dd) {
   // the business lens says what it is in plain words: Invoice DB · database record, Example ERP · ERP record
-  if (biz()) return (dd.store ? dd.store.name + ' · ' : '') + t(dataBizKey(dd));
+  if (biz()) return (storeShownName(dd.store, true) ? storeShownName(dd.store, true) + ' · ' : '') + t(dataBizKey(dd));
   if (!dd.store) return kindWord(dd.kind);
   return dd.store.name + ' · ' + (dd.kind === 'record' ? kindWord('record') : t(storeKindKey(dd.store)));
+}
+/** A street legend's store name in the register on screen: the legend's rows carry name and kind only, so the
+ * store's own ref (its engine, how it is known) is read off a data node of the street that lives in it. */
+function legendStoreName(m, st) {
+  if (!biz()) return st.name;
+  for (const sc of m.screens) for (const c of sc.calls) for (const d of c.data) {
+    if (d.store && d.store.name === st.name && d.store.kind === st.kind) return storeShownName(d.store, true);
+  }
+  return storeShownName(st, true);
 }
 /** The business lens's word for a data node: by its store's kind when it has one, else by its own kind. */
 function dataBizKey(dd) {
@@ -2091,7 +2100,7 @@ function streetHtml(d, j, g) {
       + (reached ? '<span class="rw"' + tipAttrs({ key: 'map.mode.reached', noFocus: true }) + '><b class="r"></b>' + esc(t('map.mode.reached')) + '</span>' : '')
       + (stores.length ? '<span class="stores"><span class="sl"' + tipAttrs({ key: 'map.store.legend', noFocus: true }) + '>' + esc(t('map.store.legend')) + '</span>'
         + stores.map((st) => '<span class="mst st-' + storeKind(st) + '" data-store="' + esc(st.name) + '"' + tipAttrs({ key: storeKindKey(st), noFocus: true }) + '><i></i>'
-          + esc(st.name) + ' · ' + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
+          + (legendStoreName(m, st) ? esc(legendStoreName(m, st)) + ' · ' : '') + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
       + '</span></div>';
   }
   m.screens.forEach((s, si) => {
@@ -2484,7 +2493,7 @@ function drawCard() {
     if (dd.store) {
       const via = dd.store.via ? 'map.store.via.' + dd.store.via : '';
       store = '<div class="store"><span class="mst st-' + storeKind(dd.store) + '"' + tipAttrs({ key: storeKindKey(dd.store) }) + '><i></i>'
-        + esc(dd.store.name) + ' · ' + esc(t(storeKindKey(dd.store))) + '</span>'
+        + (storeShownName(dd.store, biz()) ? esc(storeShownName(dd.store, biz())) + ' · ' : '') + esc(t(storeKindKey(dd.store))) + '</span>'
         + (via && t(via) !== via ? '<span class="map-code via"><span class="hud-label"' + tipAttrs({ key: 'map.store.known', noFocus: true }) + '>' + esc(t('map.store.known')) + '</span> '
           + '<span' + tipAttrs({ key: via, noFocus: true }) + '>' + esc(t(via)) + '</span>' + (dd.store.ref ? ' · <code>' + esc(dd.store.ref) + '</code>' : '') + '</span>' : '')
         + '</div>';

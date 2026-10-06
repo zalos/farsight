@@ -6,7 +6,7 @@
 // All facts come from /api/apis* (core/openapi.ts); nothing is computed here.
 
 import { S, expose, esc, mdInline, repoOf, bizLabel, bizName, currentLens, humanize, plainClause } from '../store.js';
-import { t, def } from '../strings.js';
+import { t, def, proseHtml } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs, registerTip, numberTip, tipSource } from '../lib/tooltip.js';
@@ -233,7 +233,7 @@ function opsTableHtml(a) {
         : '<td class="api-opcell"><span class="m-chip m-' + esc(op.method) + '">' + esc(op.method) + '</span>'
           + '<a class="api-opname" href="' + apiHref(a.id, { op: op.routeId }) + '">' + esc(op.path) + '</a>'
           + (op.contract && op.contract.spec && op.contract.spec.operationId ? '<span class="api-opid">' + esc(op.contract.spec.operationId) + '</span>' : '') + '</td>'
-          + '<td>' + (op.summary ? '<div class="api-sum">' + esc(op.summary) + '</div>' : '<div class="api-sum none">' + esc(humanize(op.name)) + '</div>') + '</td>';
+          + '<td>' + (op.summary && proseHtml(op.summary) ? '<div class="api-sum">' + proseHtml(op.summary) + '</div>' : '<div class="api-sum none">' + esc(humanize(op.name)) + '</div>') + '</td>';
       return '<tr class="op' + (op.status === 'spec-only' ? ' spec-only' : '') + '">'
         + nameCell
         + '<td>' + gates + '</td>'
@@ -267,7 +267,7 @@ function opPanelHtml(a, op) {
     + '<h2>' + (business ? '<span>' + esc(opWords(op)) + '</span>'
       : '<span class="m-chip m-' + esc(op.method) + '">' + esc(op.method) + '</span><span class="api-code" style="font-size:14px;color:var(--ink)">' + esc(op.path) + '</span>')
     + statusChips(op) + '</h2>'
-    + (op.summary && !business ? '<p class="api-desc">' + esc(op.summary) + '</p>' : '')
+    + (op.summary && !business ? '<p class="api-desc">' + proseHtml(op.summary) + '</p>' : '')
     + (c.description ? '<p class="api-desc">' + words(c.description) + '</p>' : '')
     + (op.docs && op.docs !== c.description ? '<p class="api-desc">' + words(op.docs) + '</p>' : '');
   if (business) return html + opPanelBizHtml(op) + '</div>';
@@ -427,7 +427,7 @@ function compareHtml(r, a) {
   const mism = r.matched.filter((m) => m.contract.drift && m.contract.drift.length);
   if (!r.specOnly.length && !r.codeOnly.length && !mism.length) return html + '<p class="api-desc">' + esc(t('apis.compare.agree')) + '</p>';
   if (r.specOnly.length) html += '<h3 class="hud-label">' + esc(t('apis.compare.declared')) + '</h3><ul class="api-cmp-list">'
-    + r.specOnly.map((s) => '<li><span class="api-code" style="color:var(--ink)">' + esc(s.op) + '</span>' + (s.summary ? ' — ' + esc(s.summary) : '') + '</li>').join('') + '</ul>';
+    + r.specOnly.map((s) => '<li><span class="api-code" style="color:var(--ink)">' + esc(s.op) + '</span>' + (s.summary ? ' — ' + proseHtml(s.summary) : '') + '</li>').join('') + '</ul>';
   if (r.codeOnly.length) html += '<h3 class="hud-label">' + esc(t('apis.compare.implemented')) + '</h3><ul class="api-cmp-list">'
     + r.codeOnly.map((x) => '<li><a class="api-opname" href="' + apiHref(a.id, { op: x.routeId }) + '">' + esc(x.name) + '</a>' + (x.loc ? ' <span class="api-code">' + esc(x.loc.path) + ':' + x.loc.line + '</span>' + vsl(x.loc.repo, x.loc.path, x.loc.line) : '') + '</li>').join('') + '</ul>';
   if (mism.length) html += '<h3 class="hud-label">' + esc(t('apis.compare.mismatched')) + '</h3><ul class="api-cmp-list">'
