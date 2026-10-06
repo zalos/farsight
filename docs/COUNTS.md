@@ -389,7 +389,7 @@ tab whose subject nothing types prints **no number**: Overview, UX, Route and Ch
 | Gates · Decisions head `3` · Overview chip `3 decisions` | `segments[i].counted.decisions` | decisions drawn on this screen | screen | not printed in the business register when some decisions are guard-class (the rows then are fewer than the number) |
 | Tests tab `5` · Cases head · Overview chip `5 test cases` | `coverage.segments[i].counted.tests` | cases (unit + integration + e2e) whose walk reaches the screen | screen | the case rows listed are the cases counted; coverage runs that name no case are listed apart under `counted.runReports` |
 | Coverage runs head `1` | `coverage.segments[i].counted.runReports` | coverage reports that touched the screen's code and name no case | screen | not a case; never in the tab's number |
-| the tests foot (`… e2e · … unit · … integration · … observed`, the evidence chip, *their own last run*) | `coverage.segments[i]` through `jrnFoldFacts` | as the journey's tests foot | screen (`journey.scopeHere`, printed above the counts) | the same fold the journey's foot reads; never recomputed |
+| the tests foot (`… e2e · … unit · … integration · … observed`, the evidence chip, *their own last runs* `N test cases`) | `coverage.segments[i]` through `jrnFoldFacts` | as the journey's tests foot | screen (`journey.scopeHere`, printed above the counts) | the same fold the journey's foot reads; never recomputed |
 | Work tab `N` · Work head | `/api/work/links?node=<page>` → `counts.items` | work items linked to the screen's page node, by state | node (`count.scope.node`) | the journey header's work chip counts the whole flow (`/api/work/flow`); asked only when a work source is configured |
 | `×2` beside a gate | `segments[i].gates[].count` (viewer, `plainTip` → `map.prop.times`) | times the walk of this screen met that checkpoint | screen | Σ over the rows is the screen's `counted.checks` |
 | `2 more that nobody put in plain words` (business) | `jrnGatesShown(rows).mute` (viewer, `plainTip` → `map.prop.gates.mute`) | gates on the screen whose only name is the code's | screen | drawn + mute = `counted.gates` |
@@ -518,6 +518,24 @@ table). Nothing on the code map counts packages or projects a second way.
 *config: nx-workspace — 3 config files (1 for the whole source · 2 for one folder) · 1 conflict · 1 note(s)* (the
 `examples/nx-workspace` graph). `count.scope.source` was the tests' scope (*at one test level*); its define now says
 what a source holds in general, with the test level as the tests' case.
+
+### One test verdict per cell (swarm 2026-10-05, finding 1 — core `coverage.ts` `testVerdict()`)
+
+One action read *passed, by its own declaration · stale*, *their own last run: skipped* and a tip saying *verdict:
+unknown* at once; the Tests matrix printed PASSED beside *skipped* on every row; `route.ts:24` read *reached by tests*
+on the route and *no test reaches this step* on its handler. The decision: **the cell's verdict is computed once, in
+core, and every surface prints it** — the journey header, the Sheet's *Verified by*, the timeline's screen foot, the
+drill and the inspector foot, the Map's property *Tests* tab and street chips, the Tests matrix, the scoped Tests page,
+MCP `test_coverage` and `farsight tests matrix`.
+
+| field | what it is | rule |
+|---|---|---|
+| `verdict.word` | the evidence word (`evidenceWord(chip, observedBy)`) | the strongest class over the active refs; the closed set of words is unchanged |
+| `verdict.status` | what the run **behind the word** said | read over the refs that earned the word only (`earningRefs`: cases coverage placed, else cases passed by their own declaration, else coverage reports). A declaration word stands only beside *passed*; a coverage report records no verdict, so *seen by a coverage run* has none; absent for *declared only*, *reached by tests* and nothing. `observation` is folded over the same refs, so the tip's *verdict* row is this status, and the chip is *stale* only when every earning ref's run is `changed` |
+| `verdict.runs` | C: every case of the cell by its own last run — `count.unit.cases`, the cell's scope, breakdown `count.part.passed` · `failed` · `skipped` · `flaky` · `noRun` (an `unknown` verdict and no run read as one absence, as on the source cards) | sums to `counted.tests`. Printed as *their own last runs* `N test cases` with the split in its tip — a count, never a second verdict. `run` (the weakest over every covering case) stays in the payload and is no longer printed as a verdict |
+| `steps[n].coverage.sameLoc` | the route ↔ handler at the same `file:line` (`sameLocTwins`) | one place in the code, one verdict: `stepCoverage` reads their tests together |
+| `steps[n].coverageViaRuns` | C: a table's accessors' cases by their own runs (`viaRuns`) | a table has no word; its foot prints this count and no verdict |
+| `GET /api/tests?flow=&seg=n[&action=k]` · `?node=` · `?flow=&lean=1&cases=1` | the cell a journey's door opened (`cellCoverage`) with its cases, each with `word` (`caseWord`, the scope rule over that case alone) | the page's verdict equals the Sheet's for the same cell (pinned by a core test and a server test) |
 
 ## 4. Open — found, not changed here
 

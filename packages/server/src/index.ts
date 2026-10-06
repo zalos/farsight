@@ -9,13 +9,13 @@ import {
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown,
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
-  testsSurface, testDetail, stepCoverage, verifiedThrough, testsIdentity, testsMatrixV1, testsMatrixCsv,
+  testsSurface, testDetail, stepCoverage, verifiedThrough, cellCoverage, caseWord, viaRuns, testsIdentity, testsMatrixV1, testsMatrixCsv,
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
   counted, journeyTree, configCounts,
 } from '@farsight/core';
-import type { GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
+import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest, refuseWrite } from './guard.js';
 import type { ReadOnlyWhy } from './guard.js';
 import { folded, scopeKey, leanMetric, leanCoverage, leanJourneyRow } from './folds.js';
@@ -355,7 +355,11 @@ function enrichStep(step: JourneyStep, g: JourneyGraph, fileCache: Map<string, s
     // What reaches its accessors is the evidence it has: named, capped, and
     // carrying its own total so the cap is visible rather than silent (B4.2).
     const via = verifiedThrough(g.index, step.nodeId);
-    if (via.length) { out.coverageVia = via.slice(0, VIA_CAP); out.coverageViaCount = via.length; }
+    if (via.length) {
+      out.coverageVia = via.slice(0, VIA_CAP); out.coverageViaCount = via.length;
+      // the accessors' cases by their own runs — counted in core, so the foot prints no verdict of its own
+      out.coverageViaRuns = viaRuns(via);
+    }
   }
 
   if (step.via === 'reads' || step.via === 'writes') {
@@ -967,11 +971,31 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const level = u.searchParams.get('level');
       const flow = u.searchParams.get('flow');
       const nodeId = u.searchParams.get('node');
+      // each case of a scoped answer carries its own word, by the scope's rule (core `caseWord`)
+      const withWords = (refs: CoverageTestRef[]) => refs.map((r) => ({ ...r, word: caseWord(r) }));
       // ?node= answers "what verifies this one thing" without walking the catalogue
       if (nodeId) {
         const node = g.index.byId.get(nodeId);
         if (!node) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${nodeId}` }));
-        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, node: enrichNode(node), coverage: stepCoverage(g.index, nodeId) }));
+        const coverage = stepCoverage(g.index, nodeId);
+        return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, node: enrichNode(node), coverage, ...(coverage ? { cases: withWords(coverage.tests) } : {}) }));
+      }
+      // ?flow=&seg=n[&action=k] — one screen of a journey, or one action inside it: the cell a
+      // journey's door was opened from, with its cases (swarm 2026-10-05: the doors kept no scope)
+      const segArg = u.searchParams.get('seg');
+      if (flow && segArg != null) {
+        const entryNode = resolveEntry(g.index, flow, {});
+        if (!entryNode) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${flow}` }));
+        const jr = journey(g.index, entryNode.id);
+        const summary = journeySummary(g.index, jr, screensFor(g.index, entryNode.id));
+        const actionArg = u.searchParams.get('action');
+        const cell = cellCoverage(g.index, jr, summary, Number(segArg), actionArg != null ? Number(actionArg) : undefined);
+        if (!cell) return send(404, JSON.stringify({ error: `no ${actionArg != null ? 'action ' + actionArg + ' in ' : ''}screen ${segArg} of ${entryNode.id}` }));
+        return send(200, JSON.stringify({
+          generatedAt: g.meta.generatedAt, identity: testsIdentity(g.meta), flow: entryNode.id, flowName: entryNode.name,
+          seg: Number(segArg), ...(actionArg != null ? { action: Number(actionArg) } : {}), label: cell.label,
+          coverage: leanCoverage(cell.facts), cases: withWords(cell.facts.tests),
+        }));
       }
       // the level filter reaches the counts and tiles as well as the rows: under ?level=e2e
       // the header used to print every level's cases above e2e rows (pass swarm 2026-09-25)
@@ -981,12 +1005,15 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const resolved = flow ? resolveFlowRows(surface.journeys, flow) : undefined;
       // ?lean=1 — the same numbers without the per-node lists behind them (folds.ts); with ?flow= only the flow's coverage
       const lean = ['1', 'true'].includes(u.searchParams.get('lean') ?? '');
+      const wantCases = ['1', 'true'].includes(u.searchParams.get('cases') ?? '');
       if (lean && flow) {
         const row = resolved?.rows[0];
         return send(200, JSON.stringify({
           generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', identity: testsIdentity(g.meta), flow, lean: true,
           ...(resolved?.resolvedFrom ? { resolvedFrom: resolved.resolvedFrom } : {}),
-          ...(row ? { coverage: leanCoverage(row.coverage) } : {}),
+          ...(row ? { coverage: leanCoverage(row.coverage), flowName: row.name } : {}),
+          // ?cases=1 — the flow's cases, each with its own word: the Tests page opened from a journey's door
+          ...(row && wantCases ? { cases: withWords(row.coverage.tests) } : {}),
         }));
       }
       const filtered = {
@@ -1009,6 +1036,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         // and the gaps as data — absent when the graph recorded none, `[]` when it recorded nothing
         ...testsEvidence(g.meta.tests, scope),
         ...(flowRow ? { coverage: lean ? leanCoverage(flowRow.coverage) : flowRow.coverage } : {}),
+        ...(flowRow && wantCases ? { cases: withWords(flowRow.coverage.tests) } : {}),
       }));
     }
     // ── Design surface (docs/proposals/design-source.md) ─────────────────
