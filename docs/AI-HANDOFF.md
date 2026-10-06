@@ -41,16 +41,16 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
-## Current state — 2026-10-05
+## Current state — 2026-10-06
 
 `main` is green.
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`4a44f4c`** after the 2026-10-05 round (PRs #53–#58, item 13 below) on the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
-| tests | **1052** — core 305 · work 59 · parsers 196 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 55 · server 278 · cli 60 (+ `pnpm test:scripts` 13), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 212/212** (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand) |
-| string/symbol lint | **2066 entries · 33 sprite symbols · 42 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys |
-| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `4a44f4c` on 2026-10-05 and re-synced through `POST /api/sync` (4478 sync 65, 4477 sync 105); both prefixes' global `farsight` print `commit 4a44f4c`. The reference app's own manifest now declares two personas, six groups, placements on all 18 flows and two storylines (`invoice`, `vendor`); its design drift is back to **7**. Check `lsof` before restarting or measuring on any port. |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`81a455e`** after the swarm-fixes round (PRs #62–#71, item 14 below) on the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1117** — core 333 · work 59 · parsers 205 · work-fixture 18 · work-azdo 39 · work-jira 41 · mcp 56 · server 306 · cli 60 (+ `pnpm test:scripts` 13), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 239/239** (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — see the swarm-fixes left-open list) |
+| string/symbol lint | **2240 entries · 35 sprite symbols · 49 modules**; the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-chrome.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
+| servers | the dogfood server on **4478** (workspace CLI, `flags.map` on in the local settings) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace, `flags.map` on in its local settings). Both restarted on `81a455e` on 2026-10-06 and re-synced through `POST /api/sync` (4478 sync 66, 4477 sync 107 — its status line now reads *history 282 commits indexed · 0 new this sync*); both prefixes' global `farsight` print `commit 81a455e`; zero page errors on the Map storyline, the front door, a branch journey, Tests and Settings of 4477. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**. For a reviewer swarm, restart 4477 with `--read-only`. Check `lsof` before restarting or measuring on any port. |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -337,6 +337,95 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       **The ceiling that remains is the payload:** `/graph` is **411 MB** at this size (2.4–2.8 s to load, ~500 MB heap,
       ~2 s server parse) — the server-side query API round.
 
+14. **The swarm-fixes round — the 2026-10-05 swarm's nine findings, in its order** (2026-10-06; proposal
+    `docs/proposals/swarm-fixes-2026-10-05.md`, PR #62; eight lanes, PRs #63–#71, every lane measured on a read-only copy
+    of the reference app's graph served by its own build, zero page errors on every shot).
+    - **One test verdict per cell** (#64): the contradictions were two extra folds, not the word — the *their own last
+      run* line printed the weakest status over every covering case (one skipped case among 145 said *skipped*) and
+      the tip's verdict folded over coverage reports, which record `unknown`. Core `testVerdict()` now puts `verdict`
+      on every coverage fold: the word is `evidenceWord` as before, `status` is read only over the refs that earned the
+      word (a declaration word only ever stands beside *passed*; a coverage report alone gives no status), `runs` is
+      every case by its own last run (passed · failed · skipped · flaky · no run recorded, summing to the cases).
+      A route and its handler at the same `file:line` are twins (`sameLocTwins`), so `route.ts:24` carries one verdict on
+      both surfaces. Every scoped foot has *open the list* and the Tests page reads `?flow=&seg=&action=` /
+      `?node=` (`GET /api/tests?flow=&seg=[&action=]`, `cases` opt-in); `farsight tests matrix` gains the runs column.
+    - **Stale said once and only when true** (#65): on the reference app *stale* is **true** — the Playwright run was
+      stamped on 2026-10-04 and the code moved after it — so the counts barely moved; what changed is that every
+      *stale* carries both sides (`core/freshness.ts` → `freshness` on every coverage fact: *the tests ran on commit X
+      (date); the code is at commit Y now*, or *the working tree changed after the run*), a current scope says
+      *current as of sync N*, and a run with no digest says *no source digest* with the stamp recipe, never *stale*.
+      The code side is `meta.tests[repo].head` (`setFreshnessMeta` per index in server/MCP/CLI). The Tests page is one
+      card per source × level × runner (the reference app's e2e level is a Playwright card and a Vitest card, each
+      with one answer). **Settings vs Changes:** `writeSpine()` printed only this sync's incremental read (`history 0
+      commits read`); it now prints `history N commits indexed · k new this sync` from `db.commitCount`, the rows
+      Changes counts.
+    - **One word per position, and the business register's last words** (#70): *step* is the storyline position
+      only (business *journey n of m*); the Sheet's columns are **stops** (`counted.actionStops` = actions + run again
+      + declared only + nothing to call — pinned by a core test, which is why *5 actions* and *6 columns* were both
+      right), the drawer head says *stop n of m · call*, the drill's *stop* and *beat* stay, the code register's
+      *983 steps* is *visits*, inspector words say *part*, plurals come from the catalog. Business register: gate
+      shapes are sentences (`journey.biz.gateShape.*`), `chore(memory):` prefixes drop from commit subjects, a store
+      read off a driver prints *database record*, plan ids drop, descriptions go through `plainWords`; ADR numbers
+      stay in every register as citations. Identifier tokens in view on the walked business screens 375 → ~199
+      whole-page, 0 on the storyboard, the storyline board and the Map street.
+    - **A gate answers its click** (#67): one gate card everywhere (journey lists, Sheet, ladder, drill, Map property,
+      code map inspector; `lib/gate-card.js` + a pure `gate-card-model.js`, `GET /api/gate?node=`, MCP `gate`, a
+      `## gate` section in `describe_node`): kind · name · `path:line` · doors on its head · *what it allows* (the
+      `@business` sentence, else the `@guard` words, else *nobody has written down what this allows* with who should and
+      where) · *where it stands* (n of m calls · n pages) · its code wrapped · the calls it guards with doors · the
+      tests that reach it with the one verdict; business keeps sentence, scope and tests. The doors are on every gate
+      row; the ▸ fold is gone. **Config checks** (core `config-check.ts`: a guard whose text reads the environment and
+      takes no request-like parameter; six of the reference app's 73) are listed and counted apart and never as a
+      screen's gates — the ops sign-in checks were reached from the page's `serverContext` → `loadWebEnv`, not from a
+      call; the submit journey went 28 → 25 gates & rules + 3 config checks. Two CI-only races fixed on the way: the
+      card survives the inspector redrawing under it (a `data-tip-anchor` the tooltip re-finds), and the specs click
+      the gate's name, not the row's centre (Linux font metrics put the centre on the ⧉ editor link).
+    - **Chrome** (#66, plus the focus fix #71): a cog with the word SETTINGS and a Settings row in ⋯; **READ-ONLY was a
+      constant chip with nothing behind it** — now `farsight serve --read-only` (and every `--as-of` serve) refuses
+      `PUT /api/settings`, `POST /api/sync`, `POST /api/work/*` (`guard.ts` `isWriteRoute`/`refuseWrite`),
+      `/api/version` reports `session: { readOnly, why }`, the chip shows only then and every `[data-write]` control is
+      greyed with a tip; the legend is closed by default, scrolls inside itself, has its own glyph and the `g` key; `?`
+      opens the keymap everywhere; the Map toolbar folds by measurement (the 1440 overflow was its fixed breakpoints);
+      the Sheet's *verified by* chip wraps inside its cell and gate names break between words; Experiments is one flag
+      per line; the chosen journey view is remembered per register so business lands on the Storyboard; Esc on an
+      empty journey asks first; the board takes focus when the Map opens and Tab from it goes to the first cover (the
+      band header's count was redrawn by the first walk — the flaky spec's cause); the light theme dims less.
+    - **Storylines, second pass** (#68): a **branch** is a storyline fact — a `journeys[]` entry
+      `{ id, branchOf, when, rejoins? }` in the manifest or the config override (`branchOf` a step of the same storyline,
+      `when` required, `rejoins` absent when the case leaves the storyline); the Map draws it on its own row under its
+      parent, dashed with a fork glyph, the condition on an amber link and a dashed return; the front door lists it
+      indented with *back to …*; the journey header reads *branch of … · when …*; MCP/CLI print it; counts break
+      down *n on the main path · n branches*; both JSON schemas and `design_guide` cover it. `?storyline=<unknown>`
+      says so with the declared ids as doors (`#/journeys?storyline=` and MCP/CLI too); ⌘K finds storylines (first
+      row, lands on `#/map?storyline=`); storyline cards on the Map and the front door carry the first journey's first
+      screen or the placeholder; each board card carries the one evidence chip and the band header *n of m journeys
+      with a run's evidence*. The reference app's manifest now declares the correction journey as a branch of review.
+    - **The two empty screens, and the record's status lifecycle from code** (#69): the mark-paid state screen is bound
+      to a form that only runs `onConfirm`, a function its parent handed it — the call was credited to the page
+      component alone, so the street (same edges) listed it under the page and the state screen had nothing to walk
+      into; the approval state is bound to a display-only component. New parser pass `callback-props.ts`: a component
+      that runs a function its parent handed it gets `calls` edges for what that function calls, following
+      pass-through parents, only along components rendered from one place (technique `callback-prop`, MEDIUM, added
+      to the frozen diff schema additively); a parent-computed value is credited only where the child branches on it.
+      On the reference app five state screens went from 0 calls · 0 gates to their call, 8–12 gates and 40–65 cases;
+      http edges to routes 69 → 69, unknown stubs 3 → 3, drift 7 → 7. **Lifecycle:** `GraphNode.lifecycle` on a record
+      when the code declares its statuses (a SQL CHECK, `z.enum`, a literal union, a `const … as const`) — statuses,
+      transitions with the writer that performs each (`from` only when the writer compared the prior status),
+      statuses no code writes — as `Counted`s (core `lifecycle.ts`), printed by `describe_node`, as a strip in the
+      journey header and the Map property's Overview with a door per move. The reference app's invoice: 11 statuses,
+      6 moves with a writer (draft → submitted → verified → approved → compiled → scheduled → paid), 5 nothing writes;
+      the storyline's order matches the moves.
+    - **Export** (#63): *Save* in the Map toolbar, the journey header and the Portfolio heading — PNG (the DOM copied
+      into an SVG `foreignObject` with the page's stylesheet, same-origin images and sprite glyphs inlined, drawn to a
+      canvas at ≥2×, empty rows cropped) and PDF (a minimal writer embedding the canvas; long side capped at A3), CSV
+      for the Portfolio; a three-line provenance footer (what it shows · source · sync · source commit · as of · lens ·
+      drawn by Farsight build · saved date); file name `farsight-<surface>-<source>[-<storyline|journey>]-sync<N>-<date>`.
+      Client-side only, no dependency, no route. The Map export fits the band first and saves the whole band; the
+      journey export switches to the Storyboard. Measured: the storyline board 3203×1657 in 0.24 s, the storyboard
+      2880×3400 in 1.1 s. **Pinned link:** Share → *Copy pinned link* uses the existing `@sync:N` hash grammar plus
+      `asof=<date>`; when the address pins a sync the server does not draw, a note beside the sync chip says *pinned to
+      sync N · this server shows sync M* (the server cannot draw an older sync on demand; only `--as-of` at start).
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -372,10 +461,16 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
+**First (2026-10-06): the swarm's nine findings below are built (item 14) — the next things are the reference app's
+rehydrated evidence (its own session installs the build, restarts its MCP, re-runs its unit and e2e suites with the
+reporters stamped, re-syncs; the handoff prompt lives in the private folder), then the second swarm on one build and
+one sync, asked also *what do you want next*, then the server-side query API round (`/graph` 411 MB at 245k nodes).**
+
 **The 2026-10-05 swarm (eight personas, cold, on the reference app's own server at `4a44f4c`, judging only from
 their own screenshots; reports outside the repo) — 8 × TRIAL, fit mean 6.4 (5.0–7.0): the storyline and the doors are
 credited by every role (*the best "how our business runs in software" picture*; *beats grep for the call chase*), and
-the same two things hold every score down. Ranked, convergent first:**
+the same two things hold every score down. Ranked, convergent first (all nine worked in the swarm-fixes round, item
+14; what each left open is listed under *The swarm-fixes round left open*):**
 
 1. **One verdict per test cell** (6 roles) — *passed, by its own declaration · stale* beside *no test reaches this
    step*, *last run: skipped* and a tip saying *verdict unknown*; one file:line with two verdicts on two surfaces; the
@@ -400,6 +495,41 @@ the same two things hold every score down. Ranked, convergent first:**
    both *unknown* and *changed since the run*.
 8. **Export** (3) — PNG/PDF of the storyline board, the storyboard and the Portfolio; a pinned, dated link.
 9. **Business register, last ~30 words** — and ADR numbers kept as citation keys in every register.
+
+**The swarm-fixes round left open (2026-10-06), by lane:**
+
+- *Verdict:* a step no test reaches still prints *no test reaches this step* beside the action's own count (two
+  scopes by design since 2026-09-25; four reviewers read it as a contradiction — a sentence that names both scopes is
+  the fix); the Map property's per-case rows keep their own per-case labels; the scoped case list caps at 200 rows.
+- *Freshness:* *stale* is repo-wide because the digest covers the whole source (per-journey needs the commit spine's
+  touched files at fold time); the sentence names the two commits, not how many lie between; the AT RISK bar prints
+  its shared sentence only when every stale journey compares with one code commit.
+- *Words:* the front door's Designs/drift table and entry-point lists still print routes, design ids and file names
+  in the business register (46 tokens); Portfolio descriptions keep `CON-01 to CON-08`; *the runtime container* and
+  the API title are names the reference app wrote (rename or tag there); the `step=` URL parameter is a screen
+  ordinal (renaming it touches many specs); `history.ts`'s *run `farsight ingest`* note still prints raw backticks on
+  Changes; the business gate row has no tip with the team's original label.
+- *Gate:* the drill lanes do not draw config checks; the card cannot say which test exercises the refusal path (no
+  branch-level coverage); the card is not exportable and cannot seed Affected; a guard that reads its settings through
+  a helper is not recognised as a config check.
+- *Chrome:* a focused button that has a tip (`⋯ N`) opens it only on hover now (Enter presses the button); the work
+  pane's write controls are not greyed on a read-only server (the server refuses them, the pane does not say so
+  first); "nothing here" is still drawn three ways; the `mapLegendSeen` e2e fixture is dead; a reader who tabs directly
+  onto a band header's count loses focus when a walk redraws it.
+- *Storylines:* at board zoom the branch label can run past the band panel; the dashed return line is faint; the
+  legend does not list *branch* / *back to*; cross-source storylines.
+- *Data:* the approval (verified) state could say *its page makes N calls* instead of *calls: none*; handlers passed
+  through render props or spreads, a `fetch` written inside the handed function, and member-call handlers
+  (`mutation.mutate`) are not credited; lifecycles do not yet read Postgres `CREATE TYPE … AS ENUM`, Drizzle `pgEnum`
+  or an INSERT's literal status; the prior status is blank when the writer compares two records; one lifecycle per
+  record (the `status` column first); a property screen that reaches a record only through a repeated call shows no
+  lifecycle.
+- *Export:* the server cannot draw a pinned sync on demand (only `--as-of` at start); the Portfolio CSV is the cells'
+  text, not typed `Counted` columns; cross-origin images (Figma URLs) stay empty in the picture; pictures past the
+  canvas limits are scaled, not tiled; the Map export leaves the board fitted.
+- *CI:* the e2e suite is timing-sensitive under load (four specs failed once each on a loaded machine and passed
+  alone: `codemap-projects` where-is, `journey-ladder:60`, `map-journey-links:120`, `map-zoom` pinch); two races were
+  fixed this round (#71, #67) — the pinch test's timing lives in `lib/map-canvas.js`.
 
 **The 2026-10-05 round left open, first:** the `/graph` payload at scale (411 MB for 245k nodes) — a server-side query
 API with the index semantics the viewer folds today is the next ceiling and a round of its own; the Map reads its

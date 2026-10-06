@@ -34,7 +34,7 @@ pnpm e2e                            # Playwright e2e (build first): real `serve`
 node packages/cli/dist/cli.js --version                  # which build: version · built · commit (also MCP graph_overview, /api/version, the HUD sync-chip tooltip)
 node packages/cli/dist/cli.js status [--port 4477]       # is anything out of date: installed build vs the server on the port vs the build that wrote the graph, + the check/update/restart/reingest steps (exit 1 when action is needed); the same recipe ends MCP graph_overview, rides on /api/version as `install`/`currency`, and puts RESTART on the HUD sync chip
 node packages/cli/dist/cli.js ingest . --repo farsight   # CLI ingest
-node packages/cli/dist/cli.js serve graph.json           # viewer on :4477
+node packages/cli/dist/cli.js serve graph.json [--read-only]   # viewer on :4477; --read-only (and every --as-of) refuses PUT /api/settings, POST /api/sync and /api/work writes, shows the READ-ONLY chip and greys every write control — start a reviewer's server this way
 node packages/cli/dist/cli.js mcp --graph graph.json     # MCP over stdio
 node packages/cli/dist/cli.js api list                    # API surfaces (spec-backed / implied) with drift counts
 node packages/cli/dist/cli.js api diff --spec x.yaml --repo r --strict   # proposed spec vs code; exit 1 on drift
@@ -114,6 +114,13 @@ coverage report alone is *seen by a coverage run*. The six absence words are a c
 or a fourth is the failure mode the clarity phase existed to remove. No number moves without evidence, and every
 number names what it counts and the scope it counts over. Every number and every detail carries a tip (`lib/tooltip.js`, see
 [docs/MAP-VIEWER.md](docs/MAP-VIEWER.md#tooltips--libtooltipjs-2026-09-25)) built from the catalog's `define` and its scope.
+**One verdict, one freshness fact, one gate card** (2026-10-06): a test cell's word and status come from core
+`testVerdict()` (`coverage.ts`) and nothing else — no surface folds its own weakest run or its own tip status; *stale*
+is printed only by core `freshness.ts` and only with both sides (*ran on commit X · the code is at Y*), a run without
+a digest says *no source digest*, never *stale*; a gate click anywhere opens the one card (`lib/gate-card.js` over
+`GET /api/gate`), and a guard that reads the environment and takes no request is a *config check*, counted apart and
+never a screen's gate. *Step* is the storyline position only; the Sheet's columns are *stops*. A new catalog module is
+a `strings-<area>.ts` registered the way `strings-doors.ts` is, so lanes do not collide in `strings.ts`.
 
 ## Design language ("Farsight HUD")
 
