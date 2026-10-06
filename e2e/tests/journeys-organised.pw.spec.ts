@@ -99,7 +99,11 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '3 groups']);
     await expect(billing.locator('.jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
     await expect(ops.locator('.jrn-pcount .jrn-org-n').first()).toHaveText('1 journey');
-    await billing.locator('.jrn-pcount .jrn-org-n').first().click();
+    // scrolled there first: a tip closes when what holds its trigger scrolls (the storylines above push it below the fold)
+    const count = billing.locator('.jrn-pcount .jrn-org-n').first();
+    await count.scrollIntoViewIfNeeded();
+    await expect(count).toBeInViewport();
+    await count.click();
     const tip = page.locator('#fs-tip');
     await expect(tip).toContainText('for this persona');
     await expect(tip).toContainText('/api/journeys');
