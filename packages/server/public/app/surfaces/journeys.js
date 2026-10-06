@@ -373,7 +373,10 @@ function jrnFlowCardHtml(f, rows, repo, pinned, extra) {
   const chips = (f.screens || []).map((id, i) => {
     const r = byId[id] || {};
     const cls = r.status === 'both' ? 'ok' : r.status === 'design-only' ? 'stub' : '';
-    return '<span class="api-chip ' + cls + '"><b>' + (i + 1) + '</b>' + esc(id) + (r.name ? ' · ' + esc(r.name) : '') + '</span>';
+    // a design id is how the design files the screen: the business register reads its name
+    // (and the id only when the design gave it no name), as the journey's own header does
+    const words = currentLens() === 'business' ? esc(r.name || id) : esc(id) + (r.name ? ' · ' + esc(r.name) : '');
+    return '<span class="api-chip ' + cls + '"><b>' + (i + 1) + '</b>' + words + '</span>';
   }).join('');
   // the surface carries each doc's title beside its path (R21); an older server sends paths only
   const docs = (f.docLinks || f.docs || []).map((d) => jrnDocLinkHtml(repo, d)).join('');

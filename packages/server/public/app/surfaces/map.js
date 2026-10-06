@@ -206,6 +206,15 @@ function dataKindWords(dd) {
   if (!dd.store) return kindWord(dd.kind);
   return dd.store.name + ' · ' + (dd.kind === 'record' ? kindWord('record') : t(storeKindKey(dd.store)));
 }
+/** A street legend's store name in the register on screen: the legend's rows carry name and kind only, so the
+ * store's own ref (its engine, how it is known) is read off a data node of the street that lives in it. */
+function legendStoreName(m, st) {
+  if (!biz()) return st.name;
+  for (const sc of m.screens) for (const c of sc.calls) for (const d of c.data) {
+    if (d.store && d.store.name === st.name && d.store.kind === st.kind) return storeShownName(d.store, true);
+  }
+  return storeShownName(st, true);
+}
 /** The business lens's word for a data node: by its store's kind when it has one, else by its own kind. */
 function dataBizKey(dd) {
   if (dd.store) return 'map.biz.kind.' + storeKind(dd.store);
@@ -2019,7 +2028,7 @@ function streetHtml(d, j, g) {
       + (reached ? '<span class="rw"' + tipAttrs({ key: 'map.mode.reached', noFocus: true }) + '><b class="r"></b>' + esc(t('map.mode.reached')) + '</span>' : '')
       + (stores.length ? '<span class="stores"><span class="sl"' + tipAttrs({ key: 'map.store.legend', noFocus: true }) + '>' + esc(t('map.store.legend')) + '</span>'
         + stores.map((st) => '<span class="mst st-' + storeKind(st) + '" data-store="' + esc(st.name) + '"' + tipAttrs({ key: storeKindKey(st), noFocus: true }) + '><i></i>'
-          + esc(st.name) + ' · ' + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
+          + (legendStoreName(m, st) ? esc(legendStoreName(m, st)) + ' · ' : '') + esc(t(storeKindKey(st))) + '</span>').join('') + '</span>' : '')
       + '</span></div>';
   }
   m.screens.forEach((s, si) => {
