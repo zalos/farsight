@@ -202,6 +202,21 @@ every register. The scope menu's Esc is caught on the window in the capture phas
 keymap. The theme previews on choose (`previewTheme`) and is written only by *Save settings*; `system` (and a
 settings file with no theme) follows `prefers-color-scheme`.
 
+### Freshness — `lib/freshness.js` (2026-10-05)
+
+*Stale* is a comparison, printed only with its sentence. The core decides the fact (`freshness.ts`
+`freshnessFact()`: current · stale · no source digest · none, the run's commit and date, the code's commit and sync,
+the catalog keys); this module only prints it. `freshSentence(fact)` fills the sentence in the lens's register (the
+business lens prints `fact.biz`), `freshLineHtml(fact, cls)` is the inline line (`.fresh .fresh-<state>`, '' for
+*none*), `freshAttrs(fact)` makes any element a trigger for the registered `fresh` tip — the word, the sentence, a
+*against what* table (the run · the code · read by sync, code lenses only), *what changes it* (the stamp recipe is
+dropped in business) and the runs read split by state. Printers: the journey header (`.jrn-fresh` after the evidence
+chip; skipped where the evidence is shared), `jrnEvidenceTip` (the chip tip on the journey, Map, Portfolio row and
+the Tests matrix all pass `fresh: facts.freshness`), the Tests source cards (`freshDgHtml` + the sentence + the
+recipe; `cardGaps()` keeps a results report's freshness finding on the card its runs belong to) and the *Last runs*
+KPI, the Map cover's *stale* mark (its tip is the journey's fact) and the *at risk* bar (`fresh.risk.against`, once,
+when every stale journey compares with one commit). No surface derives a freshness word itself.
+
 ### Change impact — `impact.js` (distance control, tests per distance, 2026-09-27)
 
 The drawer (`openImpact`, `b`) and the journey's IMPACT tab draw one body, `impactBodyHtml(entry, redraw)`. In the
