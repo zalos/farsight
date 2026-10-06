@@ -51,7 +51,7 @@ export function fetchGate(id) {
  */
 export function gateAttrs(id, opts = {}) {
   if (!id) return '';
-  return ' data-gate-card="' + esc(id) + '"' + (opts.step != null ? ' data-gate-step="' + esc(String(opts.step)) + '"' : '')
+  return ' data-gate-card="' + esc(id) + '" data-tip-anchor="' + esc('gate:' + id) + '"' + (opts.step != null ? ' data-gate-step="' + esc(String(opts.step)) + '"' : '')
     + (opts.config ? ' data-gate-config="1"' : '') + ' tabindex="0" role="button" aria-haspopup="dialog"'
     + ' onclick="openGateCard(this, event)"';
 }
@@ -200,7 +200,7 @@ function show(el, m, via) {
  */
 export async function openGateCard(el, e) {
   if (e) { e.stopPropagation(); if (e.preventDefault && e.type === 'click' && el.tagName === 'A') e.preventDefault(); }
-  const host = el && el.closest ? el.closest('[data-gate-card]') : null;
+  let host = el && el.closest ? el.closest('[data-gate-card]') : null;
   if (!host) return;
   // a second click on the gate whose card is open closes it
   if (tipOpen() && tipAnchor() === host && host.dataset.gcOpen === '1') { hideTip(); host.dataset.gcOpen = ''; return; }
@@ -208,7 +208,10 @@ export async function openGateCard(el, e) {
   const via = e && e.type === 'keydown' ? 'key' : 'click';
   const pending = fetchGate(id);
   const first = await Promise.race([pending, new Promise((r) => setTimeout(() => r(undefined), WAIT_MS))]);
-  if (!host.isConnected) return;
+  // the surface may have redrawn while the answer was on its way (the code map's inspector draws again on a select):
+  // open on the element that names the same gate now
+  if (!host.isConnected) host = gateElement(id);
+  if (!host) return;
   const m = modelFor(host, first === undefined ? null : first);
   if (!m) return;
   document.querySelectorAll('[data-gc-open="1"]').forEach((x) => { x.dataset.gcOpen = ''; });
@@ -216,11 +219,18 @@ export async function openGateCard(el, e) {
   show(host, m, via);
   if (first !== undefined) return;
   const answer = await pending;
-  // the card is still open on this gate: draw it again whole, keeping the reader's place
-  if (!(tipOpen() && tipAnchor() === host)) return;
+  // the card is still open on this gate (a redraw may have moved it onto a new element): draw it again whole, keeping the reader's place
+  const now = tipOpen() ? tipAnchor() : null;
+  if (!now || now.getAttribute('data-gate-card') !== id) return;
+  host = now;
   const had = document.activeElement && document.activeElement.closest && document.activeElement.closest('.fs-tip');
   const root = show(host, modelFor(host, answer), via);
   if (had && root) { const f = root.querySelector('a[href],button'); if (f) f.focus({ preventScroll: true }); }
+}
+
+/** The element on screen that names this gate now, or null. */
+function gateElement(id) {
+  return [...document.querySelectorAll('[data-gate-card]')].find((n) => n.getAttribute('data-gate-card') === id && n.getClientRects().length) || null;
 }
 
 /** Enter or Space on a focused gate opens its card (keymap.js asks this before the doors' keys). */

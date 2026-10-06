@@ -73,8 +73,32 @@ test('in the business register the card keeps the sentence, the scope and the te
 /** @covers packages/server/public/app/lib/graph-render.js::nodeCardHtml */
 test('the code map: a gate in the inspector opens the same card', async ({ page }) => {
   await gotoReady(page, '#/codemap?node=' + enc('invoice-app::route::GET /invoices') + '&lens=hybrid');
-  const rc = page.locator('.rulecard[data-gate-card="' + GATE + '"]').first();
+  const rc = page.locator('#inspector .rulecard[data-gate-card="' + GATE + '"]').first();
+  await expect(rc).toBeVisible();
   await rc.click();
   await expect(card(page)).toBeVisible();
   await expect(card(page).locator('[data-gc-sec="calls"] .gc-row')).toHaveCount(2);
+});
+
+/**
+ * A slow machine: the inspector draws again (a second select) while the card waits for /api/gate, and again while
+ * the card is open. The card opens on the gate's new row and stays open across the redraw (CI run 37460360907).
+ * @covers packages/server/public/app/lib/gate-card.js::openGateCard
+ * @covers packages/server/public/app/lib/tooltip.js::onMutate
+ */
+test('the card survives the inspector drawing again under it', async ({ page }) => {
+  const ROUTE = 'invoice-app::route::GET /invoices';
+  await gotoReady(page, '#/codemap?node=' + enc(ROUTE) + '&lens=hybrid');
+  await page.route('**/api/gate?*', async (r) => { await new Promise((res) => setTimeout(res, 900)); await r.continue(); });
+  const rc = page.locator('#inspector .rulecard[data-gate-card="' + GATE + '"]').first();
+  await expect(rc).toBeVisible();
+  await rc.click();
+  // the inspector is redrawn before the answer lands: the row the reader clicked is gone
+  await page.evaluate((id) => (window as any).select(id), ROUTE);
+  await expect(card(page)).toBeVisible();
+  await expect(card(page).locator('[data-gc-sec="calls"] .gc-row')).toHaveCount(2);
+  // and once more with the card open
+  await page.evaluate((id) => (window as any).select(id), ROUTE);
+  await page.waitForTimeout(300);
+  await expect(card(page)).toBeVisible();
 });
