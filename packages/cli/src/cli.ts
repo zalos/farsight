@@ -7,7 +7,7 @@ import {
   stitchHttp, apiSurface, graphToSpec, reconcile, driftMarkdown,
   storybookLive,
   designSurface, reconcileDesign, designDriftMarkdown, isDesignManifest, buildLine, buildInfo, installState, currencyAdvice,
-  testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts,
+  testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
   journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText,
@@ -1405,10 +1405,15 @@ switch (command) {
       // the same bytes `GET /api/tests/matrix?format=csv` serves: one printer in core
       if (format === 'csv') { console.log(testsMatrixCsv(testsMatrixRows(index, surface, identity))); break; }
       if (!surface.journeys.length) { console.log('no flows in the graph — add a screens manifest (docs/proposals/design-source.md) and re-ingest'); break; }
-      console.log('  JOURNEY                                   COVERAGE       E2E  DECL  REACH   OBS  GAP');
+      console.log('  JOURNEY                                   COVERAGE       E2E  DECL  REACH   OBS  EVIDENCE · THEIR OWN LAST RUNS  GAP');
       for (const r of surface.journeys) {
-        // the end-to-end word, never a tick: a header-only `@covers` is a claim, not evidence
-        console.log(`  ${r.name.slice(0, 40).padEnd(40)}  ${formatMetric(r.coverage.metric).padStart(8)}  ${r.e2e.padStart(8)}  ${String(r.declared.length).padStart(4)}  ${String(r.inferred.length).padStart(5)}  ${String(r.observed.length).padStart(4)}  ${r.gap}`);
+        // the end-to-end word, never a tick: a header-only `@covers` is a claim, not evidence. The
+        // evidence column is the cell's one verdict (core testVerdict) — the word the HUD prints — and
+        // the cases' own runs beside it as a count, never as a second verdict (swarm 2026-10-05)
+        const v = r.coverage.verdict;
+        const runs = v.runs.breakdown?.filter((p) => p.n) ?? [];
+        const evidence = `${v.word.cls === 'none' ? 'nothing reaches it' : word(v.word.key, 'professional')} · ${v.runs.n} case(s)${runs.length ? ` (${breakdownText({ ...v.runs, breakdown: runs })})` : ''}`;
+        console.log(`  ${r.name.slice(0, 40).padEnd(40)}  ${formatMetric(r.coverage.metric).padStart(8)}  ${r.e2e.padStart(8)}  ${String(r.declared.length).padStart(4)}  ${String(r.inferred.length).padStart(5)}  ${String(r.observed.length).padStart(4)}  ${evidence}  ${r.gap}`);
       }
       console.log(`\n  coverage is ${formatMetric(surface.metric)} of ${surface.metric.scopeLabel} — declared = an @covers claim · reached = what the test imports or opens · observed = a run reached it`);
       console.log('  e2e = the end-to-end word for the journey: observed (a run saw it) · reached (a test body reaches a route or screen on it) · declared (claimed only) · none');

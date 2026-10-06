@@ -468,7 +468,7 @@ function testsHtml(pm) {
     foot = '<div class="line">' + jrnEvChipHtml(facts) + (obs ? '<span class="obs">' + esc(obs) + '</span>' : '') + '</div>' + jrnFootScopeHtml(facts)
       + '<div class="line"><span class="cnt">' + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
         .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
-      + jrnRunLineHtml(facts.run);
+      + jrnRunLineHtml(facts);
   }
   const { cases, reports } = pm.tabs.tests;
   const reportRow = (x) => row(esc(biz() ? caseWords(x.name) : String(x.name || '')), biz() ? '' : esc([x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · ')),

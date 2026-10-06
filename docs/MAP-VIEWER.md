@@ -262,6 +262,21 @@ up to the total), the top bar's `⋯ N` (`fitTopbar` — the folded controls by 
 `N screens` (`jrnScreensTip` — the screens in order, built or not). Tests: `packages/server/test/tooltip.test.ts`
 (placement, builders in both lenses and registers), `e2e/tests/tooltips.pw.spec.ts`.
 
+### One test verdict per cell — core `testVerdict()` (2026-10-05)
+
+The word a test cell prints, the status of the run behind it and its cases by their own runs are computed once in
+core (`coverage.ts` `testVerdict()`, carried as `verdict` on every coverage fold — journey, screen, action, step) and
+printed, never derived, by: `jrnEvChipHtml` and the `jrnEvidence` tip (the *verdict* row is `verdict.status`),
+`jrnRunLineHtml(facts)` (*their own last runs* `N test cases`, the run split in the number's tip — no status chip), the
+journey header, `lib/map-chips.js` `mapEvidenceChip`, the Map property's Tests tab, and the Tests page
+(`evidenceCellHtml` + `runsLineHtml`; the weakest-run chip is gone). The viewer's own weakest-run fold
+(`JRN_RUN_WEAK`) is gone; a table's foot reads `coverageViaRuns`.
+
+Every tests foot with a scope carries *open the list* (`jrnCasesDoorHtml`, `jrnCasesHref`): a screen opens
+`#/tests?flow=<id>&seg=n`, a Sheet cell `…&seg=n&action=k`, a step `#/tests?node=<id>`. `surfaces/tests.js` reads that
+query itself (`scopedFromHash`), draws the cell first (`scopedHtml`: the cell's word, its runs, every case with its own
+`word` and run, links back to the journey and to every journey) and narrows the matrix to the journey's row.
+
 ## Journey numbers and business words (2026-09-25)
 
 **Numbers.** A journey prints a number one of two ways, both in `surfaces/journeys.js`: `jrnCountedHtml(c, { rel,
