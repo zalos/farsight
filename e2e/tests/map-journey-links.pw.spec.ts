@@ -170,12 +170,12 @@ test('past the reading floor the board says so, and no card word draws under it'
   await expect(hint).toHaveClass(/\bfloor\b/);
   await expect(hint).toHaveText(N + ' journeys · zoom in to read');
   await expect(page.locator('.map-world')).toHaveClass(/\bfloor\b/);
-  // no word on a card draws under 8 px on screen: the font size times the scale the card is drawn at
-  const px = await page.locator('.map-dcover .map-chip').first().evaluate((el) => {
+  // no word on a card draws under 8 px on screen: the font size times the scale the card is drawn at — polled, since
+  // the floor class lands a frame before the fit that applies it (a one-shot read failed under load)
+  await expect.poll(() => page.locator('.map-dcover .map-chip').first().evaluate((el) => {
     const h = (el as HTMLElement).offsetHeight;
     return parseFloat(getComputedStyle(el).fontSize) * (h ? el.getBoundingClientRect().height / h : 1);
-  });
-  expect(px).toBeGreaterThanOrEqual(7.9);
+  })).toBeGreaterThanOrEqual(7.9);
 });
 
 /** @covers packages/server/public/app/surfaces/journeys.js::gotoJourney */
