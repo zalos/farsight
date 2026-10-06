@@ -331,7 +331,7 @@ test.describe('storylines', () => {
     await expect(thumbs).toHaveCount(STEPS.length + BRANCHES.length);
     // the front door: indented under the chain, with its condition and its way back
     await page.evaluate(() => { location.hash = '#/journeys'; });
-    const row = page.locator(`.jrn-story[data-storyline="${STORY.id}"] .jrn-story-branch[data-branch="${id}"]`);
+    const row = page.locator(`.jrn-story[data-storyline="${STORY.id}"] .jrn-story-branch[data-branch="${B.id}"]`);
     await expect(row).toContainText(`branch of ${NAME(of)}`);
     await expect(row.locator('.when')).toHaveText(`when ${B.when}`);
     await expect(row.locator('.back')).toContainText(`back to ${NAME(`invoice-app::flow::${B.rejoins}`)}`);

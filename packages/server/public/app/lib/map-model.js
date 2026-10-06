@@ -334,6 +334,8 @@ export function placeBranches(L, branches, opts = {}) {
  * while it has not been read. O(journeys).
  * @group Map
  */
+/** Where the storyline's evidence count comes from (a tip's *from* line). */
+const EVIDENCE_SRC = ['storylineEvidence', '/api/journey', 'summary.coverage.journey.evidenceWord'].join(' → ');
 export function storylineEvidence(ids, words) {
   const all = Array.isArray(ids) ? ids : [];
   const part = { run: 0, partly: 0, none: 0, unread: 0 };
@@ -351,7 +353,7 @@ export function storylineEvidence(ids, words) {
     { key: 'count.part.evNone', n: part.none },
     ...(part.unread ? [{ key: 'count.part.evUnread', n: part.unread }] : []),
   ];
-  return { n: part.run, of: all.length, unit: 'count.unit.storylineObserved', bizUnit: 'count.unit.storylineObserved', scope: 'count.scope.storyline', source: 'storylineEvidence → /api/journey summary.coverage.journey.evidenceWord per journey', breakdown };
+  return { n: part.run, of: all.length, unit: 'count.unit.storylineObserved', bizUnit: 'count.unit.storylineObserved', scope: 'count.scope.storyline', source: EVIDENCE_SRC, breakdown };
 }
 
 /**

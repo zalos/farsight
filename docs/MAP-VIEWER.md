@@ -418,6 +418,26 @@ n of m* from; `findStoryline(tree, id)` matches by id, then by id or name case-i
   m* (business: *journey n of m*) › — the arrows open the journey before / after it in its first storyline (the
   others are in the name's tip).
 
+**Storylines, second pass** (swarm-fixes 2026-10-05 §6). A **branch** is a declared fact, never guessed: a
+storyline's `journeys[]` entry may be `{ id, branchOf, when, rejoins? }` (manifest or config block; core
+`storylineEntry()` reads both). `JourneysMeta.storylines[].journeys` stays the steps (ids) and `.branches[]` sits
+beside them; `JourneyTree.storylines[].branches: StorylineBranch[]` (a JourneyRow + `branchOf`, `branchOfName`,
+`when`, `rejoins?`, `rejoinsName?`); `storylineOf()` / core `storylinePlacements()` answer a branch with `branch` set
+(`step` = its parent's number, `prev` = the parent, `next` = the step it rejoins). A branch whose parent is not a
+step, with no `when`, or naming a step is a note and is not drawn. The front door lists each branch indented under
+the chain (`.jrn-story-branches > .jrn-story-branch`: the parent's number, *branch of …*, *when …*, the journey's
+chip, *back to …* or *does not come back*); the header reads *branch of <journey> · when …* (clamped, the whole
+sentence in its tip) with ‹ to the parent and › to the step it rejoins. **Thumbnails**: every storyline card (front
+door `.jrn-story-thumb`, Map `.map-thumb`) shows its first journey's first screen (`firstScreenOf(designs, flowId)`
+in `lib/journeys-model.js`, `screenThumbHtml()` in `lib/journeys-tree.js` over `/api/design/image`) or the
+placeholder (design glyph, screen name, absence word) — never an empty box. **Unknown ids**: `?storyline=<id>` that
+nothing declares draws an empty board with *No storyline called “id” is declared here* and a door per storyline plus
+*All journeys* (`unknownStorylineHtml`); `#/journeys?storyline=` marks and scrolls to the card, or says the same
+above the cards; MCP `journeys` and `farsight journeys --storyline` answer with core `unknownStorylineText()`.
+**Fast travel**: `lib/search-model.js storylineTravelItems(meta.journeys, repos, mapOn)` + `scoreStoryline()` fold the
+declared storylines once per graph · scope · Map flag; a hit is a `presult-story` row (kind *storyline*) that lands on
+`#/map?storyline=<id>` (`#/journeys?storyline=<id>` with the Map off); `KIND_BONUS.storyline` (4) leads a tie.
+
 e2e: `e2e/tests/journeys-organised.pw.spec.ts` (structure and the order rule against the manifest on disk; the
 fixture's personas *Billing* and *Operations*, its two groups and the shared, config-placed *Draft and send* on the
 front door, the header, the Portfolio and the Map; and the front door drawn identically with `/api/journeys` answering 404).
@@ -553,6 +573,16 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
   `routeLinks` out east or south and in west or north, so the chain reads on — which `linkVisibility` shows at every
   altitude, the one line the board draws unhovered. *Band by* is hidden while a storyline is drawn; *All* restores
   the bands. The Affected mode paints whatever is drawn. Every other journey is not drawn (h / l walk the storyline).
+  **Branches**: `storylineModel()` appends each branch district (`d.branch = { of, when, rejoins, step }`, no `step`
+  of its own) and two link kinds — `branch` (parent → branch, sides s → n, its label *when …* drawn even at the board)
+  and `rejoin` (dashed, branch → the step it rejoins, sides w/e); `layout()` lays the steps out, then
+  `placeBranches(L, branches, { gap })` puts each branch on a row of its own under its parent's row (at the parent's
+  x), pushing later rows down and growing the band. A branch card is dashed, carries the fork glyph in place of a
+  number and a *branch of … · when …* line. **Cards and evidence**: on a storyline's board each card is taller
+  (`STORY_THUMB_H`) for its picture and carries the journey's evidence word (`summary.coverage.journey.evidenceWord`,
+  core's one decision; the quiet *stale* mark is not repeated beside it); the band header adds one `Counted`,
+  `storylineEvidence(ids, words)` — *n of m journeys with a run's evidence*, its breakdown with a run's evidence ·
+  declared or reached only · with no test · not read yet, refilled as each journey is read (`fillStoryEvidence`).
 
 Each district has a **cover** (`.map-dcover`) drawn **by altitude** (clarity pass 2026-10-04). At the **board**
 (below `LEVEL_NB`) a cover is a card: the name (two lines, its tip the whole name and sentence), **one status chip**
