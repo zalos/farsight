@@ -461,10 +461,53 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**First (2026-10-06): the swarm's nine findings below are built (item 14) — the next things are the reference app's
-rehydrated evidence (its own session installs the build, restarts its MCP, re-runs its unit and e2e suites with the
-reporters stamped, re-syncs; the handoff prompt lives in the private folder), then the second swarm on one build and
-one sync, asked also *what do you want next*, then the server-side query API round (`/graph` 411 MB at 245k nodes).**
+**Swarm round 2 (2026-10-06, the same eight personas, cold, on the reference app's own server at `81a455e`, sync 108,
+`--read-only`, after the application re-ran and stamped its own suites; reports and `_synthesis.md` outside the repo) —
+8 × TRIAL, fit mean 7.0 (6.5–7.5; was 6.4), the champion and the onboarding dev leaning ADOPT.** Credited by every role
+in their own words: one verdict for a journey across the Map, the journey, the Portfolio and Tests; *current as of sync
+108 — the tests ran on the code as it is now*; the gate card (*the best panel in the product* again); *step* as the
+storyline position; Settings named; the stamped exports; the branch. **What holds the scores is the same defect one
+level down — a number whose scope changes between surfaces without saying so.** Ranked, convergent first:
+
+1. **A scope word on every test number that can sit beside another** (7 roles) — the Map property's *323 cases ·
+   passed* beside the drawer's *NO TEST REACHES THIS PART · 125 reach the action*, impact's *2 tests* and the gate
+   card's *16* for one screen; *no test is known to reach*; one phrasing for the declaration verdict (four today);
+   the matrix cell's *0 tests · 29 passed*; skips on the chip when non-zero; the matrix's level filter filters the
+   rows; the CSV's `evidence_class`/`status` words equal the screen's.
+2. **A not-built screen never carries *passed*** (BA blocker, QA, newdev) — *Tracking — paid* is *designed, not built*
+   with *passed · 111 test cases*; the Paid journey's screen 3 has *0 actions · calls: none indexed* beside *22 cases*.
+3. **Commits, one sentence with both facts** (7) — Settings *282 commits indexed* vs Changes *242 of 282 never
+   ingested*: *read into history* and *ingested by a sync* are two facts; say both, the same on both surfaces.
+4. **Read-only means every write** (6) — Work's *Sync now*, *Sync & re-ingest*, *Add source* and its inputs, the
+   theme hint still look live under the banner.
+5. **Sums and arrows name their scope** (5) — per-screen counts beside journey totals need *distinct*; `→ n` differs
+   between the full board and the storyline board with one tip; *6 journeys* vs *journey 3 of 5* (the branch); the
+   gate card's *34 of 75 calls* beside a list of 68; *×9* in the list vs *16* on the card.
+6. **`step` is back on the Tests page** (6), *beats*, one screen's *3 stops*; **the lifecycle strip and the verdict
+   hover in business words** (5) — raw status constants are the first thing a business reader sees.
+7. **The gate card scrolls** (two roles could not reach its tests section); one gate word per panel (*gates & rules* ·
+   *checks and rules* · *guard* · CHECK); the Map's Gates tab counting 5 and listing none; setup switches still
+   listed as a screen's checks (the config-check rule misses a shape).
+8. **Layout at 1280** — the sticky journey header covers the first card; narrow Map cards drop chips with no `+n`;
+   `#/settings` and the property tab in the address; the keymap lists keys twice; a light print stylesheet for the
+   PDF; the `{owner}` placeholder in the owner tip; Esc out of a journey re-lays the board.
+
+**What they want next — 24 features, clustered, by how many roles asked:** **A** (6) the PR / diff → what it touches →
+the deduplicated tests to run, posted to the PR with the Affected link and the stamped PNG (`farsight affected --pr`;
+the champion's *release readiness brief* and the PO's *what happens if we change this* are the same engine with a
+business page); **B** (5) compare two syncs on the storyline — delta chips, a semantic diff (a route that lost a guard,
+a status that lost its writer, a step whose tests went green → skipped), a dated A → B PDF, a failing CI check, the
+Monday report; **D** (5) the readiness / audit pack per storyline (requirement → code → gate → contract → verifying
+case with verdict and date; a rules register to sign off; XLSX/PDF stamped); **C** (3) publish and subscribe —
+Confluence / a Jira epic panel refreshed on every sync, a weekly Teams/Slack digest; **G** (3) write-back — exploratory
+findings filed to the tracker, a *what-if* step drawn dashed, bypass paths drafted as negative tests; **F** (newdev) a
+guided tour from the storyline and plain-language questions answered with evidence links; **E** (staff) a CodeLens
+gate card with *run these tests*; **H** (exec) a cross-repository portfolio by owning team with a cost proxy. A and B
+share one engine (Affected over a commit range + the snapshot store); D is the page on top of both.
+
+**The order:** the eight trust items first (one lane each or paired — the next swarm catalogues them again
+otherwise), then the feature round A → B → D → C → E · F · G · H, and the server-side query API round
+(`/graph` 411 MB at 245k nodes) when the Map or the code map hits it.
 
 **The 2026-10-05 swarm (eight personas, cold, on the reference app's own server at `4a44f4c`, judging only from
 their own screenshots; reports outside the repo) — 8 × TRIAL, fit mean 6.4 (5.0–7.0): the storyline and the doors are
