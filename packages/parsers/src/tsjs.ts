@@ -14,6 +14,7 @@ import { isTestFile } from './tests/cases.js';
 import { isStoryFile } from './stories/index.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
 import { propFactsOf, type PropFacts } from './callback-props.js';
+import { collectEnums, collectStatusFacts, linkLifecycles, type LifecycleFacts } from './lifecycle.js';
 
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
@@ -240,6 +241,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const routeHandlers: { routeId: string; file: string; handler: string }[] = [];
   // every JSX-bearing function's props: the ones it runs, hands on, decides on, and what it hands its children
   const propFacts = new Map<string, PropFacts & { file: string }>();
+  // the record lifecycle's facts (lifecycle.ts): enums declared, status fields, writes, compares, SQL CHECK lists
+  const lifeFacts: LifecycleFacts = { decls: [], uses: [], writes: [], compares: [], checks: new Map() };
   let edgeSeq = 0;
 
   const addNode = (n: GraphNode) => {
@@ -453,6 +456,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       }
     });
 
+    { const en = collectEnums(program, file, line); lifeFacts.decls.push(...en.decls); lifeFacts.uses.push(...en.uses); }
     // declared functions & components & zod schemas
     const declared: { name: string; node: AstNode; body: AstNode | null; kind: NodeKind; cls?: string; clsGroup?: string }[] = [];
     walk(program, (n, parents) => {
@@ -605,6 +609,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         const at = line(n.start ?? 0) + (text.slice(0, tbl.offset).match(/\n/g) ?? []).length;
         const existing = nodes.get(tableId);
         if (existing && existing.loc) continue;
+        if (tbl.checks.length) lifeFacts.checks.set(tableId, tbl.checks);
         nodes.set(tableId, {
           id: tableId, kind: 'table', name: tbl.name, lang: 'sql',
           loc: { repo, path: file, line: at },
@@ -628,6 +633,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       if (hasJsx && /^[A-Z]/.test(d.name)) kind = 'component';
       const id = symbolId(file, d.name);
       if (hasJsx) { const pf = propFactsOf(d.node, d.body, line); if (pf) propFacts.set(id, { file, ...pf }); }
+      { const sf = collectStatusFacts(d.body, id, line); lifeFacts.writes.push(...sf.writes); lifeFacts.compares.push(...sf.compares); }
       const doc = parseDoc(leadingComment(source, d.node.start ?? 0));
       // @guard — declared auth wrapper (withTenant(clientId, fn)…): a guard
       // node even before an adapter understands the framework it belongs to
@@ -1805,6 +1811,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       }
     }
   }
+
+  linkLifecycles(repo, nodes, edges, lifeFacts);
 
   const packagesMeta = emitPackages();
 

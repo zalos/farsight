@@ -24,3 +24,4 @@ export * from './deps.js';
 export * from './projects.js';
 export * from './config-files.js';
 export * from './journeys.js';
+export * from './lifecycle.js';
