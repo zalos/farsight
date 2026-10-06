@@ -50,6 +50,10 @@ the viewer uses inline handlers.
   (`dryRun: true`) writes nothing to the tracker.
 - **Never starts, installs or builds** a Storybook or anything else it finds in your repo. A Storybook
   `command` in settings is shown to you, not run.
+- **Never sends a saved view anywhere.** *Save* (a picture, a PDF or the Portfolio's CSV) is drawn in your
+  browser from the page you are looking at and handed to the browser to save; there is no export route on the
+  server, and the file leaves the machine only if you send it. Its footer names the source, the sync, the source
+  commit and the day — check that before sharing a picture outside your team.
 
 ## Reporting a vulnerability
 

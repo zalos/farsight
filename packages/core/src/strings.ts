@@ -27,6 +27,7 @@ import { DOOR_STRINGS } from './strings-doors.js';
 import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
+import { EXPORT_STRINGS } from './strings-export.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -110,6 +111,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...LIFECYCLE_STRINGS,
   // the chrome's words live in strings-chrome.ts (the read-only session, the legend's key, Esc on a journey)
   ...CHROME_STRINGS,
+  // export's words live in strings-export.ts (export.*, the saved picture's footer, the pinned link and its note)
+  ...EXPORT_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 

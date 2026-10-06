@@ -2953,6 +2953,19 @@
   .gc-none .sym{width:12px;height:12px;margin-right:4px;vertical-align:-2px}
   .map-hint .n{font-weight:600}
   .map-hint.floor{color:var(--ink)}
+  /* ── export (lib/export.js): the Save control, its menu, its status line, and the pinned link's note ── */
+  .fx-tool{display:inline-flex;align-items:center;gap:6px}
+  .fx-tool .sym{width:13px;height:13px;flex:none}
+  .pf-headrow .fx-tool{margin-left:auto}
+  .fx-menu{position:fixed;z-index:80;min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:5px;box-shadow:0 12px 40px -8px rgba(0,0,0,.5);padding:6px;display:flex;flex-direction:column;gap:2px}
+  .fx-menu [role="menuitem"]{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:3px;font-size:12.5px;color:var(--ink);text-align:left;white-space:nowrap}
+  .fx-menu [role="menuitem"] .sym{width:14px;height:14px;color:var(--accent);flex:none}
+  .fx-menu [role="menuitem"]:hover,.fx-menu [role="menuitem"]:focus-visible{background:var(--accent-dim);color:var(--accent);outline:none}
+  .fx-toast{position:fixed;right:16px;bottom:34px;z-index:90;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:4px;padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--ink);max-width:min(560px,80vw);box-shadow:0 8px 30px -10px rgba(0,0,0,.5)}
+  .fx-toast.busy{color:var(--muted)}
+  .pinnote{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;color:var(--warn);border:1px solid var(--line);border-radius:3px;padding:2px 7px;white-space:nowrap;margin-left:8px}
+  .pinnote .sym{width:12px;height:12px}
+  .share-row .sym{width:14px;height:14px}
 </style>
 </head>
 <body class="lens-hybrid">
@@ -3001,6 +3014,7 @@
     <symbol id="sym-work" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="16" rx="2"/><path d="M9 4.5 V3.5 H15 V4.5"/><path d="M8.5 10 L9.8 11.3 L12 9"/><path d="M13.8 10.2 H16"/><path d="M8.5 15 L9.8 16.3 L12 14"/><path d="M13.8 15.2 H16"/></g></symbol>
     <symbol id="sym-package" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3.5 L19.5 7.5 V16.5 L12 20.5 L4.5 16.5 V7.5 Z"/><path d="M4.5 7.5 L12 11.5 L19.5 7.5"/><path d="M12 11.5 V20.5"/><path d="M8.2 5.5 L15.8 9.5"/></g></symbol>
     <symbol id="sym-story" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 9 H20.5"/><path d="M10 12 L15 14.5 L10 17 Z" fill="currentColor"/></g></symbol>
+    <symbol id="sym-save" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 V14.2"/><path d="M8 10.4 L12 14.4 L16 10.4"/><path d="M5 15.5 V18.5 a1 1 0 0 0 1 1 H18 a1 1 0 0 0 1 -1 V15.5"/></g></symbol>
   </defs>
 </svg>
 
@@ -3159,6 +3173,7 @@
       <span class="jrn-count" id="jrn-count"></span>
       <span class="jrn-head-chips">
         <span class="jrn-tomap" id="jrn-tomap"></span>
+        <span class="jrn-export" id="jrn-export"></span>
         <span class="jrn-partof" id="jrn-partof"></span>
         <span class="jrn-work" id="jrn-work"></span>
         <button class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button>
