@@ -22,7 +22,7 @@ const IDENTIFIER = new RegExp([
   String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
   String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
   String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+|\bADR\s?\d+`,
+  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
 ].join('|'), 'g');
 /** The contract's and the index's own words, which the business lens does not print (the swarm counted them). */
 const DEV_WORDS = /\bspec-backed\b|\bimplied\b|\bedge confidence\b|\bMEDIUM\b|\bguards?\b|·\s*record\b/i;

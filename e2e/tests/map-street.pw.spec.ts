@@ -22,7 +22,7 @@ const IDENTIFIER = new RegExp([
   String.raw`\b(?:GET|POST|PUT|PATCH|DELETE)\b`,
   String.raw`\b[\w-]+\.(?:spec|test|pw)\b`,
   String.raw`\.(?:tsx?|jsx?|mjs|json)\b`,
-  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+|\bADR\s?\d+`,
+  String.raw`\b(?:CON|INV|OPS)-\d+[a-z]?\b|\bPBI\s?#?\d+`,
 ].join('|'), 'g');
 
 /** Switch the map on for this page only — the flag is read client-side. */
