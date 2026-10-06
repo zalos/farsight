@@ -13,7 +13,7 @@ import { countedHtml, defAttrs } from './counted.js';
 import { doorsFor } from './detail-doors.js';
 import { lifecycleStripModel } from './lifecycle-model.js';
 
-export { lifecyclesFor } from './lifecycle-model.js';
+export { lifecyclesFor, headerLifecycles, screenLifecycles } from './lifecycle-model.js';
 
 function moveWords(m) {
   return m.from != null

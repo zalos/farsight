@@ -24,7 +24,7 @@ export const LIFECYCLE_STRINGS: Record<string, StringEntry> = {
   'lifecycle.via.assignment': same('sets the field', 'The code sets the status field on the record directly.'),
   'lifecycle.via.update-call': same('in an update', 'The code passes the new status in the changes it asks the store to save.'),
   'lifecycle.via.sql': same('in a database statement', 'The code writes the new status in a database update statement.'),
-  'lifecycle.more': same('+{n} more', 'More moves than fit here; the record on the code map lists them all.'),
+  'lifecycle.more': same('+{n} more records', 'Other records this journey moves between statuses. Each one\u2019s whole lifecycle is on the screen that moves it.'),
   // counts (docs/COUNTS.md § Lifecycle)
   'lifecycle.count.statuses': same('{n} statuses', 'How many statuses the code declares for this record’s status field.'),
   'lifecycle.count.statusesOne': one('1 status', 'lifecycle.count.statuses'),

@@ -31,3 +31,21 @@ test('a screen keeps only the records its own calls reach', () => {
   assert.deepEqual(lifecyclesFor([lc, { ...lc, nodeId: 'a::table::notes' }], ['a::table::notes']).map((x: { nodeId: string }) => x.nodeId), ['a::table::notes']);
   assert.deepEqual(lifecyclesFor(undefined, ['x']), []);
 });
+
+const { headerLifecycles, screenLifecycles } = await import(join(here, '..', 'public', 'app', 'lib', 'lifecycle-model.js'));
+
+test('the header keeps the records this journey moves, the most moves first, two at most', () => {
+  const read = { ...lc, nodeId: 'a::table::read', onJourney: [false, false] };
+  const one = { ...lc, nodeId: 'a::table::one', onJourney: [true, false] };
+  const two = { ...lc, nodeId: 'a::table::two', onJourney: [true, true] };
+  const three = { ...lc, nodeId: 'a::table::three', onJourney: [false, true] };
+  const got = headerLifecycles([read, one, two, three]);
+  assert.deepEqual(got.shown.map((x: { nodeId: string }) => x.nodeId), ['a::table::two', 'a::table::one']);
+  assert.equal(got.more, 1);
+  assert.deepEqual(headerLifecycles([read]), { shown: [], more: 0 });
+});
+
+test('a screen shows a record its calls reach, or one a step of it moves', () => {
+  assert.deepEqual(screenLifecycles([lc], [], ['a::s.ts::send']).length, 1);
+  assert.deepEqual(screenLifecycles([lc], [], ['a::s.ts::other']).length, 0);
+});

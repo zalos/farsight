@@ -29,7 +29,7 @@ import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOr
 import { fillJourneyWork } from '../work-chips.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
 import { filterTree, placesOf, storylineOf } from '../lib/journeys-model.js';
-import { lifecycleStripHtml } from '../lib/lifecycle-strip.js';
+import { lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -4349,16 +4349,17 @@ function jrnFillStoryline(tree, entryId) {
     + '</span>';
 }
 /**
- * The journey header's status lifecycle: one strip per record the walk reaches whose statuses the
- * code declares (`/api/journey` → `lifecycles`, core `journeyLifecycles`) — the statuses in declared
+ * The journey header's status lifecycle: one strip per record whose statuses the code declares and
+ * that this journey moves (at most two, the rest counted) (`/api/journey` → `lifecycles`, core `journeyLifecycles`) — the statuses in declared
  * order, each move some code makes as a door to its writer, the moves this journey makes lit.
  * `''` when no record the journey reaches declares its statuses.
  * @group Journey view
  * @business Shows the statuses a record goes through and which part of the system moves it to each one.
  */
 export function jrnLifecycleHtml(data) {
-  const list = (data && data.lifecycles) || [];
-  return list.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join('');
+  const { shown, more } = headerLifecycles(data && data.lifecycles);
+  return shown.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join('')
+    + (more ? '<span class="lc-more"' + defAttrs('lifecycle.more') + '>' + esc(t('lifecycle.more').replace('{n}', more)) + '</span>' : '');
 }
 /**
  * The header count line: five named groups instead of a run of fourteen counts

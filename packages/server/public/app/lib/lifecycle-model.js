@@ -30,3 +30,23 @@ export function lifecyclesFor(all, ids) {
   return (all || []).filter((lc) => keep.has(lc.nodeId));
 }
 
+
+/**
+ * The records a journey header shows: those whose moves this journey makes (a record the walk only
+ * reads says nothing about this journey), the most moves first, at most `cap`; the rest counted.
+ */
+export function headerLifecycles(all, cap = 2) {
+  const mine = (all || []).map((lc, i) => ({ lc, i, here: (lc.onJourney || []).filter(Boolean).length })).filter((x) => x.here > 0);
+  mine.sort((a, b) => b.here - a.here || a.i - b.i);
+  return { shown: mine.slice(0, cap).map((x) => x.lc), more: Math.max(0, mine.length - cap) };
+}
+
+/**
+ * The records a screen shows: those its own calls reach, and those whose move a step of this
+ * screen makes (a repeated call carries no data rows of its own, but its writer is still a step here).
+ */
+export function screenLifecycles(all, recordIds, stepIds) {
+  const recs = new Set(recordIds || []);
+  const steps = new Set(stepIds || []);
+  return (all || []).filter((lc) => recs.has(lc.nodeId) || ((lc.lifecycle && lc.lifecycle.transitions) || []).some((x) => steps.has(x.by)));
+}

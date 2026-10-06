@@ -32,7 +32,7 @@ import {
 } from './journeys.js';
 import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml } from '../lib/detail-doors.js';
 import { journeyStepHash } from '../lib/route-url.js';
-import { lifecycleStripHtml, lifecyclesFor } from '../lib/lifecycle-strip.js';
+import { lifecycleStripHtml, screenLifecycles } from '../lib/lifecycle-strip.js';
 import { propertyModel } from '../lib/map-property-model.js';
 import { affectedOn, affectedSpec, affectedTabHtml, affectedTabCount, journeyChipReach, pickAffected, affectedSummaryHtml } from './map-affected.js';
 
@@ -368,14 +368,16 @@ function overviewHtml(pm, st) {
 }
 
 /**
- * The Overview's status lifecycle: one strip per record this screen's calls reach whose statuses
- * the code declares (the journey answer's `lifecycles`, kept to the screen's own data). `''` when
+ * The Overview's status lifecycle: one strip per record whose statuses the code declares and that
+ * this screen's calls reach or one of its steps moves (the journey answer's `lifecycles`, kept to the screen's own data). `''` when
  * none does — the section is left out rather than drawn empty.
  * @group Map
  */
 function propLifecycleHtml(pm, st) {
   const ids = ((pm.tabs.apis && pm.tabs.apis.records) || []).map((r) => r.nodeId);
-  const list = lifecyclesFor(st.ctx && st.ctx.data && st.ctx.data.lifecycles, ids);
+  const data = st.ctx && st.ctx.data;
+  const seg = data && data.summary && pm.screen && pm.screen.segment ? (data.summary.segments || [])[pm.screen.segment.index] : null;
+  const list = screenLifecycles(data && data.lifecycles, ids, ((seg && seg.markers) || []).map((m) => m.nodeId));
   if (!list.length) return '';
   return sec('lifecycle.word', list.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join(''));
 }
