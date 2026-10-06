@@ -372,6 +372,35 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
+**The 2026-10-05 swarm (eight personas, cold, on the reference app's own server at `4a44f4c`, judging only from
+their own screenshots; reports outside the repo) — 8 × TRIAL, fit mean 6.4 (5.0–7.0): the storyline and the doors are
+credited by every role (*the best "how our business runs in software" picture*; *beats grep for the call chase*), and
+the same two things hold every score down. Ranked, convergent first:**
+
+1. **One verdict per test cell** (6 roles) — *passed, by its own declaration · stale* beside *no test reaches this
+   step*, *last run: skipped* and a tip saying *verdict unknown*; one file:line with two verdicts on two surfaces; the
+   Tests matrix printing PASSED beside *skipped*. One evidence word computed once, printed the same everywhere.
+2. **Stale, said once and only when true** (5) — all 18 journeys, every Portfolio row and all three test levels say
+   *stale* / *no source digest* with no sentence saying against what; Settings *history 0 commits read* contradicts
+   Changes *242 of 282 never ingested*.
+3. **One word per position** (6) — *step* means the storyline position, the drawer's walk index (*STEP 232*), the
+   drill's *stop*, the code register's *983 steps*; action counts disagree with the sheet's columns.
+4. **A gate answers its click** (6) — today it turns amber or opens its service; the doors hide behind ▸; no gate →
+   the call it guards → the tests that reach it; config checks listed as a contractor screen's gates.
+5. **Chrome** (6–7) — Settings behind an unlabelled sun icon and absent from ⋯; a READ-ONLY session still offering
+   *Sync*, *Save*, *Add source*; the Map legend opening over the board on every visit; the Sheet's *verified by* row
+   overflowing; the Experiments row one word wide; the toolbar overflowing at 1440; `?` with four jobs; business
+   opening on the Sheet.
+6. **Storylines, second pass** — a branch kind for the correction journey (drawn as an ordinary step); an unknown
+   `?storyline=` says so; ⌘K finds storylines; thumbnails on the cards; test evidence on the storyline board; the
+   record's status lifecycle derived from the code. (The reference manifest's own step order — *Paid* before *Weekly
+   consolidation* — was the lead's error and is fixed there.)
+7. **Data holes the BA found** — the mark-paid and approval screens show *0 actions · 0 gates · calls: none indexed*
+   while the street lists `POST …/mark-paid` under them; the e2e card badged VITEST over Playwright files and saying
+   both *unknown* and *changed since the run*.
+8. **Export** (3) — PNG/PDF of the storyline board, the storyboard and the Portfolio; a pinned, dated link.
+9. **Business register, last ~30 words** — and ADR numbers kept as citation keys in every register.
+
 **The 2026-10-05 round left open, first:** the `/graph` payload at scale (411 MB for 245k nodes) — a server-side query
 API with the index semantics the viewer folds today is the next ceiling and a round of its own; the Map reads its
 journeys one at a time (300 journeys > 30 s), `/api/tests` without `lean=1` is 243 MB, a code-map card click re-lays
