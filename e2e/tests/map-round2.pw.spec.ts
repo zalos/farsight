@@ -201,9 +201,12 @@ test.describe('map round 2 — keys', () => {
       await go(page, '#/map');
       await boardReady(page);
       await expect(page.locator('.map-legend')).toBeHidden();
-      await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('.map-board'))).toBe(true);
+      // the board takes the focus once its first draw has settled: wait for it, never read it once
+      await expect.poll(() => page.evaluate(() => document.activeElement?.classList.contains('map-board'))).toBe(true);
+      // the first Tab lands on a journey's cover (a stop a redraw keeps), not on the header or a count a walk redraws
       await page.keyboard.press('Tab');
-      expect(await page.evaluate(() => !!document.activeElement?.closest('.map-board'))).toBe(true);
+      await expect.poll(() => page.evaluate(() => !!document.activeElement?.matches('.map-board .map-dcover'))).toBe(true);
+      await expect(page.locator('.map-dcover:focus')).toHaveCount(1);
     });
   });
 });
