@@ -669,8 +669,8 @@ export function select(id) {
     + nodeWorkSecHtml(n)
     + ((guards.length || validates.length) ? '<div class="insp-sec"><span class="hud-label">' + esc(t('surf.insp.gates')) + gateCount + '</span>'
       // a gate answers its click with the gate card (swarm-fixes 2026-10-05, finding 4)
-      + guards.map((g) => '<div class="rulecard auth"' + gateAttrs(g.id) + '>' + sym('lock') + ' ' + esc(business ? bizName(g) : g.name) + (g.loc && !business ? '<div class="rd">' + esc(g.loc.path) + ':' + g.loc.line + vsl(repoOf(g), g.loc.path, g.loc.line) + '</div>' : '') + '</div>').join('')
-      + validates.map((v) => '<div class="rulecard"' + gateAttrs(v.id) + '>' + sym('shield') + ' ' + esc(business ? bizName(v) : v.name) + (v.signature && !business ? '<div class="rd">' + esc(v.signature.slice(0, 90)) + '…</div>' : '') + (v.loc && !business ? '<div class="rd">' + esc(v.loc.path) + ':' + v.loc.line + vsl(repoOf(v), v.loc.path, v.loc.line) + '</div>' : '') + '</div>').join('') + '</div>' : '')
+      + guards.map((g) => '<div class="rulecard auth"' + gateAttrs(g.id) + '>' + sym('lock') + ' <span class="rc-n">' + esc(business ? bizName(g) : g.name) + '</span>' + (g.loc && !business ? '<div class="rd">' + esc(g.loc.path) + ':' + g.loc.line + vsl(repoOf(g), g.loc.path, g.loc.line) + '</div>' : '') + '</div>').join('')
+      + validates.map((v) => '<div class="rulecard"' + gateAttrs(v.id) + '>' + sym('shield') + ' <span class="rc-n">' + esc(business ? bizName(v) : v.name) + '</span>' + (v.signature && !business ? '<div class="rd">' + esc(v.signature.slice(0, 90)) + '…</div>' : '') + (v.loc && !business ? '<div class="rd">' + esc(v.loc.path) + ':' + v.loc.line + vsl(repoOf(v), v.loc.path, v.loc.line) + '</div>' : '') + '</div>').join('') + '</div>' : '')
     + (dataEdges.length ? '<div class="insp-sec"><span class="hud-label">' + esc(t('surf.insp.data')) + secCount(dataEdges, 'surf.insp.dataCount') + '</span>'
       + dataEdges.map((e) => {
         const me = e.from === n.id, other = S.BYID[me ? e.to : e.from];

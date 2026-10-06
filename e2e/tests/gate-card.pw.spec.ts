@@ -75,7 +75,9 @@ test('the code map: a gate in the inspector opens the same card', async ({ page 
   await gotoReady(page, '#/codemap?node=' + enc('invoice-app::route::GET /invoices') + '&lens=hybrid');
   const rc = page.locator('#inspector .rulecard[data-gate-card="' + GATE + '"]').first();
   await expect(rc).toBeVisible();
-  await rc.click();
+  // the gate's name, not the card's centre: the centre can land on the row's ⧉ editor link (CI run 37461063645,
+  // Linux fonts put it under the click), which opens the editor and is not the gate
+  await rc.locator('.rc-n').click();
   await expect(card(page)).toBeVisible();
   await expect(card(page).locator('[data-gc-sec="calls"] .gc-row')).toHaveCount(2);
 });
@@ -92,7 +94,9 @@ test('the card survives the inspector drawing again under it', async ({ page }) 
   await page.route('**/api/gate?*', async (r) => { await new Promise((res) => setTimeout(res, 900)); await r.continue(); });
   const rc = page.locator('#inspector .rulecard[data-gate-card="' + GATE + '"]').first();
   await expect(rc).toBeVisible();
-  await rc.click();
+  // the gate's name, not the card's centre: the centre can land on the row's ⧉ editor link (CI run 37461063645,
+  // Linux fonts put it under the click), which opens the editor and is not the gate
+  await rc.locator('.rc-n').click();
   // the inspector is redrawn before the answer lands: the row the reader clicked is gone
   await page.evaluate((id) => (window as any).select(id), ROUTE);
   await expect(card(page)).toBeVisible();
