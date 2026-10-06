@@ -197,6 +197,21 @@ test('actions and stops are two numbers with two names — and the stops contain
   assert.match(STRINGS['journey.drill.actionOf']!.professional, /^stop \{n\} of \{t\}/);
 });
 
+test('the Sheet\'s columns are the stops, and actions + again + declared + nothing to call = stops', () => {
+  // swarm 2026-10-05 (finding 3): *5 actions* above a Sheet of 6 numbered columns, *15 actions*
+  // beside *stop 1 of 23*. The columns are the stops (`counted.actionStops`, the number the
+  // Sheet's corner prints); the header's actions are one named part of them.
+  const sum = fold();
+  const q = sum.counted!;
+  const columns = sum.segments.reduce((a, sg) => a + sg.moments.length, 0);
+  assert.equal(q.actionStops.n, columns, 'the number above the Sheet is its columns');
+  const [calledStops, declaredStops, noCall] = q.actionStops.breakdown!.map((p) => p.n);
+  assert.equal(calledStops + declaredStops + noCall, columns, 'the stops\' split adds up to the columns');
+  assert.equal(q.actions.n + q.again.n + declaredStops + noCall, columns,
+    'the header\'s actions reconcile with the columns through named parts — never a silent difference');
+  assert.ok(q.actions.n < columns, 'more columns than actions here, which is why they carry two names');
+});
+
 test('conditions not in plain language are one number in every register, and the screens add up to it', () => {
   // Business printed 118 and hybrid 90 for the reference app's POC flow: business folded the gate
   // conditions nobody labelled in, hybrid drew them as decisions and left them out.
@@ -387,7 +402,7 @@ test('countedLine says each scope once, before the numbers it scopes, in the len
   const q = fold().counted!;
   const code = countedLine([q.screens, q.actions, q.actionStops, q.steps], { lens: 'code' });
   assert.match(code, /^across this journey: 3 screens · 2 actions · 4 stops \(/);
-  assert.match(code, /steps/);
+  assert.match(code, /visits/);
   const biz = countedLine([q.screens, q.actions, q.steps], { lens: 'business' });
   assert.equal(BIZ_BANNED.test(biz), false, `the business line counts in a developer's unit: ${biz}`);
   assert.match(biz, /2 things the user can do/);
