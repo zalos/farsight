@@ -2114,6 +2114,8 @@ function jrnRowLabel(r) {
  * @group Journey view
  * @business Opens the journey in the shape that suits the reader: the storyboard for the business, the sheet for both, the timeline for code.
  */
+/** Where this browser remembers the journey view a register last chose (one key per register). */
+function jrnLayoutKey(lens) { return 'fs-jrn-layout.' + lens; }
 function jrnDefaultLayout() {
   const lens = currentLens();
   return lens === 'business' ? 'storyboard' : lens === 'code' ? 'timeline' : 'sheet';
@@ -2122,16 +2124,22 @@ function jrnDefaultLayout() {
  * Which visual the journey is drawn as — `storyboard` (the screens and the
  * selected action's ledger), `timeline` (the blueprint timeline), `sheet` (the
  * system sheet) or `drill` (behind its flag). A `?view=` deep link wins (the
- * shell puts it on S.jrnLayout), else what this browser last chose, else the
- * register's own default.
+ * shell puts it on S.jrnLayout), else what this browser last chose in this
+ * register, else the register's own default.
  * @group Journey view
  */
 function jrnLayout() {
+  // the register decides the landing view, and the reader's last choice is remembered per register: one choice
+  // for every register opened the business reader on the Sheet a hybrid session had picked (three swarms running)
+  const lens = currentLens();
+  if (S.jrnLayout && S.jrnLayoutLens && S.jrnLayoutLens !== lens) S.jrnLayout = null;
   if (!S.jrnLayout) {
     let saved = '';
-    try { saved = localStorage.getItem('fs-jrn-layout') || ''; } catch (e) { saved = ''; }
+    try { saved = localStorage.getItem(jrnLayoutKey(lens)) || ''; } catch (e) { saved = ''; }
     S.jrnLayout = /^(storyboard|timeline|sheet|drill)$/.test(saved) ? saved : jrnDefaultLayout();
   }
+  // a `?view=` link's choice holds for the register it was opened in
+  S.jrnLayoutLens = lens;
   // the drill is an experiment: with the flag off, a remembered or deep-linked `drill` reads as the timeline (and share links say so)
   if (S.jrnLayout === 'drill' && !jrnDrillEnabled()) S.jrnLayout = 'timeline';
   return S.jrnLayout;
@@ -2174,7 +2182,8 @@ function jrnLayoutSwitchHtml() {
  */
 export function jrnSetLayout(v) {
   S.jrnLayout = /^(storyboard|sheet)$/.test(v) ? v : (v === 'drill' && jrnDrillEnabled()) ? 'drill' : 'timeline';
-  try { localStorage.setItem('fs-jrn-layout', S.jrnLayout); } catch (e) { /* private mode: the view is just not remembered */ }
+  S.jrnLayoutLens = currentLens();
+  try { localStorage.setItem(jrnLayoutKey(S.jrnLayoutLens), S.jrnLayout); } catch (e) { /* private mode: the view is just not remembered */ }
   jrnWriteViewHash();
   if (S.JOURNEY) renderJourney(S.JOURNEY);
 }

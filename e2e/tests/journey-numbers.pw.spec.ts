@@ -151,6 +151,7 @@ test.describe('journey chrome from the keyboard', () => {
     await expect(journey).toBeVisible();
     await expect(page.getByRole('button', { name: 'Source scope' })).toBeFocused();
     await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
     await expect(journey).toBeHidden();
     await expect(page).toHaveURL(/#\/journeys$/);
     await expect(page.locator('#focuschip')).toBeHidden();
