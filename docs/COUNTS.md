@@ -527,6 +527,16 @@ table). Nothing on the code map counts packages or projects a second way.
 `examples/nx-workspace` graph). `count.scope.source` was the tests' scope (*at one test level*); its define now says
 what a source holds in general, with the test level as the tests' case.
 
+### Lifecycle (`GraphNode.lifecycle` → core `lifecycle.ts` `lifecycleCounts()`; `/api/journey` `lifecycles[]`, the journey header and the Map property's Overview, MCP `describe_node`)
+
+The statuses one field of a record (a table node) may hold, read from the code by parsers `lifecycle.ts`: a SQL `CHECK (status IN (…))` on the column, or a `const … as const` list, a `z.enum`, a string-literal union or a string `enum` a field of that name is declared with, binding the record only when every status written to it fits that one declaration. A move is listed only with the function that writes it; `from` only when that function compares the status to exactly one prior status in an `if` that says what it was. Scope `count.scope.node` — one record, alone.
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| statuses | `lifecycle.count.statuses` *n statuses* (both) | `count.scope.node` | `lifecycleCounts().statuses` over `lifecycle.statuses` | the declared statuses of the record's status field, each once, in declared order; breakdown `lifecycle.part.written` *some code moves to* · `lifecycle.part.unwritten` *no code moves to* — a partition |
+| moves with a writer | `lifecycle.count.transitions` *n moves with a writer* (both) | `count.scope.node` | `lifecycleCounts().transitions` over `lifecycle.transitions` | one per (from, to, writer): the same move by two functions is two, the same move written twice in one function is one; breakdown `lifecycle.part.withFrom` *check the status first* · `lifecycle.part.noFrom` — a partition |
+| statuses no code moves to | `lifecycle.count.unwritten` *n statuses no code moves to* (both) | `count.scope.node` | `lifecycleCounts().unwritten` = statuses − `transitions[].to` | the declared statuses no function writes (an initial status set by a column default or an INSERT parameter is one of them — the literal is not in the code) |
+
 ### Freshness — *stale* is a comparison (core `freshness.ts`; swarm-fixes 2026-10-05, finding 2)
 
 Freshness is a sentence with two sides, never a bare word and never a number of its own. `freshnessFact(runs, code)`
