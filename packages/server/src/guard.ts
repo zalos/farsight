@@ -68,3 +68,36 @@ export function refuseRequest(req: GuardRequest): string | null {
   return null;
 }
 
+
+// ── a read-only session (`farsight serve --read-only`, and every `--as-of` serve) ──
+//
+// The viewer's top bar has always said READ-ONLY while Settings offered *Save*,
+// *Sync & re-ingest* and *Add source* beside it (swarm 2026-10-05, six roles). A
+// read-only server is now a fact the server holds and enforces: it refuses every
+// request that changes something it owns — the workspace settings, the graph (a
+// sync) and the work-item cache and trackers — and `/api/version` says so, so the
+// viewer disables the same controls it would otherwise refuse. The two diff routes
+// (`POST /api/design/diff`, `POST /api/apis/diff`) compare a proposal and persist
+// nothing, so they stay open.
+
+/** Why a server is read-only: started with `--read-only`, or serving an `--as-of` snapshot. */
+export type ReadOnlyWhy = 'flag' | 'as-of';
+
+/** True for a request that would change the workspace settings, the graph or the work items. */
+export function isWriteRoute(method: string | undefined, url: string): boolean {
+  const m = (method ?? 'GET').toUpperCase();
+  if (SAFE_METHODS.has(m)) return false;
+  const path = url.split('?')[0] ?? url;
+  if (path === '/api/settings') return true;
+  if (path === '/api/sync') return true;
+  if (path === '/api/work' || path.startsWith('/api/work/')) return true;
+  return false;
+}
+
+/** The refusal a read-only server sends for a write route (403), or null when the request may proceed. */
+export function refuseWrite(readOnly: ReadOnlyWhy | null | undefined, method: string | undefined, url: string): string | null {
+  if (!readOnly || !isWriteRoute(method, url)) return null;
+  return readOnly === 'as-of'
+    ? 'this server is read-only: it serves an --as-of snapshot, so settings, syncs and work-item writes are refused'
+    : 'this server is read-only (started with --read-only): settings, syncs and work-item writes are refused';
+}

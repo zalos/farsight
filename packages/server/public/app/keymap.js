@@ -1,5 +1,6 @@
 // keymap.js — every keyboard binding in one place (b · j/k · l · v · d · [ ] · f · t · ⌘K · y · ?;
-// on the Map also h/l · arrows · p · + − 0, asked of surfaces/map.js mapKey first)
+// on the Map also h/l · arrows · p · + − 0 · g the legend, asked of surfaces/map.js mapKey first).
+// `?` has one job everywhere — this keymap (swarm 2026-10-05: it had four)
 // plus the published keymap panel. Keys are the fast path, never the only
 // path: each action here also has a visible button somewhere in the chrome.
 
@@ -33,11 +34,12 @@ const KEYS = [
   { keys: '+ / − / 0', desc: 'key.mapZoom' },
   { keys: '[ / ]', desc: 'key.mapStep' },
   { keys: 'y', desc: 'key.mapLink' },
+  { keys: 'g', desc: 'key.mapLegend' },
   { keys: 'enter · o', desc: 'key.doors' },
   { keys: 'f', desc: 'key.f' },
   { keys: 'y', desc: 'key.y' },
   { keys: '?', desc: 'key.help' },
-  { keys: 'click · ?', desc: 'key.tip' },
+  { keys: 'click · enter', desc: 'key.tip' },
   { keys: 'esc', desc: 'key.esc' },
 ];
 
@@ -103,12 +105,13 @@ function onKeydown(e) {
     else if (settingsOpen()) closeSettings();
     // the cut list sits above the forks drawer, so it leaves first — Esc unwinds
     // what is on top, never the overlay while something is still covering it
-    else if (jOpen) { if (cutsOpen()) closeCuts(); else if (forksOpen()) closeForks(); else if (expandedOpen()) closeExpanded(); else closeJourney(); }
+    else if (jOpen) { if (cutsOpen()) closeCuts(); else if (forksOpen()) closeForks(); else if (expandedOpen()) closeExpanded(); else escCloseJourney(); }
     // on the map Esc backs out one level: the explore card, the screen, the street
     else if (mapOpen() && mapEscape()) { /* used */ }
     else if (S.focusSet) clearFocus();
     return;
   }
+  if (escArmed && e.key !== 'Shift') { escArmed = 0; escToast(false); }
   if (palOpen) { paletteNav(e); return; }
   const tag = (e.target && e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
@@ -138,6 +141,36 @@ function onKeydown(e) {
   // on the map, the thing whose explore card is open is the one asked about
   if (e.key === 'b') { openImpact((mapOpen() && mapSelected()) || S.selected); return; }
   if (e.key === 'f') { if (S.focusSet) clearFocus(); else if (S.selected) focusOn(S.selected); return; }
+}
+
+/** How long the first Esc on an open journey waits for the second. */
+const ESC_AGAIN_MS = 2500;
+let escArmed = 0, escToastT = null;
+/**
+ * Esc on a journey with nothing inside it open: the first press says what a
+ * second would do, the second (within 2.5 s) closes the journey. One Esc used
+ * to drop a reader who had only meant to dismiss something onto the Journeys
+ * list, their place lost (swarm 2026-10-05, the onboarding developer).
+ * @group Keymap
+ */
+function escCloseJourney() {
+  const now = Date.now();
+  if (escArmed && now - escArmed < ESC_AGAIN_MS) { escArmed = 0; escToast(false); closeJourney(); return; }
+  escArmed = now;
+  escToast(true);
+}
+/** The quiet note the first Esc shows, in the page's live region. */
+function escToast(on) {
+  let el = document.getElementById('esc-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'esc-toast'; el.className = 'esc-toast'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+    document.body.appendChild(el);
+  }
+  clearTimeout(escToastT);
+  el.textContent = on ? t('journey.escAgain') : '';
+  el.classList.toggle('on', on);
+  if (on) escToastT = setTimeout(() => { el.classList.remove('on'); el.textContent = ''; escArmed = 0; }, ESC_AGAIN_MS);
 }
 
 /** Attach the central listener (called once from the shell's boot).

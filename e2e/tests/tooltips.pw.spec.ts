@@ -81,10 +81,10 @@ test.describe('tips', () => {
    * @covers packages/server/public/app/lib/tooltip.js::tipKeydown
    * @covers packages/server/public/app/keymap.js::onKeydown
    */
-  test('the keyboard opens a tip with ?, Tabs into its links, and Esc hands focus back', async ({ page }) => {
+  test('the keyboard opens a tip with Enter, Tabs into its links, and Esc hands focus back', async ({ page }) => {
     await gotoReady(page, '#/portfolio');
     await page.locator('#stats').focus();
-    await page.keyboard.press('?');
+    await page.keyboard.press('Enter');
     await expect(tip(page)).toBeVisible();
     await expect(page.locator('#keymap')).not.toHaveClass(/open/);
     await page.keyboard.press('Tab');
@@ -115,6 +115,7 @@ test.describe('tips', () => {
     await page.keyboard.press('Escape');
     await expect(tip(page)).toBeHidden();
     await expect(journey).toBeVisible();
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(journey).toBeHidden();
   });
@@ -194,9 +195,9 @@ test.describe('tips', () => {
     await expect(btn).toBeVisible();
     const n = Number(await btn.locator('.cnt').textContent());
     expect(n).toBeGreaterThan(0);
-    await btn.focus();
-    await page.keyboard.press('?');
-    await expect(tip(page)).toBeVisible();
+    // a button's tip opens on hover (Enter presses the button; `?` is the keymap's)
+    await btn.hover();
+    await expect(tip(page)).toBeVisible({ timeout: 6000 });
     await expect(tip(page)).toContainText(n + ' controls folded');
     await expect(tip(page).locator('.tip-tbl tbody tr')).toHaveCount(n);
     // the button itself still opens its menu; the tip gives way to it

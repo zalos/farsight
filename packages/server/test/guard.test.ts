@@ -164,3 +164,17 @@ test('server: a cross-site write is refused before it runs; the viewer and curl 
   assert.ok(!bad.text.includes('pasted-value'));
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).defaultLens, 'code', 'a refused body leaves the file as it was');
 });
+
+test('refuseWrite: a read-only server refuses the routes that change settings, the graph or work items, and nothing else', async () => {
+  const { refuseWrite, isWriteRoute } = await import(dist('guard.js'));
+  for (const [m, u] of [['PUT', '/api/settings'], ['POST', '/api/sync'], ['POST', '/api/work/sync'], ['POST', '/api/work/intent'], ['POST', '/api/work/item/KAN-1/comment']]) {
+    assert.equal(isWriteRoute(m, u), true, `${m} ${u}`);
+    assert.match(refuseWrite('flag', m, u) ?? '', /read-only/, `${m} ${u}`);
+    assert.match(refuseWrite('as-of', m, u) ?? '', /as-of/, `${m} ${u}`);
+    assert.equal(refuseWrite(null, m, u), null, `writable: ${m} ${u}`);
+  }
+  // reads and the two diff routes (they compare a proposal and persist nothing) stay open
+  for (const [m, u] of [['GET', '/api/settings'], ['GET', '/api/work?x=1'], ['POST', '/api/design/diff'], ['POST', '/api/apis/diff'], ['HEAD', '/api/sync']]) {
+    assert.equal(refuseWrite('flag', m, u), null, `${m} ${u}`);
+  }
+});
