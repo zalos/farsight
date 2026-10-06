@@ -22,6 +22,7 @@ import { mapEnabled } from './map.js';
 import { loadJourneyTree } from '../lib/journeys-tree.js';
 import { treeFrom, journeysInOrder } from '../lib/journeys-model.js';
 import { jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
+import { exportToolHtml, registerExport, tableRows } from '../lib/export.js';
 
 /** A catalog word's tip, or nothing when it has no define. */
 function tipOf(key) { return key && def(key) ? defAttrs(key) : ''; }
@@ -53,11 +54,11 @@ export function mountPortfolio(route, el) {
 /** The page around the table. Its heading and standfirst are catalog words too,
  * so a register flip has to redraw them — not only the rows. */
 function shellHtml() {
-  return '<div class="set-wrap pf-wrap"><div class="pf-headrow"><h1>' + esc(t('nav.portfolio')) + '</h1>' + mapSwitchHtml() + '</div>'
+  return '<div class="set-wrap pf-wrap"><div class="pf-headrow"><h1>' + esc(t('nav.portfolio')) + '</h1>' + mapSwitchHtml() + exportToolHtml('portfolio', 'jrn-viewbtn pf-export') + '</div>'
     + '<p class="sub">' + esc(t('portfolio.sub')) + '</p>'
     + '<div id="pf-body"><p class="set-note">' + esc(t('portfolio.loading')) + '</p></div>'
     // the components the product can show on their own, from the story files (ADR 9)
-    + '<div id="pf-stories"></div></div>';
+    + '<div id="pf-stories" data-export-skip></div></div>';
 }
 
 /**
@@ -370,5 +371,22 @@ function erpCell(row) {
   if (approval) return '<span class="warn">' + esc(t('portfolio.erpDeclared')) + '</span>';
   return '<span class="dim"' + tipOf('journey.absent.notInvolved') + '>' + esc(t('journey.absent.notInvolved')) + '</span>';
 }
+
+/**
+ * What the Portfolio's Save control draws and lists (lib/export.js): the tables as the reader sees them, and the
+ * same rows as a spreadsheet — persona, group, then the table's own columns.
+ * @group Portfolio
+ * @business Saves the Portfolio as a picture, a PDF or a spreadsheet of every journey row.
+ */
+function portfolioPicture() {
+  const el = document.querySelector('.pf-wrap');
+  return el ? { el, title: t('export.board.all') } : null;
+}
+registerExport('portfolio', portfolioPicture, {
+  csv: () => tableRows(document.querySelector('.pf-wrap') || document.body, {
+    table: '.pf-persona table.pf-table',
+    sections: [{ label: t('export.col.persona'), around: '.pf-persona', head: 'h2' }, { label: t('export.col.group'), before: '.pf-group' }],
+  }),
+});
 
 expose({ mountPortfolio });

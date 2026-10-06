@@ -38,6 +38,7 @@ import {
   paintDistrict, affectedBarHtml, screenChipReach, affectedFlows, affectedListHtml, affectedExport, affectedReady,
 } from './map-affected.js';
 import { shareLink } from '../share.js';
+import { exportToolHtml, registerExport } from '../lib/export.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
 // lane L widened the column (480 → 600) so a call's words and path and a data node's kind line show whole at the
@@ -1445,7 +1446,7 @@ function chromeHtml() {
     + tool('fit', 'map.tool.fit', esc(t('map.tool.fit')))
     + tool('full', 'map.tool.full', esc(t('map.tool.full')))
     + tool('link', 'map.tool.link', esc(t('map.tool.link')))
-    // lane E (export, round 2026-10-05): its `tool('export', …)` goes here, before the legend
+    + exportToolHtml('map', 'map-tb map-tb-save')
     // the legend has a glyph of its own — `?` is the keymap's, everywhere (swarm 2026-10-05: `?` had four jobs)
     + tool('legend', 'map.tool.legend', sym('legend'), MAP.legend ? ' on map-tb-legend' : ' map-tb-legend')
     + '</div>'
@@ -3078,5 +3079,22 @@ export function mapSelected() {
   if (!MAP.card || !MAP.card.tg) return null;
   return MAP.card.tg.kind === 'call' ? MAP.card.tg.call.nodeId : MAP.card.tg.data.nodeId;
 }
+
+/**
+ * What the Map's Save control draws (lib/export.js): the whole board at the fit — every band, or the one storyline
+ * drawn — never only the part on screen. The board is fitted first, the way *Fit* does, so the reader sees what is
+ * saved; a property or a street open is closed back to the board.
+ * @group Map
+ * @business Saves the board — the storyline or every journey — as one picture, whatever part is on screen.
+ */
+async function mapPicture() {
+  if (!MAP.world || !MAP.cv || !MAP.size.w) return null;
+  if (MAP.prop) closeProperty();
+  fitAll(false);
+  await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+  const story = MAP.nb && MAP.nb.storyline;
+  return { world: MAP.world, size: MAP.size, scale: MAP.cv.state().s, title: story ? story.name : t('export.board.all'), subject: story ? story.id : '' };
+}
+registerExport('map', mapPicture);
 
 expose({ mapFit, mapZoom });
