@@ -281,6 +281,17 @@ business lens also drops design ids (`jrnDesignIdHtml`), routes, HTTP verbs, con
 parts the code tags `plumbing` (`jrnHelperTest`), and names the drill's places as *the request* / *the service*.
 `e2e/tests/journey-numbers.pw.spec.ts` holds the business views to zero identifier-shaped tokens.
 
+**One word per position (2026-10-05).** *Step* is a journey's place in a storyline and nothing else (business:
+*journey n of m*); a **stop** is one time the journey does something — a Sheet column, the drill's rail (which walks the
+Sheet's order, `jrnDrillActions` = `jrnSheetModel(sum).cols`), the storyboard's *stops 1–n*, the drawer's
+*stop n of t* (`jrnStopOf` / `jrnStopText`); a **beat** is one hop inside a stop (drill); a **visit** is the walk's
+count (`983 visits`), never a position. `core/test/position-words.test.ts` holds the catalog to it. Prose somebody
+wrote goes through `proseHtml()` (business: `plainWords()`; hybrid/code: a backticked span drawn as `<code class="tick">`)
+or `unTick()` for a chip; `plainWords()` keeps ADR numbers (a citation key, every register) and drops one-letter plan
+ids (*decision D6*). Business also strips a commit's conventional type (`commitWords()`), says four common gate
+labels in words (`jrnGateInWords` → `journey.biz.gateShape.*`: same-origin, rate limit, id shape, return path), and
+leaves out a driver-derived database engine name (`storeShownName()` in `lib/map-model.js`).
+
 **Absence words — one per fact (2026-09-27).** An empty (action, layer) cell's word is decided once, in core
 `journeyAbsence()` (`core/journey-counted.ts`), and shipped on the summary: `segments[i].absent.moments[mo.index][key]`
 (key = a `summary.systems` row key, or `user` for *what the user sees*), `.kinds[mo.index][records|messages|external|afterwards]`

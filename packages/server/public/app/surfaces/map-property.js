@@ -20,7 +20,7 @@
 import { S, esc, currentLens, bizName, repoOf, humanize, commitWords } from '../store.js';
 import { t, plainWords, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
-import { countedHtml, countedUnit, countedAttrs, defAttrs, plainTip, unCode, countWords } from '../lib/counted.js';
+import { countedHtml, countedUnit, countedAttrs, defAttrs, plainTip, unCode, countWords as countPhrase } from '../lib/counted.js';
 import { mapEvidenceChip } from '../lib/map-chips.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { designThumbHtml, linkHtml } from '../lib/graph-render.js';
@@ -604,7 +604,7 @@ function commitRow(x) {
     biz() ? '' : '<span' + defAttrs('map.prop.changes.by') + '>' + esc(t('map.prop.changes.by').split('{author}').join(x.author || '')) + '</span>',
     esc(parts.slice(0, 3).map((p) => p.name).join(', '))
       + (parts.length > 3 ? ' <span' + plainTip(parts.length - 3, 'map.prop.changes.partsMore', 'journey.scopeHere', '/api/history/touching') + '>'
-        + esc(countWords('map.prop.changes.partsMore', parts.length - 3)) + '</span>' : ''),
+        + esc(countPhrase('map.prop.changes.partsMore', parts.length - 3)) + '</span>' : ''),
     biz() ? '' : '<code>' + esc(String(x.sha || '').slice(0, 7)) + '</code>',
     biz() ? '' : (x.keys || []).map((k) => '<b class="mp-key">' + esc(k) + '</b>').join(' '),
   ].filter(Boolean).join(' · ');
