@@ -15,6 +15,22 @@ import { coverageFor, journeyScope, testNodes, toCoverageRef, twinOf, type Cover
 import { computeMetric, testsCovering, type MetricValue } from './metrics.js';
 import { buildLine } from './version.js';
 import { counted, type Counted } from './counts.js';
+import { freshnessFact, codeAtOfIndex, type FreshnessFact, type FreshnessRun } from './freshness.js';
+
+/**
+ * How many source cards a list of tests makes — one per source × level × runner of its spec cases, a
+ * level with only run-level reports counting once. The same rule the cards are built by.
+ */
+function cardCount(tests: GraphNode[]): number {
+  const keys = new Set<string>();
+  for (const t of tests) if (!t.test!.runLevel) keys.add(`${repoOf(t)} ${t.test!.level} ${t.test!.runner}`);
+  for (const t of tests) {
+    if (!t.test!.runLevel) continue;
+    const lv = `${repoOf(t)} ${t.test!.level} `;
+    if (![...keys].some((k) => k.startsWith(lv))) keys.add(lv + t.test!.runner);
+  }
+  return keys.size;
+}
 
 /** One spec file with its cases — the `suites` view. */
 export interface TestSuiteRow {
@@ -39,6 +55,14 @@ export interface TestSourceCard {
   lastRun?: { at: string; freshness: NonNullable<TestRef['run']>['freshness']; stale: boolean; changedBy?: NonNullable<TestRef['run']>['changedBy'] };
   /** the honest sentence beside the counts */
   freshness: string;
+  /**
+   * The card's freshness fact (`freshness.ts`) over its cases' own runs — one state,
+   * so a card never says *no source digest* and *changed since the run* at once
+   * (SDET, swarm 2026-10-05). Absent when no case of the card has a run.
+   */
+  fresh?: FreshnessFact;
+  /** the results reports this card's runs came from — the card's blind spots are the ones naming these */
+  reports?: string[];
   /**
    * each case's last recorded verdict, summed — the card said *37 cases ·
    * digest matches* and never whether they passed (pass swarm 2026-09-25).
@@ -203,13 +227,21 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
   }).sort((a, b) => a.repo.localeCompare(b.repo) || a.file.localeCompare(b.file));
 
   // ── source cards: one per repo × level ──
-  const cards = new Map<string, TestSourceCard & { files: Set<string>; declares?: { known: number; unmatched: number; nothing: number } }>();
-  for (const t of tests) {
+  const cards = new Map<string, TestSourceCard & { files: Set<string>; declares?: { known: number; unmatched: number; nothing: number }; freshRuns: FreshnessRun[]; reportSet: Set<string> }>();
+  // spec cases first, run-level report nodes after: a report joins the card of its runner, or its level's
+  // biggest card — a coverage report is not a runner of its own and never opens a card with no cases
+  for (const t of [...tests.filter((x) => !x.test!.runLevel), ...tests.filter((x) => x.test!.runLevel)]) {
     const repo = repoOf(t);
-    const key = `${repo} ${t.test!.level}`;
+    // one card per source × level × runner: an e2e level that holds a few vitest specs beside its
+    // Playwright suite was badged with whichever runner came first (VITEST over Playwright files)
+    let key = `${repo} ${t.test!.level} ${t.test!.runner}`;
+    if (t.test!.runLevel && !cards.has(key)) {
+      const sameLevel = [...cards.entries()].filter(([k]) => k.startsWith(`${repo} ${t.test!.level} `)).sort((a, b) => b[1].cases - a[1].cases)[0];
+      if (sameLevel) key = sameLevel[0];
+    }
     let card = cards.get(key);
     if (!card) {
-      card = { repo, level: t.test!.level, runner: t.test!.runner, files: new Set<string>(), cases: 0, freshness: '' } as unknown as TestSourceCard & { files: Set<string>; declares?: { known: number; unmatched: number; nothing: number } };
+      card = { repo, level: t.test!.level, runner: t.test!.runner, files: new Set<string>(), cases: 0, freshness: '', freshRuns: [], reportSet: new Set<string>() } as unknown as TestSourceCard & { files: Set<string>; declares?: { known: number; unmatched: number; nothing: number }; freshRuns: FreshnessRun[]; reportSet: Set<string> };
       cards.set(key, card);
     }
     const run = t.test!.run;
@@ -219,6 +251,10 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
       runs[run ? run.status : 'noRun']++;
     }
     if (run && (!card.lastRun || run.at > card.lastRun.at)) card.lastRun = { at: run.at, freshness: run.freshness, stale: run.stale, ...(run.changedBy ? { changedBy: run.changedBy } : {}) };
+    if (run && !t.test!.inactive) {
+      card.freshRuns.push({ freshness: run.freshness, ...(run.changedBy ? { changedBy: run.changedBy } : {}), at: run.at, ...(run.commit ? { commit: run.commit } : {}), repo });
+      if (run.report) card.reportSet.add(run.report);
+    }
     // a passed end-to-end case: what does it declare? (the passed-by-declaration split)
     if (!t.test!.runLevel && t.test!.level === 'e2e' && run?.status === 'passed') {
       const decl = (card.declares ??= { known: 0, unmatched: 0, nothing: 0 });
@@ -228,12 +264,19 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
       else decl.nothing++;
     }
   }
+  const codeAt = codeAtOfIndex(index);
   const sources: TestSourceCard[] = [...cards.values()].map((c) => {
     const runs = c.runs ?? { passed: 0, failed: 0, skipped: 0, flaky: 0, unknown: 0, noRun: 0 };
+    const fresh = c.freshRuns.length ? freshnessFact(c.freshRuns, codeAt) : undefined;
     return {
       repo: c.repo, level: c.level, runner: c.runner, files: c.files.size, cases: c.cases,
       ...(c.lastRun ? { lastRun: c.lastRun } : {}),
-      freshness: c.lastRun
+      ...(fresh ? { fresh } : {}),
+      ...(c.reportSet.size ? { reports: [...c.reportSet].sort() } : {}),
+      // the sentence reads the card's one freshness fact, so it cannot say what the fact does not
+      freshness: fresh && fresh.ranAt
+        ? `last run ${fresh.ranAt.slice(0, 10)} — ${freshnessSentence(fresh.state === 'current' ? 'unchanged' : fresh.state === 'stale' ? 'changed' : 'unknown', fresh.changedBy)}`
+        : c.lastRun
         ? `last run ${c.lastRun.at.slice(0, 10)} — ${freshnessSentence(c.lastRun.freshness, c.lastRun.changedBy)}`
         : 'no run has been observed; declared and inferred evidence only',
       runs,
@@ -259,7 +302,7 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
         } : {}),
       },
     };
-  }).sort((a, b) => a.repo.localeCompare(b.repo) || a.level.localeCompare(b.level));
+  }).sort((a, b) => a.repo.localeCompare(b.repo) || a.level.localeCompare(b.level) || b.cases - a.cases || a.runner.localeCompare(b.runner));
 
   // ── the journeys × tests matrix ──
   const journeys: TestMatrixRow[] = [];
@@ -321,7 +364,7 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
   const part = level ? metric.parts?.[level] : undefined;
   return {
     counts,
-    ...(level ? { level, countsAll: countsOf(inScope, new Set(inScope.map((t) => `${repoOf(t)} ${t.test!.level}`)).size, orphansOf(index, inScope).length) } : {}),
+    ...(level ? { level, countsAll: countsOf(inScope, cardCount(inScope), orphansOf(index, inScope).length) } : {}),
     counted: {
       cases: counted(counts.cases, 'count.unit.cases', selection, 'testsSurface().counts.cases', {
         bizUnit: 'journey.biz.countTests',

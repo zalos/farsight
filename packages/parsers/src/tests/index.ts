@@ -336,6 +336,7 @@ export function applyTests(fragment: GraphFragment, repoRoot: string, options: I
     // what a report must stamp for its runs to read `unchanged` — recorded so a later
     // `tests import --stamp` can be refused when it names a different checkout
     ...(fragment.meta?.sourceDigest ? { sourceDigest: fragment.meta.sourceDigest } : {}),
+    ...(imported.head ? { head: imported.head } : {}),
   };
   if (fragment.meta) fragment.meta.tests = meta;
   else fragment.meta = { files: claimed.length, sourceHash: 'empty', tests: meta };
@@ -353,7 +354,7 @@ export function importReports(
   repoRoot: string,
   config: TestsConfigBlock,
   addEdge?: (from: string, to: string, meta: GraphEdge['meta'], resolution: GraphEdge['resolution']) => void,
-): { reports: TestsMeta['reports']; edges: number; runs: number; gaps: TestsGap[]; blindSpots: string[]; errors: string[] } {
+): { reports: TestsMeta['reports']; edges: number; runs: number; gaps: TestsGap[]; blindSpots: string[]; errors: string[]; head?: { sha: string; at?: string } } {
   const reports: ReportEntry[] = [];
   const gaps: TestsGap[] = [];
   const errors: string[] = [];
@@ -438,6 +439,7 @@ export function importReports(
         path: report.path, kind: report.kind, runner, level, mtime: report.mtime, runId: report.runId, freshness, glob, matched: files.length,
         reason: freshness === 'unknown' ? 'no-digest' : freshness === 'changed' ? 'digest-changed' : 'ok',
         ...(changedBy ? { changedBy } : {}),
+        ...(report.sourceCommit ? { commit: report.sourceCommit } : {}),
       };
       reports.push(entry);
       if (freshness === 'unknown') {
@@ -484,7 +486,10 @@ export function importReports(
   }
 
   const ordered = orderGaps(gaps);
-  return { reports, edges: edgeCount, runs, gaps: ordered, blindSpots: foldGaps(ordered), errors };
+  // the code side of every freshness sentence (core freshness.ts): HEAD as this read saw it — asked only
+  // when a report recorded a digest, because only then is there a comparison to name
+  const headNow = reports.some((r) => r.freshness === 'changed' || r.freshness === 'unchanged') ? headOnce() : undefined;
+  return { reports, edges: edgeCount, runs, gaps: ordered, blindSpots: foldGaps(ordered), errors, ...(headNow ? { head: headNow } : {}) };
 }
 
 /** `repo::test::run:<level>:<project>` — the synthetic node a coverage report's edges hang off. */

@@ -25,3 +25,4 @@ export * from './projects.js';
 export * from './config-files.js';
 export * from './journeys.js';
 export * from './lifecycle.js';
+export * from './freshness.js';

@@ -215,6 +215,11 @@ not list*. A screen row's `⚠ n drift` has the same tip over that screen (`desi
 
 ### Changes (`/api/changes`, `/api/history` → `history.ts`)
 
+The **sync status line** a source carries in Settings (`settings.sources[].status`, written by `POST /api/sync`) says
+`history N commits indexed · k new this sync` — N is `SnapshotDb.commitCount(repo)`, the same rows the Changes notes
+count over (*242 of 282 never ingested*: 282 is N), k what this sync's incremental read added. Until 2026-10-05 it
+said `history 0 commits read` (k alone) beside a Changes page of 282 commits (swarm 2026-10-05, four roles).
+
 `51 of 66 commits were never ingested by any sync` (`spine.unindexed` of `spine.commits`, scope: the commit range
 read), `n files touched`, `n renamed`, `n of them byte-identical`, `n shown of t` (`chrome.shownOf`, the table's
 fold). Not typed yet. A spine row on the same commit as the sync before it whose recorded content digest differs
@@ -237,7 +242,8 @@ history holds for the repository (see `### Map`, Property).
 | KPI *Journeys with e2e* `9 · reached 9 · observed 0 · declared 0 · none 1` (the reference app) | `journeys[].e2e` tallied in the viewer | flows by e2e rung | selection | — |
 | card `example-app · e2e · 15 spec files · 91 cases` | `sources[]` · C:`sources[].counted.cases` | cases in one source at one level | source | now with verdicts: `91 with no run recorded`; farsight e2e `37 passed` |
 | card `89 passed in the report · 89 declare something this workspace knows` (e2e only) | C:`sources[].counted.passedByDeclaration` | passed cases by what they declare (known · only unmatched · nothing) | source | a flow's `n passed, by their own declaration` counts the part of *declare something known* that lands in its scope (§2 #13) |
-| card freshness sentence | `sources[].freshness` (`freshnessSentence(freshness, changedBy)`) | the level's newest run | source | `changed` on the run's own commit reads *the working tree differs from HEAD* (§2 #14) |
+| card freshness sentence | `sources[].fresh` (core `freshness.ts` `freshnessFact()`) → `fresh.sentence.*`; `sources[].freshness` is the same answer as one line | the card's cases' own runs, one state: *current as of sync N* · *stale — ran on commit X; the code is at Y* · *no source digest* + the stamp recipe | source | **one card per source × level × runner** since 2026-10-05 (an e2e level of Playwright runs was badged VITEST by 21 vitest specs under `e2e/`, and said *no source digest* and *changed since the run* at once); a run-level report joins its runner's card or its level's biggest; the card's blind spots are its level's minus the freshness findings of results reports whose runs sit on another card; `counts.sources` counts these cards |
+| KPI *Last runs* per level | each card's `fresh` | one date + one freshness word per card | source × level | a level with two runners prints both, the runner named (code lenses) |
 | matrix *Observed* `0 tests · 75 passed, by their own declaration · 13 run reports` | `coverage.counts.tests.{observed, declaredPassed, runLevel}` | observed cases split by how, and reports | journey | `tests.observedSplitDecl`; `tests.observedSplit` when nothing passed by declaration |
 | suites row `3 passed · date · digest matches` | `suites[].counts` | one spec file's cases by verdict | file | — |
 | *Orphans · n* | `counts.orphans` | tests covering nothing + unresolved claims | selection | follows the level now |
@@ -528,6 +534,25 @@ The statuses one field of a record (a table node) may hold, read from the code b
 | statuses | `lifecycle.count.statuses` *n statuses* (both) | `count.scope.node` | `lifecycleCounts().statuses` over `lifecycle.statuses` | the declared statuses of the record's status field, each once, in declared order; breakdown `lifecycle.part.written` *some code moves to* · `lifecycle.part.unwritten` *no code moves to* — a partition |
 | moves with a writer | `lifecycle.count.transitions` *n moves with a writer* (both) | `count.scope.node` | `lifecycleCounts().transitions` over `lifecycle.transitions` | one per (from, to, writer): the same move by two functions is two, the same move written twice in one function is one; breakdown `lifecycle.part.withFrom` *check the status first* · `lifecycle.part.noFrom` — a partition |
 | statuses no code moves to | `lifecycle.count.unwritten` *n statuses no code moves to* (both) | `count.scope.node` | `lifecycleCounts().unwritten` = statuses − `transitions[].to` | the declared statuses no function writes (an initial status set by a column default or an INSERT parameter is one of them — the literal is not in the code) |
+
+### Freshness — *stale* is a comparison (core `freshness.ts`; swarm-fixes 2026-10-05, finding 2)
+
+Freshness is a sentence with two sides, never a bare word and never a number of its own. `freshnessFact(runs, code)`
+decides one state for any list of runs: **current** (some run's recorded digest is still the code's) · **stale**
+(every run is older than the code — the same rule as the chip's `observed-stale`) · **no source digest** (no run
+compared; *not* stale) · **none**. The fact carries the run's side (`ranAt`, `ranOn.commit` from the report stamp's
+`farsight.commit`) and the code's (`codeAt.commit` = `meta.tests[repo].head`, else a one-source graph's
+`meta.commit`; `codeAt.sync` = `meta.sync`), and the catalog keys of its word, its sentence (`fresh.sentence.*`), its
+business sentence (`journey.biz.fresh.*`) and its recipe (`fresh.recipe.rerun` · `fresh.recipe.stamp`). The code side is
+registered per index (`setFreshnessMeta`) by the server, MCP and the CLI.
+
+| printed | source | compares | scope | where |
+|---|---|---|---|---|
+| `stale — the tests ran on commit ffe2759 (2026-10-04); the code is at commit 4632734 now` | `coverage.freshness` | the runs that observed the scope (else the covering tests' own runs) vs the code read | journey · segment · action · step | journey header (`.jrn-fresh`), the evidence chip's tip (journey, Map, Portfolio row, Tests matrix) |
+| `current as of sync 106 — the tests ran on the code as it is now` | `coverage.freshness` | as above | as above | as above — a current journey says so instead of saying nothing |
+| `no source digest was recorded — the tests ran on …` + the stamp recipe | `sources[].fresh` / `coverage.freshness` | runs with no recorded digest | source card · scope | Tests cards |
+| `runs read: n current · n older than the code · n with no source digest` | `fresh.runs` | the runs the answer is computed over; sums to them | the fact's scope | the freshness tip (`count.part.fresh*`) |
+| Map *at risk* `18 journeys stale` + `against the code at commit X (sync N) — every one of these runs is from D or before` | each journey's `coverage.journey.freshness` | printed once when every stale journey compares with one commit | board | `riskCounteds()`; each card's *stale* mark carries its own journey's fact as its tip |
 
 ### One test verdict per cell (swarm 2026-10-05, finding 1 — core `coverage.ts` `testVerdict()`)
 

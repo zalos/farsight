@@ -302,6 +302,8 @@ export interface TestsMeta {
     reason?: 'ok' | 'no-match' | 'unreadable' | 'empty' | 'no-digest' | 'digest-changed';
     /** `digest-changed` only: a new commit, or the same commit with a working tree that differs (`TestRun.changedBy`) */
     changedBy?: 'commit' | 'working-tree';
+    /** the commit the report's stamp recorded (`farsight.commit`), when it recorded one — the run's side of the freshness sentence */
+    commit?: string;
     mtime?: string;
     runId?: string;
     /** results reports: test cases this report was joined to */
@@ -339,6 +341,12 @@ export interface TestsMeta {
   blindSpots: string[];
   /** the content digest the fragment was ingested at — what a stamped report must equal */
   sourceDigest?: string;
+  /**
+   * HEAD when this read compared a stamped report with the code — the code's side of
+   * every freshness sentence (core `freshness.ts`). Absent when no report recorded a
+   * digest, or git could not be asked.
+   */
+  head?: { sha: string; at?: string };
 }
 
 /**

@@ -706,6 +706,11 @@
   .jrn-count .g-actions .jrn-num,.jrn-count .jrn-screens{font-weight:600}
   .jrn-count .jrn-touches{color:var(--muted);white-space:normal}
   .jrn-count .jrn-obs{color:var(--dim);font-size:10px}
+  /* the freshness sentence (lib/freshness.js): stale with both sides, current with its sync, no source digest */
+  .fresh{color:var(--dim);font-size:10px}
+  .fresh.fresh-stale{color:var(--warn,#E8A13C)}
+  .fresh.fresh-current{color:var(--ok,#6FCF8E)}
+  .tst-card .fresh{display:block;font-size:11px;margin:4px 0}
   .jrn-count .jrn-e2e{margin-left:0}
   .jrn-count .jrn-e2e.stale{color:var(--amber);border-color:rgba(240,180,78,.45)}
   .jrn-count .jrn-e2e.declared,.jrn-count .jrn-e2e.shared{color:var(--muted);border-color:var(--dim)}
@@ -2530,6 +2535,7 @@
   .map-risk{position:absolute;left:12px;top:calc(var(--map-chrome-h,52px) + 8px);z-index:5;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 10px;font-size:11px}
   .map-risk .hud-label{color:var(--warn,#E8A13C)}
   .map-risk .sep{color:var(--dim)}
+  .map-risk .map-risk-why{color:var(--dim);margin-left:6px}
   /* the AT RISK counts are facts with a tip, not buttons: drawn as the product's other numbers are (a dotted
      underline), so they no longer promise a click that does nothing (PO, swarm 2026-10-05) */
   .map-risk .map-chip{border:0;background:none;padding:0;border-radius:0;color:var(--warn,#E8A13C);text-decoration:underline dotted;text-underline-offset:3px;cursor:help}

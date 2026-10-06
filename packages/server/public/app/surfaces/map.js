@@ -22,6 +22,7 @@ import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
+import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
@@ -1242,19 +1243,33 @@ function riskCounteds() {
   const ds = MAP.nb.districts || [];
   if (!ds.length || ds.some((d) => !MAP.journeys.has(d.id))) return null;
   let stale = 0, notBuilt = 0, erp = 0;
+  const why = new Map();
   for (const d of ds) {
     const j = MAP.journeys.get(d.id);
     const sum = j && j.data && j.data.summary;
     if (!sum) continue;
     const ew = sum.coverage && sum.coverage.journey && sum.coverage.journey.evidenceWord;
-    if (ew && ew.cls === 'stale') stale++;
+    if (ew && ew.cls === 'stale') {
+      stale++;
+      // the comparison behind each *stale*, by its sentence: said once on the bar when every one shares it
+      const f = sum.coverage.journey.freshness;
+      if (f && f.state === 'stale') why.set(d.id, f);
+    }
     const b = sum.counted && sum.counted.built;
     if (b && b.of != null && b.n < b.of) notBuilt++;
     if (erpReached(sum)) erp++;
   }
   const src = 'surfaces/map.js riskCounteds ← each /api/journey summary (coverage.journey.evidenceWord · counted.built · systems)';
   const c = (n, unit) => ({ n, unit, bizUnit: unit, scope: 'count.scope.workspace', source: src });
-  return [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+  const out = [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
+  // every stale journey compared with one code: name it once on the bar, with the newest run among them
+  const facts = [...why.values()];
+  const codes = new Set(facts.map((f) => (f.codeAt && f.codeAt.commit) || ''));
+  if (facts.length && facts.length === stale && codes.size === 1 && !codes.has('') && facts[0].codeAt.sync != null) {
+    const newest = facts.reduce((a, f) => (!a || (f.ranAt || '') > (a.ranAt || '') ? f : a), null);
+    out[0].fresh = Object.assign({}, newest, { key: 'fresh.risk.against', biz: 'journey.biz.fresh.riskAgainst' });
+  }
+  return out;
 }
 function drawRisk() {
   const el = MAP.stage && MAP.stage.querySelector('.map-risk');
@@ -1262,7 +1277,9 @@ function drawRisk() {
   const k = riskCounteds();
   if (!k || !k.some((x) => x.n)) { el.hidden = true; el.innerHTML = ''; return; }
   el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
-    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })).join('<span class="sep">·</span>');
+    + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })
+      // *stale* said once, with what it compares, when every stale journey shares one comparison
+      + (x.fresh ? '<span class="map-risk-why"' + freshAttrs(x.fresh, { noFocus: true }) + '>' + esc(freshSentence(x.fresh)) + '</span>' : '')).join('<span class="sep">·</span>');
   const appeared = el.hidden;
   // whether the board sits at its fit — asked before the headline shows, since the fit then leaves it its row
   const at = appeared && MAP.cv && !MAP.prop && MAP.cv.level() === 'nb' ? MAP.cv.stopAt() : null;
@@ -2037,7 +2054,11 @@ function coverAggHtml(d, j) {
   // two marks, not one (§3.3): *stale* quiet in the muted colour — the code moved under the tests — and *not built* in
   // amber — a screen is only designed; one or both, each with its own define
   const mark = (cls, key, glyph) => '<span class="map-mark ' + cls + '"' + tipAttrs({ key, noFocus: true }) + '>' + (glyph ? sym(glyph) : '') + esc(t(key)) + '</span>';
-  const marks = (stale ? mark('stale', 'map.cover.mark.stale', 'sync') : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
+  // *stale*'s tip is the comparison itself: the run's commit and the code's (finding 2)
+  const staleMark = () => (cov && cov.freshness && cov.freshness.state === 'stale'
+    ? '<span class="map-mark stale"' + freshAttrs(cov.freshness, { noFocus: true }) + '>' + sym('sync') + esc(t('map.cover.mark.stale')) + '</span>'
+    : mark('stale', 'map.cover.mark.stale', 'sync'));
+  const marks = (stale ? staleMark() : '') + (partly ? mark('notbuilt', 'map.cover.mark.notBuilt', 'warning') : '');
   return status + marks + '<span class="map-mark leads" data-leads-for="' + esc(d.id) + '" hidden></span>';
 }
 

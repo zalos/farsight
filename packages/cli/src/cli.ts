@@ -2,7 +2,7 @@
 import { resolve, join, basename } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import {
-  GraphStore, buildIndex,
+  GraphStore, buildIndex, setFreshnessMeta,
   SnapshotDb, SnapshotUnavailable, diffGraphs, parsePolicy, applyPolicy, toSarif, toMarkdown, changeSentence,
   stitchHttp, apiSurface, graphToSpec, reconcile, driftMarkdown,
   storybookLive,
@@ -889,6 +889,7 @@ switch (command) {
     const store = GraphStore.load(graphFile);
     const { nodes, edges } = store.toJSON();
     const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
     if (sub === 'list' || !sub) {
       const apis = apiSurface(index);
       if (!apis.length) { console.log('no HTTP routes in the graph — nothing to list'); break; }
@@ -935,6 +936,7 @@ switch (command) {
     const store = GraphStore.load(graphFile);
     const { nodes, edges } = store.toJSON();
     const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
     const repo = flag('repo');
     const hopsArg = flag('hops');
     const hops = hopsArg != null ? Number(hopsArg) : undefined;
@@ -1042,6 +1044,7 @@ switch (command) {
     const store = GraphStore.load(graphFile);
     const { nodes, edges } = store.toJSON();
     const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
 
     // `--changed a.ts b.ts` takes every following token, so the generic positional
     // reader (which only skips one value per flag) cannot be used here
@@ -1359,6 +1362,7 @@ switch (command) {
           gaps: [...keptGaps, ...imported.gaps],
           blindSpots: [...keptBlind, ...imported.blindSpots],
           ...(fragment.meta.sourceDigest ? { sourceDigest: fragment.meta.sourceDigest } : {}),
+          ...(imported.head ?? prior?.head ? { head: (imported.head ?? prior?.head)! } : {}),
         },
       };
       out.save(graphFile);
@@ -1389,6 +1393,7 @@ switch (command) {
 
     const { nodes, edges } = store.toJSON();
     const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
     const scopeFlag = flag('scope');
     const scope = scopeFlag && scopeFlag !== 'all' ? new Set(scopeFlag.split(',').map((x) => x.trim()).filter(Boolean)) : null;
     const surfaceAll = testsSurface(index, scope, store.meta.tests);
@@ -1533,6 +1538,7 @@ switch (command) {
     const store = GraphStore.load(graphFile);
     const { nodes, edges } = store.toJSON();
     const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
     if (sub === 'list' || !sub) {
       const designs = designSurface(index);
       if (!designs.length) { console.log('no design source in the graph — add docs/design/screens.json to a repo (docs/proposals/design-source.md) and re-ingest'); break; }
