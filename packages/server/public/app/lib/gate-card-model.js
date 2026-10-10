@@ -125,7 +125,13 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
     pending: answer == null,
     failed: answer === false,
     calls: null, pages: null, tests: null, counted: null, evidence: null, truncated: false,
+    // a rule the parser read out of a refusing comparison (gates lane 2026-10-10)
+    precondition: (f.node && f.node.precondition) || null,
+    // who it matters to, from the service's fold (core gate-class.ts) — null until it answers
+    tier: null,
   };
+  const ag = answer && typeof answer === 'object' ? answer.gate : null;
+  if (ag && ag.tier) out.tier = tierLine(ag, lens);
   if (answer && typeof answer === 'object') {
     const calls = answer.calls || [];
     const tests = answer.tests || [];
@@ -140,6 +146,30 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
     out.truncated = !!answer.truncated;
   }
   return out;
+}
+
+/** `contact_vendor_links.status not in {PENDING, REJECTED}`: a precondition's code form, as the code register prints it. */
+export function preconditionCode(p) {
+  if (!p) return '';
+  const at = p.record + '.' + p.field;
+  if (p.kind === 'present') return at + ' not empty';
+  if (p.requires && p.requires.length === 1) return at + ' = ' + p.requires[0];
+  if (p.requires && p.requires.length) return at + ' in {' + p.requires.join(', ') + '}';
+  const ex = p.excludes || [];
+  return ex.length === 1 ? at + ' ≠ ' + ex[0] : at + ' not in {' + ex.join(', ') + '}';
+}
+
+/**
+ * The card's tier line as catalog keys: the tier, why (its class), the precondition's code form outside
+ * the business register, and where the tier came from (its class, the config file, or the code's own tag).
+ */
+export function tierLine(g, lens) {
+  return {
+    tier: g.tier, tierKey: 'gate.tier.' + g.tier, classKey: 'gate.class.' + g.class,
+    fromKey: 'gate.tierFrom.' + (g.tierFrom || 'class'),
+    code: lens !== 'business' && g.precondition ? preconditionCode(g.precondition) : '',
+    elseText: g.precondition ? g.precondition.else : '',
+  };
 }
 
 /** The gate a clicked element names: `data-gate-card` on it or on the nearest element above it. */

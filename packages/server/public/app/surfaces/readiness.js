@@ -125,7 +125,9 @@ function rulesHtml(r) {
   return '<h2 class="rd-h2"><span' + defAttrs('readiness.rules') + '>' + esc(t('readiness.rules')) + '</span> '
     + countedHtml(r.counted.rules, '/api/readiness', { cls: 'rd-hsub' }) + ' <span class="rd-hsub">' + esc(t('readiness.rulesSub')) + '</span></h2>'
     + '<table class="rd-table rd-rules"><thead><tr>' + head.map((k) => '<th' + defAttrs(k) + '>' + esc(t(k)) + '</th>').join('') + '</tr></thead><tbody>'
-    + r.rules.map((g) => '<tr><td class="rd-gate">' + esc(currentLens() === 'business' && g.words ? g.words : g.name) + '</td>'
+    + r.rules.map((g) => '<tr><td class="rd-gate">' + esc(currentLens() === 'business' && g.words ? g.words : g.name)
+      // who it matters to (gates lane 2026-10-10): the tier chip, its class in the tip
+      + (g.tier ? ' <span class="gate-tier ' + esc(g.tier) + '"' + defAttrs(g.class ? 'gate.class.' + g.class : 'gate.tier.' + g.tier) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '') + '</td>'
       + '<td>' + (g.words ? esc(g.words) : '<span class="rd-warn"' + defAttrs('readiness.noWords') + '>' + esc(t('readiness.noWords')) + '</span>') + '</td>'
       + '<td>' + num(g.screens, 'readiness.screensN', 'count.scope.gate') + '</td>'
       + '<td>' + num(g.tests, 'readiness.casesN', 'count.scope.gate') + '</td>'

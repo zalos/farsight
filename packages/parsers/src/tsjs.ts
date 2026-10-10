@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { relative, dirname, resolve as resolvePath } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import { configCheckOf, CONFIG_CHECK_TAG } from '@farsight/core';
+import { configCheckOf, paramsText, CONFIG_CHECK_TAG } from '@farsight/core';
+
+/** A parameter typed as a fetch `Response`: the function reads what a server answered. */
+const READS_RESPONSE = /:\s*Response\b/;
 import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta } from '@farsight/core';
 import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
 import { createAliasClassifier, resolveFileish } from './aliases.js';
@@ -15,7 +18,8 @@ import { isTestFile } from './tests/cases.js';
 import { isStoryFile } from './stories/index.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
 import { propFactsOf, type PropFacts } from './callback-props.js';
-import { collectEnums, collectStatusFacts, linkLifecycles, type LifecycleFacts } from './lifecycle.js';
+import { collectEnums, collectStatusFacts, linkLifecycles, constTables, type LifecycleFacts } from './lifecycle.js';
+import { collectPreconditionFacts, emptyPreconditionFacts, linkPreconditions } from './preconditions.js';
 
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
@@ -244,6 +248,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const propFacts = new Map<string, PropFacts & { file: string }>();
   // the record lifecycle's facts (lifecycle.ts): enums declared, status fields, writes, compares, SQL CHECK lists
   const lifeFacts: LifecycleFacts = { decls: [], uses: [], writes: [], compares: [], checks: new Map() };
+  // refusing comparisons, refused lists and transition tables (preconditions.ts)
+  const preFacts = emptyPreconditionFacts();
   let edgeSeq = 0;
 
   const addNode = (n: GraphNode) => {
@@ -458,6 +464,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     });
 
     { const en = collectEnums(program, file, line); lifeFacts.decls.push(...en.decls); lifeFacts.uses.push(...en.uses); }
+    preFacts.tables.push(...constTables(program, file, line));
     // declared functions & components & zod schemas
     const declared: { name: string; node: AstNode; body: AstNode | null; kind: NodeKind; cls?: string; clsGroup?: string }[] = [];
     walk(program, (n, parents) => {
@@ -635,6 +642,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       const id = symbolId(file, d.name);
       if (hasJsx) { const pf = propFactsOf(d.node, d.body, line); if (pf) propFacts.set(id, { file, ...pf }); }
       { const sf = collectStatusFacts(d.body, id, line); lifeFacts.writes.push(...sf.writes); lifeFacts.compares.push(...sf.compares); }
+      collectPreconditionFacts(d.body, id, file, source, line, preFacts);
       const doc = parseDoc(leadingComment(source, d.node.start ?? 0));
       // @guard — declared auth wrapper (withTenant(clientId, fn)…): a guard
       // node even before an adapter understands the framework it belongs to
@@ -662,6 +670,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         ],
         ...(doc.business ? { facets: { business: { description: doc.business } } } : {}),
         ...docLinkFields(doc),
+        // `@guard[policy] …`: the team's tier for this gate wins over the one its class gives (core gate-class.ts)
+        ...(isGuard && doc.guardTier ? { gateTier: { tier: doc.guardTier, from: 'annotation' as const } } : {}),
       });
       symbols.push({ nodeId: id, file, name: d.name, exported: true });
       if (kind === 'function') fileFunctionIds.push(id);
@@ -1165,6 +1175,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             const rn = nodes.get(routeId)!;
             rn.branches = [...(rn.branches ?? []), ...handlerBranches].slice(0, MAX_BRANCH_POINTS);
           }
+          // its refusals and the constants it hands a guard belong to the route too (preconditions.ts)
+          collectPreconditionFacts((arg.body as AstNode) ?? null, routeId, file, source, line, preFacts);
           // the handler is a call argument, never deferred; a withTx(…) inside it still counts
           walk(arg.body, (b, hps) => {
             if (b.type !== 'CallExpression') return;
@@ -1264,6 +1276,9 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     if (call.argsKey) resolvedCalls.push({ fromId: call.fromId, toId: targetId, key: call.argsKey, line: call.line, deferred: call.deferred, tx: call.tx });
     const kind: GraphEdge['kind'] =
       target?.kind === 'rule' ? 'validates' : target?.kind === 'guard' ? 'guards' : 'calls';
+    // a schema read over a response the server already sent (`toProblem(res: Response)` parsing an
+    // error body) checks nothing a person submits: it is not a gate on the caller (gates lane 2026-10-10)
+    if (kind === 'validates' && READS_RESPONSE.test(paramsText(nodes.get(call.fromId)?.snippet ?? ''))) continue;
     const key = `${kind}|${call.fromId}|${targetId}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
@@ -1816,6 +1831,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   }
 
   linkLifecycles(repo, nodes, edges, lifeFacts);
+  // after the lifecycle: the actions are the functions that move a record's status, and the routes
+  linkPreconditions(repo, nodes, edges, preFacts, lifeFacts.decls);
 
   const packagesMeta = emitPackages();
 

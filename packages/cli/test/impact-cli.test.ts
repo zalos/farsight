@@ -78,7 +78,8 @@ describe('farsight impact — the text form', () => {
 
     // the sum is the number this design exists to stop printing: it must appear nowhere
     const total = hop1! + hop2! + hop3!;
-    assert.ok(!new RegExp(`\\b${total}\\b`).test(r.out), `the printer must never sum the hops (${total} appeared)`);
+    // (a source line number — `routes.ts:27` — is not a count; the graph's preconditions moved the hop sizes onto one)
+    assert.ok(!new RegExp(`(?<![:\\d])\\b${total}\\b`).test(r.out), `the printer must never sum the hops (${total} appeared)`);
     assert.ok(!/\btotal\b/i.test(r.out), 'no line may call anything a total');
   });
 
