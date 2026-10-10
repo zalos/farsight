@@ -53,6 +53,49 @@ function actionMiss(g: Grant, intent: Intent): string | null {
   return null;
 }
 
+/** A policy verdict over any grant shape. */
+export interface GrantDecision<G> { verdict: Verdict; grant?: G; requiresConfirmation: boolean }
+
+/** The fields of a grant the shared policy reads — a tracker's `Grant`, and a code host's (code-host.ts). */
+export interface GrantLike<A extends string = string> {
+  actions: A[];
+  principals?: Grant['principals'];
+  confirm?: Grant['confirm'];
+}
+
+/**
+ * Verdict 1, the shared half: of the grants that allow `action` for `who`, the first that needs no
+ * confirmation wins over one that does; a grant names its principals, and one that names none is for people
+ * only. `miss(g)` says why a grant that allows the action does not cover this target (a tracker item's
+ * project, a field…), or null. Default deny. Pure; no call leaves the process. Tracker writes and code-host
+ * posts (`farsight affected --post`) both decide here, so the two cannot drift.
+ */
+export function decideGrants<A extends string, G extends GrantLike<A>>(
+  grants: readonly G[] | undefined,
+  action: A,
+  who: 'human' | 'agent',
+  opts: { agentWrites?: Permissions['agentWrites']; miss?: (g: G) => string | null } = {},
+): GrantDecision<G> {
+  const allowing = (grants ?? []).filter((g) => g.actions.includes(action));
+  if (!allowing.length) return { verdict: { allowed: false, reason: `no grant allows ${action}` }, requiresConfirmation: false };
+  let closest: string | null = null;
+  let best: GrantDecision<G> | null = null;
+  for (const g of allowing) {
+    const principals = g.principals ?? ['human'];
+    if (!principals.includes(who)) { closest ??= `no grant allows ${action} for ${who === 'agent' ? 'an agent' : 'a person'}`; continue; }
+    const miss = opts.miss ? opts.miss(g) : null;
+    if (miss) { closest = miss; continue; }
+    const confirm = g.confirm;
+    const agentConfirm = who === 'agent' && (opts.agentWrites ?? 'confirm') === 'confirm' && confirm !== 'never';
+    const requiresConfirmation = confirm === 'always' || (confirm === 'agent' && who === 'agent') || agentConfirm;
+    const d = { verdict: { allowed: true, reason: `granted: ${g.actions.join(', ')} for ${principals.join(' and ')}` }, grant: g, requiresConfirmation };
+    if (!requiresConfirmation) return d;
+    best ??= d;
+  }
+  if (best) return best;
+  return { verdict: { allowed: false, reason: closest ?? `no grant allows ${action}` }, requiresConfirmation: false };
+}
+
 /** Verdict 1 — the consumer's policy. Pure; no call leaves the process. */
 export function evaluatePolicy(
   permissions: Permissions | undefined,
@@ -63,28 +106,10 @@ export function evaluatePolicy(
   if ((opts.mode ?? 'read-only') !== 'edit') {
     return { verdict: { allowed: false, reason: 'this source is read-only' }, requiresConfirmation: false };
   }
-  const who = intent.requestedBy.kind;
-  const grants = (permissions?.grants ?? []).filter((g) => g.actions.includes(intent.action));
-  if (!grants.length) return { verdict: { allowed: false, reason: `no grant allows ${intent.action}` }, requiresConfirmation: false };
-  let closest: string | null = null;
-  // grants are additive: of the grants that allow it, one that needs no confirmation wins over one that
-  // does, whatever order settings lists them in
-  let best: PolicyDecision | null = null;
-  for (const g of grants) {
-    // a grant names its principals; one that names none is for people only — an agent needs an explicit grant
-    const principals = g.principals ?? ['human'];
-    if (!principals.includes(who)) { closest ??= `no grant allows ${intent.action} for ${who === 'agent' ? 'an agent' : 'a person'}`; continue; }
-    const miss = scopeMiss(g, item) ?? actionMiss(g, intent);
-    if (miss) { closest = miss; continue; }
-    const confirm = g.confirm;
-    const agentConfirm = who === 'agent' && (permissions?.agentWrites ?? 'confirm') === 'confirm' && confirm !== 'never';
-    const requiresConfirmation = confirm === 'always' || (confirm === 'agent' && who === 'agent') || agentConfirm;
-    const d: PolicyDecision = { verdict: { allowed: true, reason: `granted: ${g.actions.join(', ')} for ${principals.join(' and ')}` }, grant: g, requiresConfirmation };
-    if (!requiresConfirmation) return d;
-    best ??= d;
-  }
-  if (best) return best;
-  return { verdict: { allowed: false, reason: closest ?? `no grant allows ${intent.action}` }, requiresConfirmation: false };
+  return decideGrants(permissions?.grants, intent.action, intent.requestedBy.kind, {
+    agentWrites: permissions?.agentWrites,
+    miss: (g) => scopeMiss(g, item) ?? actionMiss(g, intent),
+  });
 }
 
 /** What the provider declares it cannot do at all (§7.2: *this source cannot*). */

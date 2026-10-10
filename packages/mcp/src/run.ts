@@ -39,6 +39,7 @@ import { ingestRepo, readSpecSource, readManifestSource, repoContentDigest } fro
 import { registerWorkTools } from './work.js';
 import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
+import { registerAffectedTools } from './affected-tools.js';
 
 /** Serve the graph over stdio — what `farsight mcp` runs. */
 export async function runMcpServer(graphArg?: string): Promise<void> {
@@ -492,6 +493,8 @@ const work = registerWorkTools({ server, graphPath, index: () => index, roots: (
 const configTools = registerConfigTools({ server, meta: () => store.meta });
 // journeys by persona and group, in declared order (journey-organisation-and-config-files.md §4.4)
 const journeysTools = registerJourneysTools({ server, index: () => index, meta: () => store.meta });
+// what a pull request or a commit range touches — only when a code-host source grants agents read (affected-tools.ts)
+registerAffectedTools({ server, workspace: dirname(graphPath), index: () => index, meta: () => store.meta, roots: () => store.roots });
 
 server.registerTool('graph_overview', {
   title: 'Graph overview',
