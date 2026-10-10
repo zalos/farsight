@@ -112,7 +112,7 @@ export function lifecycleStripHtml(lc, api, opts = {}) {
     const tipKey = x.declared ? 'lifecycle.word.declared' : 'lifecycle.word.undeclared';
     const tip = lens === 'code' ? '' : tipAttrs({ text: t(tipKey).replace('{status}', x.status) + (x.written ? '' : ' · ' + t('lifecycle.unmovedYet')) });
     return (x.sep ? '<span class="lc-sep" aria-hidden="true">' + esc(x.sep) + '</span>' : '')
-      + '<span class="lc-status' + (x.written ? '' : ' unwritten') + (x.declared ? ' declared' : '') + '" role="listitem" data-status="' + esc(x.status) + '"'
+      + '<span class="lc-status' + (x.written ? '' : ' unwritten') + (lens === 'code' ? '' : ' words') + '" role="listitem" data-status="' + esc(x.status) + '"'
       + (lens === 'code' && !x.written ? defAttrs('lifecycle.unwritten') : tip) + '>'
       + '<span class="lc-w">' + esc(x.main) + '</span>'
       + (x.constant ? ' <code class="lc-c">' + esc(x.constant) + '</code>' : '')

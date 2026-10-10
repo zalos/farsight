@@ -198,7 +198,7 @@ function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], loca
   const name = n?.name ?? nameOfId(by);
   const at = locate?.(by);
   return {
-    by, name, words: n?.facets?.business?.label ?? humanizeName(name.split('.').pop() ?? name), via,
+    by, name, words: n?.facets?.business?.label ?? humanizeName((name.split(': ')[0] ?? name).split('.').pop() ?? name), via,
     ...(extra.from !== undefined ? { from: extra.from } : {}), ...(extra.line ? { line: extra.line } : {}), ...(at ? { at } : {}),
   };
 }
