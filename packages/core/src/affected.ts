@@ -235,6 +235,8 @@ export function affectedReach(index: GraphIndex, report: ImpactReport): Affected
 export interface RangeFile extends FileHunks {
   /** git's letter: A added · M modified · D deleted · R renamed · C copied (absent when the host does not say) */
   status?: string;
+  /** the graph source the file belongs to, when it is not `input.repo` (a source nested in the same repository) */
+  repo?: string;
 }
 export interface RangeCommit { sha: string; subject: string; at: string; author?: string }
 /** What was asked about: two commits, or a pull request of a code host. */
@@ -243,7 +245,7 @@ export type AffectedRangeSpec =
   | { kind: 'pr'; number: number; title?: string; url?: string; base?: string; head?: string; host?: string };
 
 export interface AffectedRangeInput {
-  /** the graph source the change belongs to */
+  /** the graph source the change belongs to (a file may name another, nested source) */
   repo: string;
   range: AffectedRangeSpec;
   /** the commits in the range, oldest first */
@@ -302,7 +304,7 @@ export interface AffectedV1 {
     pr: { number: number; title: string | null; url: string | null; base: string | null; head: string | null; host: string | null } | null;
   };
   commits: { sha: string; subject: string; at: string; author: string | null }[];
-  files: { path: string; status: string | null; parts: number; granularity: typeof AFFECTED_GRANULARITY[number] }[];
+  files: { path: string; source: string; status: string | null; parts: number; granularity: typeof AFFECTED_GRANULARITY[number] }[];
   /** hop 0: the parts the hunks landed in */
   changed: { id: string; name: string; kind: string; file: string; line: number | null }[];
   journeys: {
@@ -382,17 +384,25 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
   const src = 'core affected.ts affectedRange';
 
   // ── hop 0: the parts the hunks land in (the commit spine's rule, nodesTouched) ──
-  const repoNodes: GraphNode[] = [];
-  const testNodes: GraphNode[] = [];
+  const wanted = new Set([input.repo, ...input.files.map((f) => f.repo ?? input.repo)]);
+  const codeOf = new Map<string, GraphNode[]>();
+  const testsOf = new Map<string, GraphNode[]>();
   for (const n of index.byId.values()) {
-    if (repoOfNode(n) !== input.repo) continue;
-    if (n.kind === 'test') testNodes.push(n); else repoNodes.push(n);
+    const r = repoOfNode(n);
+    if (!wanted.has(r)) continue;
+    const m = n.kind === 'test' ? testsOf : codeOf;
+    const list = m.get(r) ?? [];
+    list.push(n);
+    m.set(r, list);
   }
   const changed = new Map<string, GraphNode>();
   const files: AffectedV1['files'] = [];
   const changedTests = new Map<string, GraphNode>();
   for (const f of input.files) {
     const path = f.path.replace(/^\.\//, '');
+    const source = f.repo ?? input.repo;
+    const repoNodes = codeOf.get(source) ?? [];
+    const testNodes = testsOf.get(source) ?? [];
     const touched = f.status === 'D' ? { nodes: [] as GraphNode[], fileOnly: false } : nodesTouched(repoNodes, { path, ranges: f.ranges });
     // a changed spec file: its cases are selected as they are, at hop 0
     const specs = testNodes.filter((t) => t.loc && !t.test?.runLevel && (t.loc.path === path || t.loc.path.endsWith('/' + path) || path.endsWith('/' + t.loc.path)));
@@ -400,7 +410,7 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
     for (const n of touched.nodes) changed.set(n.id, n);
     const granularity = touched.nodes.length ? (touched.fileOnly ? 'file' : 'lines') : 'none';
     if (granularity === 'file') floor = true;
-    files.push({ path, status: f.status ?? null, parts: touched.nodes.length, granularity });
+    files.push({ path, source, status: f.status ?? null, parts: touched.nodes.length, granularity });
   }
   const unmatched = files.filter((f) => f.granularity === 'none' && !f.path.match(/\.(md|json|ya?ml|lock|txt|svg|png)$/i) && f.status !== 'D').length;
   if (unmatched) { floor = true; notes.push(`${unmatched} changed file(s) define nothing this graph indexed`); }

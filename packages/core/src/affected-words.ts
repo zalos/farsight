@@ -24,7 +24,7 @@ export function affectedLines(doc: AffectedV1, md = false): string[] {
     : `${say('affected.title.range')} · ${doc.range.from?.slice(0, 7)}..${doc.range.to?.slice(0, 7)}`;
   out.push(md ? `### ${head}` : head);
   out.push(`${doc.range.repo}${id.sync != null ? ` · sync ${id.sync}` : ''}${id.source_commit ? ` · commit ${id.source_commit.slice(0, 7)}` : ''} · ${id.farsight}`);
-  out.push(`${countedText(doc.counted.commits, { scope: false })} · ${countedText(doc.counted.files, { scope: false })} · ${countedText(doc.counted.changed)}${doc.bound === 'floor' ? ' · a floor' : ''}`);
+  out.push(`${countedText(doc.counted.commits, { scope: false })} · ${countedText(doc.counted.files, { scope: false })} · ${countedText(doc.counted.changed, { scope: false })}${doc.bound === 'floor' ? ' · a floor' : ''}`);
   out.push('');
   out.push(`${b(say('affected.head.journeys'))} — ${countedText(doc.counted.journeys)} · ${countedText(doc.counted.screens, { scope: false })}`);
   if (!doc.journeys.length) out.push(`  ${say('affected.none.journeys')}`);

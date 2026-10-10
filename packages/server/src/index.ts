@@ -898,8 +898,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if (!id) return send(400, JSON.stringify({ error: 'missing ?storyline=<id>' }));
       const g = loadJourneyGraph(graphPath);
       const tree = journeyTree(g.index, g.meta.journeys);
-      const { brief, spine } = readinessOf(g.index, tree, id, ws);
-      if (!brief) return send(404, JSON.stringify({ error: `no storyline ${id}`, known: tree.storylines.map((s) => ({ id: s.id, name: s.name })) }));
+      const { brief, spine } = readinessOf(g.index, tree, id, ws, u.searchParams.get('repo') || undefined);
+      if (!brief) return send(404, JSON.stringify({ error: `no storyline ${id}`, known: tree.storylines.map((s) => ({ id: s.id, name: s.name, repo: s.repo })) }));
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, commit: g.meta.commit ?? null, spine, readiness: brief }));
     }
     if (url.startsWith('/api/journey') && req.method === 'GET') {

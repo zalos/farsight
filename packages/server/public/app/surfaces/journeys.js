@@ -235,7 +235,7 @@ function jrnStorylinesHtml(org) {
       + (branches ? '<ul class="jrn-story-branches">' + branches + '</ul>' : '')
       + '<div class="jrn-story-go">'
       + (mapOn ? '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>' : '')
-      + readinessDoorHtml(st.id, 'jrn-story-ready')
+      + readinessDoorHtml(st.id, 'jrn-story-ready', st.repo)
       + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ', 1)">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
       + '</div></div>';
   }

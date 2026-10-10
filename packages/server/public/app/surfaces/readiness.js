@@ -43,7 +43,7 @@ export function mountReadiness(route, el) {
   RD.data = null;
   const gen = ++RD.gen;
   el.innerHTML = '<div class="rd-wrap"><div class="rd-sheet" id="rd-sheet"><p class="set-note">' + esc(t('readiness.loading')) + '</p></div></div>';
-  fetch(API + encodeURIComponent(RD.id)).then(async (r) => ({ status: r.status, body: await r.json() })).then(({ status, body }) => {
+  fetch(API + encodeURIComponent(RD.id) + (route.repo ? '&repo=' + encodeURIComponent(route.repo) : '')).then(async (r) => ({ status: r.status, body: await r.json() })).then(({ status, body }) => {
     if (gen !== RD.gen) return;
     RD.data = status === 200 ? body : { error: body.error, known: body.known || [] };
     draw();
@@ -70,7 +70,7 @@ function draw() {
   if (!d || d.error) {
     host.innerHTML = '<p class="rd-unknown"' + defAttrs('readiness.unknown') + '>' + esc(fill('readiness.unknown', { id: RD.id })) + '</p>'
       + ((d && d.known && d.known.length) ? '<p class="rd-known"><span class="hud-label">' + esc(t('readiness.known')) + '</span> '
-        + d.known.map((k) => '<a href="#/readiness/' + esc(encodeURIComponent(k.id)) + '">' + esc(k.name) + '</a>').join(' · ') + '</p>' : '');
+        + d.known.map((k) => '<a href="#/readiness/' + esc(encodeURIComponent(k.id)) + (k.repo ? '?repo=' + esc(encodeURIComponent(k.repo)) : '') + '">' + esc(k.name) + '</a>').join(' · ') + '</p>' : '');
     return;
   }
   host.innerHTML = sheetHtml(d);

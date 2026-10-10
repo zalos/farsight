@@ -11,9 +11,10 @@ import { tipAttrs } from './tooltip.js';
  * The door: `#/readiness/<storyline id>`.
  * @param {string} id  the storyline's id
  * @param {string} [cls]  the host's own link class
+ * @param {string} [repo]  the source that declares it (two sources may share a storyline id)
  * @group Readiness
  */
-export function readinessDoorHtml(id, cls) {
-  return '<a class="rel rd-door ' + esc(cls || '') + '" href="#/readiness/' + esc(encodeURIComponent(id)) + '"'
+export function readinessDoorHtml(id, cls, repo) {
+  return '<a class="rel rd-door ' + esc(cls || '') + '" href="#/readiness/' + esc(encodeURIComponent(id)) + (repo ? '?repo=' + esc(encodeURIComponent(repo)) : '') + '"'
     + tipAttrs({ key: 'readiness.door', noFocus: true }) + '>' + sym('open') + ' ' + esc(t('readiness.door')) + '</a>';
 }

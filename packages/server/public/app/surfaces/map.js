@@ -965,7 +965,7 @@ function bandHeadHtml(b, word, byPersona) {
     + esc(countWords('map.band.journeys', n)) + '</span>'
     + (story ? '<span class="ev">' + storyEvidenceHtml() + '</span>' : '')
     // the door into the storyline's release readiness brief (lane A, round 2026-10-10 — this one call site)
-    + (story ? readinessDoorHtml(story.id, 'map-story-ready') : '')
+    + (story ? readinessDoorHtml(story.id, 'map-story-ready', story.repo) : '')
     + (desc ? '<span class="d">' + esc(desc) + '</span>' : '') + '</div>';
 }
 /** The storyline band's test evidence: one Counted over its journeys (storylineEvidence), with its breakdown in the tip. */

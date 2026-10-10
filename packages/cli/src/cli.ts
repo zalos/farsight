@@ -108,7 +108,7 @@ usage:
                                                                component file or title, and each entry that matched nothing
                                                                with its reason; exit 1 when a running index has unmatched entries.
                                                                Read-only: Farsight never starts a Storybook
-  farsight affected --pr <n> | --from <sha> --to <sha> [--repo name] [--host-repo owner/name] [--hops N]
+  farsight affected --pr <n> | --from <sha> --to <sha> [--repo name] [--host-repo owner/name] [--checkout dir] [--hops N]
                     [--json] [--png <path>] [--post [--confirm] [--via gh]] [--graph graph.json]
                                                                what a pull request or a commit range touches: the parts its
                                                                changed lines sit in, the journeys that run them (with their
@@ -122,7 +122,7 @@ usage:
                                                                three verdicts (your policy · the host · the credential); exit 0
                                                                posted, 1 not posted, 2 waiting for --confirm. --png draws the
                                                                stamped picture when Playwright's browser is installed
-  farsight readiness --storyline <id> [--json | --csv] [--graph graph.json]
+  farsight readiness --storyline <id> [--repo name] [--json | --csv] [--graph graph.json]
                                                                the release readiness brief: one row per step and branch of the
                                                                storyline — built, its own verdict and last run, skipped and never
                                                                run, gates no test is known to reach, commits since its last green

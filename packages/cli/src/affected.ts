@@ -9,7 +9,7 @@
 //
 // readiness: core `readiness()` for one storyline with commits from the spine — words, `--json`, `--csv`.
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, relative, isAbsolute } from 'node:path';
 import {
   GraphStore, buildIndex, setFreshnessMeta, journeyTree, affectedRange, countedText, readinessCsvRows, buildLine, t,
   unknownStorylineText,
@@ -121,13 +121,18 @@ export async function runAffected(a: CliArgs): Promise<void> {
     return a.fail(`the graph holds ${repos.length} sources — name one with --repo (${repos.join(', ')})`);
   };
   const repo = pickRepo();
-  const root = store.roots[repo] ?? process.cwd();
+  // the checkout git reads (prefix, history, a commit range): the graph's root for the source, or --checkout
+  const root = resolve(a.flag('checkout') ?? store.roots[repo] ?? process.cwd());
   const host: CodeHostSource | undefined = hosts.find((h) => (hostArg ? h.repo === hostArg : (h.source ?? h.repo.split('/').pop()) === repo)) ?? (hosts.length === 1 ? hosts[0] : undefined);
   const viaGh = a.flag('via') === 'gh';
   if (prArg && (!Number.isInteger(Number(prArg)) || Number(prArg) < 1)) a.fail(`--pr takes a pull request number (got "${prArg}")`);
   let change: ReadChange;
   try {
-    change = await readChange({ root, ask: prArg ? { pr: Number(prArg) } : { from: from!, to: to! }, ...(host ? { host } : {}), ...(hostArg ? { hostRepo: hostArg } : {}), viaGh });
+    // sources nested under this one in the same repository (an example app inside the repo) take their own files
+    const home = store.roots[repo];
+    const sources = home ? repos.filter((r) => store.roots[r]).map((r) => ({ name: r, rel: relative(home, store.roots[r]!) }))
+      .filter((x) => !x.rel.startsWith('..') && !isAbsolute(x.rel)) : [];
+    change = await readChange({ root, ask: prArg ? { pr: Number(prArg) } : { from: from!, to: to! }, ...(host ? { host } : {}), ...(hostArg ? { hostRepo: hostArg } : {}), viaGh, ...(sources.length ? { sources } : {}) });
   } catch (err) {
     return a.fail((err as Error).message);
   }
@@ -154,9 +159,9 @@ export async function runAffected(a: CliArgs): Promise<void> {
   const cmd = `farsight affected --pr ${pr.number} --json`;
   const d = await decidePost(host, 'human', open, async () => pr!);
   const verdictLine = (k: string, v: { allowed: boolean; reason: string }) => console.error(`  ${t(k, R)}: ${t(v.allowed ? 'work.verdict.yes' : 'work.verdict.no', R)} — ${v.reason}`);
-  verdictLine('work.verdict.policy', d.verdicts.policy);
-  verdictLine('work.verdict.tracker', d.verdicts.tracker);
-  verdictLine('work.verdict.credential', d.verdicts.credential);
+  verdictLine('affected.verdict.policy', d.verdicts.policy);
+  verdictLine('affected.verdict.host', d.verdicts.tracker);
+  verdictLine('affected.verdict.credential', d.verdicts.credential);
   if (!d.allowed) { console.error(say('affected.post.denied')); process.exitCode = 1; return; }
   if (d.requiresConfirmation && !a.has('confirm')) { console.error(say('affected.post.waiting')); process.exitCode = 2; return; }
   const gh = d.host!;
@@ -172,7 +177,7 @@ export function runReadiness(a: CliArgs): void {
   const id = a.flag('storyline');
   const { index, tree } = loadGraph(a);
   if (!id) a.fail(`usage: farsight readiness --storyline <id> [--json|--csv] — storylines: ${tree.storylines.map((s) => s.id).join(', ') || 'none declared'}`);
-  const { brief } = readinessOf(index, tree, id!, a.workspace);
+  const { brief } = readinessOf(index, tree, id!, a.workspace, a.flag('repo'));
   if (!brief) a.fail(unknownStorylineText(tree, id!));
   if (a.has('json')) { console.log(JSON.stringify(brief, null, 2)); return; }
   if (a.has('csv')) {

@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { codeHostPolicy, openGitHub, type CodeHostSource, type PullRequest, type GitHubHost } from './code-host.js';
 import type { Verdict } from './contract.js';
 
-export interface ChangeFile { path: string; status?: string; ranges: [number, number][] }
+export interface ChangeFile { path: string; status?: string; ranges: [number, number][]; repo?: string }
 export interface ChangeCommit { sha: string; subject: string; at: string; author?: string }
 export type ChangeRange =
   | { kind: 'commits'; from: string; to: string }
@@ -63,10 +63,23 @@ export async function readChange(o: {
   hostRepo?: string;
   viaGh?: boolean;
   who?: 'human' | 'agent';
+  /**
+   * The graph sources nested under the checkout's source (`rel` = their folder relative to it, '' for the
+   * source itself). A changed file belongs to the deepest one whose folder holds it, its path made relative
+   * to that folder; a file under none is left out.
+   */
+  sources?: { name: string; rel: string }[];
 }): Promise<ReadChange> {
   const prefix = (() => { try { return git(o.root, ['rev-parse', '--show-prefix']).trim(); } catch { return ''; } })();
-  const rel = (p: string) => (prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p);
-  const inSource = (p: string) => !prefix || p.startsWith(prefix);
+  const homes = (o.sources?.length ? o.sources : [{ name: '', rel: '' }])
+    .map((x) => ({ name: x.name, at: prefix + (x.rel ? x.rel.replace(/\/+$/, '') + '/' : '') }))
+    .sort((a, b) => b.at.length - a.at.length);
+  const homeOf = (p: string) => homes.find((h) => !h.at || p.startsWith(h.at));
+  const place = <F extends { path: string }>(f: F): (F & { repo?: string }) | null => {
+    const h = homeOf(f.path);
+    if (!h) return null;
+    return { ...f, path: f.path.slice(h.at.length), ...(h.name ? { repo: h.name } : {}) };
+  };
   if ('pr' in o.ask) {
     const n = o.ask.pr;
     const repo = o.hostRepo ?? o.host?.repo ?? originRepo(o.root);
@@ -81,7 +94,7 @@ export async function readChange(o: {
     try {
       pr = await opened.host.pr(n);
       commits = await opened.host.commits(n);
-      files = (await opened.host.files(n)).filter((f) => inSource(f.path)).map((f) => ({ ...f, path: rel(f.path) }));
+      files = (await opened.host.files(n)).map(place).filter((f) => f !== null) as ChangeFile[];
     } catch (err) {
       throw new Error(`could not read pull request #${n} of ${repo}: ${(err as Error).message}${o.viaGh ? '' : ' (a private repository needs a credential: auth.secret on the code-host source, or --via gh)'}`);
     }
@@ -98,7 +111,7 @@ export async function readChange(o: {
     const hs = hunks(git(o.root, ['diff', '--unified=0', '--no-color', '--no-ext-diff', '-M', from, to]));
     const seen = new Set(hs.map((h) => h.path));
     for (const p of status.keys()) if (!seen.has(p)) hs.push({ path: p, ranges: [] });
-    const files = hs.filter((h) => inSource(h.path)).map((h) => ({ path: rel(h.path), ranges: h.ranges, ...(status.get(h.path) ? { status: status.get(h.path)! } : {}) }));
+    const files = hs.map((h) => place({ path: h.path, ranges: h.ranges, ...(status.get(h.path) ? { status: status.get(h.path)! } : {}) })).filter((f): f is ChangeFile => !!f);
     const history = logRows(git(o.root, ['log', '-n', '500', '--format=%H%x09%cI', to]));
     return { range: { kind: 'commits', from, to }, commits, files, history };
   } catch (err) {

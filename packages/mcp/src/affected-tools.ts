@@ -7,6 +7,7 @@
  */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { relative, isAbsolute } from 'node:path';
 import { affectedRange, affectedLines, journeyTree, buildLine, type GraphIndex, type GraphMeta, type TestsMatrixIdentity } from '@farsight/core';
 import { loadCodeHostSources, agentsMayRead, readChange } from '@farsight/work';
 
@@ -45,7 +46,9 @@ export function registerAffectedTools(ctx: AffectedToolsContext): boolean {
     if (!source || !repos.includes(source)) return text(`no source "${source ?? ''}" in the graph — name one with repo (${repos.join(', ')})`);
     let change;
     try {
-      change = await readChange({ root: roots[source]!, ask: pr ? { pr } : { from: from!, to: to! }, ...(host ? { host } : {}), who: 'agent' });
+      const home = roots[source]!;
+      const sources = repos.map((r) => ({ name: r, rel: relative(home, roots[r]!) })).filter((x) => !x.rel.startsWith('..') && !isAbsolute(x.rel));
+      change = await readChange({ root: home, ask: pr ? { pr } : { from: from!, to: to! }, ...(host ? { host } : {}), who: 'agent', sources });
     } catch (err) {
       return text((err as Error).message);
     }

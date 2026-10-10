@@ -123,4 +123,7 @@ export const AFFECTED_STRINGS: Record<string, StringEntry> = {
   'readiness.print': same('print', 'Opens the browser’s print dialog: the brief on A4, light, one storyline per page.'),
   'readiness.foot': same('every number is counted with its scope; the PDF carries this provenance line', 'What the page promises about its numbers.'),
   'export.surface.readiness': same('Release readiness', 'The release readiness brief of one storyline.'),
+  'affected.verdict.policy': same('your policy', 'Verdict 1: the code-host source in .farsight/settings.json grants this action to you (people) or to an agent.'),
+  'affected.verdict.host': same('the host', 'Verdict 2: the code host answers — the pull request is open and the repository lets this credential write.'),
+  'affected.verdict.credential': same('the credential', 'Verdict 3: the token from the keychain (or, with --via gh, the GitHub CLI’s own login) is accepted by the host.'),
 };

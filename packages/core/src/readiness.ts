@@ -79,8 +79,9 @@ const SRC = 'core readiness.ts readiness';
 type CommitsSince = (repo: string, parts: { node: string; path?: string }[], since: string) => number | null;
 
 /** The brief for one storyline; undefined when the tree declares no storyline of that id. */
-export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: string, opts: { commitsSince?: CommitsSince } = {}): Readiness | undefined {
-  const st: JourneyStoryline | undefined = tree.storylines.find((s) => s.id === storylineId);
+export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: string, opts: { commitsSince?: CommitsSince; repo?: string } = {}): Readiness | undefined {
+  // two sources may each declare a storyline of the same id: `repo` names the one asked for
+  const st: JourneyStoryline | undefined = tree.storylines.find((s) => s.id === storylineId && (!opts.repo || s.repo === opts.repo));
   if (!st) return undefined;
   const cards = new Map<string, ReturnType<typeof gateCard>>();
   const card = (id: string) => { if (!cards.has(id)) cards.set(id, gateCard(index, id)); return cards.get(id); };
