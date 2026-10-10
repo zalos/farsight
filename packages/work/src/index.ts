@@ -8,3 +8,4 @@ export * from './keys.js';
 export * from './registry.js';
 export * from './settings.js';
 export * from './words.js';
+export * from './code-host.js';
