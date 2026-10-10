@@ -1175,6 +1175,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             const rn = nodes.get(routeId)!;
             rn.branches = [...(rn.branches ?? []), ...handlerBranches].slice(0, MAX_BRANCH_POINTS);
           }
+          // its refusals and the constants it hands a guard belong to the route too (preconditions.ts)
+          collectPreconditionFacts((arg.body as AstNode) ?? null, routeId, file, source, line, preFacts);
           // the handler is a call argument, never deferred; a withTx(…) inside it still counts
           walk(arg.body, (b, hps) => {
             if (b.type !== 'CallExpression') return;
