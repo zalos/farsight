@@ -128,8 +128,10 @@ function renderPicker(el) {
   });
   html += '</div>';
   el.innerHTML = html;
-  jrnMountDesigns();
-  mountStateOfPlay(jrnScopeParam());
+  // both reads start now; the state of play paints first, then the journeys under it — one order, so nothing
+  // the reader is pointing at moves when the card above it fills
+  jrnFrontDoorData();
+  mountStateOfPlay(jrnScopeParam()).finally(() => jrnMountDesigns());
 }
 
 // ── designs front door (docs/proposals/design-source.md) ────────

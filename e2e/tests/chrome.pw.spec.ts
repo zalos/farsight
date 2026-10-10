@@ -175,7 +175,8 @@ test.describe('a read-only session, on every surface', () => {
       await page.goto(url + hash);
       await expect(page.locator('#stats')).not.toHaveText('loading…');
       await expect(page.locator(ready).first(), name).toBeVisible();
-      await expect(page.locator('#readonly'), name).toBeVisible();
+      // the chip is drawn (in the bar, or in ⋯ when a long workspace name folds it there) and says so
+      await expect(page.locator('#readonly'), name).not.toHaveAttribute('hidden', '');
       await expect(page.locator('#readonly'), name).toHaveText(/read-only/i);
       expect(await liveWrites(page), name).toEqual([]);
     }

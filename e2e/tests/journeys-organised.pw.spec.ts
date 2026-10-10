@@ -123,8 +123,13 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     await gotoReady(page, '#/journeys?lens=business');
     await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '3 groups']);
     await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
-    await page.locator('.jrn-org > .set-note .jrn-org-n').first().click();
-    await expect(page.locator('#fs-tip')).toContainText('across every source in scope');
+    // the count sits below the state of play now: scroll it in first, so the scroll's own event cannot close the tip
+    const n = page.locator('.jrn-org > .set-note .jrn-org-n').first();
+    await n.scrollIntoViewIfNeeded();
+    await expect(async () => {
+      if (await page.locator('#fs-tip').isHidden()) await n.click();
+      await expect(page.locator('#fs-tip')).toContainText('across every source in scope', { timeout: 1000 });
+    }).toPass();
     await expect(page.locator('#fs-tip')).not.toContainText('/api/');
   });
 

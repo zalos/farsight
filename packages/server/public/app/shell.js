@@ -268,6 +268,9 @@ export function applyRoute() {
   document.body.className = document.body.className.replace(/\bsurface-[\w-]+\b/g, '').replace(/\s+/g, ' ').trim();
   document.body.classList.add('surface-' + r.surface);
   const surfEl = document.getElementById('surface');
+  // the Settings page is a node the document keeps: a re-mount of the same address hands it back before clearing
+  const set = document.getElementById('settings');
+  if (set && surfEl.contains(set)) document.body.appendChild(set);
   surfEl.innerHTML = '';
   SURFACES[r.surface].mount(r, surfEl);
   const graphMode = document.body.classList.contains('surface-graph');
@@ -475,7 +478,8 @@ export function renderChrome() {
  * drawing a copy of it. One control, one accessible name, one place it lives.
  * @group Shell
  */
-const TOPBAR_FOLD = ['hubbtn', 'sharewrap', 'regtoggle', 'readonly', 'kmbtn', 'gearbtn', 'nav'];
+// READ-ONLY folds last before the tabs: it says what every greyed control on the page is about (round 2026-10-10)
+const TOPBAR_FOLD = ['hubbtn', 'sharewrap', 'regtoggle', 'kmbtn', 'gearbtn', 'readonly', 'nav'];
 /**
  * Fold the bar until it fits the window.
  *
