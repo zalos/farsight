@@ -44,5 +44,35 @@
         "group": "review"
       }
     ]
+  },
+  "lifecycle": {
+    "invoices": {
+      "views": {
+        "billing": {
+          "Being drafted": [
+            "draft"
+          ],
+          "Sent": [
+            "open"
+          ],
+          "Approved": [
+            "approved"
+          ],
+          "Paid": [
+            "paid"
+          ],
+          "Void (ended)": [
+            "void"
+          ]
+        }
+      },
+      "overlays": [
+        {
+          "name": "Posted to the ledger",
+          "table": "ledger_entries",
+          "when": "a ledger entry names the invoice"
+        }
+      ]
+    }
   }
 }

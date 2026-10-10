@@ -876,6 +876,31 @@ across features and across personas, in order:
 An agent manages all of this with its own file tools — Farsight never writes into a code source: edit
 the manifest or the config, call refresh_graph, then journeys to check the result.
 
+## 1⅞ · A record's statuses in your people's words (farsight.config.json → lifecycle)
+
+The code decides which statuses a record has and what moves it between them (a SQL CHECK, a z.enum, a
+string union, a const list; each write of the field). Config only names them, per persona:
+
+"lifecycle": {
+  "invoices": {
+    "views": { "billing": { "Being drafted": ["draft"], "Sent": ["open"], "Void (ended)": ["void"] } },
+    "overlays": [ { "name": "Needs changes", "table": "review_requests", "when": "an open row" } ]
+  }
+}
+
+- The key is the record's node id or table name; views are keyed by persona id (or name), and each word
+  lists the statuses, as the code spells them, that persona calls by it. A status the code does not
+  declare, a record with no lifecycle, or an overlay table the graph lacks is a note (Settings → config
+  files, MCP config_files), never a fact. A status with no word prints the constant in plain words.
+- An overlay is a condition a person sees that is not a status — a row in another table. It is drawn as a
+  row of its own kind, with the code that writes that table.
+- A nested farsight.config.json names only records whose statuses are declared under its folder; the
+  nearer file's word stands (a lifecycle conflict records the disagreement).
+- Where it shows: the journey header's status lifecycle and the Map property's Overview print the words of
+  the journey's persona (business: the word, the constant in the tip; hybrid: both; code: the constant),
+  and "what each one means" opens one table — the word · in the code · what moves it — the writer a door
+  to the journey screen it runs from (GET /api/lifecycle?node=&flow=). describe_node prints the words.
+
 ## 2 · What the graph does with it (no code needed yet)
 
 - Each screen resolves to the page/component node the code adapter emitted, or becomes a page node
