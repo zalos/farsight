@@ -129,7 +129,8 @@ export function distinctArgs(sum) {
   const rows = [
     row('tests.distinct.actions', (sg) => n(sg.counted && sg.counted.actions), n(total.actions)),
     row('tests.distinct.gates', (sg) => n(sg.counted && sg.counted.gates), n(total.gates)),
-    row('tests.distinct.cases', (_, i) => n(cov.segments && cov.segments[i] && cov.segments[i].counted && cov.segments[i].counted.tests),
+    // a not-built screen's cases are the route's, not the screen's: no case reaches a screen with no code
+    row('tests.distinct.cases', (_, i) => (cov.segments && cov.segments[i] && cov.segments[i].notBuilt ? 0 : n(cov.segments && cov.segments[i] && cov.segments[i].counted && cov.segments[i].counted.tests)),
       n(cov.journey && cov.journey.counted && cov.journey.counted.tests)),
   ].filter(Boolean);
   if (!rows.length) return null;
