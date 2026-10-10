@@ -40,7 +40,7 @@ screen* · `count.scope.action` *in this action* · `count.scope.node` *for this
 every source in scope* · `count.scope.component` *this component's own* · `count.scope.parts` *on the parts it
 renders* · `count.scope.storybook` *in this Storybook* · `count.scope.workSource` *in this work source* ·
 `count.scope.workSources` *across the work sources listed* · `count.scope.workSync` *in this sync* ·
-`count.scope.workItem` *on this item* (the four work scopes joined 2026-09-30 with `packages/work`).
+`count.scope.workItem` *on this item* (the four work scopes joined 2026-09-30 with `packages/work`). `count.scope.route` *on the routes it will call* joined 2026-10-10: the scope of the cases a designed, not-built screen's routes are reached by (§4 below).
 
 **Printing it** (what `numberTip()` needs, nothing more):
 
@@ -157,8 +157,8 @@ should print `counted.{screens, built, actions}` with their `bizUnit` (fixes `6 
 | tests foot `tests: 13 e2e · 22 unit · 0 integration · 0 observed` | `coverage.segments[i].counts.tests` · C:`coverage.segments[i].counted` | distinct cases reaching the screen, per level, any evidence class | screen | Portfolio's 80 is the journey's; Tests' 91 the source's |
 | `LAST RUN skipped / unknown` | `coverage.segments[i].run` | weakest verdict over the covering cases' own runs | screen | **not** the run behind the chip: that is `observation` |
 | business `Checked by tests — 35 tests reach this, 13 of them from end to end. A run reached this code…` | `counts.tests` + viewer `runKey` → `evidenceWord.biz` | cases (every level), e2e cases | screen | the run clause now comes from `evidenceWord.biz` |
-| Sheet *Verified by* cell `IN THIS ACTION` + `tests: 3 e2e · 69 unit …` / business `Checked by tests — 72 tests reach this…` | `coverage.moments[i][k]` · C:`counted.tests` (scope `count.scope.action`) | every case reaching **any** step of the action | action — printed as the label above the counts (`jrnFootScopeHtml`, from the `Counted`'s own scope) | the step's own foot below; the viewer's copy of the evidence rule (`strings.js evidenceWord`) should go |
-| step foot (drill inspector head, TESTS tab) `FOR THIS PART ALONE` + counts, or `no test reaches this step` | `steps[i].coverage` (`stepCoverage()`) · C:`counted.tests` (scope `count.scope.node`) | cases reaching this one node | node | **2026-09-27:** when it is `0` and the action's is not, the foot prints `journey.tests.widerScope` — *72 test cases reach the action it belongs to — none of them reaches this part itself* (`jrnStepActionFacts`, the action's `Counted` with its tip). The reference app's submit handler read *no test reaches this step* beside the action's *72* with neither scope named (story swarm finding 4). Impact's *1 tests reach them* is a third scope — the things that use this part, hop 1 — worded by `impact.js` (another lane) |
+| Sheet *Verified by* cell, one chip `72 test cases · over this action · <word> · n skipped` (2026-10-10; was the label `IN THIS ACTION` above) + `by level: 3 e2e · 69 unit …` / business `Checked by tests — 72 tests reach this…` | `coverage.moments[i][k]` · C:`counted.tests` (scope `count.scope.action`) | every case reaching **any** step of the action | action — printed as the label above the counts (`jrnFootScopeHtml`, from the `Counted`'s own scope) | the step's own foot below; the viewer's copy of the evidence rule (`strings.js evidenceWord`) should go |
+| step foot (drill inspector head, TESTS tab) one chip `n test cases · over this part alone · <word>`, or `no test is known to reach this part` (2026-10-10) | `steps[i].coverage` (`stepCoverage()`) · C:`counted.tests` (scope `count.scope.node`) | cases reaching this one node | node | **2026-09-27:** when it is `0` and the action's is not, the foot prints `journey.tests.widerScope` — *72 test cases reach the action it belongs to — none of them reaches this part itself* (`jrnStepActionFacts`, the action's `Counted` with its tip). The reference app's submit handler read *no test reaches this step* beside the action's *72* with neither scope named (story swarm finding 4). Impact's *1 tests reach them* is a third scope — the things that use this part, hop 1 — worded by `impact.js` (another lane) |
 | Storyboard `stops 1–9` (was *actions 1–9*) · ledger `stop 3 of 9 on this screen` | `segments[i].moments.length` | stops on the screen | screen | C:`segments[i].counted.actionStops`; `.actions` is the distinct ones |
 | Drill `action 1 of 31` → **`stop 1 of 31 on this journey`** | `jrnDrillActions(sum)` = the Sheet's columns (`jrnSheetModel(sum).cols`, each screen in rank order) = Σ moments · C:`counted.actionStops` | §2 #1 | journey | since 2026-10-05 the rail walks the Sheet's order, so stop n is column n |
 | Sheet corner `layer ↓ · stop →` + `6 stops` (business `part of the system ↓ · stop →`) | C:`summary.counted.actionStops` | the Sheet's columns | journey | **2026-10-05 (swarm finding 3):** *5 actions* sat above six numbered columns (*15 actions* beside *stop 1 of 23*). The columns are stops; the header's actions are one named part of them: `actions + again + declared + nothing to call = stops = columns` (pinned in `core/test/counts.test.ts`) |
@@ -632,3 +632,50 @@ MCP `test_coverage` and `farsight tests matrix`.
 - **MCP `work_changes` impact per hop is a plain number** (2026-09-30). Each dependent once at its nearest hop over
   every touched node, never summed — but the catalog has no unit for *dependents at hop n*, so it is not a
   `Counted` yet. It needs a core unit (and a scope for *what a work item's commits touched*) before it can be one.
+
+## 4. Every test number carries its scope (2026-10-10)
+
+The 2026-10-06 swarm met one screen as *323 cases · passed* (Map property), *no test reaches this part · 125 reach
+the action* (drawer), *2 tests* (impact) and *16* (gate card): four true numbers over four scopes, none named on the
+number itself. **The rule: a test number that can sit beside another prints its scope on its chip; the tip keeps the
+breakdown.** One chip prints every test number (`lib/test-chip.js testChipHtml`): the count (`counted.tests`, its tip),
+the scope's chip words, the cell's one word (`testVerdict()`), and `· n failed · n skipped · n flaky` whenever not zero.
+
+| chip words (`count.over.*`, core `SCOPE_WORDS` / `scopeWord()`) | the scope (`COUNT_SCOPES`) | printed by |
+|---|---|---|
+| *over this journey* | `journey.scopeAll` | journey header (with *distinct*), Map journey head and board cards, Tests matrix cell, Portfolio |
+| *over this screen* | `journey.scopeHere` | storyboard scenes and screen cards, Map street screens, Map property headline chip and Overview |
+| *over this action* | `count.scope.action` | Sheet *Verified by*, the Tests page opened on an action |
+| *over this part alone* | `count.scope.node` | the drill's step foot, the drawer |
+| *over this gate* | `count.scope.gate` | gate card *tests that reach it* |
+| *over the route it will call* | `count.scope.route` | a designed, not-built screen (below) |
+| *over what this change reaches* | `count.scope.affected` | the Map's Affected tab |
+| *among what uses it directly* · *among everything listed up to this distance* | `surf.scope.hop1` · `surf.scope.hopsSoFar` | change impact's tests line (untyped, its scope key printed as its chip words) |
+
+- **The verdict carries them.** `TestVerdict.scopeWord` (the chip words' key) and `failed · skipped · flaky`, lifted out
+  of `verdict.runs.breakdown` — the same numbers, never another count (`packages/core/test/scope-words.test.ts`).
+  *Passed* keeps its word; the skips sit beside it.
+- **One phrasing for the declaration verdict.** `tests.evidence.declaredPassed` *passed, by its own declaration*,
+  printed from the verdict everywhere. Retired: the Map property's per-case *named by a run* and *passed, declared
+  here* (each case row now prints its own evidence word, core `caseWord`, stamped on every ref as `word`), the run
+  line's *n tests named by a run* (now *n cases passed* for a declaration, *n cases ran* for a case coverage placed),
+  and the foot's *{n} observed* (the observed split stays in the tests count's tip).
+- **A designed, not-built screen has no verdict** (core `segmentCoverage()`, `CoverageFacts.notBuilt`,
+  `TestVerdict.notBuilt`): word *not built* (one of the six absence words), no status, no observing run; its counts
+  are the cases that reach the routes it will call, scoped `count.scope.route`. Its actions follow it. The chip reads
+  *designed, not built · no test can reach a screen with no code · n test cases · over the route it will call*.
+- **The absence word is a floor.** *no test is known to reach this part / action / screen / it* (was *no test reaches*):
+  a test this build could not read is not counted.
+- **Distinct.** The journey header's tests chip says *distinct*; its tip is the per-screen table — actions, gates &
+  rules and test cases per screen, their sum and the journey's distinct total (`distinctArgs()`, read off
+  `segments[i].counted` and `coverage.segments[i].counted.tests`). On the fixture's Billing cycle: actions 1 + 5 + 0 = 6
+  vs 5, gates 2 + 5 + 1 = 8 vs 6, cases 4 + 5 + 0 = 9 vs 7.
+- **The Map property's one sentence of scopes** (`testsScopeLine()`): *n over its action X · m over the gate Y · k over
+  the page's own code* — the actions' numbers are the core's `coverage.moments`, the gate and page numbers the
+  screen's own refs by the node in scope they landed on; parts overlap and are never summed.
+- **The Tests matrix's level filter filters its rows** (`coverageFor(…, { level })`): a row reads that level's cases;
+  a journey no case of that level reaches is left out and counted (`journeysLeftOut`, *n journeys no unit test is known
+  to reach*); the e2e column is not drawn under a unit or integration filter.
+- **The frozen matrix CSV** gains two appended columns (additive): `evidence_word` — the case's own word as the screen
+  prints it — and `verdict` — its run status where a named case's run earned the word, `''` otherwise
+  (`docs/contracts/farsight-tests-matrix-v1.md`).
