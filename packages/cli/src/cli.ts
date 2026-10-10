@@ -28,6 +28,7 @@ import type { WorkSettingsSource } from '@farsight/server';
 import type { Settings } from '@farsight/server';
 import { runMcpServer } from '@farsight/mcp';
 import { runWork } from './work.js';
+import { runAffected, runReadiness } from './affected.js';
 
 const [, , command, ...rest] = process.argv;
 
@@ -36,7 +37,7 @@ function flag(name: string, fallback?: string): string | undefined {
   return i >= 0 ? rest[i + 1] : fallback;
 }
 /** A flag that takes no value, so the word after it is a positional (`serve --read-only graph.json`). */
-const BOOL_FLAGS = new Set(['--read-only']);
+const BOOL_FLAGS = new Set(['--read-only', '--json', '--post', '--confirm', '--csv']);
 function hasFlag(name: string): boolean { return rest.includes(`--${name}`); }
 const positional = rest.filter((a, i) => !a.startsWith('--') && (rest[i - 1]?.startsWith('--') !== true || BOOL_FLAGS.has(rest[i - 1] ?? '')));
 
@@ -107,6 +108,26 @@ usage:
                                                                component file or title, and each entry that matched nothing
                                                                with its reason; exit 1 when a running index has unmatched entries.
                                                                Read-only: Farsight never starts a Storybook
+  farsight affected --pr <n> | --from <sha> --to <sha> [--repo name] [--host-repo owner/name] [--hops N]
+                    [--json] [--png <path>] [--post [--confirm] [--via gh]] [--graph graph.json]
+                                                               what a pull request or a commit range touches: the parts its
+                                                               changed lines sit in, the journeys that run them (with their
+                                                               storyline step), the gates, record writes and calls on the changed
+                                                               path, and each test case that reaches it once, with its own last
+                                                               run (--json: the frozen farsight-affected v1). A pull request is
+                                                               read from GitHub with the code-host source's keychain credential
+                                                               (keychain:farsight/github-<org>), or with the GitHub CLI's own
+                                                               login only when you pass --via gh. --post writes one comment
+                                                               (updated in place) and one check on the pull request through the
+                                                               three verdicts (your policy · the host · the credential); exit 0
+                                                               posted, 1 not posted, 2 waiting for --confirm. --png draws the
+                                                               stamped picture when Playwright's browser is installed
+  farsight readiness --storyline <id> [--json | --csv] [--graph graph.json]
+                                                               the release readiness brief: one row per step and branch of the
+                                                               storyline — built, its own verdict and last run, skipped and never
+                                                               run, gates no test is known to reach, commits since its last green
+                                                               run (from the history), ship or hold with the reason; then the
+                                                               rules register (gate · its words · screens · cases · owner)
   farsight work sync [--source id]                             copy the work items of every work source in .farsight/settings.json
                                                                (Jira, Azure DevOps) into .farsight/work.db: full first, then
                                                                incremental from the stored cursor
@@ -1506,6 +1527,14 @@ switch (command) {
       }
     }
     if (answer.storybooks.some((b) => b.reachable && (b.counts?.unresolved ?? 0) > 0)) process.exitCode = 1;
+    break;
+  }
+  case 'affected': {
+    await runAffected({ flag: (n) => flag(n), has: hasFlag, workspace: process.cwd(), fail });
+    break;
+  }
+  case 'readiness': {
+    runReadiness({ flag: (n) => flag(n), has: hasFlag, workspace: process.cwd(), fail });
     break;
   }
   case 'work': {
