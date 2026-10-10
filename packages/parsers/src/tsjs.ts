@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { relative, dirname, resolve as resolvePath } from 'node:path';
 import { parseSync } from 'oxc-parser';
-import { configCheckOf, CONFIG_CHECK_TAG } from '@farsight/core';
+import { configCheckOf, paramsText, CONFIG_CHECK_TAG } from '@farsight/core';
+
+/** A parameter typed as a fetch `Response`: the function reads what a server answered. */
+const READS_RESPONSE = /:\s*Response\b/;
 import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta } from '@farsight/core';
 import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
 import { createAliasClassifier, resolveFileish } from './aliases.js';
@@ -667,6 +670,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         ],
         ...(doc.business ? { facets: { business: { description: doc.business } } } : {}),
         ...docLinkFields(doc),
+        // `@guard[policy] …`: the team's tier for this gate wins over the one its class gives (core gate-class.ts)
+        ...(isGuard && doc.guardTier ? { gateTier: { tier: doc.guardTier, from: 'annotation' as const } } : {}),
       });
       symbols.push({ nodeId: id, file, name: d.name, exported: true });
       if (kind === 'function') fileFunctionIds.push(id);
@@ -1269,6 +1274,9 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     if (call.argsKey) resolvedCalls.push({ fromId: call.fromId, toId: targetId, key: call.argsKey, line: call.line, deferred: call.deferred, tx: call.tx });
     const kind: GraphEdge['kind'] =
       target?.kind === 'rule' ? 'validates' : target?.kind === 'guard' ? 'guards' : 'calls';
+    // a schema read over a response the server already sent (`toProblem(res: Response)` parsing an
+    // error body) checks nothing a person submits: it is not a gate on the caller (gates lane 2026-10-10)
+    if (kind === 'validates' && READS_RESPONSE.test(paramsText(nodes.get(call.fromId)?.snippet ?? ''))) continue;
     const key = `${kind}|${call.fromId}|${targetId}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);

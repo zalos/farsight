@@ -34,8 +34,14 @@ export function paramsText(code: string): string {
  */
 export function configCheckOf(code: string): boolean {
   if (!code || !READS_ENV.test(code)) return false;
+  // a use-case is not a settings check because somewhere in its body it reads one (gates lane
+  // 2026-10-10: a 230-line submit taking `(c: Container, input)` read as a config check)
+  if (code.split('\n').length > CONFIG_CHECK_MAX_LINES) return false;
   return !TAKES_REQUEST.test(paramsText(code));
 }
+
+/** A config check is a short function: past this many lines it is a use-case that happens to read a setting. */
+export const CONFIG_CHECK_MAX_LINES = 40;
 
 /** The tag the parser writes on a guard `configCheckOf` accepts. */
 export const CONFIG_CHECK_TAG = 'config-check';
@@ -43,9 +49,12 @@ export const CONFIG_CHECK_TAG = 'config-check';
 /** A guard node that checks the process, not a request: the parser's tag, else its snippet read by the same rule. */
 export function isConfigCheck(node: GraphNode | undefined): boolean {
   if (!node || node.kind !== 'guard') return false;
-  if (node.tags?.includes(CONFIG_CHECK_TAG)) return true;
+  if (node.tags?.includes(CONFIG_CHECK_TAG)) return !node.tags.includes('action-gate');
   // a gate declared in farsight.config.json is a policy somebody named, never a settings check
   if (node.tags?.includes('declared')) return false;
+  // a use-case marked as a gate (it moves a record's status) is an action, never a settings check
+  if (node.tags?.includes('action-gate')) return false;
+  if (node.loc?.endLine && node.loc.endLine - node.loc.line + 1 > CONFIG_CHECK_MAX_LINES) return false;
   return !!node.snippet && configCheckOf(node.snippet);
 }
 

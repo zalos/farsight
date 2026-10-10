@@ -783,6 +783,8 @@ export interface GraphNode {
   lifecycle?: RecordLifecycle;
   /** rule nodes tagged `precondition`: the record, the field, what it requires and what happens otherwise — see Precondition */
   precondition?: Precondition;
+  /** guard and rule nodes: a tier somebody set — `farsight.config.json → gateTiers` or `@guard[tier]` — over the one the class gives (core gate-class.ts) */
+  gateTier?: { tier: GateTier; from: 'config' | 'annotation' };
   /** component/page nodes: the stories that render this component on its own — see StoryRef */
   stories?: StoryRef[];
   /** package nodes only: which dependency this is, where it is declared and at what range — see PackageRef */

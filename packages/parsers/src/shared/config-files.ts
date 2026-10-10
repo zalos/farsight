@@ -368,6 +368,7 @@ export function applyWorkspaceRouteGuards(nodes: GraphNode[], edges: GraphEdge[]
 function matcherFields(c: FarsightConfig): FarsightConfig {
   return {
     ...(c.tags ? { tags: c.tags } : {}), ...(c.glossary ? { glossary: c.glossary } : {}), ...(c.guards ? { guards: c.guards } : {}),
+    ...(c.gateTiers ? { gateTiers: c.gateTiers } : {}),
     ...(c.entrypoints ? { entrypoints: c.entrypoints } : {}), ...(c.setup ? { setup: c.setup } : {}),
   };
 }
