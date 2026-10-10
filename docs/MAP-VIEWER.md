@@ -714,6 +714,27 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
   `storylineEvidence(ids, words)` — *n of m journeys with a run's evidence*, its breakdown with a run's evidence ·
   declared or reached only · with no test · not read yet, refilled as each journey is read (`fillStoryEvidence`).
 
+**Swimlanes** (round 2026-10-10 §2; `lib/map-lanes-model.js`, `surfaces/map-lanes.js`, `drawLanes()` and its
+neighbours in `surfaces/map.js`). With a storyline drawn the toolbar carries *Layout: chain · lanes*
+(`layoutToolHtml`, `?layout=lanes`, the `w` key; `MAP.layout`). Lanes: `laneLayout(storyline, designs, tree,
+summaries, { lanes?, handoffs?, byId })` folds the tree's storyline and the journeys read so far into **lanes** —
+one per persona that owns a journey (the tree's order; a branch on its first persona other than its step's lane)
+and one per store a stage's write markers name — **stages** (the steps' screens in order, a screen met again drawn
+once; a branch's screens on its lane from the column after its step), **pills** (per store, a row per record it
+writes: a record with a lifecycle gets one pill per status the storyline's code moves it into, in the lifecycle's
+order, `created` for the first declared status; any other record one *written* pill; two rows drawn, the rest
+folded into the lane head's *+n records written*), **arrows** (one *moves* per pill from the first stage that makes
+it; *then* inside a lane; *branch*; *seen* only from a declared hand-off whose screen reads the record), and
+`counts` / `notes`. `laneGeometry(model, { aspect, extraH })` places it in board px, wrapping the columns into the
+number of segments that fits largest on the stage (each segment repeats the lanes). The layer `.map-lanes` sits in
+the world scaled by `LANE_K` (2); while it shows, the world has `lanes-on` and nothing else of the chain is drawn.
+The canvas sees one altitude (`level` returns `nb`) with two stops (`laneStops`: the lanes fitted, a stage large
+enough to enter, framed by `frameStage`); a click, Enter or a zoom into a stage card (`enterStage`) sets
+`MAP.lanesAway` and centres that journey's street at that screen; Fit on the lanes, Esc from the street and a zoom
+back out to the board (`lanesReturn`) bring the lanes back. Under the lanes: the main record's strip
+(`lifecycleStripHtml`, the same call as the journey header), the footer (journeys · screens · built · branches ·
+*lanes from …* · notes) and a legend; Save draws the layer whole (`mapPicture`).
+
 Each district has a **cover** (`.map-dcover`) drawn **by altitude** (clarity pass 2026-10-04). At the **board**
 (below `LEVEL_NB`) a cover is a card: the name (two lines, its tip the whole name and sentence), **one status chip**
 — *built*, *partly built · n of m* or *designed, not built*, the summary's own `counted.built` with its number tip —

@@ -21,8 +21,8 @@
  * *Not grouped* persona; a flow naming no group sits in the persona's trailing
  * *Other journeys* group.
  */
-import type { JourneysMeta, JourneyGroupDecl, JourneyPersonaDecl, JourneyStorylineEntryDecl, JourneyStorylineBranch } from './graph.js';
-import { storylineEntry, type JourneysConfig } from './config.js';
+import type { JourneysMeta, JourneyGroupDecl, JourneyPersonaDecl, JourneyStorylineEntryDecl, JourneyStorylineBranch, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl } from './graph.js';
+import { storylineEntry, storylineLane, storylineHandoff, type JourneysConfig } from './config.js';
 import { designSurface, flowStatusWord, type DesignManifest, type FlowRow } from './design.js';
 import { counted, countedText, breakdownText, type Counted } from './counts.js';
 import { t } from './strings.js';
@@ -190,7 +190,7 @@ export function journeysMetaOf(
       };
     }
   }
-  const storylines = storylinesOf(manifests, blocks, notes);
+  const storylines = storylinesOf(manifests, blocks, notes, personas.map((p) => p.id));
   return { personas, groups, flows, ...(storylines.length ? { storylines } : {}), notes };
 }
 
@@ -217,6 +217,7 @@ function storylinesOf(
   manifests: { manifest: DesignManifest; path: string }[],
   blocks: JourneysBlock[],
   notes: string[],
+  personaIds: string[] = [],
 ): NonNullable<JourneysMeta['storylines']> {
   // while the declarations fold, `journeys` holds the entries as written (ids and branch objects); the steps pass splits them
   type Entry = string | JourneyStorylineEntryDecl;
@@ -236,6 +237,9 @@ function storylinesOf(
       if (s.name) { e.name = s.name; g.add('name'); }
       if (s.description) { e.description = s.description; g.add('description'); }
       if (s.journeys) { e.journeys = s.journeys.slice(); g.add('journeys'); listFrom.set(k, b); }
+      // the swimlane lists (round 2026-10-10 §2) override the way `journeys` does: a list given replaces the whole list
+      if (s.lanes) { e.lanes = s.lanes.slice(); g.add('lanes'); }
+      if (s.handoffs) { e.handoffs = s.handoffs.slice(); g.add('handoffs'); }
       if (s.name || s.description || s.journeys || !g.size) e.from = b.from;
     }
   }
@@ -247,12 +251,14 @@ function storylinesOf(
       const name = str(raw.name) ?? id;
       const description = str(raw.description);
       const journeys = (Array.isArray(raw.journeys) ? raw.journeys : []).map(storylineEntry).filter((x): x is string | JourneyStorylineEntryDecl => !!x);
+      const lanes = Array.isArray(raw.lanes) ? raw.lanes.map(storylineLane).filter((x): x is JourneyStorylineLaneDecl => !!x) : undefined;
+      const handoffs = Array.isArray(raw.handoffs) ? raw.handoffs.map(storylineHandoff).filter((x): x is JourneyStorylineHandoffDecl => !!x) : undefined;
       const k = key(id);
       const i = at.get(k);
       if (i == null) {
         at.set(k, out.length);
         first.set(k, path);
-        out.push({ id, name, ...(description ? { description } : {}), journeys, declared: true, from: path });
+        out.push({ id, name, ...(description ? { description } : {}), journeys, ...(lanes ? { lanes } : {}), ...(handoffs ? { handoffs } : {}), declared: true, from: path });
         continue;
       }
       const g = given.get(k);
@@ -262,6 +268,8 @@ function storylinesOf(
         if (!g.has('name')) e.name = name;
         if (!g.has('description') && description) e.description = description;
         if (!g.has('journeys')) e.journeys = journeys;
+        if (!g.has('lanes') && lanes) e.lanes = lanes;
+        if (!g.has('handoffs') && handoffs) e.handoffs = handoffs;
       } else if (first.get(k) !== path && !g?.has('journeys')) {
         notes.push(`storyline "${id}" is declared by ${first.get(k)} and ${path}; the one in ${first.get(k)} is kept`);
       }
@@ -286,10 +294,54 @@ function storylinesOf(
       steps.push(id);
     }
     const branches = branchesOf(s.id, branchEntries, steps, ids, where, own);
+    const lanes = s.lanes ? lanesOf(s.id, s.lanes, personaIds, own) : undefined;
+    const handoffs = s.handoffs ? handoffsOf(s.id, s.handoffs, [...steps, ...branches.map((b) => b.id)], own) : undefined;
     if (own.length) notes.push(...own);
-    result.push({ ...s, journeys: steps, ...(branches.length ? { branches } : {}), ...(own.length ? { notes: own } : {}) });
+    const { lanes: _l, handoffs: _h, ...rest } = s;
+    result.push({
+      ...rest, journeys: steps, ...(branches.length ? { branches } : {}),
+      ...(lanes && lanes.length ? { lanes } : {}), ...(handoffs && handoffs.length ? { handoffs } : {}),
+      ...(own.length ? { notes: own } : {}),
+    });
   }
   return result;
+}
+
+/**
+ * The lanes a storyline names (round 2026-10-10 §2), checked against what ingest knows: a persona lane's persona must
+ * be one the source declares, and an id is named once. A store's name is checked where the graph is drawn (the store
+ * a call writes to is only known from the walk). What breaks a rule is a note and never a lane.
+ */
+function lanesOf(storyline: string, lanes: JourneyStorylineLaneDecl[], personaIds: string[], own: string[]): JourneyStorylineLaneDecl[] {
+  const out: JourneyStorylineLaneDecl[] = [];
+  for (const l of lanes) {
+    if (out.some((x) => key(x.id) === key(l.id))) { own.push(`storyline "${storyline}" names lane "${l.id}" twice — the first is kept`); continue; }
+    if (l.persona && !personaIds.some((p) => key(p) === key(l.persona!))) { own.push(`storyline "${storyline}": lane "${l.id}" is for persona "${l.persona}", which no manifest or config declares — it is not a lane`); continue; }
+    out.push(l);
+  }
+  return out;
+}
+
+/**
+ * The hand-offs a storyline names (round 2026-10-10 §2), checked against what ingest knows: each end is a lane the
+ * storyline names or derives (a persona id, a store name — checked where drawn) or `<journey>#<n>` with the journey a
+ * step or a branch of this storyline and n a whole number from 1. A `moves` hand-off needs the status it moves to.
+ * What breaks a rule is a note; what holds is drawn only when the graph finds both ends.
+ */
+function handoffsOf(storyline: string, handoffs: JourneyStorylineHandoffDecl[], journeys: string[], own: string[]): JourneyStorylineHandoffDecl[] {
+  const out: JourneyStorylineHandoffDecl[] = [];
+  const endOk = (ref: string): boolean => {
+    const m = /^(.+)#(\d+)$/.exec(ref);
+    if (!m) return true;   // a lane id: a named lane, a persona id or a store name — the graph decides where it is drawn
+    return journeys.some((j) => key(j) === key(m[1]!)) && Number(m[2]) >= 1;
+  };
+  for (const h of handoffs) {
+    const bad = [h.from, h.to].find((r) => !endOk(r));
+    if (bad) { own.push(`storyline "${storyline}": hand-off ${h.from} → ${h.to} names "${bad}", which is not a screen of a journey of this storyline — it is not drawn`); continue; }
+    if (h.kind === 'moves' && !h.status) { own.push(`storyline "${storyline}": hand-off ${h.from} → ${h.to} moves the record but names no status — it is not drawn`); continue; }
+    out.push(h);
+  }
+  return out;
 }
 
 /**
@@ -381,6 +433,9 @@ export interface JourneyStoryline {
   branches: StorylineBranch[];
   /** `journeys` counts the steps and the branches (a breakdown parts them when there is a branch); `built` the same set */
   counts: { journeys: Counted; built: Counted };
+  /** the lanes and hand-offs its manifest or config names for the swimlane layout (round 2026-10-10 §2); absent: none */
+  lanes?: JourneyStorylineLaneDecl[];
+  handoffs?: JourneyStorylineHandoffDecl[];
   /** what was set aside for this storyline: a named journey no manifest declares, one named twice, one out of scope */
   notes: string[];
 }
@@ -691,6 +746,8 @@ function storylinesFold(personas: JourneyPersona[], inScope: [string, JourneysMe
       journeys,
       branches,
       counts: storylineCounts(journeys, s.id, branches),
+      ...(s.lanes && s.lanes.length ? { lanes: s.lanes } : {}),
+      ...(s.handoffs && s.handoffs.length ? { handoffs: s.handoffs } : {}),
       notes: own,
     };
   });

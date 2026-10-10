@@ -530,6 +530,20 @@
                     }
                   ]
                 }
+              },
+              "lanes": {
+                "type": "array",
+                "description": "The lanes the swimlane layout names or overrides (a list given in config replaces the manifest's).",
+                "items": {
+                  "$ref": "#/$defs/storylineLane"
+                }
+              },
+              "handoffs": {
+                "type": "array",
+                "description": "Hand-offs the swimlane layout draws when the graph finds both ends (a list given in config replaces the manifest's).",
+                "items": {
+                  "$ref": "#/$defs/storylineHandoff"
+                }
               }
             }
           }
@@ -652,6 +666,83 @@
               }
             }
           }
+        }
+      }
+    },
+    "storylineLane": {
+      "type": "object",
+      "description": "One lane of the storyline's swimlane layout, named by the design. Lanes are derived from the graph — one per persona who owns a journey of the storyline and one per store its code writes to — so an entry only names, orders or adds a second line to one. Give exactly one of persona or store. An entry the graph cannot find is a note, never a lane.",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The lane's id; a hand-off may name it."
+        },
+        "persona": {
+          "type": "string",
+          "description": "A declared persona id: the lane of that kind of person."
+        },
+        "store": {
+          "type": "string",
+          "description": "A store's name as the code or the config gives it: the lane of that store."
+        },
+        "surface": {
+          "type": "string",
+          "description": "Where that person works, a second line under the lane's name."
+        },
+        "name": {
+          "type": "string",
+          "description": "The word the lane is printed under, in place of the persona's or the store's."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "persona"
+          ]
+        },
+        {
+          "required": [
+            "store"
+          ]
+        }
+      ]
+    },
+    "storylineHandoff": {
+      "type": "object",
+      "description": "A hand-off the swimlane layout draws when the graph finds both ends. Each end is a lane (its id, a persona id or a store name) or a screen written journey-id#n (the n-th screen of that journey of the storyline, from 1). kind moves: the screen moves the record into status in a store lane. kind seen: a screen in another lane reads the record in status. One the graph cannot find is a note, never an arrow.",
+      "required": [
+        "from",
+        "to",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Where the hand-off starts: a screen (journey-id#n) for moves, a store lane for seen."
+        },
+        "to": {
+          "type": "string",
+          "description": "Where it ends: a store lane for moves, a screen (journey-id#n) for seen."
+        },
+        "kind": {
+          "enum": [
+            "moves",
+            "seen"
+          ],
+          "description": "moves: the screen's action moves the record. seen: the screen shows the record in that status without the person doing anything."
+        },
+        "status": {
+          "type": "string",
+          "description": "The status as the code spells it. Required for moves; a seen hand-off without one is a note."
+        },
+        "when": {
+          "type": "string",
+          "description": "A label for the arrow, in words."
         }
       }
     }

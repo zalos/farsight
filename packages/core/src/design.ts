@@ -872,6 +872,25 @@ across features and across personas, in order:
   of m" (or "branch of <journey> · when …") with the journeys before and after, GET /api/journeys
   (tree.storylines[].branches), the MCP journeys tool (storyline: <id>) and farsight journeys
   --storyline <id>.
+- Swimlanes: the Map's LAYOUT control (chain · lanes, #/map?storyline=<id>&layout=lanes, the w key)
+  draws a storyline as lanes of who acts. The lanes are derived: one per persona that owns a journey
+  of it (a branch on its first persona other than its step's), one per store its code writes to
+  (from the walk's write markers), the screens in step order as columns, the record's moves in the
+  store lane in the order its lifecycle declares them, each naming the code that makes it. Name,
+  order or add to them with two optional lists on the storyline (manifest or config, a list given
+  in config replaces the manifest's):
+    "lanes": [ { "id": "billing", "persona": "billing", "surface": "invoice portal" },
+               { "id": "ledger", "store": "Invoice DB", "name": "Invoices" } ],
+    "handoffs": [ { "from": "billing-cycle#2", "to": "ledger", "kind": "moves", "status": "open" },
+                  { "from": "ledger", "to": "invoice-review#1", "kind": "seen", "status": "open",
+                    "when": "the review queue shows it" } ]
+  A lane is { id, persona | store, surface?, name? }; a hand-off { from, to, kind: moves | seen,
+  status?, when? } whose ends are a lane (its id, a persona id or a store name) or a screen written
+  <journey id>#<n>. Nothing is drawn that the graph cannot find: a persona with no journey here, a
+  store the storyline does not write, a status nothing moves, a seen screen that does not read the
+  record — each is a note on the lanes' footer (and a lane for an undeclared persona, or a hand-off
+  naming a journey outside the storyline, a note at ingest). No walk says which status a screen
+  branches on, so a "seen" arrow is drawn only from a hand-off you declare.
 
 An agent manages all of this with its own file tools — Farsight never writes into a code source: edit
 the manifest or the config, call refresh_graph, then journeys to check the result.

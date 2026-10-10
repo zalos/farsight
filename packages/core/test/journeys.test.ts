@@ -515,3 +515,43 @@ test('an unknown storyline is said so, with the ones there are', () => {
   assert.equal(unknownStorylineText(t, 'nope'), 'No storyline called “nope” is declared here. Storylines declared here: vendor (A vendor account) · leave (Leaving)');
   assert.equal(unknownStorylineText(treeOf(graph([{ manifest: PORTAL, path: 'm.json' }])), 'x'), 'No storyline called “x” is declared here. No storyline is declared in scope.');
 });
+
+test('storyline lanes and hand-offs (round 2026-10-10 §2): the manifest names them, the config block replaces each list, what ingest can refuse is a note', () => {
+  const withLanes: DesignManifest = {
+    ...PORTAL,
+    storylines: [{
+      id: 'vendor', name: 'A vendor account',
+      journeys: ['contractor-sign-in', 'vendor-account-creation'],
+      lanes: [
+        { id: 'c', persona: 'contractor', surface: 'the portal' },
+        { id: 'ghost', persona: 'nobody' },
+        { id: 'c', persona: 'ops' },
+        { id: 'db', store: 'Vendor DB', name: 'Vendor records' },
+      ],
+      handoffs: [
+        { from: 'vendor-account-creation#1', to: 'db', kind: 'moves', status: 'ACTIVE' },
+        { from: 'db', to: 'contractor-sign-in#1', kind: 'seen', status: 'ACTIVE', when: 'the account is active' },
+        { from: 'nowhere#1', to: 'db', kind: 'moves', status: 'ACTIVE' },
+        { from: 'contractor-sign-in#1', to: 'db', kind: 'moves' },
+      ],
+    } as never],
+  };
+  const g = graph([{ manifest: withLanes, path: 'docs/design/screens.json' }], ['/sign-in']);
+  const meta = g.meta.storylines!.find((s) => s.id === 'vendor')!;
+  assert.deepEqual(meta.lanes, [{ id: 'c', persona: 'contractor', surface: 'the portal' }, { id: 'db', store: 'Vendor DB', name: 'Vendor records' }]);
+  assert.deepEqual(meta.handoffs!.map((h) => h.from + '>' + h.to), ['vendor-account-creation#1>db', 'db>contractor-sign-in#1']);
+  for (const want of ['"nobody"', 'lane "c" twice', '"nowhere#1"', 'names no status']) assert.ok(meta.notes!.some((n) => n.includes(want)), want + ' in ' + meta.notes!.join('\n'));
+  const t = treeOf(g);
+  const story = t.storylines.find((s) => s.id === 'vendor')!;
+  assert.equal(story.lanes!.length, 2);
+  assert.equal(story.handoffs!.length, 2);
+  // the config block's list replaces the manifest's, the other list kept
+  const config = [{ from: 'farsight.config.json', dir: '.', journeys: { storylines: [{ id: 'vendor', lanes: [{ id: 'o', persona: 'ops', name: 'Back office' }] }] } }];
+  const t2 = treeOf(graph([{ manifest: withLanes, path: 'docs/design/screens.json' }], [], config as never));
+  const s2 = t2.storylines.find((s) => s.id === 'vendor')!;
+  assert.deepEqual(s2.lanes, [{ id: 'o', persona: 'ops', name: 'Back office' }]);
+  assert.equal(s2.handoffs!.length, 2, 'the manifest\'s hand-offs stand');
+  // sanitize: a lane needs an id and exactly one of persona or store; a hand-off a from, a to and a known kind
+  const c = sanitizeJourneys({ journeys: { storylines: [{ id: 's', lanes: [{ id: 'a', persona: 'p', extra: 1 }, { id: 'b' }, { id: 'c', persona: 'p', store: 'x' }, 'z'], handoffs: [{ from: 'a', to: 'b', kind: 'seen', status: 'S' }, { from: 'a', to: 'b', kind: 'pushes' }] }] } } as unknown as FarsightConfig);
+  assert.deepEqual(c.journeys!.storylines, [{ id: 's', lanes: [{ id: 'a', persona: 'p' }], handoffs: [{ from: 'a', to: 'b', kind: 'seen', status: 'S' }] }]);
+});

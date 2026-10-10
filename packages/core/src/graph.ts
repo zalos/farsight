@@ -611,7 +611,27 @@ export interface JourneyGroupDecl { id: string; name: string; description?: stri
  * A storyline — a named chain of journeys across features and personas (round-2026-10-05 §2): the whole life of
  * one business thing, an invoice from upload to payment. `journeys` are flow ids of the same source, in order.
  */
-export interface JourneyStorylineDecl { id: string; name: string; description?: string; journeys: (string | JourneyStorylineEntryDecl)[] }
+export interface JourneyStorylineDecl {
+  id: string; name: string; description?: string; journeys: (string | JourneyStorylineEntryDecl)[];
+  /** the lanes the swimlane layout names or overrides (round 2026-10-10 §2) — derived lanes draw without them */
+  lanes?: JourneyStorylineLaneDecl[];
+  /** hand-offs the swimlane layout draws when the graph finds both ends (round 2026-10-10 §2) */
+  handoffs?: JourneyStorylineHandoffDecl[];
+}
+/**
+ * One lane of a storyline's swimlane layout, as a manifest or a config names it (round 2026-10-10 §2): a lane is a
+ * persona's (`persona`, a declared persona id) or a store's (`store`, the name the code or the config gives it).
+ * `name` replaces the lane's word, `surface` is a second line (where that person works). Lanes are derived from the
+ * graph; an entry only names, orders or overrides one — an entry the graph cannot find is a note, never a lane.
+ */
+export interface JourneyStorylineLaneDecl { id: string; persona?: string; store?: string; surface?: string; name?: string }
+/**
+ * A hand-off the swimlane layout draws (round 2026-10-10 §2): `from` / `to` are a lane id or a screen of a journey of
+ * the storyline written `<journey id>#<n>` (its n-th screen, 1-based). `moves` — the screen moves the record into
+ * `status` in a store lane; `seen` — a screen in another lane reads the record in `status`. Drawn only when the graph
+ * finds both ends; otherwise a note.
+ */
+export interface JourneyStorylineHandoffDecl { from: string; to: string; kind: 'moves' | 'seen'; status?: string; when?: string }
 /**
  * One entry of a storyline's `journeys` list written as an object (swarm-fixes 2026-10-05 §6): `{ id }` alone is a
  * step like a bare id; with `branchOf` it is a **branch** — a journey that leaves the chain at that step only when
@@ -644,6 +664,9 @@ export interface JourneysMeta {
     id: string; name: string; description?: string; journeys: string[];
     /** the branches it declares, in the order written: each leaves the chain at a step of `journeys` (absent: none) */
     branches?: JourneyStorylineBranch[];
+    /** the lanes and hand-offs the swimlane layout names (absent: none — every lane is derived) */
+    lanes?: JourneyStorylineLaneDecl[];
+    handoffs?: JourneyStorylineHandoffDecl[];
     declared: true; from: string; notes?: string[];
   }[];
   /** one sentence per thing set aside (a config flow id no manifest declares) */

@@ -878,3 +878,6 @@ export function storeShownName(st, business) {
   if (business && st.engine && st.via !== 'config') return '';
   return String(st.name);
 }
+
+// the storyline as swimlanes (round 2026-10-10 §2) — its own module, re-exported so the Map imports one model
+export { laneLayout, laneGeometry, firstSentence, LANE_GEOM, LANE_K } from './map-lanes-model.js';
