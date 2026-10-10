@@ -190,7 +190,8 @@ test.describe('map property', () => {
     expect(await tabCounts(page)).toMatchObject({ gates: '2', apis: '1', tests: '4' });
     await openTab(page, 'tests');
     await expect(page.locator('.mp-body .ev')).toHaveText(/passed, by its own declaration/i);
-    const verified = page.locator('.mp-body .mp-row[data-map-card="test"]').filter({ has: page.locator('.mp-ev.byDeclaration') });
+    // the case's own word (core `caseWord`), never a label of the tab's own
+    const verified = page.locator('.mp-body .mp-row[data-map-card="test"]').filter({ has: page.locator('.mp-ev', { hasText: /passed, by its own declaration/i }) });
     await expect(verified).toHaveCount(1);
     await expect(verified).toContainText('a draft is saved for the picked customer');
     await openTab(page, 'ux');

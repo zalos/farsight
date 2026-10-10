@@ -115,7 +115,15 @@
         },
         "source_digest": { "type": "string", "description": "The content digest of the repo this node lives in, from `identity.source_digest`; when the graph records none, the digest the run stamped; '' when neither exists." },
         "sync": { "type": ["integer", "null"], "minimum": 0 },
-        "source_commit": { "type": "string" }
+        "source_commit": { "type": "string" },
+        "evidence_word": {
+          "description": "Added 2026-10-10 (additive). The case's own evidence word on this node, in the words the screen prints for it (core caseWord, professional register). Unlike evidence_class it reads a declared end-to-end case whose run passed as observed by its declaration, and a coverage report as seen by a coverage run.",
+          "enum": ["declared only", "reached by tests", "verified by a run", "verified · stale", "passed, by its own declaration", "passed, by its own declaration · stale", "seen by a coverage run", "seen by a coverage run · stale"]
+        },
+        "verdict": {
+          "description": "Added 2026-10-10 (additive). The run behind evidence_word, as the screen prints it beside the word: the case's run status when a results report named the case and its run earned the word; '' for a claim, a reading of the test body, or a coverage report (which records no verdict).",
+          "enum": ["passed", "failed", "skipped", "flaky", "unknown", ""]
+        }
       }
     }
   }

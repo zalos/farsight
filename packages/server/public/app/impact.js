@@ -18,6 +18,7 @@ import { sym } from './sym.js';
 import { vsl, kindWord } from './lib/graph-render.js';
 import { tipAttrs } from './lib/tooltip.js';
 import { defAttrs, plainTip, countKey } from './lib/counted.js';
+import { scopeWordHtml } from './lib/test-chip.js';
 
 /** A tip-bearing span for a catalog word (its define and its Grammar Book entry). @group Change impact */
 function impTip(key) { return '<span class="imp-tip"' + (def(key) ? defAttrs(key) : '') + '>'; }
@@ -194,9 +195,13 @@ function impTestsHtml(report, upto) {
   const levels = Object.keys(r.byLevel).sort();
   const list = levels.map((k) => r.byLevel[k] + ' ' + t('tests.level.' + k)).join(' · ');
   const key = upto === 1 ? 'impact.testsDirect' : 'impact.testsSoFar';
-  return '<div class="imp-tests"' + plainTip(r.total, 'surf.impact.tests', upto === 1 ? 'surf.scope.hop1' : 'surf.scope.hopsSoFar', '/api/impact',
-    levels.map((k) => [t('tests.level.' + k), r.byLevel[k]]), key) + '>'
-    + esc(t(key).split('{h}').join(String(upto)).replace('{list}', list || t('journey.absent.noneIndexed'))) + '</div>';
+  const scope = upto === 1 ? 'surf.scope.hop1' : 'surf.scope.hopsSoFar';
+  // a test number with its scope on the chip (round 2026-10-10): impact's *2 tests* beside a screen's *323 cases*
+  // reads as two scopes — the tests among what uses it, never the screen's own
+  return '<div class="imp-tests" data-tchip data-scope="' + esc(scope) + '"><span class="cnt-n"' + plainTip(r.total, 'surf.impact.tests', scope, '/api/impact',
+    levels.map((k) => [t('tests.level.' + k), r.byLevel[k]]), key) + '>' + esc(t('surf.impact.tests').replace('{n}', String(r.total))) + '</span>'
+    + '<span class="tc-sep"> · </span>' + scopeWordHtml(scope)
+    + (list ? '<span class="tc-sep"> · </span>' + esc(list) : '') + '</div>';
 }
 
 /** One hop: its head with what it holds by kind, then its dependents.

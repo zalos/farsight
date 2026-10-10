@@ -281,9 +281,10 @@ test.describe('journey absence words', () => {
    */
   test('a step no test reaches names its own scope and the action\'s number beside it — never a bare contradiction', async ({ page }) => {
     await openIn(page, 'hybrid', 'sheet');
-    // the Verified-by cell names the scope it counts over
+    // the Verified-by cell names the scope it counts over, on the chip itself (round 2026-10-10)
     const verified = page.locator('.jrn-scell.test').first();
-    await expect(verified.locator('.jrn-tscope')).toHaveAttribute('data-scope', 'count.scope.action');
+    await expect(verified.locator('[data-tchip]').first()).toHaveAttribute('data-scope', 'count.scope.action');
+    await expect(verified.locator('.tc-scope').first()).toHaveText('over this action');
     // a step no test reaches, inside an action tests do reach
     const pick = await page.evaluate(() => {
       const J = (window as any).S.JOURNEY;
@@ -304,11 +305,11 @@ test.describe('journey absence words', () => {
     await page.evaluate(() => { const S = (window as any).S; S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: { journeyDrill: true } }); });
     await page.evaluate(() => (window as any).jrnSetLayout('drill'));
     await page.evaluate((o) => (window as any).jrnSelect(o), pick!.order);
-    const head = page.locator('.jrn-tfoot').filter({ hasText: 'no test reaches this part' }).first();
+    const head = page.locator('.jrn-tfoot').filter({ hasText: 'no test is known to reach this part' }).first();
     await expect(head).toBeVisible();
     const wider = head.locator('.jrn-twider');
     await expect(wider).toHaveAttribute('data-scope', 'count.scope.action');
     await expect(wider).toContainText(String(pick!.n));
-    await expect(wider).toContainText('reach the action it belongs to');
+    await expect(wider).toContainText('over the action it belongs to');
   });
 });

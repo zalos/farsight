@@ -29,6 +29,7 @@ import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
 import { EXPORT_STRINGS } from './strings-export.js';
+import { EVIDENCE_STRINGS } from './strings-evidence.js';
 import { AFFECTED_STRINGS } from './strings-affected.js';
 
 export type Register = 'hud' | 'professional';
@@ -119,6 +120,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...CHROME_STRINGS,
   // export's words live in strings-export.ts (export.*, the saved picture's footer, the pinned link and its note)
   ...EXPORT_STRINGS,
+  // the test chip's words live in strings-evidence.ts (count.over.*, the not-built sentence, distinct)
+  ...EVIDENCE_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
@@ -794,7 +797,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.insp.security': same('requires'),
   'journey.insp.gatesHere': same('gates on this part'),
   'journey.insp.toGetHere': same('to get here'),
-  'journey.insp.noTestStep': same('no test reaches this part'),
+  'journey.insp.noTestStep': same('no test is known to reach this part', 'No indexed test reaches this one part. A floor: a test this build could not read is not counted, so this says what is known, not that none exists.'),
   // The drawer's head names where the open part sits: the stop (the Sheet's column, the
   // drill's rail), never the walk's own index — `STEP 232` was a number no other surface
   // printed, beside a storyline header whose *step 2 of 6* meant something else.
@@ -828,7 +831,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.layerSub.gates': same('guards · rules · decisions'),
   'journey.layerSub.verified': same('tests reaching this action'),
   'journey.noTests': same('no tests indexed'),
-  'journey.noTestReaches': same('no test reaches this action'),
+  'journey.noTestReaches': same('no test is known to reach this action', 'No indexed test reaches any part of this action. A floor: a test this build could not read is not counted.'),
   'journey.testsE2e': same('{n} e2e',
     'Distinct end-to-end test cases that reach this scope, by any of the three kinds of evidence — declared, reached or observed. A case reaching three screens is counted once on the journey and once on each screen. Cases in a source that reach nothing here are not counted: that total is on the Tests page, scoped to its source.'),
   'journey.testsUnit': same('{n} unit',
@@ -1012,16 +1015,16 @@ export const STRINGS: Record<string, StringEntry> = {
   // tab's own (`tests.runOnly`, `tests.evidence.runSeen`) — one fact, one
   // wording, on every surface that prints it (blocker 7).
   'journey.tests.foot': same(
-    'tests: {e2e} e2e · {unit} unit · {int} integration · {obs} observed',
+    'by level: {e2e} e2e · {unit} unit · {int} integration',
     'Distinct test cases that reach this, counted per level. Integration is its own level and is never folded into unit; a coverage report is not a case and is counted on its own line.',
   ),
   'journey.tests.open': same('open the list', 'Opens the Tests surface on the cases this cell counts — the same scope, the same evidence word — each case with its own last run.'),
   'journey.tests.listHint': same('↑↓ walk · ↵ opens the test'),
-  'journey.tests.noneScreen': same('no test reaches this screen'),
+  'journey.tests.noneScreen': same('no test is known to reach this screen', 'No indexed test reaches this screen. A floor: a test this build could not read is not counted.'),
   // One step, two scopes (story swarm 2026-09-25, finding 4): the action's Verified-by
   // number counts every test reaching any part of the action; a step's own foot counts
   // the tests reaching that part alone. Printed together, each with its scope.
-  'journey.tests.widerScope': same('{n} reach the action it belongs to \u2014 none of them reaches this part itself',
+  'journey.tests.widerScope': same('{n} over the action it belongs to \u2014 none of them is known to reach this part itself',
     'Two scopes, two numbers. The action\u2019s number counts every test that reaches any part of the action — the screen, the call, the handler, the helpers under it. This part\u2019s own number counts only the tests that reach this one part, and here it is none. Neither contradicts the other.'),
   'journey.tests.throughAccessors': same(
     'reached by {n} tests through its accessors',
@@ -2265,9 +2268,12 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.obs.reports': same('{n} coverage reports, no test named',
     'The run behind the evidence word is known only from coverage reports: each says which code a run reached and none says which test reached it. Counted once each.'),
   'journey.obs.reportsOne': one('1 coverage report, no test named', 'journey.obs.reports'),
-  'journey.obs.cases': same('{n} tests named by a run',
+  'journey.obs.cases': same('{n} of them ran',
     'The run behind the evidence word: test cases a results report named running over this code. The only kind of evidence that names a test.'),
-  'journey.obs.casesOne': one('1 test named by a run', 'journey.obs.cases'),
+  'journey.obs.casesOne': one('1 of them ran', 'journey.obs.cases'),
+  'journey.obs.passed': same('{n} of them passed',
+    'The run behind the evidence word: end-to-end cases a results report says passed, each declaring that it covers this code.'),
+  'journey.obs.passedOne': one('1 of them passed', 'journey.obs.passed'),
   'journey.obs.none': same('nothing observed',
     'No run of any kind reached this code: the evidence word beside it is a claim or a reading of the test bodies, and no run stands behind it.'),
   'journey.tests.theirRun': same('their own last run',
