@@ -543,13 +543,20 @@ function drawLanes() {
   const h = Math.max(1, b.h - riskTop());
   // under the lanes: the record's strip, the footer and the legend — measured below once drawn
   const extraH = 40 + (model.lifecycles.length ? 50 : 0);
-  const G = laneGeometry(model, { aspect: b.w > 0 ? b.w / h : 1.6, extraH });
+  const aspect = b.w > 0 ? b.w / h : 1.6;
+  let G = laneGeometry(model, { aspect, extraH });
   if (!el) { el = document.createElement('div'); el.className = 'map-lanes'; MAP.world.appendChild(el); }
-  el.style.cssText = 'width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + LANE_K + ')';
   const had = el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
-  el.innerHTML = lanesHtml(model, G, { evidenceHtml: storyEvidenceHtml(), sentence });
-  // the board holds what was drawn under the lanes (offset sizes are layout units, untouched by the scale)
-  const bottom = el.querySelector('.ln-bottom');
+  const paint = () => {
+    el.style.cssText = 'width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + LANE_K + ')';
+    el.innerHTML = lanesHtml(model, G, { evidenceHtml: storyEvidenceHtml(), sentence });
+  };
+  paint();
+  // what is drawn under the lanes is measured (offset sizes are layout units, untouched by the scale): when it is not
+  // the height the wrap was chosen for, choose again with the real one, so the board fits as large as it can
+  let bottom = el.querySelector('.ln-bottom');
+  const real = bottom ? bottom.offsetHeight + 12 : extraH;
+  if (Math.abs(real - extraH) > 8) { G = laneGeometry(model, { aspect, extraH: real }); paint(); bottom = el.querySelector('.ln-bottom'); }
   const need = bottom ? bottom.offsetTop + bottom.offsetHeight + G.geom.margin : G.size.h;
   if (need > G.size.h) { G.size.h = need; el.style.height = need + 'px'; }
   const before = MAP.lanes;
