@@ -15,7 +15,8 @@ import { isTestFile } from './tests/cases.js';
 import { isStoryFile } from './stories/index.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
 import { propFactsOf, type PropFacts } from './callback-props.js';
-import { collectEnums, collectStatusFacts, linkLifecycles, type LifecycleFacts } from './lifecycle.js';
+import { collectEnums, collectStatusFacts, linkLifecycles, constTables, type LifecycleFacts } from './lifecycle.js';
+import { collectPreconditionFacts, emptyPreconditionFacts, linkPreconditions } from './preconditions.js';
 
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
@@ -244,6 +245,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const propFacts = new Map<string, PropFacts & { file: string }>();
   // the record lifecycle's facts (lifecycle.ts): enums declared, status fields, writes, compares, SQL CHECK lists
   const lifeFacts: LifecycleFacts = { decls: [], uses: [], writes: [], compares: [], checks: new Map() };
+  // refusing comparisons, refused lists and transition tables (preconditions.ts)
+  const preFacts = emptyPreconditionFacts();
   let edgeSeq = 0;
 
   const addNode = (n: GraphNode) => {
@@ -458,6 +461,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     });
 
     { const en = collectEnums(program, file, line); lifeFacts.decls.push(...en.decls); lifeFacts.uses.push(...en.uses); }
+    preFacts.tables.push(...constTables(program, file, line));
     // declared functions & components & zod schemas
     const declared: { name: string; node: AstNode; body: AstNode | null; kind: NodeKind; cls?: string; clsGroup?: string }[] = [];
     walk(program, (n, parents) => {
@@ -635,6 +639,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       const id = symbolId(file, d.name);
       if (hasJsx) { const pf = propFactsOf(d.node, d.body, line); if (pf) propFacts.set(id, { file, ...pf }); }
       { const sf = collectStatusFacts(d.body, id, line); lifeFacts.writes.push(...sf.writes); lifeFacts.compares.push(...sf.compares); }
+      collectPreconditionFacts(d.body, id, file, source, line, preFacts);
       const doc = parseDoc(leadingComment(source, d.node.start ?? 0));
       // @guard — declared auth wrapper (withTenant(clientId, fn)…): a guard
       // node even before an adapter understands the framework it belongs to
@@ -1816,6 +1821,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   }
 
   linkLifecycles(repo, nodes, edges, lifeFacts);
+  // after the lifecycle: the actions are the functions that move a record's status, and the routes
+  linkPreconditions(repo, nodes, edges, preFacts, lifeFacts.decls);
 
   const packagesMeta = emitPackages();
 
