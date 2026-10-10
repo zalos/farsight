@@ -28,6 +28,7 @@ import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
 import { EXPORT_STRINGS } from './strings-export.js';
+import { AFFECTED_STRINGS } from './strings-affected.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -105,6 +106,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  // a change's affected set and the release readiness brief live in strings-affected.ts
+  ...AFFECTED_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)

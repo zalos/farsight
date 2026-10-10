@@ -433,6 +433,37 @@ picked, what uses it as far out as the distance chosen, and the journeys and scr
 | list rows (`list these`, CSV, JSON `farsight-affected v0`) | viewer `affectedRows(entries)` over the same answers | per seed and distance: journeys (owner from the design manifest), screens once each with their journeys, the owners, the tests first met there — the same rows in the panel and in both copies; `copied N rows` counts them | affected | the list panel; JSON v0 is **not frozen** |
 | `n behind it` on a stop | `report.cutPoints[].behind` | as the impact panel's | one stop | the tab's *not walked*, hybrid and code; business names each stop without a number |
 
+#### A change's affected set (`farsight affected`, MCP `affected`, the PR comment → core `affected.ts` `affectedRange()`, frozen `farsight-affected v1`)
+
+One document for a commit range or a pull request: the parts its changed lines sit in are hop 0 together, one
+impact report per part, folded by fewest hop. Every number is a `Counted` scoped `count.scope.affected`; the
+document's `counted` block carries them and `docs/contracts/farsight-affected-v1.md` says what each may claim.
+
+| printed | source | counts | scope | where |
+|---|---|---|---|---|
+| `3 commits` | C:`doc.counted.commits` | the commits the range holds (`from..to`, or the pull request's own) | affected | CLI, comment head |
+| `4 files changed` | C:`doc.counted.files` (breakdown `count.part.fileAdded` · `fileModified` · `fileDeleted`) | files changed base → head, each once | affected | CLI, comment head |
+| `2 parts changed` | C:`doc.counted.changed` (breakdown `count.part.commitLines` · `commitFile`) | definitions a changed line starts in or sits under (`nodesTouched`), a floor | affected | CLI, comment head |
+| `in 2 journeys` | C:`doc.counted.journeys` (breakdown by distance, as the Map's) | journeys whose walk meets a changed part (hop 0) or a node the reports list | affected | *Journeys touched* |
+| `2 screens reach it` | C:`doc.counted.screens` | distinct pages whose own part of a walk meets one | affected | *Journeys touched* |
+| `3 gates and rules on the changed path` | C:`doc.counted.gates` (breakdown `count.part.gateChanged` · `gateOnPath`) | checks met by an action (moment) of a hop-0 journey whose own steps run a changed part, and checks that changed themselves; each once | affected | *On the changed path* |
+| `3 record writes on the changed path` | C:`doc.counted.writes` | (record, writer) pairs written by those actions; the status moves from the record's lifecycle for that writer | affected | *On the changed path* |
+| `2 calls on the changed path` | C:`doc.counted.contracts` (same breakdown as gates) | routes those actions call, and routes that changed | affected | *On the changed path* |
+| `2 test cases to run` | C:`doc.counted.tests` (breakdown = `testVerdict().runs`: passed · failed · skipped · flaky · no run recorded) | distinct cases covering a changed part (hop 0), whose own file changed (hop 0), or covering what uses one (hop n); each once at its nearest hop. Whole-run reports are `run_level`, not cases | affected | *Tests to run*, the check's line |
+| `1 passed · 1 skipped · 0 failed · last run … · n commits since` | `doc.verdict` (`testVerdict()` over the cases) + `history` after `last_run` | every listed case by its own last run; the head's commits after the newest | affected | the verdict line, the check |
+
+#### Release readiness (`GET /api/readiness?storyline=&repo=`, `farsight readiness`, `#/readiness/<storyline>` → core `readiness.ts` `readiness()`)
+
+| printed | source | counts | scope | where |
+|---|---|---|---|---|
+| `6 journeys` (business and hybrid; the rows) | C:`counted.steps` (unit `count.unit.journeys`; breakdown `count.part.storylineSteps` · `storylineBranches`) | the storyline's steps and branches, one row each | storyline | the summary strip |
+| `2 ship` · `4 hold` | C:`counted.ship` / `counted.hold` (hold's breakdown by first reason: `count.part.holdNotBuilt` · `holdFailed` · `holdSkipped`) | rows with no hold reason / with one; they sum to the rows | storyline | the summary strip |
+| `1 skipped case` | C:`counted.skipped` | distinct cases over the storyline whose own last run skipped them | storyline | the summary strip |
+| `1 gate no test is known to reach` | C:`counted.unreached` | distinct gates on the storyline's screens whose gate card lists no case | storyline | the summary strip |
+| `5 gates and rules` | C:`counted.rules` | distinct gates and rules the storyline's screens meet | storyline | the rules register heading |
+| per row: `n / m` skipped / never run · `k / g` gates · commits since green | `rows[].skipped` · `.unrun` (the journey's `testVerdict().runs` parts) · `.gates.unreached` of `.gates.n` · `.commitsSince` (`SnapshotDb.commitsTouching` after `lastGreen`) | the journey's own scope (`journey.scopeAll`) | journey | the table |
+| per rule: `n screens` · `n cases` | `rules[].screens` · `.tests` (the gate card's cases, run-level reports apart) | the storyline's screens that meet it · cases reaching it or a call it guards | gate | the register |
+
 #### Risk headline and scope words (round 2, `surfaces/map.js` `riskCounteds()`)
 
 | printed | source | counts | scope | where |

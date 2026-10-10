@@ -28,3 +28,5 @@ export * from './gates.js';
 export * from './gate-class.js';
 export * from './lifecycle.js';
 export * from './freshness.js';
+export * from './readiness.js';
+export * from './affected-words.js';

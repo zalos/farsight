@@ -20,7 +20,7 @@ import { sym } from '../sym.js';
 import { tipAttrs } from './tooltip.js';
 import {
   footerFacts, footerLines, exportFilename, pictureScale, pictureSelector,
-  pdfPage, pdfFromJpeg, toCsv, cellWords, keptRows,
+  pdfPage, pdfA4, pdfFromJpeg, toCsv, cellWords, keptRows,
 } from './export-model.js';
 
 const XHTML = 'http://www.w3.org/1999/xhtml';
@@ -427,7 +427,9 @@ export async function saveView(surface, format, opts = {}) {
       out.width = pic.canvas.width; out.height = pic.canvas.height;
       if (format === 'pdf') {
         const jpeg = new Uint8Array(await (await blobOf(pic.canvas, 'image/jpeg', 0.92)).arrayBuffer());
-        const bytes = pdfFromJpeg(jpeg, pic.canvas.width, pic.canvas.height, { page: pdfPage(pic.w, pic.h), title: lines[0], subject: lines[1] });
+        // a document (the readiness brief) lies on one A4 page, the picture fitted inside its margins
+        const a4 = src.a4 ? pdfA4(pic.w, pic.h) : null;
+        const bytes = pdfFromJpeg(jpeg, pic.canvas.width, pic.canvas.height, { page: a4 ? a4.page : pdfPage(pic.w, pic.h), ...(a4 ? { place: a4.place } : {}), title: lines[0], subject: lines[1] });
         out.bytes = bytes.length;
         if (opts.dataUrl) out.dataUrl = 'data:application/pdf;base64,' + btoa(Array.from(bytes, (c) => String.fromCharCode(c)).join(''));
         else download(new Blob([bytes], { type: 'application/pdf' }), name);

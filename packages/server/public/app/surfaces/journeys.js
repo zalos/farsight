@@ -15,6 +15,7 @@
 // (node.branches, step.conditions, top-level forkCount) is all optional.
 // Everything from the server is untrusted display data → esc().
 
+import { readinessDoorHtml } from '../lib/readiness-door.js';
 import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens, cssId } from '../store.js';
 import { t, def, evidenceWord, plainWords, proseHtml, unTick } from '../strings.js';
 import { sym } from '../sym.js';
@@ -234,6 +235,7 @@ function jrnStorylinesHtml(org) {
       + (branches ? '<ul class="jrn-story-branches">' + branches + '</ul>' : '')
       + '<div class="jrn-story-go">'
       + (mapOn ? '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>' : '')
+      + readinessDoorHtml(st.id, 'jrn-story-ready', st.repo)
       + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ', 1)">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
       + '</div></div>';
   }
