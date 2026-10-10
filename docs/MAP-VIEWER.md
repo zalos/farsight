@@ -865,6 +865,17 @@ out in the business register, so a gate there is its words. `lib/detail-doors.js
 **Enter** on a focused detail (`[data-doors]`) opens its first door, **o** its editor door (also with the Map's
 explore card open). Where they are drawn: the journey's gate and rule rows carry their doors on the row itself
 (`.jrn-gl-go`; the ▸ and `jrnGateExpand` are gone — a gate's click opens the gate card, below) and the card reads its own lines from
+**The status lifecycle — `lib/lifecycle-strip.js` + the pure `lib/lifecycle-model.js`** (round 2026-10-10 §3). The journey
+header and the Map property's Overview draw one strip per record from `/api/journey`'s `lifecycles[].views` (core
+`lifecycleViews`, the persona(s) the flow is for): the statuses in declared order in the persona's words — business the
+word (the constant and *no word declared* in the tip), hybrid the word and the constant, code the constant — joined by
+`→` only where some code moves a record straight from the one before, else `·`; the counts as `Counted`s (business
+*statuses · that the app moves · nothing moves yet*). *What each one means* (`lcToggle`) opens one table under the strip
+— the word · in the code · what moves it, then the overlays as rows of their own kind — and asks `GET
+/api/lifecycle?node=&flow=` to place every writer on the journey screen it runs from (this journey first, else the first
+whose screens reach it; `flowWalks` folded once per index), each a door built by `route-url.js journeyStepHash`. The old
+row of arrow chips is gone; its doors live in the table.
+
 **`GET /api/source?node=<id>`** (the node's span from disk inside its source's root, or 12 lines from its line when it
 has none; `codeSlotHtml` + `fillCode`, one answer per node per sync; `packages/server/test/source-api.test.ts`); the
 marker inspector's head (`jrnInspDoorsHtml`); the explore card (its `.acts`, contract first); every property row the

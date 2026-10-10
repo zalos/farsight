@@ -49,3 +49,38 @@ test('a screen shows a record its calls reach, or one a step of it moves', () =>
   assert.deepEqual(screenLifecycles([lc], [], ['a::s.ts::send']).length, 1);
   assert.deepEqual(screenLifecycles([lc], [], ['a::s.ts::other']).length, 0);
 });
+
+// ── round 2026-10-10 §3: the persona's view ──
+const { pickView, stripItems, stripCounts, tableRows, placedView } = await import(join(here, '..', 'public', 'app', 'lib', 'lifecycle-model.js'));
+const mover = (by: string, extra = {}) => ({ by, name: by, words: by.toUpperCase(), via: 'update-call', ...extra });
+const view = {
+  persona: { id: 'billing', name: 'Billing' }, declared: true,
+  rows: [
+    { kind: 'status', status: 'draft', word: 'Being drafted', declared: true, written: true, movers: [mover('create', { at: { flowId: 'a::flow::f', flowName: 'F', screen: 1, screenName: 'S', here: true } })] },
+    { kind: 'status', status: 'open', word: 'Sent', declared: true, written: true, movers: [mover('send', { from: 'draft' })] },
+    { kind: 'status', status: 'paid', word: 'Paid', declared: false, written: false, movers: [] },
+    { kind: 'status', status: 'void', word: 'Void', declared: false, written: true, movers: [mover('cancel', { from: 'open' })] },
+  ],
+  overlays: [{ kind: 'overlay', name: 'Posted', when: 'a row', table: 'ledger', tableId: 'a::table::ledger', tableName: 'ledger', movers: [] }],
+  counts: { statuses: { n: 4 }, moved: { n: 3 }, unmoved: { n: 1 }, overlays: { n: 1 } },
+};
+
+test('the strip prints the word in business, word and constant in hybrid, the constant in code; arrows only where code moves', () => {
+  assert.equal(pickView({ views: [{ declared: false }, view] }), view);
+  const biz = stripItems(view, 'business');
+  assert.deepEqual(biz.map((x: { sep: string; main: string; constant: string }) => x.sep + x.main + (x.constant ? '/' + x.constant : '')), ['Being drafted', '→Sent', '·Paid', '·Void']);
+  assert.deepEqual(stripItems(view, 'hybrid').map((x: { constant: string }) => x.constant), ['draft', 'open', 'paid', 'void']);
+  assert.deepEqual(stripItems(view, 'code').map((x: { main: string }) => x.main), ['draft', 'open', 'paid', 'void']);
+  assert.deepEqual(stripCounts({ counts: { statuses: 's', transitions: 't', unwritten: 'u' } }, view, 'business').map((c: { n: number }) => c.n), [4, 3, 1]);
+  assert.deepEqual(stripCounts({ counts: { statuses: 's', transitions: 't', unwritten: 'u' } }, view, 'code'), ['s', 't', 'u']);
+});
+
+test('the table is every status then every overlay; a mover placed on a screen gets a door, one not placed none', () => {
+  const rows = tableRows(view, (m: { at: { flowId: string; screen: number } }) => '#/journeys/' + m.at.flowId + '?step=' + m.at.screen);
+  assert.deepEqual(rows.map((r: { kind: string; word: string }) => r.kind + ':' + r.word), ['status:Being drafted', 'status:Sent', 'status:Paid', 'status:Void', 'overlay:Posted']);
+  assert.equal(rows[0].movers[0].door, '#/journeys/a::flow::f?step=1');
+  assert.equal(rows[1].movers[0].door, null);
+  assert.deepEqual(rows[2].movers, []);
+  assert.equal(placedView(view, { views: [{ persona: { id: 'ops' } }, { persona: { id: 'billing' }, x: 1 }] }).x, 1);
+  assert.equal(placedView(view, null), view);
+});

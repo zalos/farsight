@@ -50,3 +50,66 @@ export function screenLifecycles(all, recordIds, stepIds) {
   const steps = new Set(stepIds || []);
   return (all || []).filter((lc) => recs.has(lc.nodeId) || ((lc.lifecycle && lc.lifecycle.transitions) || []).some((x) => steps.has(x.by)));
 }
+
+// ── one state machine, two views of it (round 2026-10-10 §3) ────────────────
+// `/api/journey`'s `lifecycles[].views` (core `lifecycleViews`): one view per persona the journey is for,
+// each status with the word that persona uses (config, else the constant humanized), the constant, and
+// what moves a record into it. These folds pick what the strip and the table draw for a lens.
+
+/** The view a surface draws: the first persona's whose words config gave, else the first view. */
+export function pickView(lc) {
+  const views = (lc && lc.views) || [];
+  return views.find((v) => v.declared) || views[0] || null;
+}
+
+/**
+ * The strip's items, in declared order. `sep` before each item after the first: `→` when some code moves a
+ * record into it straight from the one before (a move from that status, or a move that checks no prior
+ * status while the one before is itself reached), else `·` — an arrow is only drawn where the code moves.
+ * `text` is what the lens prints: business the word, hybrid the word and the constant, code the constant.
+ * @param {object} view  one `LifecycleView`
+ * @param {'business'|'hybrid'|'code'} lens
+ */
+export function stripItems(view, lens) {
+  if (!view) return [];
+  const rows = view.rows || [];
+  return rows.map((r, i) => {
+    const prev = i > 0 ? rows[i - 1] : null;
+    const arrow = !!prev && r.written && (r.movers || []).some((m) => m.from === prev.status || (m.from == null && (prev.written || i === 1)));
+    return {
+      status: r.status, word: r.word, declared: !!r.declared, written: !!r.written,
+      sep: i === 0 ? '' : arrow ? '→' : '·',
+      main: lens === 'code' ? r.status : r.word,
+      constant: lens === 'hybrid' && r.word !== r.status ? r.status : '',
+    };
+  });
+}
+
+/** The counts the strip prints for a lens: business says how many the app moves; code and hybrid the moves with a writer. */
+export function stripCounts(lc, view, lens) {
+  const c = (lc && lc.counts) || {};
+  const v = (view && view.counts) || {};
+  return lens === 'business' ? [v.statuses || c.statuses, v.moved, v.unmoved] : [c.statuses, c.transitions, c.unwritten];
+}
+
+/**
+ * The table's rows: every status then every overlay, each with its movers. A mover's `door` is the journey
+ * link to its screen (built by the caller through route-url.js), `null` when no journey reaches it.
+ * @param {object} view
+ * @param {(m:object) => string|null} doorOf
+ */
+export function tableRows(view, doorOf) {
+  if (!view) return [];
+  const mv = (m) => ({ by: m.by, name: m.name, words: m.words, at: m.at || null, door: m.at ? doorOf(m) : null });
+  return [
+    ...(view.rows || []).map((r) => ({ kind: 'status', word: r.word, declared: !!r.declared, code: r.status, written: !!r.written, movers: (r.movers || []).map(mv) })),
+    ...(view.overlays || []).map((o) => ({ kind: 'overlay', word: o.name, declared: true, code: o.tableName, when: o.when, written: (o.movers || []).length > 0, movers: (o.movers || []).map(mv) })),
+  ];
+}
+
+/** Merge a `/api/lifecycle` answer's placements into the journey's view (same rows, same order): the answer wins. */
+export function placedView(view, answer) {
+  if (!answer || !answer.views || !answer.views.length) return view;
+  const want = view && view.persona ? view.persona.id : null;
+  return answer.views.find((v) => (v.persona ? v.persona.id : null) === want) || answer.views[0];
+}
