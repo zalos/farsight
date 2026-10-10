@@ -10,7 +10,11 @@ import assert from 'node:assert/strict';
 import {
   COUNT_SCOPES, SCOPE_WORDS, scopeWord, STRINGS, evidenceFacts, caseWord, coverageFor,
   buildIndex, journey, journeySummary, screensFor, journeyCoverage, cellCoverage, segmentNotBuilt,
+  testsSurface, testsMatrixRows, testsMatrixCsv, TESTS_MATRIX_COLUMNS, EVIDENCE_WORDS,
 } from '../dist/index.js';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { CoverageTestRef, GraphNode, GraphEdge } from '../dist/index.js';
 
 test('every scope a test number can count over has chip words in the catalog, with a define', () => {
@@ -116,4 +120,51 @@ test('every covering ref carries its own word, equal to caseWord', () => {
     assert.deepEqual(r.word, { cls: w.cls, key: w.key });
   }
   assert.ok(facts.tests.some((r) => r.word!.key === 'tests.evidence.declaredPassed'));
+});
+
+// ── the matrix: the screen's words, additively; the level filter filters the rows ──
+const here = dirname(fileURLToPath(import.meta.url));
+const SCHEMA = () => JSON.parse(readFileSync(join(here, '..', '..', '..', 'schemas', 'farsight-tests-matrix-v1.schema.json'), 'utf8'));
+
+test('farsight-tests-matrix v1: evidence_word and verdict are appended, pinned, and equal the screen’s words', () => {
+  // the contract is additive-only: the two columns come last, after every v1 column
+  assert.deepEqual(TESTS_MATRIX_COLUMNS.slice(-2), ['evidence_word', 'verdict']);
+  assert.equal(TESTS_MATRIX_COLUMNS.indexOf('source_commit'), TESTS_MATRIX_COLUMNS.length - 3);
+  const props = SCHEMA().$defs?.row?.properties ?? SCHEMA().definitions?.row?.properties;
+  assert.deepEqual(props.evidence_word.enum, [...EVIDENCE_WORDS]);
+  assert.deepEqual(props.evidence_word.enum, [
+    'declared only', 'reached by tests', 'verified by a run', 'verified · stale',
+    'passed, by its own declaration', 'passed, by its own declaration · stale',
+    'seen by a coverage run', 'seen by a coverage run · stale',
+  ]);
+  assert.deepEqual(props.verdict.enum, ['passed', 'failed', 'skipped', 'flaky', 'unknown', '']);
+  for (const k of EVIDENCE_WORDS) assert.ok(Object.values(STRINGS).some((e) => e.professional === k), `${k} is a catalog word`);
+  const index = app();
+  const rows = testsMatrixRows(index, testsSurface(index, null));
+  const e2e = rows.find((r) => r.test_id === E2E)!;
+  // the edge stores `declared`; the screen says the case passed, by its own declaration
+  assert.equal(e2e.evidence_class, 'declared');
+  assert.equal(e2e.evidence_word, 'passed, by its own declaration');
+  assert.equal(e2e.verdict, 'passed');
+  const unit = rows.find((r) => r.test_id === UNIT)!;
+  assert.equal(unit.evidence_word, 'reached by tests');
+  assert.equal(unit.verdict, '', 'a reading of a test body has no run behind its word');
+  assert.equal(unit.status, 'skipped', 'the case’s own run stays in its own column');
+  assert.match(testsMatrixCsv(rows).split('\n')[0]!, /,evidence_word,verdict$/);
+});
+
+test('the Tests page’s level filter filters the journey rows and their evidence', () => {
+  const index = app();
+  const all = testsSurface(index, null);
+  const unit = testsSurface(index, null, undefined, { level: 'unit' });
+  const integration = testsSurface(index, null, undefined, { level: 'integration' });
+  const row = (s: typeof all) => s.journeys.find((r) => r.flowId === FLOW);
+  assert.equal(row(all)!.coverage.evidenceWord.key, 'tests.evidence.declaredPassed');
+  // under unit, the row is the unit case's: reached by tests, never the e2e pass
+  assert.equal(row(unit)!.coverage.evidenceWord.key, 'journey.evidence.reached');
+  assert.ok(row(unit)!.coverage.tests.every((t) => t.level === 'unit'));
+  // under a level nothing reaches, the journey leaves the table and is counted as left out
+  assert.equal(row(integration), undefined);
+  assert.equal(integration.journeysLeftOut, 1);
+  assert.equal(all.journeysLeftOut, undefined);
 });

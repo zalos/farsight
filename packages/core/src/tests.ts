@@ -11,7 +11,8 @@ import type { GraphNode, TestsMeta, TestRef } from './graph.js';
 import type { GraphMeta } from './store.js';
 import type { GraphIndex } from './query.js';
 import { journey, flowScreenIds, repoOf } from './query.js';
-import { coverageFor, journeyScope, testNodes, toCoverageRef, twinOf, type CoverageFacts, type CoverageTestRef } from './coverage.js';
+import { coverageFor, caseWord, journeyScope, testNodes, toCoverageRef, twinOf, type CoverageFacts, type CoverageTestRef } from './coverage.js';
+import { t as word } from './strings.js';
 import { computeMetric, testsCovering, type MetricValue } from './metrics.js';
 import { buildLine } from './version.js';
 import { counted, type Counted } from './counts.js';
@@ -131,6 +132,8 @@ export interface TestsSurface {
   sources: TestSourceCard[];
   suites: TestSuiteRow[];
   journeys: TestMatrixRow[];
+  /** under a level filter: the journeys in scope no case of that level reaches, left out of `journeys` (finding 1.8) */
+  journeysLeftOut?: number;
   orphans: TestOrphan[];
   /** one sentence per gap in the evidence — printed by the tab, the overview and `farsight status` */
   blindSpots: string[];
@@ -306,6 +309,7 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
 
   // ── the journeys × tests matrix ──
   const journeys: TestMatrixRow[] = [];
+  let levelLeftOut = 0;
   for (const n of index.byId.values()) {
     if (n.kind !== 'flow') continue;
     if (scope && !scope.has(repoOf(n))) continue;
@@ -313,7 +317,9 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
     const walk = journey(index, n.id);
     // the one journey scope — byte-identical to the journey fold's (R9)
     const ids = journeyScope(index, walk, screenIds);
-    const coverage = coverageFor(index, ids, { kind: 'flow', label: n.name, flowId: n.id });
+    // under a level filter the row reads that level's cases only, and a journey no case of that level reaches is left out
+    const coverage = coverageFor(index, ids, { kind: 'flow', label: n.name, flowId: n.id }, undefined, level ? { level } : {});
+    if (level && !coverage.tests.length) { levelLeftOut++; continue; }
     const declared = coverage.tests.filter((t) => t.evidence === 'declared');
     const inferred = coverage.tests.filter((t) => t.evidence === 'static');
     const observed = coverage.tests.filter((t) => t.evidence === 'observed');
@@ -364,7 +370,7 @@ export function testsSurface(index: GraphIndex, scope?: Set<string> | null, meta
   const part = level ? metric.parts?.[level] : undefined;
   return {
     counts,
-    ...(level ? { level, countsAll: countsOf(inScope, cardCount(inScope), orphansOf(index, inScope).length) } : {}),
+    ...(level ? { level, countsAll: countsOf(inScope, cardCount(inScope), orphansOf(index, inScope).length), journeysLeftOut: levelLeftOut } : {}),
     counted: {
       cases: counted(counts.cases, 'count.unit.cases', selection, 'testsSurface().counts.cases', {
         bizUnit: 'journey.biz.countTests',
@@ -562,7 +568,29 @@ export interface TestMatrixCell {
   source_digest: string;
   sync: number | null;
   source_commit: string;
+  /**
+   * Added 2026-10-10, additive (swarm round 2, finding 1.9: `evidence_class=observed`
+   * with `status=unknown` read *seen by a coverage run* on screen, and a declared
+   * case that passed read *passed, by its own declaration* on screen and `declared`
+   * here). The case's own evidence word on this node, in the words the screen
+   * prints it (core `caseWord`, professional register) — one of `EVIDENCE_WORDS`.
+   */
+  evidence_word: string;
+  /**
+   * The run behind that word, as the screen prints it beside the word: the run's
+   * status when a results report named the case and its run earned the word;
+   * `''` when the word is a claim or a reading (declared only, reached by tests)
+   * or a coverage report earned it (a report records no verdict).
+   */
+  verdict: NonNullable<TestRef['run']>['status'] | '';
 }
+
+/** Every value `evidence_word` takes — the catalog's words for the case words, pinned by a test against the schema. */
+export const EVIDENCE_WORDS = [
+  'declared only', 'reached by tests', 'verified by a run', 'verified · stale',
+  'passed, by its own declaration', 'passed, by its own declaration · stale',
+  'seen by a coverage run', 'seen by a coverage run · stale',
+] as const;
 
 /** What the document was computed from — the same identity every row repeats, so a CSV row stands alone. */
 export interface TestsMatrixIdentity {
@@ -594,6 +622,8 @@ export const TESTS_MATRIX_COLUMNS: (keyof TestMatrixCell)[] = [
   'run_level', 'inactive', 'evidence_class', 'technique', 'confidence', 'resolution_note', 'match',
   'run_id', 'run_at', 'status', 'retries', 'duration_ms', 'freshness', 'stale',
   'source_digest', 'sync', 'source_commit',
+  // appended 2026-10-10 (additive): the screen's word and verdict for the case on this node
+  'evidence_word', 'verdict',
 ];
 
 /** Column by column, in order: absence first, numbers numerically, strings by code unit (never locale). */
@@ -633,6 +663,17 @@ export function testsMatrixRows(index: GraphIndex, surface: TestsSurface, identi
         if (!t?.test) continue;
         const run = t.test.run;
         const cls = String(e.meta?.evidence ?? 'declared');
+        // the case's word on this node, by the screen's rule: a declared e2e case whose run passed is observed by its declaration (metrics.ts `testsCovering`)
+        const inactive = t.test.inactive === true || e.meta?.inactive === true;
+        const byDeclaration = cls === 'declared' && t.test.level === 'e2e' && !t.test.runLevel && !inactive && run?.status === 'passed';
+        const ev = byDeclaration ? 'observed' : cls === 'static' ? 'static' : cls === 'observed' ? 'observed' : 'declared';
+        const cw = caseWord({
+          id: t.id, name: t.name, level: t.test.level, runner: t.test.runner, evidence: ev, runLevel: t.test.runLevel === true,
+          ...(byDeclaration ? { observedVia: 'declaration' as const } : {}),
+          ...(run ? { status: run.status, at: run.at, freshness: run.freshness } : {}),
+          reaches: { nodeId, name: node.name, kind: node.kind },
+        });
+        const earnedByRun = (cw.cls === 'observed' || cw.cls === 'stale') && t.test.runLevel !== true;
         rows.push({
           flow_id: row.flowId,
           flow_name: row.name,
@@ -664,6 +705,8 @@ export function testsMatrixRows(index: GraphIndex, surface: TestsSurface, identi
           source_digest: digests[repoOf(node)] ?? run?.sourceDigest ?? '',
           sync,
           source_commit: commit,
+          evidence_word: word(cw.key, 'professional'),
+          verdict: earnedByRun && run?.status ? run.status : '',
         });
       }
     }

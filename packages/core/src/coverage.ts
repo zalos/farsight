@@ -657,7 +657,13 @@ function earningRefs(active: CoverageTestRef[]): CoverageTestRef[] {
   return observing;
 }
 
-export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricScope, countScope?: CountScope): CoverageFacts {
+/**
+ * `opts.level` keeps the cases of one test level only — the Tests page's level
+ * filter, which used to change the header and leave every journey row's
+ * evidence at every level (swarm round 2, finding 1.8). The metric is the
+ * scope's own and is not filtered; its part for the level is `metric.parts`.
+ */
+export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricScope, countScope?: CountScope, opts: { level?: TestRef['level'] } = {}): CoverageFacts {
   const ids = [...new Set(nodeIds)].filter((id) => {
     const n = index.byId.get(id);
     // a declared-but-unbuilt route cannot be "uncovered": there is nothing to test yet
@@ -670,6 +676,7 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
   for (const id of ids) {
     const node = index.byId.get(id);
     for (const t of testsCovering(index, id)) {
+      if (opts.level && t.level !== opts.level) continue;
       if (t.evidence === 'declared') declared++;
       if (t.evidence === 'observed') observed++;
       const ref = toCoverageRef(index, t, node);
