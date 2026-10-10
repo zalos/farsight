@@ -16,6 +16,7 @@ import { tipAttrs } from '../lib/tooltip.js';
 import { mapTestsChips } from '../lib/map-chips.js';
 import { lifecycleStripHtml } from '../lib/lifecycle-strip.js';
 import { LANE_K } from '../lib/map-lanes-model.js';
+import { storeShownName } from '../lib/map-model.js';
 
 const biz = () => currentLens() === 'business';
 const fill = (key, vars) => Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
@@ -34,7 +35,7 @@ export function laneNoteText(n) {
 }
 
 /** One stage card: its place, name, sub-line, one status chip, the street's test chip, and a decision the code holds. */
-function stageHtml(st, r, m) {
+function stageHtml(st, r, m, say) {
   const step = st.branch
     ? '<span class="map-step branch"' + tipAttrs({ text: fill('lanes.stage.branch', { when: st.branch.when }) + ' · ' + st.journeyName, noFocus: true }) + '>' + sym('fork') + '</span>'
     : '<span class="map-step"' + tipAttrs({ text: fill(biz() ? 'map.storyline.bizStep' : 'map.storyline.step', { n: st.step, m: m.stepsOf }) + ' · ' + st.journeyName, noFocus: true }) + '>' + st.step + '</span>';
@@ -44,15 +45,15 @@ function stageHtml(st, r, m) {
   // the street's own test chip for this screen: the count with its scope and the one evidence word (lane V's chip)
   const tests = st.tests ? mapTestsChips(st.tests, st.evidence, { hideZero: biz() }) : '';
   const dec = st.decisions.length
-    ? '<div class="dec"' + tipAttrs({ text: t('lanes.decision') + ' · ' + st.decisions.join(' · '), noFocus: true }) + '>' + sym('decision')
-      + '<span class="w">' + esc(st.decisions[0]) + '</span>' + (st.decisions.length > 1 ? '<span class="more">' + esc(fill('lanes.decision.more', { n: st.decisions.length - 1 })) + '</span>' : '') + '</div>'
+    ? '<div class="dec"' + tipAttrs({ text: t('lanes.decision') + ' · ' + st.decisions.map(say).join(' · '), noFocus: true }) + '>' + sym('decision')
+      + '<span class="w">' + esc(say(st.decisions[0])) + '</span>' + (st.decisions.length > 1 ? '<span class="more">' + esc(fill('lanes.decision.more', { n: st.decisions.length - 1 })) + '</span>' : '') + '</div>'
     : '';
   const label = t('lanes.stage.open') + ' · ' + st.name + ' · ' + st.journeyName;
   return '<div class="ln-stage' + (st.state === 'planned' ? ' planned' : '') + (st.branch ? ' branch' : '') + '" role="button" tabindex="0"'
     + ' data-key="' + esc(st.key) + '" data-flow="' + esc(st.flowId) + '" data-index="' + st.screenIndex + '" data-name="' + esc(st.name) + '"'
     + ' aria-label="' + esc(label) + '" style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px">'
-    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: st.name + (st.words ? ' · ' + st.words : ''), noFocus: true }) + '>' + esc(st.name) + '</span></div>'
-    + (st.sub ? '<div class="sub">' + esc(st.sub) + '</div>' : '')
+    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: st.name + (st.words ? ' · ' + say(st.words) : ''), noFocus: true }) + '>' + esc(st.name) + '</span></div>'
+    + (st.sub ? '<div class="sub">' + esc(say(st.sub)) + '</div>' : '')
     + '<div class="ln-chips">' + status + tests + '</div>' + dec + '</div>';
 }
 
@@ -66,28 +67,29 @@ function pillHtml(p, r, m) {
   const tip = recordWords(p.record.name) + ' · ' + move + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '');
   return '<div class="ln-pill ' + p.kind + '" data-key="' + esc(p.key) + '" data-record="' + esc(p.record.id) + '"' + (p.status != null ? ' data-status="' + esc(p.status) + '"' : '')
     + ' style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px"' + tipAttrs({ text: tip, noFocus: true }) + '>'
-    + '<div class="mv">' + sym('record') + (p.first ? '<span class="rec">' + esc(recordWords(p.record.name)) + '</span><span class="sep">·</span>' : '') + '<span class="w">' + esc(move) + '</span></div>'
+    + '<div class="mv">' + sym('record') + (p.first && !p.isStore ? '<span class="rec">' + esc(recordWords(p.record.name)) + '</span><span class="sep">·</span>' : '') + '<span class="w">' + esc(move) + '</span></div>'
     + (by && !biz() ? '<div class="by map-code">' + esc(by) + '</div>' : '') + '</div>';
 }
+
+const storeKindOf = (l) => (['sql', 'document', 'files', 'erp'].includes(l.store.kind) ? l.store.kind : 'other');
 
 /** The lane's head: its word, its second line, what it is, and its count with the scope it counts over. */
 function laneHeadHtml(l) {
   const glyph = l.kind === 'store' ? sym('record') : sym('human');
   const sub = l.kind === 'store'
-    ? fill('lanes.store.sub', { kind: t('map.store.kind.' + (['sql', 'document', 'files', 'erp'].includes(l.store.kind) ? l.store.kind : 'other')) })
+    ? fill('lanes.store.sub', { kind: t('map.store.kind.' + storeKindOf(l)) })
     : l.description;
-  const word = l.name || t('lanes.persona.none');
+  const word = l.kind === 'store' ? (l.declaredName || storeShownName(l.store, biz()) || t('map.store.kind.' + storeKindOf(l))) : l.name || t('lanes.persona.none');
   return '<div class="ln-head"><div class="nm">' + glyph + '<span>' + esc(word) + '</span></div>'
     + (l.surface ? '<div class="surf">' + esc(l.surface) + '</div>' : '')
     + (sub ? '<div class="d">' + esc(sub) + '</div>' : '')
-    + '<div class="n">' + countedHtml(l.count, API, { cls: 'ln-n' }) + ' <span class="sc">· ' + esc(t(l.count.scope)) + '</span></div></div>';
+    + '<div class="n">' + countedHtml(l.count, API, { cls: 'ln-n' }) + ' <span class="sc">· ' + esc(t(l.count.scope)) + '</span></div>' + moreHtml(l) + '</div>';
 }
 
-/** The folded records of a store lane: one line that names them in its tip. */
-function moreHtml(l, x, y, w, h) {
-  const n = l.folded.length;
-  return '<div class="ln-pill more" style="left:' + x + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px"'
-    + tipAttrs({ text: l.folded.map((r) => recordWords(r.name)).join(' · '), noFocus: true }) + '>' + esc(fill('lanes.pill.more', { n })) + '</div>';
+/** The folded records of a store lane: one line in its head that names them in its tip. */
+function moreHtml(l) {
+  if (!l.folded || !l.folded.length) return '';
+  return '<div class="more"' + tipAttrs({ text: l.folded.map((r) => recordWords(r.name)).join(' · '), noFocus: true }) + '>' + esc(fill('lanes.pill.more', { n: l.folded.length })) + '</div>';
 }
 
 const mid = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
@@ -170,12 +172,12 @@ function footerHtml(m) {
 }
 
 /**
- * The lifecycles under the lanes — each record whose moves the lanes draw, its strip as the journey prints it, with the
- * moves this storyline makes marked as made here.
+ * The lifecycle under the lanes — the record whose moves the lanes draw first (the most moves), its strip as the
+ * journey prints it, with the moves this storyline makes marked as made here.
  */
 function lifeHtml(m) {
   const made = new Set(m.pills.flatMap((p) => p.moves.map((x) => p.record.id + '|' + x.by + '|' + p.status)));
-  return m.lifecycles.slice(0, 2).map((lc) => {
+  return m.lifecycles.slice(0, 1).map((lc) => {
     const here = lc.lifecycle.transitions.map((tr) => made.has(lc.nodeId + '|' + tr.by + '|' + tr.to));
     return '<div class="ln-life">' + lifecycleStripHtml({ ...lc, onJourney: here }, API) + '</div>';
   }).join('');
@@ -207,15 +209,9 @@ export function lanesHtml(m, G, ctx = {}) {
       + '<div class="ln-headbox" style="width:' + G.geom.head + 'px">' + laneHeadHtml(l) + '</div></div>';
   }
   html += '<svg class="ln-arrows" aria-hidden="true" width="' + G.size.w + '" height="' + G.size.h + '">' + arrowsSvg(m, G, labels) + '</svg>';
-  for (const st of m.stages) { const r = G.rects.get(st.key); if (r) html += stageHtml(st, r, m); }
-  for (const p of m.pills) { const r = G.rects.get(p.key); if (r) html += pillHtml(p, r, m); }
-  // a store lane's folded records: one line in its last row, in each segment's first column
-  for (const l of m.lanes) {
-    if (l.kind !== 'store' || !l.folded || !l.folded.length) continue;
-    const lr = G.laneRects.find((x) => x.lane === l.id && x.segment === 0);
-    if (!lr) continue;
-    html += moreHtml(l, lr.x + G.geom.head + (G.geom.col - G.geom.cardW) / 2, lr.y + G.geom.pad + (l.rowCount - 1) * G.geom.pillRow, G.geom.cardW, G.geom.pillH);
-  }
+  const say = ctx.sentence || ((x) => x);
+  for (const st of m.stages) { const r = G.rects.get(st.key); if (r) html += stageHtml(st, r, m, say); }
+  for (const p of m.pills) { const r = G.rects.get(p.key); const l = m.lanes.find((x) => x.id === p.lane); if (r) html += pillHtml({ ...p, isStore: !!(l && l.name === p.record.name) }, r, m); }
   for (const lb of labels) {
     html += '<div class="ln-label ' + lb.cls + '" style="left:' + lb.x + 'px;top:' + lb.y + 'px' + (lb.max ? ';max-width:' + lb.max + 'px' : '') + '">' + esc(lb.text) + '</div>';
   }

@@ -37,7 +37,11 @@ function markerMode(m) {
 /** The store a data marker lives in: the node's own, else the marker's, else none — never guessed from a name. */
 function storeOf(m, node) {
   const s = (node && node.store) || m.store || null;
-  return s && s.name ? { name: String(s.name), kind: s.kind || 'other' } : null;
+  if (!s || !s.name) return null;
+  const out = { name: String(s.name), kind: s.kind || 'other' };
+  if (s.engine) out.engine = s.engine;
+  if (s.via) out.via = s.via;
+  return out;
 }
 const storeKey = (s) => keyOf(s.name) + '|' + (s.kind || 'other');
 /** The first sentence of a screen's words, the stage card's sub-line (the whole is its tip). */
@@ -181,7 +185,9 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   const storeLanes = [];
   for (const st of [...stages].sort((a, b) => a.col - b.col)) {
     for (const w of st.writes.values()) {
-      if (!storeLanes.some((s) => storeKey(s.store) === storeKey(w.store))) storeLanes.push({ store: w.store, firstCol: st.col });
+      const have = storeLanes.find((s) => storeKey(s.store) === storeKey(w.store));
+      if (!have) storeLanes.push({ store: w.store, firstCol: st.col });
+      else if (!have.store.engine && w.store.engine) have.store = w.store;
     }
   }
 
@@ -250,7 +256,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     }
     hit.id = d.id;
     hit.declared = i;
-    if (d.name) hit.name = d.name;
+    if (d.name) { hit.name = d.name; hit.declaredName = d.name; }
     if (d.surface) hit.surface = d.surface;
   });
   const rank = (l) => (l.declared == null ? 1e6 : l.declared);
@@ -286,7 +292,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
         });
       });
     });
-    l.rowCount = l.rows.length + (l.folded.length ? 1 : 0);
+    l.rowCount = l.rows.length;
   }
   for (const l of pl) l.rowCount = Math.max(1, ...stages.filter((s) => s.lane === l.id).map((s) => s.row + 1));
 
@@ -389,8 +395,8 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
  */
 export const LANE_K = 2;
 export const LANE_GEOM = Object.freeze({
-  head: 112, col: 158, cardW: 144, cardH: 104, rowGap: 10, pad: 8, pillH: 34, pillRow: 40,
-  laneGap: 6, segGap: 34, top: 44, margin: 16,
+  head: 124, col: 158, cardW: 144, cardH: 104, rowGap: 10, pad: 8, pillH: 34, pillRow: 40,
+  laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 66,
 });
 
 /**
@@ -402,16 +408,16 @@ export function laneGeometry(model, opts = {}) {
   const g = { ...LANE_GEOM, ...(opts.geom || {}) };
   const cols = Math.max(1, model.columns || 1);
   const laneH = model.lanes.map((l) => (l.kind === 'store'
-    ? g.pad * 2 + Math.max(1, l.rowCount || 1) * g.pillRow - (g.pillRow - g.pillH)
+    ? Math.max(g.storeMinH, g.pad * 2 + Math.max(1, l.rowCount || 1) * g.pillRow - (g.pillRow - g.pillH))
     : g.pad * 2 + Math.max(1, l.rowCount || 1) * (g.cardH + g.rowGap) - g.rowGap));
   const lanesH = laneH.reduce((a, b) => a + b, 0) + g.laneGap * Math.max(0, laneH.length - 1);
   const extraH = opts.extraH || 0;
   const aspect = opts.aspect > 0 ? opts.aspect : 1.6;
   let best = null;
   const maxK = Math.max(1, Math.ceil(cols / 2));
-  for (let k = 1; k <= maxK; k++) {
+  for (let k = opts.k || 1; k <= (opts.k || maxK); k++) {
     const per = Math.ceil(cols / k);
-    if (k > 1 && Math.ceil(cols / (k - 1)) === per) continue;
+    if (!opts.k && k > 1 && Math.ceil(cols / (k - 1)) === per) continue;
     const w = g.margin * 2 + g.head + per * g.col;
     const h = g.top + k * lanesH + (k - 1) * g.segGap + extraH + g.margin;
     // the fit scale on a unit-height stage of this aspect: the larger, the more readable

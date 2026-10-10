@@ -541,8 +541,8 @@ function drawLanes() {
   const model = laneLayout(story, MAP.designs, MAP.tree, sums, { byId: S.BYID });
   const b = boardSize();
   const h = Math.max(1, b.h - riskTop());
-  // under the lanes: a strip per record (at most two), the footer and the legend — measured below once drawn
-  const extraH = 40 + 46 * Math.min(2, model.lifecycles.length);
+  // under the lanes: the record's strip, the footer and the legend — measured below once drawn
+  const extraH = 40 + (model.lifecycles.length ? 50 : 0);
   const G = laneGeometry(model, { aspect: b.w > 0 ? b.w / h : 1.6, extraH });
   if (!el) { el = document.createElement('div'); el.className = 'map-lanes'; MAP.world.appendChild(el); }
   el.style.cssText = 'width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + LANE_K + ')';
