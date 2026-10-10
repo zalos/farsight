@@ -40,6 +40,8 @@ node packages/cli/dist/cli.js api list                    # API surfaces (spec-b
 node packages/cli/dist/cli.js api diff --spec x.yaml --repo r --strict   # proposed spec vs code; exit 1 on drift
 node packages/cli/dist/cli.js tests list|matrix [--format csv]  # tests in the graph: suites with last run + freshness; journeys × tests (declared / inferred / observed), coverage floor|exact, gaps
 node packages/cli/dist/cli.js impact <id> [--hops N] [--tests] [--json]  # what depends on this, per hop, never summed; --json is the frozen farsight-impact-tests v1 document for CI test selection
+node packages/cli/dist/cli.js affected --pr <n> | --from <sha> --to <sha> [--json] [--post [--confirm] [--via gh]]  # what a change touches: journeys (storyline step), gates, record writes and calls on the changed path, each test case once with its own last run; --json = frozen farsight-affected v1; --post = one comment + one check through the three verdicts (a `type: 'code-host'` source)
+node packages/cli/dist/cli.js readiness --storyline <id> [--repo r] [--json|--csv]  # the release readiness brief: one row per step, ship or hold with the reason, the rules register (also #/readiness/<id>)
 node packages/cli/dist/cli.js stories [--repo r] [--node <id>] [--json]   # the repos' Storybooks (found or configured, never started), running or not, and how the live index maps onto components (ADR 9)
 node packages/cli/dist/cli.js tests import --results r.json --coverage coverage-final.json --repo r  # attach a CI report to an existing graph without re-ingesting
 node packages/cli/dist/cli.js journeys [--repo r] [--persona p] [--group g] [--storyline s] [--json]   # the journeys organised persona → group → journeys in declared order (manifest personas[]/groups[]/flow persona·group·order, farsight.config.json → journeys overrides); the same tree as GET /api/journeys and MCP `journeys`
@@ -106,7 +108,7 @@ moved out; open a map when you need it, not to orient.
 **The invariants that always apply, wherever you are working.** Every user-facing string goes through the
 two-register catalog (`packages/core/src/strings.ts`) with both registers and a `define`; every glyph goes
 through `sym()`; `pnpm lint:strings` enforces both, and its RULE 5 bans developer units from the business
-register. `farsight-diff v1`, `farsight-tests-matrix v1` and `farsight-impact-tests v1` are **frozen and
+register. `farsight-diff v1`, `farsight-tests-matrix v1`, `farsight-impact-tests v1` and `farsight-affected v1` are **frozen and
 additive-only**, each pinned by a test asserting its enums against an explicit literal list *and* its schema
 file. Every number arrives as a `Counted` (core `counts.ts`: words, scope, source, a breakdown that sums) and
 is listed in `docs/COUNTS.md`; *verified* means a results report named a case that ran over the code — a
