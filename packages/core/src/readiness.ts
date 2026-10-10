@@ -12,7 +12,8 @@
  * a confidence it does not have. Pure over the graph; the commits come from a callback the caller backs
  * with the commit spine (server: `SnapshotDb.commitsTouching`), absent = not known.
  */
-import type { GraphNode } from './graph.js';
+import type { GraphNode, GateClass, GateTier } from './graph.js';
+import { gateTierOf } from './gate-class.js';
 import { type GraphIndex, journey, journeySummary } from './query.js';
 import { screensFor } from './design.js';
 import { counted, type Counted } from './counts.js';
@@ -66,6 +67,9 @@ export interface ReadinessRule {
   tests: number;
   /** the owners the design names for the journeys that meet it */
   owners: string[];
+  /** who it matters to and what it protects (core gate-class.ts, gates lane 2026-10-10) */
+  tier?: GateTier;
+  class?: GateClass;
 }
 
 export interface Readiness {
@@ -167,13 +171,15 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
   const ruleRows: ReadinessRule[] = [...rules.values()].map(({ node, screens, owners }) => {
     const c = card(node.id);
     const { ident, phrase } = gateNameParts(node.name);
-    const words = c?.gate.business ?? (ident ? phrase : undefined);
+    const words = c?.gate.business ?? node.precondition?.words ?? (ident ? phrase : undefined);
+    const t = gateTierOf(node);
     return {
       id: node.id, name: node.name, kind: node.kind === 'rule' ? 'rule' as const : 'guard' as const, ident: ident || node.name,
       ...(words ? { words } : {}),
       screens: screens.size,
       tests: c ? c.tests.filter((t) => !t.runLevel).length : 0,
       owners: [...owners].sort(),
+      tier: t.tier, class: t.class,
     };
   }).sort((a, b) => b.screens - a.screens || a.name.localeCompare(b.name));
 

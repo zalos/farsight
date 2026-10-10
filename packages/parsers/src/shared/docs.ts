@@ -15,6 +15,8 @@ export interface ParsedDoc {
   tags: string[];
   /** @guard [label] — this function is an auth/permission wrapper; callers get 🔒 edges. */
   guard?: string;
+  /** @guard[business|policy|technical] — the tier the team gives the gate, overriding the one its class gives */
+  guardTier?: 'business' | 'policy' | 'technical';
   /** @entrypoint [kind:name] — declared entry point (cron/queue job…); parts become searchable tags. */
   entrypoint?: string[];
   /** @covers <target…> — what a test claims to verify: a flow id, a design screen id, `METHOD /path`, a node id, or a symbol name. One per line or comma separated; repeated tags accumulate. */
@@ -127,7 +129,13 @@ export function parseDoc(raw: string | null): ParsedDoc {
       case 'business': out.business = cleanProse(value); break;
       case 'group': out.group = cleanProse(value); break;
       case 'tag': case 'tags': out.tags.push(...value.split(/[,\s]+/).filter(Boolean)); break;
-      case 'guard': out.guard = value; break; // '' means "guard, named after the function"
+      case 'guard': {
+        // `@guard[policy] four eyes` — the bracket is the tier, the rest the label ('' = named after the function)
+        const m = value.match(/^\[(business|policy|technical)\]\s*([\s\S]*)$/i);
+        if (m) { out.guardTier = m[1]!.toLowerCase() as ParsedDoc['guardTier']; out.guard = m[2]!.trim(); }
+        else out.guard = value;
+        break;
+      }
       case 'entrypoint': out.entrypoint = value.split(/[:\s]+/).filter(Boolean); break;
       // @covers is a CLAIM by the test author — resolved against the graph by the tests adapter,
       // kept verbatim on the node when nothing matches (docs/proposals/tests-surface.md §3.2)

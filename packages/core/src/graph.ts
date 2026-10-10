@@ -730,6 +730,12 @@ export interface LifecycleTransition {
   via: 'assignment' | 'update-call' | 'sql';
   /** the write's line in the writer's file */
   line?: number;
+  /**
+   * the statuses a transition table lets the record leave for `to`, when the writer goes through
+   * one (`guard(from, 'APPROVED')` over `const T = { VERIFIED: ['APPROVED', …], … }`), read inverted
+   * (parsers/src/lifecycle.ts `transitionTables`). `from` is set too when the table names exactly one.
+   */
+  fromAny?: string[];
 }
 export interface LifecycleSource {
   /** a SQL CHECK on the column, a `const … as const` array, a `z.enum`, a string-literal union, a TS `enum` */
@@ -737,6 +743,59 @@ export interface LifecycleSource {
   name?: string;
   path: string;
   line: number;
+}
+
+/**
+ * What a gate protects (core gate-class.ts `gateClass`): who may go on (identity, authorisation), the
+ * state of the record and the records around it, that nothing is missing (completeness), policy
+ * (integrity, data protection), and the technical checks (input shape, platform). `configuration`
+ * is a check on how the app was started; `action-gate` is a use-case marked `@guard` that writes a
+ * record's status — the action itself, never a gate on itself.
+ */
+export type GateClass =
+  | 'identity' | 'authorisation' | 'record-state' | 'completeness'
+  | 'integrity' | 'data-protection'
+  | 'input' | 'platform'
+  | 'configuration' | 'action-gate';
+/** Who a gate matters to: `business` + `policy` are what the business register lists, `technical` folds. */
+export type GateTier = 'business' | 'policy' | 'technical';
+
+/**
+ * A precondition the code enforces before an action (parsers/src/preconditions.ts): a comparison on a
+ * status, kind, type, flag or list of a record, whose arm refuses — a throw, a refusing return, a 4xx
+ * helper, or a push into a list one throw refuses. Carried by a `rule` node tagged `precondition`
+ * that `validates` the action.
+ */
+export interface Precondition {
+  /** the record: its table name when the graph knows it, else the word the code uses for it */
+  record: string;
+  /** the table node id, when the record resolved to one */
+  table?: string;
+  /** the field compared (`status`, `bc_sync_status`, `lines`) */
+  field: string;
+  /** the values the field must hold (`['ACTIVE']`); for `kind: 'present'` the empty list */
+  requires: string[];
+  /** the values it must not hold (`['PENDING', 'REJECTED']`) */
+  excludes?: string[];
+  /** a status/kind compare, a list that must not be empty, a flag that must be set or clear */
+  kind: 'state' | 'present' | 'flag';
+  /** what happens otherwise: `409 conflict`, `throw`, `return` */
+  else: string;
+  /** how the code refuses: a guard clause, a blocker list one throw refuses, a transition table */
+  via: 'guard-clause' | 'blocker-list' | 'transition-table';
+  /** the comparison's line in `path` (the function it sits in may be one hop from the action) */
+  path: string;
+  line: number;
+  /** the class it is (`record-state`, `completeness`) — the tier follows from it */
+  class: GateClass;
+  tier: GateTier;
+  /** the sentence: the `@business` arm label, else the refusal's own message, else words from the names */
+  words: string;
+  wordsFrom: 'business' | 'message' | 'humanize';
+  /** the action it guards (node id) */
+  action: string;
+  /** the record is the one the action writes (`own`) or one it loaded beside it (`related`) */
+  relation: 'own' | 'related';
 }
 
 export interface GraphNode {
@@ -768,6 +827,10 @@ export interface GraphNode {
   store?: StoreRef;
   /** table nodes: the statuses one field of the record holds and the functions that move it between them — see RecordLifecycle */
   lifecycle?: RecordLifecycle;
+  /** rule nodes tagged `precondition`: the record, the field, what it requires and what happens otherwise — see Precondition */
+  precondition?: Precondition;
+  /** guard and rule nodes: a tier somebody set — `farsight.config.json → gateTiers` or `@guard[tier]` — over the one the class gives (core gate-class.ts) */
+  gateTier?: { tier: GateTier; from: 'config' | 'annotation' };
   /** component/page nodes: the stories that render this component on its own — see StoryRef */
   stories?: StoryRef[];
   /** package nodes only: which dependency this is, where it is declared and at what range — see PackageRef */
@@ -804,7 +867,8 @@ export type ResolutionTechnique =
   | 'constant-host' //   MEDIUM — a non-literal fetch inside a class whose base URL starts with a constant host
   | 'name-match' //     LOW    — last-resort symbol name match
   | 'work-key' //        MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
-  | 'callback-prop'; //  MEDIUM — a function a parent hands a single-site child component as a prop, credited to the child that runs it (parsers/src/callback-props.ts)
+  | 'callback-prop' //   MEDIUM — a function a parent hands a single-site child component as a prop, credited to the child that runs it (parsers/src/callback-props.ts)
+  | 'precondition'; //   HIGH   — a refusing comparison on a record's status, kind, flag or list, credited to the action it stands in front of (parsers/src/preconditions.ts)
 
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
 

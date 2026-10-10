@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { gateFacts, gateSentence, gateCardModel, nameParts, GATE_CARD_CAP } = await import(join(here, '..', 'public', 'app', 'lib', 'gate-card-model.js'));
+const { gateFacts, gateSentence, gateCardModel, nameParts, GATE_CARD_CAP, tierLine, preconditionCode } = await import(join(here, '..', 'public', 'app', 'lib', 'gate-card-model.js'));
 
 const G = 'app::src/auth.ts::requireOwner';
 const R = 'app::src/rules.ts::invoiceShape';
@@ -91,4 +91,19 @@ test('the card: pending until the service answers, then the calls and tests capp
   assert.deepEqual(m.tests.rows.map((t: any) => t.onGate), [true, false]);
   assert.equal(m.evidence.chip, 'reached');
   assert.equal(gateCardModel('nope', ctx, {}), null);
+});
+
+// gates lane 2026-10-10: the card's tier line, from the service's fold, and a precondition's code form
+test('the tier line says the tier, why, the code form outside business, and where the tier came from', () => {
+  const pre = { record: 'contractors', field: 'status', requires: ['ACTIVE'], kind: 'state', else: '409 conflict' };
+  const g = { tier: 'business', class: 'record-state', tierFrom: 'class', precondition: pre };
+  assert.deepEqual(tierLine(g, 'hybrid'), {
+    tier: 'business', tierKey: 'gate.tier.business', classKey: 'gate.class.record-state', fromKey: 'gate.tierFrom.class',
+    code: 'contractors.status = ACTIVE', elseText: '409 conflict',
+  });
+  assert.equal(tierLine(g, 'business').code, '', 'the business register prints no code form');
+  assert.equal(tierLine({ tier: 'policy', class: 'integrity', tierFrom: 'config' }, 'code').fromKey, 'gate.tierFrom.config');
+  assert.equal(preconditionCode({ record: 'links', field: 'status', requires: [], excludes: ['PENDING', 'REJECTED'], kind: 'state' }), 'links.status not in {PENDING, REJECTED}');
+  assert.equal(preconditionCode({ record: 'invoices', field: 'lines', requires: [], kind: 'present' }), 'invoices.lines not empty');
+  assert.equal(preconditionCode({ record: 'invoices', field: 'status', requires: ['A', 'B'], kind: 'state' }), 'invoices.status in {A, B}');
 });

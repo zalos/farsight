@@ -68,6 +68,7 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
   'config.field.tags': same('tags', 'Labels attached to parts of the code by matching their path or name.'),
   'config.field.glossary': same('business words', 'Plain words for the names in the code, shown in the business lens instead of the name.'),
   'config.field.guards': same('checks', 'Functions or web addresses to treat as checks a request must pass, such as signing in.'),
+  'config.field.gateTiers': same('check tiers', 'Which checks matter to the business and which are technical, for the checks whose kind gives the wrong answer.'),
   'config.field.entrypoints': same('ways in', 'Code that starts work by itself, such as a nightly job or a queue reader, so a journey can start there.'),
   'config.field.setup': same('start-up code', 'The code that builds the running application when it starts, kept apart from what a user does.'),
   'config.field.plumbing': same('plumbing', 'Folders of helper code: shown inside journeys, but never counted as a feature or a way in.'),

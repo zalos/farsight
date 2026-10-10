@@ -26,6 +26,12 @@ export interface FarsightConfig {
    * `security-declared-only` when the built handler enforces nothing the parser can see.
    */
   guards?: Record<string, string[]>;
+  /**
+   * matcher → tier: the tier a gate is in when its class gives the wrong one (gates lane 2026-10-10).
+   * A matcher is an exact node id or a substring of `path name`, the guards' shape; it applies to
+   * guards and rules (preconditions included). A `@guard[tier]` the code carries wins over it.
+   */
+  gateTiers?: Record<string, 'business' | 'policy' | 'technical'>;
   /** entrypoint label → matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs…). */
   entrypoints?: Record<string, string[]>;
   /** OpenAPI/Swagger documents describing this repo's HTTP surface — a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself). */
@@ -68,7 +74,7 @@ export interface FarsightConfig {
 
 /** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
 export const CONFIG_FIELDS = [
-  'tags', 'glossary', 'guards', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
+  'tags', 'glossary', 'guards', 'gateTiers', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
   'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle',
 ] as const satisfies readonly (keyof FarsightConfig)[];
 
@@ -558,6 +564,7 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
   // function-shaped matchers only here; route-shaped ones are applyRouteGuards()
   const guardRules = Object.entries(config.guards ?? {}).map(([l, ms]) => [l, ms.filter((m) => !ROUTE_MATCHER.test(m))] as const).filter(([, ms]) => ms.length);
   const entryRules = Object.entries(config.entrypoints ?? {});
+  const tierRules = Object.entries(config.gateTiers ?? {});
   // plumbing is a path glob (a whole directory of helpers); setup is the guards' matcher shape (an exact node id or a substring of `path name`)
   const plumbingGlobs = (config.plumbing ?? []).map(globToRegExp);
   const setupMatchers = config.setup ?? [];
@@ -601,6 +608,14 @@ export function applyConfig(nodes: GraphNode[], config: FarsightConfig, edges: G
         edges.push({ id: `g${edges.length}`, kind: 'guards', from: node.id, to: e.from,
           resolution: { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `declared a guard by farsight.config.json (${label})` } });
         e.meta = { ...e.meta, via: 'guard' };
+      }
+    }
+    // the tier a team gives a gate, past its class (core gate-class.ts); the code's own `@guard[tier]` stands
+    if ((node.kind === 'guard' || node.kind === 'rule') && node.gateTier?.from !== 'annotation') {
+      for (const [m, tier] of tierRules) {
+        if (!(node.id === m || hay.includes(m.toLowerCase()))) continue;
+        if (tier !== 'business' && tier !== 'policy' && tier !== 'technical') continue;
+        node.gateTier = { tier, from: 'config' };
       }
     }
     for (const [label, matchers] of entryRules) {

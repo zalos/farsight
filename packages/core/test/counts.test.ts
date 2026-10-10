@@ -148,8 +148,12 @@ test('every count the journey fold hands out is sound: known words, a define, a 
   const sum = fold();
   const n = assertSound(sum.counted, 'journey') + sum.segments.reduce((a, sg) => a + assertSound(sg.counted, `segment ${sg.index}`), 0);
   // 20 since the data-stores pass: `stores` joined the header counts; 21 since the map pass: `screensReached`;
-  // 22 and 8 per screen since the gate card (swarm-fixes 2026-10-05): `configChecks`, counted apart from the gates
-  assert.equal(n, 22 + 8 * sum.segments.length, 'every header count and every screen count is typed');
+  // 22 and 8 per screen since the gate card (swarm-fixes 2026-10-05): `configChecks`, counted apart from the gates;
+  // 24 and 10 since the gates lane (2026-10-10): `gatesBusiness` + `gatesTechnical`, a partition of `gates`
+  assert.equal(n, 24 + 10 * sum.segments.length, 'every header count and every screen count is typed');
+  for (const c of [sum.counted!, ...sum.segments.map((sg) => sg.counted!)]) {
+    assert.equal(c.gatesBusiness.n + c.gatesTechnical.n, c.gates.n, 'the two tiers partition the gates');
+  }
   for (const sg of sum.segments) assert.ok(sg.counted, `segment ${sg.index} carries no typed counts`);
 });
 

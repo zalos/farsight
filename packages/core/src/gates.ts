@@ -11,7 +11,14 @@
  * existed is read the same way from the node's snippet.
  */
 import type { GraphNode, Loc } from './graph.js';
-import type { GraphIndex } from './query.js';
+import type { GraphIndex, Journey, JourneySummary, JourneyGate } from './query.js';
+import type { GateClass, GateTier, Precondition } from './graph.js';
+import { gateTierOf, GATE_CLASS_ORDER, type TierFrom } from './gate-class.js';
+
+function tierOfNode(node: GraphNode): { tier: GateTier; class: GateClass; tierFrom: TierFrom } {
+  const t = gateTierOf(node);
+  return { tier: t.tier, class: t.class, tierFrom: t.tierFrom };
+}
 import { testsCovering, EVIDENCE_RANK } from './metrics.js';
 import { toCoverageRef, evidenceFacts, type CoverageTestRef, type EvidenceWord, type CoverageCounted, type CoverageFacts, type TestVerdict } from './coverage.js';
 import { counted, type Counted } from './counts.js';
@@ -58,6 +65,12 @@ export interface GateCard {
     configCheck: boolean;
     /** declared in farsight.config.json rather than found in the code */
     declared: boolean;
+    /** who it matters to and why (core gate-class.ts): the tier, the class that gave it, and where the tier came from */
+    tier: GateTier;
+    class: GateClass;
+    tierFrom: TierFrom;
+    /** a rule the parser read out of a refusing comparison: the record, the field, what it requires, what happens otherwise */
+    precondition?: Precondition;
     project?: string;
   };
   /** what the gate sits on directly — the functions and routes its `guards` / `validates` edges name */
@@ -191,6 +204,8 @@ export function gateCard(index: GraphIndex, gateId: string): GateCard | undefine
       ...(firstSentence(node.docs) ? { docs: firstSentence(node.docs)! } : {}),
       configCheck: isConfigCheck(node),
       declared: !!node.tags?.includes('declared'),
+      ...tierOfNode(node),
+      ...(node.precondition ? { precondition: node.precondition } : {}),
       ...(node.project?.name ? { project: node.project.name } : {}),
     },
     sitsOn,
@@ -217,4 +232,155 @@ export function gateCard(index: GraphIndex, gateId: string): GateCard | undefine
     },
     truncated,
   };
+}
+
+// ── what an action needs (gates lane, 2026-10-10) ─────────────────────────────
+
+/** One thing an action needs before it goes through: a gate on its walk, with its tier, its words and its one verdict. */
+export interface ActionPrecondition {
+  /** the gate's node id (a planned gate's synthetic id) */
+  id: string;
+  tier: GateTier;
+  class: GateClass;
+  /** a precondition's record and field, and the values it must / must not hold */
+  record?: string;
+  field?: string;
+  requires?: string[];
+  excludes?: string[];
+  /** the record is the one the action writes, or one loaded beside it */
+  relation?: 'own' | 'related';
+  /** the roles or scopes a guard was handed here (`ops.approver`) */
+  role?: string;
+  /** the words: a precondition's sentence, a guard's `@guard` requirement, else its name */
+  words: string;
+  wordsFrom: 'business' | 'message' | 'humanize' | 'guard' | 'name';
+  /** the gate card's one verdict for it (`gateCard().verdict` — `testVerdict()`): its word and how many tests reach it */
+  evidence?: { word: EvidenceWord; tests: number; status?: TestVerdict['status'] };
+  /** `path:line` */
+  loc?: string;
+  planned?: true;
+}
+/** A record move the action makes, and whether the code checks the status it moves from. */
+export interface ActionMove {
+  record: string;
+  table: string;
+  field: string;
+  from?: string;
+  fromAny?: string[];
+  to: string;
+  by: string;
+  /** the code compares the prior status (a guard clause or a transition table): false = *not checked by the code* */
+  checked: boolean;
+  /** the record is written in its first declared status: it is being created, with nothing to move from */
+  creates?: true;
+}
+/** What one action needs, in the order a reader meets it: who, the record's own state, the records around it, policy, then the technical checks. */
+export interface ActionPreconditions {
+  /** the route the action calls, else the function that starts it */
+  action: string;
+  moves: ActionMove[];
+  preconditions: ActionPrecondition[];
+  /** the preconditions counted, each once, by tier (scope: one action) */
+  counted: Counted;
+}
+
+/** How far under an action's call a writer still makes the action's own move. */
+export const MOVE_DEPTH = 2;
+const CLASS_RANK = new Map<GateClass, number>(GATE_CLASS_ORDER.map((c, i) => [c, i]));
+const CARD_FACTS = new WeakMap<GraphIndex, Map<string, ActionPrecondition['evidence'] | null>>();
+/** The gate card's verdict for one gate, folded once per index. */
+function evidenceOf(index: GraphIndex, id: string): ActionPrecondition['evidence'] | undefined {
+  let m = CARD_FACTS.get(index);
+  if (!m) { m = new Map(); CARD_FACTS.set(index, m); }
+  if (m.has(id)) return m.get(id) ?? undefined;
+  const card = gateCard(index, id);
+  const ev = card ? { word: card.verdict.word, tests: card.tests.length, ...(card.verdict.status ? { status: card.verdict.status } : {}) } : null;
+  m.set(id, ev);
+  return ev ?? undefined;
+}
+
+/** One gate of the walk as a thing the action needs. */
+function preconditionOf(index: GraphIndex, g: JourneyGate): ActionPrecondition {
+  const node = index.byId.get(g.id);
+  const t = node ? gateTierOf(node) : { tier: g.tier ?? 'business', class: g.class ?? 'authorisation' };
+  const pre = node?.precondition;
+  const { ident, phrase } = gateNameParts(g.name);
+  const words = pre?.words ?? (phrase && ident ? phrase : g.name);
+  const loc = pre ? `${pre.path}:${pre.line}` : node?.loc ? `${node.loc.path}:${node.loc.line}` : undefined;
+  const ev = node ? evidenceOf(index, g.id) : undefined;
+  return {
+    id: g.id, tier: g.tier ?? t.tier, class: g.class ?? t.class,
+    ...(pre ? { record: pre.record, field: pre.field, requires: pre.requires, ...(pre.excludes ? { excludes: pre.excludes } : {}), relation: pre.relation } : {}),
+    ...(g.requires ? { role: g.requires } : {}),
+    words, wordsFrom: pre ? pre.wordsFrom : phrase && ident ? 'guard' : 'name',
+    ...(ev ? { evidence: ev } : {}),
+    ...(loc ? { loc } : {}),
+    ...(g.planned ? { planned: true as const } : {}),
+  };
+}
+
+/** The order the hand-off reads: identity → authorisation → the record's own state → related records → completeness → policy → technical. */
+function needOrder(a: ActionPrecondition, b: ActionPrecondition): number {
+  const r = (x: ActionPrecondition) => (CLASS_RANK.get(x.class) ?? 99) * 2 + (x.relation === 'related' ? 1 : 0);
+  return r(a) - r(b);
+}
+
+/**
+ * Every moment's `preconditions`: the gates its steps meet (config checks apart, as everywhere), each
+ * once, with tier, class, words and the gate card's verdict; and the record moves it makes, each
+ * saying whether the code checks the status it moves from. Pure over the walk; the verdict is the
+ * gate card's own, folded once per gate per index.
+ */
+export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary: JourneySummary): JourneySummary {
+  const stepAt = new Map(j.steps.map((s) => [s.order, s] as const));
+  for (const sg of summary.segments) {
+    for (const mo of sg.moments) {
+      const seen = new Map<string, ActionPrecondition>();
+      // the writers a move is the action's own: the call and up to two calls under it (an outbox
+      // drained later, three calls down, is the machinery's state, not this action's move)
+      const callDepth = mo.callStep != null ? stepAt.get(mo.callStep)?.depth : stepAt.get(mo.actionStep)?.depth;
+      const inRange = new Set<string>();
+      const tables: GraphNode[] = [];
+      for (let o = mo.from; o <= mo.to; o++) {
+        const st = stepAt.get(o);
+        if (!st) continue;
+        if (callDepth == null || st.depth <= callDepth + MOVE_DEPTH) inRange.add(st.nodeId);
+        const n = index.byId.get(st.nodeId);
+        if (n?.kind === 'table' && n.lifecycle && !tables.includes(n)) tables.push(n);
+        for (const g of st.gates) {
+          if (g.config || seen.has(g.id)) continue;
+          seen.set(g.id, preconditionOf(index, g));
+        }
+      }
+      const needs = [...seen.values()].sort(needOrder);
+      const moves: ActionMove[] = [];
+      for (const t of tables) {
+        for (const tr of t.lifecycle!.transitions) {
+          if (!inRange.has(tr.by)) continue;
+          // a record written in its first status is being created: there is no status to move from
+          const creates = !tr.from && tr.to === t.lifecycle!.statuses[0];
+          const checked = creates || !!tr.from || !!tr.fromAny?.length
+            || needs.some((p) => p.relation === 'own' && p.field && index.byId.get(p.id)?.precondition?.table === t.id && p.field.replace(/_/g, '').toLowerCase() === t.lifecycle!.field.replace(/_/g, '').toLowerCase() && !!p.requires?.length);
+          if (moves.some((m) => m.table === t.id && m.to === tr.to && m.by === tr.by)) continue;
+          moves.push({ record: t.name, table: t.id, field: t.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked, ...(creates ? { creates: true as const } : {}) });
+        }
+      }
+      if (!needs.length && !moves.length) continue;
+      const callNode = mo.callStep != null ? stepAt.get(mo.callStep)?.nodeId : undefined;
+      const action = callNode ?? stepAt.get(mo.actionStep)?.nodeId ?? '';
+      const tiers = (k: GateTier) => needs.filter((p) => p.tier === k).length;
+      mo.preconditions = {
+        action, moves, preconditions: needs,
+        counted: counted(needs.length, 'count.unit.preconditions', 'count.scope.action', `journeySummary().segments[${sg.index}].moments[${mo.index}].preconditions`, {
+          bizUnit: 'count.unit.preconditions',
+          breakdown: [
+            { key: 'count.part.tierBusiness', n: tiers('business') },
+            { key: 'count.part.tierPolicy', n: tiers('policy') },
+            { key: 'count.unit.gatesTechnical', n: tiers('technical') },
+          ],
+        }),
+      };
+    }
+  }
+  return summary;
 }
