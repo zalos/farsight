@@ -590,6 +590,40 @@ street is the board. Programmatic moves animate 450 ms (`.anim`, off under `pref
 do. Leaving a screen lands on the street at scale **1.0** centred on it; a ⌘/Ctrl scroll out past a small budget,
 or a two-finger pinch out, over the open screen leaves it (the rest of that scroll is swallowed for 400 ms).
 
+**Below the screen: the action and the code, and one LAYOUT control** (lanes round 2026-10-10, proposal 1 steps 1–2;
+`surfaces/map-stops.js`). The level control reads **ALL · JOURNEY · SCREEN · ACTION · CODE** (`map.level.act`,
+`map.level.code`, both registers; `stopNow()` says which is on). The first three are the board, the street and the
+property; the last two are drawn by the journey's own drill code on the Map's stage, never by a second surface:
+- **the action stop** (`openAction(flow, ci, { order, beat, code, dock })`, `ci` a Sheet column — the journey's stop):
+  entered from a call card's *walk its beats* door, a property call row's door (`ctx.onOpenAction`), `+` on an open
+  screen (`stopZoom`) or the ACTION button. `.map-act-host` (under the chrome) holds a slim **strip** of the journey's
+  screens (the one it is on lit, *action n of m*; a click opens that screen), the drill's caption and **lanes** for one
+  action (`jrnDrillStageHtml()` + `jrnDrillMount()` from `journey-drill.js`, the beats from `lib/journey-model.js
+  drillBeats`) and a keys line. The full journey answer (with its walk — the board reads `steps=0`) is fetched once per
+  journey per sync and becomes `S.JOURNEY` with `S.JRN_HOST` = the host: `journeys.js jrnHostEl()` makes selection,
+  folds and rings look there while the overlay is closed, and the closed overlay's `#jrn-tl` is emptied so the drill's
+  ids are unique. `←` / `→` walk the beats (`walkBeat`), `[` / `]` the journey's actions, `−` back to the screen,
+  `+` the code. First draw measured into `.map-act-host[data-draw-ms]`;
+- **the code stop** is the dock opening, not a zoom: the drill's inspector (`#jrn-insp`, DOCS · CODE · FORKS · TESTS ·
+  CHANGE IMPACT, REQUEST / RESPONSE on a seam) shown in place · bottom · right (`setActDock`, `d`; the journey's
+  `fs-jrn-dock`, so both surfaces remember one place); it opens on the CODE tab (DOCS in the business lens) on the
+  beat that is a part (a screen kept open from an earlier action has no code here);
+- **LAYOUT** (`MAP_LAYOUTS`, `registerMapLayout({ id, word, when, onPick })` — the registration point a lane adds a
+  layout through; `when` is `nb` · `st` · `act`; `layoutAt(when)`, `v` cycles): `chain` at the board, `screens · table`
+  at the journey — **table** draws the Sheet (`jrnSheetIndex` + `jrnSheetHtml`) in `.map-table-host` in place of the
+  street, under the street head, a column (its head or a part in a cell) opening that action's beats (`syncTable()`
+  after every canvas change) — and `beats · ladder` at the action (the ladder of that action's lines only). The board's
+  storyline and band pickers step aside below the board (`.map-chrome.below`);
+- **the crumb** is a strip under the toolbar (`.map-crumbs`, `crumbHtml()`): *storyline › journey · step n of m ›
+  screen · screen n of m › action n of m · name*, the bold part being where the reader is (positions, not counts —
+  docs/COUNTS.md);
+- **the street head** carries what the journey header did besides its counts (`streetFactsHtml`): the storyline
+  position, the lifecycle strip through `jrnLifecycleHtml` (lane W's strip) and *Save* (`registerExport('street')` — the
+  stop in view: the action with its dock, the table, or the journey's district);
+- **the address**: `#/map/<flow>?screen=<step>&action=<k>[&beat=<b>][&layout=<l>][&dock=<d>]` (`lib/route-url.js
+  mapStopHash` / `mapStopOf`, pure and tested; `dock` only at the code stop, `layout` only when not the stop's
+  default). `applyRouteTarget` opens the stop a link names; `writeHash` writes it (`actionParams()`).
+
 **The opening frame and the edge cues.** `#/map/<flow>` opens at the journey stop (refitted once its walk lands,
 unless the link names `z/x/y`). When screens run past an edge, `.map-edgecue.l` / `.r` (on the stage, in the gap
 under the screens' row so it never sits on a name) prints *◂ n more* / *n more ▸* (`map.edge.more`, the number a

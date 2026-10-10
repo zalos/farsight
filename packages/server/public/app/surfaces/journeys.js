@@ -35,6 +35,7 @@ import { filterTree, placesOf, storylineOf, findStoryline, firstScreenOf } from 
 import { lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 import { exportToolHtml, registerExport } from '../lib/export.js';
+import { rankOrder, momOrdinal, buildTree, cellTree, sheetModel, stopOf, ladderModel, LADDER } from '../lib/journey-model.js';
 import { testChipHtml, distinctArgs } from '../lib/test-chip.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
@@ -649,16 +650,7 @@ function jrnBannerHtml(s) {
  * of journey steps (the wire order from /api/journey).
  * @group Journey view
  */
-function jrnBuildTree(steps) {
-  const parent = steps.map(() => -1), children = steps.map(() => []), roots = [], stack = [];
-  steps.forEach((s, i) => {
-    const d = s.depth || 0;
-    while (stack.length && (steps[stack[stack.length - 1]].depth || 0) >= d) stack.pop();
-    if (stack.length) { parent[i] = stack[stack.length - 1]; children[parent[i]].push(i); } else roots.push(i);
-    stack.push(i);
-  });
-  return { parent, children, roots };
-}
+export function jrnBuildTree(steps) { return buildTree(steps); }
 /**
  * Pure: split a code block spanning absolute lines
  * [startLine … startLine+lineCount-1] at child call sites. kids is
@@ -2202,7 +2194,7 @@ function jrnCompStoryHtml(id) {
 }
 /** Label + sub-line for a system row by its kind — a repo row names the side of the seam it is.
  * @group Journey view */
-function jrnRowLabel(r) {
+export function jrnRowLabel(r) {
   if (r.kind === 'api') return { label: t('journey.row.api') + ' · ' + r.label, sub: r.planned ? t('journey.rowPlanned') : t('journey.rowSub.api') };
   if (r.kind === 'repo') {
     const side = r.side === 'ux' ? 'ux' : 'server';
@@ -2327,7 +2319,7 @@ export function jrnCycleLayout() {
  * when nothing was chosen yet.
  * @group Journey view
  */
-function jrnDock() {
+export function jrnDock() {
   if (!S.jrnDock) {
     try { S.jrnDock = localStorage.getItem('fs-jrn-dock'); } catch (e) { S.jrnDock = null; }
     if (!/^(inline|bottom|right)$/.test(S.jrnDock || '')) S.jrnDock = 'bottom';
@@ -2474,7 +2466,7 @@ function jrnLadderColLabel(r) { const lb = jrnRowLabel(r); return lb.label; }
 // share it had when every system drew a full lane (172 px), and grows to what
 // it holds; a column it skips between two it uses keeps its place, narrow; the
 // columns after the last one it uses fold into one end column.
-const JRN_LAD_TIME = 150, JRN_LAD_COL = 172, JRN_LAD_USED = 344, JRN_LAD_MAX = 520, JRN_LAD_SKIP = 34, JRN_LAD_END = 210, JRN_LAD_PAD = 32;
+const { TIME: JRN_LAD_TIME, SKIP: JRN_LAD_SKIP, END: JRN_LAD_END } = LADDER;
 /**
  * One segment's ladder before it is drawn: its lines (the time cell and the
  * cells by system key), which systems those lines use, and the columns that
@@ -2486,63 +2478,20 @@ const JRN_LAD_TIME = 150, JRN_LAD_COL = 172, JRN_LAD_USED = 344, JRN_LAD_MAX = 5
  * @business Works out which parts of the system one screen actually uses, so the ones it never reaches fold into one column that says so.
  */
 function jrnLadderModel(sum, sg) {
-  const uxKey = (sum.systems.find((r) => r.kind === 'repo' && r.side === 'ux') || {}).key;
-  const svKey = (sum.systems.find((r) => r.kind === 'repo' && r.side === 'server') || {}).key;
-  const momStart = new Map();
-  sg.moments.forEach((mo) => { const first = sg.markers.find((m) => m.moment === mo.index); if (first) momStart.set(first.stepOrder, mo); });
-  // `want` is what a cell needs, in px, so a column can be as wide as its widest line
-  const want = {};
-  const need = (key, px) => { want[key] = Math.max(want[key] || 0, px); };
-  const MONO = 6.3;
-  const lines = sg.markers.map((m) => {
-    const mo = momStart.get(m.stepOrder);
-    const time = mo ? '<span class="o">' + jrnMomOrdinal(sg, mo) + ' · ' + esc(jrnMoLabel(mo)) + '</span>' : String(m.stepOrder + 1);
+  const lm = ladderModel(sum, sg, { steps: S.JOURNEY.steps, text: jrnMarkerText, word: (key) => jrnAbsentWord(sg, null, key) });
+  // the model's cells are plain descriptors; the overlay draws them as it always has
+  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + esc(c.at) + ' →</span>'
+    : c.type === 'seam' ? jrnSeamCardHtml(c.m) + '<span class="go"> →</span>'
+    : c.type === 'out' ? '<span class="go out">→</span>'
+    : c.type === 'marker' ? jrnMarkerHtml(c.m)
+    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + esc(c.loc) + '</span>' : ''));
+  lm.lines = lm.lines.map((l) => {
     const cells = {};
-    if (m.kind === 'call') {
-      if (uxKey && m.caller) {
-        const at = m.caller.path + ':' + m.caller.line;
-        cells[uxKey] = '<span class="go">' + esc(at) + ' →</span>';
-        need(uxKey, 30 + (at.length + 2) * MONO);
-      }
-      cells[m.system] = jrnSeamCardHtml(m) + '<span class="go"> →</span>';
-      need(m.system, 70 + jrnMarkerText(m).length * MONO);
-    } else if (m.kind === 'record' || m.kind === 'message' || m.kind === 'external') {
-      if (svKey) { cells[svKey] = '<span class="go out">→</span>'; need(svKey, 40); }
-      cells[m.system] = jrnMarkerHtml(m);
-      need(m.system, 44 + jrnMarkerText(m).length * MONO);
-    } else {
-      // indented by tier: the handler flush left, its parts one step in, their drill-downs deeper
-      const tier = m.tier != null ? m.tier : (m.helper ? 1 : 0);
-      const node = m.nodeId && S.JOURNEY.steps[m.stepOrder] && S.JOURNEY.steps[m.stepOrder].node;
-      const loc = node && node.loc ? node.loc.path + ':' + node.loc.line : '';
-      cells[m.system] = '<span class="ind"></span>'.repeat(tier) + jrnMarkerHtml(m)
-        + (loc ? '<span class="back">' + esc(loc) + '</span>' : '');
-      // the name whole, and the file line as far as it fits: it is the part that may ellipsize
-      need(m.system, 40 + tier * 16 + jrnMarkerText(m).length * MONO + (loc ? 8 + Math.min(loc.length, 30) * 5.9 : 0));
-    }
-    return { time, cells };
+    Object.keys(l.cells).forEach((k) => { cells[k] = cell(l.cells[k]); });
+    const time = l.time.mo ? '<span class="o">' + jrnMomOrdinal(sg, l.time.mo) + ' · ' + esc(jrnMoLabel(l.time.mo)) + '</span>' : String(l.time.n);
+    return { m: l.m, time, cells };
   });
-  const used = new Set();
-  lines.forEach((l) => Object.keys(l.cells).forEach((k) => used.add(k)));
-  let last = -1;
-  sum.systems.forEach((r, i) => { if (used.has(r.key)) last = i; });
-  const cols = sum.systems.slice(0, last + 1).map((r) => ({ r, state: used.has(r.key) ? 'used' : 'skip' }));
-  const end = sum.systems.slice(last + 1);
-  const full = !end.length && cols.every((c) => c.state === 'used');
-  const widths = cols.map((c) => (c.state === 'skip' ? JRN_LAD_SKIP
-    : Math.round(Math.max(JRN_LAD_USED, Math.min(JRN_LAD_MAX, want[c.r.key] || 0)))));
-  const oldW = JRN_LAD_TIME + sum.systems.length * JRN_LAD_COL;
-  // the screen that reaches every system is drawn exactly as before; any other is as
-  // wide as what it uses, and never wider than it used to be
-  // — unless its end column is wider than the lanes it folds: then no used column is narrower than it was
-  const nUsed = cols.filter((c) => c.state === 'used').length, nSkip = cols.length - nUsed;
-  const rest = JRN_LAD_PAD + JRN_LAD_TIME + nSkip * JRN_LAD_SKIP + (end.length ? JRN_LAD_END : 0);
-  const width = full ? oldW
-    : Math.min(Math.max(oldW, rest + nUsed * JRN_LAD_COL), rest + widths.reduce((a, b) => a + b, 0) - nSkip * JRN_LAD_SKIP);
-  // each system this screen leaves empty wears the core's word for it — the same
-  // word the rows and the sheet print: a walk cut short before it cannot say it took no part
-  const word = (key) => jrnAbsentWord(sg, null, key);
-  return { lines, cols, end, full, widths, width, word };
+  return lm;
 }
 /** The grid template of one ladder: the time column, then one track per drawn column.
  * @group Journey view */
@@ -2581,7 +2530,7 @@ function jrnLadderLine(lm, time, cells, cls, i, span) {
  * @group Journey view
  * @business Reads one screen as a sequence — the stack trace with names, in the order it happens — and says where it stops.
  */
-function jrnLadderCellHtml(sum, sg) {
+export function jrnLadderCellHtml(sum, sg) {
   const lm = jrnLadderModel(sum, sg);
   const biz = currentLens() === 'business';
   const endKey = biz ? 'journey.biz.ladder.end' : 'journey.ladder.end';
@@ -2648,7 +2597,7 @@ registerTip('jrnLadderCol', jrnLadderColTip);
 /** Reveal the lines past a ladder's budget.
  * @group Journey view */
 function jrnLadderMore(si, btn) {
-  document.querySelectorAll('#jrn-tl .jrn-lline.over.s' + si).forEach((el) => el.classList.remove('over'));
+  jrnHostEl().querySelectorAll('.jrn-lline.over.s' + si).forEach((el) => el.classList.remove('over'));
   if (btn) btn.style.display = 'none';
 }
 /** The whole band in ladder mode: one ladder per segment, one expansion slot beneath.
@@ -2679,20 +2628,13 @@ function jrnMomHeadHtml(sg) {
  * choice made here and nowhere else.
  * @group Journey view
  */
-export function jrnMomOrdinal(sg, mo) {
-  const i = jrnRankOrder(sg).findIndex((x) => x.index === mo.index);
-  return (i < 0 ? mo.index : i) + 1;
-}
+export function jrnMomOrdinal(sg, mo) { return momOrdinal(sg, mo); }
 /**
  * A segment's actions in the order its screen's manifest lists the operations,
  * with anything the manifest does not list after them in walk order.
  * @group Journey view
  */
-export function jrnRankOrder(sg) {
-  const ms = (sg.moments || []).slice();
-  if (!ms.some((mo) => mo.rank != null)) return ms;
-  return ms.sort((a, b) => (a.rank != null ? a.rank : a.index) - (b.rank != null ? b.rank : b.index));
-}
+export function jrnRankOrder(sg) { return rankOrder(sg); }
 /**
  * The drill tree of one cell (a system row × a moment): who hangs under whom,
  * from the core's `under`, and which markers are drawn by default — every root
@@ -2710,38 +2652,10 @@ export function jrnRankOrder(sg) {
  * @group Journey view
  * @business Groups a step's inner workings under it — the controller, then what it calls, then the details on demand.
  */
-export function jrnCellTree(ms) {
-  const here = new Set(ms.map((m) => m.stepOrder));
-  // the business lens folds plumbing too: a part the code tags as plumbing (a
-  // class-name joiner, a card frame) does not change what the journey does, and
-  // its developer's sentence (*"dropping anything falsy"*) is not a business
-  // reader's to meet on arrival (pass swarm 2026-09-25). It is one click away.
-  const helper = jrnHelperTest();
-  const kids = new Map();
-  ms.forEach((m) => {
-    if (m.under == null || !here.has(m.under)) return;
-    if (!kids.has(m.under)) kids.set(m.under, []);
-    kids.get(m.under).push(m);
-  });
-  const all = ms.filter((m) => m.under == null || !here.has(m.under) || (!helper(m) && (m.tier == null || m.tier <= 1)));
-  // the first visit keeps the chip; the rest of that node's visits fold under it
-  const firstOf = new Map(), agains = new Map(), top = [];
-  all.forEach((m) => {
-    const seen = firstOf.get(m.nodeId);
-    if (seen == null) { firstOf.set(m.nodeId, m.stepOrder); top.push(m); return; }
-    if (!agains.has(seen)) agains.set(seen, []);
-    agains.get(seen).push(m);
-  });
-  // a repeat is still "drawn" — it hangs under its first visit, never a second
-  // time inside somebody else's drill
-  const drawn = new Set(all.map((m) => m.stepOrder));
-  const drill = (o) => (kids.get(o) || []).filter((k) => !drawn.has(k.stepOrder));
-  const again = (o) => agains.get(o) || [];
-  return { top, drill, again };
-}
+export function jrnCellTree(ms) { return cellTree(ms, jrnHelperTest()); }
 /** Whether a marker folds as plumbing in the lens on screen: the core's `helper`, and in the business lens a part tagged `plumbing`.
  * @group Journey view */
-function jrnHelperTest() {
+export function jrnHelperTest() {
   const biz = currentLens() === 'business';
   const tagged = (m) => {
     const n = ((S.JOURNEY && S.JOURNEY.steps[m.stepOrder]) || {}).node;
@@ -2763,7 +2677,7 @@ export function jrnCellFoldsHtml(m, tree, parentFold) {
 }
 /** Forget every fold before a layout is drawn (they register while it draws).
  * @group Journey view */
-function jrnResetFolds() { S.JRN_FOLDS = []; S.JRN_FOLD_OF = {}; }
+export function jrnResetFolds() { S.JRN_FOLDS = []; S.JRN_FOLD_OF = {}; }
 /**
  * The steps folded under a part: one `▸ n inside` chip (`▸ n helpers` when
  * all of them are plumbing) that opens them in place, each with its own fold
@@ -2844,7 +2758,7 @@ function jrnRevealBizTab(i) {
  * cell — so a jump from a chip, a gate or the forks drawer lands on something visible.
  * @group Journey view */
 function jrnRevealFold(i) {
-  const el = document.querySelector('#jrn-tl [data-order="' + i + '"]');
+  const el = jrnHostEl().querySelector('[data-order="' + i + '"]');
   if (!el) return;
   for (let fold = el.closest('.jrn-fold'); fold; fold = fold.parentElement && fold.parentElement.closest('.jrn-fold')) {
     if (!fold.classList.contains('open')) jrnToggleHelpers(fold.id);
@@ -3123,19 +3037,6 @@ function jrnMomentCut(sg, mo) {
 
 const JRN_SHEET_COL = 214, JRN_SHEET_LANE = 178;
 
-/** One layer row of the sheet for a system row of the summary — the repo rows
- * read as app / server parts, the API row by its spec title.
- * @group Journey view */
-function jrnSheetSysLayer(r) {
-  if (r.kind === 'api') return { key: r.key, kind: 'api', row: r, label: t('journey.layer.api'), sub: r.planned ? t('journey.rowPlanned') : r.label, cls: 'api' };
-  if (r.kind === 'repo') {
-    const ux = r.side === 'ux';
-    return { key: r.key, kind: 'repo', side: r.side, row: r, label: t(ux ? 'journey.layer.app' : 'journey.layer.server'),
-      sub: r.label + ' · ' + t('journey.rowSub.' + (ux ? 'ux' : 'server')), cls: ux ? 'app' : 'srv' };
-  }
-  const lb = jrnRowLabel(r);
-  return { key: r.key, kind: r.kind, row: r, label: lb.label, sub: lb.sub, cls: r.kind === 'records' ? 'db' : r.kind === 'messages' ? 'msg' : 'ext' };
-}
 /**
  * The sheet's model: the columns (every moment of every segment in journey
  * order) and the layers (the summary's systems in request order, with *what
@@ -3144,17 +3045,7 @@ function jrnSheetSysLayer(r) {
  * touches has no row, and the always-present rows say so in words.
  * @group Journey view
  */
-export function jrnSheetModel(sum) {
-  const cols = [];
-  sum.segments.forEach((sg) => jrnRankOrder(sg).forEach((mo, i) => cols.push({ index: cols.length, sg, mo, first: i === 0 })));
-  const rows = sum.systems || [];
-  const layers = [{ key: 'user', kind: 'user', label: t('journey.layer.user'), sub: t('journey.layerSub.user'), cls: 'ui' }];
-  rows.filter((r) => r.kind === 'repo' || r.kind === 'api').forEach((r) => layers.push(jrnSheetSysLayer(r)));
-  layers.push({ key: 'gates', kind: 'gates', label: t('journey.layer.gates'), sub: t('journey.layerSub.gates'), cls: 'gate' });
-  rows.filter((r) => r.kind !== 'repo' && r.kind !== 'api').forEach((r) => layers.push(jrnSheetSysLayer(r)));
-  layers.push({ key: 'verified', kind: 'verified', label: t('journey.layer.verified'), sub: t('journey.layerSub.verified'), cls: 'test' });
-  return { cols, layers };
-}
+export function jrnSheetModel(sum) { return sheetModel(sum, { t, rowLabel: jrnRowLabel }); }
 /** The markers one cell of the sheet draws: this layer's markers inside this
  * action, with their drill tree — the parts on top, what they called folded under them.
  * @group Journey view */
@@ -3267,7 +3158,7 @@ function jrnSheetChipsHtml(chips, li, ci) {
 /** Open the rest of a cell's chips and re-walk the j/k order so the revealed steps join it.
  * @group Journey view */
 function jrnSheetOpen(li, ci, what, btn) {
-  const cell = document.querySelector('#jrn-tl .jrn-scell[data-layer="' + li + '"][data-col="' + ci + '"]');
+  const cell = jrnHostEl().querySelector('.jrn-scell[data-layer="' + li + '"][data-col="' + ci + '"]');
   if (!cell) return;
   cell.classList.add(what);
   if (btn) btn.style.display = 'none';
@@ -3670,7 +3561,7 @@ function jrnSheetOrders() {
  * its own layer) and the j/k walk order.
  * @group Journey view
  */
-function jrnSheetIndex(sum) {
+export function jrnSheetIndex(sum) {
   S.JRN_SHEET = jrnSheetModel(sum);
   const byKey = {};
   S.JRN_SHEET.layers.forEach((l, li) => { if (l.key) byKey[l.key] = li; });
@@ -3687,7 +3578,7 @@ function jrnSheetIndex(sum) {
  * @group Journey view
  * @business The whole journey on one sheet: every action across, every layer of the system down.
  */
-function jrnSheetHtml(sum) {
+export function jrnSheetHtml(sum) {
   const sh = S.JRN_SHEET;
   const cols = sh.cols;
   const style = 'grid-template-columns:' + JRN_SHEET_LANE + 'px repeat(' + cols.length + ',minmax(' + JRN_SHEET_COL + 'px,1fr));'
@@ -4875,8 +4766,8 @@ export function jrnSelect(i, noScroll) {
   if (i >= 0 && S.JRN_DRILL) jrnDrillEnsureAction(i);
   if (i >= 0) jrnRevealFold(i);
   S.journeyActive = i;
-  document.querySelectorAll('#jrn-tl .jrn-mk, #jrn-tl .jrn-seam, #jrn-tl .jrn-bx').forEach((el) => el.classList.toggle('on', +el.dataset.order === i));
-  document.querySelectorAll('#jrn-tl .jrn-exp').forEach((el) => { el.style.display = 'none'; el.innerHTML = ''; });
+  jrnHostEl().querySelectorAll('.jrn-mk, .jrn-seam, .jrn-bx').forEach((el) => el.classList.toggle('on', +el.dataset.order === i));
+  jrnHostEl().querySelectorAll('.jrn-exp').forEach((el) => { el.style.display = 'none'; el.innerHTML = ''; });
   const mk = S.JRN_MARK[i];
   if (S.JRN_DRILL) jrnDrillSelected(mk && mk.row >= 0 ? i : -1);
   else if (jrnDock() !== 'inline') jrnDockRender(mk && mk.row >= 0 ? i : -1);
@@ -4886,7 +4777,7 @@ export function jrnSelect(i, noScroll) {
   }
   jrnUpdateProgress();
   if (!noScroll) {
-    const el = document.querySelector('#jrn-tl .jrn-mk[data-order="' + i + '"], #jrn-tl .jrn-seam[data-order="' + i + '"], #jrn-tl .jrn-bx[data-order="' + i + '"]');
+    const el = jrnHostEl().querySelector('.jrn-mk[data-order="' + i + '"], .jrn-seam[data-order="' + i + '"], .jrn-bx[data-order="' + i + '"]');
     if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   jrnImpactRings();
@@ -4945,6 +4836,17 @@ export function journeyLensRefresh() {
 /** Whether the journey overlay is open (keymap routing).
  * @group Journey view */
 export function journeyOpen() { return document.getElementById('journey').classList.contains('open'); }
+/**
+ * Where the journey's drawing lives: the overlay's timeline, or — while the overlay is closed — the Map's stage at a
+ * stop below the street (`S.JRN_HOST`, set by surfaces/map-stops.js), which draws the same Sheet and the same drill
+ * with the same ids. Selection, folds and rings look inside it, so one set of handlers serves both surfaces.
+ * @group Journey view
+ */
+export function jrnHostEl() {
+  const h = S.JRN_HOST;
+  if (h && h.isConnected && !journeyOpen()) return h;
+  return document.getElementById('jrn-tl') || document.body;
+}
 /** Whether the forks drawer is open (Esc routing).
  * @group Journey view */
 export function forksOpen() { return S.jrnForksOpen; }
@@ -4977,16 +4879,7 @@ export function jrnActionStep(d) {
  * @group Journey view
  */
 export function jrnStopOf(order) {
-  const sum = S.JOURNEY && S.JOURNEY.summary;
-  if (!sum || order == null || order < 0) return null;
-  const find = (o) => { for (const sg of sum.segments) { const m = sg.markers.find((x) => x.stepOrder === o); if (m) return { sg, m }; } return null; };
-  let cur = order, hit = find(cur);
-  const parent = S.JRN_TREE && S.JRN_TREE.parent;
-  for (let guard = 0; !hit && parent && cur != null && cur >= 0 && guard < 64; guard++) { cur = parent[cur]; hit = cur != null && cur >= 0 ? find(cur) : null; }
-  if (!hit || hit.m.moment == null) return null;
-  const cols = jrnSheetModel(sum).cols;
-  const at = cols.findIndex((c) => c.sg === hit.sg && c.mo.index === hit.m.moment);
-  return at < 0 ? null : { n: at + 1, t: cols.length };
+  return stopOf(S.JOURNEY && S.JOURNEY.summary, order, S.JRN_TREE && S.JRN_TREE.parent);
 }
 /** `stop n of t` for a part of the walk, or `''` when it sits in no stop. @group Journey view */
 export function jrnStopText(order) {
@@ -5025,7 +4918,7 @@ export function jrnStepOf(id) {
  * @business Outlines everything that uses the thing you asked about, by how far away it is.
  */
 export function jrnImpactRings() {
-  const tl = document.getElementById('jrn-tl');
+  const tl = jrnHostEl();
   if (!tl) return;
   const m = S.IMPACT_RINGS;
   const steps = (S.JOURNEY && S.JOURNEY.steps) || [];
