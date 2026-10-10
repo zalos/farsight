@@ -880,6 +880,17 @@ export function jrnDrillHtml(sum) {
     + '<div class="jrn-drill-main"><div class="jrn-lanes-wrap" id="jrn-dlanes"></div>'
     + '<div class="jrn-insp" id="jrn-insp" role="region" aria-label="' + esc(t('journey.insp.title')) + '"></div></div></div>';
 }
+/**
+ * The drill without its rail, for a host that keeps its own sense of where it is — the Map's action stop draws the
+ * journey's screens as its strip and puts the inspector in its dock. The same ids as the overlay's drill, so
+ * `jrnDrillMount()`, the wires and the inspector fill it; one drill is on the page at a time.
+ * @group Journey drill
+ */
+export function jrnDrillStageHtml() {
+  return '<div class="jrn-drill map-drill"><div class="jrn-dcap" id="jrn-dcap"></div>'
+    + '<div class="jrn-drill-main"><div class="jrn-lanes-wrap" id="jrn-dlanes"></div>'
+    + '<div class="jrn-insp" id="jrn-insp" role="region" aria-label="' + esc(t('journey.insp.title')) + '"></div></div></div>';
+}
 /** Fill the drill's lanes after its markup landed, and show the inspector's hint.
  * @group Journey drill */
 export function jrnDrillMount() {
@@ -889,7 +900,7 @@ export function jrnDrillMount() {
 /** Open an action from the rail: redraw the lanes for it and select its first drawn step (the action itself).
  * @group Journey drill
  * @business Jumps to one action of the journey and opens its beats. */
-function jrnDrillGo(ci) {
+export function jrnDrillGo(ci) {
   const dr = S.JRN_DRILL;
   if (!dr || !dr.cols[ci]) return;
   S.jrnAction = ci;

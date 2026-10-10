@@ -303,7 +303,9 @@ function callRow(c, brief) {
   const data = (c.data || []).length ? esc(dataWords(c.data)) : (c.evidence === 'not built' || c.evidence === 'declared' ? '' : '<span class="mp-dim"' + defAttrs('map.prop.apis.noData') + '>' + esc(t('map.prop.apis.noData')) + '</span>');
   const again = c.repeat ? ' <span class="mp-dim"' + defAttrs('map.prop.apis.repeat') + '>' + sym('sync') + esc(t('map.prop.apis.repeat')) + '</span>' : '';
   const sub = brief ? verb : [verb, data].filter(Boolean).join(' · ');
-  return row(serviceTag(c) + esc(callWords(c)) + again, sub, evChip(c.evidence), { kind: 'call', id: c.nodeId, handler: (c.marker && c.marker.handler) || null });
+  // one stop down: the action this call is made in, opened into its beats on the Map (surfaces/map-stops.js)
+  const walk = c.marker ? '<button type="button" class="mp-walk" data-act="walk" data-order="' + c.marker.stepOrder + '"' + defAttrs('map.act.walk') + '>' + sym('bolt') + esc(t('map.act.walk')) + '</button>' : '';
+  return row(serviceTag(c) + esc(callWords(c)) + again, sub, evChip(c.evidence) + walk, { kind: 'call', id: c.nodeId, handler: (c.marker && c.marker.handler) || null });
 }
 /**
  * A checkpoint's name in the lens: the business lens says the words somebody wrote, and a permission name
@@ -855,6 +857,7 @@ export function mountMapProperty(host, ctx) {
     if (act.dataset.act === 'back' && c.onClose) c.onClose();
     else if (act.dataset.act === 'step' && c.onStep) c.onStep(Number(act.dataset.d));
     else if (act.dataset.act === 'go' && c.onOpenScreen) c.onOpenScreen(Number(act.dataset.i));
+    else if (act.dataset.act === 'walk' && c.onOpenAction) c.onOpenAction(Number(act.dataset.order));
   }
   function onKey(e) {
     const tab = e.target.closest && e.target.closest('.mp-tab');

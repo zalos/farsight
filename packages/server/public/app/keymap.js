@@ -1,5 +1,6 @@
 // keymap.js — every keyboard binding in one place (b · j/k · l · v · d · [ ] · f · t · ⌘K · y · ?;
-// on the Map also h/l · arrows · p · + − 0 · g the legend, asked of surfaces/map.js mapKey first).
+// on the Map also h/l · arrows · p · + − 0 · g the legend · v the stop's layout · ← → an action's beats, asked of
+// surfaces/map.js mapKey first).
 // `?` has one job everywhere — this keymap (swarm 2026-10-05: it had four)
 // plus the published keymap panel. Keys are the fast path, never the only
 // path: each action here also has a visible button somewhere in the chrome.
@@ -34,6 +35,8 @@ const KEYS = [
   { keys: 'p', desc: 'key.mapPlumb' },
   { keys: '+ / − / 0', desc: 'key.mapZoom' },
   { keys: '[ / ]', desc: 'key.mapStep' },
+  { keys: '← / →', desc: 'key.mapBeats' },
+  { keys: 'v', desc: 'key.mapLayout' },
   { keys: 'y', desc: 'key.mapLink' },
   { keys: 'g', desc: 'key.mapLegend' },
   { keys: 'enter · o', desc: 'key.doors' },

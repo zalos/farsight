@@ -659,7 +659,7 @@ function jrnBannerHtml(s) {
  * of journey steps (the wire order from /api/journey).
  * @group Journey view
  */
-function jrnBuildTree(steps) { return buildTree(steps); }
+export function jrnBuildTree(steps) { return buildTree(steps); }
 /**
  * Pure: split a code block spanning absolute lines
  * [startLine … startLine+lineCount-1] at child call sites. kids is
@@ -2252,7 +2252,7 @@ export function jrnCycleLayout() {
  * when nothing was chosen yet.
  * @group Journey view
  */
-function jrnDock() {
+export function jrnDock() {
   if (!S.jrnDock) {
     try { S.jrnDock = localStorage.getItem('fs-jrn-dock'); } catch (e) { S.jrnDock = null; }
     if (!/^(inline|bottom|right)$/.test(S.jrnDock || '')) S.jrnDock = 'bottom';
@@ -2463,7 +2463,7 @@ function jrnLadderLine(lm, time, cells, cls, i, span) {
  * @group Journey view
  * @business Reads one screen as a sequence — the stack trace with names, in the order it happens — and says where it stops.
  */
-function jrnLadderCellHtml(sum, sg) {
+export function jrnLadderCellHtml(sum, sg) {
   const lm = jrnLadderModel(sum, sg);
   const biz = currentLens() === 'business';
   const endKey = biz ? 'journey.biz.ladder.end' : 'journey.ladder.end';
@@ -2530,7 +2530,7 @@ registerTip('jrnLadderCol', jrnLadderColTip);
 /** Reveal the lines past a ladder's budget.
  * @group Journey view */
 function jrnLadderMore(si, btn) {
-  document.querySelectorAll('#jrn-tl .jrn-lline.over.s' + si).forEach((el) => el.classList.remove('over'));
+  jrnHostEl().querySelectorAll('.jrn-lline.over.s' + si).forEach((el) => el.classList.remove('over'));
   if (btn) btn.style.display = 'none';
 }
 /** The whole band in ladder mode: one ladder per segment, one expansion slot beneath.
@@ -2610,7 +2610,7 @@ export function jrnCellFoldsHtml(m, tree, parentFold) {
 }
 /** Forget every fold before a layout is drawn (they register while it draws).
  * @group Journey view */
-function jrnResetFolds() { S.JRN_FOLDS = []; S.JRN_FOLD_OF = {}; }
+export function jrnResetFolds() { S.JRN_FOLDS = []; S.JRN_FOLD_OF = {}; }
 /**
  * The steps folded under a part: one `▸ n inside` chip (`▸ n helpers` when
  * all of them are plumbing) that opens them in place, each with its own fold
@@ -2691,7 +2691,7 @@ function jrnRevealBizTab(i) {
  * cell — so a jump from a chip, a gate or the forks drawer lands on something visible.
  * @group Journey view */
 function jrnRevealFold(i) {
-  const el = document.querySelector('#jrn-tl [data-order="' + i + '"]');
+  const el = jrnHostEl().querySelector('[data-order="' + i + '"]');
   if (!el) return;
   for (let fold = el.closest('.jrn-fold'); fold; fold = fold.parentElement && fold.parentElement.closest('.jrn-fold')) {
     if (!fold.classList.contains('open')) jrnToggleHelpers(fold.id);
@@ -3091,7 +3091,7 @@ function jrnSheetChipsHtml(chips, li, ci) {
 /** Open the rest of a cell's chips and re-walk the j/k order so the revealed steps join it.
  * @group Journey view */
 function jrnSheetOpen(li, ci, what, btn) {
-  const cell = document.querySelector('#jrn-tl .jrn-scell[data-layer="' + li + '"][data-col="' + ci + '"]');
+  const cell = jrnHostEl().querySelector('.jrn-scell[data-layer="' + li + '"][data-col="' + ci + '"]');
   if (!cell) return;
   cell.classList.add(what);
   if (btn) btn.style.display = 'none';
@@ -3480,7 +3480,7 @@ function jrnSheetOrders() {
  * its own layer) and the j/k walk order.
  * @group Journey view
  */
-function jrnSheetIndex(sum) {
+export function jrnSheetIndex(sum) {
   S.JRN_SHEET = jrnSheetModel(sum);
   const byKey = {};
   S.JRN_SHEET.layers.forEach((l, li) => { if (l.key) byKey[l.key] = li; });
@@ -3497,7 +3497,7 @@ function jrnSheetIndex(sum) {
  * @group Journey view
  * @business The whole journey on one sheet: every action across, every layer of the system down.
  */
-function jrnSheetHtml(sum) {
+export function jrnSheetHtml(sum) {
   const sh = S.JRN_SHEET;
   const cols = sh.cols;
   const style = 'grid-template-columns:' + JRN_SHEET_LANE + 'px repeat(' + cols.length + ',minmax(' + JRN_SHEET_COL + 'px,1fr));'
@@ -4659,8 +4659,8 @@ export function jrnSelect(i, noScroll) {
   if (i >= 0 && S.JRN_DRILL) jrnDrillEnsureAction(i);
   if (i >= 0) jrnRevealFold(i);
   S.journeyActive = i;
-  document.querySelectorAll('#jrn-tl .jrn-mk, #jrn-tl .jrn-seam, #jrn-tl .jrn-bx').forEach((el) => el.classList.toggle('on', +el.dataset.order === i));
-  document.querySelectorAll('#jrn-tl .jrn-exp').forEach((el) => { el.style.display = 'none'; el.innerHTML = ''; });
+  jrnHostEl().querySelectorAll('.jrn-mk, .jrn-seam, .jrn-bx').forEach((el) => el.classList.toggle('on', +el.dataset.order === i));
+  jrnHostEl().querySelectorAll('.jrn-exp').forEach((el) => { el.style.display = 'none'; el.innerHTML = ''; });
   const mk = S.JRN_MARK[i];
   if (S.JRN_DRILL) jrnDrillSelected(mk && mk.row >= 0 ? i : -1);
   else if (jrnDock() !== 'inline') jrnDockRender(mk && mk.row >= 0 ? i : -1);
@@ -4670,7 +4670,7 @@ export function jrnSelect(i, noScroll) {
   }
   jrnUpdateProgress();
   if (!noScroll) {
-    const el = document.querySelector('#jrn-tl .jrn-mk[data-order="' + i + '"], #jrn-tl .jrn-seam[data-order="' + i + '"], #jrn-tl .jrn-bx[data-order="' + i + '"]');
+    const el = jrnHostEl().querySelector('.jrn-mk[data-order="' + i + '"], .jrn-seam[data-order="' + i + '"], .jrn-bx[data-order="' + i + '"]');
     if (el) el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   jrnImpactRings();
@@ -4729,6 +4729,17 @@ export function journeyLensRefresh() {
 /** Whether the journey overlay is open (keymap routing).
  * @group Journey view */
 export function journeyOpen() { return document.getElementById('journey').classList.contains('open'); }
+/**
+ * Where the journey's drawing lives: the overlay's timeline, or — while the overlay is closed — the Map's stage at a
+ * stop below the street (`S.JRN_HOST`, set by surfaces/map-stops.js), which draws the same Sheet and the same drill
+ * with the same ids. Selection, folds and rings look inside it, so one set of handlers serves both surfaces.
+ * @group Journey view
+ */
+export function jrnHostEl() {
+  const h = S.JRN_HOST;
+  if (h && h.isConnected && !journeyOpen()) return h;
+  return document.getElementById('jrn-tl') || document.body;
+}
 /** Whether the forks drawer is open (Esc routing).
  * @group Journey view */
 export function forksOpen() { return S.jrnForksOpen; }
@@ -4800,7 +4811,7 @@ export function jrnStepOf(id) {
  * @business Outlines everything that uses the thing you asked about, by how far away it is.
  */
 export function jrnImpactRings() {
-  const tl = document.getElementById('jrn-tl');
+  const tl = jrnHostEl();
   if (!tl) return;
   const m = S.IMPACT_RINGS;
   const steps = (S.JOURNEY && S.JOURNEY.steps) || [];

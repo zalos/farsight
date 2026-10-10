@@ -46,7 +46,7 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
     professional: 'One screen',
     define: 'One screen up close: its picture as designed, and everything Farsight knows about it. Zoom out or press Esc to go back to its journey.',
   },
-  'map.levels': same('Zoom level', 'Which of the three heights the board is at. Each button goes there.'),
+  'map.levels': same('Zoom level', 'Which of the five stops the Map is at — every journey, one journey, one screen, one action, the code behind it. Each button goes there.'),
   'map.crumb.root': same('Journeys'),
   'map.loading': same('loading the journeys…', 'The board has asked the server for the journeys the design manifests name and has no answer yet. This is not an empty result.'),
   'map.failed': {
