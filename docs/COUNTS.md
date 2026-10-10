@@ -570,6 +570,15 @@ The statuses one field of a record (a table node) may hold, read from the code b
 | moves with a writer | `lifecycle.count.transitions` *n moves with a writer* (both) | `count.scope.node` | `lifecycleCounts().transitions` over `lifecycle.transitions` | one per (from, to, writer): the same move by two functions is two, the same move written twice in one function is one; breakdown `lifecycle.part.withFrom` *check the status first* · `lifecycle.part.noFrom` — a partition |
 | statuses no code moves to | `lifecycle.count.unwritten` *n statuses no code moves to* (both) | `count.scope.node` | `lifecycleCounts().unwritten` = statuses − `transitions[].to` | the declared statuses no function writes (an initial status set by a column default or an INSERT parameter is one of them — the literal is not in the code) |
 
+**One record read by a persona** (round 2026-10-10 §3; core `lifecycleViews()` → `/api/journey` `lifecycles[].views[]`, `GET /api/lifecycle`, the strip and its *what each one means* table). The same record and scope; the words for each status come from `farsight.config.json → lifecycle.<record>.views.<persona>` (else the constant through `humanizeName`), the statuses and the moves from the code. The strip prints *statuses · moved · unmoved* in business and *statuses · moves with a writer · statuses no code moves to* in code and hybrid.
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| statuses | `lifecycle.count.statuses` (both) | `count.scope.node` | `lifecycleViews().counts.statuses` | the same number as above; breakdown written · unwritten — a partition |
+| moved | `lifecycle.count.moved` *n some code moves to* / `lifecycle.biz.moved` *n that the app moves* | `count.scope.node` | `counts.moved` = statuses ∩ `transitions[].to` | the declared statuses at least one function writes — `moved + unmoved = statuses` |
+| unmoved | `lifecycle.count.unwritten` / `lifecycle.biz.unmoved` *n nothing moves yet* | `count.scope.node` | `counts.unmoved` = statuses − `transitions[].to` | the same set as *statuses no code moves to*, in business words |
+| overlays | `lifecycle.count.overlays` *n conditions that are not a status* (both) | `count.scope.node` | `counts.overlays` over `lifecycle.names.overlays` | the config's overlays whose table the graph has (one it does not is a note, never a row); not printed on the strip — the table draws them as rows |
+
 ### Freshness — *stale* is a comparison (core `freshness.ts`; swarm-fixes 2026-10-05, finding 2)
 
 Freshness is a sentence with two sides, never a bare word and never a number of its own. `freshnessFact(runs, code)`
