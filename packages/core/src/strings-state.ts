@@ -52,7 +52,7 @@ export const STATE_STRINGS: Record<string, StringEntry> = {
   // ── the glossary strip ──
   'journeys.glossary.title': same('Words this app leans on', 'The application’s own words, from the glossary its Farsight config files give: what each name means in this business.'),
   'journeys.glossary.all': same('the glossary', 'Every word the glossary gives, with what it means and the file it comes from.'),
-  'journeys.glossary.none': same('no farsight.config.json in scope gives a glossary', 'A glossary block in a Farsight config file names the application’s own words; until one does, this strip has nothing to show.'),
+  'journeys.glossary.none': same('no config file in scope gives a glossary', 'A glossary block in a Farsight config file names the application’s own words; until one does, this strip has nothing to show.'),
   'journeys.glossary.term': same('the name in the code'),
   'journeys.glossary.file': same('from'),
   // ── an address with nothing at it (finding 3.2) ──

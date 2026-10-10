@@ -122,16 +122,21 @@ export function stateOfPlay(
     .sort((a, b) => CLS_ORDER[a.word.cls] - CLS_ORDER[b.word.cls] || b.n - a.n || (a.word.key < b.word.key ? -1 : 1))
     .map((v) => ({ word: v.word, journeys: counted(v.n, 'count.unit.journeys', SCOPE, `${SRC} ← testsSurface().journeys[].coverage.verdict.word`, { bizUnit: 'count.unit.journeys', recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' } }) }));
 
-  const e2eRuns: FreshnessRun[] = [];
-  let newest = '';
+  // the newest end-to-end run: the cases its report recorded, and the one freshness fact over them — the fact is
+  // about that run, never a fold over every report a source ever read (an older report with no digest beside it)
+  const e2e: { run: FreshnessRun; report?: string }[] = [];
+  let newest: { at: string; report?: string } | null = null;
   for (const t of testNodes(index, scope)) {
     const ref: TestRef = t.test!;
     if (ref.level !== 'e2e' || !ref.run || ref.inactive) continue;
     const run = ref.run;
-    e2eRuns.push({ freshness: run.freshness, ...(run.changedBy ? { changedBy: run.changedBy } : {}), at: run.at, ...(run.commit ? { commit: run.commit } : {}), repo: t.loc?.repo ?? t.id.split('::')[0] });
-    if (run.at > newest) newest = run.at;
+    const report = run.report;
+    e2e.push({ run: { freshness: run.freshness, ...(run.changedBy ? { changedBy: run.changedBy } : {}), at: run.at, ...(run.commit ? { commit: run.commit } : {}), repo: t.loc?.repo ?? t.id.split('::')[0] }, ...(report ? { report } : {}) });
+    if (!newest || run.at > newest.at) newest = { at: run.at, ...(report ? { report } : {}) };
   }
-  const lastE2e = newest ? { at: newest, fresh: freshnessFact(e2eRuns, codeAtOfIndex(index)) } : null;
+  const last = newest;
+  const lastRuns = last ? e2e.filter((x) => (last.report ? x.report === last.report : x.run.at === last.at)).map((x) => x.run) : [];
+  const lastE2e = last ? { at: last.at, fresh: freshnessFact(lastRuns, codeAtOfIndex(index)) } : null;
 
   const runs = { passed: 0, failed: 0, skipped: 0, flaky: 0, noRun: 0 };
   let cases = 0;
@@ -168,7 +173,8 @@ export function stateOfPlay(
     history: opts.history ?? null,
   };
 
-  const repos = [...new Set([...index.byId.values()].map((n) => n.loc?.repo ?? n.id.split('::')[0]!))]
+  // the sources: what the graph read code from (a work item has no location and is not a source)
+  const repos = [...new Set([...Object.keys(meta?.repos ?? {}), ...[...index.byId.values()].map((n) => n.loc?.repo).filter((r): r is string => !!r)])]
     .filter((r) => !scope || scope.has(r)).sort();
   const glossary = repos.flatMap((repo) => (meta?.config?.[repo]?.glossary ?? []).map((g) => ({ ...g, repo })));
 
