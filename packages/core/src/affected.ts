@@ -23,6 +23,7 @@
  * a set counted once, split by the distance at which each member was first met
  * — a partition, never a sum across hops of anything the report counts.
  */
+import { gateTierOf } from './gate-class.js';
 import type { GraphNode } from './graph.js';
 import { type GraphIndex, type JourneyStep, journey, journeySummary } from './query.js';
 import { screensFor } from './design.js';
@@ -453,10 +454,8 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
   const gates = new Map<string, AffectedV1['gates'][number]>();
   const writes = new Map<string, AffectedV1['writes'][number]>();
   const contracts = new Map<string, AffectedV1['contracts'][number]>();
-  const tierOf = (n: GraphNode): string | null => {
-    const x = (n as unknown as { tier?: unknown; meta?: { tier?: unknown } }).tier ?? (n as unknown as { meta?: { tier?: unknown } }).meta?.tier;
-    return typeof x === 'string' ? x : null;
-  };
+  // the gate's tier from the one rule for it (core gate-class.ts, gates lane 2026-10-10)
+  const tierOf = (n: GraphNode): string | null => gateTierOf(n).tier;
   const addGate = (id: string, flowId: string | null): void => {
     const n = index.byId.get(id);
     if (!n || (n.kind !== 'guard' && n.kind !== 'rule')) return;

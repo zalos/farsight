@@ -159,7 +159,7 @@ test('farsight-diff v1: the technique enumeration carries every ResolutionTechni
     'import-resolution', 'route-literal', 'coverage-report', 'method-name',
     'interface', 'hook-binding', 'sdk-import', 'constant-host',
     'raw-sql', 'same-file', 'jsx-render', 'detected',
-    'work-key', 'callback-prop',
+    'work-key', 'callback-prop', 'precondition',
   ];
   assert.deepEqual([...techniques].sort(), [...expected].sort());
 });

@@ -922,6 +922,22 @@ board still counts). No word on a cover draws under **8 px** on screen (`FLOOR_P
 its smallest words): `coverScale` stops shrinking there, the card clips, the world wears `.floor`, and the hint says
 *n journeys · zoom in to read* (`map.floor.read`, the number with its tip). e2e: `e2e/tests/map-journey-links.pw.spec.ts`.
 
+#### Gates by tier — `jrnGateTiers` / `jrnGateTiersHtml` in `surfaces/journeys.js` (gates lane 2026-10-10)
+
+Every journey gate carries `tier` (business · policy · technical) and `class` from the core (`gate-class.ts`
+`gateTierOf`; `query.ts` puts them on each step's gates, the segment's and the business band's). The **business
+register** reads a gate list by tier — `jrnGateListHtml` hands it to `jrnGateTiersHtml`: *Who may* (identity and
+authorisation; sign-in checks worded the same fold to one row, times summed), *The record must be* (record state and
+completeness — the preconditions the parser read, `GraphNode.precondition`), *Policy*, and the technical checks
+folded in a `<details>` behind *+ n technical checks*; the screen-wide list adds a legend (*business n · policy n ·
+technical n — tier from the kind of check*). The Map property's Gates tab (`gatesByTierHtml`) and the drill (the
+technical ones counted on the lane) read the same split. Hybrid and code keep the one list with a `.gate-tier` chip
+per row. The header prints `counted.gatesBusiness` · `counted.gatesTechnical` in place of `gates`, which sits in
+their tips. A precondition's words (`jrnGateInWords` → `precondition.words`) and a role a guard was handed
+(`g.requires` → *approver role*, `jrnRoleWords`) are the words every list and the card print. The card adds a
+**Tier** section (`tierLine` in the model, from `/api/gate`'s `gate.{tier, class, tierFrom, precondition}`) and, for a
+precondition, its sentence, *Otherwise: 409 conflict* and how it refuses.
+
 #### The gate card — `lib/gate-card.js`, `lib/gate-card-model.js` (swarm-fixes 2026-10-05, finding 4)
 
 A gate answers its click. Clicking a gate anywhere — a row of the journey's gate lists (timeline *Gates & rules*

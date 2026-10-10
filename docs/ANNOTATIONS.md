@@ -29,6 +29,7 @@ Two rules underpin all of it:
 | `@group <text>` | Farsight | Logical group (overrides file-based grouping) |
 | `@tag` / `@tags a, b` | Farsight | Custom tags for search & filtering |
 | `@guard [label]` | Farsight | Marks the function an auth/permission guard (🔒); every caller gets a guard edge |
+| `@guard[business\|policy\|technical] [label]` | Farsight | The same, with the tier the team gives the gate — who it matters to — over the one its kind gives (`farsight.config.json → gateTiers` does the same from config; the code's tag wins) |
 | `@entrypoint [kind:name]` | Farsight | Declares an entry point no route detector can see (cron/queue jobs) |
 | `@covers <target…>` | Farsight | On a test file or a test case: what the test verifies. Becomes a `covers` edge with evidence class `declared` |
 | `@design <url\|id> [name]` | Farsight | Joins a screen (page/component) to its design: a Figma URL (node id kept) or the id the docs use (`SCR-07`); surfaced on the card, the inspector and `describe_node`, searchable as `design:<id>` |

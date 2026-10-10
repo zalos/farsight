@@ -62,8 +62,8 @@ rules) · …` (the scope said once per run of counts that share it); `breakdown
 
 | endpoint / fold | typed counts |
 |---|---|
-| `GET /api/journey?entry=` · `journeySummary()` | `summary.counted.{screens, screensReached, built, steps, planned, gates, checks, decisions, notInWords, inWords, actions, again, declaredNotCalled, actionStops, systems, setup, deferred, repeats, cutPoints, choices}` |
-| | `summary.segments[i].counted.{actionStops, actions, gates, checks, decisions, notInWords, inWords}` (scope *on this screen*) |
+| `GET /api/journey?entry=` · `journeySummary()` | `summary.counted.{screens, screensReached, built, steps, planned, gates, gatesBusiness, gatesTechnical, checks, decisions, notInWords, inWords, actions, again, declaredNotCalled, actionStops, systems, setup, deferred, repeats, cutPoints, choices}` |
+| | `summary.segments[i].counted.{actionStops, actions, gates, gatesBusiness, gatesTechnical, checks, decisions, notInWords, inWords}` (scope *on this screen*) |
 | | `summary.coverage.journey` and `summary.coverage.segments[i]`: `.counted.{tests, e2e, unit, integration, observed, runReports}`, `.observation`, `.evidenceWord.{cls, key, biz}` |
 | | `summary.coverage.moments[i][k]` — **new**, one slim entry per action (`segments[i].moments[k]`): `{chip, observedBy?, evidenceWord, counted, observation?, run?}`, scope *in this action* |
 | | `steps[n].coverage` (a node): `.chip`, `.evidenceWord`, and when a test reaches it `.counted`, `.observation` (scope *for this part alone*) |
@@ -118,7 +118,8 @@ Columns: **printed** (the reference app's POC unless noted) · **source** (core 
 | `6 of 11 built` | viewer rule over `summary.user` · C:`counted.built` (`of`) | screens whose design reconciled to code (else: a source location) | journey | Journeys list `11 built` = the **manifest's** 18 screens, not this flow's; business `6 built` = same number (now same form) |
 | `943 visits` (code; was *steps* until 2026-10-05) | `counts.steps` · C:`counted.steps` (no `bizUnit`) | walk nodes, re-visits included, planned excluded | journey | never printed in business; a count, never a position — *step* is the storyline's word only |
 | `30 planned` | `counts.planned` · C:`counted.planned` | walk steps from the contract, not code | journey | not the 14 *declared, not called* (operations) nor the 14 declared stops (moments) |
-| `34 gates` → **`34 gates & rules`** | `counts.gates` · C:`counted.gates` | distinct guards + rules by name (25 · 9) | journey | lane tab *Gates & rules 34*: same number |
+| `34 gates` → **`34 gates & rules`** | `counts.gates` · C:`counted.gates` | distinct guards + rules by name (25 · 9) | journey | lane tab *Gates & rules 34*: same number. Since the gates lane (2026-10-10) the header prints it as the two numbers below, and it sits in their tips |
+| **`18 that matter to the business · 8 technical checks`** (gates lane 2026-10-10) | C:`counted.gatesBusiness` · C:`counted.gatesTechnical` — `query.ts` puts `tier` on every journey gate (core `gate-class.ts` `gateTierOf`) | the same distinct gates & rules, split by tier: business + policy (breakdown `count.part.tierBusiness` · `tierPolicy`) and technical (breakdown `count.part.classInput` · `classPlatform`) | journey | **a partition of `gates`**: `gatesBusiness + gatesTechnical = gates`, pinned by `counts.test.ts`. A gate from an older build carries no tier and counts as business |
 | `146 checks` | `counts.checks` · C:`counted.checks` | meetings of those 34 (Σ per-screen counts) | journey | not the 118 conditions |
 | `28 decisions` | `counts.decisions` · C:`counted.decisions` | decisions drawn in hybrid/code: 0 in words + 28 gate conditions nobody labelled | journey | lane tab *Decisions 28*: same; the 28 are also a part of `notInWords` (same population, same key) |
 | `1 start-up` · `6 afterwards` | `counts.setup` / `counts.deferred` · C:`counted.setup` / `.deferred` | boot steps named once; deferred work registered here | journey | — |
@@ -145,7 +146,8 @@ should print `counted.{screens, built, actions}` with their `bizUnit` (fixes `6 
 | printed | source | counts | scope | siblings |
 |---|---|---|---|---|
 | `IN WORDS 0` → **`11`** | viewer `jrnBizCounts().words` → C:`counted.inWords` | lines the view draws | journey | per screen C:`segments[i].counted.inWords` |
-| `GATES & RULES 34` | `counts.gates` | = header | journey | per-screen list heading: `segments[i].counted.gates` (*on this screen*; a gate met on 3 screens counts on each) |
+| `GATES & RULES 34` | `counts.gates` | = header | journey | per-screen list heading: `segments[i].counted.gates` (*on this screen*; a gate met on 3 screens counts on each); per screen the tiers too, `segments[i].counted.gatesBusiness` / `.gatesTechnical` (scope `journey.scopeHere`, same partition) |
+| business register: *Who may 2 · The record must be 1 · + 1 technical check* | the list's own rows (`jrnGateTiers`, viewer) over `segments[i].gates[].tier` / `.class` | the rows of one action's or one screen's list, by tier: who may = identity + authorisation (sign-in checks with one wording folded to one row, times summed), the record must be = record state + completeness, policy, technical (folded) | action / screen | rows across the groups = the list's rows; the screen-wide list adds a legend *business n · policy n · technical n* |
 | `DECISIONS 28` | `counts.decisions` | = header | journey | per screen `segments[i].counted.decisions` |
 | `8 conditions … not in plain language` (screen 2) | viewer `sg.untranslated + unlabelled` (lens-dependent) → C:`segments[i].counted.notInWords` | §2 #2 | screen | hybrid printed 5: now 8 in both |
 
@@ -391,7 +393,7 @@ tab whose subject nothing types prints **no number**: Overview, UX, Route and Ch
 
 | printed | source | counts | scope | siblings |
 |---|---|---|---|---|
-| Gates tab `5` · Gates head · Overview chip `5 gates & rules` | `summary.segments[i].counted.gates` | distinct guards + rules by name on this screen (3 · 2 on Invoice list) | screen | the journey header's `gates & rules` is the journey's; the rows under the head are the same list (`jrnGatesShown`), so rows and number agree |
+| Gates tab `5` · Gates head · Overview chip `5 gates & rules` | `summary.segments[i].counted.gates` | distinct guards + rules by name on this screen (3 · 2 on Invoice list) | screen | the journey header's `gates & rules` is the journey's; the rows under the head are the same list (`jrnGatesShown`), so rows and number agree. In the business register the rows group by tier (*Who may* · *The record must be* · *Policy* · *+ n technical checks*, `jrnGateTiers`) — the same rows, grouped |
 | APIs tab `5` · APIs head · Overview chip `5 actions` | `segments[i].counted.actions` | distinct operations code calls on this screen | screen | the street's call chip (same object); New invoice prints `1` above **two** rows — the second is a *declared, never called* row (`MapCall.evidence: 'declared'`), which the number does not count, and its chip says so |
 | APIs tab `1` on a screen not built · Overview chip `1 stop` | `segments[i].counted.actionStops` | the stops the design declares (breakdown: 0 called · 1 declared · 0 no call) | screen | Discard draft; never `actions`, which is 0 there |
 | Gates · Decisions head `3` · Overview chip `3 decisions` | `segments[i].counted.decisions` | decisions drawn on this screen | screen | not printed in the business register when some decisions are guard-class (the rows then are fewer than the number) |
@@ -575,6 +577,11 @@ goes through to meet it).
 | parts it sits on | `count.unit.gateSitsOn` *n parts it sits on* (both) | `count.scope.gate` | `gateCard().sitsOn.length` | the targets of the gate's own `guards` / `validates` edges, each once |
 | tests that reach it | `count.unit.cases` (business `journey.biz.countTests`) | `count.scope.gate` | `gateCard().counted.tests` = `evidenceFacts()` over the tests of the gate and of each guarded call | one row per test, the strongest class it carries on any of those nodes; breakdown by level; the evidence chip beside it is the same fold's `evidenceWord` |
 
+**Tier** (gates lane 2026-10-10) — not a number: the card's *Tier* line is `gateCard().gate.{tier, class, tierFrom}`
+(core `gate-class.ts`): *business · a record must be in a state (invoices.status = draft) · tier from the kind of check*.
+The code form is printed outside the business register; `tierFrom` is `class`, `config` (`farsight.config.json →
+gateTiers`) or `annotation` (`@guard[tier]`).
+
 **Config checks** (core `config-check.ts`): a guard whose own text reads the process environment and takes no
 request (`requireSession(req)` reading `env.APP_BASE_URL` is a gate; `resolveOpsDevLogin(requested, env)` is a config
 check). It is no longer one of a screen's gates:
@@ -590,6 +597,40 @@ and its second 23 → **20**. The three are `resolveEmailDelivery`, `resolveOpsD
 `guards → loadWebEnv`, which the page reaches through `serverContext()` — not through any of its calls. `checks`
 (meetings) drop by the same meetings. Segment coverage still counts a config check's node (it is code the screen's
 walk runs), so no tests number moves.
+
+### Preconditions and tiers (gates lane 2026-10-10 — parsers `preconditions.ts`, core `gate-class.ts`, core `gates.ts` `withJourneyPreconditions`)
+
+A **precondition** is a `rule` node the parser built out of a refusing comparison — on the status, kind, flag or
+list of the record an action writes or one it loaded beside it — that `validates` the action (technique
+`precondition`). It is a gate like any other, so it is counted in `gates` and in its tier.
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| things an action needs | `count.unit.preconditions` *n things it needs* (both) | `count.scope.action` | `segments[i].moments[k].preconditions.counted` | the gates the action's steps meet (config checks apart, as everywhere), each once; breakdown `count.part.tierBusiness` · `count.part.tierPolicy` · `count.unit.gatesTechnical` — a partition. MCP `journey` prints it as *needs (n things it needs)* under each action |
+| gates that matter / technical checks | see § Journey header | `journey.scopeAll` / `journey.scopeHere` | `counted.gatesBusiness` / `.gatesTechnical` | a partition of `gates` |
+
+Not numbers, on the same answer: each need's `evidence` is the gate card's one verdict (`gateCard().verdict`,
+`testVerdict()`) and how many tests reach it; each record move the action makes says `checked` — false prints
+*not checked by the code* (the code never compares the status it moves from); a move into the record's first
+declared status is a creation (`creates`), never unchecked.
+
+**The numbers that moved, with their evidence** — the reference app ingested read-only from its source with the
+main build and with this lane's (scratchpad, 2026-10-10):
+
+| journey | before | after |
+|---|---|---|
+| verify & approve | 24 gates & rules · 3 config checks | **26** gates & rules = **18 that matter to the business** (16 business · 2 policy) · **8 technical checks** (6 input · 2 platform) · 3 config checks |
+| submit | 24 · 4 config checks | 24 = **15 · 9** · 3 config checks (`submitDraftInvoice` is an action, no longer a config check) |
+| vendor-account review | 16 · 3 | 16 = **6 · 10** · 3 |
+| vendor-ID link | 19 · 3 | 19 = **10 · 9** · 3 |
+| paid | 24 · 3 | 24 = **17 · 7** · 3 |
+
+Approve went 24 → 26: four preconditions joined (*the ERP draft is synced*, *the invoice's status is verified,
+under review or pending client approval* from the transition table, *the vendor account is ACTIVE*, *the identity
+link is not PENDING or REJECTED*) and two actions marked `@guard` left (`approveOpsInvoice`, `verifyOpsInvoice` —
+the actions themselves). The approve action needs, in order: signed in (×2 wordings) · the approver role
+(`OPS_INVOICE_ACTION_ROLES.approve` → `ops.approver`) · the four preconditions · the transition guard · submit
+readiness · four-eyes · OCR vendor-name agreement, and + 4 technical checks.
 
 ### Lifecycle (`GraphNode.lifecycle` → core `lifecycle.ts` `lifecycleCounts()`; `/api/journey` `lifecycles[]`, the journey header and the Map property's Overview, MCP `describe_node`)
 

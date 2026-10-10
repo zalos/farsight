@@ -144,7 +144,8 @@ test('journey(): a declared route with no code continues as planned steps from i
   const j = journey(index, route.id);
   assert.equal(j.plannedCount, 3);
   assert.equal(j.steps.length, 4);
-  assert.deepEqual(j.steps[0]!.gates, [{ id: `${route.id}#security:bearer: contractor`, kind: 'guard', name: 'bearer: contractor', planned: true }]);
+  // a planned gate is a business one: the spec's security says who may (gates lane 2026-10-10)
+  assert.deepEqual(j.steps[0]!.gates, [{ id: `${route.id}#security:bearer: contractor`, kind: 'guard', name: 'bearer: contractor', planned: true, tier: 'business', class: 'authorisation', tierFrom: 'class' }]);
   assert.deepEqual(j.steps.slice(1).map((s) => [s.via, s.depth, s.nodeId === route.id, s.planned]), [
     ['planned', 1, true, { kind: 'receives', label: 'SubmitRequest', detail: 'required' }],
     ['planned', 1, true, { kind: 'step', label: 'Submit an invoice for review.' }],
