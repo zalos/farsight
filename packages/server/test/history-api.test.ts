@@ -300,7 +300,7 @@ describe('/api/history is commitSpine() + spineSentences()', () => {
     const said = spineSentences(fold((db) => db.commitSpine('app')));
     const texts = body.notes.map((n: any) => n.text);
     assert.equal(texts[0], said.unindexed!.text, 'the unindexed count is stated before any row can be read as complete');
-    assert.match(texts[0], /3 of 5 commits were never ingested by any sync — not indexed/);
+    assert.match(texts[0], /5 commits read into history · 2 ingested by a sync · 3 not yet — the 3 not yet ingested are not indexed/);
     for (const key of ['syncs', 'outsideReach'] as const) {
       assert.ok(texts.includes(said[key]!.text), `the ${key} sentence must be the fold's: ${said[key]!.text}`);
     }
@@ -737,7 +737,7 @@ describe('/api/history — a history nobody has read (absent is not empty)', () 
     assert.ok(!body.notes.some((n: any) => /no history has been read/.test(n.text)),
       'the unread warning must go away once a history is there');
     // the unindexed count is now sayable, and says a real number
-    assert.ok(body.notes.some((n: any) => /commits were never ingested by any sync — not indexed/.test(n.text)));
+    assert.ok(body.notes.some((n: any) => / not yet — the \d+ not yet ingested are not indexed/.test(n.text)));
   });
 });
 

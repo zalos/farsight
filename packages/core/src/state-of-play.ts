@@ -30,9 +30,9 @@ export const RECHECK = {
   state: { cli: 'farsight state', mcp: 'graph_overview' },
   journeys: { cli: 'farsight journeys', mcp: 'journeys' },
   apis: { cli: 'farsight api list', mcp: 'api_surface' },
-  design: { cli: 'farsight state', mcp: 'design_surface' },
+  design: { cli: 'farsight design list', mcp: 'design_surface' },
   tests: { cli: 'farsight tests list', mcp: 'test_coverage' },
-  history: { cli: 'farsight history --repo <name>', mcp: 'graph_changes' },
+  history: { cli: 'farsight history --repo <name>', mcp: 'graph_overview' },
 } as const;
 
 export interface StateOfPlay {

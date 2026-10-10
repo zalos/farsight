@@ -935,7 +935,7 @@ export function historyFact(spines: readonly Pick<CommitSpine, 'commits' | 'unin
   const notYet = spines.reduce((s, x) => s + Math.min(x.unindexed, x.commits), 0);
   const ingested = read - notYet;
   const SRC = 'core history.ts historyFact ← commitSpine().commits / .unindexed';
-  const recheck = { cli: 'farsight history --repo <name>', mcp: 'graph_changes' };
+  const recheck = { cli: 'farsight history --repo <name>', mcp: 'graph_overview' };
   return {
     read: counted(read, 'history.fact.read', 'count.scope.workspace', SRC, {
       bizUnit: 'history.fact.read', recheck,

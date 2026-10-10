@@ -30,6 +30,7 @@ import {
   type ModelHubState, type Activity, buildLine, buildInfo, installState, currencyAdvice,
   projectFacets, projectGraph, projectsSummaryLine,
   depsRowOf, counted, gateCard, type GateCard,
+  stateOfPlay, stateOfPlayLines, historyFact,
 } from '@farsight/core';
 
 /** `changed` said as what moved: a working tree that differs from HEAD is not a new commit (the Changes spine agrees). */
@@ -514,6 +515,10 @@ server.registerTool('graph_overview', {
     : 'generated: unknown (older snapshot without metadata) — call refresh_graph if in doubt';
   const ingestedBy = meta.farsight ? `${meta.farsight.version} · built ${meta.farsight.built}${meta.farsight.commit ? ` · commit ${meta.farsight.commit}` : ''}` : 'unknown (graph written before builds were stamped)';
   const lines = [
+    // the state of play first (round 2026-10-10): the same three columns the front door draws, each number with
+    // the command that prints it again — built and walkable · validated by a run · still open
+    ...stateOfPlaySection(),
+    '',
     `Farsight semantic graph: ${nodes.length} nodes, ${edges.length} edges`,
     // which Farsight: the running build, and the build that wrote the graph — a consumer checks both before trusting a feature is there
     `running: ${buildLine()}`,
@@ -540,6 +545,25 @@ server.registerTool('graph_overview', {
   ];
   return text(lines.join('\n'));
 });
+
+/** `## state of play` — core stateOfPlay(), the fold the front door and GET /api/state print. */
+function stateOfPlaySection(): string[] {
+  let history = null;
+  const p = historyDbPath();
+  if (p) {
+    let db: SnapshotDb | undefined;
+    try {
+      db = new SnapshotDb(p);
+      const repos = [...new Set(nodes.map((n) => n.loc?.repo).filter((r): r is string => !!r))];
+      history = repos.length ? historyFact(repos.map((r) => db!.commitSpine(r))) : null;
+    } catch { history = null; } finally { try { db?.close(); } catch { /* already closed */ } }
+  }
+  try {
+    return ['## state of play', ...stateOfPlayLines(stateOfPlay(index, store.meta, { history }))];
+  } catch (err) {
+    return ['## state of play', `could not be folded: ${(err as Error).message.split('\n')[0]}`];
+  }
+}
 
 /** One line when a source recorded its projects: the tool, projects by type, dependencies, and projects per tag value of each dimension. */
 function projectsOverviewLines(): string[] {

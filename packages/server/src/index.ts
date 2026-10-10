@@ -13,14 +13,14 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts, gateCard,
+  counted, journeyTree, configCounts, gateCard, stateOfPlay, historyFact,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest, refuseWrite } from './guard.js';
 import type { ReadOnlyWhy } from './guard.js';
 import { folded, scopeKey, leanMetric, leanCoverage, leanJourneyRow } from './folds.js';
 import { isSecretRef } from '@farsight/work';
-import { writeSpine, syncWork, workSourcesOf, keyOptionsOf, handleWorkRoute } from './work.js';
+import { writeSpine, fillHistorySlot, syncWork, workSourcesOf, keyOptionsOf, handleWorkRoute } from './work.js';
 import type { SourceConfig as WorkSourceConfig, WorkSettingsSource } from './work.js';
 import { ingestRepo, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSpecUrl, ingestDesign, readManifestSource, parseManifestText, isManifestUrl, gitHead, gitHeadRef, gitShallow, gitPrefix, GIT_ABSENT_WORD, headTitle, shallowFloorSentence } from '@farsight/parsers';
 
@@ -237,6 +237,8 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
     const db = new SnapshotDb(join(ws, '.farsight', 'farsight.db'));
     const ref = db.write(store, { commit: gitHead(ws), sources: sourceStats });
     snapshot = `sync:${ref.sync} · digest ${ref.digest}`;
+    // the history sentence, now that this sync's commit is recorded as ingested (finding 2.1)
+    for (const r of read) { results[r.source.id] = fillHistorySlot(results[r.source.id] ?? '', r.name, db); r.source.status = results[r.source.id]; }
     // opt in, and only then: with the flag unset nothing below runs, so this sync
     // writes no shot directory, no shot file and no shot row
     if (settings.flags?.designShots) {
@@ -248,6 +250,8 @@ export async function syncSources(ws: string, settings: Settings, graphPath: str
   } catch (err) {
     snapshot = `history unavailable: ${(err as Error).message.split('\n')[0]}`;
   }
+  // a slot no store could fill says so instead of a number
+  for (const r of read) { results[r.source.id] = fillHistorySlot(results[r.source.id] ?? '', r.name, undefined); r.source.status = results[r.source.id]; }
   store.save(graphPath);
   saveSettings(ws, settings);
   return {
@@ -877,6 +881,29 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         })
         .catch((err) => send(500, JSON.stringify({ error: String((err as Error)?.message ?? err) })));
       return;
+    }
+    // ── the state of play (round 2026-10-10, proposal 5): the front door's three columns — built and walkable ·
+    // validated by a run · still open — from folds that already exist, each number a Counted with its re-check;
+    // the same core stateOfPlay() MCP graph_overview and `farsight state` print. Read-only: the history store is
+    // only read, and only when it exists.
+    if ((url === '/api/state' || url.startsWith('/api/state?')) && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const g = loadJourneyGraph(graphPath);
+      const scopeParam = u.searchParams.get('scope');
+      const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
+      const repos = Object.keys(g.roots).filter((r) => !scope || scope.has(r));
+      let history: ReturnType<typeof historyFact> | null = null;
+      const dbFile = join(ws, '.farsight', 'farsight.db');
+      if (repos.length && existsSync(dbFile)) {
+        try {
+          const db = openHistory(ws);
+          try { history = historyFact(repos.map((r) => db.commitSpine(r))); } finally { db.close(); }
+        } catch { history = null; }
+      }
+      const tests = folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests));
+      const state = folded(g.index, 'state', scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}` : '-'), () => stateOfPlay(g.index, g.meta, { scope, tests, history }));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', ...state }));
     }
     // ── journeys organised by persona and group (journey-organisation-and-config-files.md §4.4) — before
     // /api/journey, whose prefix it shares; the same journeyTree() the MCP tool and the CLI print ──

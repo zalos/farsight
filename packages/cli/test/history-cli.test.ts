@@ -122,11 +122,11 @@ describe('farsight history — the spine', () => {
     assert.equal(r.status, 0, r.err);
     // the unindexed sentence precedes the table: no row below may read as a complete account
     const lines = r.out.split('\n');
-    const warn = lines.findIndex((l) => l.includes('never ingested by any sync'));
+    const warn = lines.findIndex((l) => l.includes('not yet ingested are not indexed'));
     const header = lines.findIndex((l) => l.includes('SYNC  WHEN'));
     assert.ok(warn >= 0, 'the unindexed count must be stated');
     assert.ok(header > warn, 'the spine table must come after it');
-    assert.match(r.out, /3 of 5 commits were never ingested by any sync/);
+    assert.match(r.out, /5 commits read into history · 2 ingested by a sync · 3 not yet/);
     assert.match(r.out, /not indexed/);
     assert.match(r.out, /3 syncs · 2 distinct commits recorded for this repository · 1 re-indexed on a newer build/);
     assert.match(r.out, /outside every sync's reach: 1 before the oldest sync's commit/);
