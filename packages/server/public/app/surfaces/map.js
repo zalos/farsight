@@ -27,7 +27,8 @@ import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/ro
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
-import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence } from '../lib/map-model.js';
+import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
+import { lanesHtml } from './map-lanes.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
 import { findStoryline, firstScreenOf } from '../lib/journeys-model.js';
@@ -145,6 +146,12 @@ const MAP = {
   open: new Set(),
   /** whether the legend panel is open */
   legend: false,
+  /** how a storyline is drawn (`?layout=lanes`): `'chain'` — its journeys as cards — or `'lanes'` — swimlanes (round 2026-10-10 §2) */
+  layout: 'chain',
+  /** the reader went from the lanes into a journey's street: the lanes come back at the board */
+  lanesAway: false,
+  /** the lanes on the board: `{ model, G, size }` — `laneLayout()`, `laneGeometry()`, the size in world units */
+  lanes: null,
 };
 
 /** Per-sync cache of journey answers, keyed `flowId@sync` — a register flip never refetches. */
@@ -247,6 +254,8 @@ export function mountMap(route, el) {
   MAP.plumb = route && /(?:^|[?&])plumb=1(?:&|$)/.test(String(route.raw || '')) ? true : readPlumb();
   MAP.band = readBand();
   MAP.storyline = (route && route.storyline) || null;
+  MAP.layout = routeLayout(route);
+  MAP.lanesAway = false;
   MAP.storyMenu = false;
   MAP.fitted = false;
   MAP.alt = 'nb';
@@ -259,18 +268,21 @@ export function mountMap(route, el) {
   MAP.world.classList.toggle('no-plumb', !MAP.plumb);
   MAP.cv = attachCanvas(MAP.board, MAP.world, {
     onChange: onCanvasChange,
-    stops: mapStops,
-    max: () => Math.max(MAX_SCALE, enterScale() * 1.25),
-    // zoom-to-enter arms only past the calls stop, on the journey the street is on
-    armFrom: () => callsScale(),
-    snapTargets: () => (MAP.prop || !MAP.focus ? [] : [...MAP.world.querySelectorAll('.map-scr[data-flow="' + cssAttr(MAP.focus) + '"]')]),
+    stops: (a) => (lanesShown() ? laneStops(a) : mapStops(a)),
+    // on the lanes the board is one altitude: no gesture swaps it for the streets until a screen is entered
+    level: (s) => (lanesShown() ? 'nb' : levelOf(s)),
+    max: () => Math.max(MAX_SCALE, enterScale() * 1.25, lanesShown() ? laneEnterScale() * 1.25 : 0),
+    // zoom-to-enter arms only past the calls stop, on the journey the street is on (on the lanes, near a screen's own stop)
+    armFrom: () => (lanesShown() ? laneEnterScale() * 0.85 : callsScale()),
+    snapTargets: () => (lanesShown() ? [...MAP.world.querySelectorAll('.map-lanes .ln-stage')]
+      : MAP.prop || !MAP.focus ? [] : [...MAP.world.querySelectorAll('.map-scr[data-flow="' + cssAttr(MAP.focus) + '"]')]),
     onArm: onArm,
-    onSnap: (scr) => openScreenEl(scr),
+    onSnap: (scr) => (scr.classList.contains('ln-stage') ? enterStage(scr) : openScreenEl(scr)),
     onGestureEnd: () => { MAP.autoFit = null; syncHashToBoard(); },
     // the rest of a pinch out that just left a screen does not keep zooming the street
     holdWheel: () => Date.now() < (MAP.holdWheelUntil || 0),
     // a drag never leaves the board on an empty grid: some of the journeys stay on the stage (round 2)
-    bounds: () => (MAP.size.w ? { x: 0, y: 0, w: MAP.size.w, h: MAP.size.h } : null),
+    bounds: () => (lanesShown() && MAP.lanes ? { x: 0, y: 0, w: MAP.lanes.size.w, h: MAP.lanes.size.h } : MAP.size.w ? { x: 0, y: 0, w: MAP.size.w, h: MAP.size.h } : null),
   });
   // the board starts under the chrome row, so nothing draws beneath the toolbar
   const chrome = MAP.stage.querySelector('.map-chrome');
@@ -345,6 +357,7 @@ export function mapUpdate(route) {
   if (/(?:^|[?&])plumb=1(?:&|$)/.test(String(route.raw || ''))) setPlumb(true);
   // the back button or a link moved the storyline: the board redraws before going where the route says
   if ((route.storyline || null) !== (MAP.storyline || null) && MAP.designs) applyStoryline(route.storyline || null, { fromRoute: true });
+  if (routeLayout(route) !== MAP.layout && MAP.designs) setLayout(routeLayout(route), { fromRoute: true });
   applyRouteTarget(route, true);
 }
 
@@ -477,6 +490,134 @@ function applyStoryline(id, opts = {}) {
   walk(MAP.gen);
 }
 
+// ── the storyline as swimlanes (round 2026-10-10 §2) ─────────────────────
+// A storyline is drawn as a chain (its journeys as cards) or as lanes (surfaces/map-lanes.js over
+// lib/map-lanes-model.js laneLayout). The lanes are the board altitude of a storyline: a click on a screen, or a zoom
+// into it, enters that journey's street at that screen, and the board stop (Fit, Esc, zooming out) comes back to them.
+/** The layout a link names: `?layout=lanes`, else the chain. */
+function routeLayout(route) {
+  return route && /(?:^|[?&])layout=lanes(?:&|$)/.test(String(route.raw || '')) ? 'lanes' : 'chain';
+}
+/** The reader asked for the lanes and a storyline is drawn. */
+function lanesWanted() { return MAP.layout === 'lanes' && !!(MAP.nb && MAP.nb.storyline); }
+/** The lanes are the board on screen (not left for a street). */
+function lanesShown() { return lanesWanted() && !MAP.lanesAway; }
+/** *Layout: chain · lanes* — drawn beside the storyline picker while a storyline is drawn. */
+function layoutToolHtml() {
+  if (!MAP.nb || !MAP.nb.storyline) return '';
+  const on = MAP.layout === 'lanes' ? 'lanes' : 'chain';
+  const opt = (v, key) => '<button type="button" class="map-seg' + (on === v ? ' on' : '') + '" data-act="layout" data-layout="' + v + '" aria-pressed="' + (on === v) + '"'
+    + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
+  return '<span class="map-layout-pick" role="group" aria-label="' + esc(t('map.layout.pick')) + '">'
+    + '<span class="hud-label"' + tipAttrs({ key: 'map.layout.pick', noFocus: true }) + '>' + esc(t('map.layout.pick')) + '</span>'
+    + '<span class="map-segs">' + opt('chain', 'map.layout.chain') + opt('lanes', 'map.layout.lanes') + '</span></span>';
+}
+/** Draw the storyline as `v` (`'chain'` or `'lanes'`); the link carries it. */
+function setLayout(v, opts = {}) {
+  MAP.layout = v === 'lanes' ? 'lanes' : 'chain';
+  MAP.lanesAway = false;
+  if (!MAP.world) return;
+  closeCard();
+  if (MAP.prop) closeProperty({ keepHash: true });
+  drawLanes();
+  redrawChrome();
+  fitAll(false);
+  if (!opts.fromRoute) writeHash(null, null);
+}
+/** The lanes layer: drawn from the storyline and the journeys read so far, or removed when the chain is drawn. */
+function drawLanes() {
+  if (!MAP.world) return;
+  let el = MAP.world.querySelector('.map-lanes');
+  if (!lanesWanted()) {
+    if (el) el.remove();
+    MAP.lanes = null;
+    MAP.world.classList.remove('lanes-on');
+    return;
+  }
+  const story = findStoryline(MAP.tree, MAP.nb.storyline.id);
+  if (!story) return;
+  const sums = new Map();
+  for (const [id, j] of MAP.journeys) if (j && j.data) sums.set(id, j.data);
+  const model = laneLayout(story, MAP.designs, MAP.tree, sums, { byId: S.BYID });
+  const b = boardSize();
+  const h = Math.max(1, b.h - riskTop());
+  // under the lanes: a strip per record (at most two), the footer and the legend — measured below once drawn
+  const extraH = 40 + 46 * Math.min(2, model.lifecycles.length);
+  const G = laneGeometry(model, { aspect: b.w > 0 ? b.w / h : 1.6, extraH });
+  if (!el) { el = document.createElement('div'); el.className = 'map-lanes'; MAP.world.appendChild(el); }
+  el.style.cssText = 'width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + LANE_K + ')';
+  const had = el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  el.innerHTML = lanesHtml(model, G, { evidenceHtml: storyEvidenceHtml(), sentence });
+  // the board holds what was drawn under the lanes (offset sizes are layout units, untouched by the scale)
+  const bottom = el.querySelector('.ln-bottom');
+  const need = bottom ? bottom.offsetTop + bottom.offsetHeight + G.geom.margin : G.size.h;
+  if (need > G.size.h) { G.size.h = need; el.style.height = need + 'px'; }
+  const before = MAP.lanes;
+  MAP.lanes = { model, G, size: { w: G.size.w * LANE_K, h: G.size.h * LANE_K } };
+  MAP.world.classList.toggle('lanes-on', lanesShown());
+  if (had) { const f = el.querySelector('.ln-stage[data-key="' + cssAttr(had) + '"]'); if (f) focusQuiet(f); }
+  // the board was fitted to the lanes before this journey landed: it stays fitted
+  if (lanesShown() && MAP.cv && (!before || MAP.lanesFitS == null || Math.abs(MAP.cv.state().s - MAP.lanesFitS) < 0.002)) fitLanes(false);
+}
+let lanesT = null;
+function drawLanesSoon() {
+  if (!lanesWanted()) return;
+  clearTimeout(lanesT);
+  lanesT = setTimeout(drawLanes, 40);
+}
+/** Fit the lanes board on the stage, under the risk headline. */
+function fitLanes(anim) {
+  if (!MAP.cv || !MAP.lanes) return;
+  const sz = MAP.lanes.size;
+  MAP.cv.fit({ x: 0, y: 0, w: sz.w, h: sz.h }, { pad: FRAME_PAD, top: riskTop(), max: 1, anim });
+  const b = boardSize();
+  MAP.lanesFitS = Math.min(1, (b.w - FRAME_PAD * 2) / sz.w, (b.h - FRAME_PAD * 2 - riskTop()) / sz.h);
+  writeHash(null, null);
+}
+/** Back from a street to the lanes: the districts hide, the lanes show. */
+function backToLanes() {
+  MAP.lanesAway = false;
+  MAP.journey = null;
+  if (MAP.prop) closeProperty({ keepHash: true });
+  if (!MAP.lanes) drawLanes();
+  if (MAP.world) MAP.world.classList.toggle('lanes-on', lanesShown());
+}
+/** The scale at which a stage card is large enough to enter (the engine's 60 % rule arms). */
+function laneEnterScale() {
+  const b = boardSize();
+  return b.h ? (b.h * ENTER_COVER) / ((MAP.lanes ? MAP.lanes.G.geom.cardH : 104) * LANE_K) : 2.4;
+}
+/** The stops on the lanes: the board fitted, and a screen large enough to enter. */
+function laneStops() {
+  if (!MAP.lanes || !MAP.cv) return [];
+  const b = boardSize(), sz = MAP.lanes.size;
+  const fit = Math.min(1, (b.w - FRAME_PAD * 2) / sz.w, (b.h - FRAME_PAD * 2 - riskTop()) / sz.h);
+  return [{ id: 'board', s: fit, frame: () => fitLanes(true) }, { id: 'enter', s: laneEnterScale() }];
+}
+/** A stage card opened (a click, Enter, a zoom into it): that journey's street, at that screen. */
+function enterStage(el) {
+  const flow = el.dataset.flow, index = +el.dataset.index;
+  if (!flow || !MAP.geom.has(flow)) return;
+  closeCard();
+  MAP.lanesAway = true;
+  MAP.world.classList.remove('lanes-on');
+  ensureJourney(flow).then((j) => {
+    if (!j || !j.model || !MAP.lanesAway) return;
+    const i = Math.max(0, Math.min(index, j.model.screens.length - 1));
+    centreScreen(flow, i, STREET_SCALE, false);
+    writeHash(flow, null);
+    applyTabbing();
+    focusQuiet(MAP.world && MAP.world.querySelector('.map-scr[data-flow="' + cssAttr(flow) + '"][data-index="' + i + '"]'));
+  });
+}
+/** A street entered from the lanes, zoomed out to the board: the lanes again, fitted. True when it took the change. */
+function lanesReturn(st) {
+  if (!MAP.lanesAway || !lanesWanted() || MAP.altHold || MAP.prop || st.level !== 'nb') return false;
+  backToLanes();
+  requestAnimationFrame(() => fitLanes(true));
+  return true;
+}
+
 function readPlumb() {
   try { return localStorage.getItem(PLUMB_KEY) === '1'; } catch { return false; }
 }
@@ -541,6 +682,7 @@ async function ensureJourney(id, gen = MAP.gen) {
   const entry = data && data.summary ? { data, model: streetModel(data, S.BYID) } : { error: true };
   MAP.journeys.set(id, entry);
   relayoutKeeping(() => renderDistrict(id));
+  drawLanesSoon();
   if (MAP.legend) drawLegend();
   drawRisk();
   if (MAP.autoFit === id && !MAP.prop) enterJourney(id, false);
@@ -632,7 +774,7 @@ function writeHash(flow, node) {
   const query = qi >= 0 ? h.slice(qi) : '';
   let base = '#/map' + (flow ? '/' + encodeURIComponent(flow) : '');
   // the link is the picture (§K): where the board is and which card is open, so the same link opens the same view
-  const v = node ? null : viewParams(flow);
+  const v = node || lanesShown() ? null : viewParams(flow);
   h = withParams(base + query, {
     node: node || null, plumb: MAP.plumb ? '1' : null,
     z: v ? v.z : null, x: v ? v.x : null, y: v ? v.y : null,
@@ -641,6 +783,7 @@ function writeHash(flow, node) {
     screen: null, j: null,
     // the storyline on the board is part of the picture
     storyline: MAP.storyline || null,
+    layout: MAP.storyline && MAP.layout === 'lanes' ? 'lanes' : null,
     // the Affected mode is part of the picture (lane I)
     ...affectedParams(),
   });
@@ -1054,6 +1197,7 @@ function riskTop() {
 }
 function fitAll(anim) {
   if (!MAP.cv || !MAP.size.w) return;
+  if (lanesWanted()) { backToLanes(); fitLanes(anim); return; }
   holdingAlt(() => fitBoard(anim));
 }
 function fitBoard(anim) {
@@ -1237,6 +1381,7 @@ function stickHead(st) {
 }
 function onCanvasChange(st) {
   if (!MAP.stage) return;
+  if (lanesReturn(st)) return;
   // a gesture crossed the level: the other layout, the journey under the pointer kept still (its shift redraws all this)
   if (!MAP.altHold && MAP.lay && st.level !== MAP.alt) {
     const keep = altKeep();
@@ -1439,6 +1584,7 @@ function chromeHtml() {
     + '<span class="map-asof"></span>'
     + '<div class="map-tools">'
     + storylineToolHtml()
+    + layoutToolHtml()
     + bandToolHtml()
     + tool('plumb', 'map.tool.plumb', esc(t('map.tool.plumb')), MAP.plumb ? ' on' : '')
     + tool('in', 'map.tool.zoomIn', '+')
@@ -1565,7 +1711,7 @@ function drawHint(st) {
     el.classList.remove('enter');
     return drawBackTo(st);
   }
-  else if (st.level === 'nb') text = t('map.hint.nb');
+  else if (st.level === 'nb') text = t(lanesShown() ? 'lanes.hint' : 'map.hint.nb');
   else if (MAP.near) text = t('map.hint.near').replace('{name}', MAP.near.dataset.name || '');
   else text = t('map.hint.st');
   if (el.textContent !== text || el.dataset.floor) el.textContent = text;
@@ -1610,6 +1756,7 @@ function onChromeClick(e) {
     case 'aff-hops': setAffectedHops(+b.dataset.h); break;
     case 'band': MAP.bandMenu = false; setBand(b.dataset.band); break;
     case 'storyline': applyStoryline(b.dataset.storyline || null); break;
+    case 'layout': setLayout(b.dataset.layout); break;
     case 'storyline-menu': MAP.storyMenu = !MAP.storyMenu; MAP.bandMenu = false; redrawChrome(); if (MAP.storyMenu) { const f = MAP.stage.querySelector('.map-story-pick .map-seg.on') || MAP.stage.querySelector('.map-story-pick .map-seg'); if (f) f.focus(); } break;
     case 'band-menu': MAP.bandMenu = !MAP.bandMenu; MAP.storyMenu = false; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-band-pick .map-segs .map-seg'); if (f) f.focus(); } break;
     default:
@@ -1971,6 +2118,7 @@ function renderAll() {
   for (const d of MAP.nb.districts) renderDistrict(d.id);
   placeDistricts();
   drawLinks();
+  drawLanes();
   if (MAP.cv) onCanvasChange(MAP.cv.state());
 }
 
@@ -2471,6 +2619,8 @@ function onBoardClick(e) {
   if (node && MAP.cv && MAP.cv.level() === 'st') { showCard(node); return; }
   const scr = tgt.closest('.map-scr');
   if (scr && MAP.cv && MAP.cv.level() === 'st') { openScreenEl(scr); return; }
+  const stage = tgt.closest('.ln-stage');
+  if (stage && lanesShown()) { enterStage(stage); return; }
   const cover = tgt.closest('.map-dcover');
   if (cover && MAP.cv && MAP.cv.level() === 'nb') { closeCard(); enterJourney(cover.dataset.enter, true); return; }
   const echo = tgt.closest('.map-echo');
@@ -2483,15 +2633,16 @@ function onBoardKey(e) {
   // redraws, so the focus fell to <body> about one time in ten (e2e map-round2, 2026-10-06). A cover keeps its
   // focus through a redraw (`focusKey`), so it is the one stop that is always there.
   if (e.key === 'Tab' && !e.shiftKey && e.target === MAP.board) {
-    const first = MAP.world && [...MAP.world.querySelectorAll('.map-dcover')].find((c) => !c.closest('[inert]') && c.offsetParent !== null);
+    const first = MAP.world && [...MAP.world.querySelectorAll(lanesShown() ? '.ln-stage' : '.map-dcover')].find((c) => !c.closest('[inert]') && c.offsetParent !== null);
     if (first) { e.preventDefault(); first.focus({ preventScroll: true }); }
     return;
   }
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const tgt = e.target;
-  if (tgt.matches(TIP_SELECTOR) && !tgt.matches('.map-scr,.map-pl,.map-pd,.map-dcover,.map-echo')) return;
+  if (tgt.matches(TIP_SELECTOR) && !tgt.matches('.map-scr,.map-pl,.map-pd,.map-dcover,.map-echo,.ln-stage')) return;
   if (tgt.matches('.map-pl,.map-pd')) { e.preventDefault(); showCard(tgt); return; }
   if (tgt.matches('.map-scr')) { e.preventDefault(); openScreenEl(tgt); return; }
+  if (tgt.matches('.ln-stage')) { e.preventDefault(); enterStage(tgt); return; }
   if (tgt.matches('.map-dcover')) {
     e.preventDefault();
     enterCover(tgt);
@@ -2999,6 +3150,7 @@ export function mapKey(e) {
       if (cover) { enterCover(cover); return true; }
     }
   }
+  if ((k === 'w' || k === 'W') && MAP.nb.storyline && !MAP.prop) { setLayout(MAP.layout === 'lanes' ? 'chain' : 'lanes'); return true; }
   if (k === 'p' || k === 'P') { setPlumb(!MAP.plumb); return true; }
   if (k === '+' || k === '=') { mapZoom(1.35); return true; }
   if (k === '-' || k === '_') { mapZoom(1 / 1.35); return true; }
@@ -3093,6 +3245,7 @@ async function mapPicture() {
   fitAll(false);
   await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
   const story = MAP.nb && MAP.nb.storyline;
+  if (lanesShown() && MAP.lanes) return { world: MAP.world, size: MAP.lanes.size, scale: MAP.cv.state().s, title: story.name, subject: story.id + '-lanes' };
   return { world: MAP.world, size: MAP.size, scale: MAP.cv.state().s, title: story ? story.name : t('export.board.all'), subject: story ? story.id : '' };
 }
 registerExport('map', mapPicture);

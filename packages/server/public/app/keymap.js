@@ -32,6 +32,7 @@ const KEYS = [
   { keys: 'h / l', desc: 'key.mapHl' },
   { keys: '← ↑ → ↓', desc: 'key.mapArrows' },
   { keys: 'p', desc: 'key.mapPlumb' },
+  { keys: 'w', desc: 'key.mapLanes' },
   { keys: '+ / − / 0', desc: 'key.mapZoom' },
   { keys: '[ / ]', desc: 'key.mapStep' },
   { keys: 'y', desc: 'key.mapLink' },
