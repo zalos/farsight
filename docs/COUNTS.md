@@ -614,6 +614,42 @@ MCP `test_coverage` and `farsight tests matrix`.
 | `steps[n].coverageViaRuns` | C: a table's accessors' cases by their own runs (`viaRuns`) | a table has no word; its foot prints this count and no verdict |
 | `GET /api/tests?flow=&seg=n[&action=k]` · `?node=` · `?flow=&lean=1&cases=1` | the cell a journey's door opened (`cellCoverage`) with its cases, each with `word` (`caseWord`, the scope rule over that case alone) | the page's verdict equals the Sheet's for the same cell (pinned by a core test and a server test) |
 
+### State of play (`/api/state` → core `state-of-play.ts` `stateOfPlay()`; the front door, MCP `graph_overview`, CLI `farsight state`)
+
+The front door's first answer (round 2026-10-10, proposal 5). **No new count**: each number is an existing fold's,
+summed over the sources in scope, typed as a `Counted` with scope `count.scope.workspace` and a `recheck` — the CLI line
+(and MCP tool) that prints the same number again. The business register prints every count that has a `bizUnit` and
+none of the re-check commands.
+
+| field | unit | what it counts | from | re-check |
+|---|---|---|---|---|
+| `built.journeys` | `count.unit.journeysBuilt` (`of`) | journeys whose every screen is built, of the journeys the designs declare (each flow once) | `designSurface().flows[].status` | `farsight state` · `graph_overview` |
+| `built.screens` | `state.unit.screensBuilt` (`of`) | screens built, of the screens the designs declare (code-only pages left out) | `designSurface().counts.built / .designed` | `farsight design list` · `design_surface` |
+| `built.operations` | `state.unit.operations` (`of`; no business unit) | operations with code, of every operation on the API surfaces | `apiSurface().counts.implemented / .operations` | `farsight api list` · `api_surface` |
+| `built.storylines` · `built.branches` | `count.unit.storylines` · `count.part.storylineBranches` | storylines, and the branches they declare | `journeyTree().storylines[].branches` | `farsight journeys` · `journeys` |
+| `validated.byVerdict[].journeys` | `count.unit.journeys` + the word (`verdict.word.key`, lane V's words) | journeys by their one test verdict, strongest class first | `testsSurface().journeys[].coverage.verdict.word` | `farsight tests matrix` · `test_coverage` |
+| `validated.lastE2e` | not a count: the newest end-to-end run and its one freshness fact | `freshnessFact()` over every active end-to-end case's run | `testNodes()` → `freshness.ts` | — |
+| `validated.cases` | `count.unit.cases` (business `journey.biz.countTests`) | every case by its own last run: passed · failed · skipped · flaky · no run recorded (sums to the cases) | `testsSurface().sources[].runs` | `farsight tests list` · `test_coverage` |
+| `open.screensNotBuilt` | `state.unit.screensNotBuilt` | screens a design declares that no code builds (first five named in `notBuiltNames`) | `designSurface().counts.designOnly` | `farsight design list` · `design_surface` |
+| `open.operationsNotImplemented` | `state.unit.operationsNotImplemented` (no business unit) | operations a contract declares that no code serves; a spec-only source is not a gap and is left out | `apiSurface().counts.notImplemented` | `farsight api list` · `api_surface` |
+| `open.blindSpots` | `state.unit.blindSpots` | the tests catalogue's blind-spot sentences (`blindSpotSentences`) | `testsSurface().blindSpots` | `farsight tests list` · `test_coverage` |
+| `open.drift` | `state.unit.drift` | differences between a design manifest and the code | `designSurface().counts.drift` | `farsight design list` · `design_surface` |
+| `open.history` | the history fact, below | | | |
+
+### The history sentence (core `history.ts` `historyFact()` / `historySentence()`; finding 2.1)
+
+Settings printed *history 282 commits indexed* and Changes *242 of 282 never ingested*: two halves of one fact, read
+as a contradiction by seven reviewers. One fold, one sentence, printed by Settings (each source's sync status line,
+filled after the sync's snapshot is written so this sync's commit counts as ingested), Changes (the spine's first
+note, `spineSentences().unindexed`) and the front door: **`n commits read into history · k ingested by a sync · m not
+yet`**.
+
+| field | unit | what it counts | rule |
+|---|---|---|---|
+| `read` | `history.fact.read` | commits read from git for the sources (`commitSpine().commits`, summed) | breakdown `history.fact.ingested` + `history.fact.notYet` = `read` |
+| `ingested` | `history.fact.ingested` (`of` = read) | of those, the ones a sync built a graph from | `read − notYet` |
+| `notYet` | `history.fact.notYet` (`of` = read) | of those, the ones no sync ingested (`commitSpine().unindexed`) — *not indexed* | never printed as *never* |
+
 ## 4. Open — found, not changed here
 
 - **The journey prints the typed counts** (`fix/journey-numbers-and-words`, 2026-09-25). The header
