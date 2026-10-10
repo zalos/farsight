@@ -120,7 +120,7 @@ export function stateOfPlay(
   }
   const byVerdict = [...byKey.values()]
     .sort((a, b) => CLS_ORDER[a.word.cls] - CLS_ORDER[b.word.cls] || b.n - a.n || (a.word.key < b.word.key ? -1 : 1))
-    .map((v) => ({ word: v.word, journeys: counted(v.n, 'count.unit.journeys', SCOPE, `${SRC} ← testsSurface().journeys[].coverage.verdict.word`, { of: tests.journeys.length, bizUnit: 'count.unit.journeys', recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' } }) }));
+    .map((v) => ({ word: v.word, journeys: counted(v.n, 'count.unit.journeys', SCOPE, `${SRC} ← testsSurface().journeys[].coverage.verdict.word`, { bizUnit: 'count.unit.journeys', recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' } }) }));
 
   const e2eRuns: FreshnessRun[] = [];
   let newest = '';

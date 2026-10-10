@@ -120,11 +120,12 @@ export function loadWorkspaceConfig(repoRoot: string, options: IngestOptions = {
 
   ws.merged = mergeConfigs(ws.files, meta, ws.stores);
   meta.conflicts.push(...glossaryConflicts(ws.files));
-  // the words the files give, for the front door's glossary strip: one per key, the nearer file's word winning
+  // the words the files give, for the front door's glossary strip: one per key, the widest file's word (a nested
+  // file's word holds only under its folder, so the source-wide one speaks for the application)
   const words = new Map<string, NonNullable<ConfigMeta['glossary']>[number]>();
   for (const f of ws.files) {
     for (const [key, e] of Object.entries(f.config.glossary ?? {})) {
-      if (!e || typeof e.label !== 'string' || !e.label.trim()) continue;
+      if (!e || typeof e.label !== 'string' || !e.label.trim() || words.has(key)) continue;
       words.set(key, { key, label: e.label, ...(typeof e.description === 'string' && e.description.trim() ? { description: e.description } : {}), file: f.path });
     }
   }
