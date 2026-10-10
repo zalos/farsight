@@ -42,6 +42,7 @@ node packages/cli/dist/cli.js tests list|matrix [--format csv]  # tests in the g
 node packages/cli/dist/cli.js impact <id> [--hops N] [--tests] [--json]  # what depends on this, per hop, never summed; --json is the frozen farsight-impact-tests v1 document for CI test selection
 node packages/cli/dist/cli.js affected --pr <n> | --from <sha> --to <sha> [--json] [--post [--confirm] [--via gh]]  # what a change touches: journeys (storyline step), gates, record writes and calls on the changed path, each test case once with its own last run; --json = frozen farsight-affected v1; --post = one comment + one check through the three verdicts (a `type: 'code-host'` source)
 node packages/cli/dist/cli.js readiness --storyline <id> [--repo r] [--json|--csv]  # the release readiness brief: one row per step, ship or hold with the reason, the rules register (also #/readiness/<id>)
+node packages/cli/dist/cli.js state [--json]                  # the state of play: built and walkable · validated by a run · still open, every number with the command that re-checks it (also GET /api/state, the front door, the top of MCP graph_overview)
 node packages/cli/dist/cli.js stories [--repo r] [--node <id>] [--json]   # the repos' Storybooks (found or configured, never started), running or not, and how the live index maps onto components (ADR 9)
 node packages/cli/dist/cli.js tests import --results r.json --coverage coverage-final.json --repo r  # attach a CI report to an existing graph without re-ingesting
 node packages/cli/dist/cli.js journeys [--repo r] [--persona p] [--group g] [--storyline s] [--json]   # the journeys organised persona → group → journeys in declared order (manifest personas[]/groups[]/flow persona·group·order, farsight.config.json → journeys overrides); the same tree as GET /api/journeys and MCP `journeys`
@@ -123,6 +124,16 @@ a digest says *no source digest*, never *stale*; a gate click anywhere opens the
 `GET /api/gate`), and a guard that reads the environment and takes no request is a *config check*, counted apart and
 never a screen's gate. *Step* is the storyline position only; the Sheet's columns are *stops*. A new catalog module is
 a `strings-<area>.ts` registered the way `strings-doors.ts` is, so lanes do not collide in `strings.ts`.
+**One surface, five stops; scope on the chip; a tier on every gate** (2026-10-10): the Map is the one place a journey
+is read — ALL · JOURNEY · SCREEN · ACTION · CODE on one zoom (`surfaces/map-stops.js`), with one LAYOUT control whose
+choices change per stop (`registerMapLayout`); the journey's pure folds live in `lib/journey-model.js`, never in a
+surface. Every test number prints through `lib/test-chip.js` with the scope it counts over (`TestVerdict.scopeWord`),
+a designed, not-built screen has no verdict, and the absence word is *no test is known to reach*. Every gate carries a
+class and a tier (core `gate-class.ts`: business · policy · technical; `gateTiers` in config or `@guard[tier]` to
+override), the business register lists business and policy and folds the rest, and a `@guard` that writes a status is
+an action, never a gate on itself; preconditions are read from the code (`parsers/src/preconditions.ts`), never
+declared. A lifecycle's words come from `lifecycle.<record>.views` in config and `humanize()`; the statuses and the
+moves come from the code. Every `Counted` on the front door carries the `recheck` command that reproduces it.
 
 ## Design language ("Farsight HUD")
 
@@ -130,8 +141,10 @@ Blue-black ground `#0A0D14`, panels `#111623`, condensed-uppercase HUD labels (F
 
 ## Current position
 
-The clarity phase is built and merged; four passes have followed it, the last the code map's performance pass (2026-10-04). **`docs/AI-HANDOFF.md` carries the
-verified current state and the ranked next work — read it, not this paragraph.**
+The clarity phase is built and merged; six passes have followed it, the last the lanes round's wave 1 (2026-10-10:
+one surface with five stops, the storyline as swimlanes, lifecycle views, scope on every test number, gates for a
+business reader, affected on a PR, the state of play), with its waves 2–3 in flight. **`docs/AI-HANDOFF.md` carries
+the verified current state and the ranked next work — read it, not this paragraph.**
 
 The bar the product is judged against, unchanged: *"a person who opens Farsight on a real application understands
 the app before they understand the tool."* As of the 2026-09-24 visual swarm a reader new to the reference app
