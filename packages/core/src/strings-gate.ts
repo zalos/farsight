@@ -67,7 +67,7 @@ export const GATE_STRINGS: Record<string, StringEntry> = {
   'gate.depth.underOne': one('1 call down', 'gate.depth.under'),
   'gate.calls.none': same('no call reaches it in this graph',
     'No route the graph knows goes through this checkpoint. It may be met only at start-up, or only by code the graph did not read.'),
-  'gate.tests.none': same('no test reaches it',
+  'gate.tests.none': same('no test is known to reach it',
     'No test in the graph reaches this checkpoint or a call in front of it.'),
   'gate.tests.onGate': same('reaches the check itself', 'The test runs the checkpoint’s own code.'),
   'gate.tests.viaCall': same('through {call}', 'The test reaches a call in front of the checkpoint, and so the checkpoint on the way.'),

@@ -57,7 +57,8 @@ test('every scope a count may carry is in the catalog, defined, and printable in
   for (const [k, e] of Object.entries(STRINGS)) {
     if (!k.startsWith('count.')) continue;
     for (const reg of ['hud', 'professional'] as const) assert.equal(BIZ_BANNED.test(e[reg]), false, `${k} counts in a developer's unit`);
-    if (!k.endsWith('One') && !k.startsWith('count.scope.')) assert.match(e.professional, /\{n\}/, `${k} prints no number`);
+    // count.over.* are the scopes' chip words (round 2026-10-10): words, not numbers
+    if (!k.endsWith('One') && !k.startsWith('count.scope.') && !k.startsWith('count.over.')) assert.match(e.professional, /\{n\}/, `${k} prints no number`);
   }
 });
 
