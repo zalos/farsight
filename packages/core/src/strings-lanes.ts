@@ -15,7 +15,7 @@ function one(word: string, pluralKey: string): StringEntry {
 export const LANES_STRINGS: Record<string, StringEntry> = {
   // the layout control beside the storyline picker
   'map.layout.pick': same('layout', 'How the storyline is drawn: as a chain of its journeys, or as lanes of who acts with the record they move underneath.'),
-  'map.layout.chain': same('chain', 'The storyline as a chain: each journey a card, in order, its branches below the step they leave from.'),
+  'map.layout.chain': same('chain', 'The storyline as a chain: each journey a card, in order, its branches below the journey they leave from.'),
   'map.layout.lanes': same('lanes', 'The storyline as swimlanes: a lane for each kind of person who acts in it and one for each store its code writes to, the screens in order as columns, and the record’s moves in the store lane.'),
   'key.mapLanes': same('On a storyline: switch between the chain and the lanes'),
 
@@ -31,7 +31,7 @@ export const LANES_STRINGS: Record<string, StringEntry> = {
   'lanes.count.distinctScreens': same('{n} screens', 'The different screens of this storyline, each counted once however many of its journeys reach it, branches included.'),
   'lanes.count.distinctScreensOne': one('1 screen', 'lanes.count.distinctScreens'),
   'lanes.count.built': same('{n} of {m} built', 'Screens of this storyline that a page in the code serves, out of every screen it names.'),
-  'lanes.count.branches': same('{n} branches', 'Journeys that leave this storyline at one step when a condition holds, as the design declares them.'),
+  'lanes.count.branches': same('{n} branches', 'Journeys that leave this storyline at one of its journeys when a condition holds, as the design declares them.'),
   'lanes.count.branchesOne': one('1 branch', 'lanes.count.branches'),
   'lanes.part.personaLanes': same('{n} for a kind of person', 'Lanes of the people who own a journey of this storyline, from the personas the design names.'),
   'lanes.part.storeLanes': same('{n} for a store', 'Lanes of the stores this storyline’s code writes to.'),
@@ -50,7 +50,7 @@ export const LANES_STRINGS: Record<string, StringEntry> = {
 
   // the stages and their decisions
   'lanes.stage.open': same('walk this journey from this screen', 'Opens the journey this screen belongs to on its street, at this screen.'),
-  'lanes.stage.branch': same('branch · when {when}', 'This screen belongs to a journey that leaves the storyline at the step above it when this condition holds.'),
+  'lanes.stage.branch': same('branch · when {when}', 'This screen belongs to a journey that leaves the storyline at the journey it is drawn after, when this condition holds.'),
   'lanes.stage.built': same('built', 'A page in the code serves this screen.'),
   'lanes.decision': same('decision', 'A choice the code makes on this screen, in the words the team wrote. It is drawn beside the screen, never as a screen of its own, so the count of screens stays true.'),
   'lanes.decision.more': same('+{n}', 'More choices the code makes on this screen; the tip lists them.'),
