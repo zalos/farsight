@@ -53,7 +53,8 @@ test.describe('map — keyboard, fast travel and links', () => {
     // start from the level pills: the chrome comes before the board
     await page.locator('.map-lvls button[data-l="nb"]').focus();
     const seen: string[] = [];
-    for (let i = 0; i < 20 && seen.filter((x) => x.startsWith('map-dcover')).length < 3; i++) {
+    // five level pills (ALL · JOURNEY · SCREEN · ACTION · CODE) and the tools come first
+    for (let i = 0; i < 30 && seen.filter((x) => x.startsWith('map-dcover')).length < 3; i++) {
       await page.keyboard.press('Tab');
       seen.push(await focused(page));
     }

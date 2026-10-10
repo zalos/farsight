@@ -665,14 +665,15 @@ function writeHash(flow, node) {
   // below the screen the address names the place (surfaces/map-stops.js): screen · action · beat · layout · dock
   const ap = !node ? actionParams() : null;
   h = withParams(base + query, {
-    action: ap ? ap.action : null, beat: ap ? ap.beat : null, dock: ap ? ap.dock : null,
-    layout: ap ? ap.layout : !node && flow && layoutAt('st') === 'table' ? 'table' : null,
     node: node || null, plumb: MAP.plumb ? '1' : null,
     z: v ? v.z : null, x: v ? v.x : null, y: v ? v.y : null,
     card: !node && MAP.card ? MAP.card.spec : null,
     // the link names the picture from here on: `screen` and `j` were how it was arrived at — except at an action,
     // whose screen is part of its place
     screen: ap ? ap.screen : null, j: null,
+    action: ap ? ap.action : null, beat: ap ? ap.beat : null,
+    layout: ap ? ap.layout : !node && flow && layoutAt('st') === 'table' ? 'table' : null,
+    dock: ap ? ap.dock : null,
     // the storyline on the board is part of the picture
     storyline: MAP.storyline || null,
     // the Affected mode is part of the picture (lane I)
