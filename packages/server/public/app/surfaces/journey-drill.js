@@ -24,13 +24,14 @@ import { vsl, linkHtml, designThumbHtml } from '../lib/graph-render.js';
 import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
 import { gateAttrs } from '../lib/gate-card.js';
 import {
-  jrnCellTree, jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnScreenNode, jrnSegDecisions,
+  jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnScreenNode, jrnSegDecisions,
   jrnGateText, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml,
   jrnSchemaChipHtml, jrnFirstSentence, jrnSheetModel, jrnMarkerAt, jrnSelect, jrnSelectSegment, jrnScrollTo, jrnTxLineHtml,
   jrnTestsFootHtml, jrnStepTestFacts, jrnCountedHtml, jrnMoLabel, jrnDesignIdHtml, jrnUntranslatedHtml, jrnActionUntrList, jrnWords, jrnCallWords,
-  jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts, jrnStopText,
+  jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts, jrnStopText, jrnRowLabel as jrnRowLabelOf, jrnHelperTest as jrnHelperOf,
 } from './journeys.js';
 import { tipAttrs, tipSource } from '../lib/tooltip.js';
+import { drillLayers, drillLayerOf, drillBeats } from '../lib/journey-model.js';
 import { impactBodyHtml, impactCached, impactFetch, impactHasHops, impactOpts, impactRings, impactHash } from '../impact.js';
 
 const JRN_DRILL_LANE = 172, JRN_DRILL_COL = 212, JRN_DRILL_SEAM_COL = 320, JRN_DRILL_STOP = 150, JRN_INSP_TESTS = 12;
@@ -54,17 +55,7 @@ function jrnDrillActions(sum) {
 /** The rows of the lanes: the sheet's layers minus *verified by* (tests are an inspector tab here).
  * @group Journey drill */
 function jrnDrillLayers(sum) {
-  const layers = jrnSheetModel(sum).layers.filter((l) => l.kind !== 'verified');
-  // the board keeps records · messages · third party in view even when the walk reached none:
-  // an absent row says the core's word for the whole journey (*none indexed* — we looked and
-  // found nothing) instead of vanishing
-  const have = new Set(layers.map((l) => l.kind));
-  [['records', 'db'], ['messages', 'msg'], ['external', 'ext']].forEach(([kind, cls]) => {
-    if (have.has(kind)) return;
-    const word = (sum.absentKinds && sum.absentKinds[kind]) || 'noneIndexed';
-    layers.push({ key: 'absent:' + kind, kind, label: t('journey.row.' + kind), sub: jrnAbsentText(word) + ' · ' + t('journey.rowSub.' + kind), cls, absent: true, word });
-  });
-  return layers;
+  return drillLayers(sum, { t, rowLabel: jrnRowLabelOf, absentText: jrnAbsentText });
 }
 /** The word a beat wears in its column head, by the layer its marker sits in.
  * @group Journey drill */
@@ -80,17 +71,7 @@ function jrnBeatWord(layer) {
 }
 /** Which row a marker draws in: the user row for a component or page, else its system's row.
  * @group Journey drill */
-function jrnDrillLayerOf(m, byKey) {
-  const n = (S.JOURNEY.steps[m.stepOrder] || {}).node || {};
-  if (m.kind === 'step' && (n.kind === 'component' || n.kind === 'page') && byKey.user != null) return byKey.user;
-  return byKey[m.system] != null ? byKey[m.system] : (byKey.user || 0);
-}
-/** The moment's own call (the one that gives the action its answer), else its first call marker.
- * @group Journey drill */
-function jrnDrillCall(sg, mo, ms) {
-  const calls = ms.filter((m) => m.kind === 'call');
-  return (mo.callStep != null && calls.find((m) => m.stepOrder === mo.callStep)) || calls[0] || null;
-}
+function jrnDrillLayerOf(m, byKey) { return drillLayerOf(m, byKey, S.JOURNEY.steps); }
 /**
  * The beats of one action, in causal order: the screen (when it stayed open
  * from an earlier action), then every marker of the drill tree at tier 0–1 in
@@ -107,134 +88,31 @@ function jrnDrillCall(sg, mo, ms) {
  */
 function jrnDrillBeats(col, layers) {
   const { sg, mo } = col;
-  const byKey = {};
-  layers.forEach((l, li) => { byKey[l.key] = li; });
-  const ms = sg.markers.filter((m) => m.moment === mo.index);
-  const tree = jrnCellTree(ms);
-  const here = new Map(ms.map((m) => [m.stepOrder, m]));
-  // parts that reach data: every ancestor (by `under`) of a record / message / external
-  const reach = new Set();
-  ms.forEach((m) => {
-    if (m.kind !== 'record' && m.kind !== 'message' && m.kind !== 'external') return;
-    for (let u = m.under; u != null && here.has(u); u = here.get(u).under) reach.add(u);
-  });
-  const beats = [], colOf = {}, cells = {};
-  // a beat owns its repeats too — folded inside its box, but still selectable,
-  // so clicking a cut point or jumping to one lands in the column it belongs to
-  const owns = (o, bi) => { colOf[o] = bi; tree.again(o).forEach((r) => { colOf[r.stepOrder] = bi; }); };
-  const put = (li, bi, html) => { (cells[li + ':' + bi] = cells[li + ':' + bi] || []).push(html); };
-  const isUx = (li) => layers[li] && (layers[li].kind === 'user' || (layers[li].kind === 'repo' && layers[li].side === 'ux'));
-  const isServer = (li) => layers[li] && layers[li].kind === 'repo' && layers[li].side === 'server';
-  const isMinor = (m) => {
-    if (m.kind !== 'step' || m.business || m.tier == null || m.tier < 1) return false;
-    if (reach.has(m.stepOrder)) return false;
-    return !tree.drill(m.stepOrder).some((k) => !k.helper);
-  };
-  // the column a step belongs to: its own beat, else the nearest ancestor's (by `under`, then by the walk's parent)
-  const colOfStep = (o) => {
-    for (let cur = o, n = 0; cur != null && cur >= 0 && n < 64; n++) {
-      if (colOf[cur] != null) return colOf[cur];
-      const m = here.get(cur);
-      cur = m && m.under != null ? m.under : (S.JRN_TREE ? S.JRN_TREE.parent[cur] : -1);
-    }
-    return null;
-  };
-  if (mo.component && mo.component.stepOrder < mo.from && byKey.user != null) {
-    beats.push({ kind: 'screen', order: mo.component.stepOrder, layer: byKey.user, open: true, comp: mo.component, also: [] });
-    colOf[mo.component.stepOrder] = 0;
-  }
-  const call = jrnDrillCall(sg, mo, ms);
-  const callNode = call ? ((S.JOURNEY.steps[call.stepOrder] || {}).node || {}) : {};
-  const answer = call && callNode.contract && (callNode.contract.responses || []).length ? { call, contract: callNode.contract } : null;
-  let last = -1, lastServer = -1, answerAt = -1;
-  const pushAnswer = () => {
-    beats.push({ kind: 'answer', layer: byKey[call.system] != null ? byKey[call.system] : 0, answer, also: [] });
-    answerAt = beats.length - 1;
-  };
-  tree.top.forEach((m) => {
-    if (m.kind === 'record' || m.kind === 'message' || m.kind === 'external') {
-      let bi = colOfStep(m.stepOrder);
-      if (bi == null) bi = last >= 0 ? last : 0;
-      if (!beats.length) { beats.push({ kind: 'data', layer: jrnDrillLayerOf(m, byKey), m, also: [] }); bi = 0; }
-      owns(m.stepOrder, bi);
-      put(jrnDrillLayerOf(m, byKey), bi, jrnDrillBoxHtml(m, layers[jrnDrillLayerOf(m, byKey)], tree));
-      return;
-    }
-    const li = jrnDrillLayerOf(m, byKey);
-    // a minor part folds into the beat before it only while they are written on the same
-    // side of a transaction boundary: a column wears one side, so a chip that disagrees
-    // with its host would be drawn inside a transaction it is not written in
-    if (isMinor(m) && last >= 0 && m.under != null && colOf[m.under] === last && beats[last].m
-      && (beats[last].m.tx || null) === (m.tx || null)) {
-      beats[last].also.push(m); owns(m.stepOrder, last);
-      return;
-    }
-    // the answer comes back before the browser goes on: it sits between the last server beat and the next browser beat
-    if (answer && answerAt < 0 && lastServer >= 0 && isUx(li)) pushAnswer();
-    beats.push({ kind: m.kind === 'call' ? 'seam' : 'part', layer: li, m, also: [] });
-    last = beats.length - 1; owns(m.stepOrder, last);
-    if (isServer(li)) lastServer = last;
-  });
-  if (answer && answerAt < 0 && (lastServer >= 0 || colOf[call.stepOrder] != null)) pushAnswer();
-  // the boxes of the beats themselves (their *also* chips are known only now)
-  beats.forEach((b, bi) => {
-    if (b.kind === 'screen') put(b.layer, bi, jrnDrillScreenBoxHtml(b.comp, sg));
-    else if (b.kind === 'answer') put(b.layer, bi, jrnDrillAnswerBoxHtml(b.answer));
-    else if (b.kind === 'data') { /* drawn above as data */ }
-    else put(b.layer, bi, jrnDrillBoxHtml(b.m, layers[b.layer], tree, b.also));
-  });
-  // gates and decisions of this action, in the column of the step they sit on.
-  // Both the words and the drawn set are the shared decision (`jrnGatesShown`,
-  // `jrnGateLabel`), so this row cannot call a checkpoint one thing while the
-  // sheet one keystroke away calls it another; the lane's control narrows it the
-  // same way it narrows them.
+  // which gates and decisions this lens draws, and what it cannot name — the lane's control narrows them the way it
+  // narrows the timeline's and the sheet's; the model only places what it is handed
   const business = currentLens() === 'business';
   const tab = jrnBizTab();
   const gs = jrnGatesShown((sg.gates || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to));
-  const gates = tab === 'decisions' ? [] : gs.drawn;
   const all = jrnSegDecisions(sg).filter((d) => d.order >= mo.from && d.order <= mo.to);
   const shown = business ? all.filter((d) => d.cls !== 'guard') : all;
-  const decs = tab === 'gates' ? [] : shown;
+  const model = drillBeats(col, layers, {
+    steps: S.JOURNEY.steps, parent: S.JRN_TREE ? S.JRN_TREE.parent : null, helper: jrnHelperOf(),
+    gates: tab === 'decisions' ? [] : gs.drawn, decs: tab === 'gates' ? [] : shown,
+  });
+  const tree = model.tree;
+  const cells = {};
+  Object.keys(model.cells).forEach((k) => {
+    cells[k] = model.cells[k].map((b) => (b.type === 'data' ? jrnDrillBoxHtml(b.m, layers[b.layer], tree)
+      : b.type === 'part' ? jrnDrillBoxHtml(b.m, layers[b.layer], tree, b.also)
+      : b.type === 'screen' ? jrnDrillScreenBoxHtml(b.comp, b.sg)
+      : b.type === 'answer' ? jrnDrillAnswerBoxHtml(b.answer)
+      : b.type === 'gate' ? jrnDrillGateBoxHtml(b.g, b.bi, b.k)
+      : jrnDrillDecBoxHtml(b.d, b.bi, b.k)));
+  });
   // one number in every lens: the technical conditions plus the gate conditions nobody labelled
   const untranslated = (mo.index === 0 ? (sg.untranslated || 0) : 0) + all.filter((d) => d.cls === 'guard').length;
-  // how many of this action's checkpoints this register cannot name: said once on
-  // the lane, where the row it is about is the antecedent — never as an identifier
-  // standing in for a sentence, and never folded into the count above, which is
-  // about conditions in the code and not about checkpoints
   const notInWords = tab === 'decisions' ? 0 : gs.mute;
-  if (byKey.gates != null) {
-    gates.forEach((g, k) => { const bi = colOfStep(g.stepOrder); if (bi != null) put(byKey.gates, bi, jrnDrillGateBoxHtml(g, bi, k)); });
-    decs.forEach((d, k) => { const bi = colOfStep(d.order); if (bi != null) put(byKey.gates, bi, jrnDrillDecBoxHtml(d, bi, k)); });
-  }
-  // which side of a transaction boundary each column is written on. Read over every marker
-  // of the action, not only the drawn beats: on the reference app's submit the whole transaction sits
-  // one fold deep under the handler's beat (tier 2), so a beat-only rail would be blank on
-  // the one action whose own source disclaims the boundary. A column holding both sides is
-  // `straddles` — the only claim the flag supports there, and the one that matters.
-  const txCols = beats.map(() => null);
-  ms.forEach((m) => {
-    if (!m.tx) return;
-    const bi = colOf[m.stepOrder] != null ? colOf[m.stepOrder] : colOfStep(m.stepOrder);
-    if (bi == null || bi < 0 || bi >= txCols.length) return;
-    txCols[bi] = txCols[bi] == null || txCols[bi] === m.tx ? m.tx : 'straddles';
-  });
-  // the wires: beat to beat in causal order; a part to what it reached (down its own column)
-  const wires = [];
-  const boxId = (b) => b.kind === 'answer' ? 'jrn-ans' : b.kind === 'screen' ? 'jrn-bx-' + b.order : 'jrn-bx-' + b.m.stepOrder;
-  beats.forEach((b, bi) => {
-    if (!bi) return;
-    const prev = beats[bi - 1];
-    if (b.kind === 'answer') wires.push({ a: boxId(lastServer >= 0 ? beats[lastServer] : prev), b: 'jrn-ans', cls: 'dash' });
-    else wires.push({ a: boxId(prev), b: boxId(b), cls: (prev.kind === 'answer' || (b.m && b.m.planned)) ? 'dash' : '' });
-  });
-  ms.forEach((m) => {
-    if (m.kind !== 'record' && m.kind !== 'message' && m.kind !== 'external') return;
-    const bi = colOf[m.stepOrder];
-    if (bi == null || !beats[bi] || beats[bi].kind === 'data') return;
-    wires.push({ a: boxId(beats[bi]), b: 'jrn-bx-' + m.stepOrder, cls: m.kind === 'record' ? 'violet' : m.kind === 'message' ? 'q' : 'grey' });
-  });
-  gates.forEach((g, k) => { const bi = colOfStep(g.stepOrder); if (bi != null && beats[bi] && beats[bi].kind !== 'data') wires.push({ a: boxId(beats[bi]), b: 'jrn-bg-' + bi + '-' + k, cls: 'gate' }); });
-  return { beats, colOf, cells, wires, untranslated, notInWords, call, txCols, untrList: jrnActionUntrList(sg, mo) };
+  return { beats: model.beats, colOf: model.colOf, cells, wires: model.wires, untranslated, notInWords, call: model.call, txCols: model.txCols, untrList: jrnActionUntrList(sg, mo) };
 }
 
 /** The words for a side of the transaction boundary, in the register the lens asks for.
