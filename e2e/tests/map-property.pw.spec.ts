@@ -148,8 +148,8 @@ test.describe('map property', () => {
     await expect(img).toBeVisible();
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
     await expect(page.locator('.mp-tab')).toHaveCount(8);
-    // gates 5 (3 guards + 2 rules), APIs 5 distinct operations, tests 5 cases; nothing types the rest
-    expect(await tabCounts(page)).toEqual({ overview: '', gates: '5', apis: '5', ux: '', tests: '5', route: '', work: '', changes: '' });
+    // gates 7 (3 guards + 2 rules + 2 preconditions read from the code), APIs 5 distinct operations, tests 5 cases; nothing types the rest
+    expect(await tabCounts(page)).toEqual({ overview: '', gates: '7', apis: '5', ux: '', tests: '5', route: '', work: '', changes: '' });
     // a tab's number is a tip trigger that says what it counts
     await page.locator('#mp-tab-gates .mp-tabn [data-tip-id]').hover();
     await expect(page.locator('#fs-tip')).toContainText(/gates/i);
