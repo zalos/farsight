@@ -60,7 +60,7 @@ export function registerAffectedTools(ctx: AffectedToolsContext): boolean {
     const doc = affectedRange(ctx.index(), {
       repo: source, range: change.range, commits: change.commits, files: change.files,
       ...(change.history ? { history: change.history } : {}), ...(hops ? { hops } : {}),
-      tree: journeyTree(ctx.index(), meta.journeys), identity,
+      tree: (r: string) => journeyTree(ctx.index(), meta.journeys, new Set([r])), identity,
     });
     return text(json ? JSON.stringify(doc, null, 2) : affectedLines(doc).join('\n'));
   });

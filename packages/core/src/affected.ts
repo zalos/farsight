@@ -256,8 +256,11 @@ export interface AffectedRangeInput {
   history?: { sha: string; at: string }[];
   /** how far out the impact reports look (default 2) */
   hops?: number;
-  /** the journey tree, for each journey's storyline position (absent: none is printed) */
-  tree?: JourneyTree;
+  /**
+   * the journey tree, for each journey's storyline position (absent: none is printed). A function is asked
+   * per source: two sources may declare a storyline of one id, and a workspace-wide tree keeps only the first.
+   */
+  tree?: JourneyTree | ((repo: string) => JourneyTree);
   identity: TestsMatrixIdentity;
 }
 
@@ -438,7 +441,8 @@ export function affectedRange(index: GraphIndex, input: AffectedRangeInput): Aff
       const m = meetIn(s.nodes, hopOf);
       if (m) screens.push({ id: s.screenId, name: s.name, segment: s.segment, hop: m.hop });
     }
-    const storylines = input.tree ? storylinePlacements(input.tree, f.id).map((p) => ({
+    const treeOf = typeof input.tree === 'function' ? input.tree(f.id.split('::')[0]!) : input.tree;
+    const storylines = treeOf ? storylinePlacements(treeOf, f.id).map((p) => ({
       id: p.id, name: p.name, step: p.step, of: p.of, branch_of: p.branch?.of ?? null, when: p.branch?.when ?? null,
     })) : [];
     flows.push({ id: f.id, name: f.name, hop: j.hop, by: j.by, storylines, screens });

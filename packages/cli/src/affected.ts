@@ -39,7 +39,10 @@ function loadGraph(a: CliArgs) {
   const { nodes, edges } = store.toJSON();
   const index = buildIndex(nodes, edges);
   setFreshnessMeta(index, store.meta);
-  return { store, index, tree: journeyTree(index, store.meta.journeys) };
+  const trees = new Map<string, ReturnType<typeof journeyTree>>();
+  // one tree per source: two sources may declare a storyline of one id (journeyTree keeps the first workspace-wide)
+  const treeOf = (repo: string) => { if (!trees.has(repo)) trees.set(repo, journeyTree(index, store.meta.journeys, new Set([repo]))); return trees.get(repo)!; };
+  return { store, index, tree: journeyTree(index, store.meta.journeys), treeOf };
 }
 
 /** A date as the day it fell on (UTC), or the dash. */
@@ -105,7 +108,7 @@ export async function runAffected(a: CliArgs): Promise<void> {
   const from = a.flag('from');
   const to = a.flag('to');
   if (!prArg && !(from && to)) a.fail('usage: farsight affected --pr <n> | --from <sha> --to <sha> [--repo name] [--json] [--png <path>] [--post [--confirm] [--via gh]]');
-  const { store, index, tree } = loadGraph(a);
+  const { store, index, treeOf } = loadGraph(a);
   const repos = [...new Set([...Object.keys(store.roots), ...Object.keys(store.meta.repos ?? {})])];
   const hosts = loadCodeHostSources(a.workspace);
 
@@ -147,7 +150,7 @@ export async function runAffected(a: CliArgs): Promise<void> {
     farsight: buildLine(),
     generated_at: new Date().toISOString(),
   };
-  const doc = affectedRange(index, { repo, range, commits, files, ...(history ? { history } : {}), hops, tree, identity });
+  const doc = affectedRange(index, { repo, range, commits, files, ...(history ? { history } : {}), hops, tree: treeOf, identity });
 
   if (a.has('json')) console.log(JSON.stringify(doc, null, 2));
   else console.log(affectedLines(doc).join('\n'));
@@ -175,7 +178,8 @@ export async function runAffected(a: CliArgs): Promise<void> {
 
 export function runReadiness(a: CliArgs): void {
   const id = a.flag('storyline');
-  const { index, tree } = loadGraph(a);
+  const { index, tree: all, treeOf } = loadGraph(a);
+  const tree = a.flag('repo') ? treeOf(a.flag('repo')!) : all;
   if (!id) a.fail(`usage: farsight readiness --storyline <id> [--json|--csv] — storylines: ${tree.storylines.map((s) => s.id).join(', ') || 'none declared'}`);
   const { brief } = readinessOf(index, tree, id!, a.workspace, a.flag('repo'));
   if (!brief) a.fail(unknownStorylineText(tree, id!));
