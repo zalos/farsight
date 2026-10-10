@@ -22,6 +22,8 @@
  * git lives in `parsers/src/shared/git.ts`; reading and writing the rows lives
  * in `SnapshotDb`.
  */
+import { counted, countKey, type Counted } from './counts.js';
+import { t, type Register } from './strings.js';
 
 /** `--name-status` / `--numstat` classification of one path in one commit. */
 export type FileStatus =
@@ -855,10 +857,12 @@ export function spineSentences(spine: CommitSpine): SpineSentences {
           : ''),
     };
   }
+  // the one history sentence (round 2026-10-10, finding 2.1): both halves, the same words Settings and the
+  // front door print — read into history · ingested by a sync · not yet
   if (spine.commits && spine.unindexed) {
-    out.unindexed = { level: 'warn', text: `${num(spine.unindexed)} of ${num(spine.commits)} commits were never ingested by any sync — not indexed: Farsight can name the files they touched, not what they did to the graph` };
+    out.unindexed = { level: 'warn', text: `${historySentence(historyFact([spine]))} — the ${num(spine.unindexed)} not yet ingested are not indexed: Farsight can name the files they touched, not what they did to the graph` };
   } else if (spine.commits) {
-    out.unindexed = { level: 'note', text: `every one of the ${num(spine.commits)} commits in this history was ingested by some sync` };
+    out.unindexed = { level: 'note', text: `${historySentence(historyFact([spine]))} — every commit in this history was ingested by some sync` };
   }
   // a sync that never walked this source has not failed to stamp a commit — the
   // third row state (H5), said here so the count is never read as one situation
@@ -908,4 +912,43 @@ export function spineSentences(spine: CommitSpine): SpineSentences {
     }
   }
   return out;
+}
+
+// ── the history fact: one sentence with both halves (round 2026-10-10, finding 2.1) ──────────────────────
+// Settings printed *history 282 commits indexed* (the commits read from git) and Changes *242 of 282 never
+// ingested* (the same commits, the other half): two facts read as one contradiction by seven reviewers. One
+// fold, one sentence, printed by Settings (the sync status line), Changes (the spine's first note) and the
+// front door's state of play: *n commits read into history · k ingested by a sync · m not yet*.
+
+/** The three numbers, each a `Counted`: read = ingested + not yet. */
+export interface HistoryFact {
+  read: Counted;
+  ingested: Counted;
+  notYet: Counted;
+  /** some repository has had its history read — when false every number is 0 because nothing was read, not because nothing exists */
+  historyRead: boolean;
+}
+
+/** The history fact over one or more repositories' spines (the workspace sums them; a commit belongs to one repository). */
+export function historyFact(spines: readonly Pick<CommitSpine, 'commits' | 'unindexed'>[]): HistoryFact {
+  const read = spines.reduce((s, x) => s + x.commits, 0);
+  const notYet = spines.reduce((s, x) => s + Math.min(x.unindexed, x.commits), 0);
+  const ingested = read - notYet;
+  const SRC = 'core history.ts historyFact ← commitSpine().commits / .unindexed';
+  const recheck = { cli: 'farsight history --repo <name>', mcp: 'graph_changes' };
+  return {
+    read: counted(read, 'history.fact.read', 'count.scope.workspace', SRC, {
+      bizUnit: 'history.fact.read', recheck,
+      breakdown: [{ key: 'history.fact.ingested', n: ingested }, { key: 'history.fact.notYet', n: notYet }],
+    }),
+    ingested: counted(ingested, 'history.fact.ingested', 'count.scope.workspace', SRC, { bizUnit: 'history.fact.ingested', of: read, recheck }),
+    notYet: counted(notYet, 'history.fact.notYet', 'count.scope.workspace', SRC, { bizUnit: 'history.fact.notYet', of: read, recheck }),
+    historyRead: read > 0,
+  };
+}
+
+/** The sentence: *282 commits read into history · 40 ingested by a sync · 242 not yet* — one wording everywhere. */
+export function historySentence(f: HistoryFact, register: Register = 'professional'): string {
+  const w = (c: Counted) => t(countKey(c.unit, c.n), register).replace('{n}', String(c.n));
+  return [w(f.read), w(f.ingested), w(f.notYet)].join(' · ');
 }

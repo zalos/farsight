@@ -28,6 +28,7 @@ import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
 import { EXPORT_STRINGS } from './strings-export.js';
+import { STATE_STRINGS } from './strings-state.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -113,6 +114,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...CHROME_STRINGS,
   // export's words live in strings-export.ts (export.*, the saved picture's footer, the pinned link and its note)
   ...EXPORT_STRINGS,
+  // the front door's state of play, the history sentence, the glossary strip and the read-only words live in strings-state.ts
+  ...STATE_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
@@ -971,7 +974,7 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.countChecks': same('{n} checks',
     'How many times this journey met a checkpoint, counting every screen that meets it. The checkpoints themselves are counted once each as gates & rules.'),
   'journey.countChecksOne': one('1 check', 'journey.countChecks'),
-  'journey.countBuilt': same('{n} of {m} built',
+  'journey.countBuilt': same('{n} of {m} screens built',
     'How many of the screens this journey’s design names exist in code, of how many it names.'),
   'journey.countDeclaredOnly': same('{n} declared, not called',
     'Operations this journey’s contract or design names that no code in it calls: either the action is a contract-derived planned call, or a screen’s manifest lists an operation no action made. Counted once each across the journey, and never added to the actions — declared is not built. The flow status table prints this number under these words too, from the same fold.'),
@@ -2240,7 +2243,7 @@ export const STRINGS: Record<string, StringEntry> = {
   // the business lens's own words for counts that had none there (RULE 5 applies)
   'journey.biz.countScreens': same('{n} screens', 'How many screens this journey names, in order. A screen met twice is one screen. The split says how many of them were reached when the journey was traced through the code.'),
   'journey.biz.countScreensOne': one('1 screen', 'journey.biz.countScreens'),
-  'journey.biz.countBuilt': same('{n} of {m} built',
+  'journey.biz.countBuilt': same('{n} of {m} screens built',
     'How many of the screens this journey’s design names exist in code, of how many it names. The same number, in the same form, as the other registers print.'),
   'journey.biz.countActions': same('{n} things the user can do',
     'Distinct things a person can do across this journey, each counted once: one thing per call to the system, however many screens make it. The same number as the other registers’ actions.'),
