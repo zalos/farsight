@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl } from './graph.js';
+import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -77,7 +77,7 @@ export interface JourneysConfig {
   /** storylines — named chains of journeys (round-2026-10-05 §2); an entry overrides the manifest's with the same id, field by field */
   storylines?: JourneysConfigStoryline[];
 }
-export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: (string | JourneyStorylineEntryDecl)[] }
+export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: (string | JourneyStorylineEntryDecl)[]; lanes?: JourneyStorylineLaneDecl[]; handoffs?: JourneyStorylineHandoffDecl[] }
 export interface JourneysConfigPersona { id: string; name?: string; description?: string }
 export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
 export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
@@ -224,6 +224,32 @@ export function storylineEntry(v: unknown): string | JourneyStorylineEntryDecl |
 }
 
 /**
+ * One `lanes[]` entry of a storyline, read softly (round 2026-10-10 §2): a string `id` and exactly one of a string
+ * `persona` or `store`, with an optional `surface` and `name`; anything else is dropped (undefined).
+ */
+export function storylineLane(v: unknown): JourneyStorylineLaneDecl | undefined {
+  const s = (x: unknown): string | undefined => (typeof x === 'string' && x.trim() ? x.trim() : undefined);
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const id = s(o.id), persona = s(o.persona), store = s(o.store);
+  if (!id || (!persona && !store) || (persona && store)) return undefined;
+  return { id, ...(persona ? { persona } : {}), ...(store ? { store } : {}), ...(s(o.surface) ? { surface: s(o.surface)! } : {}), ...(s(o.name) ? { name: s(o.name)! } : {}) };
+}
+
+/**
+ * One `handoffs[]` entry of a storyline, read softly (round 2026-10-10 §2): string `from` and `to`, a `kind` of
+ * `moves` or `seen`, an optional `status` and `when`; anything else is dropped (undefined).
+ */
+export function storylineHandoff(v: unknown): JourneyStorylineHandoffDecl | undefined {
+  const s = (x: unknown): string | undefined => (typeof x === 'string' && x.trim() ? x.trim() : undefined);
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const from = s(o.from), to = s(o.to), kind = s(o.kind);
+  if (!from || !to || (kind !== 'moves' && kind !== 'seen')) return undefined;
+  return { from, to, kind, ...(s(o.status) ? { status: s(o.status)! } : {}), ...(s(o.when) ? { when: s(o.when)! } : {}) };
+}
+
+/**
  * Soft validation of `journeys` (§4.2): an entry without a string id is dropped, a field of the
  * wrong type is left out, a block of the wrong shape becomes empty. Never throws.
  */
@@ -264,6 +290,8 @@ export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
       return {
         id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
         ...(journeys ? { journeys } : {}),
+        ...(Array.isArray(e.lanes) ? { lanes: e.lanes.map(storylineLane).filter((x): x is JourneyStorylineLaneDecl => !!x) } : {}),
+        ...(Array.isArray(e.handoffs) ? { handoffs: e.handoffs.map(storylineHandoff).filter((x): x is JourneyStorylineHandoffDecl => !!x) } : {}),
       };
     });
   }
