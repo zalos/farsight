@@ -41,11 +41,17 @@ import {
 } from './map-affected.js';
 import { shareLink } from '../share.js';
 import { exportToolHtml, registerExport } from '../lib/export.js';
+import { mapStopOf } from '../lib/route-url.js';
+import { sheetModel, screenActions } from '../lib/journey-model.js';
+import {
+  bindStops, stopNow, drawLayoutTool, setLayout, cycleLayout, layoutAt, registerMapLayout, MAP_LAYOUTS, openAction, openActionAt, openScreenAction, closeAction, actionOpen,
+  actionParams, actionKey, stopZoom, openCode, closeCode, crumbHtml, syncTable, tableOpen, redrawStops, closeStops, streetFactsHtml, forgetWalks,
+} from './map-stops.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
 // lane L widened the column (480 → 600) so a call's words and path and a data node's kind line show whole at the
 // calls stop: a call wraps its name and path onto as many lines as they need (`callTextH`), never an ellipsis
-const SW = 260, SH = 236, COL = 600, HEAD = 118, SY = HEAD + 36, PAD = 60;
+const SW = 260, SH = 236, COL = 600, HEAD = 150, SY = HEAD + 36, PAD = 60;
 const PL_TOP = SY + SH + 76, OPW = 250, DX = 280, DW = 280, ROW = 40, OPMIN = 68, OPGAP = 16;
 /** A call node's text metrics (CSS `.map-pl`): characters per line of its name and of its path, and line heights — on the safe side, so the box is never shorter than its words. */
 const CALL_NAME_CH = 31, CALL_PATH_CH = 35, CALL_NAME_LH = 16, CALL_PATH_LH = 13, CALL_CHROME_H = 36;
@@ -153,6 +159,8 @@ const MAP = {
   lanesAway: false,
   /** the lanes on the board: `{ model, G, size }` — `laneLayout()`, `laneGeometry()`, the size in world units */
   lanes: null,
+  /** the action open below the screen (surfaces/map-stops.js), or null */
+  act: null,
 };
 
 /** Per-sync cache of journey answers, keyed `flowId@sync` — a register flip never refetches. */
@@ -340,10 +348,12 @@ export function mapRefresh(reason) {
     if (MAP.legend) drawLegend();
     if (MAP.card) reopenCard();
     if (MAP.prop && MAP.prop.handle && MAP.prop.handle.update) MAP.prop.handle.update(propCtx());
+    redrawStops();
     return;
   }
   // a new graph: the cached walks describe the old one
-  if (reason === 'sync') JOURNEY_CACHE.clear();
+  if (reason === 'sync') { JOURNEY_CACHE.clear(); forgetWalks(); }
+  closeStops();
   closeCard();
   closeProperty({ keepHash: true });
   start();
@@ -360,13 +370,14 @@ export function mapUpdate(route) {
   if (/(?:^|[?&])plumb=1(?:&|$)/.test(String(route.raw || ''))) setPlumb(true);
   // the back button or a link moved the storyline: the board redraws before going where the route says
   if ((route.storyline || null) !== (MAP.storyline || null) && MAP.designs) applyStoryline(route.storyline || null, { fromRoute: true });
-  if (routeLayout(route) !== MAP.layout && MAP.designs) setLayout(routeLayout(route), { fromRoute: true });
+  if (routeLayout(route) !== MAP.layout && MAP.designs) setLanesLayout(routeLayout(route), { fromRoute: true });
   applyRouteTarget(route, true);
 }
 
 /** Leave: stop every listener, every fetch's effect and the property. @group Map */
 export function unmountMap() {
   MAP.gen++;
+  closeStops();
   if (MAP.offAffected) { MAP.offAffected(); MAP.offAffected = null; }
   resetAffected();
   closeCard();
@@ -505,24 +516,31 @@ function routeLayout(route) {
 function lanesWanted() { return MAP.layout === 'lanes' && !!(MAP.nb && MAP.nb.storyline); }
 /** The lanes are the board on screen (not left for a street). */
 function lanesShown() { return lanesWanted() && !MAP.lanesAway; }
-/** *Layout: chain · lanes* — drawn beside the storyline picker while a storyline is drawn. */
-function layoutToolHtml() {
-  if (!MAP.nb || !MAP.nb.storyline) return '';
-  const on = MAP.layout === 'lanes' ? 'lanes' : 'chain';
-  const opt = (v, key) => '<button type="button" class="map-seg' + (on === v ? ' on' : '') + '" data-act="layout" data-layout="' + v + '" aria-pressed="' + (on === v) + '"'
-    + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
-  return '<span class="map-layout-pick" role="group" aria-label="' + esc(t('map.layout.pick')) + '">'
-    + '<span class="hud-label"' + tipAttrs({ key: 'map.layout.pick', noFocus: true }) + '>' + esc(t('map.layout.pick')) + '</span>'
-    + '<span class="map-segs">' + opt('chain', 'map.layout.chain') + opt('lanes', 'map.layout.lanes') + '</span></span>';
+/**
+ * The lanes are a choice of the LAYOUT control at the board stop (surfaces/map-stops.js `MAP_LAYOUTS`), offered only
+ * while a storyline is drawn: picking *lanes* or *chain* there, `w`, or a link's `?layout=lanes` all land here.
+ */
+const LANES_CHOICE = { id: 'lanes', word: 'map.layout.lanes', when: 'nb', onPick: () => setLanesLayout('lanes', { fromControl: true }) };
+registerMapLayout({ id: 'chain', word: 'map.layout.chain', when: 'nb', onPick: () => setLanesLayout('chain', { fromControl: true }) });
+/** Offer the lanes at the board while a storyline is drawn, and keep the control's choice the board's own. */
+function syncLanesChoice() {
+  const at = MAP_LAYOUTS.indexOf(LANES_CHOICE);
+  if (MAP.nb && MAP.nb.storyline) { if (at < 0) registerMapLayout(LANES_CHOICE); }
+  else if (at >= 0) MAP_LAYOUTS.splice(at, 1);
+  const want = lanesWanted() ? 'lanes' : 'chain';
+  if (layoutAt('nb') !== want) { MAP.layoutSync = true; try { setLayout('nb', want); } finally { MAP.layoutSync = false; } }
 }
 /** Draw the storyline as `v` (`'chain'` or `'lanes'`); the link carries it. */
-function setLayout(v, opts = {}) {
-  MAP.layout = v === 'lanes' ? 'lanes' : 'chain';
+function setLanesLayout(v, opts = {}) {
+  if (MAP.layoutSync) return;
+  const next = v === 'lanes' ? 'lanes' : 'chain';
+  MAP.layout = next;
   MAP.lanesAway = false;
   if (!MAP.world) return;
   closeCard();
   if (MAP.prop) closeProperty({ keepHash: true });
   drawLanes();
+  if (!opts.fromControl) syncLanesChoice();
   redrawChrome();
   fitAll(false);
   if (!opts.fromRoute) writeHash(null, null);
@@ -530,6 +548,7 @@ function setLayout(v, opts = {}) {
 /** The lanes layer: drawn from the storyline and the journeys read so far, or removed when the chain is drawn. */
 function drawLanes() {
   if (!MAP.world) return;
+  syncLanesChoice();
   let el = MAP.world.querySelector('.map-lanes');
   if (!lanesWanted()) {
     if (el) el.remove();
@@ -763,6 +782,24 @@ async function applyRouteTarget(route, animate) {
   }
   if (!MAP.geom.has(flow)) { fitAll(false); MAP.fitted = true; return; }
   const gen = MAP.gen;
+  // the stops below the screen and the layout a link names (lanes round 2026-10-10): `?screen=n&action=k[&beat][&layout][&dock]`
+  const stop = mapStopOf(route.raw || location.hash);
+  if (stop.layout === 'table' || stop.layout === 'screens') setLayout('st', stop.layout);
+  if (stop.layout === 'beats' || stop.layout === 'ladder') setLayout('act', stop.layout);
+  if (!node && stop.action) {
+    const j = await ensureJourney(flow);
+    if (gen !== MAP.gen || !j || !j.model || !j.data) return;
+    const si = screenAtStep(j.model.screens, stop.screen);
+    const acts = si == null ? [] : screenActions(sheetModel(j.data.summary).cols, j.model.screens, si);
+    const col = acts[Math.min(acts.length, stop.action) - 1];
+    if (col) {
+      if (!MAP.fitted) { centreScreen(flow, si, STREET_SCALE, false); MAP.fitted = true; }
+      const a = MAP.act;
+      if (!a || a.flow !== flow || a.ci !== col.index) openAction(flow, col.index, { beat: stop.beat ? stop.beat - 1 : 0, code: !!stop.dock, dock: stop.dock });
+      return;
+    }
+  }
+  if (MAP.act) closeAction({ quiet: true });
   if (!node) {
     if (MAP.prop) closeProperty({ keepHash: true });
     if (view) {
@@ -813,16 +850,22 @@ function writeHash(flow, node) {
   const query = qi >= 0 ? h.slice(qi) : '';
   let base = '#/map' + (flow ? '/' + encodeURIComponent(flow) : '');
   // the link is the picture (§K): where the board is and which card is open, so the same link opens the same view
-  const v = node || lanesShown() ? null : viewParams(flow);
+  const v = node || MAP.act || lanesShown() ? null : viewParams(flow);
+  // below the screen the address names the place (surfaces/map-stops.js): screen · action · beat · layout · dock
+  const ap = !node ? actionParams() : null;
   h = withParams(base + query, {
     node: node || null, plumb: MAP.plumb ? '1' : null,
     z: v ? v.z : null, x: v ? v.x : null, y: v ? v.y : null,
     card: !node && MAP.card ? MAP.card.spec : null,
-    // the link names the picture from here on: `screen` and `j` were how it was arrived at
-    screen: null, j: null,
+    // the link names the picture from here on: `screen` and `j` were how it was arrived at — except at an action,
+    // whose screen is part of its place
+    screen: ap ? ap.screen : null, j: null,
+    action: ap ? ap.action : null, beat: ap ? ap.beat : null,
+    // the layout at the stop the address names: the action's, the journey's table, or the storyline's lanes on the board
+    layout: ap ? ap.layout : !node && flow && layoutAt('st') === 'table' ? 'table' : !node && !flow && MAP.storyline && MAP.layout === 'lanes' ? 'lanes' : null,
+    dock: ap ? ap.dock : null,
     // the storyline on the board is part of the picture
     storyline: MAP.storyline || null,
-    layout: MAP.storyline && MAP.layout === 'lanes' ? 'lanes' : null,
     // the Affected mode is part of the picture (lane I)
     ...affectedParams(),
   });
@@ -834,7 +877,7 @@ function writeHash(flow, node) {
 }
 /** After a gesture: the hash names the journey the street is on, or none at the neighbourhood. */
 function syncHashToBoard() {
-  if (!MAP.cv || MAP.prop) return;
+  if (!MAP.cv || MAP.prop || MAP.act) return;
   writeHash(MAP.cv.level() === 'st' ? MAP.focus : null, null);
 }
 
@@ -1289,7 +1332,7 @@ function journeyAt(anchor) {
 }
 /** The stops about a stage point, for the engine. None while a screen is open. */
 function mapStops(anchor) {
-  if (!MAP.cv || MAP.prop || !MAP.size.w) return [];
+  if (!MAP.cv || MAP.prop || MAP.act || !MAP.size.w) return [];
   const id = MAP.cv.level() === 'st' && MAP.focus ? MAP.focus : journeyAt(anchor);
   const js = journeyScale(id), cs = callsScale(), es = enterScale();
   const out = [{ id: 'board', s: boardScale(), frame: () => { fitAll(true); writeHash(null, null); } }];
@@ -1430,7 +1473,7 @@ function onCanvasChange(st) {
     if (st.level === 'st' && keep) openedJourney(keep);
     if (ensureAlt(st.level, keep)) return;
   }
-  const lvl = MAP.prop ? 'pr' : st.level;
+  const lvl = stopNow();
   MAP.world.style.setProperty('--map-cs', String(coverScale(st.s)));
   MAP.world.classList.toggle('lvl-nb', st.level === 'nb');
   MAP.world.classList.toggle('lvl-st', st.level !== 'nb');
@@ -1475,6 +1518,9 @@ function onCanvasChange(st) {
   drawEdges(st);
   const risk = MAP.stage.querySelector('.map-risk');
   if (risk) risk.classList.toggle('off', st.level !== 'nb' || !!MAP.prop);
+  // the stops below the street: the LAYOUT control's choices, and the table in place of the street
+  if (drawLayoutTool()) fitChrome();
+  syncTable();
 }
 /**
  * The risk headline above the board (round 2): how many journeys are stale, not fully built, or reach the ERP —
@@ -1612,6 +1658,8 @@ function stageHtml() {
     + '<div class="map-afflist" hidden role="dialog" data-map-wheel="own" aria-label="' + esc(t('map.affected.listTitle')) + '"></div>'
     + '<div class="map-toast" role="status" aria-live="polite" hidden></div>'
     + '<div class="map-prop-host" hidden></div>'
+    // the stops below the street (surfaces/map-stops.js): the journey as a table, one action's beats with the code's dock
+    + '<div class="map-table-host" hidden></div><div class="map-act-host" hidden></div>'
     + '</div><div class="map-xcard" hidden role="dialog"></div></div>';
 }
 function chromeHtml() {
@@ -1620,12 +1668,13 @@ function chromeHtml() {
     + '<span class="lv-full">' + esc(t(key)) + '</span><span class="lv-short">' + sym(glyph) + esc(t(key + '.short')) + '</span></button>';
   const tool = (act, key, label, extra) => '<button type="button" class="map-tb' + (extra || '') + '" data-act="' + act + '" aria-label="' + esc(t(key)) + '"' + tipAttrs({ key, noFocus: true }) + '>' + label + '</button>';
   return '<div class="map-lvls" role="group" aria-label="' + esc(t('map.levels')) + '">'
-    + lvl('nb', 'map.level.nb', 'interchange') + lvl('st', 'map.level.st', 'step') + lvl('pr', 'map.level.pr', 'screen') + '</div>'
-    + '<div class="map-crumb"></div>'
+    + lvl('nb', 'map.level.nb', 'interchange') + lvl('st', 'map.level.st', 'step') + lvl('pr', 'map.level.pr', 'screen')
+    + lvl('act', 'map.level.act', 'bolt') + lvl('code', 'map.level.code', 'gear') + '</div>'
     + '<span class="map-asof"></span>'
     + '<div class="map-tools">'
+    // the one LAYOUT control: its choices are the stop's (surfaces/map-stops.js MAP_LAYOUTS)
+    + '<span class="map-layout-slot"></span>'
     + storylineToolHtml()
-    + layoutToolHtml()
     + bandToolHtml()
     + tool('plumb', 'map.tool.plumb', esc(t('map.tool.plumb')), MAP.plumb ? ' on' : '')
     + tool('in', 'map.tool.zoomIn', '+')
@@ -1638,7 +1687,9 @@ function chromeHtml() {
     + tool('legend', 'map.tool.legend', sym('legend'), MAP.legend ? ' on map-tb-legend' : ' map-tb-legend')
     + '</div>'
     // the Affected mode's bar, a row of its own under the toolbar (lane I)
-    + affectedBarHtml();
+    + affectedBarHtml()
+    // the crumb strip under the toolbar: where the reader is, at every stop
+    + '<div class="map-crumbs"><div class="map-crumb"></div></div>';
 }
 function redrawChrome() {
   const c = MAP.stage && MAP.stage.querySelector('.map-chrome');
@@ -1671,8 +1722,10 @@ function fitChrome() {
   // measured as one row: a chrome that may wrap (narrow windows, the Affected bar's own row) never overflows, so
   // its first row is measured with the wrap and the Affected bar set aside
   const aff = c.querySelector('.map-affbar');
+  const crumbs = c.querySelector('.map-crumbs');
   c.style.flexWrap = 'nowrap';
   if (aff) aff.style.display = 'none';
+  if (crumbs) crumbs.style.display = 'none';
   const fits = () => c.scrollWidth <= c.clientWidth + 1;
   for (const f of CHROME_FOLDS) {
     if (fits()) break;
@@ -1680,6 +1733,7 @@ function fitChrome() {
   }
   c.style.flexWrap = c.classList.contains('f-wrap') ? 'wrap' : '';
   if (aff) aff.style.display = '';
+  if (crumbs) crumbs.style.display = '';
   if (crumb) crumb.style.flexShrink = '';
   if (MAP.stage) MAP.stage.style.setProperty('--map-chrome-h', c.offsetHeight + 'px');
 }
@@ -1694,14 +1748,12 @@ function focusBoardOnOpen() {
 function drawCrumb() {
   const el = MAP.stage && MAP.stage.querySelector('.map-crumb');
   if (!el || !MAP.cv) return;
-  const lvl = MAP.prop ? 'pr' : MAP.cv.level();
-  const d = MAP.focus && MAP.nb.districts.find((x) => x.id === MAP.focus);
-  const sep = '<span class="sep">›</span>';
-  let html = lvl === 'nb' || !d ? '<b>' + esc(t('map.crumb.root')) + '</b>' : esc(t('map.crumb.root')) + sep + (MAP.prop ? '' : '<b>') + esc(nameWords(d.name)) + (MAP.prop ? '' : '</b>');
-  if (MAP.prop) {
-    const sc = propScreen();
-    if (sc) html += sep + '<b>' + esc(sc.name) + '</b>';
-  }
+  const lvl = stopNow();
+  const flow = MAP.act ? MAP.act.flow : MAP.focus;
+  const d = flow && MAP.nb.districts.find((x) => x.id === flow);
+  const j = flow && MAP.journeys.get(flow);
+  // storyline › journey · step n of m › screen · screen n of m › action n of m · name (surfaces/map-stops.js)
+  const html = crumbHtml({ lvl, d, flow, tree: MAP.tree, story: MAP.nb.storyline, model: j && j.model, propIndex: MAP.prop ? MAP.prop.index : null, nameWords });
   // on a narrow stage the journey's name may ellipsize: the trail is whole in its tip
   const whole = el.ownerDocument.createElement('div');
   whole.innerHTML = html;
@@ -1784,6 +1836,7 @@ function onChromeClick(e) {
   if (!b) return;
   if (b.dataset.l) { goLevel(b.dataset.l); return; }
   switch (b.dataset.act) {
+    case 'layout': setLayout(b.dataset.when, b.dataset.layout); break;
     case 'plumb': setPlumb(!MAP.plumb); break;
     case 'legend': toggleLegend(); break;
     case 'in': mapZoom(1.35); break;
@@ -1797,7 +1850,6 @@ function onChromeClick(e) {
     case 'aff-hops': setAffectedHops(+b.dataset.h); break;
     case 'band': MAP.bandMenu = false; setBand(b.dataset.band); break;
     case 'storyline': applyStoryline(b.dataset.storyline || null); break;
-    case 'layout': setLayout(b.dataset.layout); break;
     case 'storyline-menu': MAP.storyMenu = !MAP.storyMenu; MAP.bandMenu = false; redrawChrome(); if (MAP.storyMenu) { const f = MAP.stage.querySelector('.map-story-pick .map-seg.on') || MAP.stage.querySelector('.map-story-pick .map-seg'); if (f) f.focus(); } break;
     case 'band-menu': MAP.bandMenu = !MAP.bandMenu; MAP.storyMenu = false; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-band-pick .map-segs .map-seg'); if (f) f.focus(); } break;
     default:
@@ -1805,6 +1857,14 @@ function onChromeClick(e) {
 }
 /** The level pills: each goes to its height. */
 function goLevel(l) {
+  // below the screen: the action (the property's first, else the journey's first screen's first) and the code over it
+  if (l === 'act' || l === 'code') {
+    if (MAP.act) { if (l === 'code') openCode(); else closeCode(); return; }
+    const flow = MAP.prop ? MAP.prop.flow : MAP.focus || (MAP.nb.districts[0] && MAP.nb.districts[0].id);
+    if (flow) openScreenAction(flow, MAP.prop ? MAP.prop.index : 0, { code: l === 'code' });
+    return;
+  }
+  if (MAP.act) closeAction({ quiet: true });
   if (l === 'nb') { closeProperty(); fitAll(true); writeHash(null, null); return; }
   const flow = MAP.focus || (MAP.nb.districts[0] && MAP.nb.districts[0].id);
   if (!flow) return;
@@ -1904,7 +1964,11 @@ export function mapCopyLink() {
  * the next stop out — from a journey, its own fitted stop before the board.
  * @group Map
  */
-export function mapZoom(f) { if (MAP.cv && !MAP.prop) { MAP.autoFit = null; MAP.cv.zoomStep(f > 1 ? 1 : -1); } }
+export function mapZoom(f) {
+  // below the street a step is a stop of its own: the screen's first action, the code, and back (surfaces/map-stops.js)
+  if (stopZoom(f > 1 ? 1 : -1)) return;
+  if (MAP.cv && !MAP.prop) { MAP.autoFit = null; MAP.cv.zoomStep(f > 1 ? 1 : -1); }
+}
 /**
  * Fit what is in view (the Fit tool and `0`): the journey the street is on, plumbing included when it is on;
  * every journey only from the board. A screen that is open closes onto its journey.
@@ -2178,7 +2242,7 @@ function renderDistrict(id) {
   el.innerHTML = '<div class="map-dhead"><div class="nm">' + step + esc(nameWords(d.name)) + '</div>'
     + branchLineHtml(d)
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
-    + '<div class="agg">' + agg + '</div></div>'
+    + '<div class="agg">' + agg + '</div>' + streetFactsHtml(id, j, MAP.tree) + '</div>'
     + '<div class="map-dstreet">' + streetHtml(d, j, g) + '</div>'
     // the cover is counter-scaled (--map-inv, set by the canvas) so its name reads at any zoom;
     // its whole sentence is the cover's tip
@@ -2814,6 +2878,8 @@ function drawCard() {
       : '<span class="map-chip k-absent">' + esc(t('map.card.onNone')) + '</span>') + '</div>'
     + '<div class="acts">' + (nodeId ? '<button type="button" class="map-tb aff' + (affectedSpec() === nodeId ? ' on' : '') + '" data-act="affected"' + tipAttrs({ key: 'map.affected.action', noFocus: true }) + '>' + esc(t('map.affected.action')) + '</button>' : '')
     + doorsHtml(doors) + '</div>'
+    // one stop down: the call's action opened into its beats on this surface (surfaces/map-stops.js)
+    + (tg.kind === 'call' && tg.call.marker ? '<div class="tojrn"><button type="button" class="map-tb map-walk" data-act="beats"' + tipAttrs({ key: 'map.act.walk', noFocus: true }) + '>' + sym('bolt') + esc(t('map.act.walk')) + '</button></div>' : '')
     + (toJrn ? '<div class="tojrn">' + toJrn + '</div>' : '');
   box.setAttribute('aria-label', name);
   box.setAttribute('data-doors', '');
@@ -2823,6 +2889,7 @@ function drawCard() {
     if (!b) return;
     if (b.dataset.act === 'close') { closeCard(); return; }
     if (b.dataset.act === 'affected') { setAffected(nodeId, { origin: { flow: tg.flow } }); return; }
+    if (b.dataset.act === 'beats') { const order = tg.call.marker.stepOrder; closeCard(); openActionAt(tg.flow, order); return; }
     if (b.dataset.go != null) { const f = b.dataset.flow, i = +b.dataset.go; closeCard(); openProperty(f, i); }
   };
   // beside its node, kept on screen
@@ -2868,6 +2935,8 @@ function propCtx() {
     onClose: () => closeProperty(),
     onStep: (delta) => stepProperty(delta),
     onOpenScreen: (index) => { if (MAP.prop) openProperty(MAP.prop.flow, index); },
+    // a call row's *walk its beats*: that action, one stop down (surfaces/map-stops.js)
+    onOpenAction: (order) => { if (MAP.prop) openActionAt(MAP.prop.flow, order); },
     // the property's seed actions — its head, its Work and Changes rows (lane I)
     onAffected: (spec) => setAffected(spec, { origin: p ? { flow: p.flow } : null }),
   };
@@ -2927,6 +2996,7 @@ function fallbackProperty(host, ctx0) {
 
 async function openProperty(flow, index, opts = {}) {
   if (!MAP.stage) return;
+  if (MAP.act) closeAction({ quiet: true });
   const gen = MAP.gen;
   const j = await ensureJourney(flow);
   if (gen !== MAP.gen || !MAP.stage || !j || !j.model || !j.model.screens[index]) return;
@@ -3156,6 +3226,7 @@ export function mapEscape() {
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }
   if (MAP.legend) { closeLegend(); return true; }
+  if (MAP.act) { stopZoom(-1); return true; }
   if (MAP.prop) { closeProperty(); return true; }
   if (MAP.cv && MAP.cv.level() === 'st') {
     const flow = MAP.focus;
@@ -3179,7 +3250,10 @@ export function mapKey(e) {
   // `?` is the keymap's everywhere (keymap.js); the legend is g — its own key, beside its own glyph
   if (k === 'g' || k === 'G') return mapToggleLegend();
   // the open screen and the explore card keep their own keys; the board's walk keys are the board's
-  const inPanel = e.target && e.target.closest && e.target.closest('.map-prop-host,.map-xcard');
+  // at an action: ← → the beats, [ ] the actions, d the dock, t the tests (surfaces/map-stops.js)
+  if (MAP.act && actionKey(e)) return true;
+  if (k === 'v' || k === 'V') return cycleLayout();
+  const inPanel = e.target && e.target.closest && e.target.closest('.map-prop-host,.map-xcard,.map-act-host,.map-table-host');
   if (!MAP.prop && !inPanel) {
     if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') { panBy(k, e.shiftKey); return true; }
     if ((k === 'j' || k === 'k') && MAP.cv && MAP.cv.level() === 'st') { stepScreen(k === 'j' ? 1 : -1); return true; }
@@ -3191,7 +3265,7 @@ export function mapKey(e) {
       if (cover) { enterCover(cover); return true; }
     }
   }
-  if ((k === 'w' || k === 'W') && MAP.nb.storyline && !MAP.prop) { setLayout(MAP.layout === 'lanes' ? 'chain' : 'lanes'); return true; }
+  if ((k === 'w' || k === 'W') && MAP.nb.storyline && !MAP.prop) { setLanesLayout(MAP.layout === 'lanes' ? 'chain' : 'lanes'); return true; }
   if (k === 'p' || k === 'P') { setPlumb(!MAP.plumb); return true; }
   if (k === '+' || k === '=') { mapZoom(1.35); return true; }
   if (k === '-' || k === '_') { mapZoom(1 / 1.35); return true; }
@@ -3291,4 +3365,15 @@ async function mapPicture() {
 }
 registerExport('map', mapPicture);
 
+// the stops below the street (surfaces/map-stops.js) move the board through these, and only these
+bindStops({
+  MAP, ensureJourney, openProperty, closeProperty, closeCard, toast, nameWords,
+  writeHash: () => { if (MAP.cv) writeHash(MAP.act ? MAP.act.flow : MAP.cv.level() === 'st' ? MAP.focus : null, null); },
+  refresh: () => { if (MAP.cv) onCanvasChange(MAP.cv.state()); },
+  headHtml: (flow) => {
+    const d = MAP.nb.districts.find((x) => x.id === flow) || { id: flow, name: '' };
+    const j = MAP.journeys.get(flow);
+    return '<div class="nm">' + stepBadgeHtml(d) + esc(nameWords(d.name)) + '</div><div class="agg">' + aggHtml(d, j) + '</div>' + streetFactsHtml(flow, j, MAP.tree);
+  },
+});
 expose({ mapFit, mapZoom });

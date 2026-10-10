@@ -174,3 +174,60 @@ export function stepOfNode(segments, prefer, nodeId) {
   if (any) return any.index + 1;
   return p ? p.index + 1 : null;
 }
+
+// ── the Map's stops (lanes round 2026-10-10, proposal 1) ──────────────────────
+// The Map is one zoom with five stops — ALL JOURNEYS · ONE JOURNEY · ONE SCREEN · ONE ACTION · CODE — and one LAYOUT
+// control whose choices change per stop. Below the screen the address names the place the way the street does:
+// `#/map/<flow>?screen=<n>&action=<k>[&beat=<b>][&layout=<l>][&dock=<d>]` — `screen` the journey's step (as above),
+// `action` the 1-based action within that screen, `beat` the 1-based beat within the action, `layout` the layout at
+// that stop (`table` at the journey, `ladder` at the action; the default is never written), `dock` where the code
+// opens (`inline` · `bottom` · `right`) — present only at the CODE stop, because the code IS the dock opening.
+
+const LAYOUTS = new Set(['chain', 'lanes', 'screens', 'table', 'beats', 'ladder']);
+const DOCKS = new Set(['inline', 'bottom', 'right']);
+
+/**
+ * The address of one stop below the board. `o.screen` (1-based step) with no `o.action` is the street with that
+ * screen framed (as `mapScreenHash`); with `o.action` it is the action stop; with `o.dock` too, the code stop.
+ * `o.layout` is written as given; `o.lens` rides along.
+ *
+ * @param {string} flowId
+ * @param {{screen?:number|null, action?:number|null, beat?:number|null, layout?:string|null, dock?:string|null, lens?:string|null}} [o]
+ * @returns {string}
+ */
+export function mapStopHash(flowId, o = {}) {
+  if (!flowId) return '';
+  const screen = stepOrdinal(o.screen);
+  const action = screen != null ? stepOrdinal(o.action) : null;
+  const beat = action != null ? stepOrdinal(o.beat) : null;
+  return withParams('#/map/' + encodeURIComponent(flowId), {
+    screen: screen == null ? null : String(screen),
+    action: action == null ? null : String(action),
+    beat: beat == null ? null : String(beat),
+    layout: o.layout && LAYOUTS.has(o.layout) ? o.layout : null,
+    dock: action != null && o.dock && DOCKS.has(o.dock) ? o.dock : null,
+    lens: o.lens || null,
+  });
+}
+
+/**
+ * Which stop a Map address names, read from its query (`route.raw` or a whole hash): `{ stop, screen, action, beat,
+ * layout, dock }` — `stop` is `code` (an action and a dock), `action`, `screen` (`node=` names a screen), `journey`
+ * (a flow in the path) or `board`. Anything a link cannot mean is dropped, never guessed.
+ *
+ * @param {string} hashOrQuery
+ */
+export function mapStopOf(hashOrQuery) {
+  const h = String(hashOrQuery || '');
+  const qi = h.indexOf('?');
+  const path = qi >= 0 ? h.slice(0, qi) : h;
+  const q = new URLSearchParams(qi >= 0 ? h.slice(qi + 1) : (h.startsWith('#') ? '' : h));
+  const screen = stepOrdinal(q.get('screen'));
+  const action = screen != null ? stepOrdinal(q.get('action')) : null;
+  const beat = action != null ? stepOrdinal(q.get('beat')) : null;
+  const layout = LAYOUTS.has(q.get('layout') || '') ? q.get('layout') : null;
+  const dock = action != null && DOCKS.has(q.get('dock') || '') ? q.get('dock') : null;
+  const flow = /^#\/map\/[^?@]/.test(path);
+  const stop = action != null ? (dock ? 'code' : 'action') : q.get('node') ? 'screen' : flow || screen != null ? 'journey' : 'board';
+  return { stop, screen, action, beat, layout, dock };
+}

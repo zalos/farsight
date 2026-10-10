@@ -33,7 +33,7 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
   await openLanes(page);
   await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
   // the layout control says lanes, and the link carries it
-  await expect(page.locator('.map-layout-pick .map-seg[data-layout="lanes"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.map-layout .map-seg[data-layout="lanes"]')).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => location.hash)).toContain('layout=lanes');
   // the lanes: Billing, Operations (persona), Invoice DB (store) — one panel each in the one segment
   const lanes = page.locator('.map-lanes .ln-lane');
@@ -98,7 +98,7 @@ test('a screen on the lanes enters its journey\'s street at that screen; zooming
 /** @covers packages/server/public/app/surfaces/map.js::setLayout */
 test('the layout control and w switch between the chain and the lanes; the chain draws as before', async ({ page }) => {
   await openLanes(page);
-  await page.locator('.map-layout-pick .map-seg[data-layout="chain"]').click();
+  await page.locator('.map-layout .map-seg[data-layout="chain"]').click();
   await expect(page.locator('.map-world')).not.toHaveClass(/lanes-on/);
   await expect(page.locator('.map-lanes')).toHaveCount(0);
   await expect(page.locator('.map-band.story')).toHaveCount(1);
@@ -108,7 +108,7 @@ test('the layout control and w switch between the chain and the lanes; the chain
   await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
   // with no storyline drawn there is no layout to pick
   await page.evaluate(() => { location.hash = '#/map'; });
-  await expect(page.locator('.map-layout-pick')).toHaveCount(0);
+  await expect(page.locator('.map-layout .map-seg[data-layout="lanes"]')).toHaveCount(0);
 });
 
 /**

@@ -14,8 +14,6 @@ function one(word: string, pluralKey: string): StringEntry {
 
 export const LANES_STRINGS: Record<string, StringEntry> = {
   // the layout control beside the storyline picker
-  'map.layout.pick': same('layout', 'How the storyline is drawn: as a chain of its journeys, or as lanes of who acts with the record they move underneath.'),
-  'map.layout.chain': same('chain', 'The storyline as a chain: each journey a card, in order, its branches below the journey they leave from.'),
   'map.layout.lanes': same('lanes', 'The storyline as swimlanes: a lane for each kind of person who acts in it and one for each store its code writes to, the screens in order as columns, and the record’s moves in the store lane.'),
   'key.mapLanes': same('On a storyline: switch between the chain and the lanes'),
 

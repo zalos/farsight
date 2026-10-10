@@ -29,6 +29,7 @@ import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
 import { EXPORT_STRINGS } from './strings-export.js';
+import { STOP_STRINGS } from './strings-stops.js';
 import { EVIDENCE_STRINGS } from './strings-evidence.js';
 import { AFFECTED_STRINGS } from './strings-affected.js';
 
@@ -120,6 +121,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...CHROME_STRINGS,
   // export's words live in strings-export.ts (export.*, the saved picture's footer, the pinned link and its note)
   ...EXPORT_STRINGS,
+  // the Map's stops and its layout control live in strings-stops.ts (map.level.act/code, map.layout.*, the crumb's positions)
+  ...STOP_STRINGS,
   // the test chip's words live in strings-evidence.ts (count.over.*, the not-built sentence, distinct)
   ...EVIDENCE_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
