@@ -281,7 +281,14 @@ export function walkBeat(d) {
 }
 /** The inspector on its code tab (DOCS in the business lens, which reads no code). */
 function openCodeTab() {
-  if (S.journeyActive == null || S.journeyActive < 0) selectBeat(ST.act.beat || 0);
+  // the code is a part's: a screen kept open from an earlier action has none here, so the next beat that is a part opens
+  const dr = S.JRN_DRILL;
+  const sel = S.journeyActive != null && S.journeyActive >= 0 && dr && dr.colOf && dr.colOf[S.journeyActive] === ST.act.beat;
+  if (!sel && dr && dr.beats) {
+    const from = ST.act.beat || 0;
+    const at = dr.beats.findIndex((b, i) => i >= from && b.kind !== 'screen');
+    selectBeat(at >= 0 ? at : from);
+  }
   const tab = currentLens() === 'business' ? 'docs' : 'code';
   if (S.jrnInspTab !== tab && typeof window.jrnDrillInspTab === 'function') window.jrnDrillInspTab(tab);
 }
@@ -520,9 +527,11 @@ function drawTableNow(j, data) {
   S.JRN_DRILL = null;
   jrnSheetIndex(data.summary);
   jrnResetFolds();
-  host.innerHTML = '<div class="map-table" data-map-wheel="own">'
+  // the head scrolls with the table: it is the journey header's facts, and a header that stays put is the one the
+  // reviewers lost the first card under at 1280
+  host.innerHTML = '<div class="map-table" data-map-wheel="own"><div class="map-table-scroll">'
     + '<div class="map-table-head" data-flow="' + esc(flow) + '">' + ST.api.headHtml(flow) + '</div>'
-    + '<div class="map-table-wrap">' + jrnSheetHtml(data.summary) + '</div>'
+    + '<div class="map-table-wrap">' + jrnSheetHtml(data.summary) + '</div></div>'
     + '<div class="map-act-foot"><span class="map-hintline"' + tipAttrs({ key: 'map.table.hint', noFocus: true }) + '>' + esc(t('map.table.hint')) + '</span></div></div>';
   if (!ST.table.wired) { ST.table.wired = true; host.addEventListener('click', onTableClick, true); }
 }

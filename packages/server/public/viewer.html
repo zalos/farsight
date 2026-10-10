@@ -2690,7 +2690,9 @@
   .map-table-head{padding:12px 18px 10px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:6px;flex-shrink:0}
   .map-table-head .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:20px;color:var(--ink)}
   .map-table-head .agg{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .map-table-wrap{flex:1;overflow:auto;min-height:0;scrollbar-color:var(--line) var(--ground)}
+  .map-table-scroll{flex:1;overflow:auto;min-height:0;scrollbar-color:var(--line) var(--ground)}
+  .map-table-scroll .map-table-head{position:sticky;left:0;width:min(100%,calc(100vw - 40px));box-sizing:border-box}
+  .map-table-wrap{min-width:0}
   .map-table-wrap .jrn-sbh,.map-table-wrap .jrn-scell{cursor:pointer}
   .map-act{position:absolute;inset:0;display:flex;flex-direction:column;font-family:var(--body)}
   .map-act-top{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0;min-width:0}
