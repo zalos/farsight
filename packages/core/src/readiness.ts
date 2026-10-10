@@ -186,8 +186,8 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
     rows,
     rules: ruleRows,
     counted: {
-      steps: counted(rows.length, 'count.unit.readinessRows', scope, `${SRC} → storyline steps and branches`, {
-        bizUnit: 'count.unit.readinessRows',
+      steps: counted(rows.length, 'count.unit.journeys', scope, `${SRC} → storyline steps and branches`, {
+        bizUnit: 'count.unit.journeys',
         breakdown: [{ key: 'count.part.storylineSteps', n: steps }, { key: 'count.part.storylineBranches', n: rows.length - steps }],
       }),
       ship: counted(ship, 'count.unit.readinessShip', scope, `${SRC} → rows with no hold reason`, { bizUnit: 'count.unit.readinessShip' }),

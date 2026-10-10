@@ -2966,6 +2966,60 @@
   .pinnote{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;color:var(--warn);border:1px solid var(--line);border-radius:3px;padding:2px 7px;white-space:nowrap;margin-left:8px}
   .pinnote .sym{width:12px;height:12px}
   .share-row .sym{width:14px;height:14px}
+
+  /* ── the release readiness brief (#/readiness/<storyline>, surfaces/readiness.js) — a light document sheet ── */
+  .rd-wrap{padding:24px 16px 48px}
+  .rd-sheet{max-width:1180px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:28px 34px 22px;color:var(--ink)}
+  .rd-head{display:flex;gap:24px;align-items:flex-start;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:12px}
+  .rd-brand{letter-spacing:.2em;color:var(--cyan)}
+  .rd-title{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:24px;margin:6px 0 4px;font-weight:600}
+  .rd-story{color:var(--cyan)}
+  .rd-prov{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .rd-headr{display:flex;flex-direction:column;align-items:flex-end;gap:10px;font-size:12px;color:var(--muted)}
+  .rd-tools{display:flex;gap:8px}
+  .rd-sign{white-space:nowrap}.rd-line{display:inline-block;width:110px;border-bottom:1px solid var(--muted);margin:0 6px}.rd-line.short{width:56px}
+  .rd-desc{color:var(--muted);margin:10px 0 0;font-size:13px}
+  .rd-tiles{display:flex;flex-wrap:wrap;gap:0;margin:16px 0 18px;border:1px solid var(--line);background:var(--raised);border-radius:3px}
+  .rd-tile{padding:9px 16px;border-right:1px solid var(--line);font-size:13px}
+  .rd-tile-n{font-weight:600}
+  .rd-table{width:100%;border-collapse:collapse;font-size:13px}
+  .rd-table th{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--ink);text-align:left;vertical-align:bottom;padding:6px 8px;border-bottom:2px solid var(--ink)}
+  .rd-table td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .rd-step{font-family:var(--hud);font-size:18px;font-weight:600;width:44px}
+  .rd-branch td{background:var(--raised)}.rd-branch .rd-step{padding-left:16px}
+  .rd-name{font-weight:600;color:var(--ink);text-decoration:none}
+  .rd-sub{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}.rd-sub-i{font-size:11.5px;color:var(--muted)}
+  .rd-gates{font-family:var(--mono);color:var(--auth)}
+  .rd-n{font-family:var(--mono);text-decoration:underline dotted;text-underline-offset:3px}
+  .rd-ev.ev-observed{color:var(--ok)}.rd-ev.ev-reached,.rd-ev.ev-declared{color:var(--cyan)}.rd-ev.ev-stale{color:var(--warn)}.rd-ev.ev-none{color:var(--muted)}
+  .rd-stamp{display:inline-block;font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:10px;padding:1px 6px;border:1px solid currentColor;border-radius:2px}
+  .rd-stamp.ok{color:var(--ok)}.rd-stamp.warn{color:var(--warn)}
+  .rd-badge{display:inline-block;font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:12px;font-weight:700;padding:2px 9px;border:1.5px solid currentColor;border-radius:2px}
+  .rd-badge.ship{color:var(--ok)}.rd-badge.hold{color:var(--err)}
+  .rd-why{display:block;font-size:11.5px;color:var(--muted);margin-top:4px}
+  .rd-h2{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:13px;margin:26px 0 6px}
+  .rd-hsub{font-family:var(--body);text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted);font-weight:400}
+  .rd-gate{font-family:var(--mono);color:var(--auth)}
+  .rd-warn{font-style:italic;color:var(--warn)}
+  .rd-dash{color:var(--muted)}
+  .rd-foot{margin-top:18px;padding-top:10px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);text-align:right}
+  .rd-unknown{font-size:15px}.rd-known a{margin:0 4px}
+  .rd-door{white-space:nowrap}
+  .map-band-head .rd-door{font-size:12px;margin-left:10px}
+  @page{size:A4 portrait;margin:12mm}
+  @media print{
+    html,body{height:auto;overflow:visible;background:#fff !important}
+    body.rd-on .frame,body.rd-on .interim-note,body.rd-on #fs-tip,body.rd-on .keymap,body.rd-on .impact,body.rd-on [data-export-skip]{display:none !important}
+    body.rd-on .surface{position:static;overflow:visible;display:block !important;background:#fff}
+    body.rd-on .rd-wrap{padding:0}
+    body.rd-on .rd-sheet{max-width:none;border:none;padding:0;background:#fff;break-after:page}
+    body.rd-on .rd-row{break-inside:avoid}
+    body.rd-on .rd-table{font-size:10.5px}
+    body.rd-on .rd-title{font-size:17px}
+    body.rd-on .rd-prov,body.rd-on .rd-gates{font-size:9px}
+    body.rd-on .rd-table th{font-size:8.5px;padding:4px 5px}
+    body.rd-on .rd-table td{padding:6px 5px}
+  }
 </style>
 </head>
 <body class="lens-hybrid">
