@@ -24,6 +24,7 @@ import { showTip, hideTip, tipAnchor, tipOpen } from './tooltip.js';
 import { doorsFor, doorsHtml, fetchSource } from './detail-doors.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { mapEvidenceChip } from './map-chips.js';
+import { testChipHtml } from './test-chip.js';
 import { gateCardModel } from './gate-card-model.js';
 import { jrnGateInWords, jrnGateText } from '../surfaces/journeys.js';
 
@@ -156,8 +157,10 @@ function testRowHtml(r, m) {
 function testsHtml(m) {
   if (m.pending || m.failed || !m.tests) return '';
   const c = m.counted.tests && m.counted.tests.tests;
-  const head = secHead('gate.sec.tests', (c ? countedHtml(c, API, { cls: 'gc-n', words: String(m.tests.total) }) : '')
-    + (m.tests.total ? ' ' + mapEvidenceChip(m.evidence) : ''));
+  // one chip: the cases *over this gate*, the one word and the skips — the gate card's 16 never again reads as the screen's 323
+  const chip = c && m.tests.total ? testChipHtml({ ...(m.evidence || {}), counted: m.counted.tests }, { api: API, cls: 'gc-tchip' }) : '';
+  const head = secHead('gate.sec.tests', chip || (c ? countedHtml(c, API, { cls: 'gc-n', words: String(m.tests.total) }) : '')
+    + (m.tests.total && !chip ? ' ' + mapEvidenceChip(m.evidence) : ''));
   if (!m.tests.total) return '<section class="gc-sec">' + head + '<p class="gc-none"' + defAttrs('gate.tests.none') + '>' + sym('absent') + esc(t('gate.tests.none')) + '</p></section>';
   return '<section class="gc-sec" data-gc-sec="tests">' + head + m.tests.rows.map((r) => testRowHtml(r, m)).join('')
     + (m.tests.more ? '<p class="gc-more">' + esc(fill(t('gate.more'), { n: m.tests.more })) + '</p>' : '') + '</section>';

@@ -42,7 +42,7 @@ test.describe('change impact', () => {
     // the panel names what it counts over, as the journey's tests feet do
     await expect(page.locator('#impact .imp-scope [data-scope="impact.scope"]')).toHaveText(/on what uses this part/i);
     // past hop 1 the words say it is a union up to that distance
-    expect(lines[1]).toContain('hops 1–2, each test once');
+    expect(lines[1]).toContain('among everything listed up to this distance');
     expect(lines[lines.length - 1]).not.toContain('none indexed');
   });
 

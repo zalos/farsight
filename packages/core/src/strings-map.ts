@@ -275,8 +275,6 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.prop.tests.cases': same('Cases that run over this screen', 'The test cases whose walk reaches a part of this screen on this journey, with what each one last said. Not the Affected count: that one counts tests reaching what uses a thing picked, within the distance chosen.'),
   'map.prop.tests.verifiedNote': same('Verified means a results report named a case that ran over these parts. A coverage report alone reads as seen by a coverage run.', 'The difference between a case a run named and a line a coverage run touched.'),
   'map.prop.tests.reports': same('Coverage runs that name no case', 'Reports of a whole run that touched this screen’s code without naming which case did. They are counted apart from the cases.'),
-  'map.prop.tests.byRun': same('named by a run', 'A results report named this case and it ran.'),
-  'map.prop.tests.byDeclaration': same('passed, declared here', 'This case declares the screen it covers and its last run passed.'),
   'map.prop.tests.reached': same('reaches it', 'The walk from this case reaches a part of this screen; no run named it.'),
 
   // route

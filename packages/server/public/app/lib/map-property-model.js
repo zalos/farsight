@@ -134,6 +134,39 @@ export function screenCases(cov) {
   return [...by.values()];
 }
 
+/**
+ * The one sentence under a screen's tests chip (round 2026-10-10, proposal 4):
+ * how many of its cases run over each of its actions, over each gate its calls
+ * meet, and over the page's own code — three scopes inside the screen's, each
+ * named, so the screen's number is never read as any one of them. The action
+ * numbers are the core's own per-action folds (`coverage.moments`); the gate and
+ * page numbers are the screen's own refs, each case once, by the node in scope it
+ * landed on (`reaches`). Parts overlap: a case can reach an action and a gate.
+ */
+export function testsScopeLine(sum, si, seg, cov, pageIds) {
+  if (!cov || cov.notBuilt) return { actions: [], gates: [], page: null };
+  const moments = (sum && sum.coverage && sum.coverage.moments && sum.coverage.moments[si]) || [];
+  const actions = ((seg && seg.moments) || []).map((mo, k) => {
+    const m = moments[k];
+    const n = m && m.counted && m.counted.tests ? m.counted.tests.n : 0;
+    return { mo, n };
+  }).filter((a) => a.n > 0 && !(a.mo && a.mo.repeat));
+  const refs = screenCases(cov).filter((x) => !x.runLevel);
+  const casesOn = (ids) => new Set(refs.filter((x) => x.reaches && ids.has(x.reaches.nodeId)).map((x) => x.id)).size;
+  const gates = ((seg && seg.gates) || []).map((g) => ({ gate: g, n: casesOn(new Set([g.id])) }))
+    .filter((g) => g.n > 0).sort((a, b) => b.n - a.n);
+  const page = casesOn(new Set((pageIds || []).filter(Boolean)));
+  return { actions, gates, page };
+}
+
+/** The screens of a journey no indexed test is known to reach — a not-built one says so. In street order. */
+export function screensNoTestReaches(sum) {
+  const segs = (sum && sum.segments) || [];
+  const cov = (sum && sum.coverage && sum.coverage.segments) || [];
+  return segs.map((sg, i) => ({ sg, c: cov[i] })).filter(({ c }) => c && c.counted && c.counted.tests && (c.notBuilt || !c.counted.tests.n))
+    .map(({ sg, c }) => ({ name: (sg.screen && sg.screen.name) || '', id: (sg.screen && sg.screen.id) || null, notBuilt: !!c.notBuilt }));
+}
+
 /** The number on the APIs tab: the distinct operations the code calls, or — for a screen not built — the stops its design declares. */
 function apisCount(screen, seg) {
   const c = (seg && seg.counted) || {};
@@ -182,7 +215,7 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
         business: screen.business || (seg.screen && seg.screen.business) || '',
         glance: [apisCount(screen, seg), c.gates, c.decisions, testsCount].filter(Boolean),
         // the screen's coverage fold: its evidence word is printed beside the tests count, never apart (lane N)
-        evidence: testsCount && testsCount.n ? cov : null,
+        evidence: testsCount ? cov : null,
         calls,
         gates,
         work: 'lazy',
@@ -205,7 +238,11 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
         planned: screen.state === 'planned',
       },
       ux: { page: node, components, built: screen.state !== 'planned' },
-      tests: { facts: cov, cases: screenCases(cov).filter((x) => !x.runLevel), reports: screenCases(cov).filter((x) => x.runLevel) },
+      tests: {
+        facts: cov, cases: screenCases(cov).filter((x) => !x.runLevel), reports: screenCases(cov).filter((x) => x.runLevel),
+        scopeLine: testsScopeLine(sum, si, seg, cov, [pageId].concat(components.map((x) => x.id))),
+        unreached: screensNoTestReaches(sum),
+      },
       route: {
         route: (node && node.name) || screen.route || '',
         status: screen.state === 'planned' ? 'planned' : 'built',

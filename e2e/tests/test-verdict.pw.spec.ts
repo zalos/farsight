@@ -45,8 +45,8 @@ test.describe('one test verdict per cell', () => {
     const feet = page.locator('.jrn-scell .jrn-tfoot');
     expect(await feet.count()).toBeGreaterThan(0);
     await expect(page.locator('.jrn-tfoot .st')).toHaveCount(0);
-    // the runs number is a count whose tip's parts add up to it
-    const runs = page.locator('.jrn-runs .jrn-num').first();
+    // the chip's number is a count of the cases by their own runs, whose tip's parts add up to it (round 2026-10-10)
+    const runs = page.locator('.jrn-scell .jrn-tfoot [data-tchip] .tc-n').first();
     await runs.scrollIntoViewIfNeeded();
     const n = Number(((await runs.textContent()) ?? '').match(/\d+/)![0]);
     await runs.click();
