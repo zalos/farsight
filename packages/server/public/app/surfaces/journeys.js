@@ -3774,7 +3774,22 @@ function jrnStorySceneHtml(sum, sg, sel) {
     + (desc ? '<span class="jrn-scene-d">' + esc(desc) + '</span>' : '')
     + storyChipsHtml(screenStoryIds(n, u.components))
     + '<span class="jrn-scene-a">' + acts + (decl ? ' · ' + jrnNumHtml(decl, 'journey.countDeclaredOnly', 'journey.scopeHere', { noFocus: true }) : '') + '</span>'
+    + jrnSceneTestsHtml(sum, sg)
     + jrnStorySysHtml(sum, sg) + '</div>';
+}
+/**
+ * A scene's tests line (round 2026-10-10): the screen's cases *over this screen*,
+ * its one word and its skips — or, for a designed, not-built screen, why it has
+ * no verdict — so the per-screen numbers read as screens beside the header's
+ * distinct journey total, never as parts of it.
+ * @group Journey storyboard
+ */
+function jrnSceneTestsHtml(sum, sg) {
+  const cov = sum && sum.coverage && sum.coverage.segments && sum.coverage.segments[sg.index];
+  if (!cov || !sg.screen) return '';
+  const chip = testChipHtml(jrnFoldFacts(cov));
+  return '<span class="jrn-scene-t jrn-cfoot" onclick="event.stopPropagation()">' + (chip || '<span class="jrn-mk none"' + defAttrs('journey.tests.noneScreen') + '>'
+    + sym('absent') + esc(t('journey.tests.noneScreen')) + '</span>') + '</span>';
 }
 /**
  * The linked journeys as chips: what has to happen first (◀ requires), where
