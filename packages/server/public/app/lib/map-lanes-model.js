@@ -428,7 +428,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
  */
 export const LANE_K = 2;
 export const LANE_GEOM = Object.freeze({
-  head: 124, col: 158, cardW: 144, cardH: 104, rowGap: 10, pad: 8, pillH: 44, pillRow: 50,
+  head: 124, col: 158, cardW: 144, cardH: 116, rowGap: 10, pad: 8, pillH: 44, pillRow: 50,
   laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 66,
 });
 

@@ -50,11 +50,13 @@ function stageHtml(st, r, m, say) {
   const step = st.branch
     ? '<span class="map-step branch"' + tipAttrs({ text: fill('lanes.stage.branch', { when: st.branch.when }) + ' · ' + st.journeyName, noFocus: true }) + '>' + sym('fork') + '</span>'
     : '<span class="map-step"' + tipAttrs({ text: fill(biz() ? 'map.storyline.bizStep' : 'map.storyline.step', { n: st.step, m: m.stepsOf }) + ' · ' + st.journeyName, noFocus: true }) + '>' + st.step + '</span>';
-  const status = st.state === 'planned'
-    ? '<span class="map-chip k-warn"' + tipAttrs({ key: 'map.screen.planned', noFocus: true }) + '>' + sym('warning') + esc(t('map.screen.planned')) + '</span>'
-    : '<span class="map-chip k-ok"' + tipAttrs({ key: 'lanes.stage.built', noFocus: true }) + '>' + esc(t('lanes.stage.built')) + '</span>';
-  // the street's own test chip for this screen: the count with its scope and the one evidence word (lane V's chip)
+  // the street's own test chip for this screen: the count with its scope and the one evidence word (lane V's chip);
+  // for a screen with no code it is the not-built chip, which then is the card's one status word too
   const tests = st.tests ? mapTestsChips(st.tests, st.evidence, { hideZero: biz() }) : '';
+  const says = tests.includes('data-not-built');
+  const status = st.state === 'planned'
+    ? (says ? '' : '<span class="map-chip k-warn"' + tipAttrs({ key: 'map.screen.planned', noFocus: true }) + '>' + sym('warning') + esc(t('map.screen.planned')) + '</span>')
+    : '<span class="map-chip k-ok"' + tipAttrs({ key: 'lanes.stage.built', noFocus: true }) + '>' + esc(t('lanes.stage.built')) + '</span>';
   const dec = st.decisions.length
     ? '<div class="dec"' + tipAttrs({ text: t('lanes.decision') + ' · ' + st.decisions.map(say).join(' · '), noFocus: true }) + '>' + sym('decision')
       + '<span class="w">' + esc(say(st.decisions[0])) + '</span>' + (st.decisions.length > 1 ? '<span class="more">' + esc(fill('lanes.decision.more', { n: st.decisions.length - 1 })) + '</span>' : '') + '</div>'
