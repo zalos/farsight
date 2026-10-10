@@ -61,11 +61,24 @@ function biz() { return currentLens() === 'business'; }
 /** The gate's name in the register on screen: its words in business (never the identifier), its name elsewhere. */
 function gateName(m) {
   const n = m.facts.node;
+  // a precondition is named by its sentence everywhere but the code register, which prints its code form
+  if (m.precondition && currentLens() !== 'code') return biz() ? plainWords(m.precondition.words) || m.precondition.words : m.precondition.words;
   if (!biz()) return jrnGateText(n) || n.name;
   return plainWords(jrnGateInWords(n)) || t('gate.unnamed');
 }
 function kindKey(m) {
+  if (m.precondition) return 'gate.kind.precondition';
   return m.kind === 'config' ? 'gate.kind.config' : m.kind === 'rule' ? 'gate.kind.rule' : 'gate.kind.guard';
+}
+/** Who it matters to and why (gates lane 2026-10-10): the tier chip, the class in words, the code form, where the tier came from. */
+function tierHtml(m) {
+  const l = m.tier;
+  if (!l) return '';
+  return '<section class="gc-sec" data-gc-sec="tier">' + secHead('gate.tier.head')
+    + '<p class="gc-tier"><span class="gate-tier ' + esc(l.tier) + '"' + defAttrs(l.tierKey) + '>' + esc(t(l.tierKey)) + '</span> '
+    + '<span' + defAttrs(l.classKey) + '>' + esc(t(l.classKey)) + '</span>'
+    + (l.code ? ' <code>(' + esc(l.code) + ')</code>' : '') + '</p>'
+    + '<p class="gc-dim"' + defAttrs(l.fromKey) + '>' + esc(t(l.fromKey)) + '</p></section>';
 }
 function secHead(key, extra) {
   return '<h4 class="gc-h"><span' + defAttrs(key) + '>' + esc(t(key)) + '</span>' + (extra ? ' ' + extra : '') + '</h4>';
@@ -86,6 +99,13 @@ function codeHtml(src) {
 }
 function sentenceHtml(m) {
   const s = m.sentence;
+  // a precondition says its own sentence, then what happens otherwise
+  if (m.precondition) {
+    const w = m.precondition.words || '';
+    return '<p class="gc-says">' + esc(biz() ? plainWords(w) || w : w) + '</p>'
+      + (m.precondition.else ? '<p class="gc-dim"' + defAttrs('gate.pre.else') + '>' + esc(fill(t('gate.pre.else'), { else: m.precondition.else })) + '</p>' : '')
+      + (m.precondition.via ? '<p class="gc-dim"' + defAttrs('gate.pre.via.' + m.precondition.via) + '>' + esc(t('gate.pre.via.' + m.precondition.via)) + '</p>' : '');
+  }
   const says = s.says.source === 'business' ? (biz() ? plainWords(s.says.words) : s.says.words)
     : s.says.source === 'phrase' ? fill(t(s.says.key), { words: biz() ? plainWords(s.says.words) : s.says.words })
       : t(s.says.key);
@@ -155,6 +175,7 @@ export function gateCardHtml(m, opts = {}) {
   return '<div class="gc" data-gc="' + esc(m.id) + '">'
     + '<div class="gc-head">' + kind + '<b class="tip-h gc-name">' + esc(gateName(m)) + '</b>' + at + '</div>'
     + (doors ? '<div class="gc-doors">' + doors + '</div>' : '')
+    + tierHtml(m)
     + '<section class="gc-sec">' + secHead('gate.sec.allows') + sentenceHtml(m) + '</section>'
     + '<section class="gc-sec" data-gc-sec="where">' + secHead('gate.sec.where') + whereHtml(m) + '</section>'
     + (biz() ? '' : '<section class="gc-sec">' + secHead('gate.sec.code') + '<div class="gc-code" data-gc-src="' + esc(m.id) + '"><span class="dd-load">' + esc(t('door.codeLoading')) + '</span></div></section>')

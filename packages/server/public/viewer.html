@@ -1253,6 +1253,19 @@
   /* a list whose every row is withheld collapses to its heading and its one
      sentence: a section that can never draw a row is not an empty state */
   .jrn-gl-grp.empty .jrn-gl-mute{padding-top:2px}
+  /* gates by tier (gates lane 2026-10-10): the business register groups, the others chip */
+  .gate-tier{display:inline-block;font-family:var(--hud);font-size:9px;text-transform:uppercase;letter-spacing:.1em;border:1px solid var(--line);border-radius:2px;padding:0 5px;margin-left:4px;color:var(--muted);vertical-align:1px}
+  .gate-tier.business{color:var(--amber);border-color:rgba(240,180,78,.45)}
+  .gate-tier.policy{color:var(--auth);border-color:rgba(167,139,224,.45)}
+  .gate-tier.technical{color:var(--muted)}
+  .jrn-gl-tech{margin-top:4px}
+  .jrn-gl-tech>summary{cursor:pointer;font-family:var(--hud);font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:3px 2px;list-style-position:inside}
+  .jrn-gl-tech>summary:hover{color:var(--ink)}
+  .jrn-gl-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px;font-size:10px;color:var(--muted)}
+  .jrn-gl-legend .gate-tier{margin-left:0}
+  .jrn-gatelist.tiers .jrn-gl-grp.record .sym{color:var(--table, #C287D6)}
+  .gc-tier{margin:0 0 2px;line-height:1.6}
+  .gc-tier code{font-size:11px;color:var(--muted)}
   /* two checkpoints one developer gave the same phrase: each keeps its row, its
      count and its link, and says which of the places sharing that name it is */
   .jrn-gl-same{font-family:var(--hud);text-transform:uppercase;letter-spacing:.07em;font-size:8px;color:var(--dim);margin-left:7px;white-space:nowrap}
