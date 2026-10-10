@@ -196,6 +196,25 @@ describe('gate — one gate answered (swarm-fixes 2026-10-05, finding 4)', () =>
     assert.match(node, /## gate — gate \(guard\)/);
     assert.match(await call('gate', { node_id: 'nope::x' }), /unknown gate/);
   });
+
+  test('a precondition says its tier, its record and field, how it refuses, and the words it was given', async () => {
+    const id = 'invoice-app::precondition::src/server/invoiceService.ts::finalizeInvoice::invoices.lines#present';
+    const out = await call('gate', { node_id: id });
+    assert.match(out, /tier: business · nothing required is missing · tier from the kind of check/);
+    assert.match(out, /precondition: invoices\.lines not empty — the record the action writes · otherwise 409 conflict/);
+    assert.match(out, /its words \(the @business label\): An invoice must have at least one line item/);
+    assert.match(await call('gate', { node_id: 'invoice-app::guard::requireScope(billing:write)' }), /tier: business · what they may do/);
+  });
+
+  test('the journey prints what each action needs, and a move the code never checks', async () => {
+    const out = await call('journey', { entry: 'draft-and-send' });
+    assert.match(out, /needs \(\d+ things? it needs/);
+    const biz = await call('journey', { entry: 'draft-and-send', view: 'business' });
+    assert.match(biz, /needs: .*An invoice must have at least one line item/);
+    // a record created in its first status has nothing to move from: never "not checked"
+    assert.ok(!/moves invoices to draft/.test(biz), "a creation is not an unchecked move");
+    assert.match(biz, /moves invoices to open — the status it moves from is not checked by the code/);
+  });
 });
 
 describe('describe_node — what to know before changing it', () => {
@@ -312,7 +331,8 @@ describe('journey', () => {
     // the typed counts, grouped by the scope they count over (docs/COUNTS.md) — the same
     // numbers, under the same words, the HUD prints; nothing counted twice or recounted here
     const q = sum.counted!;
-    const line = countedLine([q.screens, q.built, q.gates, q.checks, q.decisions, q.notInWords, q.actions, q.again, q.declaredNotCalled, q.actionStops], { lens: 'code' });
+    // the gates, then the same gates split by who they matter to (gates lane 2026-10-10)
+    const line = countedLine([q.screens, q.built, q.gates, q.gatesBusiness, q.gatesTechnical, q.checks, q.decisions, q.notInWords, q.actions, q.again, q.declaredNotCalled, q.actionStops], { lens: 'code' });
     assert.ok(out.includes(`${line} · ${k.records} record(s) · ${k.messages} message(s)`), out.split('\n').slice(0, 4).join('\n'));
     assert.match(line, /^across this journey: /, 'the scope is printed, once, before the numbers it scopes');
     if (k.gates) assert.ok(line.includes(`${k.gates} gate`), 'the gates number is summary.counts.gates');

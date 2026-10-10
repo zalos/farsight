@@ -12,8 +12,13 @@
  */
 import type { GraphNode, Loc } from './graph.js';
 import type { GraphIndex, Journey, JourneySummary, JourneyGate } from './query.js';
-import type { GateClass, GateTier } from './graph.js';
-import { gateTierOf, GATE_CLASS_ORDER } from './gate-class.js';
+import type { GateClass, GateTier, Precondition } from './graph.js';
+import { gateTierOf, GATE_CLASS_ORDER, type TierFrom } from './gate-class.js';
+
+function tierOfNode(node: GraphNode): { tier: GateTier; class: GateClass; tierFrom: TierFrom } {
+  const t = gateTierOf(node);
+  return { tier: t.tier, class: t.class, tierFrom: t.tierFrom };
+}
 import { testsCovering, EVIDENCE_RANK } from './metrics.js';
 import { toCoverageRef, evidenceFacts, type CoverageTestRef, type EvidenceWord, type CoverageCounted, type CoverageFacts, type TestVerdict } from './coverage.js';
 import { counted, type Counted } from './counts.js';
@@ -60,6 +65,12 @@ export interface GateCard {
     configCheck: boolean;
     /** declared in farsight.config.json rather than found in the code */
     declared: boolean;
+    /** who it matters to and why (core gate-class.ts): the tier, the class that gave it, and where the tier came from */
+    tier: GateTier;
+    class: GateClass;
+    tierFrom: TierFrom;
+    /** a rule the parser read out of a refusing comparison: the record, the field, what it requires, what happens otherwise */
+    precondition?: Precondition;
     project?: string;
   };
   /** what the gate sits on directly — the functions and routes its `guards` / `validates` edges name */
@@ -193,6 +204,8 @@ export function gateCard(index: GraphIndex, gateId: string): GateCard | undefine
       ...(firstSentence(node.docs) ? { docs: firstSentence(node.docs)! } : {}),
       configCheck: isConfigCheck(node),
       declared: !!node.tags?.includes('declared'),
+      ...tierOfNode(node),
+      ...(node.precondition ? { precondition: node.precondition } : {}),
       ...(node.project?.name ? { project: node.project.name } : {}),
     },
     sitsOn,
@@ -258,6 +271,8 @@ export interface ActionMove {
   by: string;
   /** the code compares the prior status (a guard clause or a transition table): false = *not checked by the code* */
   checked: boolean;
+  /** the record is written in its first declared status: it is being created, with nothing to move from */
+  creates?: true;
 }
 /** What one action needs, in the order a reader meets it: who, the record's own state, the records around it, policy, then the technical checks. */
 export interface ActionPreconditions {
@@ -337,10 +352,12 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
       for (const t of tables) {
         for (const tr of t.lifecycle!.transitions) {
           if (!inRange.has(tr.by)) continue;
-          const checked = !!tr.from || !!tr.fromAny?.length
+          // a record written in its first status is being created: there is no status to move from
+          const creates = !tr.from && tr.to === t.lifecycle!.statuses[0];
+          const checked = creates || !!tr.from || !!tr.fromAny?.length
             || needs.some((p) => p.relation === 'own' && p.field && index.byId.get(p.id)?.precondition?.table === t.id && p.field.replace(/_/g, '').toLowerCase() === t.lifecycle!.field.replace(/_/g, '').toLowerCase() && !!p.requires?.length);
           if (moves.some((m) => m.table === t.id && m.to === tr.to && m.by === tr.by)) continue;
-          moves.push({ record: t.name, table: t.id, field: t.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked });
+          moves.push({ record: t.name, table: t.id, field: t.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked, ...(creates ? { creates: true as const } : {}) });
         }
       }
       if (!needs.length && !moves.length) continue;
