@@ -211,6 +211,8 @@ export function lanesHtml(m, G, ctx = {}) {
     + '<span class="tag"' + tipAttrs({ key: 'lanes.tag', noFocus: true }) + '>' + esc(t('lanes.tag')) + '</span>'
     + countedHtml(nLanes, '/api/journeys', { cls: 'ln-n' })
     + (ctx.evidenceHtml ? '<span class="ev">' + ctx.evidenceHtml + '</span>' : '')
+    // the storyline band's own doors (the release readiness brief) ride on the lanes' header too
+    + (ctx.doorHtml || '')
     + (m.storyline.description ? '<span class="d">' + esc(ctx.sentence ? ctx.sentence(m.storyline.description) : m.storyline.description) + '</span>' : '')
     + '</div>';
   // the lane panels, each segment's lanes again with their heads

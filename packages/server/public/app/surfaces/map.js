@@ -16,6 +16,7 @@
 // `lib/map-canvas.js`, the data shapes `lib/map-model.js`, and the property is
 // `surfaces/map-property.js`, reached through `openMapProperty(host, ctx)`.
 
+import { readinessDoorHtml } from '../lib/readiness-door.js';
 import { S, esc, expose, currentLens, humanize, bizName, unCode } from '../store.js';
 import { t, def, plainWords, unTick } from '../strings.js';
 import { sym } from '../sym.js';
@@ -549,7 +550,7 @@ function drawLanes() {
   const had = el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
   const paint = () => {
     el.style.cssText = 'width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + LANE_K + ')';
-    el.innerHTML = lanesHtml(model, G, { evidenceHtml: storyEvidenceHtml(), sentence });
+    el.innerHTML = lanesHtml(model, G, { evidenceHtml: storyEvidenceHtml(), doorHtml: readinessDoorHtml(story.id, 'map-story-ready', story.repo), sentence });
   };
   paint();
   // what is drawn under the lanes is measured (offset sizes are layout units, untouched by the scale): when it is not
@@ -1127,6 +1128,8 @@ function bandHeadHtml(b, word, byPersona) {
     + '<span class="n"' + plainTip(n, 'map.band.journeys', story ? 'count.scope.storyline' : 'map.band.scope', byPersona || story ? '/api/journeys' : '/api/design').replace(' tabindex="0"', '') + '>'
     + esc(countWords('map.band.journeys', n)) + '</span>'
     + (story ? '<span class="ev">' + storyEvidenceHtml() + '</span>' : '')
+    // the door into the storyline's release readiness brief (lane A, round 2026-10-10 — this one call site)
+    + (story ? readinessDoorHtml(story.id, 'map-story-ready', story.repo) : '')
     + (desc ? '<span class="d">' + esc(desc) + '</span>' : '') + '</div>';
 }
 /** The storyline band's test evidence: one Counted over its journeys (storylineEvidence), with its breakdown in the tip. */

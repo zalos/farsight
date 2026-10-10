@@ -1170,3 +1170,18 @@ says *pinned to sync N · this server shows sync M* (`drawPinNote`, kept beside 
 `#syncchipwrap` and a `hashchange` listener; `pinMismatch`). A graph without a sync number has no pinned link; the menu
 says so.
 
+## Release readiness brief — `surfaces/readiness.js`, `lib/readiness-door.js` (round 2026-10-10, proposal 6)
+
+`#/readiness/<storyline>[?repo=<source>]` (a surface reached by doors, not a tab): `GET /api/readiness` drawn as a
+document sheet — the brand line, the title, the provenance line (the export footer's own facts), a sign-off line,
+the summary strip (`counted.steps · ship · hold · skipped · unreached`), one table row per step and branch (built ·
+its own verdict word in this lens's words and the day of its newest run · skipped / never run · gates no test is known
+to reach of the journey's gates · commits since the last green run · SHIP / HOLD with the reasons), then the rules
+register (gate · in plain words · screens · tests · owner, *not declared* in warn italics). The page sets
+`data-theme="light"` on mount and gives the reader's theme back on unmount (`body.rd-on` while it shows). Print:
+`@page A4`, the chrome and `[data-export-skip]` hidden, a white ground, the steps on the first page and the register
+after a page break. Save (`registerExport('readiness', …, { csv })`) writes a light PDF on **one A4 page**
+(`export-model.js pdfA4` places the picture inside 28 pt margins; `pdfFromJpeg` takes `place`) and a CSV with one
+line per row. The doors are `readinessDoorHtml(id, cls, repo)`: one call site in `map.js bandHeadHtml` (the storyline
+band head) and one in `journeys.js` (the storyline card's ways in). e2e: `e2e/tests/readiness.pw.spec.ts`.
+
