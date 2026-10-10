@@ -14,7 +14,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts, gateCard,
+  counted, journeyTree, configCounts, gateCard, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest, refuseWrite } from './guard.js';
@@ -922,6 +922,13 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // ?steps=0 — the summary without the walk's steps and their code (the board and the Portfolio read the
       // summary only; on a large graph the steps are most of the answer and every one reads its file)
       const withSteps = !['0', 'false'].includes(q.get('steps') ?? '');
+      const summary = journeySummary(g.index, jr, screens);
+      // the lifecycle in the words of the persona(s) the flow is for, each writer placed on this journey's screen
+      const flowName = entryNode.kind === 'flow' ? (entryNode.design?.name ?? entryNode.name) : entryNode.name;
+      const lifecycles = journeyLifecycles(g.index, jr, {
+        personas: flowPersonas(g.index, g.meta.journeys, entry),
+        ...(entryNode.kind === 'flow' ? { locate: placeOnJourney({ id: entry, name: flowName }, jr, summary) } : {}),
+      });
       return send(200, JSON.stringify({
         entry: enrichNode(entryNode),
         ...(entry !== entryArg ? { resolvedFrom: entryArg } : {}),
@@ -934,12 +941,43 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         // the SCREEN band: the entry when it is a screen, else the pages/components upstream — derived, with their design refs
         screens: screens.map(enrichNode),
         // the three-band blueprint (what the user sees · business · what the system does) — same fold the MCP prints
-        summary: journeySummary(g.index, jr, screens),
-        // the records the walk reaches whose statuses the code declares: statuses, moves, writers (core lifecycle.ts)
-        lifecycles: journeyLifecycles(g.index, jr),
+        summary,
+        // the records the walk reaches whose statuses the code declares: statuses, moves, writers, and each
+        // persona's words for them (core lifecycle.ts)
+        lifecycles,
         ...(withSteps ? { steps: jr.steps.map((s) => enrichStep(s, g, fileCache)) } : { stepsOmitted: jr.steps.length }),
         edges: jr.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })),
       }));
+    }
+    if ((url === '/api/lifecycle' || url.startsWith('/api/lifecycle?')) && req.method === 'GET') {
+      // one record's lifecycle read by the persona(s) of a journey (round 2026-10-10 §3): every writer placed on the
+      // journey screen it runs from — the open journey first (`flow`), else the first journey whose screens reach it.
+      // Every journey's walk is folded once per index (core affected.ts flowWalks), so only this answer pays for it
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const q = new URL(url, 'http://localhost').searchParams;
+      const id = q.get('node');
+      if (!id) return send(400, JSON.stringify({ error: 'missing ?node=<record id>' }));
+      const g = loadJourneyGraph(graphPath);
+      const node = g.index.byId.get(id);
+      if (!node) return send(404, JSON.stringify({ error: `no node ${id} in this graph` }));
+      if (!node.lifecycle) return send(404, JSON.stringify({ error: `${id} has no status lifecycle the code declares` }));
+      const flow = q.get('flow') ?? '';
+      const answer = folded(g.index, 'lifecycle', `${id}\u0000${flow}`, () => {
+        const walks = flowWalks(g.index);
+        const order = [...walks.filter((w) => w.id === flow), ...walks.filter((w) => w.id !== flow)];
+        const locate = (writer: string): LifecyclePlace | undefined => {
+          for (const w of order) {
+            const sc = w.screens.find((x) => x.nodes.has(writer));
+            if (sc) {
+              const f = g.index.byId.get(w.id);
+              return { flowId: w.id, flowName: f?.design?.name ?? w.name, screen: sc.segment + 1, screenName: sc.name, here: w.id === flow };
+            }
+          }
+          return undefined;
+        };
+        return { node: id, name: node.name, views: lifecycleViews(g.index, node, { personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [], locate }) };
+      }, 32);
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
     }
     if ((url === '/api/source' || url.startsWith('/api/source?')) && req.method === 'GET') {
       // one node's own lines (round 2026-10-05 §3.2: a gate expands to its code). Only a node the
