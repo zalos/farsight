@@ -26,6 +26,7 @@ import { impactFromRoute } from './impact.js';
 import './provenance.js';
 import { initTips, registerTip, tableTip, linksTip, setTip, grammarHref, tipAttrs, tipOpen } from './lib/tooltip.js';
 import { plainTip } from './lib/counted.js';
+import { readOnlyWhy, applyReadOnly } from './lib/read-only.js';
 
 // ── router ──────────────────────────────────────────────────────
 // `map` is behind the workspace's `flags.map` (Settings → Experiments): `navTabs()` leaves it out when off
@@ -63,6 +64,11 @@ const SURFACES = {
   map: { mount: mountMap, unmount: unmountMap, refresh: mapRefresh, update: mapUpdate },
   stewardship: { mount: mountStewardship },
   grammar: { mount: mountGrammar, refresh: refreshGrammar },
+  // Settings is an address (`#/settings`, round 2026-10-10 finding 3.2) and keeps the top bar (3.3): the page
+  // mounts into the surface frame under the chrome instead of covering the window
+  settings: { mount: mountSettings, unmount: unmountSettings, refresh: () => renderSettings() },
+  // an address this build has no page for says so (3.2) — it used to drop the reader on the front door silently
+  nowhere: { mount: mountNowhere },
 };
 let currentSurface = null;
 
@@ -220,6 +226,7 @@ function q0view(r) { return /[?&]view=/.test(String(r.raw || '')); }
  */
 export function applyRoute() {
   let r = parseRoute();
+  if (r && r.surface && (!SURFACES[r.surface] || r.surface === 'nowhere')) r = Object.assign({}, r, { asked: r.surface, surface: 'nowhere' });
   if (!r || !SURFACES[r.surface]) {
     const dflt = defaultSurface();
     history.replaceState(null, '', '#/' + dflt);
@@ -437,6 +444,8 @@ export function renderChrome() {
   // a gear and the word: the glyph alone read as a theme toggle to seven of eight reviewers (swarm 2026-10-05)
   const gear = document.getElementById('gearbtn');
   if (gear) {
+    // Settings is an address: the gear reads as the tab on screen while it is open
+    gear.classList.toggle('on', cur === 'settings');
     gear.removeAttribute('title');
     gear.innerHTML = sym('gear') + '<span class="gearlbl">' + esc(t('surf.chrome.settings')) + '</span>';
     gear.setAttribute('aria-label', t('surf.chrome.settings'));
@@ -559,7 +568,8 @@ export function fitTopbar() {
     menu.appendChild(row);
   }
   btn.innerHTML = sym('more') + '<span class="cnt">' + folded + '</span>';
-  btn.setAttribute('aria-label', t('chrome.more'));
+  // the badge's number has words a screen reader hears too (finding 3.4); the tip below says the same, by name
+  btn.setAttribute('aria-label', t('chrome.more') + ' — ' + t('tip.more.of').replace('{n}', folded));
   btn.removeAttribute('title');
   // the count's tip names what it counts — the controls folded away, by name
   const nameOf = (n) => (n.id === 'nav' ? t('tip.more.nav')
@@ -660,7 +670,7 @@ export function previewTheme(theme) {
   applyTheme(theme);
   const note = document.getElementById('set-theme-note');
   const saved = S.SETTINGS && (S.SETTINGS.theme || 'system');
-  if (note) note.textContent = theme !== saved ? t('surf.theme.preview') : '';
+  if (note) note.textContent = theme !== saved ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview') : '';
 }
 /**
  * Rebuild the scope button label + grouped multi-select menu. Collections act
@@ -699,7 +709,7 @@ export function buildScope() {
   // on the code map: its own filters — projects, tag values, depends on (surfaces/codemap-projects.js)
   html += cmapScopeHtml();
   const ro = !!readOnlyWhy();
-  html += '<div class="sc-foot"><button class="sc-save' + (ro ? ' ro-off" aria-disabled="true' : '') + '" onclick="saveScopeGroup()" title="' + esc(t(ro ? 'sys.readonly.control' : 'scope.newGroupTitle')) + '">' + esc(t('scope.newGroup')) + '</button></div>';
+  html += '<div class="sc-foot"><button class="sc-save' + (ro ? ' ro-off" aria-disabled="true' : '') + '" data-write onclick="saveScopeGroup()" title="' + esc(t(ro ? 'sys.readonly.control' : 'scope.newGroupTitle')) + '">' + esc(t('scope.newGroup')) + '</button></div>';
   menu.innerHTML = html;
   colls.forEach((c, i) => {
     const names = collSourceNames(c);
@@ -1192,53 +1202,52 @@ export function paletteNav(e) {
 }
 
 // ── the read-only session ───────────────────────────────────────
-/**
- * Why this session is read-only — `'flag'` (`serve --read-only`), `'as-of'` (a
- * past sync) — or null when the server takes changes. Read off `/api/version`'s
- * `session`, the same fact the server enforces (guard.ts `refuseWrite`); an
- * older server that does not say is taken as writable, as it always was.
- * @group Settings page
- */
-export function readOnlyWhy() {
-  const s = S.VERSION && S.VERSION.session;
-  return s && s.readOnly ? (s.why === 'as-of' ? 'as-of' : 'flag') : null;
-}
-/**
- * Grey out every control that would change something the server owns, with a
- * tip saying why — disabled, never hidden: a reader sees what the product can
- * do and why it will not do it here. Buttons keep their focus and their tip
- * (`aria-disabled`, their handlers return early); the fields that only feed
- * them are disabled outright.
- * @group Settings page
- */
-export function applyReadOnly() {
-  const ro = !!readOnlyWhy();
-  document.querySelectorAll('[data-write]').forEach((el) => {
-    if (el.tagName === 'BUTTON') {
-      el.classList.toggle('ro-off', ro);
-      if (ro) { el.setAttribute('aria-disabled', 'true'); setTip(el, { text: t('sys.readonly.control') }); }
-      else el.removeAttribute('aria-disabled');
-    } else {
-      el.disabled = ro;
-    }
-  });
-  const banner = document.getElementById('set-ro');
-  if (banner) { banner.hidden = !ro; banner.textContent = ro ? t('sys.readonly.banner') : ''; }
-}
+// readOnlyWhy() and applyReadOnly() live in lib/read-only.js, shared by every surface that draws a write control
 /** True (and the click is spent) when a write control is pressed in a read-only session. */
 function refusedReadOnly() { return !!readOnlyWhy(); }
 
 // ── settings page ───────────────────────────────────────────────
 /** @group Settings page */
-export function settingsOpen() { return document.getElementById('settings').classList.contains('open'); }
+export function settingsOpen() { return currentSurface === 'settings'; }
 /**
+ * Settings is the address `#/settings`: opening it goes there, remembering where the reader came from.
  * @group Settings page
  */
-export function openSettings() { renderSettings(); document.getElementById('settings').classList.add('open'); }
+export function openSettings() {
+  if (currentSurface === 'settings') return;
+  S.settingsFrom = location.hash && !/^#\/settings\b/.test(location.hash) ? location.hash : null;
+  location.hash = '#/settings';
+}
 /**
+ * Back to where Settings was opened from — or to where an unrouted visit lands.
  * @group Settings page
  */
-export function closeSettings() { document.getElementById('settings').classList.remove('open'); }
+export function closeSettings() {
+  if (currentSurface !== 'settings') return;
+  location.hash = S.settingsFrom || '#/' + defaultSurface();
+}
+/** Mount the Settings page into the surface frame, under the top bar. @group Settings page */
+function mountSettings(route, el) {
+  const set = document.getElementById('settings');
+  el.appendChild(set);
+  set.classList.add('open', 'as-surface');
+  renderSettings();
+}
+/** Hand the Settings page back to the document, closed. @group Settings page */
+function unmountSettings() {
+  const set = document.getElementById('settings');
+  set.classList.remove('open', 'as-surface');
+  document.body.appendChild(set);
+}
+/**
+ * An address this build has no page for: one line that says so, and a door to the front door.
+ * @group Shell
+ */
+function mountNowhere(route, el) {
+  const asked = '#/' + String((route && route.raw ? route.raw.replace(/^#\//, '') : route && route.asked) || '');
+  el.innerHTML = '<div class="set-wrap"><p class="nowhere" role="status"' + tipAttrs({ key: 'shell.nowhere', noFocus: true }) + '>' + sym('absent')
+    + ' <span>' + esc(t('shell.nowhere')) + '</span> <code>' + esc(asked) + '</code> · <a class="nowhere-door" href="#/journeys">' + esc(t('shell.nowhereDoor')) + ' ›</a></p></div>';
+}
 /**
  * @group Settings page
  * @business The settings screen: manage sources, collections, and appearance.
@@ -1258,7 +1267,7 @@ export function renderSettings() {
     || '<div class="set-note">' + esc(t('set.noCollections')) + '</div>';
   document.getElementById('set-theme').value = S.themePreview || S.SETTINGS.theme || 'system';
   const tn = document.getElementById('set-theme-note');
-  if (tn) tn.textContent = S.themePreview && S.themePreview !== (S.SETTINGS.theme || 'system') ? t('surf.theme.preview') : '';
+  if (tn) tn.textContent = S.themePreview && S.themePreview !== (S.SETTINGS.theme || 'system') ? t(readOnlyWhy() ? 'sys.readonly.themeHint' : 'surf.theme.preview') : '';
   document.getElementById('set-lens').value = S.SETTINGS.defaultLens || 'hybrid';
   const surf = document.getElementById('set-surface');
   if (surf) {
@@ -1508,7 +1517,7 @@ async function boot() {
   }
   indexGuards(); buildScope(); buildChips(); renderSettings();
   // the running build, fail-soft: an older server without /api/version just leaves the tooltip shorter
-  fetch('/api/version').then((r) => (r.ok ? r.json() : null)).then((v) => { if (v) { S.VERSION = v; renderChrome(); } }).catch(() => {});
+  const versionRead = fetch('/api/version').then((r) => (r.ok ? r.json() : null)).then((v) => { if (v) { S.VERSION = v; renderChrome(); } }).catch(() => {});
   // the word register is the third thing that changes what is on screen without
   // changing the route — it goes through the one contract, so the list of which
   // surfaces bother to redraw lives on each surface instead of here
@@ -1518,6 +1527,9 @@ async function boot() {
   initTips();
   // ahead of keymap.js's listener: an Esc meant for the scope menu stops there
   window.addEventListener('keydown', scopeMenuKey, true);
+  // the session (read-only or not) decides how every surface draws its write controls, so the first surface
+  // waits a moment for it — never long: an older or slow server draws as writable, as it always did
+  await Promise.race([versionRead, new Promise((r) => setTimeout(r, 1500))]);
   applyRoute();
   initKeymap();
   warmSearch();

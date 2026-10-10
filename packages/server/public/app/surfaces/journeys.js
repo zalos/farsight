@@ -24,6 +24,7 @@ import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
 import { gateAttrs } from '../lib/gate-card.js';
 import { trapFocus, releaseFocus, rememberOpener } from '../lib/focus-trap.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
+import { stateOfPlayShellHtml, mountStateOfPlay } from '../lib/state-of-play.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from '../lib/tooltip.js';
 import { plainTip, countedHtml, defAttrs, countKey } from '../lib/counted.js';
 import { jrnDrillEnabled, jrnDrillIndex, jrnDrillHtml, jrnDrillMount, jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnDrillStep, jrnInspPanelHtml } from './journey-drill.js';
@@ -106,7 +107,8 @@ function renderPicker(el) {
   const byRepo = {};
   entries.forEach((n) => (byRepo[repoOf(n)] = byRepo[repoOf(n)] || []).push(n));
   let html = '<div class="set-wrap"><h1>' + esc(t('journeys.pickerTitle')) + '</h1><p class="sub">' + esc(t('journeys.pickerSub')) + '</p>'
-    + startHereHtml()
+    // READ THIS IF beside the STATE OF PLAY, and the words this application leans on (round 2026-10-10)
+    + stateOfPlayShellHtml()
     + '<div id="jrn-storylines"></div>'
     + '<div id="jrn-organised"></div>'
     + '<div id="jrn-designs"></div>';
@@ -127,23 +129,7 @@ function renderPicker(el) {
   html += '</div>';
   el.innerHTML = html;
   jrnMountDesigns();
-}
-
-/**
- * Three steps for someone who has never opened this before: where to start, how
- * to change the register, and where every word on screen is defined. Chrome, not
- * data — it says nothing about the product, so it cannot be wrong about it.
- * @group Journey view
- */
-function startHereHtml() {
-  return '<div class="set-sec jrn-start"><h2>' + esc(t('journeys.startHere')) + '</h2>'
-    + '<ol class="jrn-startlist"><li>' + esc(t('journeys.startStep1')) + '</li>'
-    + '<li>' + esc(t('journeys.startStep2')) + '</li>'
-    + '<li>' + esc(t('journeys.startStep3')) + '</li></ol>'
-    + '<div class="jrn-startbtns">'
-    + '<a class="rel" href="#/grammar">' + sym('open') + ' ' + esc(t('journeys.startGrammar')) + '</a>'
-    + '<button class="rel" onclick="toggleKeymapPanel()">' + esc(t('journeys.startKeys')) + '</button>'
-    + '</div></div>';
+  mountStateOfPlay(jrnScopeParam());
 }
 
 // ── designs front door (docs/proposals/design-source.md) ────────
@@ -1582,7 +1568,8 @@ function jrnGateRowHtml(g, qualifier) {
     // a real space, not only the margin: this row is read in a screenshot and
     // pasted into a ticket as often as it is clicked
     + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
-    + '<span class="jrn-gl-x"' + (g.count > 1 ? ' title="' + esc(t('journey.gateTimes').replace('{n}', g.count)) + '"' : '') + '>'
+    // ×n is a number: its tip says what it counts — the times this list met the gate (finding 3.4)
+    + '<span class="jrn-gl-x"' + (g.count > 1 ? ' aria-label="' + esc(t('journey.gateTimes').replace('{n}', g.count)) + '"' + tipAttrs({ key: 'journey.gateTimes', noFocus: true }) : '') + '>'
     + (g.count > 1 ? '×' + g.count : '') + '</span>'
     // the doors on the row itself, not behind a ▸ (the business register draws none: they open code)
     + '<span class="jrn-gl-go">' + (gn ? doorsHtml(doorsFor(g.kind === 'rule' ? 'rule' : 'gate', gn)) : '')
@@ -3176,7 +3163,7 @@ export function jrnSchemaChipHtml(m) {
  * @group Journey view */
 function jrnSheetGateChipHtml(g) {
   return '<span class="jrn-mk gate"' + (S.BYID[g.id] ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
-    + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(jrnGateText(g)) + (g.count > 1 ? ' ×' + g.count : '')
+    + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(jrnGateText(g)) + (g.count > 1 ? ' <span class="jrn-gl-x"' + tipAttrs({ key: 'journey.gateTimes', noFocus: true }) + '>×' + g.count + '</span>' : '')
     + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '') + '</span>';
 }
 /** One translated decision as a sheet chip — a fork the flow can take in this action.

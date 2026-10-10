@@ -145,6 +145,7 @@
   .lens-switch button.on{background:var(--accent-dim);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
   .gearbtn{font-size:14px;color:var(--muted);padding:4px 6px;display:inline-flex;align-items:center}
   .gearbtn:hover{color:var(--ink)}
+  .gearbtn.on{color:var(--accent)}
   .kmbtn{font-family:var(--mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:3px 9px}
   .kmbtn:hover{color:var(--accent);border-color:var(--accent)}
 
@@ -574,6 +575,11 @@
      the gear stays live beside an open journey, so Settings opens over it */
   .settings{position:fixed;inset:0;z-index:44;background:var(--ground);display:none;overflow-y:auto}
   .settings.open{display:block}
+  /* Settings as an address (#/settings): the page sits in the surface frame, under the top bar */
+  .settings.as-surface{position:static;inset:auto;z-index:auto;overflow:visible;background:none}
+  .nowhere{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--muted);font-size:13px;padding:14px 0}
+  .nowhere code{font-family:var(--mono);font-size:12px;color:var(--ink)}
+  .nowhere .sym{width:15px;height:15px}
   .set-wrap{max-width:860px;margin:0 auto;padding:28px 24px 80px}
   .set-wrap h1{font-family:var(--hud);text-transform:uppercase;letter-spacing:.18em;font-size:17px;color:var(--accent);margin:0 0 4px}
   .set-wrap .sub{color:var(--muted);font-size:12.5px;margin:0 0 24px}
@@ -602,6 +608,14 @@
   .set-ro{margin:-12px 0 20px;padding:8px 12px;border:1px dashed var(--line);border-radius:4px;color:var(--muted);font-size:12px}
   .btn.ro-off,.x.ro-off,.sc-save.ro-off{opacity:.45;cursor:not-allowed}
   .btn.ro-off:hover,.x.ro-off:hover{border-color:var(--line);color:inherit;background:none}
+  /* every write control in a read-only session (lib/read-only.js), on every surface: it looks disabled — no accent,
+     no fill, a not-allowed cursor — and keeps its tip, which says why and who to ask (round 2026-10-10, finding 3.1) */
+  [data-write].ro-off,[data-write][aria-disabled="true"]{opacity:.42;cursor:not-allowed;filter:grayscale(1);background:none;border-color:var(--line);color:var(--dim);box-shadow:none}
+  [data-write].ro-off:hover{background:none;border-color:var(--line);color:var(--dim)}
+  [data-write]:disabled{filter:grayscale(1)}
+  .wk-ro{margin:12px 22px 0}
+  .wk-ro .ro-chip{margin-right:8px}
+  .wk-ro-pane{border-left:2px solid var(--line);padding-left:8px}
   [data-write]:disabled{opacity:.5;cursor:not-allowed}
   .esc-toast{position:fixed;left:50%;bottom:44px;transform:translateX(-50%);z-index:90;background:var(--panel);border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:7px 14px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;box-shadow:0 10px 30px -8px rgba(0,0,0,.5);display:none}
   .esc-toast.on{display:block}
@@ -801,6 +815,31 @@
   .jrn-start .jrn-startbtns{display:flex;gap:8px;align-items:center}
   /* both are actions: the accent, never the browser's link blue on the blue-black ground */
   .jrn-start .jrn-startbtns .rel{text-decoration:none;color:var(--accent)}
+  /* the front door opens with the state of play (round 2026-10-10): READ THIS IF beside STATE OF PLAY, then the glossary */
+  .sop-row{display:grid;grid-template-columns:minmax(200px,1fr) 2.6fr;gap:16px;align-items:stretch;margin-bottom:16px}
+  .sop-row>.set-sec{margin:0}
+  .jrn-readthis .jrn-startbtns{flex-direction:column;align-items:flex-start}
+  .sop-prov{font-family:var(--mono);font-size:11px;color:var(--muted);margin:2px 0 12px;line-height:1.6}
+  .sop-prov b{color:var(--ink);font-weight:500}
+  .sop-cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;border-top:1px solid var(--line);padding-top:12px}
+  .sop-col h3{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:10.5px;margin:0 0 8px;font-weight:600}
+  .sop-col.ok h3{color:var(--ok)} .sop-col.run h3{color:var(--cyan,#5BC8DD)} .sop-col.open h3{color:var(--warn)}
+  .sop-col+.sop-col{border-left:1px solid var(--line);padding-left:14px}
+  .sop-col ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;font-size:12.5px;line-height:1.45}
+  .sop-n{border-bottom:1px dotted var(--muted);cursor:help}
+  .sop-cmd{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:3px}
+  .sop-re{font-family:var(--mono);font-size:10.5px;color:var(--accent);background:none;border:none;padding:0 2px;cursor:pointer;white-space:nowrap}
+  .sop-re:hover{text-decoration:underline}
+  .sop-word{font-size:12px;color:var(--muted)}
+  .sop-names{color:var(--muted)}
+  .sop-gloss h2{display:inline-block;margin:0 12px 0 0}
+  .sop-gloss{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:16px}
+  .sop-terms{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .sop-term{display:inline-flex;gap:6px;align-items:baseline;border:1px solid var(--line);background:var(--raised,var(--panel));border-radius:4px;padding:3px 8px;font-size:11.5px}
+  .sop-term b{font-family:var(--hud);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;color:var(--accent)}
+  .sop-term span{color:var(--muted)}
+  .sop-none{margin:0}
+  @media (max-width:900px){.sop-row{grid-template-columns:1fr}.sop-cols{grid-template-columns:1fr}.sop-col+.sop-col{border-left:none;padding-left:0}}
   .pf-table td{vertical-align:top}
   /* the flow's name is the first thing a reader reads: the lens accent, not the browser's link blue */
   .pf-table a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--line)}

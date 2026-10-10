@@ -74,7 +74,7 @@ export function erpDeclared(summary) {
 /** The owner chip: the name the manifest gives, the Portfolio's Owner column. '' when it names nobody. */
 export function mapOwnerChip(owner) {
   if (!owner) return '';
-  return '<span class="map-chip k-owner"' + defAttrs('map.cover.owner') + '>' + esc(t('map.cover.owner').split('{owner}').join(owner)) + '</span>';
+  return '<span class="map-chip k-owner"' + defAttrs('map.cover.owner', undefined, { owner }) + '>' + esc(t('map.cover.owner').split('{owner}').join(owner)) + '</span>';
 }
 
 /** The ERP chip: reached (with the system's name), declared and not built, or nothing. */
