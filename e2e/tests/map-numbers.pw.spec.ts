@@ -112,14 +112,15 @@ test.describe('map — one number, one word', () => {
     await head.locator('.map-chip').first().hover();
     await expect(page.locator('#fs-tip')).toContainText(/reached by the walk through the code/i);
     await expect(page.locator('#fs-tip')).toContainText(/across this journey/i);
-    // the evidence chip is the Portfolio's word, right after the tests count
+    // the evidence chip is the Portfolio's word, inside the tests count's own chip with its scope (round 2026-10-10)
     await expect(head.locator('.map-chip.k-ev')).toHaveText(word);
-    expect(await head.locator('.map-chip.k-test').evaluate((el) => el.nextElementSibling?.classList.contains('k-ev'))).toBe(true);
+    await expect(head.locator('.map-chip.k-test .k-ev')).toHaveCount(1);
+    await expect(head.locator('.map-chip.k-test .tc-scope')).toHaveText('over this journey');
     // every screen card that counts tests carries its own evidence word beside them
     const cards = await page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`).evaluateAll((els) => els.map((el) => {
       const test = el.querySelector('.map-chip.k-test');
       const n = test ? parseInt(test.textContent || '0', 10) : 0;
-      return { n, ev: !!(test && test.nextElementSibling && test.nextElementSibling.classList.contains('k-ev')) };
+      return { n, ev: !!(test && test.querySelector('.k-ev')) };
     }));
     expect(cards.filter((c) => c.n > 0).length).toBeGreaterThan(0);
     for (const c of cards) expect(c.ev, 'a screen\'s tests without their evidence word').toBe(c.n > 0);

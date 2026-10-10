@@ -14,6 +14,7 @@
 // the property, Esc, and the link (`?affected=<seed>&ahops=N`). The pure parts are
 // lib/map-affected-model.js.
 
+import { scopeWordHtml } from '../lib/test-chip.js';
 import { S, esc, currentLens, bizName, unCode } from '../store.js';
 import { t, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
@@ -444,7 +445,10 @@ export function affectedTabHtml(ctx) {
     ? '<div class="mp-affpick"><span class="hud-label"' + defAttrs('map.affected.seedFor') + '>' + esc(t('map.affected.seedFor')) + '</span>'
       + AFF.entries.map((x, i) => '<button type="button" class="api-chip' + (i === AFF.pick ? ' on' : '') + '" data-act="aff-pick" data-i="' + i + '" aria-pressed="' + (i === AFF.pick) + '">' + esc(seedName(x.seed)) + '</button>').join('') + '</div>' : '';
   const counts = [k.screens, k.journeys, k.calls, k.tests].filter((c) => countedUnit(c))
-    .map((c) => countedHtml(c, '/api/impact', { cls: 'mp-chip' }) + (c === k.tests ? withinHtml() : '')).join('');
+    .map((c) => (c === k.tests
+      // the tests count with its scope on the chip (round 2026-10-10): over what reaches the seed, as far as asked
+      ? '<span data-tchip class="tchip" data-scope="' + esc(c.scope) + '">' + countedHtml(c, '/api/impact', { cls: 'mp-chip' }) + '<span class="tc-sep"> · </span>' + scopeWordHtml(scopeWordKeyOf(c.scope)) + withinHtml() + '</span>'
+      : countedHtml(c, '/api/impact', { cls: 'mp-chip' }))).join('');
   const scope = '<div class="mp-affscope"><span class="hud-label"' + defAttrs('count.scope.affected') + '>' + esc(t('count.scope.affected')) + '</span> <b>' + esc(seedName(e.seed)) + '</b></div>';
   const groups = hopGroups(r).map((g) => {
     const j = g.journeys.map((x) => rowHtml(esc(flowName(x.flowId, x.name)), '', '', carry('#/map/' + encodeURIComponent(x.flowId))));
@@ -468,4 +472,9 @@ function withinHtml() {
 function affectedBarState() {
   const key = AFF.state === 'loading' ? 'map.affected.reading' : AFF.state === 'unknown' ? 'map.affected.unknown' : AFF.state === 'noParts' ? 'map.affected.noParts' : 'map.affected.failed';
   return '<span class="mp-note"' + defAttrs(key) + '>' + esc(t(key)) + '</span>';
+}
+
+/** The chip words of a test count's scope: the affected scope reads *over what this change reaches*. */
+function scopeWordKeyOf(scope) {
+  return scope === 'count.scope.affected' ? 'count.over.affected' : scope;
 }

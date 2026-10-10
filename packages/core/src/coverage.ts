@@ -20,7 +20,7 @@ import type { ConfidenceTier, GraphNode, ResolutionTechnique, TestRef, Loc } fro
 import type { GraphIndex, Journey, JourneySummary } from './query.js';
 import { flowScreenIds, isDeclaredOnly, journey } from './query.js';
 import { computeMetric, testsCovering, EVIDENCE_RANK, type MetricValue, type MetricScope, type CoveringTest } from './metrics.js';
-import { counted, type Counted, type CountScope } from './counts.js';
+import { counted, scopeWord, type Counted, type CountScope } from './counts.js';
 import { freshnessFact, codeAtOfIndex, type CodeAt, type FreshnessFact } from './freshness.js';
 
 /**
@@ -105,6 +105,14 @@ export interface CoverageTestRef {
   technique?: ResolutionTechnique;
   confidence?: ConfidenceTier;
   note?: string;
+  /**
+   * The case's own evidence word, by the scope's rule with the case alone as the
+   * scope (`caseWord`): what a list prints beside the case's name, so a row never
+   * words its evidence differently from the chip above it — *named by a run* and
+   * *passed, declared here* were the Map property's own labels for these
+   * (swarm round 2, 2026-10-06). Class and key only; no business sentence.
+   */
+  word?: { cls: EvidenceWord['cls']; key: string };
 }
 
 /** What one scope (a journey, a segment, a step) is verified by. */
@@ -198,6 +206,16 @@ export interface CoverageFacts {
    */
   sharedEvidence?: { screens: number };
   /**
+   * Screen scopes only: the screen is **designed, not built** — it has no code,
+   * so no test can reach it and the scope has no verdict (round 2026-10-10,
+   * proposal 4; swarm round 2 found *passed · 111 test cases* on a screen the
+   * same page called *designed, not built*). The word is the absence word *not
+   * built*, `chip` is `none` and `verdict.notBuilt` is set; the counts and the
+   * refs are the cases that reach **the routes the screen will call**, scoped
+   * `count.scope.route` — what the cases do reach, said with its own scope.
+   */
+  notBuilt?: true;
+  /**
    * The covering tests' runs folded to their weakest verdict — kept for
    * consumers that read it, and **never printed as the cell's verdict**: one
    * skipped case among a hundred made it *skipped* beside a word a passed run
@@ -250,6 +268,23 @@ export interface TestVerdict {
   word: EvidenceWord;
   status?: NonNullable<TestRef['run']>['status'];
   runs: Counted;
+  /**
+   * The words a chip prints for the scope `runs` counts over (`count.over.*`,
+   * core `scopeWord()`): *over this screen*, *over this action*. A test number
+   * that can sit beside another prints this on its chip (round 2026-10-10,
+   * proposal 4); the long scope words stay in the tip.
+   */
+  scopeWord: string;
+  /**
+   * Lifted out of `runs` for the chip, so *passed* never hides them: a chip
+   * prints `· n skipped` (and `· n failed`, `· n flaky`) whenever it is not zero.
+   * The same numbers as `runs.breakdown`, never another count.
+   */
+  failed: number;
+  skipped: number;
+  flaky: number;
+  /** the scope is a designed, not-built screen: no word, no status (see `CoverageFacts.notBuilt`) */
+  notBuilt?: true;
 }
 
 /** One action's tests, slim: the chip, the word, the typed counts and the observing run — no test list, no metric. */
@@ -347,7 +382,21 @@ export function toCoverageRef(index: GraphIndex, t: CoveringTest, node: GraphNod
     ...(t.note ? { note: t.note } : {}),
     ...(t.loc ? { loc: t.loc } : {}),
     ...(t.run ? { status: t.run.status, at: t.run.at, freshness: t.run.freshness, stale: t.run.stale, ...(t.run.changedBy ? { changedBy: t.run.changedBy } : {}), ...(t.run.commit ? { commit: t.run.commit } : {}) } : {}),
+    word: caseWordOf({ evidence: t.evidence, runLevel: t.runLevel, ...(t.observedVia ? { observedVia: t.observedVia } : {}), ...(t.run ? { freshness: t.run.freshness } : {}) }),
   };
+}
+
+/**
+ * One case's word without a fold: the chip and the attribution `evidenceFacts`
+ * would decide for the case alone as the scope (`caseWord` — pinned equal by
+ * the core tests), cheap enough to stamp on every ref.
+ */
+function caseWordOf(r: Pick<CoverageTestRef, 'evidence' | 'runLevel' | 'observedVia' | 'freshness'>): { cls: EvidenceWord['cls']; key: string } {
+  const observed = r.evidence === 'observed';
+  const chip: CoverageFacts['chip'] = observed ? (r.freshness === 'changed' ? 'observed-stale' : 'observed') : r.evidence === 'static' ? 'reached' : 'declared';
+  const by: CoverageFacts['observedBy'] = observed ? (r.runLevel ? 'runs' : r.observedVia === 'declaration' ? 'declaration' : 'tests') : undefined;
+  const w = evidenceWord(chip, by);
+  return { cls: w.cls, key: w.key };
 }
 
 /**
@@ -587,7 +636,10 @@ export function testVerdict(
     bizUnit: 'journey.biz.countTests',
     breakdown: [...RUN_PARTS.map((s) => ({ key: `count.part.${s}`, n: n(s) })), { key: 'count.part.noRun', n: noRun }],
   });
-  return { word, ...(status && word.cls !== 'none' && word.cls !== 'declared' && word.cls !== 'reached' ? { status } : {}), runs };
+  return {
+    word, ...(status && word.cls !== 'none' && word.cls !== 'declared' && word.cls !== 'reached' ? { status } : {}), runs,
+    scopeWord: scopeWord(countScope), failed: n('failed'), skipped: n('skipped'), flaky: n('flaky'),
+  };
 }
 
 /**
@@ -605,7 +657,13 @@ function earningRefs(active: CoverageTestRef[]): CoverageTestRef[] {
   return observing;
 }
 
-export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricScope, countScope?: CountScope): CoverageFacts {
+/**
+ * `opts.level` keeps the cases of one test level only — the Tests page's level
+ * filter, which used to change the header and leave every journey row's
+ * evidence at every level (swarm round 2, finding 1.8). The metric is the
+ * scope's own and is not filtered; its part for the level is `metric.parts`.
+ */
+export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricScope, countScope?: CountScope, opts: { level?: TestRef['level'] } = {}): CoverageFacts {
   const ids = [...new Set(nodeIds)].filter((id) => {
     const n = index.byId.get(id);
     // a declared-but-unbuilt route cannot be "uncovered": there is nothing to test yet
@@ -618,6 +676,7 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
   for (const id of ids) {
     const node = index.byId.get(id);
     for (const t of testsCovering(index, id)) {
+      if (opts.level && t.level !== opts.level) continue;
       if (t.evidence === 'declared') declared++;
       if (t.evidence === 'observed') observed++;
       const ref = toCoverageRef(index, t, node);
@@ -839,6 +898,63 @@ function segmentNodeIds(segment: JourneySummary['segments'][number]): string[] {
 }
 
 /**
+ * Whether a segment's screen is **designed, not built**: its design says so, or
+ * — with no design status — it has no source location. The Map's street draws
+ * the same screen as *planned* by the same rule (`lib/map-model.js`).
+ */
+export function segmentNotBuilt(segment: JourneySummary['segments'][number]): boolean {
+  const sc = segment.screen;
+  if (!sc) return false;
+  return sc.designStatus === 'design-only' || (!sc.designStatus && !sc.loc);
+}
+
+/** The routes a not-built screen will call: its call markers and the operations its design declares that a route serves. */
+function plannedRouteIds(segment: JourneySummary['segments'][number]): string[] {
+  return [
+    ...segment.markers.filter((m) => m.kind === 'call').flatMap((m) => (m.choice ? m.choice.candidates.map((c) => c.nodeId) : [m.nodeId])),
+    ...segment.declaredOnly.map((d) => d.routeId).filter((id): id is string => !!id),
+  ];
+}
+
+/**
+ * One screen's coverage. A built screen reads every node it covers
+ * (`segmentNodeIds`). A **designed, not-built** screen has no code, so no test
+ * can reach it and it carries no verdict: the facts are the cases that reach
+ * the routes it will call, scoped `count.scope.route`, with the absence word
+ * *not built* and `notBuilt` set — never *passed* on a screen with no code
+ * (swarm round 2, 2026-10-06: *Tracking — paid* read *passed · 111 test cases*).
+ */
+export function segmentCoverage(index: GraphIndex, segment: JourneySummary['segments'][number], label: string): CoverageFacts {
+  if (!segmentNotBuilt(segment)) return coverageFor(index, segmentNodeIds(segment), { kind: 'segment', label });
+  const reach = coverageFor(index, plannedRouteIds(segment), { kind: 'segment', label }, 'count.scope.route');
+  const { observedBy: _by, observation: _obs, e2eVia: _via, ...rest } = reach;
+  return {
+    ...rest,
+    e2e: 'none',
+    verifiedEndToEnd: false,
+    chip: 'none',
+    evidenceWord: NOT_BUILT_WORD,
+    verdict: notBuiltVerdict(reach.verdict),
+    notBuilt: true,
+    note: `${label} is designed, not built: no test can reach a screen with no code.`,
+  };
+}
+
+const NOT_BUILT_WORD: EvidenceWord = { cls: 'none', key: 'journey.absent.notBuilt' };
+
+/** A verdict on a scope with no code: the absence word, no status — the runs stay, they are the cases' own. */
+function notBuiltVerdict(v: TestVerdict): TestVerdict {
+  const { status: _status, ...rest } = v;
+  return { ...rest, word: NOT_BUILT_WORD, notBuilt: true };
+}
+
+/** An action on a designed, not-built screen: the same rule as its screen — no word, no status, the observing run dropped. */
+function notBuiltMoment(m: MomentCoverage): MomentCoverage {
+  const { observedBy: _by, observation: _obs, ...rest } = m;
+  return { ...rest, chip: 'none', evidenceWord: NOT_BUILT_WORD, verdict: notBuiltVerdict(m.verdict) };
+}
+
+/**
  * One action's tests: every test reaching a step inside it, each once, with
  * the strongest class it carries there — the same refs the Sheet's *Verified
  * by* cell used to fold for itself in the viewer.
@@ -890,14 +1006,17 @@ export function cellCoverage(index: GraphIndex, j: Journey, summary: JourneySumm
   const sg = summary.segments[seg];
   if (!sg) return undefined;
   const label = sg.screen?.name ?? `step ${sg.index + 1} of ${summary.entry.name}`;
-  if (action == null) return { label, facts: coverageFor(index, segmentNodeIds(sg), { kind: 'segment', label }) };
+  if (action == null) return { label, facts: segmentCoverage(index, sg, label) };
   const mo = sg.moments[action];
   if (!mo) return undefined;
   const stepNode = new Map(j.steps.map((st) => [st.order, st.nodeId] as const));
   const ids: string[] = [];
   for (let o = mo.from; o <= mo.to; o++) { const id = stepNode.get(o); if (id) ids.push(id); }
   const here = `${label} · ${mo.label}`;
-  return { label: here, facts: coverageFor(index, ids, { kind: 'segment', label: here }, 'count.scope.action') };
+  const facts = coverageFor(index, ids, { kind: 'segment', label: here }, 'count.scope.action');
+  if (!segmentNotBuilt(sg)) return { label: here, facts };
+  const { observedBy: _by, observation: _obs, e2eVia: _via, ...rest } = facts;
+  return { label: here, facts: { ...rest, e2e: 'none', verifiedEndToEnd: false, chip: 'none', evidenceWord: NOT_BUILT_WORD, verdict: notBuiltVerdict(facts.verdict), notBuilt: true } };
 }
 
 /**
@@ -916,6 +1035,7 @@ export function viaRuns(refs: CoverageTestRef[]): Counted {
  * evidence differently from the chip above it.
  */
 export function caseWord(ref: CoverageTestRef): EvidenceWord {
+  // the fold's answer for the case alone; `caseWordOf` (stamped on every ref as `word`) is pinned equal to it
   return evidenceFacts([{ ...ref, inactive: false }], 'count.scope.node', 'caseWord()').evidenceWord;
 }
 
@@ -937,9 +1057,11 @@ export function journeyCoverage(index: GraphIndex, j: Journey, summary: JourneyS
   const stepNode = new Map(j.steps.map((st) => [st.order, st.nodeId] as const));
   return {
     journey: coverageFor(index, journeyIds, { kind: 'flow', label, flowId: j.entryId }),
-    segments: summary.segments.map((sg) =>
-      coverageFor(index, segmentNodeIds(sg), { kind: 'segment', label: sg.screen?.name ?? `step ${sg.index + 1} of ${label}` })),
-    moments: summary.segments.map((sg) => sg.moments.map((mo) => momentCoverage(index, stepNode, mo.from, mo.to))),
+    segments: summary.segments.map((sg) => segmentCoverage(index, sg, sg.screen?.name ?? `step ${sg.index + 1} of ${label}`)),
+    moments: summary.segments.map((sg) => sg.moments.map((mo) => {
+      const m = momentCoverage(index, stepNode, mo.from, mo.to);
+      return segmentNotBuilt(sg) ? notBuiltMoment(m) : m;
+    })),
   };
 }
 

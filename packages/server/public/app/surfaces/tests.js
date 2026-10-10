@@ -26,6 +26,7 @@
 
 import { S, expose, esc, currentLens, humanize, bizName } from '../store.js';
 import { t, def, evidenceWord } from '../strings.js';
+import { testChipHtml, scopeWordHtml } from '../lib/test-chip.js';
 import { sym } from '../sym.js';
 import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs } from '../lib/tooltip.js';
@@ -693,7 +694,9 @@ function evidenceCellHtml(row) {
   // of this word read one answer (visual swarm 2026-09-24). Nothing on this tab
   // changes: it is the other three that move to what this one already said.
   const word = evidenceWord(c).key;
-  let html = c.freshness && c.freshness.state !== 'none'
+  // one chip with the count, *over this journey*, the word and the skips (lib/test-chip.js, round 2026-10-10)
+  const tchip = testChipHtml(c, { api: '/api/tests', cls: 'tst-tchip' });
+  let html = tchip ? tchip : c.freshness && c.freshness.state !== 'none'
     ? '<span class="' + esc(EV_CLS[cls]) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev: evidenceWord(c), obs: c.observation || null, fresh: c.freshness } }) + '>'
       + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'none' ? sym('absent') : '') + esc(t(word)) + '</span>'
     : evChipHtml(cls, word);
@@ -701,7 +704,7 @@ function evidenceCellHtml(row) {
     html += '<span class="tst-lift">' + esc(t(tests.runLevel === 1 ? 'tests.runOnlyOne' : 'tests.runOnly').replace('{n}', String(tests.runLevel))) + '</span>';
   }
   if (chip && !(row.built || 0)) html += '<span class="tst-lift">' + esc(t('tests.row.noScreenBuilt')) + '</span>';
-  html += runsLineHtml(c);
+  html += runsLineHtml(c, !!tchip);
   return html;
 }
 
@@ -714,11 +717,12 @@ function evidenceCellHtml(row) {
  * 2026-10-05, finding 1).
  * @group Tests tab
  */
-function runsLineHtml(c) {
+function runsLineHtml(c, chipped) {
   const runs = c.verdict && c.verdict.runs;
   const o = c.observation;
   const bits = [];
-  if (runs && runs.n) bits.push('<span class="hud-label"' + tipOf('journey.tests.theirRuns') + '>' + esc(t('journey.tests.theirRuns')) + '</span> ' + countedHtml(runs, '/api/tests'));
+  // a chip above already printed the cases with their scope and their skips: the line keeps the run's date and freshness
+  if (runs && runs.n && !chipped) bits.push('<span class="hud-label"' + tipOf('journey.tests.theirRuns') + '>' + esc(t('journey.tests.theirRuns')) + '</span> ' + countedHtml(runs, '/api/tests'));
   if (o && o.at) bits.push('<span class="mono">' + esc(o.at.slice(0, 10)) + ' </span>' + dgHtml(o.freshness, o.changedBy));
   if (c.run && c.run.projects && c.run.projects.length && !biz()) bits.push('<span class="mono">' + esc(c.run.projects.join(' · ')) + '</span>');
   return bits.length ? '<span class="tst-lift tst-runs">' + bits.join(' · ') + '</span>' : '';
@@ -745,8 +749,9 @@ function scopedHtml() {
   const ew = cov ? evidenceWord(cov) : { cls: 'none', key: 'journey.absent.noneIndexed' };
   const head = '<h2 data-scope="' + esc(cov && cov.counted && cov.counted.tests ? cov.counted.tests.scope : '') + '">'
     + esc(t('tests.scoped.head').replace('{scope}', name)) + '</h2>';
-  const verdict = '<div class="tst-gap tst-scoped-verdict">' + evChipHtml(ew.cls, ew.key)
-    + (cov ? ' ' + runsLineHtml(cov) : '') + '</div>'
+  const tchip = cov ? testChipHtml(cov, { api: '/api/tests', cls: 'tst-tchip' }) : '';
+  const verdict = '<div class="tst-gap tst-scoped-verdict">' + (tchip || evChipHtml(ew.cls, ew.key))
+    + (cov ? ' ' + runsLineHtml(cov, !!tchip) : '') + '</div>'
     + '<p class="tst-gap">' + (flow ? '<a href="#/journeys/' + encodeURIComponent(flow) + '">' + esc(t('tests.scoped.journey')) + '</a> · ' : '') + back + '</p>';
   const CAP = 200;
   const list = cases.length
@@ -772,7 +777,7 @@ function scopedCaseHtml(c) {
 
 /** One journey row: what is built, what evidence exists, the metric with its scope, the counts, what is missing.
  * @group Tests tab */
-function matrixRowHtml(row, business) {
+function matrixRowHtml(row, business, e2eCol = true) {
   const c = row.coverage || {};
   const m = c.metric;
   const tests = (c.counts && c.counts.tests) || {};
@@ -791,18 +796,19 @@ function matrixRowHtml(row, business) {
     + '<td class="mono"><span' + plainTip(row.built || 0, 'journey.status.partly', 'journey.scopeAll', '/api/tests', null, 'tests.col.screens', { m: row.screens || 0 }) + '>'
     + esc(builtWord(row)) + '</span></td>'
     + '<td>' + evidenceCellHtml(row) + '</td>'
-    + '<td>' + evChipHtml(e2eCls, 'journey.flowE2e.' + (row.e2e || 'none')) + liftHtml(row) + '</td>'
+    + (e2eCol ? '<td>' + evChipHtml(e2eCls, 'journey.flowE2e.' + (row.e2e || 'none')) + liftHtml(row) + '</td>' : '')
     + '<td><span class="tst-den"><b' + (m && m.denominator != null ? plainTip(m.numerator, 'count.unit.reached', 'journey.scopeAll', '/api/tests', null, 'tests.col.reached', { m: m.denominator }) : '') + '>'
     + esc(metricText(m)) + '</b> ' + esc((m && m.scopeLabel) || '') + '</span>'
     + (boundNote(m) ? '<span class="tst-lift"' + tipOf('tests.metric.floor') + '>' + esc(boundNote(m)) + '</span>' : '') + '</td>'
     + (business ? '' : '<td class="num"><b' + plainTip(declared, 'tests.col.declared', 'journey.scopeAll', '/api/tests') + '>' + declared + '</b></td>'
       + '<td class="num"><b' + plainTip(reached, 'tests.col.reachedTests', 'journey.scopeAll', '/api/tests') + '>' + reached + '</b></td>'
       + '<td class="num">' + (obs || runs
-        ? (decl
-          ? '<span' + tipOf('tests.observedSplitDecl') + '>'
-            + esc(t('tests.observedSplitDecl').replace('{tests}', String(obs - decl)).replace('{decl}', String(decl)).replace('{runs}', String(runs))) + '</span>'
-          : '<span' + tipOf('tests.observedSplit') + '>'
-            + esc(t('tests.observedSplit').replace('{tests}', String(obs)).replace('{runs}', String(runs))) + '</span>')
+        // the observed split, each part only when it is not zero, and the scope it counts over on the chip:
+        // `0 tests · 29 passed, by their own declaration` read as a contradiction (swarm round 2, finding 1.5)
+        ? '<span data-tchip class="tchip" data-scope="journey.scopeAll"' + tipOf(decl ? 'tests.observedSplitDecl' : 'tests.observedSplit') + '>'
+          + [[obs - decl, 'tests.obsPart.cases'], [decl, 'tests.obsPart.declared'], [runs, 'tests.obsPart.runs']]
+            .filter((p) => p[0] > 0).map((p) => esc(t(p[1]).replace('{n}', String(p[0])))).join(' · ')
+          + '<span class="tc-sep"> · </span>' + scopeWordHtml('count.over.journey') + '</span>'
         : '<span class="dim">' + esc(t('journey.absent.noneIndexed')) + '</span>') + '</td>')
     + '<td><div class="tst-gap' + (row.e2e === 'none' || row.e2e === 'declared' ? ' bad' : '') + '">'
     + esc(business ? unCode(row.gap || '') : (row.gap || '')) + '</div></td></tr>';
@@ -812,9 +818,11 @@ function matrixRowHtml(row, business) {
  * @group Tests tab */
 function matrixHtml(d) {
   const business = currentLens() === 'business';
-  const cols = business
+  // under a unit or integration filter the e2e column would say *no e2e* of every row: it is the level's rows, not the e2e word
+  const e2eCol = LEVEL === 'all' || LEVEL === 'e2e';
+  const cols = (business
     ? ['journey', 'screens', 'evidence', 'e2e', 'reached', 'missing']
-    : ['journey', 'screens', 'evidence', 'e2e', 'reached', 'declared', 'reachedTests', 'observed', 'missing'];
+    : ['journey', 'screens', 'evidence', 'e2e', 'reached', 'declared', 'reachedTests', 'observed', 'missing']).filter((c) => e2eCol || c !== 'e2e');
   const flow = SCOPED && SCOPED_DATA && !SCOPED_DATA.error ? (SCOPED_DATA.flow || SCOPED.flow) : null;
   const all = d.journeys || [];
   const rows = flow && all.some((r) => r.flowId === flow) ? all.filter((r) => r.flowId === flow) : all;
@@ -830,8 +838,11 @@ function matrixHtml(d) {
     + (rows.length
       ? '<table class="tst-table"><thead><tr>' + cols.map((c) => '<th' + tipOf('tests.col.' + c) + '>'
         + esc(t('tests.col.' + c)) + '</th>').join('') + '</tr></thead><tbody>'
-        + rows.map((r) => matrixRowHtml(r, business)).join('') + '</tbody></table>'
+        + rows.map((r) => matrixRowHtml(r, business, e2eCol)).join('') + '</tbody></table>'
       : '<p class="set-note">' + esc(t('tests.noJourneys')) + '</p>')
+    // the level filter filters the rows: the journeys no case of that level reaches are left out, and counted
+    + (d.journeysLeftOut ? '<p class="tst-gap" data-left-out="' + d.journeysLeftOut + '"' + tipOf('tests.levelRows') + '>'
+      + esc(t('tests.levelRows').replace('{n}', String(d.journeysLeftOut)).replace('{level}', t('tests.level.' + LEVEL))) + '</p>' : '')
     + '<p class="tst-gap"><a href="/api/tests/matrix?scope=' + encodeURIComponent(scopeParam())
     + '&amp;format=csv"' + tipAttrs({ key: 'tests.exportCsv', noFocus: true }) + '>' + esc(t('tests.exportCsv')) + '</a></p>'
     + '</div>';

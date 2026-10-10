@@ -82,8 +82,36 @@ export const COUNT_SCOPES = [
   'count.scope.group',      // the journeys of one group under one persona (core journeys.ts)
   'count.scope.storyline',  // the journeys one storyline chains, each once (core journeys.ts)
   'count.scope.gate',       // one gate: the gate itself and the calls a request goes through to meet it (core gates.ts)
+  'count.scope.route',      // the routes a designed, not-built screen will call (core coverage.ts `notBuilt`): the screen has no code a test can reach
 ] as const;
 export type CountScope = typeof COUNT_SCOPES[number];
+
+/**
+ * The short words a test number prints **on its chip** for the scope it counts
+ * over (round 2026-10-10, proposal 4: *n cases · over this screen*). The scope
+ * key itself (`on this screen`) is the long form a tip or a sentence reads; these
+ * are what sits beside the number wherever two test numbers can meet, so
+ * `323 cases · over this screen` and `125 · over this action` never read as one
+ * claim. Keyed by `CountScope`; a scope with no chip word prints its scope key.
+ */
+export const SCOPE_WORDS: Partial<Record<CountScope, string>> = {
+  'journey.scopeAll': 'count.over.journey',
+  'journey.scopeHere': 'count.over.screen',
+  'count.scope.action': 'count.over.action',
+  'count.scope.node': 'count.over.part',
+  'count.scope.gate': 'count.over.gate',
+  'count.scope.route': 'count.over.route',
+  'count.scope.affected': 'count.over.affected',
+  'count.scope.source': 'count.over.source',
+  'count.scope.selection': 'count.over.selection',
+  'count.scope.workspace': 'count.over.workspace',
+};
+
+/** The catalog key a number's chip prints for its scope (`over this screen`) — `SCOPE_WORDS`, else the scope key itself. */
+export function scopeWord(c: Pick<Counted, 'scope'> | CountScope | string): string {
+  const scope = typeof c === 'string' ? c : c.scope;
+  return SCOPE_WORDS[scope as CountScope] ?? scope;
+}
 
 /** Build a `Counted`, leaving out what is absent so the JSON stays small. */
 export function counted(
