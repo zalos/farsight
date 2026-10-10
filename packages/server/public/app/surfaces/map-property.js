@@ -21,15 +21,15 @@ import { S, esc, currentLens, bizName, repoOf, humanize, commitWords } from '../
 import { t, plainWords, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, countedUnit, countedAttrs, defAttrs, plainTip, unCode, countWords as countPhrase } from '../lib/counted.js';
-import { mapEvidenceChip } from '../lib/map-chips.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { designThumbHtml, linkHtml } from '../lib/graph-render.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { workSourcesConfigured, flowWork, stateHtml, sourceName } from '../work-chips.js';
 import {
   jrnGateLabel, jrnGateText, jrnGatesShown, jrnAbsentHtml, jrnWords, jrnRefAnchors,
-  jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml, jrnContractHtml,
+  jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml, jrnContractHtml, jrnMoLabel,
 } from './journeys.js';
+import { testChipHtml } from '../lib/test-chip.js';
 import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml } from '../lib/detail-doors.js';
 import { journeyStepHash } from '../lib/route-url.js';
 import { gateAttrs } from '../lib/gate-card.js';
@@ -364,7 +364,8 @@ function gateList(rows, key) {
 
 function overviewHtml(pm, st) {
   const o = pm.tabs.overview;
-  const glance = o.glance.map((c) => countWords(c) + (c === pm.counts.tests ? mapEvidenceChip(o.evidence) : '')).filter(Boolean).join('')
+  // the tests count is one chip with its scope and word (lib/test-chip.js); the rest are plain counts
+  const glance = o.glance.map((c) => (c === pm.counts.tests && o.evidence ? testChipHtml(jrnFoldFacts(o.evidence), { cls: 'mp-tchip', zero: true }) || countWords(c) : countWords(c))).filter(Boolean).join('')
     + (pm.hero.planned ? '<span class="api-chip stub"' + defAttrs('design.status.designOnly') + '>' + esc(t('design.status.designOnly')) + '</span>' : '');
   const calls = o.calls.length ? capRows('ov-calls', o.calls.map((c) => callRow(c, true))) : (pm.tabs.apis.planned ? absentRow('notBuilt') : absentRow('noneIndexed'));
   COUNTED_GATES = pm.counts.gates;
@@ -469,17 +470,46 @@ function caseWords(name) {
   return (plainWords(said) || said).replace(/(^|[\s(])\/[\w.:{}\-/]*/g, '$1').replace(/\s{2,}/g, ' ').trim() || unCode(v);
 }
 function caseRow(x) {
-  const how = x.observedVia === 'declaration' && x.status === 'passed' ? 'map.prop.tests.byDeclaration'
-    : x.evidence === 'observed' ? 'map.prop.tests.byRun' : 'map.prop.tests.reached';
+  // the case's own word, by the scope's rule with the case alone (core `caseWord`, stamped on every ref): one of the
+  // evidence words, never a label of this tab's own (*named by a run* and *passed, declared here* are gone)
+  const w = x.word || { cls: x.evidence === 'static' ? 'reached' : x.evidence || 'declared', key: x.evidence === 'static' ? 'journey.evidence.reached' : 'journey.evidence.' + (x.evidence || 'declared') };
+  const implied = /declaredPassed/.test(w.key);
   const name = biz() ? caseWords(x.name) : String(x.name || '');
   const sub = biz() ? '' : [x.level ? t('tests.level.' + x.level) : '', x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).map(esc).join(' · ');
-  const status = x.status ? '<span class="st ' + esc(x.status) + '"' + defAttrs('tests.run.' + x.status) + '>' + esc(t('tests.run.' + x.status)) + '</span>' : '';
-  return row(esc(name), sub, '<span class="mp-ev ' + esc(how.split('.').pop()) + '"' + defAttrs(how) + '>' + esc(t(how)) + '</span>' + status, { kind: 'test', id: x.id });
+  // a declaration word already says the run passed; any other word has the case's own run beside it
+  const status = x.status && !implied ? '<span class="st ' + esc(x.status) + '"' + defAttrs('tests.run.' + x.status) + '>' + esc(t('tests.run.' + x.status)) + '</span>' : '';
+  return row(esc(name), sub, '<span class="mp-ev ' + esc(w.cls) + '"' + defAttrs(w.key) + '>' + esc(t(w.key)) + '</span>' + status, { kind: 'test', id: x.id });
+}
+
+/** `2 over its action list invoices · 2 over the gate scope billing:read · 0 over the page's own code`. */
+function testsScopeLineHtml(line) {
+  if (!line) return '';
+  const part = (key, n, name) => '<span class="mp-scope-part"' + defAttrs(key) + '>'
+    + esc(t(key)).replace('{n}', () => '<b>' + n + '</b>').replace('{name}', () => (name ? (biz() ? esc(name) : code(name)) : '')) + '</span>';
+  const bits = line.actions.slice(0, 3).map((a) => part('tests.scopeLine.action', a.n, jrnMoLabel(a.mo)))
+    .concat(line.gates.slice(0, 2).map((g) => part('tests.scopeLine.gate', g.n, jrnGateLabel(g.gate))));
+  if (line.page != null) bits.push(part('tests.scopeLine.page', line.page, ''));
+  return bits.length ? '<div class="line mp-scope-line">' + bits.join(' · ') + '</div>' : '';
+}
+
+/** `no test is known to reach: Discard draft (not built)` — the journey's screens the tests foot does not cover. */
+function noneKnownHtml(list) {
+  if (!list || !list.length) return '';
+  const names = list.map((x) => x.name + (x.notBuilt ? ' (' + t('journey.absent.notBuilt') + ')' : '')).join(', ');
+  return '<div class="line mp-none-known"' + defAttrs('tests.noneKnown') + '>' + sym('absent') + esc(t('tests.noneKnown').replace('{list}', names)) + '</div>';
 }
 
 function testsHtml(pm) {
   const cov = pm.tabs.tests.facts;
   const facts = jrnFoldFacts(cov);
+  const flow = (VIEW.ctx && VIEW.ctx.flow) || null;
+  const door = flow && pm.segIndex != null ? '<div class="line"><a class="dd-door lead" href="#/tests?flow=' + encodeURIComponent(flow) + '&amp;seg=' + pm.segIndex + '"'
+    + defAttrs('journey.tests.open') + '>' + esc(t('journey.tests.open')) + '</a></div>' : '';
+  if (facts && facts.notBuilt) {
+    // a screen with no code: no verdict, and the cases that reach the route it will call, with that scope
+    return '<section class="mp-sec"><h3 class="hud-label"' + defAttrs('map.prop.tests.head') + '>' + esc(t('map.prop.tests.head')) + '</h3><div class="jrn-tfoot mp-tfoot">'
+      + '<div class="line">' + testChipHtml(facts) + '</div>' + door + '</div></section>';
+  }
   if (!facts || (!facts.total && !facts.runLevel)) {
     return sec('map.prop.tests.head', '<div class="mp-row none">' + jrnAbsentHtml('noneIndexed', (facts && facts.note) || '') + '</div>')
       + sec('map.prop.tests.cases', absentRow('noneIndexed'));
@@ -490,13 +520,17 @@ function testsHtml(pm) {
   if (biz()) {
     const ev = evidenceWord(facts);
     const runKey = ev.biz || (facts.chip === 'observed-stale' ? 'journey.biz.testsRun.stale' : 'journey.biz.testsRun.none');
-    foot = '<div class="line">' + jrnEvChipHtml(facts) + '</div>' + jrnFootScopeHtml(facts)
-      + '<div class="line biz">' + esc(t('journey.biz.tests')).replace('{n}', () => num(k.tests, facts.total)).replace('{e2e}', () => num(k.e2e, facts.e2e)) + ' ' + esc(t(runKey)) + '</div>';
+    foot = '<div class="line">' + (testChipHtml(facts) || jrnEvChipHtml(facts)) + '</div>'
+      + testsScopeLineHtml(pm.tabs.tests.scopeLine) + noneKnownHtml(pm.tabs.tests.unreached) + door
+      + '<div class="line biz">' + esc(t(runKey)) + '</div>';
   } else {
     const obs = jrnObsText(facts);
-    foot = '<div class="line">' + jrnEvChipHtml(facts) + (obs ? '<span class="obs">' + esc(obs) + '</span>' : '') + '</div>' + jrnFootScopeHtml(facts)
+    // the headline chip: the cases *over this screen*, the one word, the skips; then the one sentence of scopes inside it
+    foot = '<div class="line">' + (testChipHtml(facts) || jrnEvChipHtml(facts)) + '</div>'
+      + testsScopeLineHtml(pm.tabs.tests.scopeLine) + noneKnownHtml(pm.tabs.tests.unreached) + door
+      + (obs ? '<div class="line"><span class="obs">' + esc(obs) + '</span></div>' : '')
       + '<div class="line"><span class="cnt">' + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
-        .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
+        .replace('{int}', () => num(k.integration, facts.integration)) + '</span></div>'
       + jrnRunLineHtml(facts);
   }
   const { cases, reports } = pm.tabs.tests;

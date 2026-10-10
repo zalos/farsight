@@ -33,6 +33,7 @@ import { filterTree, placesOf, storylineOf, findStoryline, firstScreenOf } from 
 import { lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from '../lib/freshness.js';
 import { exportToolHtml, registerExport } from '../lib/export.js';
+import { testChipHtml, distinctArgs } from '../lib/test-chip.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -3257,6 +3258,8 @@ export function jrnFoldFacts(cov) {
     // the cell's one verdict (core `testVerdict`): the word, its own run's status, every case by its run
     verdict: cov.verdict || null,
     chip: cov.chip || 'none', run: cov.run || null, note: cov.note, freshness: cov.freshness || null,
+    // a designed, not-built screen: no verdict, the cases that reach the route it will call (core `segmentCoverage`)
+    notBuilt: !!(cov.notBuilt || (cov.verdict && cov.verdict.notBuilt)),
   };
 }
 /** The same facts as the server already folded them for a whole scope — read, never recomputed.
@@ -3380,7 +3383,8 @@ export function jrnObsText(facts) {
 /** Who observed a run: the cases a results report named, and the coverage reports that name none.
  * @group Journey view */
 function jrnObsWho(o) {
-  return [o.cases ? jrnCountWord('journey.obs.cases', o.cases) : '', o.reports ? jrnCountWord('journey.obs.reports', o.reports) : ''].filter(Boolean).join(' · ');
+  // a declaration's cases are known to have passed; a case coverage placed is known to have run
+  return [o.cases ? jrnCountWord(o.by === 'declaration' ? 'journey.obs.passed' : 'journey.obs.cases', o.cases) : '', o.reports ? jrnCountWord('journey.obs.reports', o.reports) : ''].filter(Boolean).join(' · ');
 }
 /**
  * The evidence chip's tip: the word and what it means, then the run behind it
@@ -3456,11 +3460,17 @@ export function jrnTestsFootHtml(facts, opts) {
     return '<div class="jrn-tfoot"><div class="line">' + JRN_FOOT_NONE + esc(t('journey.noTestsSub')) + '">'
       + sym('absent') + esc(t('journey.noTests')) + '</span></div></div>';
   }
+  if (facts && facts.notBuilt) {
+    // no code, no verdict: what the cases do reach, with that scope — never *passed* on a screen with no code
+    return '<div class="jrn-tfoot"><div class="line">' + testChipHtml(facts) + '</div>' + jrnCasesDoorHtml(o.cases) + '</div>';
+  }
   if (!facts || (!facts.total && !facts.runLevel)) {
     return '<div class="jrn-tfoot"><div class="line">' + JRN_FOOT_NONE + esc((facts && facts.note) || def('journey.absent.notReached') || '') + '">'
       + sym('absent') + esc(t(o.absent || 'journey.noTestReaches')) + '</span></div>' + jrnFootWiderHtml(o.wider) + jrnImpactDoorHtml(o.impact) + '</div>';
   }
-  const chip = jrnEvChipHtml(facts);
+  // one chip: the count, the scope it counts over, the cell's one word, and the skips beside it (round 2026-10-10)
+  // — a table's accessors carry no typed count, so their foot keeps the plain evidence chip
+  const chip = testChipHtml(facts) || jrnEvChipHtml(facts);
   const k = facts.counted || {};
   // a number the core typed carries its own tip; one it did not (a table's
   // accessors) prints as the plain number it is
@@ -3469,13 +3479,12 @@ export function jrnTestsFootHtml(facts, opts) {
     const ev = evidenceWord(facts);
     const runKey = ev.biz || (facts.chip === 'observed-stale' ? 'journey.biz.testsRun.stale' : 'journey.biz.testsRun.none');
     return '<div class="jrn-tfoot"><div class="line">' + chip + '</div>'
-      + jrnFootScopeHtml(facts) + '<div class="line biz">' + esc(t('journey.biz.tests')).replace('{n}', () => num(k.tests, facts.total)).replace('{e2e}', () => num(k.e2e, facts.e2e))
-      + ' ' + esc(t(runKey)) + '</div>' + jrnCasesDoorHtml(o.cases) + jrnImpactDoorHtml(o.impact) + '</div>';
+      + '<div class="line biz">' + esc(t(runKey)) + '</div>' + jrnCasesDoorHtml(o.cases) + jrnImpactDoorHtml(o.impact) + '</div>';
   }
   const obs = jrnObsText(facts);
   return '<div class="jrn-tfoot">'
     + '<div class="line">' + chip + (obs ? '<span class="obs">' + esc(obs) + '</span>' : '') + '</div>'
-    + jrnFootScopeHtml(facts) + '<div class="line"><span class="cnt">'
+    + (chip.indexOf('data-tchip') >= 0 ? '' : jrnFootScopeHtml(facts)) + '<div class="line"><span class="cnt">'
     + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
       .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
     + jrnRunLineHtml(facts)
@@ -4493,8 +4502,11 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
     : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
   const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
   g('g-tests', [
-    jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }),
-    evHtml,
+    // one chip: the cases, *over this journey*, *distinct* beside per-screen counts (its tip is the per-screen
+    // table), the one word and the skips — the shared-evidence case keeps its sentence instead of the word
+    cov && cov.counted && cov.counted.tests && cov.counted.tests.n
+      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests' }) + (cov.sharedEvidence ? ' ' + evHtml : '')
+      : jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }) + evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
     // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)
     cov && !cov.sharedEvidence ? freshLineHtml(cov.freshness, 'jrn-fresh') : '',

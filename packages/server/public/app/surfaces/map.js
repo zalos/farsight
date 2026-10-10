@@ -2147,7 +2147,7 @@ function coverAggHtml(d, j) {
   const mark = (cls, key, glyph) => '<span class="map-mark ' + cls + '"' + tipAttrs({ key, noFocus: true }) + '>' + (glyph ? sym(glyph) : '') + esc(t(key)) + '</span>';
   // on a storyline's board the card says its test evidence with lane V's chip (the cell's one verdict, its word and its
   // tip); the word names a stale run itself, so the quiet *stale* mark is not said twice
-  const ev = MAP.nb.storyline && cov ? mapEvidenceChip(cov) : '';
+  const ev = MAP.nb.storyline && cov ? (cov.counted && cov.counted.tests ? mapTestsChips(cov.counted.tests, cov) : mapEvidenceChip(cov)) : '';
   // *stale*'s tip is the comparison itself: the run's commit and the code's (finding 2)
   const staleMark = () => (cov && cov.freshness && cov.freshness.state === 'stale'
     ? '<span class="map-mark stale"' + freshAttrs(cov.freshness, { noFocus: true }) + '>' + sym('sync') + esc(t('map.cover.mark.stale')) + '</span>'

@@ -1918,6 +1918,20 @@
        .tfoot — the tests foot pass B4 hangs under a screen card / inspector head.
      .tst-*  is this surface's own layout. Colours come from the theme tokens,
      so the light theme follows without a second block. */
+  /* lib/test-chip.js — a test number with its scope (round 2026-10-10): count · scope words · word · skips */
+  .tchip{display:inline-flex;flex-wrap:wrap;align-items:center;gap:0 2px;font-size:11px;line-height:1.5;color:var(--text)}
+  .tchip .tc-sep{color:var(--dim)}
+  .tchip .tc-scope{color:var(--muted);font-style:italic}
+  .tchip .tc-distinct{color:var(--muted);text-decoration:underline dotted;text-underline-offset:2px}
+  .tchip .tc-run.failed{color:var(--err,#E5706B)}
+  .tchip .tc-run.skipped,.tchip .tc-run.flaky{color:var(--amber)}
+  .tchip .tc-ev{margin:0 2px}
+  .tchip.nb{color:var(--amber)}
+  .tchip.nb .tc-nb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9px;display:inline-flex;align-items:center;gap:4px}
+  .tchip.map-chip{border:0;padding:0;background:none}
+  .mp-scope-line{font-size:11px;color:var(--muted)}
+  .mp-scope-line b{color:var(--text);font-weight:600}
+  .mp-none-known{font-size:11px;color:var(--amber)}
   .ev{display:inline-flex;align-items:center;gap:5px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9px;line-height:1;white-space:nowrap;padding:3px 8px;border:1px solid var(--line);border-radius:2px;color:var(--muted)}
   .ev .sym{width:11px;height:11px}
   .ev.declared,.ev.ev-declared{border-style:dashed;color:var(--dim)}
