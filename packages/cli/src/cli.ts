@@ -10,7 +10,7 @@ import {
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
-  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText,
+  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, stateOfPlay, stateOfPlayLines, historyFact,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
 } from '@farsight/core';
 import type {
@@ -149,6 +149,9 @@ usage:
                                                                scoped to a folder, the fields each gives and any it ignored, then
                                                                the conflicts between them and the notes (--json: per source
                                                                { files, conflicts, notes })
+  farsight state [--repo name] [--json] [--graph graph.json]    the state of play: what is built and walkable, what a test run validated,
+                                                               what is still open, and the commits read into history and ingested —
+                                                               the front door's three columns, each number with its re-check command
   farsight journeys [--repo name] [--persona p] [--group g] [--storyline s] [--json] [--graph graph.json]
                                                                the storylines (named chains of journeys, in order), then the journeys
                                                                by persona, then by group, in the order the manifests and
@@ -1542,6 +1545,30 @@ switch (command) {
       sub: positional[0], positional: positional.slice(1), workspace: process.cwd(), fail,
       flag: (n) => flag(n), has: (n) => rest.includes(`--${n}`),
     });
+    break;
+  }
+  case 'state': {
+    // the state of play (round 2026-10-10): the front door's three columns, the same core stateOfPlay()
+    // GET /api/state and MCP graph_overview print — every number with the command that prints it again
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
+    const repo = flag('repo');
+    const scope = repo ? new Set([repo]) : null;
+    const repos = [...new Set(nodes.map((n) => n.loc?.repo).filter((r): r is string => !!r && (!scope || scope.has(r))))];
+    let history = null;
+    if (repos.length && existsSync(dbPath())) {
+      try {
+        const db = new SnapshotDb(dbPath());
+        try { history = historyFact(repos.map((r) => db.commitSpine(r))); } finally { db.close(); }
+      } catch { history = null; }
+    }
+    const state = stateOfPlay(index, store.meta, { scope, history });
+    if (rest.includes('--json')) { console.log(JSON.stringify(state, null, 2)); break; }
+    console.log(stateOfPlayLines(state).join('\n'));
     break;
   }
   case 'journeys': {

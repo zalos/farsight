@@ -205,7 +205,7 @@ const noProblems = (c: any, where: string) => assert.deepEqual(countedProblems(c
 
 test('POST /api/sync: the code, its history with keys, the tracker and the join — each on its status line', () => {
   assert.match(syncBody.results.app, /^ok: /);
-  assert.match(syncBody.results.app, /history \d+ commits? indexed · \d+ new this sync/);
+  assert.match(syncBody.results.app, /\d+ commits? read into history · \d+ ingested by a sync · \d+ not yet · \d+ new this sync/);
   assert.match(syncBody.results[SRC], /^ok: 8 items .* links? to the graph/);
   assert.ok(syncBody.work.nodes >= 8);
   assert.ok(syncBody.work.edges >= 4);

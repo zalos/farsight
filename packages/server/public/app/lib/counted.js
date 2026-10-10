@@ -81,8 +81,8 @@ export function countedHtml(c, api, opts = {}) {
  * rich `defTip`, for a chip or a label a reader may not know (`verified · stale`,
  * `declared`, `floor`, an absence word, a kind badge). Replaces a `title`.
  */
-export function defAttrs(key, tipKey) {
-  return tipAttrs({ id: 'def', args: { key }, tipKey });
+export function defAttrs(key, tipKey, vars) {
+  return tipAttrs({ id: 'def', args: vars ? { key, vars } : { key }, tipKey });
 }
 
 // `unCode()` — a fold's sentence with the code said in words — lives in store.js

@@ -162,9 +162,19 @@ export function linksTip(links) {
 /** The route that opens the Grammar Book at one entry. */
 export function grammarHref(key) { return '#/grammar?key=' + encodeURIComponent(key); }
 
+/**
+ * A heading built at runtime from a catalog word: its placeholders filled from `vars`, and any that nothing
+ * fills dropped with the separator before them — a tip never prints a raw `{owner}` (finding 3.7).
+ */
+export function filledHeading(w, vars) {
+  let out = String(w || '');
+  for (const [k, v] of Object.entries(vars || {})) out = out.split('{' + k + '}').join(String(v));
+  return out.replace(/\s*[·:—-]?\s*\{\w+\}/g, '').trim();
+}
+
 /** A catalog word as a rich tip: heading, define, and the book's entry. */
-export function defTip(key) {
-  return '<div class="tip-h">' + esc(word(key)) + '</div>'
+export function defTip(key, vars) {
+  return '<div class="tip-h">' + esc(filledHeading(word(key), vars)) + '</div>'
     + (def(key) ? '<p class="tip-p">' + esc(def(key)) + '</p>' : '')
     + linksTip([{ label: 'tip.grammar', href: grammarHref(key) }]);
 }
@@ -278,7 +288,7 @@ export function registerTip(name, builder) { BUILDERS.set(name, builder); }
 registerTip('number', (el, args) => numberTip(args || {}));
 registerTip('table', (el, args) => tableTip(args || {}));
 registerTip('links', (el, args) => linksTip(args || []));
-registerTip('def', (el, args) => defTip((args && args.key) || el.dataset.tipDef || ''));
+registerTip('def', (el, args) => defTip((args && args.key) || el.dataset.tipDef || '', args && args.vars));
 
 /** What a trigger's tip holds: `{ rich, content }`, or null for none. */
 export function tipContentFor(el) {
@@ -504,6 +514,13 @@ function onPointerOut(e) {
     // a simple tip is not interactive: leaving its trigger closes it straight away
     if (!st.rich) hideTip(); else scheduleLeave();
   }
+}
+
+/** Open one trigger's tip pinned, as a click on a plain trigger would — for a control whose own click is spent (a greyed write control says why). */
+export function pinTip(el) {
+  if (!el) return;
+  cancelPending();
+  openFor(el, { pinned: true, via: 'click' });
 }
 
 function onClick(e) {

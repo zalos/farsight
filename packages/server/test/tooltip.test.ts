@@ -164,3 +164,16 @@ test('every tip.* word is in the catalog in both registers', () => {
   }
   for (const k of ['tip.counts', 'tip.scope', 'tip.source', 'tip.grammar', 'tip.marker']) assert.ok(STRINGS[k].define, k + ' is defined');
 });
+
+test('a heading built at runtime never prints an unfilled placeholder — every catalog key, as a definition tip', () => {
+  // the owner tip printed `owner · {owner}` (swarm round 2, finding 3.7): defTip heads with the catalog word,
+  // which carries placeholders the trigger fills — or, when it passes none, the heading drops them
+  const raw: string[] = [];
+  for (const key of Object.keys(STRINGS)) {
+    const head = /<div class="tip-h">([^<]*)<\/div>/.exec(defTip(key))?.[1] ?? '';
+    if (/\{\w+\}/.test(head)) raw.push(`${key}: ${head}`);
+  }
+  assert.deepEqual(raw, []);
+  assert.match(defTip('map.cover.owner', { owner: 'Billing team' }), /owner · Billing team/);
+  assert.match(defTip('map.cover.owner'), /<div class="tip-h">owner<\/div>/);
+});

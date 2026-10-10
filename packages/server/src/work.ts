@@ -14,7 +14,7 @@ import { randomUUID } from 'node:crypto';
 import {
   SnapshotDb, workToFragment, detectWorkKeysFallback, hunksOfPatch, nodesTouched, strongestLinks,
   itemsByState, itemSummaryOf, touchedCount, workFindings, filterWorkItems, flowNodeSet, counted, parseWorkNodeId,
-  COMMIT_KEY_VIAS,
+  COMMIT_KEY_VIAS, historyFact, historySentence,
 } from '@farsight/core';
 import type {
   GraphStore, GraphIndex, GraphNode, KeyDetectOptions, KeyDetector, DetectedKey, WorkLinkFact, WorkLinkVia, WorkItemFacts,
@@ -146,15 +146,34 @@ export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRea
     // branch reads nothing new, and `history 0 commits read` beside a Changes page of 282 commits read as
     // "history is not wired up" to four reviewers (swarm 2026-10-05). The total is the spine's own count —
     // the number the Changes page counts over — so the two surfaces say one fact.
-    const total = db.commitCount(src.name);
+    // The history half is one sentence with both facts (round 2026-10-10, finding 2.1) — *n commits read into
+    // history · k ingested by a sync · m not yet*, core `historySentence()`, the words Changes and the front door
+    // print. It is filled in by `fillHistorySlot()` once this sync's snapshot is written, so the commit this sync
+    // ingests is counted as ingested — the same count the Changes page reads afterwards.
     const added = log.commits.length;
-    const parts = [`history ${total} commit${total === 1 ? '' : 's'} indexed · ${added} new this sync${log.truncated ? ` (capped at ${log.max})` : ''}`];
+    const parts = [`${HISTORY_SLOT} · ${added} new this sync${log.truncated ? ` (capped at ${log.max})` : ''}`];
     if (forgot) parts.push(`${forgot} keyed commit${forgot === 1 ? '' : 's'} no longer in the history, forgotten`);
     if (resolved) parts.push(`${resolved} keyed commit${resolved === 1 ? '' : 's'} resolved to code`);
     return parts.join(' · ');
   } catch (err) {
     return `history not indexed: ${(err as Error).message.split('\n')[0]}`;
   }
+}
+
+/** Where `writeSpine()` leaves the history sentence until the sync's snapshot exists. */
+export const HISTORY_SLOT = '\u0000history';
+
+/**
+ * Put the history sentence into a status line `writeSpine()` wrote — read from the spine after this sync's
+ * snapshot is recorded. Without a store it says the history could not be read, never a number.
+ */
+export function fillHistorySlot(status: string, repo: string, db: SnapshotDb | undefined): string {
+  if (!status.includes(HISTORY_SLOT)) return status;
+  let said = 'history not indexed';
+  if (db) {
+    try { said = historySentence(historyFact([db.commitSpine(repo)])); } catch { /* the store could not answer: say so */ }
+  }
+  return status.split(HISTORY_SLOT).join(said);
 }
 
 /** The identity of the graph a commit's nodes were resolved against: the repo's source hash. */
