@@ -67,7 +67,7 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
  * @covers packages/server/public/app/surfaces/map.js::enterStage
  * @covers packages/server/public/app/surfaces/map.js::laneStops
  */
-test('a screen on the lanes enters its journey\'s street at that screen; zooming in on one does too; Esc comes back to the lanes', async ({ page }) => {
+test('a screen on the lanes enters its journey\'s street at that screen; zooming in on one by + does too; Esc comes back to the lanes', async ({ page }) => {
   await openLanes(page);
   // click: Invoice list (billing-cycle's second screen) — the street of Billing cycle, that screen framed
   await page.locator('.map-lanes .ln-stage[data-key="s:INV-01"]').click();
@@ -81,16 +81,12 @@ test('a screen on the lanes enters its journey\'s street at that screen; zooming
   // and Fit on the lanes fits the lanes
   await page.locator('[data-act="fit"]').click();
   await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
-  // zoom in on a screen by the keys: + goes stop to stop and enters the screen centred
-  const box = await page.locator('.map-lanes .ln-stage[data-key="s:INV-02"]').boundingBox();
-  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-  for (let i = 0; i < 16; i++) {
-    if (!(await page.locator('.map-world.lanes-on').count())) break;
-    await page.keyboard.down('Control');
-    await page.mouse.wheel(0, -300);
-    await page.keyboard.up('Control');
-    await page.waitForTimeout(650);
-  }
+  // zoom in by the keys: + goes to the stop where the screen nearest the middle is large enough to enter, framed and
+  // ringed; the next + enters it (the same rule as a zoom gesture that ends on an armed screen, without its timing)
+  await page.locator('.map-board').focus();
+  await page.keyboard.press('+');
+  await expect(page.locator('.map-lanes .ln-stage.near')).toHaveCount(1);
+  await page.keyboard.press('+');
   await expect(page.locator('.map-world')).not.toHaveClass(/lanes-on/, { timeout: 8000 });
   await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
 });

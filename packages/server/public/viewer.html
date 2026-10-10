@@ -2992,8 +2992,10 @@
      While the lanes are the board the districts, bands and links of the chain are not drawn. */
   .map-layout-pick{display:inline-flex;align-items:center;gap:6px;margin-right:8px}
   .map-layout-pick .hud-label{font-size:9px;white-space:nowrap}
-  .map-world.lanes-on > :not(.map-lanes){display:none !important}
-  .map-world:not(.lanes-on) > .map-lanes{display:none}
+  .map-world.lanes-on > :not(.map-lanes):not(.map-lanes-snap){display:none !important}
+  .map-world:not(.lanes-on) > .map-lanes,.map-world:not(.lanes-on) > .map-lanes-snap{display:none}
+  .map-lanes-snap{position:absolute;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none}
+  .map-lanes-snap .ln-snap{position:absolute}
   .map-lanes{position:absolute;left:0;top:0;transform-origin:0 0}
   .ln-top{position:absolute;display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden;font-size:11px;color:var(--muted)}
   .ln-top .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:18px;color:var(--ink)}

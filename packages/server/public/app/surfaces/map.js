@@ -275,10 +275,12 @@ export function mountMap(route, el) {
     max: () => Math.max(MAX_SCALE, enterScale() * 1.25, lanesShown() ? laneEnterScale() * 2 : 0),
     // zoom-to-enter arms only past the calls stop, on the journey the street is on (on the lanes, near a screen's own stop)
     armFrom: () => (lanesShown() ? laneEnterScale() * 0.85 : callsScale()),
-    snapTargets: () => (lanesShown() ? [...MAP.world.querySelectorAll('.map-lanes .ln-stage')]
+    // on the lanes the targets are unscaled stand-ins for the stage cards (the engine measures offsets, and the lanes
+    // layer is scaled by LANE_K), each leading to its card
+    snapTargets: () => (lanesShown() ? [...MAP.world.querySelectorAll('.map-lanes-snap .ln-snap')]
       : MAP.prop || !MAP.focus ? [] : [...MAP.world.querySelectorAll('.map-scr[data-flow="' + cssAttr(MAP.focus) + '"]')]),
-    onArm: onArm,
-    onSnap: (scr) => (scr.classList.contains('ln-stage') ? enterStage(scr) : openScreenEl(scr)),
+    onArm: (el) => onArm(lanesCard(el)),
+    onSnap: (scr) => (scr.classList.contains('ln-snap') ? enterStage(lanesCard(scr)) : openScreenEl(scr)),
     onGestureEnd: () => { MAP.autoFit = null; syncHashToBoard(); },
     // the rest of a pinch out that just left a screen does not keep zooming the street
     holdWheel: () => Date.now() < (MAP.holdWheelUntil || 0),
@@ -531,6 +533,8 @@ function drawLanes() {
   let el = MAP.world.querySelector('.map-lanes');
   if (!lanesWanted()) {
     if (el) el.remove();
+    const snap = MAP.world.querySelector('.map-lanes-snap');
+    if (snap) snap.remove();
     MAP.lanes = null;
     MAP.world.classList.remove('lanes-on');
     return;
@@ -560,6 +564,13 @@ function drawLanes() {
   if (Math.abs(real - extraH) > 8) { G = laneGeometry(model, { aspect, extraH: real }); paint(); bottom = el.querySelector('.ln-bottom'); }
   const need = bottom ? bottom.offsetTop + bottom.offsetHeight + G.geom.margin : G.size.h;
   if (need > G.size.h) { G.size.h = need; el.style.height = need + 'px'; }
+  // the snap targets: one unscaled box per stage card, in world units, for the canvas engine to measure
+  let snap = MAP.world.querySelector('.map-lanes-snap');
+  if (!snap) { snap = document.createElement('div'); snap.className = 'map-lanes-snap'; snap.setAttribute('aria-hidden', 'true'); MAP.world.appendChild(snap); }
+  snap.innerHTML = model.stages.map((st) => {
+    const r = G.rects.get(st.key);
+    return r ? '<div class="ln-snap" data-key="' + esc(st.key) + '" style="left:' + r.x * LANE_K + 'px;top:' + r.y * LANE_K + 'px;width:' + r.w * LANE_K + 'px;height:' + r.h * LANE_K + 'px"></div>' : '';
+  }).join('');
   const before = MAP.lanes;
   MAP.lanes = { model, G, size: { w: G.size.w * LANE_K, h: G.size.h * LANE_K } };
   MAP.world.classList.toggle('lanes-on', lanesShown());
@@ -616,8 +627,14 @@ function frameStage(anchor, s) {
   }
   if (best) MAP.cv.centerOn(best.x, best.y, s, true);
 }
+/** The stage card a lanes snap target stands in for (any other element is itself). */
+function lanesCard(el) {
+  if (!el || !el.classList || !el.classList.contains('ln-snap')) return el;
+  return MAP.world.querySelector('.map-lanes .ln-stage[data-key="' + cssAttr(el.dataset.key) + '"]') || null;
+}
 /** A stage card opened (a click, Enter, a zoom into it): that journey's street, at that screen. */
 function enterStage(el) {
+  if (!el) return;
   const flow = el.dataset.flow, index = +el.dataset.index;
   if (!flow || !MAP.geom.has(flow)) return;
   closeCard();
@@ -1513,7 +1530,7 @@ function drawRisk() {
 }
 /** The screen a zoom in would enter, ringed and named in the hint first, so the snap is never a surprise. */
 function onArm(el) {
-  MAP.world.querySelectorAll('.map-scr.near').forEach((n) => { if (n !== el) n.classList.remove('near'); });
+  MAP.world.querySelectorAll('.map-scr.near,.ln-stage.near').forEach((n) => { if (n !== el) n.classList.remove('near'); });
   if (el) el.classList.add('near');
   MAP.near = el;
   if (MAP.cv) drawHint(MAP.cv.state());
