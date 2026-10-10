@@ -917,6 +917,22 @@ board still counts). No word on a cover draws under **8 px** on screen (`FLOOR_P
 its smallest words): `coverScale` stops shrinking there, the card clips, the world wears `.floor`, and the hint says
 *n journeys · zoom in to read* (`map.floor.read`, the number with its tip). e2e: `e2e/tests/map-journey-links.pw.spec.ts`.
 
+#### Gates by tier — `jrnGateTiers` / `jrnGateTiersHtml` in `surfaces/journeys.js` (gates lane 2026-10-10)
+
+Every journey gate carries `tier` (business · policy · technical) and `class` from the core (`gate-class.ts`
+`gateTierOf`; `query.ts` puts them on each step's gates, the segment's and the business band's). The **business
+register** reads a gate list by tier — `jrnGateListHtml` hands it to `jrnGateTiersHtml`: *Who may* (identity and
+authorisation; sign-in checks worded the same fold to one row, times summed), *The record must be* (record state and
+completeness — the preconditions the parser read, `GraphNode.precondition`), *Policy*, and the technical checks
+folded in a `<details>` behind *+ n technical checks*; the screen-wide list adds a legend (*business n · policy n ·
+technical n — tier from the kind of check*). The Map property's Gates tab (`gatesByTierHtml`) and the drill (the
+technical ones counted on the lane) read the same split. Hybrid and code keep the one list with a `.gate-tier` chip
+per row. The header prints `counted.gatesBusiness` · `counted.gatesTechnical` in place of `gates`, which sits in
+their tips. A precondition's words (`jrnGateInWords` → `precondition.words`) and a role a guard was handed
+(`g.requires` → *approver role*, `jrnRoleWords`) are the words every list and the card print. The card adds a
+**Tier** section (`tierLine` in the model, from `/api/gate`'s `gate.{tier, class, tierFrom, precondition}`) and, for a
+precondition, its sentence, *Otherwise: 409 conflict* and how it refuses.
+
 #### The gate card — `lib/gate-card.js`, `lib/gate-card-model.js` (swarm-fixes 2026-10-05, finding 4)
 
 A gate answers its click. Clicking a gate anywhere — a row of the journey's gate lists (timeline *Gates & rules*
@@ -1177,4 +1193,19 @@ from the start), so when the address is pinned to a sync the server is not drawi
 says *pinned to sync N · this server shows sync M* (`drawPinNote`, kept beside the chip by a MutationObserver on
 `#syncchipwrap` and a `hashchange` listener; `pinMismatch`). A graph without a sync number has no pinned link; the menu
 says so.
+
+## Release readiness brief — `surfaces/readiness.js`, `lib/readiness-door.js` (round 2026-10-10, proposal 6)
+
+`#/readiness/<storyline>[?repo=<source>]` (a surface reached by doors, not a tab): `GET /api/readiness` drawn as a
+document sheet — the brand line, the title, the provenance line (the export footer's own facts), a sign-off line,
+the summary strip (`counted.steps · ship · hold · skipped · unreached`), one table row per step and branch (built ·
+its own verdict word in this lens's words and the day of its newest run · skipped / never run · gates no test is known
+to reach of the journey's gates · commits since the last green run · SHIP / HOLD with the reasons), then the rules
+register (gate · in plain words · screens · tests · owner, *not declared* in warn italics). The page sets
+`data-theme="light"` on mount and gives the reader's theme back on unmount (`body.rd-on` while it shows). Print:
+`@page A4`, the chrome and `[data-export-skip]` hidden, a white ground, the steps on the first page and the register
+after a page break. Save (`registerExport('readiness', …, { csv })`) writes a light PDF on **one A4 page**
+(`export-model.js pdfA4` places the picture inside 28 pt margins; `pdfFromJpeg` takes `place`) and a CSV with one
+line per row. The doors are `readinessDoorHtml(id, cls, repo)`: one call site in `map.js bandHeadHtml` (the storyline
+band head) and one in `journeys.js` (the storyline card's ways in). e2e: `e2e/tests/readiness.pw.spec.ts`.
 

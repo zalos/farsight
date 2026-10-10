@@ -1,3 +1,4 @@
+import { readinessOf } from './readiness.js';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -30,6 +31,7 @@ import { ingestRepo, ingestSpec, parseSpecText, readSpecSource, specToYaml, isSp
  * (REST control plane + POST /lens/query + WS diffs).
  */
 
+export { readinessOf } from './readiness.js';
 export { writeSpine, resolveCommitNodes, syncWork, joinWork, workSourcesOf, keyOptionsOf, keyDetector, SYNC_MAX_COMMITS } from './work.js';
 export type { WorkSettingsSource, WorkSyncOutcome, UnmatchedKey } from './work.js';
 
@@ -914,6 +916,20 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const scopeParam = u.searchParams.get('scope');
       const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', tree: journeyTree(g.index, g.meta.journeys, scope) }));
+    }
+    // ── the release readiness brief for one storyline (round 2026-10-10, proposal 6) ──
+    if (url.startsWith('/api/readiness') && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const id = (u.searchParams.get('storyline') ?? '').trim();
+      if (!id) return send(400, JSON.stringify({ error: 'missing ?storyline=<id>' }));
+      const g = loadJourneyGraph(graphPath);
+      const repo = u.searchParams.get('repo') || undefined;
+      // one source's tree when the address names it: two sources may declare a storyline of one id
+      const tree = journeyTree(g.index, g.meta.journeys, repo ? new Set([repo]) : null);
+      const { brief, spine } = readinessOf(g.index, tree, id, ws, repo);
+      if (!brief) return send(404, JSON.stringify({ error: `no storyline ${id}`, known: tree.storylines.map((s) => ({ id: s.id, name: s.name, repo: s.repo })) }));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, commit: g.meta.commit ?? null, spine, readiness: brief }));
     }
     if (url.startsWith('/api/journey') && req.method === 'GET') {
       // linearized execution walk from one entry node, enriched with on-disk code

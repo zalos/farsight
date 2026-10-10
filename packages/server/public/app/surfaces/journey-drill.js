@@ -191,7 +191,10 @@ function jrnDrillBeats(col, layers) {
   const business = currentLens() === 'business';
   const tab = jrnBizTab();
   const gs = jrnGatesShown((sg.gates || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to));
-  const gates = tab === 'decisions' ? [] : gs.drawn;
+  // the business register draws who may, the records and policy; the technical checks fold to one line
+  // on the lane (gates lane 2026-10-10)
+  const gates = tab === 'decisions' ? [] : business ? gs.drawn.filter((g) => g.tier !== 'technical') : gs.drawn;
+  const technical = tab === 'decisions' || !business ? 0 : gs.rows.filter((g) => g.tier === 'technical').length;
   const all = jrnSegDecisions(sg).filter((d) => d.order >= mo.from && d.order <= mo.to);
   const shown = business ? all.filter((d) => d.cls !== 'guard') : all;
   const decs = tab === 'gates' ? [] : shown;
@@ -234,7 +237,7 @@ function jrnDrillBeats(col, layers) {
     wires.push({ a: boxId(beats[bi]), b: 'jrn-bx-' + m.stepOrder, cls: m.kind === 'record' ? 'violet' : m.kind === 'message' ? 'q' : 'grey' });
   });
   gates.forEach((g, k) => { const bi = colOfStep(g.stepOrder); if (bi != null && beats[bi] && beats[bi].kind !== 'data') wires.push({ a: boxId(beats[bi]), b: 'jrn-bg-' + bi + '-' + k, cls: 'gate' }); });
-  return { beats, colOf, cells, wires, untranslated, notInWords, call, txCols, untrList: jrnActionUntrList(sg, mo) };
+  return { beats, colOf, cells, wires, untranslated, notInWords, technical, call, txCols, untrList: jrnActionUntrList(sg, mo) };
 }
 
 /** The words for a side of the transaction boundary, in the register the lens asks for.
@@ -520,6 +523,7 @@ function jrnDrillLanesHtml(cols, layers, model, col) {
     const ctl = layer.kind === 'gates'
       ? jrnBizTabsHtml(S.JOURNEY.summary)
         + (model.notInWords ? '<span class="jrn-gl-mute">' + sym('warning') + esc(t('journey.biz.notInWords').replace('{n}', model.notInWords)) + '</span>' : '')
+        + (model.technical ? '<span class="jrn-gl-tech-n"' + tipAttrs({ key: 'gate.group.technical' }) + '>' + esc(model.technical === 1 ? t('gate.group.technicalOne') : t('gate.group.technical').replace('{n}', model.technical)) + '</span>' : '')
       : '';
     // a lane this action leaves empty says so in the core's word for the cell — the
     // word the rows, the sheet and the storyboard print for the same (action, layer)

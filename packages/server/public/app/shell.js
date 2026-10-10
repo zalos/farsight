@@ -20,6 +20,7 @@ import { mountTests, testsRefresh } from './surfaces/tests.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
 import { mountMap, mapRefresh, mapUpdate, unmountMap, mapEnabled, mapOpen, mapTravel } from './surfaces/map.js';
 import { renderConfigFiles } from './surfaces/settings-config.js';
+import { mountReadiness, unmountReadiness, readinessRefresh } from './surfaces/readiness.js';
 import { closeShare } from './share.js';
 import { initKeymap } from './keymap.js';
 import { impactFromRoute } from './impact.js';
@@ -63,6 +64,8 @@ const SURFACES = {
   // opened, the back button) — the board keeps its place instead of re-mounting
   map: { mount: mountMap, unmount: unmountMap, refresh: mapRefresh, update: mapUpdate },
   stewardship: { mount: mountStewardship },
+  // the release readiness brief of one storyline (#/readiness/<id>): reached by its doors, not a tab
+  readiness: { mount: mountReadiness, unmount: unmountReadiness, refresh: readinessRefresh },
   grammar: { mount: mountGrammar, refresh: refreshGrammar },
   // Settings is an address (`#/settings`, round 2026-10-10 finding 3.2) and keeps the top bar (3.3): the page
   // mounts into the surface frame under the chrome instead of covering the window

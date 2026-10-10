@@ -1,0 +1,841 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farsight.dev/schemas/farsight-affected-v1.schema.json",
+  "title": "farsight-affected v1",
+  "description": "A commit range or a pull request placed on the journeys: what changed, the journeys and storyline steps it reaches, the gates, record writes and calls on the changed path, and the deduplicated test cases with each one's own last run. Frozen and additive-only (docs/contracts/farsight-affected-v1.md).",
+  "type": "object",
+  "required": [
+    "schema",
+    "identity",
+    "range",
+    "commits",
+    "files",
+    "changed",
+    "journeys",
+    "gates",
+    "writes",
+    "contracts",
+    "tests",
+    "run_level",
+    "verdict",
+    "select",
+    "counted",
+    "bound",
+    "notes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "farsight-affected v1"
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "range": {
+      "type": "object",
+      "required": [
+        "kind",
+        "repo",
+        "from",
+        "to",
+        "pr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "commits",
+            "pr"
+          ]
+        },
+        "repo": {
+          "type": "string",
+          "description": "The graph source the change belongs to."
+        },
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pr": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "number",
+                "title",
+                "url",
+                "base",
+                "head",
+                "host"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "title": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "base": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "head": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "host": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "commits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "sha",
+          "subject",
+          "at",
+          "author"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sha": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "source",
+          "status",
+          "parts",
+          "granularity"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "The graph source the file belongs to (the range's, or a source nested in the same repository)."
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "granularity": {
+            "$ref": "#/$defs/granularity"
+          }
+        }
+      }
+    },
+    "changed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "file",
+          "line"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "journeys": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "hop",
+          "by",
+          "storylines",
+          "screens"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "hop": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "by": {
+            "type": "string"
+          },
+          "storylines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "step",
+                "of",
+                "branch_of",
+                "when"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "of": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "branch_of": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "when": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "screens": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "segment",
+                "hop"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "segment": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "hop": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "tier",
+          "changed",
+          "journeys"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/gateKind"
+          },
+          "tier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "journeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "writes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "store",
+          "writer",
+          "writer_name",
+          "moves",
+          "journeys"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "store": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "writer": {
+            "type": "string"
+          },
+          "writer_name": {
+            "type": "string"
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "from",
+                "to"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "from": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "to": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "journeys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "method",
+          "path",
+          "contract",
+          "changed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "method": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contract": {
+            "$ref": "#/$defs/contract"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/test"
+      }
+    },
+    "run_level": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "verdict": {
+      "type": "object",
+      "required": [
+        "class",
+        "word",
+        "passed",
+        "failed",
+        "skipped",
+        "flaky",
+        "no_run",
+        "last_run",
+        "commits_since"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "$ref": "#/$defs/verdictClass"
+        },
+        "word": {
+          "type": "string",
+          "description": "The catalog key of the evidence word (testVerdict)."
+        },
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "flaky": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "no_run": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_run": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commits_since": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "select": {
+      "type": "object",
+      "description": "runner → the cases a CI job can name and run.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "file",
+            "title",
+            "project"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "project": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "counted": {
+      "type": "object",
+      "required": [
+        "commits",
+        "files",
+        "changed",
+        "journeys",
+        "screens",
+        "gates",
+        "writes",
+        "contracts",
+        "tests"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "commits": {
+          "$ref": "#/$defs/counted"
+        },
+        "files": {
+          "$ref": "#/$defs/counted"
+        },
+        "changed": {
+          "$ref": "#/$defs/counted"
+        },
+        "journeys": {
+          "$ref": "#/$defs/counted"
+        },
+        "screens": {
+          "$ref": "#/$defs/counted"
+        },
+        "gates": {
+          "$ref": "#/$defs/counted"
+        },
+        "writes": {
+          "$ref": "#/$defs/counted"
+        },
+        "contracts": {
+          "$ref": "#/$defs/counted"
+        },
+        "tests": {
+          "$ref": "#/$defs/counted"
+        }
+      }
+    },
+    "bound": {
+      "enum": [
+        "exact",
+        "floor"
+      ]
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "description": "The `farsight-tests-matrix v1` identity block, verbatim: what the document was computed from.",
+      "required": [
+        "source_digest",
+        "farsight",
+        "generated_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sync": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Snapshot ordinal of the graph, when a snapshot store recorded one."
+        },
+        "source_commit": {
+          "type": "string",
+          "description": "Workspace commit at snapshot time, when known."
+        },
+        "source_digest": {
+          "type": "object",
+          "description": "repo name → content digest of that repo's checkout. Empty when the graph records none."
+        },
+        "farsight": {
+          "type": "string",
+          "description": "The build that produced the document (`buildLine()`)."
+        },
+        "generated_at": {
+          "type": "string",
+          "description": "ISO timestamp. The only field that changes between two runs over the same graph."
+        }
+      }
+    },
+    "granularity": {
+      "enum": [
+        "lines",
+        "file",
+        "none"
+      ]
+    },
+    "gateKind": {
+      "enum": [
+        "guard",
+        "rule"
+      ]
+    },
+    "contract": {
+      "enum": [
+        "both",
+        "spec-only",
+        "code-only",
+        "declared",
+        null
+      ]
+    },
+    "runStatus": {
+      "enum": [
+        "passed",
+        "failed",
+        "skipped",
+        "flaky",
+        "unknown",
+        null
+      ]
+    },
+    "evidenceClass": {
+      "enum": [
+        "declared",
+        "reached",
+        "observed"
+      ]
+    },
+    "verdictClass": {
+      "enum": [
+        "none",
+        "declared",
+        "reached",
+        "observed",
+        "stale"
+      ]
+    },
+    "level": {
+      "enum": [
+        "unit",
+        "integration",
+        "e2e"
+      ]
+    },
+    "runner": {
+      "enum": [
+        "vitest",
+        "jest",
+        "node:test",
+        "playwright",
+        "cypress",
+        "junit",
+        "other"
+      ]
+    },
+    "test": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "file",
+        "line",
+        "level",
+        "runner",
+        "project",
+        "evidence_class",
+        "status",
+        "at",
+        "hop",
+        "inactive"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "runner": {
+          "$ref": "#/$defs/runner"
+        },
+        "project": {
+          "type": "string"
+        },
+        "evidence_class": {
+          "$ref": "#/$defs/evidenceClass"
+        },
+        "status": {
+          "$ref": "#/$defs/runStatus"
+        },
+        "at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hop": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inactive": {
+          "type": "boolean"
+        }
+      }
+    },
+    "counted": {
+      "type": "object",
+      "required": [
+        "n",
+        "unit",
+        "scope",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "of": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unit": {
+          "type": "string"
+        },
+        "bizUnit": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "breakdown": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "n"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "n": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

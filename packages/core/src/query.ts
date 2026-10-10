@@ -1,6 +1,8 @@
 import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind } from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
 import { isConfigCheck } from './config-check.js';
+import { withJourneyPreconditions, type ActionPreconditions } from './gates.js';
+import { gateTierOf, isActionGate, type GateClass, type GateTier, type TierFrom } from './gate-class.js';
 import { withJourneyCounted, type JourneyCounted, type SegmentCounted, type SegmentAbsence, type AbsenceKind, type AbsenceWord } from './journey-counted.js';
 
 /**
@@ -176,6 +178,33 @@ export interface UntranslatedCondition {
   requires: string;
 }
 
+/**
+ * One gate on a step, with who it matters to (gates lane 2026-10-10, core gate-class.ts): `tier` and
+ * `class` on every gate; `requires` = the roles or scopes a guard was handed at this call site
+ * (`requireOpsRole(p, ROLES.approve)` → `ops.approver`); `words` = a precondition's sentence.
+ */
+export interface JourneyGate {
+  id: string;
+  kind: 'guard' | 'rule';
+  name: string;
+  planned?: true;
+  config?: true;
+  tier?: GateTier;
+  class?: GateClass;
+  tierFrom?: TierFrom;
+  requires?: string;
+  words?: string;
+}
+/** The tier facts a gate list entry carries, copied from the step's gate. */
+export type GateTierFacts = Pick<JourneyGate, 'tier' | 'class' | 'tierFrom' | 'requires' | 'words'>;
+export function tierFactsOf(g: GateTierFacts | undefined): GateTierFacts {
+  if (!g) return {};
+  return {
+    ...(g.tier ? { tier: g.tier } : {}), ...(g.class ? { class: g.class } : {}), ...(g.tierFrom ? { tierFrom: g.tierFrom } : {}),
+    ...(g.requires ? { requires: g.requires } : {}), ...(g.words ? { words: g.words } : {}),
+  };
+}
+
 /** A fork in a caller that gates one hop of a journey. */
 export interface PathCondition {
   nodeId: string;
@@ -219,7 +248,7 @@ export interface JourneyStep {
    * guards/validates on this node; `planned` = the spec's security requirement on a declared route, not an enforced gate;
    * `config` = a config check (core gates.ts `isConfigCheck`): it checks how the app was started, not this request
    */
-  gates: { id: string; kind: 'guard' | 'rule'; name: string; planned?: true; config?: true }[];
+  gates: JourneyGate[];
   repeat: boolean;          // node already appeared earlier in this journey
   cycle: boolean;           // back-reference; traversal did not recurse
   conditions?: PathCondition[]; // forks enclosing THIS hop's call site (this hop only)
@@ -394,9 +423,18 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       // person: it is still a rule of the code (`rulesFor` and list_rules keep it) but it
       // is not a checkpoint on anyone's journey (01 §2.3.6 a)
       if (src.kind === 'rule' && (src.tags?.includes('env-schema') || src.tags?.includes('plumbing'))) continue;
+      // a @guard that moves a record's status is the action itself — a step of the walk, never a gate
+      // on itself; the preconditions it enforces arrive as its own gates (gates lane 2026-10-10)
+      if (isActionGate(src)) continue;
       if ((src.kind === 'guard' || src.kind === 'rule') && !gates.some((g) => g.id === src.id)) {
         // a guard that checks the process (its settings), not the request: kept, and said so (gates.ts)
-        gates.push({ id: src.id, kind: src.kind, name: src.name, ...(isConfigCheck(src) ? { config: true as const } : {}) });
+        const t = gateTierOf(src);
+        const requires = typeof e.meta?.requires === 'string' ? e.meta.requires : undefined;
+        gates.push({
+          id: src.id, kind: src.kind, name: src.name, ...(isConfigCheck(src) ? { config: true as const } : {}),
+          tier: t.tier, class: t.class, tierFrom: t.tierFrom,
+          ...(requires ? { requires } : {}), ...(src.precondition ? { words: src.precondition.words } : {}),
+        });
       }
     }
     // a declared route's security requirement is a planned gate: the spec commits to it, no code enforces it yet.
@@ -405,7 +443,7 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
     if (node && isDeclaredOnly(node)) {
       for (const sec of node.contract?.security ?? []) {
         if (gates.some((g) => g.name === sec)) continue;
-        gates.push({ id: `${id}#security:${sec}`, kind: 'guard', name: sec, planned: true });
+        gates.push({ id: `${id}#security:${sec}`, kind: 'guard', name: sec, planned: true, tier: 'business', class: 'authorisation', tierFrom: 'class' });
       }
     }
     return gates;
@@ -435,7 +473,11 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
   const conditionsAt = (parent: GraphNode, cs: { path: string; line: number }): PathCondition[] | undefined => {
     if (!parent.branches?.length || parent.loc?.path !== cs.path) return undefined;
     const out: PathCondition[] = [];
+    const preSites = preconditionSites(index);
     for (const bp of parent.branches) {
+      // a refusing comparison the parser made a precondition is a gate now (preconditions.ts): it is
+      // drawn and counted as one, not as a condition nobody put in words
+      if (preSites.has(`${cs.path}:${bp.line}`)) continue;
       const category = categorizeBranch(bp);
       for (const arm of bp.arms) {
         if (cs.line < arm.line || cs.line > arm.endLine) continue;
@@ -634,6 +676,17 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
   for (const id of visited) forkCount += index.byId.get(id)?.branches?.length ?? 0;
 
   return { entryId, steps, edges: flowEdges, truncated, forkCount, plannedCount, cutPoints };
+}
+
+/** `path:line` of every precondition rule in the graph, folded once per index (a lookup per fork after that). */
+const PRE_SITES = new WeakMap<GraphIndex, Set<string>>();
+export function preconditionSites(index: GraphIndex): Set<string> {
+  let s = PRE_SITES.get(index);
+  if (s) return s;
+  s = new Set<string>();
+  for (const n of index.byId.values()) if (n.precondition) s.add(`${n.precondition.path}:${n.precondition.line}`);
+  PRE_SITES.set(index, s);
+  return s;
 }
 
 /** Rough meaning of a fork, for grouping/summaries. Shared by server + MCP so the viewer stays heuristic-free. */
@@ -1069,6 +1122,12 @@ export interface JourneyMoment {
   /** deferred work registered inside this action — the Afterwards row (R2) */
   afterwards: { stepOrder: number; nodeId: string; name: string; title?: string; hostStep: number }[];
   counts: { markers: number; calls: number; planned: number; records: number; messages: number; helpers: number };
+  /**
+   * what this action needs before it goes through (core gates.ts `withJourneyPreconditions`): the gates
+   * its steps meet with tier, class, words and the gate card's verdict, and the record moves it makes,
+   * each saying whether the code checks the status it moves from. Absent when it meets none and moves none.
+   */
+  preconditions?: ActionPreconditions;
 }
 
 /**
@@ -1085,7 +1144,7 @@ export interface JourneySegment {
   /** the segment's sub-columns: one per client-side action, in execution order */
   moments: JourneyMoment[];
   /** deduped by name within the segment; count = how many steps met it. Config checks are not here: see `configChecks` */
-  gates: { id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number }[];
+  gates: ({ id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number } & GateTierFacts)[];
   /**
    * the config checks the walk met on this screen (core gates.ts `isConfigCheck`): guards that check how the app
    * was started — its settings — on the way to a request, never the request itself. Listed apart and counted apart
@@ -1139,8 +1198,8 @@ export interface JourneySummary {
   business: {
     description?: string;
     docs: NonNullable<GraphNode['links']>;
-    gates: { id: string; name: string; planned?: true; appliesTo: string }[];
-    rules: { id: string; name: string; appliesTo: string }[];
+    gates: ({ id: string; name: string; planned?: true; appliesTo: string } & GateTierFacts)[];
+    rules: ({ id: string; name: string; appliesTo: string } & GateTierFacts)[];
     /** the config checks the walk met, each once — not gates (`segments[].configChecks`) */
     configChecks: { id: string; name: string; appliesTo: string }[];
     /** translated decisions only: class business | guard, in walk order, deduped by fork + arm */
@@ -1402,7 +1461,7 @@ export function humanizeName(name: string): string {
  * (screensFor); everything else is derived from the steps.
  */
 export function journeySummary(index: GraphIndex, j: Journey, screens: GraphNode[]): JourneySummary {
-  return withJourneyCoverage(index, j, withJourneyCounted(j, buildJourneySummary(index, j, screens)));
+  return withJourneyPreconditions(index, j, withJourneyCoverage(index, j, withJourneyCounted(j, buildJourneySummary(index, j, screens))));
 }
 
 function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]): JourneySummary {
@@ -1521,8 +1580,8 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     }
     for (const g of s.gates) {
       if (g.config) configChecks.set(g.id, { id: g.id, name: g.name, appliesTo: n.id });
-      else if (g.kind === 'guard') gates.set(g.id, { id: g.id, name: g.name, ...(g.planned ? { planned: true as const } : {}), appliesTo: n.id });
-      else rules.set(g.id, { id: g.id, name: g.name, appliesTo: n.id });
+      else if (g.kind === 'guard') gates.set(g.id, { id: g.id, name: g.name, ...(g.planned ? { planned: true as const } : {}), appliesTo: n.id, ...tierFactsOf(g) });
+      else rules.set(g.id, { id: g.id, name: g.name, appliesTo: n.id, ...tierFactsOf(g) });
       timeline.push({ order: s.order, depth: s.depth, kind: 'gate', nodeId: g.id, name: g.name, via: s.via, stepOrder: s.order, ...(g.planned ? { planned: true as const } : {}) });
     }
     let kind: TimelineItem['kind'] = 'step';
@@ -1593,8 +1652,13 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       }
       const kind: 'guard' | 'rule' = g?.kind === 'rule' ? 'rule' : 'guard';
       const have = seg.gates.find((x) => x.name === row.name && x.kind === kind);
-      if (have) have.count++;
-      else seg.gates.push({ id: row.nodeId, kind, name: row.name, ...(row.planned ? { planned: true as const } : {}), count: 1, stepOrder: row.stepOrder });
+      if (have) {
+        have.count++;
+        // one guard handed different roles on this screen: both roles are what it requires here
+        if (g?.requires && have.requires && !have.requires.split(', ').includes(g.requires)) have.requires = [...new Set([...have.requires.split(', '), ...g.requires.split(', ')])].join(', ');
+        else if (g?.requires && !have.requires) have.requires = g.requires;
+      }
+      else seg.gates.push({ id: row.nodeId, kind, name: row.name, ...(row.planned ? { planned: true as const } : {}), count: 1, stepOrder: row.stepOrder, ...tierFactsOf(g) });
       continue;
     }
     if (row.kind === 'decision') {

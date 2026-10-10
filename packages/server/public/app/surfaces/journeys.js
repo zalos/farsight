@@ -15,6 +15,7 @@
 // (node.branches, step.conditions, top-level forkCount) is all optional.
 // Everything from the server is untrusted display data → esc().
 
+import { readinessDoorHtml } from '../lib/readiness-door.js';
 import { S, expose, esc, jsArg, repoOf, bizLabel, humanize, inScope, effectiveGroup, currentLens, cssId } from '../store.js';
 import { t, def, evidenceWord, plainWords, proseHtml, unTick } from '../strings.js';
 import { sym } from '../sym.js';
@@ -222,6 +223,7 @@ function jrnStorylinesHtml(org) {
       + (branches ? '<ul class="jrn-story-branches">' + branches + '</ul>' : '')
       + '<div class="jrn-story-go">'
       + (mapOn ? '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>' : '')
+      + readinessDoorHtml(st.id, 'jrn-story-ready', st.repo)
       + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ', 1)">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
       + '</div></div>';
   }
@@ -1512,6 +1514,13 @@ const JRN_BARE_IDENT = /^[A-Za-z0-9_$]+$/;
  * @group Journey view
  */
 export function jrnGateInWords(g) {
+  // a precondition carries the sentence the parser read for it — the team's label, the refusal's
+  // own message, or words from the names (gates lane 2026-10-10)
+  const node = g && S.BYID && S.BYID[g.id];
+  const pre = (g && g.words) || (node && node.precondition && node.precondition.words);
+  if (pre) return pre;
+  // a guard handed a role or scope here says the role (`requireOpsRole(p, ROLES.approve)` → *approver role*)
+  if (g && g.requires) return t('pre.role').replace('{role}', jrnRoleWords(g.requires));
   const { phrase } = jrnGateParts(g);
   // a handful of checks every web application has, named the way a developer names
   // them (*same-origin on mutating routes*, *public-path rate limit*, *path id shape*):
@@ -1522,6 +1531,12 @@ export function jrnGateInWords(g) {
   if (shape) return t('journey.biz.gateShape.' + shape[0]);
   if (!phrase || JRN_BARE_IDENT.test(phrase) || JRN_DEV_TOKEN.test(phrase)) return '';
   return phrase;
+}
+/** `ops.reviewer, ops.approver` → *reviewer or approver*: the last part of each role, in words.
+ * @group Journey view */
+export function jrnRoleWords(requires) {
+  const roles = String(requires || '').split(/,\s*/).filter(Boolean).map((r) => humanize(r.split(/[.:/]/).pop() || r).toLowerCase());
+  return roles.length > 1 ? t('pre.or').replace('{a}', roles.slice(0, -1).join(', ')).replace('{b}', roles[roles.length - 1]) : (roles[0] || '');
 }
 /**
  * What to call a checkpoint, in the register the reader asked for — the ONE
@@ -1567,6 +1582,8 @@ function jrnGateRowHtml(g, qualifier) {
     + opens + ' title="' + esc(g.name || '') + '">'
     + sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock')
     + '<span class="jrn-gl-w">' + esc(words) + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
+    // the tier beside the name outside the business register, which groups by it instead
+    + (g.tier && currentLens() !== 'business' && !g.config ? ' <span class="gate-tier ' + esc(g.tier) + '"' + tipAttrs({ key: 'gate.tier.' + g.tier }) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
     // a real space, not only the margin: this row is read in a screenshot and
     // pasted into a ticket as often as it is clicked
     + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
@@ -1641,12 +1658,72 @@ function jrnGateGroupHtml(list, key, scopeKey, cls) {
 function jrnGateListHtml(gates, scopeKey, configChecks) {
   const cfg = (configChecks || []).map((g) => ({ ...g, kind: 'guard', config: true }));
   if ((!gates || !gates.length) && !cfg.length) return '';
+  // the business register reads the checks by who they matter to (gates lane 2026-10-10)
+  if (currentLens() === 'business' && (gates || []).some((g) => g.tier)) return jrnGateTiersHtml(gates, scopeKey, cfg, { legend: !!scopeKey });
   return '<div class="jrn-gatelist">'
     + jrnGateGroupHtml((gates || []).filter((g) => g.kind !== 'rule'), 'journey.bizGroup.gates', scopeKey)
     + jrnGateGroupHtml((gates || []).filter((g) => g.kind === 'rule'), 'journey.bizGroup.rules', scopeKey)
     // the config checks the screen's code meets on the way: listed apart, counted apart (swarm-fixes 2026-10-05, finding 4)
     + jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config')
     + '</div>';
+}
+/**
+ * The checks split by tier, the business register's reading (gates lane 2026-10-10): *who may*
+ * (identity and authorisation, a sign-in check met several times folded to one line per way it is
+ * worded), *the record must be* (record state and completeness, the preconditions the code
+ * enforces), *policy*, and the technical checks folded behind *+ n technical checks*, which opens
+ * them. Pure over the list's own `tier` / `class` (core gate-class.ts) — nothing is re-derived here.
+ * @group Journey view
+ * @business What has to be true before this goes through, grouped by who it matters to.
+ */
+export function jrnGateTiersHtml(gates, scopeKey, cfg, o) {
+  const opt = o || {};
+  const { who, record, policy, technical } = jrnGateTiers(gates);
+  const tech = technical.length
+    ? '<details class="jrn-gl-tech"><summary' + tipAttrs({ key: 'gate.group.technical' }) + '>'
+      + esc(jrnCountWord('gate.group.technical', technical.length)) + '</summary>'
+      + jrnGateGroupHtml(technical, 'gate.tier.technical', scopeKey, 'technical') + '</details>'
+    : '';
+  // the tier counts and where a tier comes from, once per screen's list — not in every action's cell
+  const legend = !opt.legend ? '' : '<div class="jrn-gl-legend">' + ['business', 'policy', 'technical'].map((k) => {
+    const n = { business: who.length + record.length, policy: policy.length, technical: technical.length }[k];
+    return '<span class="gate-tier ' + k + '"' + tipAttrs({ key: 'gate.tier.' + k }) + '>' + esc(t('gate.tier.' + k)) + ' ' + n + '</span>';
+  }).join('') + '<span class="jrn-gl-legend-w"' + tipAttrs({ key: 'gate.tierFrom.class' }) + '>' + esc(t('gate.tierFrom.class')) + '</span></div>';
+  return '<div class="jrn-gatelist tiers">'
+    + jrnGateGroupHtml(who, 'gate.group.whoMay', scopeKey, 'who')
+    + jrnGateGroupHtml(record, 'gate.group.record', scopeKey, 'record')
+    + jrnGateGroupHtml(policy, 'gate.group.policy', scopeKey, 'policy')
+    + tech
+    + (cfg && cfg.length ? jrnGateGroupHtml(cfg, 'journey.bizGroup.configChecks', scopeKey, 'config') : '')
+    + legend + '</div>';
+}
+/**
+ * One list of gates split by tier: who may (sign-in checks folded, one row per wording with the
+ * times summed), the record must be, policy, technical. A gate from an older server has no tier
+ * and stays with who may — shown, never folded away unseen.
+ * @group Journey view
+ */
+export function jrnGateTiers(gates) {
+  const rows = (gates || []).slice().sort((a, b) => a.stepOrder - b.stepOrder);
+  const technical = rows.filter((g) => g.tier === 'technical');
+  const policy = rows.filter((g) => g.tier === 'policy');
+  const biz = rows.filter((g) => g.tier !== 'technical' && g.tier !== 'policy');
+  const record = biz.filter((g) => g.class === 'record-state' || g.class === 'completeness');
+  const whoAll = biz.filter((g) => !record.includes(g));
+  // sign-in checks say the same thing to a business reader: one row per wording, the times summed
+  const who = [];
+  const byWords = new Map();
+  for (const g of whoAll) {
+    if (g.class !== 'identity') { who.push(g); continue; }
+    const w = jrnGateLabel(g) || t('gate.signedIn');
+    const have = byWords.get(w);
+    if (have) { have.count = (have.count || 1) + (g.count || 1); have.folded = (have.folded || 1) + 1; continue; }
+    const row = { ...g, words: g.words || (jrnGateLabel(g) ? '' : t('gate.signedIn')) };
+    if (!row.words) delete row.words;
+    byWords.set(w, row);
+    who.push(row);
+  }
+  return { who, record, policy, technical };
 }
 /**
  * The checks of one action — the ONE renderer the sheet's *Gates & business*
@@ -4464,7 +4541,14 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
     jrnCountedHtml(actions, { cls: 'jrn-actions', rel: [C('again'), C('declaredNotCalled'), C('actionStops'), C('planned'), C('setup'), C('deferred'), C('choices'), C('systems')] }),
     business && touches.length ? '<span class="jrn-touches">' + esc(t('journey.biz.touches').replace('{systems}', touches.join(' · '))) + '</span>' : '',
   ]);
-  g('g-gates', [jrnCountedHtml(C('gates'), { rel: [C('checks'), C('decisions')] })]);
+  // the gates split by who they matter to (gates lane 2026-10-10): two numbers that partition the
+  // gates & rules — the whole sits in their tips, so the header never prints three claims about one list
+  if (C('gatesBusiness')) {
+    g('g-gates', [
+      jrnCountedHtml(C('gatesBusiness'), { cls: 'jrn-gates-biz', rel: [C('gates'), C('checks'), C('decisions')] }),
+      jrnCountedHtml(C('gatesTechnical'), { cls: 'jrn-gates-tech', rel: [C('gates')] }),
+    ]);
+  } else g('g-gates', [jrnCountedHtml(C('gates'), { rel: [C('checks'), C('decisions')] })]);
   // the whole — technical conditions plus gate conditions nobody labelled — in
   // every lens: one concept, one number. The header uses the short words; the
   // tip heads with the business sentence in the business lens.

@@ -20,6 +20,8 @@ import { STRINGS } from '../dist/index.js';
 const STEP_KEYS: Record<string, string> = {
   'journeys.storyline.stepOf': 'the storyline position',
   'map.storyline.step': 'the storyline position',
+  'affected.storyline.step': 'the storyline position, in the affected set',
+  'readiness.col.step': 'the storyline position, the brief\'s first column',
   'tests.orphan.whySteps': 'quotes the design manifest field `steps[]` a @covers claim names',
   'tests.blind.claim': 'names a step id of the design manifest field `steps[]`',
 };

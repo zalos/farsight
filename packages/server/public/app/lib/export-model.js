@@ -238,6 +238,20 @@ export function pdfPage(cssW, cssH, o = {}) {
   return { w: Math.max(1, Math.round(w * 100) / 100), h: Math.max(1, Math.round(h * 100) / 100) };
 }
 
+/**
+ * An A4 portrait page (595.28 × 841.89 pt) and where a picture of `cssW × cssH` CSS pixels lies on it:
+ * fitted inside 28 pt margins, its shape kept, at the top — a document page, not a poster.
+ * @param {number} cssW
+ * @param {number} cssH
+ * @returns {{page:{w:number,h:number}, place:{x:number,y:number,w:number,h:number}}}
+ */
+export function pdfA4(cssW, cssH) {
+  const W = 595.28, H = 841.89, M = 28;
+  const k = Math.min((W - 2 * M) / cssW, (H - 2 * M) / cssH);
+  const w = Math.round(cssW * k * 100) / 100, h = Math.round(cssH * k * 100) / 100;
+  return { page: { w: W, h: H }, place: { x: Math.round((W - w) / 2 * 100) / 100, y: Math.round((H - M - h) * 100) / 100, w, h } };
+}
+
 /** The bytes of a Latin-1 string (the PDF's own syntax is ASCII). */
 function ascii(s) {
   const out = new Uint8Array(s.length);
@@ -259,13 +273,14 @@ function pdfText(s) {
  * @param {Uint8Array} jpeg  the JPEG's bytes
  * @param {number} pxW  the JPEG's width in pixels
  * @param {number} pxH  the JPEG's height in pixels
- * @param {{page:{w:number,h:number}, title?:string, subject?:string, created?:Date}} o
+ * @param {{page:{w:number,h:number}, place?:{x:number,y:number,w:number,h:number}, title?:string, subject?:string, created?:Date}} o
  * @returns {Uint8Array}
  */
 export function pdfFromJpeg(jpeg, pxW, pxH, o) {
   const pw = o.page.w, ph = o.page.h;
   const num = (n) => String(Math.round(n * 100) / 100);
-  const content = 'q ' + num(pw) + ' 0 0 ' + num(ph) + ' 0 0 cm /Im0 Do Q';
+  const pl = o.place || { x: 0, y: 0, w: pw, h: ph };
+  const content = (o.place ? '1 1 1 rg 0 0 ' + num(pw) + ' ' + num(ph) + ' re f ' : '') + 'q ' + num(pl.w) + ' 0 0 ' + num(pl.h) + ' ' + num(pl.x) + ' ' + num(pl.y) + ' cm /Im0 Do Q';
   const d = o.created || new Date();
   const p2 = (n) => String(n).padStart(2, '0');
   const when = 'D:' + d.getUTCFullYear() + p2(d.getUTCMonth() + 1) + p2(d.getUTCDate()) + p2(d.getUTCHours()) + p2(d.getUTCMinutes()) + p2(d.getUTCSeconds()) + 'Z';

@@ -29,7 +29,7 @@ import {
   storybookLive, type StoriesAnswer, type StorybookStatus,
   type ModelHubState, type Activity, buildLine, buildInfo, installState, currencyAdvice,
   projectFacets, projectGraph, projectsSummaryLine,
-  depsRowOf, counted, gateCard, type GateCard,
+  depsRowOf, counted, gateCard, type GateCard, type ActionPreconditions,
   stateOfPlay, stateOfPlayLines, historyFact,
 } from '@farsight/core';
 
@@ -40,6 +40,7 @@ import { ingestRepo, readSpecSource, readManifestSource, repoContentDigest } fro
 import { registerWorkTools } from './work.js';
 import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
+import { registerAffectedTools } from './affected-tools.js';
 
 /** Serve the graph over stdio — what `farsight mcp` runs. */
 export async function runMcpServer(graphArg?: string): Promise<void> {
@@ -457,6 +458,15 @@ function businessView(sum: ReturnType<typeof journeySummary>): string[] {
       const reaches = names((m) => m.kind === 'external');
       if (reaches.length) out.push(`   reaches: ${reaches.join(', ')}`);
       if (mo.afterwards.length) out.push(`   afterwards: ${[...new Set(mo.afterwards.map((x) => x.title ?? x.name))].join(' · ')}`);
+      // what it needs first, in words: who may, the state of the records, the policies; technical ones counted
+      const pre = mo.preconditions;
+      if (pre?.preconditions.length) {
+        const shown = pre.preconditions.filter((x) => x.tier !== 'technical');
+        const words = [...new Set(shown.map((x) => (x.role ? `${x.role} role` : x.words)))];
+        const tech = pre.preconditions.length - shown.length;
+        out.push(`   needs: ${words.join(' · ') || 'nothing a business reader checks'}${tech ? ` · + ${tech} technical check(s)` : ''}`);
+      }
+      for (const m of pre?.moves ?? []) if (!m.checked) out.push(`   ⚠ moves ${m.record} to ${m.to.toLowerCase()} — the status it moves from is not checked by the code`);
     }
     for (const d of sg.declaredOnly) out.push(`⋯ ${d.label} — declared for this screen, not called by code`);
     if (sg.gates.length) out.push(`   gates: ${sg.gates.map((g) => `${g.kind === 'rule' ? '⛨' : '🔒'} ${g.name}${g.planned ? ' (planned)' : ''}${g.count > 1 ? ` ×${g.count}` : ''}`).join(' · ')}`);
@@ -493,6 +503,8 @@ const work = registerWorkTools({ server, graphPath, index: () => index, roots: (
 const configTools = registerConfigTools({ server, meta: () => store.meta });
 // journeys by persona and group, in declared order (journey-organisation-and-config-files.md §4.4)
 const journeysTools = registerJourneysTools({ server, index: () => index, meta: () => store.meta });
+// what a pull request or a commit range touches — only when a code-host source grants agents read (affected-tools.ts)
+registerAffectedTools({ server, workspace: dirname(graphPath), index: () => index, meta: () => store.meta, roots: () => store.roots });
 
 server.registerTool('graph_overview', {
   title: 'Graph overview',
@@ -762,6 +774,31 @@ server.registerTool('describe_node', {
   return text(lines.join('\n'));
 });
 
+/**
+ * What one action needs (gates lane 2026-10-10, core `withJourneyPreconditions`): the business and policy
+ * needs one per line with file:line and the gate card's verdict, the technical ones folded to a count, and
+ * every record move — a move whose prior status the code never compares said so.
+ */
+function needsLines(p: ActionPreconditions | undefined): string[] {
+  if (!p) return [];
+  const out: string[] = [];
+  const shown = p.preconditions.filter((x) => x.tier !== 'technical');
+  const technical = p.preconditions.length - shown.length;
+  if (shown.length || technical) out.push(`needs (${countedText(p.counted)}): ${breakdownText(p.counted)}`);
+  for (const x of shown) {
+    const what = x.record && x.field
+      ? `${x.record}.${x.field} ${x.requires?.length ? `∈ {${x.requires.join(', ')}}` : x.excludes?.length ? `∉ {${x.excludes.join(', ')}}` : 'not empty'}`
+      : x.role ? `${x.words} — role ${x.role}` : x.words;
+    const ev = x.evidence ? ` · ${x.evidence.word.cls === 'none' ? 'no test is known to reach it' : t(x.evidence.word.key, 'professional')}` : '';
+    out.push(`  ${x.tier} · ${x.class} · ${what}${x.record ? ` — "${x.words}"` : ''}${x.loc ? ` · ${x.loc}` : ''}${ev}${x.planned ? ' (planned)' : ''}`);
+  }
+  if (technical) out.push(`  + ${technical} technical check(s): ${p.preconditions.filter((x) => x.tier === 'technical').map((x) => x.words).join(' · ')}`);
+  for (const m of p.moves) {
+    out.push(`  moves ${m.record}.${m.field} ${m.from ?? (m.fromAny?.length ? `{${m.fromAny.join(', ')}}` : '?')} → ${m.to}${m.checked ? '' : ' — the prior status is not checked by the code'}`);
+  }
+  return out;
+}
+
 /** A place in the code as `path:line`, or '' when the graph has none. */
 function atLine(loc: GraphNode['loc'] | undefined): string {
   return loc ? `${loc.path}:${loc.line}` : '';
@@ -777,6 +814,14 @@ function gateLines(c: GateCard, opts: { cap?: number } = {}): string[] {
   const kind = g.configCheck ? 'config check' : g.gateKind === 'rule' ? 'validation rule' : 'gate (guard)';
   const out = [`## gate — ${kind}${g.declared ? ', declared in farsight.config.json' : ''}`];
   out.push(`${g.name}${g.loc ? ` — ${atLine(g.loc)}` : ''}`);
+  // who it matters to (gates lane 2026-10-10): the tier, the class that gave it, and where the tier came from
+  if (g.tier) out.push(`tier: ${g.tier} · ${t('gate.class.' + g.class, 'professional')} · ${t('gate.tierFrom.' + g.tierFrom, 'professional')}`);
+  if (g.precondition) {
+    const p = g.precondition;
+    const need = p.kind === 'present' ? `${p.record}.${p.field} not empty` : p.requires.length ? `${p.record}.${p.field} ∈ {${p.requires.join(', ')}}` : `${p.record}.${p.field} ∉ {${(p.excludes ?? []).join(', ')}}`;
+    out.push(`precondition: ${need} — the ${p.relation === 'own' ? 'record the action writes' : 'record loaded beside it'} · otherwise ${p.else} · ${t('gate.pre.via.' + p.via, 'professional')}`);
+    out.push(`its words (${p.wordsFrom === 'business' ? 'the @business label' : p.wordsFrom === 'message' ? 'the refusal\'s own message' : 'from the names'}): ${p.words}`);
+  }
   if (g.business) out.push(`what it allows (written): ${g.business}`);
   else if (g.phrase && g.ident) out.push(`what it requires (the @guard words): ${g.phrase}`);
   else out.push(`what it allows: nobody has written it — add a @business line above ${g.ident || g.name}${g.loc ? ` in ${g.loc.path}` : ''}, or name it in farsight.config.json → glossary`);
@@ -993,7 +1038,9 @@ server.registerTool('journey', {
     // scope it counts over (docs/COUNTS.md), so an agent quotes the number a reader sees
     sum.counted
       ? countedLine([
-        sum.counted.screens, sum.counted.built, sum.counted.gates, sum.counted.checks, sum.counted.decisions, sum.counted.notInWords,
+        sum.counted.screens, sum.counted.built, sum.counted.gates,
+        // the gates split by who they matter to (gates lane 2026-10-10): a partition of the gates beside them
+        ...(sum.counted.gatesBusiness ? [sum.counted.gatesBusiness, sum.counted.gatesTechnical] : []), sum.counted.checks, sum.counted.decisions, sum.counted.notInWords,
         sum.counted.actions, sum.counted.again, sum.counted.declaredNotCalled, sum.counted.actionStops,
       ], { lens: view === 'business' ? 'business' : 'code' }) + ` · ${k.records} record(s) · ${k.messages} message(s)`
       : `on this walk: ${k.screens} screen(s) · ${k.gates} gate(s), met ${k.checks} time(s) · ${k.decisions} decision(s) · ${k.records} record(s) · ${k.messages} message(s)${k.called || k.declaredNotCalled ? ` · operations: ${k.called} called by code, ${k.declaredNotCalled} declared, not called${k.again ? ` (+${k.again} called again later)` : ''}` : ''}`,
@@ -1110,7 +1157,10 @@ server.registerTool('journey', {
       if (cov) lines.push(`  verified by: ${cov.tests.length ? `${formatMetric(cov.metric)} of ${cov.metric.scopeLabel} · e2e ${cov.counts.e2e} · unit ${cov.counts.unit} · ${cov.e2e === 'none' ? 'no end-to-end test' : `e2e ${cov.e2e}`}` : 'nothing'} — ${cov.note}`);
     }
     const mo = momentAt.get(s.order);
-    if (mo) lines.push(`#### action ${mo.moment.index + 1} · ${mo.moment.label}${mo.moment.repeat ? ' ↺ already walked' : ''}${mo.moment.component ? ` — in ${mo.moment.component.label}${mo.moment.component.stepOrder < mo.moment.from ? ', still open' : ''}` : ''}`);
+    if (mo) {
+      lines.push(`#### action ${mo.moment.index + 1} · ${mo.moment.label}${mo.moment.repeat ? ' ↺ already walked' : ''}${mo.moment.component ? ` — in ${mo.moment.component.label}${mo.moment.component.stepOrder < mo.moment.from ? ', still open' : ''}` : ''}`);
+      lines.push(...needsLines(mo.moment.preconditions));
+    }
     if (sg?.screen && sg.from === s.order) continue; // the screen row itself is the segment header
     if (s.planned && s.planned.kind !== 'calls') {
       const p = s.planned;
