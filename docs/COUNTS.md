@@ -440,6 +440,20 @@ picked, what uses it as far out as the distance chosen, and the journeys and scr
 | `1 reaches the ERP` | viewer Counted `count.unit.riskErp` ← `erpReached(summary)` (the head's ERP chip) | journeys whose calls reach the ERP | `count.scope.workspace` | the same line |
 | *on this journey* | `map.screen.onJourney` (words + tip, no number) | names the scope of the screen card's and the property's numbers: this screen's part of this journey's walk — the same screen on another journey prints its own | — | the screen card's chips, the property's head |
 
+#### Swimlanes (round 2026-10-10 §2; `surfaces/map-lanes.js` over `lib/map-lanes-model.js` `laneLayout()`)
+
+| printed | source | counts | scope | where |
+|---|---|---|---|---|
+| `3 lanes` | viewer Counted `lanes.count.lanes` ← `laneLayout().lanes` | the lanes drawn; breakdown `lanes.part.personaLanes` · `lanes.part.storeLanes` partitions them | `count.scope.storyline` | the lanes board's header |
+| `4 screens · in this lane` | viewer Counted `lanes.count.screens` ← the stages whose lane is this one | stage cards in one persona lane (a screen met again on the main path is one card; a branch's screen is its own card); breakdown `lanes.part.mainPath` · `lanes.part.branch` | `lanes.scope.lane` | a persona lane's head |
+| `3 writes · in this storyline` | viewer Counted `lanes.count.writes` ← the store lane's pills + its folded records | each status the storyline's code moves a record of this store into, once per status, plus each other record it writes; breakdown `lanes.part.statusMoves` · `lanes.part.recordsWritten` · `lanes.part.folded` (records past the two the lane draws) | `count.scope.storyline` | a store lane's head |
+| `3 journeys` | the tree's own `storyline.counts.journeys` (`/api/journeys`) | the storyline's steps and branches, each once | `count.scope.storyline` | the lanes footer |
+| `3 screens` | viewer Counted `lanes.count.distinctScreens` ← the stages by design id | the storyline's different screens, branches included, each once however many journeys reach it; breakdown `lanes.part.built` · `lanes.part.notBuilt` | `count.scope.storyline` | the lanes footer |
+| `2 of 3 built` | viewer Counted `lanes.count.built` (`n` of `of`) ← the same screens' state | screens a page serves, of every screen the storyline names | `count.scope.storyline` | the lanes footer |
+| `1 branch` | viewer Counted `lanes.count.branches` ← `storyline.branches` | the storyline's declared branches | `count.scope.storyline` | the lanes footer |
+| a stage's test chip | the street's own `mapTestsChips(segment tests, coverage fold)` for that screen | as on the street (§ Map) — the screen's first journey's fold | as on the street | each stage card |
+| `2 notes` | `laneLayout().notes` (words, tip lists each) | lanes and hand-offs the design names that the graph cannot find; none is drawn | — | the lanes footer, only when there are any |
+
 ### Projects (`/api/projects` → core `projects.ts` `projectGraph()` / `appClosure()`; MCP `graph_overview`)
 
 | number | unit / bizUnit | scope | source | counts |
