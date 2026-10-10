@@ -26,7 +26,7 @@
 
 import { S, expose, esc, currentLens, humanize, bizName } from '../store.js';
 import { t, def, evidenceWord } from '../strings.js';
-import { testChipHtml } from '../lib/test-chip.js';
+import { testChipHtml, scopeWordHtml } from '../lib/test-chip.js';
 import { sym } from '../sym.js';
 import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs } from '../lib/tooltip.js';
@@ -803,11 +803,12 @@ function matrixRowHtml(row, business, e2eCol = true) {
     + (business ? '' : '<td class="num"><b' + plainTip(declared, 'tests.col.declared', 'journey.scopeAll', '/api/tests') + '>' + declared + '</b></td>'
       + '<td class="num"><b' + plainTip(reached, 'tests.col.reachedTests', 'journey.scopeAll', '/api/tests') + '>' + reached + '</b></td>'
       + '<td class="num">' + (obs || runs
-        ? (decl
-          ? '<span' + tipOf('tests.observedSplitDecl') + '>'
-            + esc(t('tests.observedSplitDecl').replace('{tests}', String(obs - decl)).replace('{decl}', String(decl)).replace('{runs}', String(runs))) + '</span>'
-          : '<span' + tipOf('tests.observedSplit') + '>'
-            + esc(t('tests.observedSplit').replace('{tests}', String(obs)).replace('{runs}', String(runs))) + '</span>')
+        // the observed split, each part only when it is not zero, and the scope it counts over on the chip:
+        // `0 tests · 29 passed, by their own declaration` read as a contradiction (swarm round 2, finding 1.5)
+        ? '<span data-tchip class="tchip" data-scope="journey.scopeAll"' + tipOf(decl ? 'tests.observedSplitDecl' : 'tests.observedSplit') + '>'
+          + [[obs - decl, 'tests.obsPart.cases'], [decl, 'tests.obsPart.declared'], [runs, 'tests.obsPart.runs']]
+            .filter((p) => p[0] > 0).map((p) => esc(t(p[1]).replace('{n}', String(p[0])))).join(' · ')
+          + '<span class="tc-sep"> · </span>' + scopeWordHtml('count.over.journey') + '</span>'
         : '<span class="dim">' + esc(t('journey.absent.noneIndexed')) + '</span>') + '</td>')
     + '<td><div class="tst-gap' + (row.e2e === 'none' || row.e2e === 'declared' ? ' bad' : '') + '">'
     + esc(business ? unCode(row.gap || '') : (row.gap || '')) + '</div></td></tr>';

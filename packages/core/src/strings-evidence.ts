@@ -35,5 +35,8 @@ export const EVIDENCE_STRINGS: Record<string, StringEntry> = {
   'tests.scopeLine.page': same('{n} over the page’s own code', 'Test cases that reach the screen’s page or the components it draws, rather than a call or a checkpoint.'),
   'tests.noneKnown': same('no test is known to reach: {list}', 'Screens of this journey no indexed test reaches. A floor: a test this build could not read is not counted, so this says what is known, not that none exists.'),
   'tests.col.evidenceWord': same('evidence word', 'The case’s own evidence word on this part, as the screen prints it: declared only, reached by tests, verified by a run, passed by its own declaration or seen by a coverage run.'),
+  'tests.obsPart.cases': same('{n} placed by a run’s coverage', 'Cases a results report named and a coverage report placed on this code.'),
+  'tests.obsPart.declared': same('{n} passed, by their own declaration', 'End-to-end cases a results report says passed, each declaring that it covers this code.'),
+  'tests.obsPart.runs': same('{n} run reports', 'Run-level coverage reports: a run reached this code and the report does not say which case did.'),
   'tests.levelRows': same('{n} journeys no {level} test is known to reach', 'Journeys left out of the table under this level filter: no case of the selected level reaches them.'),
 };
