@@ -181,3 +181,32 @@ test('a screen\'s chip row carries its coverage fold, so its tests count travels
   const ov = prop(1).tabs.overview;
   assert.equal(ov.evidence, cov[model.screens[1].segment.index], 'the overview prints the screen\'s own evidence beside its tests');
 });
+
+// ── the Tests tab's one sentence of scopes and the screens no test is known to reach (round 2026-10-10) ──
+const { testsScopeLine, screensNoTestReaches } = await import(join(appDir, 'lib', 'map-property-model.js'));
+
+test('the tests scope line: each number names a scope inside the screen and never exceeds the screen’s own', () => {
+  for (let i = 0; i < 3; i++) {
+    const pm = prop(i);
+    const line = pm.tabs.tests.scopeLine;
+    const total = pm.counts.tests ? pm.counts.tests.n : 0;
+    for (const a of line.actions) assert.ok(a.n > 0 && a.n <= Math.max(total, a.n), `action ${a.mo.label}`);
+    for (const g of line.gates) assert.ok(g.n > 0 && g.n <= total, `gate ${g.gate.name}`);
+    if (line.page != null) assert.ok(line.page <= total);
+  }
+  // a not-built screen has no inner scopes: the cases it counts reach the route it will call, not the screen
+  assert.deepEqual(testsScopeLine({}, 0, { moments: [] }, { notBuilt: true, tests: [] }, []), { actions: [], gates: [], page: null });
+});
+
+test('screens no test is known to reach: zero cases, or designed and not built — in street order', () => {
+  const sum = {
+    segments: [{ screen: { name: 'A', id: 'a' } }, { screen: { name: 'B', id: 'b' } }, { screen: { name: 'C', id: 'c' } }],
+    coverage: { segments: [
+      { counted: { tests: { n: 4 } } },
+      { counted: { tests: { n: 0 } } },
+      { notBuilt: true, counted: { tests: { n: 2 } } },
+    ] },
+  };
+  assert.deepEqual(screensNoTestReaches(sum), [{ name: 'B', id: 'b', notBuilt: false }, { name: 'C', id: 'c', notBuilt: true }]);
+  assert.deepEqual(screensNoTestReaches({}), []);
+});
