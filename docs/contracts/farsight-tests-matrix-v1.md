@@ -57,6 +57,7 @@ A node with no `covers` edge produces **no row** — absence is a gap, and gaps 
 | `run_id` · `run_at` · `status` · `retries` · `duration_ms` | the run behind this case; `''`/`null` when it has never run |
 | `freshness` · `stale` | `unchanged` · `changed` · `unknown`; `stale` is `null` when freshness is `unknown` |
 | `source_digest` · `sync` · `source_commit` | `identity`, repeated so a CSV row taken out of the file still says which code it describes |
+| `evidence_word` · `verdict` | *added 2026-10-10, additive, appended after every v1 column* — the case's own word on this node and the run behind it, **exactly as the screen prints them** (see below) |
 
 ### The words, and what they are not
 
@@ -65,6 +66,27 @@ A node with no `covers` edge produces **no row** — absence is a gap, and gaps 
 - **`stale: null` is not `false`.** `unknown` freshness means no source digest was recorded, so whether the code changed since the run cannot be answered. "Not stale" and "not proven fresh" are different facts and this contract keeps them apart. The CSV prints the null as `unknown` — never as `false`.
 - **`status: "flaky"` is its own verdict.** The reporter retried and the case then passed; it is not `passed` and never prints as one.
 - **`inactive` rows are kept.** A skipped case is a fact about the suite; dropping it would make the matrix flatter and less true.
+
+### `evidence_word` and `verdict` — the screen's words (added 2026-10-10)
+
+`evidence_class` is the edge's class, and two of its rows read differently on screen: a declared end-to-end case
+whose last run passed is *passed, by its own declaration* (the edge still says `declared`), and an `observed` row
+from a coverage report is *seen by a coverage run* (its `status` is `unknown`: a coverage report records no
+verdict). A consumer that wants the screen's words reads the two appended columns instead of re-deriving them:
+
+| `evidence_word` | when | `verdict` |
+|---|---|---|
+| `declared only` | an `@covers` claim, nothing ran | `''` |
+| `reached by tests` | a test body imports, renders or requests it | `''` |
+| `verified by a run` · `verified · stale` | a results report named the case and coverage placed it here | the case's run status |
+| `passed, by its own declaration` · `… · stale` | a declared e2e case whose last run passed | `passed` |
+| `seen by a coverage run` · `… · stale` | a coverage report with no case named (`run_level`) | `''` |
+
+`· stale` is the case's run on a commit the code has moved past (`freshness = changed`). The word is core
+`caseWord()` in the professional register, the same word the Tests page prints beside each case of a scoped cell
+and the Map property prints on each case row. `verdict` is `status` only where a named case's run earned the
+word — a claim, a reading or a coverage report has no verdict beside it; the case's own run stays in `status`.
+Both enums are pinned by `packages/core/test/scope-words.test.ts` against this schema.
 
 ## Determinism
 
