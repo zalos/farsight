@@ -3017,7 +3017,8 @@
   .ln-top{position:absolute;display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden;font-size:11px;color:var(--muted)}
   .ln-top .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:18px;color:var(--ink)}
   .ln-top .tag{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9px;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 5px}
-  .ln-top .d{overflow:hidden;text-overflow:ellipsis}
+  .ln-top > *{flex:none}
+  .ln-top .d{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .ln-top .ev *{font-family:var(--body);font-size:inherit;text-transform:none;letter-spacing:normal;border:none;padding:0}
   .ln-n{text-decoration:underline dotted;text-underline-offset:2px;cursor:help;color:var(--muted)}
   .ln-lane{position:absolute;border:1px solid var(--line-soft);border-radius:6px;background:color-mix(in srgb,var(--panel) 55%,transparent)}
@@ -3066,6 +3067,10 @@
   .ln-pill .w{overflow:hidden;text-overflow:ellipsis}
   .ln-pill .by{font-size:10px;color:var(--fn);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ln-pill.written{border-style:dashed}
+  .ln-pill .nd{display:flex;align-items:center;gap:4px;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
+  .ln-pill .nd .sym{width:9px;height:9px;color:var(--auth);flex:none}
+  .ln-pill .nd .nc{display:inline-flex;align-items:center;gap:2px;color:var(--warn);overflow:hidden;text-overflow:ellipsis}
+  .ln-pill .nd .nc .sym{color:var(--warn)}
   .ln-pill.more{border-style:dashed;border-color:var(--line);background:transparent;color:var(--muted);font-size:9.5px;align-items:center}
   .ln-bottom{position:absolute;display:flex;gap:14px;align-items:flex-start}
   .ln-lifes{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}

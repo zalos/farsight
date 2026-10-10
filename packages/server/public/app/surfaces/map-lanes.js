@@ -69,7 +69,7 @@ function stageHtml(st, r, m, say) {
 }
 
 /** One pill: the record (first in its row), the move in words, and — outside business — the code that makes it. */
-function pillHtml(p, r, m) {
+function pillHtml(p, r, m, say) {
   const st = (k) => m.stages.find((s) => s.key === k);
   const makers = p.stages.map(st).filter(Boolean).map((s) => s.name);
   const move = p.kind === 'created' ? fill('lanes.pill.created', { status: statusWords(p.status, p.record.id) })
@@ -79,10 +79,35 @@ function pillHtml(p, r, m) {
   return '<div class="ln-pill ' + p.kind + '" data-key="' + esc(p.key) + '" data-record="' + esc(p.record.id) + '"' + (p.status != null ? ' data-status="' + esc(p.status) + '"' : '')
     + ' style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px"' + tipAttrs({ text: tip, noFocus: true }) + '>'
     + '<div class="mv">' + sym('record') + (p.first && !p.isStore ? '<span class="rec">' + esc(recordWords(p.record.name)) + '</span><span class="sep">·</span>' : '') + '<span class="w">' + esc(move) + '</span></div>'
-    + (by && !biz() ? '<div class="by map-code">' + esc(by) + '</div>' : '') + '</div>';
+    + (by && !biz() ? '<div class="by map-code">' + esc(by) + '</div>' : '') + needsHtml(p, say) + '</div>';
 }
 
 const storeKindOf = (l) => (['sql', 'document', 'files', 'erp'].includes(l.store.kind) ? l.store.kind : 'other');
+
+/**
+ * What a move needs (lane G's preconditions on the action that makes it), as one line in its pill: the count with its
+ * scope (the action), and — in amber — *not checked by the code* when the move never compares the status it leaves.
+ * The tip is the whole box: who may · the record must be · policy, each with its evidence word; + n technical checks.
+ */
+function needsHtml(p, say) {
+  const n = p.needs;
+  if (!n) return '';
+  const ev = (x) => (x.evidence && x.evidence.word ? t(biz() && x.evidence.word.biz ? x.evidence.word.biz : x.evidence.word.key) : '');
+  const line = (x) => {
+    const w = x.role ? t('pre.role').replace('{role}', x.role) : say(x.words);
+    return w + (ev(x) ? ' (' + ev(x) + ')' : '') + (!biz() && x.loc ? ' · ' + x.loc : '');
+  };
+  const items = n.shown.map(line);
+  if (n.technical) items.push(countWords('gate.group.technical', n.technical));
+  const nc = n.notChecked && n.notChecked.status
+    ? t('pre.notChecked').replace('{record}', recordWords(n.notChecked.record)).replace('{status}', statusWords(n.notChecked.status, p.record.id))
+    : '';
+  const action = biz() ? '' : n.action.split('::').pop();
+  const tip = t('handoff.needs').replace('{action}', action || t('lanes.pill.thisMove')).replace('{list}', items.join(' · ')) + (nc ? ' · ' + nc : '');
+  return '<div class="nd"' + tipAttrs({ text: tip, noFocus: true }) + '>' + sym('gate')
+    + (n.counted ? countedHtml(n.counted, API, { cls: 'ln-n', words: fill('lanes.pill.needs', { n: n.counted.n }) }) : '<span>' + esc(fill('lanes.pill.needs', { n: n.shown.length + n.technical })) + '</span>')
+    + (nc ? '<span class="nc">' + sym('warning') + esc(t('lanes.pill.uncheckedShort')) + '</span>' : '') + '</div>';
+}
 
 /** The lane's head: its word, its second line, what it is, and its count with the scope it counts over. */
 function laneHeadHtml(l) {
@@ -225,7 +250,7 @@ export function lanesHtml(m, G, ctx = {}) {
   html += '<svg class="ln-arrows" aria-hidden="true" width="' + G.size.w + '" height="' + G.size.h + '">' + arrowsSvg(m, G, labels) + '</svg>';
   const say = ctx.sentence || ((x) => x);
   for (const st of m.stages) { const r = G.rects.get(st.key); if (r) html += stageHtml(st, r, m, say); }
-  for (const p of m.pills) { const r = G.rects.get(p.key); const l = m.lanes.find((x) => x.id === p.lane); if (r) html += pillHtml({ ...p, isStore: !!(l && l.name === p.record.name) }, r, m); }
+  for (const p of m.pills) { const r = G.rects.get(p.key); const l = m.lanes.find((x) => x.id === p.lane); if (r) html += pillHtml({ ...p, isStore: !!(l && l.name === p.record.name) }, r, m, say); }
   for (const lb of labels) {
     html += '<div class="ln-label ' + lb.cls + '" style="left:' + lb.x + 'px;top:' + lb.y + 'px' + (lb.max ? ';max-width:' + lb.max + 'px' : '') + '">' + esc(lb.text) + '</div>';
   }

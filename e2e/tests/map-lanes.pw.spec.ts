@@ -58,6 +58,10 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
   const tree = await page.evaluate(async () => (await (await fetch('/api/journeys')).json()).tree.storylines.find((s: any) => s.id === 'invoice'));
   expect(tree.counts.journeys.n).toBe(3);
   expect(tree.branches.length).toBe(1);
+  // each move carries what its action needs; finalize never checks the status it leaves, and says so
+  await expect(page.locator('.map-lanes .ln-pill[data-status="draft"] .nd')).toContainText('needs 2');
+  await expect(page.locator('.map-lanes .ln-pill[data-status="draft"] .nd .nc')).toHaveCount(0);
+  await expect(page.locator('.map-lanes .ln-pill[data-status="open"] .nd .nc')).toHaveCount(1);
   // the lifecycle strip under the lanes, and the legend
   await expect(page.locator('.map-lanes .ln-life .lc-strip')).toHaveCount(1);
   await expect(page.locator('.map-lanes .ln-legend .lg')).not.toHaveCount(0);

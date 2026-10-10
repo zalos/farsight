@@ -70,6 +70,23 @@ test('invoice-app: the record lane reads in the lifecycle\'s order — created (
   assert.equal(m.lifecycles[0].name, 'invoices');
 });
 
+test('invoice-app: each move carries what its action needs (lane G\'s preconditions) and whether the code checks the status it leaves', () => {
+  const m = model('invoice');
+  assert.equal(m.needs, true);
+  const created = m.pills.find((p: AnyRec) => p.status === 'draft');
+  const open = m.pills.find((p: AnyRec) => p.status === 'open');
+  assert.ok(created.needs && open.needs);
+  // a creation is never unchecked; finalize never compares the prior status: the one before open, draft, is named
+  assert.equal(created.needs.notChecked, null);
+  assert.deepEqual(open.needs.notChecked, { record: 'invoices', status: 'draft' });
+  // the business and policy checks are shown, the technical ones counted
+  assert.ok(open.needs.shown.some((x: AnyRec) => /line item/.test(x.words)));
+  assert.equal(created.needs.technical, 1);
+  assert.equal(open.needs.counted.scope, 'count.scope.action');
+  // a written pill has no move, so no needs
+  assert.ok(!m.pills.find((p: AnyRec) => p.kind === 'written').needs);
+});
+
 test('invoice-app: the footer counts are the tree\'s journeys, the distinct screens, how many are built and the branches', () => {
   const m = model('invoice');
   assert.equal(m.counts.journeys.n, 3);

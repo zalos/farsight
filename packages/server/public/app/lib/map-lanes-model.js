@@ -296,6 +296,38 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   }
   for (const l of pl) l.rowCount = Math.max(1, ...stages.filter((s) => s.lane === l.id).map((s) => s.row + 1));
 
+  // ── what each move needs (lane G's `moments[k].preconditions`): read from the first screen that makes the move — the
+  // action's checks in tier order, and whether the code checks the status it moves from
+  const stageObj = new Map(stages.map((s) => [s.key, s]));
+  for (const p of pills) {
+    if (p.kind === 'written') continue;
+    const first = [...p.stages].map((k) => stageObj.get(k)).filter(Boolean).sort((a, b) => a.col - b.col)[0];
+    if (!first) continue;
+    let found = null;
+    for (const { seg } of first.segs) {
+      for (const mo of seg.moments || []) {
+        const pre = mo && mo.preconditions;
+        const mv = pre && (pre.moves || []).find((x) => (x.table === p.record.id || x.record === p.record.name) && x.to === p.status);
+        if (mv) { found = { pre, mv }; break; }
+      }
+      if (found) break;
+    }
+    if (!found) continue;
+    const list = found.pre.preconditions || [];
+    const lc = lifeOf.get(p.record.id);
+    const statuses = lc ? lc.lifecycle.statuses : [];
+    const at = statuses.indexOf(p.status);
+    // a move that does not check the status it leaves: the status before it in the lifecycle is the one it is meant to leave
+    const unchecked = !found.mv.checked && !found.mv.creates;
+    p.needs = {
+      action: found.pre.action,
+      counted: found.pre.counted || null,
+      shown: list.filter((x) => x.tier !== 'technical').map((x) => ({ words: x.words, wordsFrom: x.wordsFrom, tier: x.tier, class: x.class, role: x.role || null, evidence: x.evidence || null, loc: x.loc || '', planned: !!x.planned })),
+      technical: list.filter((x) => x.tier === 'technical').length,
+      notChecked: unchecked ? { record: p.record.name, status: at > 0 ? statuses[at - 1] : (found.mv.fromAny || [])[0] || null } : null,
+    };
+  }
+
   // ── the arrows
   const arrows = [];
   // one arrow per pill, from the first screen that makes the move (the pill's tip names every screen that does)
@@ -382,6 +414,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     read, of: steps.length + branches.length, stepsOf: steps.length, firstFlow: steps.length ? steps[0].nodeId : '',
     lanes: ordered.map(({ rows, ref, declared, ...l }) => l),
     stages: stages.map(({ segs, runs, writes, reads, ...s }) => ({ ...s, reads: [...reads] })),
+    needs: pills.some((p) => p.needs),
     pills, arrows,
     lifecycles: [...new Set(pills.filter((p) => p.kind !== 'written').map((p) => p.record.id))].map((id) => lifeOf.get(id)).filter(Boolean),
     columns: Math.max(mainCols, maxCol + 1),
@@ -395,7 +428,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
  */
 export const LANE_K = 2;
 export const LANE_GEOM = Object.freeze({
-  head: 124, col: 158, cardW: 144, cardH: 104, rowGap: 10, pad: 8, pillH: 34, pillRow: 40,
+  head: 124, col: 158, cardW: 144, cardH: 104, rowGap: 10, pad: 8, pillH: 44, pillRow: 50,
   laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 66,
 });
 

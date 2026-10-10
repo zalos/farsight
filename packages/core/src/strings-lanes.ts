@@ -62,7 +62,9 @@ export const LANES_STRINGS: Record<string, StringEntry> = {
   'lanes.pill.by': same('by {name}', 'The code that makes this move or this write.'),
   'lanes.pill.from': same('made on {names}', 'The screens of this storyline whose code makes this move.'),
   'lanes.pill.more': same('+{n} records written', 'More records this storyline writes in this store, past the ones the lane has room for; the tip names them.'),
-  'lanes.pill.unchecked': same('the prior status is not checked by the code', 'The code that makes this move does not compare the record’s status first, so it would make the move from any status.'),
+  'lanes.pill.needs': same('needs {n}', 'What the code checks before it makes this move: who may make it, the state the records must be in, and the policies. The tip lists each with how tests reach it.'),
+  'lanes.pill.uncheckedShort': same('not checked', 'The code that makes this move does not compare the record’s status first. The tip names the status it is meant to leave.'),
+  'lanes.pill.thisMove': same('this move', 'The action that makes this move.'),
 
   // the arrows
   'lanes.arrow.seen': same('seen · {status}', 'A screen in another lane reads the record and shows it in this status: what that person sees change without doing anything. Drawn from a hand-off the design names, only when the screen reads the record.'),
