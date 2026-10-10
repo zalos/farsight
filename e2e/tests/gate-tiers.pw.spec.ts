@@ -58,3 +58,19 @@ test('a precondition opens the gate card with its tier and why, and what happens
   await page.keyboard.press('Escape');
   await expect(c).toHaveCount(0);
 });
+
+/** @covers packages/server/public/app/surfaces/map-property.js::gatesByTierHtml */
+test('the Map property’s Gates tab reads by tier in the business register', async ({ page }) => {
+  await gotoReady(page, '#/portfolio?lens=business');
+  await page.evaluate(() => {
+    const S = (window as any).S;
+    S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
+  });
+  await page.evaluate(([flow, n]) => { location.hash = '#/map/' + encodeURIComponent(flow) + '?node=' + encodeURIComponent(n); }, [FLOW, 'invoice-app::page::/invoices']);
+  await expect(page.locator('.mp')).toBeVisible();
+  await page.locator('#mp-tab-gates').click();
+  const heads = page.locator('.mp-body .mp-tier-h');
+  await expect(heads.first()).toHaveText(/who may/i);
+  await expect(page.locator('.mp-body .mp-tier-h', { hasText: /the record must be/i })).toBeVisible();
+  await expect(page.locator('.mp-body details.mp-tier.tech > summary')).toHaveText(/^\+ \d+ technical checks?$/);
+});
