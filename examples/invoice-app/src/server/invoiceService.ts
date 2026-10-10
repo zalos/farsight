@@ -57,6 +57,7 @@ export async function updateInvoice(id: string, patch: { lines: { amount: number
  */
 export async function finalizeInvoice(id: string) {
   const invoice = await db.invoices.findOne({ id });
+  // smoke: a throwaway line for `farsight affected --pr` (closed unmerged)
   /* @business An invoice must have at least one line item before it can be sent. */
   if (invoice.lines.length < 1) {
     throw Object.assign(new Error('invoice has no line items'), { status: 409 });
