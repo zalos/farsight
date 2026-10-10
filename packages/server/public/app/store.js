@@ -203,8 +203,7 @@ export function commitWords(subject) {
 }
 function unCodeAll(text) {
   const words = (s) => String(s).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
-  // a backticked `/` or `.` has no last segment: say it as it is (⌘K's index threw on one on the dogfood graph)
-  const file = (p) => words((String(p).split('/').filter(Boolean).pop() || String(p)).replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
+  const file = (p) => words((String(p).split('/').filter(Boolean).pop() || '').replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
   return String(text || '')
     // a document's id in brackets — (SCR-08.5), (PBI #352) — is the docs' handle, not words;
     // an ADR number is the citation key a reader quotes the decision by, so a bracket that

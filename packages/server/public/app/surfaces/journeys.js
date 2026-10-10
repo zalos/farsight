@@ -4461,7 +4461,8 @@ function jrnFillStoryline(tree, entryId) {
  */
 export function jrnLifecycleHtml(data) {
   const { shown, more } = headerLifecycles(data && data.lifecycles);
-  return shown.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join('')
+  const flow = data && data.entry && data.entry.kind === 'flow' ? data.entry.id : '';
+  return shown.map((lc) => lifecycleStripHtml(lc, '/api/journey', { flow })).join('')
     + (more ? '<span class="lc-more"' + defAttrs('lifecycle.more') + '>' + esc(t('lifecycle.more').replace('{n}', more)) + '</span>' : '');
 }
 /**

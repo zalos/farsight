@@ -389,7 +389,8 @@ function propLifecycleHtml(pm, st) {
   const seg = data && data.summary && pm.screen && pm.screen.segment ? (data.summary.segments || [])[pm.screen.segment.index] : null;
   const list = screenLifecycles(data && data.lifecycles, ids, ((seg && seg.markers) || []).map((m) => m.nodeId));
   if (!list.length) return '';
-  return sec('lifecycle.word', list.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join(''));
+  const flow = data && data.entry && data.entry.kind === 'flow' ? data.entry.id : '';
+  return sec('lifecycle.word', list.map((lc) => lifecycleStripHtml(lc, '/api/journey', { flow })).join(''));
 }
 
 function gatesHtml(pm) {
