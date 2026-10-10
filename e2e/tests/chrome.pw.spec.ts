@@ -5,6 +5,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
 import { test, expect, gotoReady, openBillingCycle } from './support';
 import { CLI, makeWorkspace } from '../fixture/workspace.mjs';
+import { routeWork } from './work-stub';
 
 test.describe('Settings is named', () => {
   /**
@@ -40,8 +41,8 @@ test.describe('Settings is named', () => {
 
 test.describe('a writable session', () => {
   /**
-   * @covers packages/server/public/app/shell.js::applyReadOnly
-   * @covers packages/server/public/app/shell.js::readOnlyWhy
+   * @covers packages/server/public/app/lib/read-only.js::applyReadOnly
+   * @covers packages/server/public/app/lib/read-only.js::readOnlyWhy
    */
   test('says nothing about read-only and leaves every write control live', async ({ page }) => {
     await gotoReady(page, '#/portfolio');
@@ -86,7 +87,7 @@ test.describe('a read-only session', () => {
 
   /**
    * @covers packages/server/src/guard.ts::refuseWrite
-   * @covers packages/server/public/app/shell.js::applyReadOnly
+   * @covers packages/server/public/app/lib/read-only.js::applyReadOnly
    */
   test('the chip says READ-ONLY, every write control is greyed with its reason, and the server refuses the write', async ({ page }) => {
     const v = await (await fetch(base + 'api/version')).json();
@@ -109,6 +110,90 @@ test.describe('a read-only session', () => {
     // pressed anyway, nothing is sent
     await page.locator('#savebtn').click({ force: true });
     await page.locator('#syncbtn').click({ force: true });
+    await page.waitForTimeout(300);
+    expect(writes).toEqual([]);
+  });
+});
+
+/** Every visible control that would write, and which of them are live — none may be, on a read-only server. */
+async function liveWrites(page: import('@playwright/test').Page): Promise<string[]> {
+  return page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-write]')]
+    .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
+    .filter((e) => !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+    .map((e) => (e.id || e.className || e.tagName) + ': ' + (e.textContent || '').trim().slice(0, 30)));
+}
+
+test.describe('a read-only session, on every surface', () => {
+  test.describe.configure({ mode: 'serial' });
+  test.use({ expectedHttpErrors: [/\/api\/settings$/] });
+  let srv: ChildProcess | null = null;
+  let url = '';
+  let done: (() => void) | null = null;
+  test.beforeAll(async () => {
+    const ws = makeWorkspace('readonly-all');
+    done = ws.cleanup;
+    const port = await freePort();
+    srv = spawn(process.execPath, [CLI, 'serve', ws.graph, '--port', String(port), '--read-only'], { cwd: ws.dir, stdio: 'ignore' });
+    url = `http://localhost:${port}/`;
+    for (let i = 0; i < 100; i++) {
+      try { if ((await fetch(url + 'api/version')).ok) return; } catch { /* not yet */ }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error('the read-only server never answered');
+  });
+  test.afterAll(() => {
+    if (srv?.pid) srv.kill('SIGTERM');
+    if (done) done();
+  });
+
+  /**
+   * @covers packages/server/public/app/lib/read-only.js::applyReadOnly
+   * @covers packages/server/public/app/lib/read-only.js::installReadOnly
+   * @covers packages/server/public/app/surfaces/work.js::workSync
+   */
+  test('Work, an item, Settings, the journey, the Map and the Portfolio: the chip, and no live write control', async ({ page }) => {
+    const writes: string[] = [];
+    page.on('request', (r) => { if (r.method() !== 'GET') writes.push(r.method() + ' ' + r.url()); });
+    await routeWork(page);
+    // the Map is a workspace flag: on for this walk, read from the settings the server serves
+    await page.route('**/api/settings', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      const res = await route.fetch();
+      const s = await res.json();
+      s.flags = Object.assign({}, s.flags, { map: true });
+      return route.fulfill({ response: res, json: s });
+    });
+    const walk: [string, string, string][] = [
+      ['work', '#/work', '.wk-syncbtn'],
+      ['an item', '#/work/' + encodeURIComponent('work::invoice-jira::INV-3'), '.wk-head'],
+      ['settings', '#/settings', '#savebtn'],
+      ['the journey', '#/journeys/' + encodeURIComponent('invoice-app::flow::billing-cycle'), '#jrn-title'],
+      ['the map', '#/map', '.map-district'],
+      ['the portfolio', '#/portfolio', '.pf-wrap'],
+    ];
+    for (const [name, hash, ready] of walk) {
+      await page.goto(url + hash);
+      await expect(page.locator('#stats')).not.toHaveText('loading…');
+      await expect(page.locator(ready).first(), name).toBeVisible();
+      await expect(page.locator('#readonly'), name).toBeVisible();
+      await expect(page.locator('#readonly'), name).toHaveText(/read-only/i);
+      expect(await liveWrites(page), name).toEqual([]);
+    }
+    // Work says so before anything is tried, and its sync and the item's writes are greyed with a reason
+    await page.goto(url + '#/work/' + encodeURIComponent('work::invoice-jira::INV-3'));
+    await expect(page.locator('.wk-ro-pane')).toBeVisible();
+    const edit = page.locator('.wk-ctl[data-action="edit"]').first();
+    await expect(edit).toHaveAttribute('aria-disabled', 'true');
+    await expect(edit).toHaveAttribute('data-tip-text', /read-only/);
+    await edit.click({ force: true });
+    await expect(page.locator('#wk-title-in')).toHaveCount(0);
+    await page.goto(url + '#/work');
+    await expect(page.locator('.wk-ro')).toBeVisible();
+    await page.locator('.wk-syncbtn').click({ force: true });
+    // the theme hint changes with the mode: a read-only server keeps no settings
+    await page.goto(url + '#/settings');
+    await page.locator('#set-theme').selectOption('light');
+    await expect(page.locator('#set-theme-note')).toHaveText(/read-only server keeps no settings/);
     await page.waitForTimeout(300);
     expect(writes).toEqual([]);
   });

@@ -170,9 +170,14 @@ describe('presence', () => {
 });
 
 describe('orient and find', () => {
-  test('graph_overview leads with counts, names the history, and ends with currency', async () => {
+  test('graph_overview leads with the state of play, then counts, names the history, and ends with currency', async () => {
     const out = await call('graph_overview');
-    assert.match(out, new RegExp(`^Farsight semantic graph: ${index.byId.size} nodes`));
+    // the front door's three columns first (round 2026-10-10), each number with the command that prints it again
+    assert.match(out, /^## state of play\nState of play — /);
+    assert.match(out, /Built and walkable:\n- .*— re-check: farsight /);
+    assert.match(out, /Validated by a run:/);
+    assert.match(out, /Still open:/);
+    assert.match(out, new RegExp(`^Farsight semantic graph: ${index.byId.size} nodes`, 'm'));
     assert.match(out, /history: 2 snapshot\(s\), sync 1–2/);
     assert.match(out, /## keeping current/);
     assert.match(out, /tests: \d+ case\(s\)/);

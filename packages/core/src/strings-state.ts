@@ -18,7 +18,7 @@ function sys(word: string): StringEntry {
 
 export const STATE_STRINGS: Record<string, StringEntry> = {
   // ── read this if ──
-  'journeys.readThisIf': same('Read this if', 'Three steps for someone opening Farsight on this application for the first time: where to start, how to change the words, and where every word is defined.'),
+  'journeys.readThisIf': same('Read this if', 'Three things to know when opening Farsight on this application for the first time: where to start, how to change the words, and where every word is defined.'),
   // ── the state of play ──
   'state.title': same('State of play', 'What is built, what a test run has checked, and what is still open in the sources in scope, as of the sync named beside it. Every number carries the command that prints it again.'),
   'state.asOf': same('as of sync {n}', 'The sync whose graph every number on this card was counted from.'),
@@ -50,9 +50,9 @@ export const STATE_STRINGS: Record<string, StringEntry> = {
   'history.fact.ingested': same('{n} ingested by a sync', 'Of the commits read, those a sync built a graph from: what each did to the graph is known.'),
   'history.fact.notYet': same('{n} not yet', 'Of the commits read, those no sync has built a graph from yet: Farsight can name the files they touched, not what they did to the graph.'),
   // ── the glossary strip ──
-  'journeys.glossary.title': same('Words this app leans on', 'The application’s own words, from the glossary its farsight.config.json files give: what each name means in this business.'),
+  'journeys.glossary.title': same('Words this app leans on', 'The application’s own words, from the glossary its Farsight config files give: what each name means in this business.'),
   'journeys.glossary.all': same('the glossary', 'Every word the glossary gives, with what it means and the file it comes from.'),
-  'journeys.glossary.none': same('no farsight.config.json in scope gives a glossary', 'A glossary block in a farsight.config.json names the application’s own words; until one does, this strip has nothing to show.'),
+  'journeys.glossary.none': same('no farsight.config.json in scope gives a glossary', 'A glossary block in a Farsight config file names the application’s own words; until one does, this strip has nothing to show.'),
   'journeys.glossary.term': same('the name in the code'),
   'journeys.glossary.file': same('from'),
   // ── an address with nothing at it (finding 3.2) ──
