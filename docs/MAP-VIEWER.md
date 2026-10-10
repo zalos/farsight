@@ -509,6 +509,35 @@ e2e: `e2e/tests/journeys-organised.pw.spec.ts` (structure and the order rule aga
 fixture's personas *Billing* and *Operations*, its two groups and the shared, config-placed *Draft and send* on the
 front door, the header, the Portfolio and the Map; and the front door drawn identically with `/api/journeys` answering 404).
 
+## The front door's state of play, read-only, addresses — `lib/state-of-play.js`, `lib/read-only.js` (2026-10-10)
+
+- **State of play** (`lib/state-of-play.js`, over `GET /api/state` → core `stateOfPlay()`): the front door opens with two
+  cards in `.sop-row` — *Read this if* (the three steps and their doors; it replaced *New here?*) and *State of play*
+  (`#sop-card`: provenance — sources · as of sync · when · code at commit · drawn by — then three `.sop-col`s, *built and
+  walkable* · *validated by a run* · *still open*). Every number is `countedHtml()` with its tip; every line ends with a
+  `.sop-re` *re-check ›* door (the command in its tip, copied on press — `sopCopy`), and a column's first line prints
+  its command under it; the business register keeps the numbers and drops the commands. The history line is the one
+  history sentence. Under the cards `#sop-gloss`, *Words this app leans on*: four chips from the config glossary
+  (`meta.config[repo].glossary`) and *the glossary ›* (all of them in a pinned tip), or the absence word *none indexed*
+  when no config gives one. `renderPicker()` starts both reads and paints the card first, then the journeys
+  (`jrnMountDesigns`), so nothing under the pointer moves when the card fills. `farsight state` and MCP
+  `graph_overview` print the same object as text (`stateOfPlayLines`); docs/COUNTS.md § State of play lists each count.
+- **Read-only means every write** (`lib/read-only.js`): `readOnlyWhy()` reads `/api/version` `session`; every control
+  that writes carries `data-write` (Settings, the scope menu's save, Work's *Sync now* and per-source sync, the item
+  pane's edit · move · assign · description · comment · preview · re-base/drop/confirm and their pickers and fields).
+  `applyReadOnly(root)` greys them (`ro-off` + `aria-disabled` on buttons, `disabled` on fields, the
+  `sys.readonly.control` tip that says why and who to ask); once the session is read-only, `installReadOnly()` greys every
+  `[data-write]` drawn later (a MutationObserver) and spends a press on one before its handler runs, pinning its tip
+  instead. Handlers (`workSync`, `workEdit`, `postIntent`, `workSettle`, `saveSettings`…) also return early. Work prints
+  `sys.readonly.page` under its strip and `sys.readonly.workPane` in the item pane; the theme hint reads
+  `sys.readonly.themeHint`. Boot waits up to 1.5 s for `/api/version` before the first surface mounts, so a surface
+  draws its write controls knowing the session. An export (Save) is not a write. The READ-ONLY chip folds last before
+  the tabs.
+- **Addresses** (`shell.js`): Settings is `#/settings` — a surface that mounts the `#settings` node into the surface
+  frame under the top bar (`mountSettings` / `unmountSettings`; `openSettings()` remembers where it came from and
+  `closeSettings()`, *Back* and Esc go there); the gear reads `.on` while it is open. An address no surface owns mounts
+  `nowhere`: one line, *There is nothing at this address* `#/x` · *go to the front door ›*, and the address stays.
+
 ## MAP — `surfaces/map.js`, `lib/map-canvas.js`, `lib/map-model.js` (2026-10-03)
 
 Every journey on one zoomable board, the way Miro or Figma draw one (brief: `docs/proposals/map-view.md`; the agreed

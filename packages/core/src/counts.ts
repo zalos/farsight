@@ -48,6 +48,11 @@ export interface Counted {
   scope: string;
   source: string;
   breakdown?: CountPart[];
+  /**
+   * The command that prints this same number again, for a reader who doubts it: the CLI line and, where one
+   * exists, the MCP tool (round 2026-10-10, the front door's state of play — every number carries its re-check).
+   */
+  recheck?: { cli: string; mcp?: string };
 }
 
 /**
@@ -114,13 +119,14 @@ export function counted(
   unit: string,
   scope: CountScope,
   source: string,
-  extra: { of?: number; bizUnit?: string; breakdown?: CountPart[] } = {},
+  extra: { of?: number; bizUnit?: string; breakdown?: CountPart[]; recheck?: { cli: string; mcp?: string } } = {},
 ): Counted {
   return {
     n, unit, scope, source,
     ...(extra.of != null ? { of: extra.of } : {}),
     ...(extra.bizUnit ? { bizUnit: extra.bizUnit } : {}),
     ...(extra.breakdown ? { breakdown: extra.breakdown } : {}),
+    ...(extra.recheck ? { recheck: extra.recheck } : {}),
   };
 }
 

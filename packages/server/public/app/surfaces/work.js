@@ -20,6 +20,7 @@ import { tipAttrs } from '../lib/tooltip.js';
 import { countedHtml, defAttrs } from '../lib/counted.js';
 import { kindWord } from '../lib/graph-render.js';
 import { openImpact } from '../impact.js';
+import { readOnlyWhy } from '../lib/read-only.js';
 import { CAT_KEY, CATS, providerWord, sourceName, stateHtml, freshHtml, whenWords, workBiz, forgetFlowWork } from '../work-chips.js';
 
 const VIEWS = ['list', 'board', 'sources'];
@@ -155,8 +156,10 @@ function drawStrip() {
     + esc(t('work.hud.view.' + v)) + '</button>').join('') + '</div>';
   el.innerHTML = '<div class="wk-strip"><h1>' + sym('work') + esc(t('nav.work')) + '</h1>'
     + '<p class="sub">' + esc(t('work.hud.sub')) + '</p>' + counts + views
-    + '<button class="wk-syncbtn" onclick="workSync()"' + (SYNCING ? ' disabled' : '') + tipAttrs({ key: 'work.hud.syncNow', noFocus: true }) + '>'
-    + sym('sync') + esc(t(SYNCING ? 'work.hud.syncing' : 'work.hud.syncNow')) + '</button></div>';
+    + '<button class="wk-syncbtn" data-write onclick="workSync()"' + (SYNCING ? ' disabled' : '') + tipAttrs({ key: 'work.hud.syncNow', noFocus: true }) + '>'
+    + sym('sync') + esc(t(SYNCING ? 'work.hud.syncing' : 'work.hud.syncNow')) + '</button></div>'
+    // a read-only server says so once, above everything, before a write is ever tried (finding 3.1)
+    + (readOnlyWhy() ? '<p class="set-ro wk-ro" role="status"><span class="ro-chip">' + esc(t('sys.readonly')) + '</span> ' + esc(t('sys.readonly.page')) + '</p>' : '');
 }
 
 /**
@@ -165,7 +168,7 @@ function drawStrip() {
  * @group Work
  */
 export function workSync(source) {
-  if (SYNCING) return;
+  if (SYNCING || readOnlyWhy()) return;
   SYNCING = true;
   drawStrip();
   fetch('/api/work/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(source ? { source } : {}) })
@@ -224,7 +227,7 @@ function cardHtml(s) {
     + freshHtml(f)
     + (s.counts && s.counts.items ? '<div class="kv">' + countedHtml(s.counts.items, '/api/work') + '</div>' : '')
     + capsHtml(s)
-    + '<div><button class="wk-ctl" onclick="workSync(this.dataset.source)" data-source="' + esc(s.id) + '">' + esc(t('work.hud.syncNow')) + '</button></div>'
+    + '<div><button class="wk-ctl" data-write onclick="workSync(this.dataset.source)" data-source="' + esc(s.id) + '">' + esc(t('work.hud.syncNow')) + '</button></div>'
     + '</div>';
 }
 
@@ -390,7 +393,7 @@ function caps(d) {
  * @group Work
  */
 function previewBtn(d, onclick) {
-  return caps(d).dryRun && d && d.previewable === true ? '<button class="btn" data-preview="1" onclick="' + onclick + '"' + tipAttrs({ key: 'work.hud.edit.preview', noFocus: true }) + '>' + esc(t('work.hud.edit.preview')) + '</button>' : '';
+  return caps(d).dryRun && d && d.previewable === true ? '<button class="btn" data-write data-preview="1" onclick="' + onclick + '"' + tipAttrs({ key: 'work.hud.edit.preview', noFocus: true }) + '>' + esc(t('work.hud.edit.preview')) + '</button>' : '';
 }
 
 /** Whether the policy lets this page draw an action's control, and the reason when it does not. @group Work */
@@ -413,7 +416,7 @@ function paneHtml(d) {
   const biz = workBiz();
   const ro = d.mode !== 'edit';
   const can = (a) => allowed(d, a).ok;
-  const ctl = (action, what, label) => (can(action) ? ' <button class="wk-ctl" data-action="' + action + '" onclick="workEdit(\'' + what + '\')">' + esc(t(label)) + '</button>' : '');
+  const ctl = (action, what, label) => (can(action) ? ' <button class="wk-ctl" data-write data-action="' + action + '" onclick="workEdit(\'' + what + '\')">' + esc(t(label)) + '</button>' : '');
   const denied = ro ? [] : ['comment', 'assign', 'transition', 'edit'].filter((a) => !can(a));
   const tracker = providerWord(it.provider);
   const parent = it.parent ? '<a href="#/work/' + encodeURIComponent(it.parent) + '">' + esc(biz ? t('work.label.parent') : String(it.parent).split('::').pop()) + '</a>' : '';
@@ -429,14 +432,15 @@ function paneHtml(d) {
   ].filter(Boolean);
   const head = '<div class="wk-sec wk-head">'
     + '<div><a class="wk-back" href="#/work">' + esc(t('work.hud.back')) + '</a></div>'
-    + (EDITING === 'title' ? '<div class="wk-ed"><input id="wk-title-in" value="' + esc(it.title) + '" aria-label="' + esc(t('work.hud.edit.title')) + '"/><div class="row">'
-      + '<button class="btn primary" onclick="workSaveTitle()">' + esc(t('work.hud.edit.save')) + '</button>' + previewBtn(d, 'workSaveTitle(true)') + '<button class="btn" onclick="workEdit(null)">' + esc(t('work.hud.edit.cancel')) + '</button></div></div>'
+    + (EDITING === 'title' ? '<div class="wk-ed"><input id="wk-title-in" data-write value="' + esc(it.title) + '" aria-label="' + esc(t('work.hud.edit.title')) + '"/><div class="row">'
+      + '<button class="btn primary" data-write onclick="workSaveTitle()">' + esc(t('work.hud.edit.save')) + '</button>' + previewBtn(d, 'workSaveTitle(true)') + '<button class="btn" onclick="workEdit(null)">' + esc(t('work.hud.edit.cancel')) + '</button></div></div>'
       : '<h1>' + (biz ? '' : '<span class="wk-key">' + esc(it.key) + '</span>') + '<span id="wk-title">' + esc(it.title) + '</span>' + ctl('edit', 'title', 'work.hud.edit.title') + '</h1>')
     + '<dl class="wk-facts">' + facts.map(([k, v]) => '<dt' + (def(k) ? defAttrs(k) : '') + '>' + esc(t(k)) + '</dt><dd>' + v + '</dd>').join('') + '</dl>'
     + '<div class="wk-chips">' + freshHtml(d.freshness)
     + ' <span class="wk-mode' + (ro ? '' : ' edit') + '"' + defAttrs(ro ? 'work.mode.readOnly' : 'work.mode.edit') + '>' + esc(t(ro ? 'work.mode.readOnly' : 'work.mode.edit')) + '</span>'
     + (/^https?:\/\//.test(it.url || '') ? ' <a class="ext" href="' + esc(it.url) + '" target="_blank" rel="noopener">' + sym('open') + ' ' + esc(t('work.hud.openIn').replace('{tracker}', tracker)) + '</a>' : '')
     + (currentCode() ? ' <span class="wk-id">' + esc(it.id) + '</span>' : '') + '</div>'
+    + (readOnlyWhy() ? '<p class="wk-note wk-ro-pane" role="status">' + esc(t('sys.readonly.workPane')) + '</p>' : '')
     + (ro ? '<p class="wk-note" id="wk-readonly"' + defAttrs('work.hud.edit.readOnly') + '>' + esc(t('work.hud.edit.readOnly')) + '</p>' : '')
     + (denied.length ? '<p class="wk-note"' + defAttrs('work.hud.edit.notGranted') + '>' + esc(t('work.hud.edit.notGranted').replace('{actions}', denied.map((a) => t(ACTION_KEY[a])).join(', '))) + '</p>' : '')
     + '</div>';
@@ -444,15 +448,15 @@ function paneHtml(d) {
   const bodyText = it.body ? (it.body.format === 'markdown' ? String(it.body.raw != null ? it.body.raw : it.body.text) : it.body.text) : '';
   const desc = '<div class="wk-sec"><h2>' + esc(t('work.hud.pane.description')) + ctl('edit', 'description', 'work.hud.edit.description') + '</h2>'
     + (EDITING === 'description'
-      ? '<div class="wk-ed"><textarea id="wk-desc-in" aria-label="' + esc(t('work.hud.edit.description')) + '">' + esc(bodyText) + '</textarea><div class="row">'
-        + '<button class="btn primary" onclick="workSaveDesc()">' + esc(t('work.hud.edit.save')) + '</button>' + previewBtn(d, 'workSaveDesc(true)') + '<button class="btn" onclick="workEdit(null)">' + esc(t('work.hud.edit.cancel')) + '</button></div></div>'
+      ? '<div class="wk-ed"><textarea id="wk-desc-in" data-write aria-label="' + esc(t('work.hud.edit.description')) + '">' + esc(bodyText) + '</textarea><div class="row">'
+        + '<button class="btn primary" data-write onclick="workSaveDesc()">' + esc(t('work.hud.edit.save')) + '</button>' + previewBtn(d, 'workSaveDesc(true)') + '<button class="btn" onclick="workEdit(null)">' + esc(t('work.hud.edit.cancel')) + '</button></div></div>'
       : (bodyText ? '<div class="wk-md">' + (biz ? '<p>' + esc(plainWords(it.body.text) || t('work.hud.noDescription')) + '</p>' : mdLite(bodyText)) + '</div>'
         : '<p class="wk-note">' + esc(t('work.hud.noDescription')) + '</p>'))
     + '</div>';
   const comments = '<div class="wk-sec"><h2>' + esc(t('work.label.comments')) + '</h2>'
     + ((it.comments || []).length ? it.comments.map(commentHtml).join('') : '<p class="wk-note">' + esc(t('work.hud.noComments')) + '</p>')
-    + (can('comment') ? '<div class="wk-ed"><textarea id="wk-comment-in" placeholder="' + esc(t('work.hud.edit.comment')) + '" aria-label="' + esc(t('work.hud.edit.comment')) + '"></textarea>'
-      + '<div class="row"><button class="btn primary" data-action="comment" onclick="workComment()">' + esc(t('work.hud.edit.post')) + '</button>' + previewBtn(d, 'workComment(true)') + '</div></div>' : '')
+    + (can('comment') ? '<div class="wk-ed"><textarea id="wk-comment-in" data-write placeholder="' + esc(t('work.hud.edit.comment')) + '" aria-label="' + esc(t('work.hud.edit.comment')) + '"></textarea>'
+      + '<div class="row"><button class="btn primary" data-write data-action="comment" onclick="workComment()">' + esc(t('work.hud.edit.post')) + '</button>' + previewBtn(d, 'workComment(true)') + '</div></div>' : '')
     + '</div>';
   const hist = '<div class="wk-sec"><h2' + defAttrs('work.hud.pane.history') + '>' + esc(t('work.label.history')) + '</h2>'
     + ((it.history || []).length ? '<ul class="wk-hist">' + it.history.map((h) => '<li>' + esc(whenWords(h.at)) + (h.by ? ' · ' + esc(h.by.name) : '') + ' · <b>'
@@ -514,6 +518,8 @@ export function mdLite(src) {
 
 /** Open one edit (`title` · `description` · `assign` · `move`), or close it with null. @group Work */
 export function workEdit(what) {
+  // a read-only server opens no editor (cancel — null — still closes one)
+  if (what && readOnlyWhy()) return;
   EDITING = what || null;
   const src = DETAIL && DETAIL.item && DETAIL.item.source;
   const redraw = () => { draw(); focusEdit(); };
@@ -539,13 +545,13 @@ function pickerHtml(what) {
   if (what === 'assign') {
     if (!PEOPLE) return '<span class="wk-note">…</span>';
     return '<div class="wk-pick" role="listbox" aria-label="' + esc(t('work.hud.edit.pick')) + '">'
-      + PEOPLE.map((p) => '<button role="option" data-person="' + esc(p.id) + '" onclick="workAssign(this.dataset.person)">' + esc(p.name) + '</button>').join('')
-      + '<button role="option" data-person="" onclick="workAssign(\'\')">' + esc(t('work.hud.edit.nobody')) + '</button>'
+      + PEOPLE.map((p) => '<button role="option" data-write data-person="' + esc(p.id) + '" onclick="workAssign(this.dataset.person)">' + esc(p.name) + '</button>').join('')
+      + '<button role="option" data-write data-person="" onclick="workAssign(\'\')">' + esc(t('work.hud.edit.nobody')) + '</button>'
       + '<button onclick="workEdit(null)">' + esc(t('work.hud.edit.cancel')) + '</button></div>';
   }
   if (!STATES) return '<span class="wk-note">…</span>';
   return '<div class="wk-pick" role="listbox" aria-label="' + esc(t('work.hud.edit.move')) + '">'
-    + STATES.map((s) => '<button role="option" data-state="' + esc(s.name) + '" data-cat="' + esc(s.category) + '" onclick="workMove(this.dataset.state,this.dataset.cat)">' + stateHtml(s, true) + '</button>').join('')
+    + STATES.map((s) => '<button role="option" data-write data-state="' + esc(s.name) + '" data-cat="' + esc(s.category) + '" onclick="workMove(this.dataset.state,this.dataset.cat)">' + stateHtml(s, true) + '</button>').join('')
     + '<button onclick="workEdit(null)">' + esc(t('work.hud.edit.cancel')) + '</button></div>';
 }
 
@@ -563,6 +569,7 @@ function requestedBy() {
  * @group Work
  */
 function postIntent(action, payload, preview) {
+  if (readOnlyWhy()) return;
   const it = DETAIL.item;
   const entry = { status: 'sending', action, payload, preview: !!preview };
   ANSWERS.unshift(entry);
@@ -612,6 +619,7 @@ export function workMove(name, category) { postIntent('transition', { to: name |
  * @group Work
  */
 export function workSettle(intentId, verb, idx) {
+  if (readOnlyWhy()) return;
   const entry = idx != null && idx !== '' && ANSWERS[+idx] ? ANSWERS[+idx] : null;
   if (entry) { entry.status = 'sending'; draw(); }
   fetch('/api/work/intent/' + encodeURIComponent(intentId) + '/' + verb, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
@@ -659,7 +667,7 @@ function answerHtml(a, idx) {
   // what a person typed is words; in the business lens its code is said in words too
   const asked = workBiz() && (a.action === 'comment' || a.action === 'edit') ? plainWords(askedWords(a.action, a.payload)) : askedWords(a.action, a.payload);
   const idxAttr = a.fromOutbox && idx == null ? '' : String(idx);
-  const btn = (verb, key) => '<button class="btn' + (verb === 'drop' ? '' : ' primary') + '" data-verb="' + verb + '" data-intent="' + esc(intent.id || '') + '" data-idx="' + esc(idxAttr) + '"'
+  const btn = (verb, key) => '<button class="btn' + (verb === 'drop' ? '' : ' primary') + '" data-write data-verb="' + verb + '" data-intent="' + esc(intent.id || '') + '" data-idx="' + esc(idxAttr) + '"'
     + ' onclick="workSettle(this.dataset.intent,this.dataset.verb,this.dataset.idx)">' + esc(t(key)) + '</button>';
   const what = '<div class="row"><span class="wk-via">' + esc(act) + '</span>'
     + (a.fromOutbox && a.key && idx == null && !workBiz() ? '<a href="#/work/' + encodeURIComponent(a.item || intent.item) + '">' + esc(a.key) + '</a>' : '')

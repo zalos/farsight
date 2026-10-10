@@ -11,7 +11,7 @@ test.describe('journey views', () => {
     await openBillingCycle(page);
     await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle/);
     await expect(page.locator('#jrn-count')).toContainText('3 screens');
-    await expect(page.locator('#jrn-count')).toContainText('2 of 3 built');
+    await expect(page.locator('#jrn-count')).toContainText('2 of 3 screens built');
   });
 
   /**

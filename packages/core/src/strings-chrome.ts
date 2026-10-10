@@ -17,7 +17,7 @@ export const CHROME_STRINGS: Record<string, StringEntry> = {
   // the READ-ONLY chip is drawn only when the server says the session is read-only
   'sys.readonly.flag': sys('This server was started read-only. Browsing changes nothing, and the server refuses every change: saving settings, adding or removing a source, a sync and a work-item write. Those controls stay on screen, greyed out.'),
   'sys.readonly.asOf': sys('This server shows a past sync, so it is read-only. Browsing changes nothing, and the server refuses every change: saving settings, adding or removing a source, a sync and a work-item write. Those controls stay on screen, greyed out.'),
-  'sys.readonly.control': sys('This session is read-only, so this does nothing here: the server refuses the change. Start the server without read-only to change settings or sync.'),
+  'sys.readonly.control': sys('This server is read-only, so this does nothing here: the server refuses the change. Ask whoever runs this server to make it, or start your own server without read-only.'),
   'sys.readonly.banner': sys('Read-only session — every change on this page is greyed out, because the server refuses it. The theme can still be previewed in this window.'),
   // keys
   'key.mapLegend': same('The board’s legend: what each line, colour and mark means'),

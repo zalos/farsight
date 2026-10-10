@@ -926,6 +926,12 @@ export interface ConfigMeta {
   conflicts: { kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle'; key: string; files: string[]; kept: string }[];
   /** unreadable files, ignored root-only fields, paths that left the source */
   notes: string[];
+  /**
+   * The glossary the files give, one entry per key (the widest file's word where two disagree: a nested file's
+   * word holds only under its folder), in the files' order — root first: the words this application leans on,
+   * for the front door's strip (round 2026-10-10). Absent when no file gives a glossary.
+   */
+  glossary?: { key: string; label: string; description?: string; file: string }[];
 }
 
 /** What a language adapter returns for one repo. */
