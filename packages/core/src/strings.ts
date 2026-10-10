@@ -1757,7 +1757,7 @@ export const STRINGS: Record<string, StringEntry> = {
   ),
   'tests.evidence.declaredPassed': same(
     'passed, by its own declaration',
-    'The observed class, earned the one way an end-to-end run can earn it without coverage: a results report says the case passed, and the case itself declares (@covers) that it covers this. No measurement shows which lines it ran, so it is the author\u2019s claim, confirmed by a pass \u2014 not a fourth class, and never worded as a run seen reaching the code. A failed, flaky, skipped or unrun case stays declared only.',
+    'An end-to-end test says it covers this, and it passed the last time it ran. In detail: the observed class, earned the one way an end-to-end run can earn it without coverage: a results report says the case passed, and the case itself declares (@covers) that it covers this. No measurement shows which lines it ran, so it is the author\u2019s claim, confirmed by a pass \u2014 not a fourth class, and never worded as a run seen reaching the code. A failed, flaky, skipped or unrun case stays declared only.',
   ),
   'tests.evidence.declaredPassedStale': same(
     'passed, by its own declaration · stale',
