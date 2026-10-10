@@ -130,3 +130,34 @@ test('stepOfNode prefers the screen the reader is on, else the first step whose 
   assert.equal(stepOfNode(segs, 2, 'zz'), 3, 'a node no step holds: the screen the reader is on');
   assert.equal(stepOfNode(segs, null, 'zz'), null);
 });
+
+// ── the Map's stops (lanes round 2026-10-10, proposal 1) ──────────────────────
+const stops = await import(join(appDir, 'lib', 'route-url.js'));
+const F = 'invoice-app::flow::billing-cycle';
+
+test('a stop below the screen is an address: screen, action, beat, layout and dock, the dock only at the code', () => {
+  const h = stops.mapStopHash(F, { screen: 2, action: 6, beat: 4, dock: 'right' });
+  assert.equal(h, '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle?screen=2&action=6&beat=4&dock=right');
+  assert.deepEqual(stops.mapStopOf(h), { stop: 'code', screen: 2, action: 6, beat: 4, layout: null, dock: 'right' });
+  assert.equal(stops.mapStopOf(stops.mapStopHash(F, { screen: 2, action: 1 })).stop, 'action');
+  assert.equal(stops.mapStopOf(stops.mapStopHash(F, { screen: 2, action: 1, layout: 'ladder' })).layout, 'ladder');
+  // an action needs its screen; a dock needs its action; a beat needs its action
+  assert.equal(stops.mapStopHash(F, { action: 3, dock: 'right', beat: 2 }), '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle');
+});
+
+test('the address round-trips, and the existing grammar reads as it did', () => {
+  for (const o of [{ screen: 1 }, { screen: 3, action: 2 }, { screen: 2, action: 6, beat: 5, layout: 'ladder', dock: 'bottom' }, { layout: 'table' }]) {
+    const back = stops.mapStopOf(stops.mapStopHash(F, o));
+    assert.equal(back.screen, o.screen ?? null);
+    assert.equal(back.action, (o as any).action ?? null);
+    assert.equal(back.layout, (o as any).layout ?? null);
+  }
+  assert.equal(stops.mapStopOf('#/map').stop, 'board');
+  assert.equal(stops.mapStopOf('#/map/' + encodeURIComponent(F) + '?z=0.8&x=1&y=2').stop, 'journey');
+  assert.equal(stops.mapStopOf('#/map/' + encodeURIComponent(F) + '?node=x').stop, 'screen');
+  assert.equal(stops.mapStopOf(stops.mapScreenHash(F, 2)).stop, 'journey', 'a screen framed on the street is the journey stop');
+  // what a link cannot mean is dropped, never guessed
+  const odd = stops.mapStopOf('#/map/x?screen=0&action=2&layout=spiral&dock=left');
+  assert.deepEqual([odd.screen, odd.action, odd.layout, odd.dock], [null, null, null, null]);
+  assert.equal(stops.mapStopOf('?screen=2&action=1').stop, 'action', 'a bare query reads too (route.raw is the whole hash)');
+});
