@@ -673,6 +673,29 @@ export interface RecordLifecycle {
   transitions: LifecycleTransition[];
   /** where the statuses are declared; the first is the declaration whose order `statuses` keeps */
   provenance: LifecycleSource[];
+  /** the words people use for the statuses and the overlays they see, from `farsight.config.json → lifecycle` (absent: none given) */
+  names?: LifecycleNames;
+}
+/**
+ * What config named for one record's lifecycle (round 2026-10-10 §3), resolved at ingest against what the
+ * code declares: only statuses in `statuses` carry a word, only tables the graph has carry an overlay.
+ */
+export interface LifecycleNames {
+  /** persona id → status → the word that persona's people use for it */
+  views: Record<string, Record<string, string>>;
+  /** conditions a person sees that are not a status: a row in another table, in the order written */
+  overlays: LifecycleOverlay[];
+  /** the config files that gave them, root first */
+  from: string[];
+}
+export interface LifecycleOverlay {
+  /** the word a person uses (`Needs changes`) */
+  name: string;
+  /** when it holds, as the config says it (`an open row`) */
+  when: string;
+  /** the table as the config named it, and the table node it resolved to */
+  table: string;
+  tableId: string;
 }
 export interface LifecycleTransition {
   /** the status the writer checks first, when it compares the field to exactly one */
@@ -877,7 +900,7 @@ export interface ConfigMeta {
   /** root first, then by folder depth, then by path; `fields` = the keys the file gave, `ignored` = the ones not applied */
   files: { path: string; dir: string; root: boolean; fields: string[]; ignored: string[] }[];
   /** two files said different things about one key; `kept` is the file whose word stands */
-  conflicts: { kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag'; key: string; files: string[]; kept: string }[];
+  conflicts: { kind: 'glossary' | 'guard' | 'external' | 'store' | 'tag' | 'lifecycle'; key: string; files: string[]; kept: string }[];
   /** unreadable files, ignored root-only fields, paths that left the source */
   notes: string[];
 }

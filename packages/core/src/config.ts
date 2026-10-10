@@ -64,12 +64,18 @@ export interface FarsightConfig {
    * block applies to every manifest of the source, a nested file's to the manifests under its folder.
    */
   journeys?: JourneysConfig;
+  /**
+   * The words people use for a record's statuses, per persona, and the conditions they see that are
+   * not statuses (round 2026-10-10 §3). Keyed by the record's node id or table name. The code decides
+   * the statuses and the moves; this only names them — a status the code does not declare is a note.
+   */
+  lifecycle?: Record<string, LifecycleConfigEntry>;
 }
 
 /** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
 export const CONFIG_FIELDS = [
   'tags', 'glossary', 'guards', 'gateTiers', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
-  'externals', 'stores', 'journeys', 'projects', 'tooling',
+  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle',
 ] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
@@ -87,6 +93,17 @@ export interface JourneysConfigStoryline { id: string; name?: string; descriptio
 export interface JourneysConfigPersona { id: string; name?: string; description?: string }
 export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
 export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
+
+/**
+ * `farsight.config.json → lifecycle.<record>`: `views[<persona id>][<word>]` lists the statuses that
+ * persona calls by that word (`"Being drafted": ["draft"]`); `overlays[]` are conditions a person sees
+ * that are not a status — a row in another table (`{ name, table, when }`).
+ */
+export interface LifecycleConfigEntry {
+  views?: Record<string, Record<string, string[]>>;
+  overlays?: LifecycleOverlayConfig[];
+}
+export interface LifecycleOverlayConfig { name: string; table: string; when: string }
 
 /**
  * `farsight.config.json → projects`. A dimension with the prefix or the key of a default

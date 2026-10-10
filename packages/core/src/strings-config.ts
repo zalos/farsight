@@ -59,6 +59,8 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
     'Two config files declare the same outside system. The first declaration is kept and the second is not applied.'),
   'config.conflict.store': same('{key} is named as two different stores — {files}. {kept}’s is kept.',
     'Two config files name the same data store differently, or put the same table in different stores. The nearer file’s word stands for its own folder; otherwise the first is kept.'),
+  'config.conflict.lifecycle': same('{key} has two words for one status — {files}. {kept}’s stands.',
+    'Two config files, or two words in one file, name the same status of a record differently for the same kind of user. The nearer file’s word is the one shown.'),
   'config.conflict.tag': same('{key} is tagged differently — {files}. {kept}’s stands.',
     'Two config files tag the same part in ways that disagree. The file named last is the one that stands.'),
 
@@ -78,5 +80,6 @@ export const CONFIG_STRINGS: Record<string, StringEntry> = {
   'config.field.stores': same('data stores', 'Which database or store the records live in, where the code does not say.'),
   'config.field.journeys': same('journey order', 'How the journeys are organised: for whom each one is, which group it sits in, and in what order.'),
   'config.field.projects': same('project words', 'How the projects of the workspace group, and words for their tags. Only the file in the top folder may give it.'),
+  'config.field.lifecycle': same('status words', 'The words people use for a record’s statuses, for each kind of user, and the conditions they see that are not a status. The code still decides which statuses exist and what moves a record between them.'),
   'config.field.tooling': same('tooling folders', 'Folders of scripts a person runs by hand, kept out of the running application. Only the file in the top folder may give it.'),
 };

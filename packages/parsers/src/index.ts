@@ -13,12 +13,14 @@ import { applyStories } from './stories/index.js';
 import { applyStores } from './stores.js';
 import { applyProjects, projectOfPath } from './shared/projects.js';
 import { loadWorkspaceConfig, applyWorkspaceConfig, applyWorkspaceRouteGuards, recordConflict } from './shared/config-files.js';
+import { applyLifecycleConfig } from './shared/lifecycle-config.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
 export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js';
 export { applyProjects, discoverProjects, projectOfPath, projectImports, importSpecifiers, workspaceGlobs } from './shared/projects.js';
 export { readNxProjectGraph, NX_GRAPH_PATHS, NX_GRAPH_MAX_BYTES } from './shared/nx-graph.js';
+export { applyLifecycleConfig } from './shared/lifecycle-config.js';
 export { loadWorkspaceConfig, emptyWorkspaceConfig, applyWorkspaceConfig, applyWorkspaceRouteGuards, journeysConfigFor, rebasePath, CONFIG_FILE } from './shared/config-files.js';
 export type { ConfigFile, WorkspaceConfig, ScopedStoreDecl } from './shared/config-files.js';
 export { javaAdapter, ingestJava } from './java/index.js';
@@ -111,6 +113,9 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   // each file's declarations scoped to its folder (the nearer file wins for a table under two)
   const storesMeta = applyStores(merged, repoRoot, opts, workspace.stores, drivers,
     (key, files, kept) => recordConflict(workspace, 'store', key, files, kept));
+  // the words people use for a record's statuses, per persona, and the overlays they see — once, on the
+  // records the code gave a lifecycle (the code decides the statuses; config only names them)
+  applyLifecycleConfig(merged.nodes, workspace);
   // the content digest goes on after the spec and design passes (both rebuild meta from
   // scratch — openapi/index.ts:38, design/index.ts:144) and before the tests pass, whose
   // freshnessOf() compares a report's recorded digest against it

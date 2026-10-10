@@ -164,6 +164,13 @@
       "items": {
         "type": "string"
       }
+    },
+    "lifecycle": {
+      "type": "object",
+      "description": "The words people use for a record's statuses, per persona, and the conditions they see that are not a status. Keyed by the record's node id or table name. The code decides the statuses and the moves; this only names them — a status the code does not declare is a note. In a nested file an entry names only records whose statuses are declared under that file's folder; the nearer file's word stands.",
+      "additionalProperties": {
+        "$ref": "#/$defs/lifecycleEntry"
+      }
     }
   },
   "$defs": {
@@ -599,6 +606,52 @@
         "rejoins": {
           "type": "string",
           "description": "The step of this storyline the branch comes back to; leave it out when the case leaves the storyline there."
+        }
+      }
+    },
+    "lifecycleEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "views": {
+          "type": "object",
+          "description": "persona id → { word → the statuses (as the code spells them) that persona calls by that word }.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "overlays": {
+          "type": "array",
+          "description": "Conditions a person sees that are not a status — a row in another table.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "table",
+              "when"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The word a person uses for it."
+              },
+              "table": {
+                "type": "string",
+                "description": "The table it is read from (node id or table name); one the code does not have is a note."
+              },
+              "when": {
+                "type": "string",
+                "description": "When it holds, in words."
+              }
+            }
+          }
         }
       }
     }
