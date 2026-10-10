@@ -15,6 +15,7 @@ import { countedHtml, countWords } from '../lib/counted.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { mapTestsChips } from '../lib/map-chips.js';
 import { lifecycleStripHtml } from '../lib/lifecycle-strip.js';
+import { pickView } from '../lib/lifecycle-model.js';
 import { LANE_K } from '../lib/map-lanes-model.js';
 import { storeShownName } from '../lib/map-model.js';
 
@@ -22,8 +23,18 @@ const biz = () => currentLens() === 'business';
 const fill = (key, vars) => Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
 const API = '/api/journey';
 
-/** A status as the register prints it: the code's constant in hybrid and code, words in business. */
-function statusWords(s) { return biz() ? humanize(String(s || '')) : String(s || ''); }
+/** The persona's word for each status of each record the lanes draw (the strip's own view), by record id. */
+let VIEWS = new Map();
+/**
+ * A status as the register prints it — the word the strip under the lanes prints for it (the persona's, from the
+ * config's views, else the constant humanized) in business, the code's constant in hybrid and code.
+ */
+function statusWords(s, recordId) {
+  if (!biz()) return String(s || '');
+  const v = recordId ? VIEWS.get(recordId) : null;
+  const row = v && (v.rows || []).find((r) => r.status === s);
+  return row && row.word ? row.word : humanize(String(s || ''));
+}
 /** A record's name: the table's name in hybrid and code, words in business. */
 function recordWords(n) { return biz() ? humanize(String(n || '')) : String(n || ''); }
 
@@ -61,8 +72,8 @@ function stageHtml(st, r, m, say) {
 function pillHtml(p, r, m) {
   const st = (k) => m.stages.find((s) => s.key === k);
   const makers = p.stages.map(st).filter(Boolean).map((s) => s.name);
-  const move = p.kind === 'created' ? fill('lanes.pill.created', { status: statusWords(p.status) })
-    : p.kind === 'move' ? fill('lanes.pill.move', { status: statusWords(p.status) }) : t('lanes.pill.written');
+  const move = p.kind === 'created' ? fill('lanes.pill.created', { status: statusWords(p.status, p.record.id) })
+    : p.kind === 'move' ? fill('lanes.pill.move', { status: statusWords(p.status, p.record.id) }) : t('lanes.pill.written');
   const by = p.writers.length ? fill('lanes.pill.by', { name: p.writers.join(', ') }) : '';
   const tip = recordWords(p.record.name) + ' · ' + move + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '');
   return '<div class="ln-pill ' + p.kind + '" data-key="' + esc(p.key) + '" data-record="' + esc(p.record.id) + '"' + (p.status != null ? ' data-status="' + esc(p.status) + '"' : '')
@@ -123,7 +134,7 @@ function arrowsSvg(m, G, labels) {
       const x2 = to.x + to.w * 0.75, y2 = to.y + to.h;
       const ya = y1 - 8;
       out += '<g class="ln-a seen" data-from="' + esc(a.from) + '" data-to="' + esc(a.to) + '"><path class="ln" d="M' + x1 + ' ' + y1 + ' L' + x1 + ' ' + ya + ' L' + x2 + ' ' + ya + ' L' + x2 + ' ' + y2 + '"/><path class="hd" d="' + head(x2, y2, 'up') + '"/></g>';
-      labels.push({ x: Math.min(x1, x2) + 6, y: ya - 18, text: a.label || fill('lanes.arrow.seen', { status: statusWords(a.status) }), cls: 'seen' });
+      labels.push({ x: Math.min(x1, x2) + 6, y: ya - 18, text: a.label || fill('lanes.arrow.seen', { status: statusWords(a.status, (m.pills.find((p) => p.key === a.from) || { record: {} }).record.id) }), cls: 'seen' });
     } else if (a.kind === 'then') {
       const a1 = mid(f), b1 = mid(to);
       const x1 = f.x + f.w, x2 = to.x;
@@ -179,7 +190,7 @@ function lifeHtml(m) {
   const made = new Set(m.pills.flatMap((p) => p.moves.map((x) => p.record.id + '|' + x.by + '|' + p.status)));
   return m.lifecycles.slice(0, 1).map((lc) => {
     const here = lc.lifecycle.transitions.map((tr) => made.has(lc.nodeId + '|' + tr.by + '|' + tr.to));
-    return '<div class="ln-life">' + lifecycleStripHtml({ ...lc, onJourney: here }, API) + '</div>';
+    return '<div class="ln-life">' + lifecycleStripHtml({ ...lc, onJourney: here }, API, { flow: m.firstFlow || '' }) + '</div>';
   }).join('');
 }
 
@@ -189,6 +200,7 @@ function lifeHtml(m) {
  * @group Map
  */
 export function lanesHtml(m, G, ctx = {}) {
+  VIEWS = new Map(m.lifecycles.map((lc) => [lc.nodeId, pickView(lc)]));
   const labels = [];
   let html = '';
   // the board's header: the storyline, the LANES tag, how many lanes, the evidence of its journeys, its sentence

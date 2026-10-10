@@ -379,7 +379,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   return {
     storyline: { id: story.id || '', name: story.name || story.id || '', description: story.description || '' },
     ready: read === steps.length + branches.length,
-    read, of: steps.length + branches.length, stepsOf: steps.length,
+    read, of: steps.length + branches.length, stepsOf: steps.length, firstFlow: steps.length ? steps[0].nodeId : '',
     lanes: ordered.map(({ rows, ref, declared, ...l }) => l),
     stages: stages.map(({ segs, runs, writes, reads, ...s }) => ({ ...s, reads: [...reads] })),
     pills, arrows,

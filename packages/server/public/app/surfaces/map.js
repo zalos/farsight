@@ -271,7 +271,7 @@ export function mountMap(route, el) {
     stops: (a) => (lanesShown() ? laneStops(a) : mapStops(a)),
     // on the lanes the board is one altitude: no gesture swaps it for the streets until a screen is entered
     level: (s) => (lanesShown() ? 'nb' : levelOf(s)),
-    max: () => Math.max(MAX_SCALE, enterScale() * 1.25, lanesShown() ? laneEnterScale() * 1.25 : 0),
+    max: () => Math.max(MAX_SCALE, enterScale() * 1.25, lanesShown() ? laneEnterScale() * 2 : 0),
     // zoom-to-enter arms only past the calls stop, on the journey the street is on (on the lanes, near a screen's own stop)
     armFrom: () => (lanesShown() ? laneEnterScale() * 0.85 : callsScale()),
     snapTargets: () => (lanesShown() ? [...MAP.world.querySelectorAll('.map-lanes .ln-stage')]
@@ -592,7 +592,21 @@ function laneStops() {
   if (!MAP.lanes || !MAP.cv) return [];
   const b = boardSize(), sz = MAP.lanes.size;
   const fit = Math.min(1, (b.w - FRAME_PAD * 2) / sz.w, (b.h - FRAME_PAD * 2 - riskTop()) / sz.h);
-  return [{ id: 'board', s: fit, frame: () => fitLanes(true) }, { id: 'enter', s: laneEnterScale() }];
+  return [{ id: 'board', s: fit, frame: () => fitLanes(true) }, { id: 'enter', s: laneEnterScale(), frame: (a) => frameStage(a, laneEnterScale()) }];
+}
+/** The lanes' enter stop: the screen nearest the zoom's point centred, large enough to arm, its hint on screen. */
+function frameStage(anchor, s) {
+  if (!MAP.cv || !MAP.lanes) return;
+  const w = MAP.cv.toWorld(anchor.x, anchor.y);
+  let best = null, bd = Infinity;
+  for (const st of MAP.lanes.model.stages) {
+    const r = MAP.lanes.G.rects.get(st.key);
+    if (!r) continue;
+    const c = { x: (r.x + r.w / 2) * LANE_K, y: (r.y + r.h / 2) * LANE_K };
+    const d = Math.hypot(c.x - w.x, c.y - w.y);
+    if (d < bd) { bd = d; best = c; }
+  }
+  if (best) MAP.cv.centerOn(best.x, best.y, s, true);
 }
 /** A stage card opened (a click, Enter, a zoom into it): that journey's street, at that screen. */
 function enterStage(el) {
