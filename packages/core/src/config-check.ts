@@ -13,6 +13,9 @@ const READS_ENV = /\bprocess\.env\b|\bimport\.meta\.env\b|\bDeno\.env\b|\benv\s*
 /** A parameter that carries a request: the request itself, its context, a session, its cookies or headers, a principal, an event. */
 const TAKES_REQUEST = /\b(?:req|request|ctx|context|session|cookies?|cookieHeader|headers|principal|event)\b|\bRequest\b|\bNextRequest\b/;
 
+/** The parameters of a use-case: its input or command, or the container, repositories or services it is handed. */
+const USE_CASE_PARAMS = /\b(?:input|command|cmd|deps|repos)\b|:\s*(?:Container|Deps|Dependencies|Repositories|Services|AppContext)\b/;
+
 /** The text between a function's first `(` and the `)` that closes it — its parameters, or `''`. */
 export function paramsText(code: string): string {
   const open = code.indexOf('(');
@@ -35,12 +38,13 @@ export function paramsText(code: string): string {
 export function configCheckOf(code: string): boolean {
   if (!code || !READS_ENV.test(code)) return false;
   // a use-case is not a settings check because somewhere in its body it reads one (gates lane
-  // 2026-10-10: a 230-line submit taking `(c: Container, input)` read as a config check)
-  if (code.split('\n').length > CONFIG_CHECK_MAX_LINES) return false;
+  // 2026-10-10: a 230-line submit taking `(c: Container, input)` read as a config check). A long
+  // function that takes the settings themselves (`resolveEmailDelivery(env)`) still is one.
+  if (code.split('\n').length > CONFIG_CHECK_MAX_LINES && USE_CASE_PARAMS.test(paramsText(code))) return false;
   return !TAKES_REQUEST.test(paramsText(code));
 }
 
-/** A config check is a short function: past this many lines it is a use-case that happens to read a setting. */
+/** Past this many lines, a function handed a use-case's parameters is a use-case that happens to read a setting. */
 export const CONFIG_CHECK_MAX_LINES = 40;
 
 /** The tag the parser writes on a guard `configCheckOf` accepts. */
@@ -54,7 +58,7 @@ export function isConfigCheck(node: GraphNode | undefined): boolean {
   if (node.tags?.includes('declared')) return false;
   // a use-case marked as a gate (it moves a record's status) is an action, never a settings check
   if (node.tags?.includes('action-gate')) return false;
-  if (node.loc?.endLine && node.loc.endLine - node.loc.line + 1 > CONFIG_CHECK_MAX_LINES) return false;
+  if (node.loc?.endLine && node.loc.endLine - node.loc.line + 1 > CONFIG_CHECK_MAX_LINES && node.snippet && USE_CASE_PARAMS.test(paramsText(node.snippet))) return false;
   return !!node.snippet && configCheckOf(node.snippet);
 }
 

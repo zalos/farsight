@@ -268,4 +268,7 @@ test('a long use-case that reads a setting is not a config check', () => {
   assert.equal(isConfigCheck(node), false);
   const short = { ...node, snippet: 'export function mode(env: Env) { if (process.env.MODE === "x") throw 1; }', loc: { repo: 'p', path: 'a.ts', line: 1, endLine: 1 } } as GraphNode;
   assert.equal(isConfigCheck(short), true);
+  // a long function handed the settings themselves is still a settings check
+  const long = { ...node, snippet: ['export function resolveMail(env: Record<string, string>) {', '  const x = process.env.MAIL;', ...Array.from({ length: 50 }, (_, i) => `  if (!env.A${i}) throw new Error("x");`), '}'].join('\n') } as GraphNode;
+  assert.equal(isConfigCheck(long), true);
 });

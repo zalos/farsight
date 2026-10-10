@@ -284,6 +284,8 @@ export interface ActionPreconditions {
   counted: Counted;
 }
 
+/** How far under an action's call a writer still makes the action's own move. */
+export const MOVE_DEPTH = 2;
 const CLASS_RANK = new Map<GateClass, number>(GATE_CLASS_ORDER.map((c, i) => [c, i]));
 const CARD_FACTS = new WeakMap<GraphIndex, Map<string, ActionPrecondition['evidence'] | null>>();
 /** The gate card's verdict for one gate, folded once per index. */
@@ -334,12 +336,15 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
   for (const sg of summary.segments) {
     for (const mo of sg.moments) {
       const seen = new Map<string, ActionPrecondition>();
+      // the writers a move is the action's own: the call and up to two calls under it (an outbox
+      // drained later, three calls down, is the machinery's state, not this action's move)
+      const callDepth = mo.callStep != null ? stepAt.get(mo.callStep)?.depth : stepAt.get(mo.actionStep)?.depth;
       const inRange = new Set<string>();
       const tables: GraphNode[] = [];
       for (let o = mo.from; o <= mo.to; o++) {
         const st = stepAt.get(o);
         if (!st) continue;
-        inRange.add(st.nodeId);
+        if (callDepth == null || st.depth <= callDepth + MOVE_DEPTH) inRange.add(st.nodeId);
         const n = index.byId.get(st.nodeId);
         if (n?.kind === 'table' && n.lifecycle && !tables.includes(n)) tables.push(n);
         for (const g of st.gates) {
