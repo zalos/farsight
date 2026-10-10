@@ -27,7 +27,7 @@ import { designThumbHtml, linkHtml } from '../lib/graph-render.js';
 import { storyChipsHtml, screenStoryIds } from '../stories.js';
 import { workSourcesConfigured, flowWork, stateHtml, sourceName } from '../work-chips.js';
 import {
-  jrnGateLabel, jrnGateText, jrnGatesShown, jrnAbsentHtml, jrnWords, jrnRefAnchors,
+  jrnGateLabel, jrnGateText, jrnGatesShown, jrnGateTiers, jrnAbsentHtml, jrnWords, jrnRefAnchors,
   jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml, jrnContractHtml,
 } from './journeys.js';
 import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml } from '../lib/detail-doors.js';
@@ -391,6 +391,23 @@ function propLifecycleHtml(pm, st) {
   return sec('lifecycle.word', list.map((lc) => lifecycleStripHtml(lc, '/api/journey')).join(''));
 }
 
+/**
+ * The screen's gates in the business register, by who they matter to (gates lane 2026-10-10): who may,
+ * the record must be, policy, and the technical checks folded behind *+ n technical checks*. The same
+ * split the journey's lists read (`jrnGateTiers`); hybrid and code keep the one list.
+ * @group Map
+ */
+function gatesByTierHtml(rows) {
+  if (!biz() || !(rows || []).some((g) => g.tier)) return gateList(rows);
+  const { who, record, policy, technical } = jrnGateTiers(rows);
+  const part = (key, list) => list.length ? '<div class="mp-tier"><h5 class="mp-tier-h"' + defAttrs(key) + '>' + esc(t(key)) + '</h5>' + gateList(list, 'tier-' + key) + '</div>' : '';
+  const tech = technical.length
+    ? '<details class="mp-tier tech"><summary' + defAttrs('gate.group.technical') + '>'
+      + esc(technical.length === 1 ? t('gate.group.technicalOne') : t('gate.group.technical').replace('{n}', technical.length)) + '</summary>'
+      + gateList(technical, 'tier-tech') + '</details>' : '';
+  return part('gate.group.whoMay', who) + part('gate.group.record', record) + part('gate.group.policy', policy) + tech;
+}
+
 function gatesHtml(pm) {
   const g = pm.tabs.gates;
   const decs = biz() ? g.decisions.filter((d) => d.class === 'business') : g.decisions;
@@ -403,7 +420,7 @@ function gatesHtml(pm) {
   // config checks are listed apart, counted apart, and only where the walk met them (swarm-fixes 2026-10-05, finding 4)
   const cfg = (g.config || []).length ? '<section class="mp-sec mp-config">' + secHead('map.prop.gates.config', countNum(g.configCounted))
     + capRows('config', dedupeGates(jrnGatesShown(g.config).drawn).map(gateRow)) + '</section>' : '';
-  return '<section class="mp-sec">' + secHead('map.prop.gates.head', countNum(g.counted)) + gateList(g.rows) + '</section>' + cfg
+  return '<section class="mp-sec">' + secHead('map.prop.gates.head', countNum(g.counted)) + gatesByTierHtml(g.rows) + '</section>' + cfg
     + '<section class="mp-sec">' + secHead('map.prop.gates.decisions', decs.length === g.decisions.length ? countNum(g.decisionsCounted) : '')
     + (decRows || absentRow('noneIndexed')) + '</section>';
 }
