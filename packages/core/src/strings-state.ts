@@ -59,9 +59,7 @@ export const STATE_STRINGS: Record<string, StringEntry> = {
   'shell.nowhere': same('There is nothing at this address', 'The link names a page this build of Farsight does not have. It may come from another version, or a word in it was mistyped.'),
   'shell.nowhereDoor': same('go to the front door'),
   // ── read-only: a write control says why and who to ask (finding 3.1) ──
-  'sys.readonly.ask': sys('Ask whoever runs this server to make the change, or start your own server without read-only.'),
+  'sys.readonly.page': sys('Read-only session — every change on this page is greyed out, because the server refuses it. Ask whoever runs this server to sync or to change a tracker item.'),
   'sys.readonly.workPane': sys('This server is read-only: tracker writes are refused here, so the controls below are greyed out.'),
   'sys.readonly.themeHint': sys('previewing in this window only — this read-only server keeps no settings'),
-  // ── tips on two unlabelled numbers (finding 3.4) ──
-  'chrome.moreCount': same('{n} controls folded into this menu', 'The window is too narrow for every control in the top bar, so this many moved into the menu behind the dots. Opening it lists them.'),
 };
