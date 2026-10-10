@@ -17,7 +17,7 @@
 import { esc } from '../store.js';
 import { t, def } from '../strings.js';
 import { sym } from '../sym.js';
-import { countedHtml, countWords, defAttrs } from './counted.js';
+import { countedHtml, countWords, defAttrs, plainTip } from './counted.js';
 import { tipAttrs, registerTip, tableTip } from './tooltip.js';
 
 // each opening tag written out whole: an attribute assembled from pieces reads as prose to the string lint
@@ -41,10 +41,12 @@ export function scopeWordHtml(key) {
 }
 
 /** `· 1 failed · 2 skipped · 1 flaky` — only the parts that are not zero, each with its define. */
-export function runPartsHtml(verdict) {
+export function runPartsHtml(verdict, api) {
   const v = verdict || {};
+  const scope = (v.runs && v.runs.scope) || '';
+  // each part is a number with its own tip: what it counts, over the scope the chip names, where from
   return ['failed', 'skipped', 'flaky'].filter((k) => v[k] > 0).map((k) => SEP
-    + '<span data-run-part="' + k + '" class="tc-run ' + k + '"' + defAttrs('count.part.' + k) + '>' + esc(countWords('count.part.' + k, v[k])) + '</span>').join('');
+    + '<span data-run-part="' + k + '" class="tc-run ' + k + '"' + plainTip(v[k], 'count.part.' + k, scope, api || '/api/journey') + '>' + esc(countWords('count.part.' + k, v[k])) + '</span>').join('');
 }
 
 /** The evidence word as a chip, with the journey's evidence tip (registered by the journey surface). */
@@ -86,7 +88,7 @@ export function testChipHtml(facts, opts = {}) {
   return CHIP_OPEN + esc(opts.cls || '') + '" data-scope="' + esc(k.scope || '') + '">'
     + num + SEP + scopeWordHtml(scope) + distinct
     + (word ? SEP + word : '')
-    + runPartsHtml(f.verdict)
+    + runPartsHtml(f.verdict, opts.api)
     + '</span>';
 }
 
@@ -99,7 +101,7 @@ export function notBuiltChipHtml(facts, opts = {}) {
   const f = facts || {};
   const k = f.counted && f.counted.tests;
   const reach = k && k.n
-    ? SEP + countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' }) + SEP + scopeWordHtml(testScopeWordKey(f)) + runPartsHtml(f.verdict)
+    ? SEP + countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' }) + SEP + scopeWordHtml(testScopeWordKey(f)) + runPartsHtml(f.verdict, opts.api)
     : '';
   return CHIP_OPEN + 'nb ' + esc(opts.cls || '') + '" data-not-built data-scope="' + esc((k && k.scope) || '') + '">'
     + '<span class="tc-nb"' + defAttrs('tests.notBuilt.word') + '>' + sym('warning') + esc(t('tests.notBuilt.word')) + '</span>'

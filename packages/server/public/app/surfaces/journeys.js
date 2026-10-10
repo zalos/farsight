@@ -4505,7 +4505,7 @@ function jrnHeaderHtml(data, sum, cnt, lens) {
     // one chip: the cases, *over this journey*, *distinct* beside per-screen counts (its tip is the per-screen
     // table), the one word and the skips — the shared-evidence case keeps its sentence instead of the word
     cov && cov.counted && cov.counted.tests && cov.counted.tests.n
-      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests' }) + (cov.sharedEvidence ? ' ' + evHtml : '')
+      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests', evCls: 'jrn-e2e' }) + (cov.sharedEvidence ? ' ' + evHtml : '')
       : jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }) + evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
     // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)

@@ -54,7 +54,7 @@ export function mapTestsChips(tests, facts, opts = {}) {
   // one chip with the count, the scope it counts over, the word and the skips (lib/test-chip.js, round 2026-10-10)
   if (facts && facts.counted && facts.counted.tests) {
     if (facts.sharedEvidence) return testChipHtml(facts, { cls: 'map-chip k-test', api: API, word: false, zero: true }) + mapEvidenceChip(facts);
-    return testChipHtml(facts, { cls: 'map-chip k-test', api: API, zero: true });
+    return testChipHtml(facts, { cls: 'map-chip k-test', api: API, zero: true, evCls: 'map-chip k-ev' });
   }
   const n = mapCountChip(tests, 'k-test');
   if (!n) return '';

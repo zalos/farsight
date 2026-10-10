@@ -23,7 +23,7 @@ export const EVIDENCE_STRINGS: Record<string, StringEntry> = {
   'count.over.workspace': same('over every source in scope', 'The number beside it counts the test cases of every source in scope.'),
   'tests.notBuilt.word': same('designed, not built', 'The design names this screen and no code for it exists yet.'),
   'tests.notBuilt.sentence': same('no test can reach a screen with no code', 'A screen that is designed and not built has nothing a test can run, so it has no test verdict. Cases that reach the routes it will call are counted beside it, with their own scope.'),
-  'tests.distinct': same('distinct', 'A case that reaches two screens is counted once here. The per-screen numbers overlap, so they add up to more than this total.'),
+  'tests.distinct': same('distinct', 'Counts each part or case once across the journey: a case that reaches two screens is counted once here. The per-screen numbers overlap, so they add up to more than this total.'),
   'tests.distinct.head': same('distinct over this journey', 'A part or a case two screens share is counted once in the journey total. The table shows the same journey counted screen by screen.'),
   'tests.distinct.perScreen': same('per screen', 'The sum of the per-screen numbers: a part or a case two screens share is counted on each.'),
   'tests.distinct.total': same('distinct', 'The journey total: each part or case once.'),
