@@ -484,12 +484,13 @@ function caseRow(x) {
 /** `2 over its action list invoices · 2 over the gate scope billing:read · 0 over the page's own code`. */
 function testsScopeLineHtml(line) {
   if (!line) return '';
-  const part = (key, n, name) => '<span class="mp-scope-part"' + defAttrs(key) + '>'
-    + esc(t(key)).replace('{n}', () => '<b>' + n + '</b>').replace('{name}', () => (name ? (biz() ? esc(name) : code(name)) : '')) + '</span>';
-  const bits = line.actions.slice(0, 3).map((a) => part('tests.scopeLine.action', a.n, jrnMoLabel(a.mo)))
-    .concat(line.gates.slice(0, 2).map((g) => part('tests.scopeLine.gate', g.n, jrnGateLabel(g.gate))));
-  if (line.page != null) bits.push(part('tests.scopeLine.page', line.page, ''));
-  return bits.length ? '<div class="line mp-scope-line">' + bits.join(' · ') + '</div>' : '';
+  // one row per scope: an action's name is words, a gate's name is code outside the business lens
+  const part = (key, n, name, isCode) => '<div class="mp-scope-part"' + defAttrs(key) + '>'
+    + esc(t(key)).replace('{n}', () => '<b>' + n + '</b>').replace('{name}', () => (name ? (isCode && !biz() ? code(name) : '<i>' + esc(name) + '</i>') : '')) + '</div>';
+  const bits = line.actions.slice(0, 3).map((a) => part('tests.scopeLine.action', a.n, jrnMoLabel(a.mo), false))
+    .concat(line.gates.slice(0, 2).map((g) => part('tests.scopeLine.gate', g.n, jrnGateLabel(g.gate), true)));
+  if (line.page != null) bits.push(part('tests.scopeLine.page', line.page, '', false));
+  return bits.length ? '<div class="line mp-scope-line">' + bits.join('') + '</div>' : '';
 }
 
 /** `no test is known to reach: Discard draft (not built)` — the journey's screens the tests foot does not cover. */
@@ -531,7 +532,7 @@ function testsHtml(pm) {
       + (obs ? '<div class="line"><span class="obs">' + esc(obs) + '</span></div>' : '')
       + '<div class="line"><span class="cnt">' + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
         .replace('{int}', () => num(k.integration, facts.integration)) + '</span></div>'
-      + jrnRunLineHtml(facts);
+      + jrnRunLineHtml(facts, true);
   }
   const { cases, reports } = pm.tabs.tests;
   const reportRow = (x) => row(esc(biz() ? caseWords(x.name) : String(x.name || '')), biz() ? '' : esc([x.runner || '', currentLens() === 'code' ? loc(x.loc) : ''].filter(Boolean).join(' · ')),

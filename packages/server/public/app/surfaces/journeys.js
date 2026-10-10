@@ -3336,10 +3336,16 @@ function jrnFootWiderHtml(wider) {
  * and printing the weakest run here put *skipped* under *passed, by its own
  * declaration* for one skipped case among 145 (swarm 2026-10-05, finding 1).
  * @group Journey view */
-export function jrnRunLineHtml(facts) {
+export function jrnRunLineHtml(facts, chipped) {
   const runs = facts && facts.verdict && facts.verdict.runs;
   if (!runs || !runs.n) return '';
   const run = facts.run;
+  // under a test chip the cases are already printed with their scope and their skips (round 2026-10-10): the line keeps
+  // only where they ran, so no second bare number of the same cases stands under the chip
+  if (chipped) {
+    return run && run.projects && run.projects.length ? '<div class="line jrn-runs"><span class="rl rl-proj"' + tipAttrs({ key: 'journey.tests.runProjects' }) + '>'
+      + esc(t('journey.tests.runProjects').replace('{list}', run.projects.join(', '))) + '</span></div>' : '';
+  }
   return '<div class="line jrn-runs"><span class="hud-label"' + tipAttrs({ key: 'journey.tests.theirRuns' }) + '>' + esc(t('journey.tests.theirRuns')) + '</span>'
     + jrnCountedHtml(runs, { noFocus: true, cls: 'rl' })
     // its own sentence: beside the freshness it read as one ungrammatical phrase (round 2)
@@ -3487,7 +3493,7 @@ export function jrnTestsFootHtml(facts, opts) {
     + (chip.indexOf('data-tchip') >= 0 ? '' : jrnFootScopeHtml(facts)) + '<div class="line"><span class="cnt">'
     + esc(t('journey.tests.foot')).replace('{e2e}', () => num(k.e2e, facts.e2e)).replace('{unit}', () => num(k.unit, facts.unit))
       .replace('{int}', () => num(k.integration, facts.integration)).replace('{obs}', () => num(k.observed, facts.observed)) + '</span></div>'
-    + jrnRunLineHtml(facts)
+    + jrnRunLineHtml(facts, chip.indexOf('data-tchip') >= 0)
     + jrnCasesDoorHtml(o.cases)
     + jrnImpactDoorHtml(o.impact) + '</div>';
 }
