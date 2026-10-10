@@ -22,7 +22,8 @@
  *   one per screen (its sentence, or its name) plus each decision in words.
  */
 import type { Journey, JourneySummary, JourneySegment } from './query.js';
-import { counted, type Counted } from './counts.js';
+import { counted, type Counted, type CountScope } from './counts.js';
+import type { GateClass, GateTier } from './graph.js';
 
 /** The journey header's numbers and their siblings, each with its scope. */
 export interface JourneyCounted {
@@ -35,6 +36,10 @@ export interface JourneyCounted {
   steps: Counted;
   planned: Counted;
   gates: Counted;
+  /** the gates that matter to the business (tier business + policy, core gate-class.ts) — with `gatesTechnical`, a partition of `gates` */
+  gatesBusiness: Counted;
+  /** the technical checks (tier technical: input shape, platform) — with `gatesBusiness`, a partition of `gates` */
+  gatesTechnical: Counted;
   checks: Counted;
   /** guards that check how the app was started (core gates.ts), met on the walk — never part of `gates` */
   configChecks: Counted;
@@ -60,6 +65,8 @@ export interface SegmentCounted {
   actionStops: Counted;
   actions: Counted;
   gates: Counted;
+  gatesBusiness: Counted;
+  gatesTechnical: Counted;
   checks: Counted;
   /** the config checks met on this screen (`segment.configChecks`), never part of `gates` */
   configChecks: Counted;
@@ -69,6 +76,36 @@ export interface SegmentCounted {
 }
 
 const SRC = 'journeySummary()';
+
+type TieredGate = { name: string; kind?: 'guard' | 'rule'; tier?: GateTier; class?: GateClass };
+/**
+ * `gates` split by tier, each distinct gate once (the key `gates` counts by: kind + name): business +
+ * policy are what matter to the business, the rest are technical. A gate from an older build carries
+ * no tier and counts as business — shown, never folded away unseen.
+ */
+function tierSplit(list: TieredGate[], scope: CountScope, src: string): { gatesBusiness: Counted; gatesTechnical: Counted } {
+  const byKey = new Map<string, TieredGate>();
+  for (const g of list) { const k = `${g.kind ?? 'guard'}:${g.name}`; if (!byKey.has(k)) byKey.set(k, g); }
+  const all = [...byKey.values()];
+  const n = (pred: (g: TieredGate) => boolean) => all.filter(pred).length;
+  const technical = (g: TieredGate) => g.tier === 'technical';
+  return {
+    gatesBusiness: counted(n((g) => !technical(g)), 'count.unit.gatesBusiness', scope, `${src} — tier business + policy (gateTier)`, {
+      bizUnit: 'count.unit.gatesBusiness',
+      breakdown: [
+        { key: 'count.part.tierBusiness', n: n((g) => !g.tier || g.tier === 'business') },
+        { key: 'count.part.tierPolicy', n: n((g) => g.tier === 'policy') },
+      ],
+    }),
+    gatesTechnical: counted(n(technical), 'count.unit.gatesTechnical', scope, `${src} — tier technical (gateTier)`, {
+      bizUnit: 'count.unit.gatesTechnical',
+      breakdown: [
+        { key: 'count.part.classInput', n: n((g) => technical(g) && g.class === 'input') },
+        { key: 'count.part.classPlatform', n: n((g) => technical(g) && g.class !== 'input') },
+      ],
+    }),
+  };
+}
 
 /** How the stops of a list of moments split: calls made, calls only declared, screens with nothing to call. */
 function stopSplit(j: Journey, moments: JourneySegment['moments']): { called: number; declared: number; noCall: number; ops: Set<string> } {
@@ -124,6 +161,7 @@ function segmentCounted(j: Journey, sg: JourneySegment, entryBusiness: string | 
       bizUnit: 'journey.countGates',
       breakdown: [{ key: 'count.part.guards', n: guards }, { key: 'count.part.rules', n: sg.gates.length - guards }],
     }),
+    ...tierSplit(sg.gates, here, `${s}.gates`),
     checks: counted(sg.counts.checks, 'journey.countChecks', here, `${s}.counts.checks`, { bizUnit: 'journey.countChecks' }),
     configChecks: counted(sg.configChecks?.length ?? 0, 'count.unit.configChecks', here, `${s}.configChecks.length`, { bizUnit: 'count.unit.configChecks' }),
     decisions: counted(sg.counts.decisions, 'journey.countDecisions', here, `${s}.counts.decisions`, {
@@ -202,6 +240,8 @@ export function journeyCounted(j: Journey, summary: JourneySummary): JourneyCoun
       bizUnit: 'journey.countGates',
       breakdown: [{ key: 'count.part.guards', n: guardNames }, { key: 'count.part.rules', n: ruleNames }],
     }),
+    ...tierSplit([...summary.business.gates.map((g) => ({ ...g, kind: 'guard' as const })), ...summary.business.rules.map((r) => ({ ...r, kind: 'rule' as const }))],
+      all, `${SRC}.business.gates + .rules`),
     checks: counted(k.checks, 'journey.countChecks', all, c('checks'), { bizUnit: 'journey.countChecks' }),
     configChecks: counted(k.configChecks ?? 0, 'count.unit.configChecks', all, c('configChecks'), { bizUnit: 'count.unit.configChecks' }),
     decisions: counted(k.decisions, 'journey.countDecisions', all, c('decisions'), {

@@ -370,3 +370,48 @@ export function linkLifecycles(repo: string, nodes: Map<string, GraphNode>, edge
   }
   return count;
 }
+
+/**
+ * A constant object whose every value is a list of string literals (gates lane, 2026-10-10):
+ * a transition table (`const T = { DRAFT: ['SUBMITTED'], SUBMITTED: ['VERIFIED', …] }`) or a role
+ * table (`const ROLES = { approve: ['ops.approver'] } as const`). Kept apart from the lifecycle's
+ * own reads above — `parsers/src/preconditions.ts` reads it inverted to give a `? → X` move its
+ * prior statuses, and by member to name the role a guard is handed.
+ */
+export interface ConstTable {
+  name: string;
+  file: string;
+  line: number;
+  entries: Record<string, string[]>;
+}
+
+/** Every `const NAME = { key: ['a', …], … }` in a file (through `as const` and `satisfies`), two keys or more. */
+export function constTables(program: AstNode, file: string, line: (o: number) => number): ConstTable[] {
+  const out: ConstTable[] = [];
+  walk(program, (n) => {
+    if (n.type !== 'VariableDeclarator' || !isNode(n.id) || (n.id as AstNode).type !== 'Identifier') return;
+    let init = n.init as AstNode | undefined;
+    while (init && (init.type === 'TSAsExpression' || init.type === 'TSSatisfiesExpression' || init.type === 'ParenthesizedExpression')) init = init.expression as AstNode;
+    if (!init || init.type !== 'ObjectExpression') return;
+    const entries: Record<string, string[]> = {};
+    for (const p of (init.properties as AstNode[]) ?? []) {
+      if (p.type !== 'Property') return;
+      const key = keyName(p.key);
+      let v = p.value as AstNode | undefined;
+      while (v && (v.type === 'TSAsExpression' || v.type === 'TSSatisfiesExpression')) v = v.expression as AstNode;
+      if (!key || !v || v.type !== 'ArrayExpression') return;
+      const vals = ((v.elements as unknown[]) ?? []).map(strLit);
+      if (!vals.every((x): x is string => x !== undefined)) return;
+      entries[key] = vals;
+    }
+    const keys = Object.keys(entries);
+    if (keys.length < 2 || !keys.some((k) => entries[k]!.length)) return;
+    out.push({ name: String((n.id as AstNode).name), file, line: line(n.start ?? 0), entries });
+  });
+  return out;
+}
+
+/** The keys whose list holds `to`: the statuses a transition table lets a record leave for `to`. */
+export function priorStatusesIn(table: ConstTable, to: string): string[] {
+  return Object.keys(table.entries).filter((k) => table.entries[k]!.includes(to));
+}

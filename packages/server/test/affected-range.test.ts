@@ -58,7 +58,8 @@ function finalizeRange(): AffectedV1 {
 
 test('a range lands on the function its hunks sit in, and reaches the journeys that run it with their storyline place', () => {
   const doc = finalizeRange();
-  assert.deepEqual(doc.changed.map((c) => c.name), ['finalizeInvoice']);
+  // the hunk 60–66 holds the function and, at line 61, the precondition read out of it (gates lane 2026-10-10)
+  assert.deepEqual(doc.changed.map((c) => c.name).sort(), ['finalizeInvoice', 'finalizeInvoice: invoices.lines not empty']);
   assert.equal(doc.files.find((f) => f.path === 'src/server/invoiceService.ts')!.granularity, 'lines');
   assert.equal(doc.files.find((f) => f.path === 'README.md')!.granularity, 'none');
   const names = doc.journeys.map((j) => j.name).sort();

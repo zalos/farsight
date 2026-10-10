@@ -40,6 +40,14 @@
         }
       }
     },
+    "gateTiers": {
+      "type": "object",
+      "description": "matcher → tier: the tier a gate or rule is in when its class gives the wrong one. A matcher is an exact node id or a substring of the gate's path or name (the guards' shape). A `@guard[tier]` in the code wins over it.",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["business", "policy", "technical"]
+      }
+    },
     "entrypoints": {
       "type": "object",
       "description": "entrypoint label → matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs…).",
