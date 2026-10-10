@@ -80,7 +80,10 @@ export function testChipHtml(facts, opts = {}) {
     return opts.zero ? CHIP_OPEN + 'zero ' + esc(opts.cls || '') + '" data-scope="' + esc(k.scope || '') + '">'
       + countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' }) + SEP + scopeWordHtml(scope) + '</span>' : '';
   }
-  const num = countedHtml(k, opts.api || '/api/journey', { cls: 'cnt-n tc-n' });
+  // the number's tip is its cases by their own last runs (`verdict.runs`, the same cases, a breakdown that sums) — the
+  // chip's word and skips are about runs, and the level split is printed on its own line beside the chip
+  const runs = f.verdict && f.verdict.runs && f.verdict.runs.n === k.n ? f.verdict.runs : k;
+  const num = countedHtml(runs, opts.api || '/api/journey', { cls: 'cnt-n tc-n' });
   if (!num) return '';
   const distinct = opts.distinct
     ? SEP + '<span class="tc-distinct"' + tipAttrs({ id: 'tchipDistinct', args: opts.distinct }) + '>' + esc(t('tests.distinct')) + '</span>' : '';
