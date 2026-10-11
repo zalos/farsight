@@ -58,8 +58,8 @@ export function builtOnlyHtml(ev) {
   const b = ev && ev.builtOnly;
   if (!b) return { before: '', after: '', cls: '' };
   return {
-    before: '<span class="tc-pb"' + defAttrs('tests.builtOnly.before') + '>' + sym('warning') + esc(countWords('tests.builtOnly.before', b.built, b.of)) + '</span>' + SEP,
-    after: SEP + '<span class="tc-pba"' + defAttrs('tests.builtOnly.after') + '>' + esc(countWords('tests.builtOnly.after', b.built)) + '</span>',
+    before: '<span class="tc-pb"' + defAttrs('tests.builtOnly.before', null, { n: b.built, m: b.of }) + '>' + sym('warning') + esc(countWords('tests.builtOnly.before', b.built, b.of)) + '</span>' + SEP,
+    after: SEP + '<span class="tc-pba"' + defAttrs('tests.builtOnly.after', null, { n: b.built }) + '>' + esc(countWords('tests.builtOnly.after', b.built)) + '</span>',
     cls: ' builtonly',
   };
 }
@@ -71,6 +71,8 @@ export function testEvidenceHtml(facts, opts = {}) {
   if (!ev || !ev.key || ev.cls === 'none') return '';
   const glyph = ev.cls === 'observed' ? sym('live') : ev.cls === 'stale' ? sym('stale') : ev.cls === 'reached' ? sym('step') : '';
   const pb = builtOnlyHtml(ev);
+  // a head that prints *n of m screens built* beside the chip keeps the scope after the word and drops the repeat before it
+  if (opts.builtShown) pb.before = '';
   return pb.before + EV_OPEN + esc(ev.cls) + pb.cls + ' ' + esc(opts.evCls || '') + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: f.observation || null, verdict: f.verdict ? { status: f.verdict.status } : null, fresh: f.freshness || null } }) + '>'
     + glyph + esc(t(ev.key)) + '</span>' + pb.after;
 }
@@ -82,12 +84,12 @@ export function testEvidenceHtml(facts, opts = {}) {
 export function testBasisHtml(facts) {
   const o = facts && facts.observation;
   if (!o || o.by !== 'declaration' || !o.cases) return '';
-  return SEP + '<span class="tc-basis"' + defAttrs('journey.obs.passed') + '>' + esc(countWords('journey.obs.passed', o.cases)) + '</span>';
+  return SEP + '<span class="tc-basis"' + defAttrs(o.cases === 1 ? 'journey.obs.passedOne' : 'journey.obs.passed', null, { n: o.cases }) + '>' + esc(countWords('journey.obs.passed', o.cases)) + '</span>';
 }
 
 /**
- * The cases by their own last runs as one sentence: *by their own last runs: 389 passed · 9 skipped · 3 no run
- * recorded*, the parts of the chip's own number (core `TestVerdict.runs`, a breakdown that sums), each with its tip.
+ * The cases by their own last runs as one sentence after the count they break down: *401 test cases · … · 389 passed ·
+ * 9 skipped · 3 with no run recorded*, the parts of the chip's own number (core `TestVerdict.runs`, a breakdown that sums), each with its tip.
  * Printed whenever a part is not *passed*, so a word never hides its skips or its unrun cases; '' when every case passed.
  */
 export function runsSentenceHtml(verdict, api) {
@@ -96,7 +98,7 @@ export function runsSentenceHtml(verdict, api) {
   const parts = ((runs && runs.breakdown) || []).filter((p) => p.n > 0);
   if (!parts.length || parts.every((p) => p.key === 'count.part.passed')) return runPartsHtml(verdict, api);
   const scope = (runs && runs.scope) || '';
-  return SEP + '<span class="tc-runs"><span class="tc-runs-lead"' + defAttrs('tests.runs.lead') + '>' + esc(t('tests.runs.lead')) + '</span> '
+  return SEP + '<span class="tc-runs">'
     + parts.map((p) => {
       const k = p.key.replace('count.part.', '');
       return '<span data-run-part="' + esc(k) + '" class="tc-run ' + esc(k) + '"' + plainTip(p.n, p.key, scope, api || '/api/journey') + '>' + esc(countWords(p.key, p.n)) + '</span>';

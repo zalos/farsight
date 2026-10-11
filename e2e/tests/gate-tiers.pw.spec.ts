@@ -25,7 +25,9 @@ test('the business register: two numbers in the header, the checks by tier, the 
   // the precondition sits under *the record must be*, in the team's own words
   const rec = page.locator('.jrn-gatelist.tiers .jrn-gl-grp.record', { has: page.locator('[data-gate-card="' + PRE + '"]') }).first();
   await expect(rec.locator('.hud-label')).toHaveText(/the record must be/i);
-  await expect(rec.locator('[data-gate-card="' + PRE + '"] .jrn-gl-w')).toHaveText('Reject edits once the invoice has left draft');
+  // the words, then the check's own tier on its row in every register (swarm round 3: the groups are by what a check is about)
+  await expect(rec.locator('[data-gate-card="' + PRE + '"] .jrn-gl-w')).toHaveText(/^Reject edits once the invoice has left draft/);
+  await expect(rec.locator('[data-gate-card="' + PRE + '"] .gate-tier')).toHaveText('business');
   // the technical checks are folded: counted on the summary, listed only when opened
   const fold = page.locator('details.jrn-gl-tech').first();
   await expect(fold.locator('summary')).toHaveText(/^\+ \d+ technical checks?$/);

@@ -25,7 +25,8 @@ test('a partly built journey says so before its word, on its head and on the sto
   await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=hybrid');
   const head = page.locator('.map-jhead .jrn-htests');
   await expect(head).toBeVisible();
-  await expect(head.locator('.tc-pb')).toHaveText(/partly built · 2 of 3/i);
+  // the head prints *2 of 3 screens built* beside the chip: the word keeps its scope after it and drops the repeat before it
+  await expect(page.locator('.map-jhead .jrn-built')).toContainText('2 of 3');
   await expect(head.locator('.tc-pba')).toHaveText('over the 2 built screens');
   await expect(head.locator('.tc-ev')).toHaveClass(/builtonly/);
   // the storyline board: the same journey's card carries the build state before its word

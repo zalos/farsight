@@ -14,7 +14,7 @@ function one(word: string, pluralKey: string): StringEntry {
 export const VERDICT_STRINGS: Record<string, StringEntry> = {
   // ── build state wins (finding 3) ──
   'tests.builtOnly.before': same('partly built · {n} of {m}',
-    'Only some of this journey’s screens have code. Its test verdict is about the screens that are built; the others have no code for a test to reach.'),
+    'Some screens this journey’s design declared have no code yet. Its test verdict is about the screens that are built; the others have no code for a test to reach.'),
   'tests.builtOnly.after': same('over the {n} built screens',
     'The verdict beside this counts only the screens that have code. A screen that is designed and not built has no verdict.'),
   'tests.builtOnly.afterOne': one('over the 1 built screen', 'tests.builtOnly.after'),
@@ -26,8 +26,6 @@ export const VERDICT_STRINGS: Record<string, StringEntry> = {
   // ── the word names what it is a verdict over (finding 4) ──
   'tip.journey.obs.byDecl': same('earned by',
     'The cases whose own results earned this word: end-to-end cases that declare they cover this, each passed in its last recorded run.'),
-  'tests.runs.lead': same('by their own last runs',
-    'Every case counted here, by what its own last recorded run said: passed, failed, skipped, flaky, or no run recorded. The parts add up to the cases.'),
   // ── readiness: a hold names its case, other skips are notes, the header says distinct (finding 5) ──
   'readiness.note.skipped': same('note: {n} other cases skipped',
     'Cases in this journey’s scope that were skipped on their own last run and do not declare this journey. Said here, never a reason to hold: only the journey’s own declared cases and its screens hold it.'),

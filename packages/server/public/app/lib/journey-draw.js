@@ -2644,12 +2644,15 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
     : chipCls ? builtOnlyHtml(ev).before + '<span class="jrn-e2e ' + esc(chipCls) + builtOnlyHtml(ev).cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' + builtOnlyHtml(ev).after : '';
   const chipped = !!(cov && cov.counted && cov.counted.tests && cov.counted.tests.n);
-  const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts, { chipNamesCases: chipped }) : '';
+  // who earned the word and when is the word's own tip (*earned by* · *when*): the head keeps its one row for the chip
+  // and the freshness sentence (swarm round 3 — *29 of them passed* beside PASSED read as 29 of the 401)
+  const obs = !business && facts && !(cov && cov.sharedEvidence) && !chipped ? jrnObsText(facts) : '';
   g('g-tests', [
     // one chip: the cases, *over this journey*, *distinct* beside per-screen counts (its tip is the per-screen
     // table), the one word and the skips — the shared-evidence case keeps its sentence instead of the word
     cov && cov.counted && cov.counted.tests && cov.counted.tests.n
-      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests', evCls: 'jrn-e2e' }) + (cov.sharedEvidence ? ' ' + evHtml : '')
+      // the declaring cases are named in the word's tip (*earned by*), not on the line: the head keeps one row for the chip
+      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests', evCls: 'jrn-e2e', basis: false, builtShown: !!C('built') }) + (cov.sharedEvidence ? ' ' + evHtml : '')
       : jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }) + evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
     // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)
