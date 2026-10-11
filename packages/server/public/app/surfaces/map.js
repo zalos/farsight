@@ -2846,7 +2846,7 @@ function aggHtml(d, j) {
     mapScreensChips(k),
     k.built && k.built.of != null && k.built.n < k.built.of ? chip(k.built, 'k-warn') : chip(k.built, 'k-ok'),
     // a count of tests never travels without its evidence word — the Portfolio's word for the same fold
-    cov && cov.counted ? mapTestsChips(cov.counted.tests, cov, { builtShown: !!k.built }) : '',
+    cov && cov.counted ? mapTestsChips(cov.counted.tests, cov, { builtShown: !!k.built, runs: false }) : '',
     // whether it reaches the ERP and who owns it — the Portfolio's columns, in its words
     mapErpChip(sum, k.built ? k.built.n : null),
     mapOwnerChip(d.owner),
