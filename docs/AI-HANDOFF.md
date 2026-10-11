@@ -58,6 +58,12 @@ summary. Standalone and embedded settings views were checked in a browser, inclu
 Real `serve` and interrupted `smoke` shutdowns released all owned ports. No real host hooks were enabled.
 The Git hook installer now handles linked worktrees' absolute common hooks path.
 
+Setup follow-up: the package README includes a source and standalone-tarball walkthrough. `smoke`
+selects temporary free connections independently of configured profiles, so it can run beside `serve`
+without changing saved settings or using the active memory store. The package regression keeps a
+configured listener occupied while checking save/recall, restart and isolation. A real local model
+smoke also passed beside the running settings view; automatic capture and brief injection remain deferred.
+
 Managed startup deliberately refuses the global agentmemory environment file because the published
 backend does not offer an override. External mode needs a dedicated compatible instance. No npm release
 was published by this setup work. The existing Farsight servers and dogfood graph were not refreshed.

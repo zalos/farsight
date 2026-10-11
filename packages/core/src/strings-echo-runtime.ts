@@ -1,6 +1,7 @@
 import type { StringEntry } from './strings.js';
 const same = (word: string, define: string): StringEntry => ({ hud: word, professional: word, define });
 export const ECHO_RUNTIME_STRINGS: Record<string, StringEntry> = {
+  'echo.runtime.smokePorts': same('The test could not find available local connections. Close unused local services and try again.', 'The smoke test selects its own temporary connections and never stops another local service.'),
   'echo.runtime.engineConfig': same('A cached engine definition is not owned by Echo. Inspect this profile’s config directory before restarting.', 'Echo refreshes only its generated engine definitions when applying new connection settings.'),
   'echo.runtime.backendResponse': same('The memory backend returned an invalid or oversized response.', 'Response contents are not included in the error because they may contain private data.'),
   'echo.runtime.isolated': same('No global backend configuration will be inherited.', 'Managed processes use only the selected Echo profile and their private runtime state.'),

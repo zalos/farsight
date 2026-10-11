@@ -16,6 +16,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
 const scratch = mkdtempSync(join(tmpdir(), 'echo-package-'));
 const artifact = join(root, 'build', 'echo', `farsight-echo-${version}.tgz`);
+const occupiedProfile = createServer();
 async function free(port) {
   return new Promise(resolve => {
     const socket = createServer();
@@ -49,9 +50,20 @@ try {
   const duplicate = await cli(['init']).then(() => false, () => true);
   assert.ok(duplicate, 'init must preserve existing settings');
   await cli(['install-runtime']);
+  // A running profile must not prevent the disposable smoke test from starting.
+  // Older builds reused this configured port and failed before saving any content.
+  await new Promise((resolve, reject) => {
+    occupiedProfile.once('error', reject);
+    occupiedProfile.listen(base, '127.0.0.1', resolve);
+  });
   const checks = JSON.parse((await cli(['smoke'])).stdout);
   assert.deepEqual(checks.map(check => [check.name, check.ok]), [
     ['remember-recall', true], ['restart-persistence', true], ['store-isolation', true],
   ]);
-  console.log('Echo tarball: clean install, CLI, pinned engine, save/recall, restart and store isolation passed.');
-} finally { rmSync(scratch, { recursive: true, force: true }); }
+  assert.ok(occupiedProfile.listening, 'smoke must leave the configured profile listener running');
+  assert.deepEqual(JSON.parse(readFileSync(config, 'utf8')), settings, 'smoke must preserve saved settings');
+  console.log('Echo tarball: clean install, CLI, pinned engine, save/recall, restart, store isolation and smoke beside an occupied profile passed.');
+} finally {
+  if (occupiedProfile.listening) await new Promise(resolve => occupiedProfile.close(resolve));
+  rmSync(scratch, { recursive: true, force: true });
+}
