@@ -16,6 +16,7 @@ import {
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
   counted, journeyTree, configCounts, gateCard, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
+  tourOf, ask,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest, refuseWrite } from './guard.js';
@@ -987,6 +988,31 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const tests = folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests));
       const state = folded(g.index, 'state', scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}/${history.agents?.n ?? '-'}` : '-'), () => stateOfPlay(g.index, g.meta, { scope, tests, history }));
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', ...state }));
+    }
+    // ── walk me through it, and ask (round 2026-10-10, proposal 8): core tourOf() and ask(), assembled from the graph,
+    // every clause carrying the node ids it cites — the same folds MCP `tour` / `ask` and `farsight tour` / `ask` print.
+    // Read-only; one answer per target (or question) per index (folds.ts) ──
+    if ((url === '/api/tour' || url.startsWith('/api/tour?')) && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const q = new URL(url, 'http://localhost').searchParams;
+      const target = (q.get('storyline') || q.get('flow') || '').trim();
+      if (!target) return send(400, JSON.stringify({ error: 'missing ?storyline=<id> or ?flow=<flow node id>' }));
+      const g = loadJourneyGraph(graphPath);
+      const repo = q.get('repo') || undefined;
+      const persona = q.get('persona') || undefined;
+      const tour = folded(g.index, 'tour', `${target}\u0000${repo ?? ''}\u0000${persona ?? ''}`, () => tourOf(g.index, target, { metas: g.meta.journeys, ...(repo ? { repo } : {}), ...(persona ? { persona } : {}) }) ?? null, 16);
+      if (!tour) return send(404, JSON.stringify({ error: `no storyline or journey ${target} in this graph` }));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, tour }));
+    }
+    if ((url === '/api/ask' || url.startsWith('/api/ask?')) && req.method === 'GET') {
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const q = new URL(url, 'http://localhost').searchParams;
+      const question = (q.get('q') ?? '').trim().slice(0, 500);
+      if (!question) return send(400, JSON.stringify({ error: 'missing ?q=<question>' }));
+      const g = loadJourneyGraph(graphPath);
+      const repo = q.get('repo') || undefined;
+      const answer = folded(g.index, 'ask', `${question.toLowerCase()}\u0000${repo ?? ''}`, () => ask(g.index, question, { metas: g.meta.journeys, ...(repo ? { repo } : {}) }), 32);
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, answer }));
     }
     // ── journeys organised by persona and group (journey-organisation-and-config-files.md §4.4) — before
     // /api/journey, whose prefix it shares; the same journeyTree() the MCP tool and the CLI print ──

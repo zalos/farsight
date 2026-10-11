@@ -1,0 +1,120 @@
+// Ask's words (round 2026-10-10, proposal 8: ask, with evidence). Spread into STRINGS in strings.ts.
+//
+// Ask is a small grammar, not a model: four shapes of question, recognised by their words in either register, each
+// answered from the graph's index. Every answer line is one of these templates filled with names the graph holds,
+// and each line carries the node it cites. A line that names code has an `ask.biz.*` twin with the code left out.
+import type { StringEntry } from './strings.js';
+
+function same(word: string, define?: string): StringEntry {
+  return define ? { hud: word, professional: word, define } : { hud: word, professional: word };
+}
+function one(word: string, pluralKey: string): StringEntry {
+  return { hud: word, professional: word, singularOf: pluralKey };
+}
+
+export const ASK_STRINGS: Record<string, StringEntry> = {
+  // ── the box and the card ─────────────────────────────────────────────────────────────────────────────────
+  'ask.title': {
+    hud: 'Ask',
+    professional: 'Ask',
+    define: 'Ask a question about the system in plain words. Four shapes are understood — where a record is set to a status and what must be true first, what guards something, how one part reaches another, and what proves something — and each is answered from the graph with the thing every line was read from.',
+  },
+  'ask.sub': same('answered from the graph', 'The answer is read from the graph: the code, the design and the test runs. Nothing is written by a model.'),
+  'ask.placeholder': same('where is an invoice set to open, and what must be true first?', 'An example of a question Ask understands.'),
+  'ask.go': same('ask', 'Answers the question from the graph.'),
+  'ask.derived': same('derived · no model', 'This answer was put together from the graph alone: every line is a template filled with what the code, the design and the test runs say, and names what it was read from. No language model wrote or rephrased it.'),
+  'ask.phrased': same('phrased by a model', 'A language model rephrased this answer. The citations under it are the graph’s and are kept as they were: a phrasing may change the words, never what each line cites.'),
+  'ask.asking': same('reading the graph…', 'The question is being answered from the graph.'),
+  'ask.failed': same('the question could not be answered: {error}', 'The server could not answer the question; the reason it gave follows.'),
+  'ask.shapes': same('Ask understands four shapes of question:', 'The kinds of question Ask can answer from the graph. A question in another shape is not guessed at.'),
+  'ask.unknown': same('That question is not one of the shapes Ask understands.', 'Ask is a small grammar over the graph, not a model: a question it cannot place in one of its four shapes is answered with the shapes, never with a guess.'),
+  'ask.shape.set': same('where is <record> set to <status>, and what must be true first?', 'Finds the code that moves a record to a status, the action and screen it runs from, what must be true before it, and the tests that prove it.'),
+  'ask.shape.guards': same('what guards <action, call or screen>?', 'Lists the checks on an action, a call or a screen, by who they matter to, each with what the tests say.'),
+  'ask.shape.path': same('how does <A> reach <B>?', 'The shortest chain of calls, reads and writes the graph knows from one part to another, one link at a time.'),
+  'ask.shape.proves': same('what proves <screen, action or gate>?', 'The test cases that reach it, each with its own last run, under the one verdict.'),
+  'ask.notFound': same('Nothing in the graph matches “{term}”.', 'The words could not be matched to a screen, an action, a call, a record or a check the graph holds. Try the name as the Map or the code writes it.'),
+  'ask.resolved': same('read as {name}', 'The part of the graph the words of the question were matched to.'),
+
+  // ── where is <record> set to <status> ─────────────────────────────────────────────────────────────────
+  'ask.set.noStatus': same('No code the graph knows moves the {record} to {status}.', 'The record declares this status, and no function the graph read writes it. A move written in a way the parser does not follow would not be seen.'),
+  'ask.set.unknownStatus': same('The {record} has no status called “{status}”.', 'The statuses the code declares for this record do not include these words, in the code’s spelling or in a persona’s.'),
+  'ask.set.noRecord': same('No record with a status the code declares matches “{term}”.', 'Ask looks for a record whose statuses the code declares — a check constraint, an enumeration or a union of words — and found none that matches.'),
+  'ask.set.writer': same('{status} is written by {writer} at {at}.', 'The function that writes this status on the record, with its file and line.'),
+  'ask.set.where': same('It runs when {persona} uses “{action}” on {screen} (screen {screenN}, action {actionN} of {journey}).',
+    'The action and the screen of a journey whose walk reaches the code that makes the move.'),
+  'ask.set.whereNone': same('No journey the graph walks reaches {writer}.', 'The code that makes the move is not on any journey’s walk, so no screen or action can be named for it.'),
+  'ask.set.also': same('It is also reached from {count}.', 'The other journeys whose walk reaches the same move.'),
+  'ask.sec.must': same('must be true first', 'The checks on the action that makes the move — who may act, the state of the record and the records around it, and the policies — each with what the tests say about it; then the technical checks, counted.'),
+  'ask.sec.proven': same('proven by', 'The test cases that reach the code that writes the new status, each with its own last run, under the one verdict.'),
+  'ask.sec.path': same('path', 'How the screen reaches the record, one link at a time, as the graph knows it.'),
+  'ask.sec.gates': same('checks', 'The checks on it, by who they matter to, each with what the tests say about it.'),
+  'ask.sec.cases': same('cases', 'The test cases that reach it, each with its own last run.'),
+  'ask.row.need': same('{words} — {kind} at {at}', 'One thing that must be true, in the words somebody wrote, else the check’s own name; the kind of check and where it is.'),
+  'ask.row.decision': same('{label} — a decision at {at}', 'A choice the code makes on the way to the move that somebody put in plain words.'),
+  'ask.row.unchecked': same('Not checked by the code: nothing compares the status the {record} is in before {writer} moves it.', 'The code that makes this move does not compare the status the record is in first. Nothing in the code stops the move from any status.'),
+  'ask.row.checked': same('The {record} is {from} first — the code checks it.', 'The code that makes this move compares the status the record is in before it writes the new one.'),
+  'ask.row.technical': same('…and {count}.', 'The technical checks on the action — input shape and platform checks — counted, not listed.'),
+  'ask.row.case': same('{name} — {status} {when}', 'One test case that reaches it, with its own last run and when that was.'),
+  'ask.row.caseFile': same('{name} at {at} — {status} {when}', 'One test case that reaches it, its file and line, with its own last run and when that was.'),
+  'ask.row.noRun': same('no run recorded', 'No results report names this case: it exists and has not been seen to run.'),
+  'ask.row.verdict': same('{word} — {count} {scope}{runs}', 'The one verdict over the cases that reach it, with how many and over what.'),
+  'ask.kind.guard': same('a gate', 'A check on who may act or on the request, before the action goes through.'),
+  'ask.kind.rule': same('a rule', 'A check on what the data must look like, or on the state of a record, before the action goes through.'),
+  'ask.tier.business': same('matters to the business', 'A check on who may act, the state of the record and the records around it, or that the record is complete.'),
+  'ask.tier.policy': same('a policy', 'A check the organisation keeps as policy, such as a second approver.'),
+  'ask.tier.technical': same('technical', 'A check that keeps the system safe — the shape of the input or a platform rule.'),
+
+  // ── what guards <x> ─────────────────────────────────────────────────────────────────────────────────
+  'ask.guards.head': same('What guards {name}: {count}.', 'The checks on it, each once, by who they matter to.'),
+  'ask.guards.none': same('No check the graph knows guards {name}.', 'The walk from it met no gate and no rule. A check written in a way the parser does not read would not be seen.'),
+
+  // ── how does <A> reach <B> ────────────────────────────────────────────────────────────────────────
+  'ask.path.head': same('{from} reaches {to} in {count}: {chain}.', 'The shortest chain the graph knows from the first part to the second.'),
+  'ask.path.none': same('No path the graph knows leads from {from} to {to}.', 'Following calls, requests, renders, reads and writes from the first part never arrives at the second. A link the parser does not read would not be seen.'),
+  'ask.path.reverse': same('No path leads that way; the other way round, {from} reaches {to} in {count}: {chain}.', 'No chain leads from the first part to the second, and one leads back from the second to the first.'),
+  'ask.path.hop': same('{from} {via} {to}', 'One link of the chain: what the first part does to reach the next.'),
+  'ask.path.more': same('{count} of the same length.', 'Other chains as short as the one shown.'),
+  'ask.path.via.calls': same('calls', 'One function calls another.'),
+  'ask.path.via.http': same('requests', 'The browser code makes a request the server answers.'),
+  'ask.path.via.renders': same('renders', 'A screen or a component draws another.'),
+  'ask.path.via.reads': same('reads', 'The code reads a record.'),
+  'ask.path.via.writes': same('writes', 'The code writes a record.'),
+  'ask.path.via.publishes': same('sends', 'The code sends a message.'),
+  'ask.path.via.consumes': same('receives', 'The code receives a message.'),
+  'ask.path.via.guards': same('is guarded by', 'A check runs before the code goes on.'),
+  'ask.path.via.validates': same('is checked by', 'A rule checks the data before the code goes on.'),
+
+  // ── what proves <x> ────────────────────────────────────────────────────────────────────────────────
+  'ask.proves.head': same('What proves {name}: {word} — {count} {scope}{runs}.', 'The one verdict over the cases that reach it, with how many and over what.'),
+  'ask.proves.notBuilt': same('{name} is designed, not built: no test can reach a screen with no code.', 'The design names this screen and no page in the code serves it yet, so it has no verdict.'),
+
+  // ── the doors ───────────────────────────────────────────────────────────────────────────────────────
+  'ask.door.gate': same('open the gate card', 'Opens the gate card for the first check named: what it allows, the calls it guards and the tests that reach it.'),
+  'ask.door.map': same('see it on the Map', 'Opens the journey on the Map at the screen this answer names.'),
+  'ask.door.cases': same('see the cases', 'Opens the Tests page kept to what this answer names.'),
+
+  // ── the business register: the same lines with the code left out ───────────────────────────────────────
+  'ask.biz.set.writer': same('The system sets it to {status}.', 'The system moves the record to this status.'),
+  'ask.biz.set.where': same('That happens when {persona} uses “{action}” on {screen}, in {journey}.', 'The action and the screen of a journey where the move is made.'),
+  'ask.biz.row.need': same('{words} — {kind}', 'One thing that must be true before the move goes through.'),
+  'ask.biz.row.decision': same('{label} — a decision', 'A choice made on the way to the move, in plain words.'),
+  'ask.biz.row.unchecked': same('Not checked: nothing makes sure the {record} is in the right state before it moves.', 'The system does not look at the record’s state before it moves it on, so nothing stops the move from any state.'),
+  'ask.biz.row.checked': same('The {record} must be {from} first — the system checks it.', 'The system looks at the record’s state before it moves it on.'),
+  'ask.biz.row.case': same('{name} — {status} {when}', 'One test that checks it, with its last run and when that was.'),
+  'ask.biz.row.verdict': same('{word} — {count} {scope}{runs}', 'What the tests say, with how many and over what.'),
+  'ask.biz.path.head': same('{from} reaches {to} in {count}: {chain}.', 'How the first part reaches the second, as the graph knows it.'),
+
+  // ── its numbers ─────────────────────────────────────────────────────────────────────────────────────
+  'ask.unit.pathLinks': same('{n} hops', 'The links of one chain from one part of the system to another: each a call, a request, a render, a read or a write.'),
+  'ask.unit.pathLinksOne': one('1 hop', 'ask.unit.pathLinks'),
+  'ask.biz.pathLinks': same('{n} links', 'The links of one chain from one part of the system to another.'),
+  'ask.biz.pathLinksOne': one('1 link', 'ask.biz.pathLinks'),
+  'count.unit.paths': same('{n} paths', 'Other chains between the same two parts, as short as the one shown.'),
+  'count.unit.pathsOne': one('1 path', 'count.unit.paths'),
+  'count.unit.places': same('{n} more places', 'Other actions on journeys whose walk reaches the same code, each once.'),
+  'count.unit.placesOne': one('1 more place', 'count.unit.places'),
+  'count.unit.checks': same('{n} checks', 'The checks on it — gates and rules — each once.'),
+  'count.unit.checksOne': one('1 check', 'count.unit.checks'),
+  'count.part.tierTechnical': same('{n} technical', 'Checks that keep the system safe — the shape of the input and platform rules.'),
+  'count.scope.path': same('on this chain', 'The parts one chain passes through, from the first part named to the second, each link once.'),
+};
