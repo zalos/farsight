@@ -177,7 +177,7 @@ describe('presence', () => {
 describe('tour and ask — assembled from the graph, every line cited (round 2026-10-10, proposal 8)', () => {
   test('tour walks the storyline stop by stop, and every id a line cites is in the graph', async () => {
     const out = await call('tour', { target: 'invoice' });
-    assert.match(out, /stop 1 of \d+ · screen · New invoice/);
+    assert.match(out, /stop 1 of \d+ on this walk · screen · New invoice/);
     assert.match(out, /hand-off · The invoice becomes open/);
     assert.match(out, /Not checked by the code: nothing compares the status the invoice is in before finalizeInvoice moves it/);
     assert.match(out, /every sentence is read from the graph · nothing is inferred by a model/);
