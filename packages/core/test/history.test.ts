@@ -183,7 +183,7 @@ test('an existing database gains the history tables and keeps every row it had',
   assert.deepEqual(
     (after.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[])
       .map((r) => r.name),
-    ['blind_spot', 'commit', 'commit_branch', 'commit_file', 'commit_key', 'commit_node', 'commit_node_done', 'commit_sync', 'edge', 'node', 'release', 'snapshot', 'snapshot_source', 'spine_read', 'sync_shot'],
+    ['blind_spot', 'commit', 'commit_branch', 'commit_file', 'commit_key', 'commit_node', 'commit_node_done', 'commit_sync', 'edge', 'node', 'release', 'snapshot', 'snapshot_meta', 'snapshot_source', 'spine_read', 'sync_shot'],
   );
   after.close();
 });
