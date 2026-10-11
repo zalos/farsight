@@ -47,15 +47,15 @@ Codex project instruction and MCP conventions were checked against [official AGE
 #74–#97: the journey overlay is retired and the Map is the one place a journey is read, with a chrome that holds
 still; the storyline draws as lanes; gates carry tiers and preconditions; every test number its scope and build
 state wins the journey verdict; a tour and an ask answered from the graph; a PR gets its affected set; two syncs
-compare; agents get tiers and budgets). In flight: lane S `fix/map-space` (the head at two lines, the lanes at the
-street's density, a flat legend, whole cards at the floor). Echo (PR #84, item 17) merged on 2026-10-11 after its re-review.
+compare; agents get tiers and budgets). Nothing is in flight. Echo (PR #84, item 17) merged on 2026-10-11 after its re-review; lane S (#99, in item 18)
+closed the cleanup pass.
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`227fb80`** after the lanes round, the cleanup pass, swarm 3's fixes and Echo (PRs #74–#97, items 15–18 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
-| tests | **1245** — core 362 · work 64 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 73 · server 370 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 316/316** (`journeys-organised`'s Map-head spec failed once under the full suite and passed alone — timing) (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
-| string/symbol lint | **2889 entries · 35 sprite symbols · 70 modules** (60 retired view words left with the overlay); the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-evidence.ts`, `strings-stops.ts`, `strings-state.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
-| servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `227fb80` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 71, 4477 sync 113, then 4477 restarted `--read-only`); both prefixes' global `farsight` print `commit 227fb80`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`c5a5c7a`** after the lanes round, the cleanup pass, swarm 3's fixes, Echo and the space pass (PRs #74–#99, items 15–18 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1353** — core 366 · work 65 · echo 103 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 73 · server 370 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 324/324** (`journeys-organised`'s Map-head spec failed once under the full suite and passed alone — timing) (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
+| string/symbol lint | **3105 entries · 35 sprite symbols · 70 modules** (60 retired view words left with the overlay); the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-evidence.ts`, `strings-stops.ts`, `strings-state.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
+| servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `c5a5c7a` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 72, 4477 sync 114, then 4477 restarted `--read-only`); both prefixes' global `farsight` print `commit c5a5c7a`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -665,6 +665,19 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       the copy doors and the model names; *conditions not in plain language* says its scope; *the sync before* skips
       syncs that re-read the same code and an absent green run prints the absence word; the lifecycle's unmoved word
       is *no code moves into* and the table prints *from*; AT RISK names its scope.
+    - **The Map uses its space** (#99; from the owner's second look — *"the lanes view is not a good use of space,
+      the steps text is too large and the keys use vertical space; the header takes a third of the screen"*): the head
+      is two lines plus a clamped description (chrome + head 188 → 153 px at 1920, 1440 and 1280 in all registers; line
+      1 name · *for* · storyline position · the status and verdict chips never fold, the rest `+n` whose click opens the
+      full row in the dock's *about* tab; line 2 the main record's lifecycle on one line with a glyph for the table and
+      `+n record ▸` for a second record); the lanes at the street's density (`LANE_K` 2 → 1 so ×1.0 is the stylesheet's
+      sizes, cards 236×96 with a one-line name, the status chip beside it, the test count and scope on one row and the
+      verdict on the next; lane heads at the HUD label size; pills one line record · move with the writer beneath; the
+      legend flat on the footer row; the lifecycle under the lanes only at ALL); the street floor keeps the picture
+      (44 → 95 px) with the name on one line and the verdict one chip; the action stop's screen strip is one line of
+      names; compare chips on lane cards are in the fold's keep set and `map-compare:89` waits on `data-laid`/`data-cmp`.
+      `e2e/tests/map-space.pw.spec.ts` asserts the head's budget at three widths, the lanes' fit, the legend's shape, the
+      floor's one-line verdicts and the WALK box.
     - **Left open:** readiness waivers and a sign-off history; HTTP status pills in business; Compare not measured on
       the reference app (the lane's graph copy had no history store); the screen panel's *WHAT REACHES* line
       duplicates the Affected bar; the gate card can open over the top nav; the *row n* note in an empty lane is words,
@@ -705,12 +718,8 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**In flight (2026-10-11 afternoon):** lane S `fix/map-space` — from the owner's second look (*the lanes view is not
-a good use of space — the steps text is too large and the keys use vertical space; the header takes a third of the
-screen*): the head bar at two lines plus a clamped description (≤ 170 px of chrome), the lanes at the street's card
-density with the legend lying flat, the street floor keeping a whole card with the verdict chip on one line, the
-beats' screen strip as one line of names. Echo's PR #84 merged after a second review found its four blocking items fixed (the
-reviews stay outside the repo). Then, in order: (1) a handoff prompt to
+**Nothing is in flight (2026-10-11 evening).** Echo's PR #84 merged after a second review found its four blocking
+items fixed (the reviews stay outside the repo); lane S (#99) closed the cleanup pass. Next, in order: (1) a handoff prompt to
 the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
 `farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
 and its lifecycle words are humanized constants), re-run its suites with the reporters, restart its server
