@@ -240,12 +240,15 @@ export function applyRoute() {
   }
   S.route = r;
   // a shared link may name the register and the journey band's shape it was written in
-  if (r.lens && /^(business|hybrid|code)$/.test(r.lens) && currentLens() !== r.lens) setLens(r.lens, true);
+  const lensMoved = !!(r.lens && /^(business|hybrid|code)$/.test(r.lens) && currentLens() !== r.lens);
+  if (lensMoved) setLens(r.lens, true);
   // the dock a Map link names (the code stop's, or the table's beside a part) is where the code opens
   if (r.surface === 'map' && /^(inline|bottom|right)$/.test(r.dock || '')) S.jrnDock = r.dock;
   // the same surface, a new place inside it: a surface that can follow its own route keeps its state
   if (currentSurface === r.surface && SURFACES[r.surface].update && document.getElementById('surface').childElementCount) {
     SURFACES[r.surface].update(r);
+    // a link that named another register redraws the words of the surface it stayed on (a mount draws them itself)
+    if (lensMoved && SURFACES[r.surface].refresh) SURFACES[r.surface].refresh('lens', r);
     renderChrome();
     impactFromRoute(r);
     return;

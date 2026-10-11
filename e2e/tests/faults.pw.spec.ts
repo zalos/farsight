@@ -51,8 +51,8 @@ test.describe('faults', () => {
       });
       await page.goto('/#/journeys');
       await page.locator('.dsg-flow.pinned').first().getByRole('button', { name: 'Open journey' }).click();
-      await expect(page.locator('#jrn-title')).toHaveText('Billing cycle');
-      await expect(page.locator('#jrn-count')).toContainText('3 screens', { timeout: 10_000 });
+      await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle/);
+      await expect(page.locator('.map-table-head .jrn-count')).toContainText('3 screens', { timeout: 10_000 });
     });
   });
 });

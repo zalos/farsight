@@ -3,7 +3,7 @@
 // column, the Experiments row readable, and the journey's landing view decided by the register.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { test, expect, gotoReady, openBillingCycle } from './support';
+import { test, expect, gotoReady, openJourneyAt } from './support';
 import { CLI, makeWorkspace } from '../fixture/workspace.mjs';
 import { routeWork } from './work-stub';
 
@@ -33,8 +33,9 @@ test.describe('Settings is named', () => {
   test('the Experiments read one flag per line, their sentence under them, never one word wide', async ({ page }) => {
     await gotoReady(page, '#/portfolio');
     await page.evaluate(() => (window as any).openSettings());
+    // the Map and the action drill are no experiments since the journey page retired into the Map: one flag is left
     const notes = page.locator('.set-flagitem .set-note');
-    await expect(notes).toHaveCount(3);
+    await expect(notes).toHaveCount(1);
     for (const w of await notes.evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect().width))) expect(w).toBeGreaterThan(300);
   });
 });
@@ -167,7 +168,7 @@ test.describe('a read-only session, on every surface', () => {
       ['work', '#/work', '.wk-syncbtn'],
       ['an item', '#/work/' + encodeURIComponent('work::invoice-jira::INV-3'), '.wk-head'],
       ['settings', '#/settings', '#savebtn'],
-      ['the journey', '#/journeys/' + encodeURIComponent('invoice-app::flow::billing-cycle'), '#jrn-title'],
+      ['the journey', '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=table', '.map-table .jrn-sheet'],
       ['the map', '#/map', '.map-district'],
       ['the portfolio', '#/portfolio', '.pf-wrap'],
     ];
@@ -222,11 +223,10 @@ test.describe('the Map toolbar', () => {
 });
 
 test.describe('the journey', () => {
-  /** @covers packages/server/public/app/surfaces/journeys.js::jrnSheetVerifiedHtml */
-  test('the Sheet\'s Verified-by cell keeps its words inside its column', async ({ page }) => {
+  /** @covers packages/server/public/app/lib/journey-draw.js::jrnSheetVerifiedHtml */
+  test('the table\'s Verified-by cell keeps its words inside its column', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openBillingCycle(page);
-    await page.locator('.jrn-viewbtn', { hasText: /^sheet$/i }).click();
+    await openJourneyAt(page, 'table');
     await expect(page.locator('.jrn-scell .jrn-tfoot').first()).toBeVisible();
     const over = await page.evaluate(() => {
       const out: string[] = [];
@@ -244,22 +244,29 @@ test.describe('the journey', () => {
   });
 
   /**
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnLayout
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnSetLayout
+   * @covers packages/server/public/app/surfaces/map-stops.js::registerView
+   * @covers packages/server/public/app/surfaces/map-stops.js::setLayout
    */
-  test('the register decides the landing view, and each register remembers its own choice', async ({ page }) => {
-    await page.addInitScript(() => { try { localStorage.setItem('fs-jrn-layout.hybrid', 'sheet'); } catch { /* no storage */ } });
-    await openBillingCycle(page);
-    await page.locator('#lb-hybrid').click();
-    const on = page.locator('.jrn-layoutsw .jrn-viewbtn.on');
-    await expect(on).toHaveText(/sheet/i);
-    // the business reader lands on the Storyboard, whatever hybrid chose
-    await page.locator('#lb-business').click();
-    await expect(on).toHaveText(/storyboard/i);
-    await page.locator('.jrn-viewbtn', { hasText: /^timeline$/i }).click();
-    await page.locator('#lb-hybrid').click();
-    await expect(on).toHaveText(/sheet/i);
-    await page.locator('#lb-business').click();
-    await expect(on).toHaveText(/timeline/i);
+  test('the register decides where a journey opens on the Map, and each register remembers its own choice', async ({ page }) => {
+    const door = (lens: string) => gotoReady(page, '#/journeys?lens=' + lens)
+      .then(() => page.locator('.dsg-flow.pinned').first().getByRole('button', { name: 'Open journey' }).click());
+    // hybrid: the table
+    await door('hybrid');
+    await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
+    // business: the street, the storyboard's look
+    await door('business');
+    await expect(page.locator('.map-scr .say').first()).toBeVisible();
+    await expect(page.locator('.map-table')).toHaveCount(0);
+    // code: the first action's beats with the code open
+    await door('code');
+    await expect(page.locator('.map-act.code')).toBeVisible();
+    // the business reader picks the table: remembered for business, and hybrid keeps its own
+    await door('business');
+    await page.locator('.map-layout [data-layout="table"]').click();
+    await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
+    await door('business');
+    await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('fs-map-view.business'))).toBe('table');
+    expect(await page.evaluate(() => localStorage.getItem('fs-map-view.hybrid'))).toBeNull();
   });
 });

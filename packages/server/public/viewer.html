@@ -2599,7 +2599,9 @@
   .map-scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim);overflow-wrap:anywhere;line-height:1.25}
   .map-scr .route:empty{display:none}
   /* the business street reads as the storyboard did: the picture and the screen's own sentence (one address) */
-  .map-scr .say{font-size:11px;line-height:1.35;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .map-scr .say{flex:none;font-size:11px;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* the picture gives the sentence its line, so the screen's chips and its test word keep theirs (the whole sentence is the tip) */
+  body.lens-business .map-scr .map-thumbwrap{height:96px}
   .map-scr .map-chips{display:flex;gap:5px;flex-wrap:wrap}
   .map-scr .map-chips .map-chip,.map-scr .state .map-chip{font-size:10px;padding:1px 7px}
   /* plumbing: the legend lane, call nodes with the service bar, data nodes with read/write */

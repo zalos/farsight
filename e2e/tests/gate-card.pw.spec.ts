@@ -2,7 +2,8 @@
 // the sentence, where it stands (the calls it guards, counted), its own code, the calls it guards with their
 // doors and the tests that reach it — the doors on the card's head and on the row, never behind a ▸. The business
 // register keeps the sentence, the scope and the tests and draws no door into code. The fixture's Billing cycle
-// meets `requireScope(billing:read)` on its Invoice list (step 2), in front of GET /invoices and GET /invoices/:id.
+// meets `requireScope(billing:read)` on its Invoice list (screen 2), in front of GET /invoices and GET /invoices/:id. A
+// journey's gates are read on the Map's table (the journey page retired into it).
 import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
 
@@ -15,13 +16,13 @@ function card(page: Page) { return page.locator('.fs-tip .gc[data-gc="' + GATE +
 /**
  * @covers packages/server/public/app/lib/gate-card.js::openGateCard
  * @covers packages/server/public/app/lib/gate-card-model.js::gateCardModel
- * @covers packages/server/public/app/surfaces/journeys.js::jrnGateRowHtml
+ * @covers packages/server/public/app/lib/journey-draw.js::jrnGateRowHtml
  * @covers GET /api/gate
  * @covers GET /api/source
  */
 test('a gate on the journey opens its card: sentence, scope, code, the calls it guards, the tests, the doors', async ({ page }) => {
-  await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&biz=gates&dock=right&lens=hybrid');
-  const row = page.locator('.jrn-gl-row[data-gate-card="' + GATE + '"]').first();
+  await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=hybrid');
+  const row = page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first();
   // the doors are on the row itself
   await expect(row.locator('a.dd-door.editor')).toHaveAttribute('href', /^vscode:\/\/file\/.+src\/server\/routes\.ts:\d+$/);
   await row.locator('.jrn-gl-w').click();
@@ -43,8 +44,8 @@ test('a gate on the journey opens its card: sentence, scope, code, the calls it 
 
 /** @covers packages/server/public/app/lib/gate-card.js::gateKeydown */
 test('Enter on a focused gate opens the card, Esc closes it and the focus comes back', async ({ page }) => {
-  await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&biz=gates&dock=right&lens=hybrid');
-  const row = page.locator('.jrn-gl-row[data-gate-card="' + GATE + '"]').first();
+  await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=hybrid');
+  const row = page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first();
   await row.focus();
   await page.keyboard.press('Enter');
   await expect(card(page)).toBeVisible();
@@ -55,10 +56,10 @@ test('Enter on a focused gate opens the card, Esc closes it and the focus comes 
 
 /** @covers packages/server/public/app/lib/gate-card.js::gateCardHtml */
 test('in the business register the card keeps the sentence, the scope and the tests, and no door into code', async ({ page }) => {
-  await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&biz=gates&dock=right&lens=business');
-  const row = page.locator('.jrn-gl-row[data-gate-card="' + GATE + '"]').first();
+  await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=business');
+  const row = page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first();
   await expect(row.locator('a.dd-door')).toHaveCount(0);
-  await row.click();
+  await row.locator('.jrn-gl-w').click();
   const c = card(page);
   await expect(c).toBeVisible();
   await expect(c.locator('.gc-says')).not.toBeEmpty();
