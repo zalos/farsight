@@ -723,7 +723,9 @@ function drawJourneyLanes(force) {
   const aspect = W > 0 && H > 0 ? W / H : 1.6;
   let G = laneGeometry(model, { aspect, extraH });
   const paint = () => {
-    const k = Math.max(0.55, Math.min(1.25, (W - 32) / G.size.w, (H - 32) / G.size.h));
+    // never past ×1.0: the lanes read at the street's density, the room left beneath (lane S — at ×1.25 a short
+    // journey's cards filled a wide window with display-sized words)
+    const k = Math.max(0.55, Math.min(1, (W - 32) / G.size.w, (H - 32) / G.size.h));
     host.innerHTML = '<div class="map-jlanes" style="width:' + Math.ceil(G.size.w * k) + 'px;height:' + Math.ceil(G.size.h * k) + 'px">'
       + '<div class="map-lanes" style="width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + k + ')">'
       + lanesHtml(model, G, { sentence }) + '</div></div>';

@@ -3039,7 +3039,7 @@
   .map-lanes-snap .ln-snap{position:absolute}
   .map-lanes{position:absolute;left:0;top:0;transform-origin:0 0}
   .ln-top{position:absolute;display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden;font-size:11px;color:var(--muted)}
-  .ln-top .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:18px;color:var(--ink)}
+  .ln-top .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:14px;color:var(--ink)}
   .ln-top .tag{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 5px}
   .ln-top > *{flex:none}
   .ln-top .d{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -3050,13 +3050,16 @@
   .ln-lane.store{background:color-mix(in srgb,var(--tbl) 6%,var(--ground))}
   .ln-headbox{position:absolute;left:0;top:0;bottom:0;border-right:1px solid var(--line-soft);border-left:3px solid var(--amber);border-radius:6px 0 0 6px;background:color-mix(in srgb,var(--amber) 6%,transparent);overflow:hidden}
   .ln-lane.store .ln-headbox{border-left-color:var(--tbl);background:color-mix(in srgb,var(--tbl) 8%,transparent)}
-  .ln-head{padding:6px 8px;display:flex;flex-direction:column;gap:2px}
-  .ln-head .nm{display:flex;align-items:flex-start;gap:4px;overflow-wrap:break-word;line-height:1.05;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:13px;color:var(--amber)}
+  /* a lane's head at the HUD label's size: the word and its count on one line, its second line clamped to one */
+  .ln-head{padding:5px 8px;display:flex;flex-direction:column;gap:2px}
+  .ln-head .nm{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;line-height:1.25;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--amber)}
+  .ln-head .nm .w{overflow-wrap:break-word;min-width:0}
+  .ln-head .nm .n{font-family:var(--body);text-transform:none;letter-spacing:0;font-size:9.5px;color:var(--dim);white-space:nowrap}
+  .ln-head .nm .n .sc{display:none}
   .ln-lane.store .ln-head .nm{color:var(--tbl)}
-  .ln-head .nm .sym{width:10px;height:10px;flex:none}
+  .ln-head .nm .sym{width:10px;height:10px;flex:none;align-self:center}
   .ln-head .surf{font-size:9.5px;color:var(--ink)}
-  .ln-head .d{font-size:9.5px;line-height:1.25;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .ln-head .n{font-size:9.5px;color:var(--dim)}
+  .ln-head .d{font-size:9.5px;line-height:1.25;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ln-head .more{font-size:9.5px;color:var(--muted);text-decoration:underline dotted;cursor:help}
   .ln-head .n .ln-n{color:var(--dim)}
   .ln-arrows{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
@@ -3070,19 +3073,31 @@
   .ln-label{position:absolute;font-size:10px;line-height:1.2;padding:2px 5px;border-radius:3px;background:var(--panel);color:var(--ink);border:1px solid var(--line);max-width:160px}
   .ln-label.branch{border-color:var(--warn);color:var(--warn)}
   .ln-label.seen{border-color:var(--tbl);color:var(--tbl)}
-  .ln-stage{position:absolute;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:6px 7px;display:flex;flex-direction:column;gap:3px;cursor:pointer;overflow:hidden}
+  .ln-stage{position:absolute;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:6px 8px;display:flex;flex-direction:column;gap:3px;cursor:pointer;overflow:hidden}
   .ln-stage:hover,.ln-stage:focus-visible,.ln-stage.near{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-dim)}
   .ln-stage.planned{border-style:dashed;border-color:var(--warn);background:color-mix(in srgb,var(--panel) 60%,transparent)}
   .ln-stage.branch{border-color:color-mix(in srgb,var(--warn) 60%,var(--line))}
   /* nothing in a stage card gives up its line to the next: the chips' row folds to +n instead (lib/map-chips.js) */
   .ln-stage>*{flex:none}
-  .ln-stage .ttl{display:flex;align-items:flex-start;gap:0}
-  .ln-stage .ttl .map-step{font-size:9.5px;flex:none;margin-right:5px}
-  .ln-stage .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.03em;font-size:16.5px;line-height:1.05;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:normal;word-break:normal;hyphens:manual;min-width:0;flex:1 1 auto}
-  .ln-stage .sub{font-size:10.5px;line-height:1.2;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* the street card's density (lane S): the name on one line at the street card's size, the status chip beside it */
+  .ln-stage .ttl{display:flex;align-items:center;gap:5px;min-width:0}
+  .ln-stage .ttl .map-step{font-size:9.5px;flex:none}
+  .ln-stage .ttl .map-chip{flex:none;font-size:9.5px;padding:0 5px;line-height:13px;gap:3px}
+  .ln-stage .ttl .map-chip .sym{width:9px;height:9px}
+  .ln-stage .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.04em;font-size:12px;line-height:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+  .ln-stage .sub{font-size:10px;line-height:1.25;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ln-stage .ln-chips{display:flex;flex-wrap:wrap;gap:2px 3px;min-height:0}
   .ln-stage .ln-chips{align-items:center;font-size:10px;line-height:1.4}
-  .ln-stage .ln-chips .tchip{display:inline-flex;flex-wrap:wrap;gap:0 3px;max-width:100%;font-size:inherit;line-height:inherit}
+  /* the test chip: its count with its scope on one row, the verdict (and what did not pass) on the next — the separator
+     before the verdict is the row's break; the verdict gives way at its tail, its tip whole */
+  .ln-stage .ln-chips .tchip{display:flex;flex-wrap:wrap;align-items:center;gap:2px 3px;width:100%;max-width:100%;font-size:inherit;line-height:inherit;border:0;padding:0;background:none}
+  .ln-stage .ln-chips .tchip>.tc-sep:has(+ .tc-ev){flex-basis:100%;height:0;overflow:hidden;font-size:0}
+  .ln-stage .ln-chips .tchip>*{flex:none;white-space:nowrap}
+  .ln-stage .ln-chips .tchip>.tc-sep:has(+ .tc-runs),.ln-stage .ln-chips .tchip>.tc-runs{order:1}
+  .ln-stage .ln-chips .tchip>.tc-sep:has(+ .tc-ev){order:2}
+  .ln-stage .ln-chips .tchip>.tc-ev{order:3}
+  .ln-stage .ln-chips .tchip>.tc-ev{display:block;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ln-stage .ln-chips .tchip>.tc-ev .sym{vertical-align:-1px;margin-right:3px}
   .ln-stage .ln-chips .tchip.nb .tc-nb{font-size:9.5px}
   /* a stage card is 144 board px wide: the verdict reads in body type there (the street's HUD capitals took four lines) */
   .ln-stage .ln-chips .tchip .tc-ev{font-family:var(--body);text-transform:none;letter-spacing:0;font-size:10px;padding:1px 5px;line-height:12px;gap:3px}
@@ -3093,8 +3108,10 @@
   .ln-stage .dec .sym{width:9px;height:9px;flex:none}
   .ln-stage .dec .w{overflow:hidden;text-overflow:ellipsis}
   .ln-stage .dec .more{color:var(--muted);flex:none}
-  .ln-pill{position:absolute;box-sizing:border-box;border:1px solid color-mix(in srgb,var(--tbl) 70%,transparent);border-radius:17px;background:color-mix(in srgb,var(--tbl) 10%,var(--panel));padding:3px 10px;display:flex;flex-direction:column;justify-content:center;gap:1px;overflow:hidden;cursor:help}
-  .ln-pill .mv,.ln-pill .rc{display:flex;align-items:flex-start;gap:4px;font-size:11.5px;line-height:1.2;color:var(--ink);white-space:normal;overflow-wrap:normal}
+  .ln-pill{position:absolute;box-sizing:border-box;border:1px solid color-mix(in srgb,var(--tbl) 70%,transparent);border-radius:12px;background:color-mix(in srgb,var(--tbl) 10%,var(--panel));padding:4px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px;overflow:hidden;cursor:help}
+  .ln-pill .mv,.ln-pill .rc{display:flex;align-items:flex-start;gap:4px;font-size:11px;line-height:1.25;color:var(--ink);white-space:normal;overflow-wrap:normal}
+  .ln-pill .mv .sym{margin-top:2px}
+  .ln-pill .by-row{display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px}
   .ln-pill .rc .sym{width:9px;height:9px;color:var(--tbl);flex:none;margin-top:2px}
   .ln-pill .mv .sym{width:9px;height:9px;color:var(--tbl);flex:none}
   .ln-pill .rec{color:var(--tbl)} .ln-pill .sep{color:var(--dim)}
@@ -3102,24 +3119,38 @@
   .ln-pill .w,.ln-pill .rec{min-width:0}
   .ln-pill .rec,.ln-pill .w{flex:1 1 auto}
   .ln-stage>.sub[hidden]{display:none}
-  .ln-pill .by{font-size:10px;line-height:1.2;color:var(--fn);white-space:normal;overflow-wrap:normal}
+  .ln-pill .by{font-size:9.5px;line-height:1.25;color:var(--fn);white-space:normal;overflow-wrap:normal}
   .ln-pill{justify-content:flex-start}
   .ln-empty{position:absolute;top:50%;transform:translateY(-50%);right:12px;font-size:11px;font-style:italic;color:var(--muted);cursor:help}
   .ln-pill.written{border-style:dashed}
-  .ln-pill .nd{display:flex;align-items:center;gap:4px;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
+  .ln-pill .nd{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;line-height:13px;padding:0 5px;color:var(--muted);white-space:nowrap;flex:none}
   .ln-pill .nd .sym{width:9px;height:9px;color:var(--auth);flex:none}
   .ln-pill .nd .nc{display:inline-flex;align-items:center;gap:2px;color:var(--warn);overflow:hidden;text-overflow:ellipsis}
   .ln-pill .nd .nc .sym{color:var(--warn)}
   .ln-pill.more{border-style:dashed;border-color:var(--line);background:transparent;color:var(--muted);font-size:9.5px;align-items:center}
-  .ln-bottom{position:absolute;display:flex;gap:14px;align-items:flex-start}
-  .ln-lifes{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
-  .ln-life{border:1px solid var(--line-soft);border-radius:6px;padding:6px 8px;background:var(--panel)}
+  /* under the lanes (lane S): the record's lifecycle on one line, then the footer's counts and the legend on one row */
+  .ln-bottom{position:absolute;display:flex;flex-direction:column;gap:6px}
+  .ln-life{border:1px solid var(--line-soft);border-radius:6px;padding:4px 8px;background:var(--panel);min-width:0}
+  .ln-life .lc-strip{flex-wrap:nowrap;white-space:nowrap;overflow:hidden;gap:0 8px;font-size:11px}
+  .ln-life .lc-statuses{flex-wrap:nowrap;min-width:0;overflow:hidden}
+  .ln-life .lc-status{border:0;padding:0 2px;flex:none}
+  .ln-life .lc-status .lc-yet,.ln-life .lc-status .lc-c{display:none !important}
+  .ln-life .lc-status.unwritten .lc-w{color:var(--dim);font-style:italic}
+  .ln-life .lc-toggle{flex:none;order:-1}
+  .ln-life .lc-head{flex:none}
+  .ln-life .lc-strip.lc-tight .lc-counts{display:none}
+  /* the footer's counts and the legend share one row: the counts are whole, the sentence of what the lanes were built
+     from gives way at its tail (its tip whole), and on a narrow board the legend wraps under them */
+  .ln-footrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;min-width:0;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;color:var(--muted)}
+  .ln-footrow .ln-foot{display:contents}
+  .ln-footrow .ln-foot>*{flex:none;white-space:nowrap}
+  .ln-footrow .ln-foot>.from{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;margin-right:12px}
   .ln-foot{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;color:var(--muted)}
   .ln-foot .ln-n{color:var(--ink)} .ln-foot .sep{color:var(--dim)} .ln-foot .rd{color:var(--warn)} .ln-foot .nt{color:var(--warn);text-decoration:underline dotted;cursor:help}
-  .ln-legend{flex:none;border:1px solid var(--line-soft);border-radius:6px;padding:6px 9px;background:var(--panel);display:flex;flex-direction:column;gap:3px}
-  .ln-legend .hud-label{font-size:9.5px;margin-bottom:2px}
-  .ln-legend .lg{display:flex;align-items:center;gap:7px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;color:var(--ink)}
-  .ln-legend .sw{display:inline-block;width:26px;height:0;border-top:1.5px solid var(--tbl)}
+  .ln-legend{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:2px 14px}
+  .ln-legend .hud-label{font-size:9.5px;color:var(--muted)}
+  .ln-legend .lg{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;color:var(--ink)}
+  .ln-legend .sw{display:inline-block;width:20px;height:0;border-top:1.5px solid var(--tbl)}
   .ln-legend .sw.seen{border-top-style:dashed}
   .ln-legend .sw.planned{height:9px;border:1px dashed var(--warn);border-radius:2px}
   .ln-legend .sw.branch{border-top:1.5px dashed var(--warn)}
