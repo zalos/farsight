@@ -607,7 +607,7 @@ export function parseFailOn(value: string): { kinds: DeltaKind[]; unknown: strin
 /** How an end was named: a sync, the one before, the newest on or before a day, a release, the last green run. */
 export type CompareHow = 'sync' | 'previous' | 'date' | 'tag' | 'last-green' | 'now';
 
-export type CompareRef = { sync: number; how: CompareHow; label?: string } | { error: string; absent?: 'notIndexed' };
+export type CompareRef = { sync: number; how: CompareHow; label?: string } | { error: string; absent?: 'notIndexed'; noGreen?: true };
 
 /** One sync's index and meta, read from history (the caller may serve the current one from its own graph). */
 export function compareSideOf(db: SnapshotDb, sync: number): CompareSide {
@@ -660,7 +660,8 @@ export function resolveCompareFrom(db: SnapshotDb, value: string, ctx: { head: n
   const v = value.trim();
   const unheld = (n: number): CompareRef => ({ error: t('compare.panel.unheld', 'professional').replace('{sync}', String(n)), absent: 'notIndexed' });
   if (v === 'previous' || v === '') {
-    const p = db.previous(ctx.head);
+    // the newest earlier sync whose code differs: a sync that re-read the same commit compares to nothing
+    const p = db.previousChanged(ctx.head) ?? db.previous(ctx.head);
     return p == null ? { error: `no sync before sync ${ctx.head} in this history`, absent: 'notIndexed' } : { sync: p, how: 'previous' };
   }
   const n = Number(v.replace(/^sync:/, ''));
@@ -677,7 +678,7 @@ export function resolveCompareFrom(db: SnapshotDb, value: string, ctx: { head: n
   }
   if (v === 'last-green') {
     const s = ctx.lastGreen ? ctx.lastGreen() : lastGreenSync(db, ctx.storyline, ctx.head, { ...(ctx.repo ? { repo: ctx.repo } : {}), ...(ctx.declaredBy ? { declaredBy: ctx.declaredBy } : {}) });
-    return s == null ? { error: `no earlier sync in this history at which every case of storyline ${ctx.storyline} passed`, absent: 'notIndexed' } : { sync: s, how: 'last-green' };
+    return s == null ? { error: t('compare.noGreen', 'professional').replace('{storyline}', ctx.storyline), absent: 'notIndexed', noGreen: true } : { sync: s, how: 'last-green' };
   }
   return { error: `cannot read ${v} as a sync: use sync:N, previous, a day YYYY-MM-DD, tag:<name> or last-green` };
 }

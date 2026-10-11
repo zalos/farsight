@@ -112,6 +112,8 @@ export function compareAnswer(
       lastGreen: () => lastGreenSync(db, storyline, head, { ...(repo ? { repo } : {}), declaredBy: b }),
     });
     const syncs = db.list(40).map((s) => ({ sync: s.sync, at: s.at, ...(s.commit ? { commit: s.commit } : {}) }));
+    // no green run is an answer, not a missing resource: the absence word and the sentence, never a 404 (swarm round 3)
+    if ('error' in ref && ref.noGreen) return { code: 200, body: { absent: 'notIndexed', word: t('journey.absent.notIndexed', 'professional'), sentence: ref.error, noGreen: true, syncs } };
     if ('error' in ref) return { code: 404, body: { error: ref.error, ...(ref.absent ? { absent: ref.absent, word: t('journey.absent.notIndexed', 'professional') } : {}), syncs } };
     if (ref.sync >= head) return { code: 400, body: { error: `the earlier end (sync ${ref.sync}) must come before the later one (sync ${head})`, syncs } };
     const a = compareSideOf(db, ref.sync);

@@ -50,5 +50,8 @@ export const VERDICT_STRINGS: Record<string, StringEntry> = {
   'http.word.422': same('a refusal (the details do not pass the checks)', 'The service answers that the request is well formed and its details do not pass the checks.'),
   'http.word.429': same('a refusal (too many tries)', 'The service answers that too many requests came too quickly.'),
   'http.word.5xx': same('a failure of the service', 'The service answers that it failed to do what was asked.'),
+  // ── Compare's defaults (finding 11) ──
+  'compare.noGreen': same('no earlier sync in this history at which every case of storyline {storyline} passed',
+    'Compare looked back through the syncs this history holds for one at which no case of the storyline had failed or been skipped on its own last run, and found none. There is nothing to compare from.'),
   'readiness.distinct.total': same('distinct', 'Each case or gate once, however many journeys reach it.'),
 };
