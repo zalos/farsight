@@ -54,10 +54,10 @@ import {
   actionParams, actionKey, stopZoom, openCode, closeCode, crumbHtml, syncTable, tableOpen, redrawStops, closeStops, storyNavLineHtml, forgetWalks,
   registerView, tableAtPart, tableAtScreen, tableParams, tableKey, tableEscape, forLineHtml, tableCountHtml, stopsDockMoved,
 } from './map-stops.js';
-import { jrnFirstSentence, jrnLifecycleHtml } from '../lib/journey-draw.js';
+import { jrnFirstSentence } from '../lib/journey-draw.js';
 import { walkToolHtml, bindWalk, openWalk, closeWalk, toggleWalk, walkOpen, drawWalk } from '../lib/tour.js';
 import { dockHtml, bindDock, unbindDock, dockPanel, openPanel, closePanel, panelOpen, redrawDock } from '../lib/map-dock.js';
-import { lifecycleTableInto, foldLifecycleStrips } from '../lib/lifecycle-strip.js';
+import { lifecycleTableInto, foldLifecycleStrips, lifecycleStripHtml, headerLifecycles } from '../lib/lifecycle-strip.js';
 import { mapScreenHash } from '../lib/route-url.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
@@ -2137,39 +2137,64 @@ function headBarHtml(d, j, tbl) {
   const desc = sentence(d.description);
   const first = desc ? jrnFirstSentence(desc) : '';
   const more = !!desc && first.length < desc.length;
-  const lc = j && j.data ? jrnLifecycleHtml(j.data) : '';
   const work = ' <span class="map-work" data-work-for="' + esc(flow) + '">' + (d.work ? flowChipHtml(d.work) : '') + '</span>';
+  const chips = tbl ? tbl + work : aggHtml(d, j);
+  // the whole row is kept for the dock's *about* tab, where the `+n` on line 1 opens it (cleanup pass, lane S)
+  MAP.headChips = chips;
   return '<div class="jh-l1"><span class="nm"' + tipAttrs({ text: name + (desc ? ' · ' + desc : ''), noFocus: true }) + '>' + stepBadgeHtml(d) + esc(name) + '</span>'
-    + forLineHtml(MAP.tree, flow) + storyNavLineHtml(MAP.tree, flow) + '</div>'
-    + '<div class="jh-l2"><div class="agg">' + (tbl ? tbl + work : aggHtml(d, j)) + '</div></div>'
-    + (lc ? '<div class="jh-lc"' + tipAttrs({ key: 'map.head.lifecycle', noFocus: true }) + '>' + lc + '</div>' : '')
+    + forLineHtml(MAP.tree, flow) + storyNavLineHtml(MAP.tree, flow)
+    + '<div class="agg">' + chips + '</div></div>'
+    + headLifecycleHtml(j)
     + (first ? '<div class="jh-desc"><span class="t">' + esc(first) + '</span>'
       + (more ? '<button type="button" class="map-more" data-act="head-more"' + tipAttrs({ key: 'map.head.more', noFocus: true }) + '>' + esc(t('map.head.more')) + '</button>' : '') + '</div>' : '');
 }
 /**
- * Line 2: the numbers on at most two rows — past them the last ones fold into one `+n` whose tip lists them. The test
- * chip (the one verdict with its scope and skips) never folds; a chip wider than the line gives way at its tail (the
- * freshness sentence, whole in the verdict word's tip). Measured, never a breakpoint.
+ * Line 2 of the head: the journey's main record's lifecycle on one line (the record its screens move most), its
+ * *what each one means* a small glyph; a second record is one `+n records ▸` that opens the others in the dock.
+ */
+function headLifecycleHtml(j) {
+  const data = j && j.data;
+  if (!data) return '';
+  const { shown } = headerLifecycles(data.lifecycles, Infinity);
+  if (!shown.length) return '';
+  const flow = data.entry && data.entry.kind === 'flow' ? data.entry.id : '';
+  MAP.headRecords = shown.slice(1);
+  const n = MAP.headRecords.length;
+  const others = n
+    ? '<button type="button" class="jh-lcmore" data-act="head-records"' + tipAttrs({ text: t('map.head.records.tip').split('{names}').join(MAP.headRecords.map((lc) => (currentLens() === 'business' ? humanize(lc.name || '') : lc.name || lc.nodeId)).join(' · ')), noFocus: true }) + '>'
+      + esc(t(n === 1 ? 'map.head.records.one' : 'map.head.records').split('{n}').join(String(n))) + '</button>'
+    : '';
+  return '<div class="jh-lc"' + tipAttrs({ key: 'map.head.lifecycle', noFocus: true }) + '>' + lifecycleStripHtml(shown[0], '/api/journey', { flow, compact: true }) + others + '</div>';
+}
+/**
+ * Line 1 keeps the name, who it is for and where it stands, then the numbers on what is left of the line: past it the
+ * last ones fold into one `+n` whose tip lists them and whose click opens the whole row in the dock's *about* tab. The
+ * status (how many screens are built) and the test chip (the one verdict with its scope and skips) never fold; the
+ * test chip gives way at its tail when even they do not fit. Measured, never a breakpoint.
  */
 function foldHead(el) {
-  // each record's lifecycle line folds its last statuses into `+n` (round-3 swarm: cut at 1280 with no mark)
+  // the record's lifecycle line folds its last statuses into `+n` (round-3 swarm: cut at 1280 with no mark)
   foldLifecycleStrips(el.querySelector('.jh-lc'));
-  const agg = el.querySelector('.jh-l2 .agg');
+  // the head is chrome: it never scrolls sideways (a focus inside it once pushed its chips off the left edge)
+  el.scrollLeft = 0;
+  const l1 = el.querySelector('.jh-l1');
+  if (l1) l1.scrollLeft = 0;
+  const agg = el.querySelector('.jh-l1 .agg');
   if (!agg) return;
   const box = agg.querySelector(':scope > .jrn-count') || agg;
   box.querySelectorAll(':scope > .jh-more').forEach((x) => x.remove());
   const kids = [...box.children].filter((k) => !k.classList.contains('jrn-hsep'));
   kids.forEach((k) => { k.hidden = false; const p = k.previousElementSibling; if (p && p.classList.contains('jrn-hsep')) p.hidden = false; });
   if (!kids.length) return;
-  const keep = (k) => k.matches('.k-test,.k-ev,.jrn-htests,.jrn-e2e,.map-work') || !!k.querySelector('.jrn-htests,.jrn-e2e,.k-test,.k-ev');
-  const rowH = Math.max(...kids.map((k) => k.offsetHeight)) || 20;
-  const over = () => box.offsetHeight > rowH * 2 + 8;
+  const keep = (k) => k.matches('.k-test,.k-ev,.k-built,.jrn-htests,.jrn-e2e,.map-work') || !!k.querySelector('.jrn-htests,.jrn-e2e,.k-test,.k-ev');
+  agg.classList.remove('tight');
+  l1.classList.remove('tight', 'tight2');
+  const over = () => agg.scrollWidth > agg.clientWidth + 1;
   if (!over()) return;
   const order = kids.filter((k) => !keep(k)).reverse();
   const hidden = [];
   let more = null;
   for (const k of order) {
-    if (k === kids[0]) continue;
     k.hidden = true;
     const p = k.previousElementSibling;
     if (p && p.classList.contains('jrn-hsep')) p.hidden = true;
@@ -2177,11 +2202,16 @@ function foldHead(el) {
     if (words) hidden.unshift(words);
     if (more) more.remove();
     const n = hidden.length;
-    box.insertAdjacentHTML('beforeend', '<span class="map-chip jh-more"' + plainTip(n, 'map.head.foldMore', 'map.fold.scopeJourney', '/api/journey', hidden.map((h) => [h, 1])).replace(' tabindex="0"', '') + '>'
-      + esc(t('map.head.foldMore').replace('{n}', String(n))) + '</span>');
+    box.insertAdjacentHTML('beforeend', '<button type="button" class="map-chip jh-more" data-act="head-chips"' + plainTip(n, 'map.head.foldMore', 'map.fold.scopeJourney', '/api/journey', hidden.map((h) => [h, 1])).replace(' tabindex="0"', '') + '>'
+      + esc(t('map.head.foldMore').replace('{n}', String(n))) + '</button>');
     more = box.lastElementChild;
     if (!over()) break;
   }
+  // only the kept chips left and still no room: the storyline's words and who it is for give way first, then the test
+  // chip at its tail
+  if (!over()) return;
+  l1.classList.add('tight');
+  if (agg.getBoundingClientRect().right > l1.getBoundingClientRect().right + 1) { l1.classList.add('tight2'); agg.classList.add('tight'); }
 }
 /** The head's own doors: *more ›* opens the description in the dock; *what each one means* opens a lifecycle's table there. */
 function onHeadClick(e) {
@@ -2193,8 +2223,20 @@ function onHeadClick(e) {
     openLifecycleTable(lc);
     return;
   }
-  const b = e.target.closest('[data-act="head-more"]');
-  if (b) { e.preventDefault(); openAbout(); }
+  const b = e.target.closest('[data-act="head-more"],[data-act="head-chips"]');
+  if (b) { e.preventDefault(); openAbout(); return; }
+  const r = e.target.closest('[data-act="head-records"]');
+  if (r) { e.preventDefault(); e.stopPropagation(); openHeadRecords(r); }
+}
+/** The journey's other records' lifecycles, each a strip and its table, in the dock's lifecycle tab. */
+function openHeadRecords(btn) {
+  const panel = dockPanel('lifecycle', { key: 'map.head.lifecycle' });
+  if (!panel || !(MAP.headRecords || []).length) return;
+  const el = MAP.stage && MAP.stage.querySelector('.map-jhead');
+  const flow = (el && el.dataset.flow) || '';
+  panel.innerHTML = '<div class="md-scroll md-lc-recs">' + MAP.headRecords.map((lc) => lifecycleStripHtml(lc, '/api/journey', { flow })).join('') + '</div>';
+  btn.setAttribute('aria-expanded', 'true');
+  openPanel('lifecycle');
 }
 function openLifecycleTable(btn) {
   const panel = dockPanel('lifecycle', { key: 'map.head.lifecycle' });
@@ -2213,7 +2255,9 @@ function openAbout() {
   if (!d) return;
   const panel = dockPanel('about', { key: 'map.dock.about' });
   if (!panel) return;
+  // the head's whole chip row — the numbers its line 1 folded into `+n` — under the name, then the description
   panel.innerHTML = '<div class="md-scroll"><h3 class="md-about-nm">' + esc(nameWords(d.name)) + '</h3>' + branchLineHtml(d)
+    + (MAP.headChips ? '<div class="md-about-chips">' + MAP.headChips + '</div>' : '')
     + '<p class="md-about-desc">' + esc(sentence(d.description)) + '</p></div>';
   openPanel('about');
 }
@@ -2844,7 +2888,7 @@ function aggHtml(d, j) {
   return [
     // screens the journey names, and — when the walk reached fewer — how many it reached (lane N, one number one word)
     mapScreensChips(k),
-    k.built && k.built.of != null && k.built.n < k.built.of ? chip(k.built, 'k-warn') : chip(k.built, 'k-ok'),
+    k.built && k.built.of != null && k.built.n < k.built.of ? chip(k.built, 'k-warn k-built') : chip(k.built, 'k-ok k-built'),
     // a count of tests never travels without its evidence word — the Portfolio's word for the same fold
     cov && cov.counted ? mapTestsChips(cov.counted.tests, cov, { builtShown: !!k.built, runs: false }) : '',
     // whether it reaches the ERP and who owns it — the Portfolio's columns, in its words

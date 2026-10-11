@@ -3232,32 +3232,50 @@
   /* the journey's head: a bar of the chrome, under the toolbar */
   .map-jhead[hidden]{display:none}
   .map-jhead{position:absolute;left:0;right:0;top:var(--map-chrome-h,84px);z-index:6;background:var(--panel);border-bottom:1px solid var(--line);
-    padding:7px 14px 8px;display:flex;flex-direction:column;gap:5px;min-width:0;font-size:12px}
-  .map-jhead .jh-l1{display:flex;align-items:baseline;gap:14px;min-width:0;white-space:nowrap}
-  .map-jhead .jh-l1 .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:16px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+    padding:5px 14px 6px;display:flex;flex-direction:column;gap:3px;min-width:0;font-size:12px;overflow:hidden}
+  /* line 1 (lane S, the owner's "the header takes a third of the screen"): name · for · storyline · the numbers on what
+     the line has left, folded to +n by measurement (map.js foldHead); line 2 the main record's lifecycle; then one line
+     of description */
+  .map-jhead .jh-l1{display:flex;align-items:center;gap:12px;min-width:0;white-space:nowrap;overflow:hidden}
+  .map-jhead .jh-l1 .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:15px;line-height:20px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;min-width:6em;max-width:34%;flex:0 1 auto}
   .map-jhead .jh-l1 .for,.map-jhead .jh-l1 .story{flex:none;font-size:11.5px;color:var(--muted)}
   .map-jhead .jh-l1 .for a{color:var(--accent)}
-  .map-jhead .jh-l2{display:flex;align-items:center;min-width:0;overflow:hidden}
-  .map-jhead .jh-l2 .agg{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;min-width:0;max-width:100%}
-  .map-jhead .jh-l2 .agg > .jrn-count{display:flex;flex:1 1 auto;flex-wrap:wrap;align-items:center;gap:4px 0;max-width:100%}
-  .map-jhead .jh-l2 [hidden]{display:none !important}
-  .map-jhead .jh-l2 .agg > *{flex:none}
-  .map-jhead .jh-l2 .agg > * > *,.map-jhead .jh-l2 .agg .map-chip{white-space:nowrap}
-  .map-jhead .jh-l2 .agg > *,.map-jhead .jh-l2 .jrn-count > *{max-width:100%;overflow:hidden;text-overflow:ellipsis}
-  .map-jhead .jh-l2 .jrn-hg{display:inline-flex;align-items:center;gap:4px}
-  .map-jhead .jh-l2 .jrn-hg,.map-jhead .jh-l2 .jrn-hg *{flex-wrap:nowrap;white-space:nowrap}
-  .map-jhead .jh-more{cursor:help;flex:none}
-  .map-jhead .jh-lc{display:flex;flex-direction:column;gap:3px;min-width:0}
-  .map-jhead .jh-lc .lc-strip{flex-wrap:nowrap;white-space:nowrap;overflow:hidden;min-width:0;gap:4px 8px}
+  .map-jhead .jh-l1 .agg{display:flex;flex-wrap:nowrap;gap:0 6px;align-items:center;min-width:0;flex:1 1 0;overflow:hidden}
+  .map-jhead .jh-l1 .agg > .jrn-count{display:flex;flex:1 1 auto;flex-wrap:nowrap;align-items:center;gap:0;min-width:0}
+  .map-jhead .jh-l1 [hidden]{display:none !important}
+  .map-jhead .jh-l1 .agg > *,.map-jhead .jh-l1 .jrn-count > *{flex:none}
+  .map-jhead .jh-l1 .agg > * > *,.map-jhead .jh-l1 .agg .map-chip{white-space:nowrap}
+  /* the test chip gives way at its tail when the line has no room even for the kept chips (its tip is whole) */
+  .map-jhead .jh-l1 .agg .tchip.map-chip,.map-jhead .jh-l1 .agg .tchip.map-chip>.tc-ev{white-space:nowrap;flex-wrap:nowrap}
+  /* no room for the kept chips: the storyline's words give way first (whole in the crumb and the tip), then the test chip's tail */
+  .map-jhead .jh-l1.tight .agg{flex:none}
+  .map-jhead .jh-l1.tight .nm{flex-shrink:.3}
+  .map-jhead .jh-l1.tight .story{flex:0 2 auto;min-width:5em;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l1.tight .for{flex:0 1 auto;min-width:4em;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l1.tight2 .agg{flex:0 1 auto}
+  .map-jhead .jh-l1 .agg.tight > .k-test,.map-jhead .jh-l1 .agg.tight .jrn-count > .jrn-hg:has(.jrn-htests){flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l1 .jrn-hg{display:inline-flex;align-items:center;gap:4px}
+  .map-jhead .jh-l1 .jrn-hg,.map-jhead .jh-l1 .jrn-hg *{flex-wrap:nowrap;white-space:nowrap}
+  .map-jhead .jh-more{cursor:pointer;flex:none;font:inherit;font-size:11px}
+  .map-jhead .jh-lc{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap}
+  .map-jhead .jh-lc .lc-strip{flex:1 1 auto;flex-wrap:nowrap;white-space:nowrap;overflow:hidden;min-width:0;gap:0 8px;font-size:11px}
   .map-jhead .jh-lc .lc-statuses{flex-wrap:nowrap;min-width:0;overflow:hidden}
   .map-jhead .jh-lc .lc-status{border:0;padding:0 2px;flex:none}
   .map-jhead .jh-lc .lc-status .lc-yet,.map-jhead .jh-lc .lc-status .lc-c,.map-jhead .jh-lc .lc-tblbox{display:none !important}
   .map-jhead .jh-lc .lc-status.unwritten .lc-w{color:var(--dim);font-style:italic}
   .map-jhead .jh-lc .lc-toggle{flex:none;order:-1}
+  .map-jhead .jh-lc .lc-word{font-size:9px}
   .map-jhead .jh-lc .lc-head{flex:none}
   .map-jhead .jh-lc .lc-strip.lc-tight .lc-counts{display:none}
-  .map-jhead .jh-desc{display:flex;align-items:baseline;gap:8px;min-width:0;color:var(--muted)}
+  .lc-toggle.lc-glyph{display:inline-flex;align-items:center;justify-content:center;width:18px;height:16px;padding:0;border-radius:3px}
+  .lc-toggle.lc-glyph .sym{width:11px;height:11px}
+  .map-jhead .jh-lcmore{flex:none;background:none;border:1px dashed var(--line);border-radius:9px;color:var(--ink);font:inherit;font-size:10.5px;padding:0 7px;cursor:pointer}
+  .map-jhead .jh-lcmore:hover{border-color:var(--accent)}
+  .map-jhead .jh-desc{display:flex;align-items:baseline;gap:8px;min-width:0;color:var(--muted);font-size:11.5px;line-height:15px}
   .map-jhead .jh-desc .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .md-about-chips{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin:6px 0 10px}
+  .md-about-chips .jrn-count{display:flex;flex-wrap:wrap;gap:4px 0;align-items:center}
+  .md-lc-recs .lc-strip{margin-bottom:12px}
   .map-more{flex:none;background:none;border:0;color:var(--accent);font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;cursor:pointer;padding:0 2px}
   .map-more:hover{color:var(--ink)}
   /* the street keeps one line in the world: its name */
