@@ -706,7 +706,7 @@ export const STRINGS: Record<string, StringEntry> = {
   // key, so the group cannot announce itself one way and read another
   // a quiet mark on the button the current register opens in, so a reader who
   // lands somewhere unfamiliar can tell a default from a disappearance
-  // ── the action drill (the journey-timeline design reference 02-action-drill · behind the journeyDrill flag) ──
+  // ── the action drill (the journey-timeline design reference 02-action-drill · the Map's action stop since 2026-10-10) ──
   'journey.beat.screen': same('the screen'),
   'journey.beat.browser': same('the browser'),
   'journey.beat.seam': same('the seam'),

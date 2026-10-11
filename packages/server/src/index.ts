@@ -77,14 +77,14 @@ export interface Settings {
   /** named selections of source ids, e.g. "Invoice systems" */
   collections: { name: string; sourceIds: string[] }[];
   /**
-   * experiments, off unless set. `journeyDrill` adds the action-drill visual to the journey view
-   * switch; `designShots` retains each screen's **design** image per sync under
+   * experiments, off unless set. `designShots` retains each screen's **design** image per sync under
    * `.farsight/cache/shots/` so a past sync can be looked at rather than described. `designShots`
    * writes files, which is why it is opt in — with it unset, the shot pass never runs and the sync
-   * writes no bytes beyond the ones it already wrote. `map` adds the `#/map` surface (every journey
-   * on one zoomable board) — a nav tab and a Portfolio button; read by the viewer only.
+   * writes no bytes beyond the ones it already wrote. (`map` and `journeyDrill` were experiments until the journey
+   * page retired into the Map, lanes round 2026-10-10; a settings file that still names them is read as before and
+   * they change nothing.)
    */
-  flags?: { journeyDrill?: boolean; designShots?: boolean; map?: boolean };
+  flags?: { designShots?: boolean; journeyDrill?: boolean; map?: boolean };
   /**
    * What an MCP session reads (round 2026-10-10, proposal 9): `tools` is the tier (`core` by default, `all` for
    * every tool), `budget` the default answer budget in tokens. Read by `farsight mcp` only.
