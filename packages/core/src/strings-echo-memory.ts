@@ -4,6 +4,7 @@ const same = (word: string, define: string): StringEntry => ({ hud: word, profes
 export const ECHO_MEMORY_STRINGS: Record<string, StringEntry> = {
   'echo.memory.unavailable': same('Echo memory is unavailable. Start Echo for this profile and try again.', 'The local bridge must be running before another process can read or save memory.'),
   'echo.memory.input': same('The memory request is invalid or too large.', 'Echo accepts bounded text, topic labels and a recall limit from one to five. Requests cannot choose their own identity or memory store.'),
+  'echo.memory.credential': same('This memory looks like a credential. Keep secrets in the keychain instead.', 'Shared memories refuse the same credential shapes as pinned lessons. Refusal messages never repeat the supplied value.'),
   'echo.memory.stale': same('Echo settings changed. Restart Echo and begin a new agent session.', 'A bridge is bound to the identity, store and model configuration with which it started.'),
   'echo.memory.ownership': same('Echo could not verify ownership of its local memory connection.', 'The private connection directory and socket must belong to the current operating-system user, with no access for other users.'),
   'echo.memory.running': same('Echo memory is already running for this profile.', 'A second bridge cannot replace or stop an existing listener.'),

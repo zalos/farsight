@@ -3,22 +3,24 @@ import { chmod, lstat, mkdir, unlink } from 'node:fs/promises';
 import { createConnection, createServer, type Socket } from 'node:net';
 import { join } from 'node:path';
 import { echoMemoryWord } from '@farsight/core/dist/strings-echo-memory.js';
+import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.js';
 import { loadContext } from './config.js';
 import { backendRequest } from './runtime.js';
 import { contextFingerprint } from './sessions.js';
 import type { BackendConnection, EchoContext } from './types.js';
+import { captureMemoryOrigin, readMemoryProvenance, saveMemoryProvenance, validProvenance, verifyMemoryOrigin, type MemoryOrigin, type MemoryProvenance } from './memory-provenance.js';
 
 export interface RememberInput { content: string; topics?: string[] }
 export interface RecallInput { query: string; limit?: number }
 export interface RememberResult { id: string; createdAt: string }
-export interface RecalledMemory { id: string; title: string; content: string; timestamp: string }
+export interface RecalledMemory { id: string; title: string; content: string; timestamp: string; provenance?: MemoryProvenance }
 export interface RecallResult { memories: RecalledMemory[]; truncated: boolean }
 export interface MemoryRequestOptions { timeoutMs?: number }
 type Operation = 'remember' | 'recall';
-type FailureCode = 'unavailable' | 'input' | 'stale' | 'ownership' | 'running' | 'response' | 'timeout' | 'externalReadOnly';
+type FailureCode = 'unavailable' | 'input' | 'credential' | 'stale' | 'ownership' | 'running' | 'response' | 'timeout' | 'externalReadOnly';
 const REQUEST_BYTES = 160_000;
 const RESPONSE_BYTES = 160_000;
-const codes = new Set<FailureCode>(['unavailable', 'input', 'stale', 'ownership', 'running', 'response', 'timeout', 'externalReadOnly']);
+const codes = new Set<FailureCode>(['unavailable', 'input', 'credential', 'stale', 'ownership', 'running', 'response', 'timeout', 'externalReadOnly']);
 class MemoryFailure extends Error {
   constructor(readonly code: FailureCode) { super(echoMemoryWord(code)); }
 }
@@ -74,6 +76,7 @@ function inputFor(operation: Operation, input: unknown): RememberInput | RecallI
   if (operation === 'remember') {
     if (!keys(input, ['content', 'topics']) || !text(input.content, 24_000)) fail('input');
     if (input.topics !== undefined && (!Array.isArray(input.topics) || input.topics.length > 20 || input.topics.some(topic => !text(topic, 80)))) fail('input');
+    if (containsCredentialShape(input.content) || (input.topics as string[] | undefined)?.some(containsCredentialShape)) fail('credential');
     return { content: input.content, ...(input.topics === undefined ? {} : { topics: input.topics as string[] }) };
   }
   if (operation !== 'recall' || !keys(input, ['query', 'limit']) || !text(input.query, 8_000)) fail('input');
@@ -105,16 +108,19 @@ function checkedMemory(value: unknown, expected: { project: string; agentId: str
   return value;
 }
 
-async function execute(ctx: EchoContext, connection: BackendConnection, operation: Operation, input: RememberInput | RecallInput, timeoutMs: number): Promise<RememberResult | RecallResult> {
+async function execute(ctx: EchoContext, connection: BackendConnection, operation: Operation, input: RememberInput | RecallInput, timeoutMs: number, origin?: MemoryOrigin): Promise<RememberResult | RecallResult> {
   const expected = scope(ctx);
   if (operation === 'remember') {
     if (ctx.profile.backend.mode !== 'managed') fail('externalReadOnly');
+    if (!origin) fail('input');
     const remember = input as RememberInput;
     const result = await backendRequest(connection, '/agentmemory/remember', {
       content: remember.content, concepts: remember.topics ?? [], type: 'fact', ...expected,
     }, timeoutMs);
     if (!object(result) || result.success !== true) fail('response');
     const memory = checkedMemory(result.memory, expected);
+    if (memory.content !== remember.content) fail('response');
+    await saveMemoryProvenance(ctx, memory.id as string, remember.content, origin);
     return { id: memory.id as string, createdAt: memory.createdAt as string };
   }
   const recall = input as RecallInput;
@@ -137,7 +143,8 @@ async function execute(ctx: EchoContext, connection: BackendConnection, operatio
     const content = rawContent.slice(0, Math.max(0, allowance - title.length));
     remaining -= title.length + content.length;
     truncated ||= title.length < rawTitle.length || content.length < rawContent.length;
-    memories.push({ id: memory.id as string, title, content, timestamp: memory.createdAt as string });
+    const provenance = await readMemoryProvenance(ctx, memory.id as string, rawContent);
+    memories.push({ id: memory.id as string, title, content, timestamp: memory.createdAt as string, ...(provenance ? { provenance } : {}) });
   }
   return { memories, truncated };
 }
@@ -170,13 +177,15 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
         try {
           if (newline !== buffer.length - 1) fail('input');
           const request: unknown = JSON.parse(buffer.subarray(0, newline).toString('utf8'));
-          if (!object(request) || !keys(request, ['version', 'fingerprint', 'operation', 'input', 'timeoutMs']) || request.version !== 1) fail('input');
+          if (!object(request) || !keys(request, ['version', 'fingerprint', 'operation', 'input', 'timeoutMs', 'origin']) || request.version !== 1) fail('input');
           if (request.fingerprint !== fingerprint || contextFingerprint(loadContext(snapshot.configPath, snapshot.profileId)) !== fingerprint) fail('stale');
           if (request.operation !== 'remember' && request.operation !== 'recall') fail('input');
           const input = inputFor(request.operation, request.input);
+          const origin = request.operation === 'remember' ? await verifyMemoryOrigin(request.origin) : undefined;
+          if (request.operation === 'remember' && !origin || request.operation === 'recall' && request.origin !== undefined) fail('input');
           const deadline = timeout(request.timeoutMs);
           timer = setTimeout(() => socket.destroy(), deadline);
-          const result = await execute(snapshot, connection, request.operation, input, deadline);
+          const result = await execute(snapshot, connection, request.operation, input, deadline, origin);
           if (!socket.destroyed) socket.end(`${JSON.stringify({ ok: true, result })}\n`);
         } catch (error) {
           const code = error instanceof MemoryFailure ? error.code : 'unavailable';
@@ -207,6 +216,7 @@ export function memoryRequest(ctx: EchoContext, operation: 'remember', input: Re
 export function memoryRequest(ctx: EchoContext, operation: 'recall', input: RecallInput, options?: MemoryRequestOptions): Promise<RecallResult>;
 export async function memoryRequest(ctx: EchoContext, operation: Operation, input: RememberInput | RecallInput, options: MemoryRequestOptions = {}): Promise<RememberResult | RecallResult> {
   const validated = inputFor(operation, input);
+  const origin = operation === 'remember' ? await captureMemoryOrigin().catch(() => fail('input')) : undefined;
   const deadline = timeout(options.timeoutMs);
   const path = await checkDirectory(ctx);
   try { await socketStat(path); } catch (error) { if (error instanceof MemoryFailure) throw error; fail('unavailable'); }
@@ -220,7 +230,7 @@ export async function memoryRequest(ctx: EchoContext, operation: Operation, inpu
       if (error) reject(new MemoryFailure(error)); else resolve(result!);
     };
     const timer = setTimeout(() => finish('timeout'), deadline);
-    socket.once('connect', () => socket.write(`${JSON.stringify({ version: 1, fingerprint: contextFingerprint(ctx), operation, input: validated, timeoutMs: deadline })}\n`));
+    socket.once('connect', () => socket.write(`${JSON.stringify({ version: 1, fingerprint: contextFingerprint(ctx), operation, input: validated, timeoutMs: deadline, ...(origin ? { origin } : {}) })}\n`));
     socket.on('error', () => finish('unavailable'));
     socket.once('close', () => finish('unavailable'));
     socket.on('data', raw => {
@@ -243,6 +253,7 @@ export async function memoryRequest(ctx: EchoContext, operation: Operation, inpu
           let length = 0;
           for (const memory of result.memories) {
             if (!object(memory) || !text(memory.id, 256) || !text(memory.timestamp, 64) || typeof memory.title !== 'string' || typeof memory.content !== 'string') fail('response');
+            if (memory.provenance !== undefined && !validProvenance(memory.provenance)) fail('response');
             length += memory.title.length + memory.content.length;
           }
           if (length > ctx.profile.budget.briefMaxChars) fail('response');

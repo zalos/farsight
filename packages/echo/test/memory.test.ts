@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createConnection } from 'node:net';
-import { chmodSync, existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { defaultConfig, loadContext, saveConfig } from '../dist/config.js';
@@ -59,6 +59,9 @@ test('private bridge remembers published records, preserves source IDs and bound
       assert.match(state.memories[0]!.project, /^echo:[a-f0-9]{64}$/);
       const recalled = await memoryRequest(ctx, 'recall', { query: 'Cold shipment' });
       assert.equal(recalled.memories[0]!.id, saved.id);
+      assert.equal(recalled.memories[0]!.provenance?.workspace, realpathSync(execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()));
+      assert.equal(recalled.memories[0]!.provenance?.commit, execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
+      assert.ok(Date.parse(recalled.memories[0]!.provenance!.savedAt));
       assert.ok(recalled.memories[0]!.content.startsWith('Cold shipment'));
       assert.equal(recalled.truncated, true);
       assert.ok(recalled.memories.reduce((sum, memory) => sum + memory.content.length + memory.title.length, 0) <= ctx.profile.budget.briefMaxChars);
@@ -67,6 +70,55 @@ test('private bridge remembers published records, preserves source IDs and bound
     assert.equal(existsSync(memorySocketPath(ctx)), false);
   });
 });
+
+test('credential shapes are refused before persistence on both the client and private bridge', async () => {
+  await fixture(async (ctx, connection, state) => {
+    const bridge = await startMemoryBridge(ctx, connection);
+    try {
+      const shapes = ['keychain:example/service', 'env:SYNTHETIC_SECRET', `Bearer ${'a'.repeat(12)}`, `Basic ${'b'.repeat(12)}`, 'c'.repeat(32)];
+      for (const value of shapes) {
+        await assert.rejects(memoryRequest(ctx, 'remember', { content: `Synthetic ${value}` }), (error: Error) => /looks like a credential/.test(error.message) && !error.message.includes(value));
+        const reply = await directRequest(ctx, { operation: 'remember', input: { content: `Synthetic ${value}` } });
+        assert.deepEqual(reply, { ok: false, code: 'credential' });
+      }
+      await assert.rejects(memoryRequest(ctx, 'remember', { content: 'Valid note', topics: [shapes[0]!] }), /looks like a credential/);
+      assert.equal(state.requests.length, 0);
+    } finally { await bridge.close(); }
+  });
+});
+
+test('memory inputs cannot invent provenance and the bridge verifies reported roots and revisions', async () => {
+  await fixture(async (ctx, connection, state) => {
+    const bridge = await startMemoryBridge(ctx, connection);
+    try {
+      await assert.rejects(memoryRequest(ctx, 'remember', { content: 'Synthetic', provenance: { workspace: '/pretend', commit: 'a'.repeat(40), savedAt: '2000-01-01' } } as any), /invalid or too large/);
+      const actualRoot = realpathSync(execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim());
+      for (const origin of [undefined, { workspace: actualRoot, commit: '0'.repeat(40) }, { workspace: actualRoot, commit: null }, { workspace: actualRoot, commit: 'a'.repeat(40), savedAt: '2000-01-01' }, { workspace: '/nonexistent-echo-test', commit: null }]) {
+        const reply = await directRequest(ctx, { operation: 'remember', input: { content: 'Synthetic origin' }, origin });
+        assert.deepEqual(reply, { ok: false, code: 'input' });
+      }
+      assert.equal(state.requests.length, 0);
+      await memoryRequest(ctx, 'remember', { content: 'Synthetic origin' });
+      assert.equal((await memoryRequest(ctx, 'recall', { query: 'Synthetic origin' })).memories[0]!.provenance?.workspace, actualRoot);
+      // Even a same-id backend replacement cannot inherit the original attribution.
+      state.memories[0]!.content = 'Synthetic origin replaced';
+      assert.equal((await memoryRequest(ctx, 'recall', { query: 'Synthetic origin' })).memories[0]!.provenance, undefined);
+      state.memories[0]!.content = 'Synthetic origin';
+      rmSync(join(ctx.dataDirectory, 'provenance'), { recursive: true });
+      assert.equal((await memoryRequest(ctx, 'recall', { query: 'Synthetic origin' })).memories[0]!.provenance, undefined);
+    } finally { await bridge.close(); }
+  });
+});
+
+function directRequest(ctx: EchoContext, request: Record<string, unknown>): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection(memorySocketPath(ctx)); let output = '';
+    socket.once('error', reject);
+    socket.on('data', chunk => { output += chunk; });
+    socket.once('end', () => resolve(JSON.parse(output)));
+    socket.once('connect', () => socket.write(`${JSON.stringify({ version: 1, fingerprint: contextFingerprint(ctx), ...request })}\n`));
+  });
+}
 
 test('identity namespaces keep profiles and full-length individual identities apart on the same backend', async () => {
   await fixture(async (ctx, connection, state) => {

@@ -8,26 +8,34 @@ const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 export function hookContext(ctx: EchoContext, executable: string, event: 'SessionStart' | 'UserPromptSubmit', result?: RecallResult): object {
   const command = [process.execPath, executable, '--config', ctx.configPath, '--profile', ctx.profileId].map(quote).join(' ');
   const limit = ctx.profile.budget.briefMaxChars;
-  const intro = word('hookAccess', { command });
+  const intro = event === 'SessionStart' ? word('hookAccess', { command }) : word('hookPrompt');
   let text = intro.length <= limit ? intro : word('hookAccessShort');
-  if (result?.memories.length) {
-    const label = `\n${word('hookReference')}\n`;
-    if (text.length + label.length >= limit) return { hookSpecificOutput: { hookEventName: event, additionalContext: text } };
-    text += label;
+  if (result) {
+    const notice = `\n${word('hookTruncated')}`;
+    // Reserve the omission notice before rows: truncation is never silent, even
+    // when the entire requested memory cannot fit the configured brief budget.
+    const rowLimit = limit - notice.length;
+    if (text.length > rowLimit) text = word('hookAccessShort');
+    let omitted = result.truncated;
     for (const memory of result.memories) {
-      const prefix = JSON.stringify({ id: memory.id, title: memory.title, timestamp: memory.timestamp });
-      const remaining = limit - text.length - prefix.length - 30;
-      if (remaining < 16) break;
+      const provenance = memory.provenance
+        ? word('memoryProvenance', { workspace: memory.provenance.workspace, commit: memory.provenance.commit ?? word('memoryCommitUnknown'), date: memory.provenance.savedAt })
+        : word('memoryProvenanceUnknown');
+      const row = (content: string): string => `\n${JSON.stringify({ id: memory.id, title: memory.title, timestamp: memory.timestamp, provenance, content })}`;
+      const remaining = rowLimit - text.length;
+      if (row('').length >= remaining) { omitted = true; continue; }
       // JSON string encoding prevents line breaks and delimiters in stored content
       // from pretending to be trusted hook instructions. Whole JSON records only.
-      let content = memory.content.slice(0, Math.min(remaining, 480));
-      let row = `${JSON.stringify({ id: memory.id, title: memory.title, timestamp: memory.timestamp, content })}\n`;
-      while (text.length + row.length > limit && content.length) {
-        content = content.slice(0, Math.max(0, content.length - 16));
-        row = `${JSON.stringify({ id: memory.id, title: memory.title, timestamp: memory.timestamp, content })}\n`;
+      let low = 0; let high = Math.min(memory.content.length, 480);
+      while (low < high) {
+        const middle = Math.ceil((low + high) / 2);
+        if (row(memory.content.slice(0, middle)).length <= remaining) low = middle;
+        else high = middle - 1;
       }
-      if (text.length + row.length <= limit) text += row;
+      text += row(memory.content.slice(0, low));
+      omitted ||= low < memory.content.length;
     }
+    if (omitted) text += notice;
   }
-  return { hookSpecificOutput: { hookEventName: event, additionalContext: text.slice(0, limit) } };
+  return { hookSpecificOutput: { hookEventName: event, additionalContext: text } };
 }
