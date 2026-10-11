@@ -900,11 +900,16 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if (repos.length && existsSync(dbFile)) {
         try {
           const db = openHistory(ws);
-          try { history = historyFact(repos.map((r) => db.commitSpine(r))); } finally { db.close(); }
+          try {
+            // the commits made with an AI assistant, by name, over the same sources (round 2026-10-10, proposal 9)
+            const byAgent: Record<string, number> = {};
+            for (const r of repos) for (const [name, n] of Object.entries(db.agentCounts(r))) byAgent[name] = (byAgent[name] ?? 0) + n;
+            history = historyFact(repos.map((r) => db.commitSpine(r)), { byAgent });
+          } finally { db.close(); }
         } catch { history = null; }
       }
       const tests = folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests));
-      const state = folded(g.index, 'state', scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}` : '-'), () => stateOfPlay(g.index, g.meta, { scope, tests, history }));
+      const state = folded(g.index, 'state', scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}/${history.agents?.n ?? '-'}` : '-'), () => stateOfPlay(g.index, g.meta, { scope, tests, history }));
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', ...state }));
     }
     // ── journeys organised by persona and group (journey-organisation-and-config-files.md §4.4) — before

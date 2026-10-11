@@ -59,6 +59,12 @@ export interface CommitRow {
   indexed: boolean;
   /** The syncs that recorded this commit, ascending. Empty when not indexed. */
   syncs: number[];
+  /**
+   * The AI assistant the commit's trailers name as a co-author (`Co-Authored-By: … <noreply@anthropic.com>`,
+   * core `agentOfMessage`), as the trailer wrote it; absent when none did, or the history was read before the
+   * spine kept it. Never a session link.
+   */
+  agent?: string;
 }
 
 /**
@@ -103,6 +109,8 @@ export interface CommitInput {
   keys?: readonly { key: string; provider: string; via: string; ref?: string }[];
   /** Key-bearing branches that carry this commit (parsers git.ts `GitCommit.branches`). */
   branches?: readonly string[];
+  /** The AI assistant its trailers name as a co-author (core `agentOfMessage`); absent when none does. */
+  agent?: string;
 }
 
 /** Why a commit range can only be partial — rendered, never swallowed (§8). */
@@ -286,6 +294,8 @@ export interface CommitSpine {
   commits: number;
   /** Of those, how many have no `commit_sync` row at all. 51 on the reference app. */
   unindexed: number;
+  /** Of those, how many name an AI assistant as a co-author (`CommitRow.agent`). */
+  agents: number;
   /** How many distinct commits the syncs recorded. 15 across the reference app's 48 syncs. */
   distinct: number;
   /** Syncs whose commit equals their predecessor's. 33 on the reference app. */
@@ -472,6 +482,7 @@ export function spineOf(snapshots: readonly SpineSnapshot[], commits: readonly C
     after,
     commits: commits.length,
     unindexed: commits.filter((c) => !c.indexed).length,
+    agents: commits.filter((c) => !!c.agent).length,
     // the commits this spine can *name* for this repository. Unverified workspace
     // shas are not counted: attributing them here would hand one repository
     // another's commits, which is the whole point of the per-source spine. With no
@@ -927,10 +938,19 @@ export interface HistoryFact {
   notYet: Counted;
   /** some repository has had its history read — when false every number is 0 because nothing was read, not because nothing exists */
   historyRead: boolean;
+  /**
+   * Of the commits read, those made with an AI assistant — a co-author trailer naming one (core
+   * `agentOfMessage`). `of` is the commits read; the breakdown names each assistant. Absent when the spines
+   * carried no agent count (a store read before the spine kept it).
+   */
+  agents?: Counted;
 }
 
 /** The history fact over one or more repositories' spines (the workspace sums them; a commit belongs to one repository). */
-export function historyFact(spines: readonly Pick<CommitSpine, 'commits' | 'unindexed'>[]): HistoryFact {
+export function historyFact(
+  spines: readonly (Pick<CommitSpine, 'commits' | 'unindexed'> & { agents?: number })[],
+  opts: { byAgent?: Record<string, number> } = {},
+): HistoryFact {
   const read = spines.reduce((s, x) => s + x.commits, 0);
   const notYet = spines.reduce((s, x) => s + Math.min(x.unindexed, x.commits), 0);
   const ingested = read - notYet;
@@ -944,7 +964,23 @@ export function historyFact(spines: readonly Pick<CommitSpine, 'commits' | 'unin
     ingested: counted(ingested, 'history.fact.ingested', 'count.scope.workspace', SRC, { bizUnit: 'history.fact.ingested', of: read, recheck }),
     notYet: counted(notYet, 'history.fact.notYet', 'count.scope.workspace', SRC, { bizUnit: 'history.fact.notYet', of: read, recheck }),
     historyRead: read > 0,
+    ...(spines.some((x) => typeof x.agents === 'number') ? { agents: agentsCounted(spines.reduce((s, x) => s + (x.agents ?? 0), 0), read, opts.byAgent) } : {}),
   };
+}
+
+/**
+ * *n of m commits made with an agent* — a `Counted` over the commits read, broken down by assistant when the
+ * caller knows the names (`SnapshotDb.agentCounts`); the parts then sum to n. Re-checked with
+ * `farsight history --agents`.
+ */
+export function agentsCounted(n: number, of: number, byAgent?: Record<string, number>): Counted {
+  const names = Object.entries(byAgent ?? {}).filter(([, k]) => k > 0).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  const named = names.reduce((s, [, k]) => s + k, 0);
+  return counted(n, 'history.fact.agents', 'count.scope.workspace', 'core history.ts agentsCounted ← commit.agent (Co-Authored-By trailers)', {
+    of, bizUnit: 'history.fact.agents',
+    recheck: { cli: 'farsight history --agents', mcp: 'graph_changes' },
+    ...(names.length && named === n ? { breakdown: names.map(([name, k]) => ({ key: 'history.fact.agentNamed', n: k, label: name })) } : {}),
+  });
 }
 
 /** The sentence: *282 commits read into history · 40 ingested by a sync · 242 not yet* — one wording everywhere. */

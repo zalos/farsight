@@ -30,7 +30,7 @@ import {
   jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml, jrnContractHtml, jrnMoLabel,
 } from './journeys.js';
 import { testChipHtml } from '../lib/test-chip.js';
-import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml } from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml, copyDoorsHtml } from '../lib/detail-doors.js';
 import { journeyStepHash } from '../lib/route-url.js';
 import { gateAttrs } from '../lib/gate-card.js';
 import { lifecycleStripHtml, screenLifecycles } from '../lib/lifecycle-strip.js';
@@ -690,6 +690,8 @@ function commitRow(x) {
         + esc(countPhrase('map.prop.changes.partsMore', parts.length - 3)) + '</span>' : ''),
     biz() ? '' : '<code>' + esc(String(x.sha || '').slice(0, 7)) + '</code>',
     biz() ? '' : (x.keys || []).map((k) => '<b class="mp-key">' + esc(k) + '</b>').join(' '),
+    // a co-author trailer named an AI assistant (round 2026-10-10, proposal 9)
+    x.agent ? '<span class="ch-agent"' + defAttrs('history.agentMade') + '>' + esc(t('history.agentMade').replace('{name}', x.agent)) + '</span>' : '',
   ].filter(Boolean).join(' · ');
   const how = parts.some((p) => p.how === 'lines') ? 'lines' : 'file';
   return row(clampHtml('commit-' + x.sha, subject), sub,
@@ -824,6 +826,8 @@ function headHtml(pm, ctx) {
     // the same screen in the journey's timeline (§3.1)
     + (pm.screen && pm.screen.segment && ctx.flow ? '<span class="mp-tojrn">' + leadDoorHtml('door.journey', journeyStepHash(ctx.flow, pm.screen.segment.index + 1, { lens: currentLens() })) + '</span>' : '')
     + (pm.node ? '<button type="button" class="btn mp-affact' + (affectedSpec() === pm.node.id ? ' on' : '') + '" data-act="affected" data-seed="' + esc(pm.node.id) + '"' + defAttrs('map.affected.action') + '>' + esc(t('map.affected.action')) + '</button>' : '')
+    // copy as MCP call · curl · CLI: the journey tool from this screen, with its full id (round 2026-10-10, proposal 9)
+    + (pm.node && pm.node.id ? '<span class="mp-copy">' + copyDoorsHtml('screen', pm.node) + '</span>' : '')
     // while the board is dimmed around something, the head says around what and how much (round 2)
     + affectedSummaryHtml()
     + '<span class="hud-label mp-level"' + defAttrs('map.prop.level') + '>' + esc(t('map.prop.level')) + '</span>';
