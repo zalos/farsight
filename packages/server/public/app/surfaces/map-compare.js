@@ -253,7 +253,7 @@ export function comparePanelHtml() {
       + '<div class="map-cmp-say">' + sentenceHtml(d) + '</div>' + doorHtml(d) + '</li>').join('')
     : '<li class="map-cmp-none"' + tipAttrs({ key: 'compare.panel.none', noFocus: true }) + '>' + esc(t('compare.panel.none')) + '</li>';
   const notes = (diff.notes || []).length
-    ? '<div class="map-cmp-notes"' + tipAttrs({ text: diff.notes.join(' · '), noFocus: true }) + '>' + esc(fill('compare.panel.notes', { n: diff.notes.length })) + '</div>' : '';
+    ? '<div class="map-cmp-notes"' + tipAttrs({ text: diff.notes.join(' · '), noFocus: true }) + '>' + esc(fill(diff.notes.length === 1 ? 'compare.panel.notesOne' : 'compare.panel.notes', { n: diff.notes.length })) + '</div>' : '';
   const head = !to.served ? '<div class="map-cmp-head"' + tipAttrs({ key: 'compare.panel.headNote', noFocus: true }) + '>' + esc(fill('compare.panel.headNote', { b: to.sync })) + '</div>' : '';
   return close + title + range + count + head + '<ol class="map-cmp-list">' + items + '</ol>' + notes
     + '<div class="map-cmp-foot"><button type="button" class="map-tb map-cmp-save" data-act="cmp-save"' + tipAttrs({ key: 'compare.panel.save', noFocus: true }) + '>' + sym('save') + ' ' + esc(t('compare.panel.save')) + '</button>'

@@ -81,6 +81,7 @@ export const COMPARE_STRINGS: Record<string, StringEntry> = {
   'compare.note.newStoryline': same('sync {sync} draws no storyline of this id: everything on it is new since', 'The earlier sync does not declare this storyline, so every screen of the later one would be a change; none is listed one by one.'),
   'compare.note.noLifecycle': same('sync {sync} read no statuses for {record}: its writers are not compared', 'That sync kept no status lifecycle for the record, so every move would read as new or gone. The moves are not listed; the record is named here instead.'),
   'compare.note.builds': same('the two syncs were written by different Farsight builds ({a} → {b}): a change may be what the newer build reads, not what the code did', 'Each sync is written by one build of Farsight. A newer build may read more of the same code, a precondition or a status it did not read before, and that reads as a change here.'),
+  'compare.note.sameCommit': same('both syncs read the code at commit {commit}: nothing in the code moved, so these changes are what Farsight reads of it', 'The two syncs were taken of the same commit. A change between them comes from how the code was read, a newer build or a changed configuration, never from an edit to the code.'),
   'compare.note.goneStoryline': same('sync {sync} draws no storyline of this id: it was taken out since', 'The later sync does not declare this storyline.'),
 
   // the Map's compare control (toolbar) and the panel
@@ -104,6 +105,7 @@ export const COMPARE_STRINGS: Record<string, StringEntry> = {
   'compare.panel.unheld': same('sync {sync} is not indexed in this server’s history', 'The history this server reads does not hold that sync: it was never recorded here, or it was pruned. The comparison cannot be drawn.'),
   'compare.panel.headNote': same('the board draws sync {b}', 'The later end of the comparison, the state the board and its cards show.'),
   'compare.panel.notes': same('{n} notes', 'What the comparison could not say; the tip lists each.'),
+  'compare.panel.notesOne': one('1 note', 'compare.panel.notes'),
   'compare.export.what': same('changes on {storyline} · sync {a} → sync {b}', 'What the saved picture shows: one storyline, the later sync drawn, with what changed since the earlier one.'),
 
   // the Changes page's storyline rows: each storyline, the same range, on the Map

@@ -435,6 +435,8 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     });
   }
 
+  // the same source commit at both ends: nothing in the code moved, so every change is what Farsight reads of it
+  if (a.end.commit && b.end.commit && a.end.commit === b.end.commit && out.length) notes.push(t('compare.note.sameCommit', 'professional').replace('{commit}', a.end.commit.slice(0, 7)));
   // a deterministic order: kind, then the subject, then the target — ids follow it
   out.sort((x, y) => SEVERITY_ORDER[x.kind] - SEVERITY_ORDER[y.kind] || x.change.localeCompare(y.change)
     || x.subject.id.localeCompare(y.subject.id) || (x.target?.id ?? '').localeCompare(y.target?.id ?? ''));
