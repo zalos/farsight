@@ -8,6 +8,8 @@
     "url": "git+https://github.com/zalos/farsight.git"
   },
   "scripts": {
+    "pack:echo": "pnpm --filter @farsight/core build && pnpm --filter @farsight/echo build && node scripts/pack-echo.mjs",
+    "test:echo:package": "pnpm pack:echo && node scripts/test-echo-package.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck && pnpm e2e:typecheck",
     "test": "pnpm -r test && pnpm test:scripts",

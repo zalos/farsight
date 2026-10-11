@@ -38,7 +38,7 @@ function profileName(value: unknown): string {
 }
 
 /** Canonical loopback aliases cannot bypass profile separation or port collisions. */
-function origin(value: unknown, localOnly = false): { url: string; local: boolean; port: number } {
+function origin(value: unknown, localOnly = false): { url: string; exactUrl: string; local: boolean; port: number } {
   if (typeof value !== 'string' || value !== value.trim() || /[\x00-\x20\x7f\\]/.test(value) || !/^https?:\/\/[^/?#]+\/?$/i.test(value)) fail('echo.config.url');
   let parsed: URL;
   try { parsed = new URL(value); } catch { fail('echo.config.url'); }
@@ -46,8 +46,9 @@ function origin(value: unknown, localOnly = false): { url: string; local: boolea
   const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
   if (localOnly && !local || !local && parsed.protocol !== 'https:') fail('echo.config.url');
+  const exactUrl = parsed.origin;
   parsed.hostname = local ? '127.0.0.1' : hostname;
-  return { url: parsed.origin, local, port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80)) };
+  return { url: parsed.origin, exactUrl, local, port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80)) };
 }
 
 function defaultProfile(index: number): EchoProfile {
@@ -117,9 +118,9 @@ export function validateConfig(value: unknown): EchoConfig {
     const modelSecret = secret(model.secretRef);
     result.profiles[name] = {
       identity: { individual: identity(id.individual), project: identity(id.project), ...(id.team === undefined ? {} : { team: identity(id.team) }) },
-      backend: { mode: backend.mode, url: address.url, ...(backendSecret === undefined ? {} : { secretRef: backendSecret }) },
-      model: { provider: model.provider, baseUrl: modelAddress.url, model: label(model.model, 'echo.config.shape', true), ...(modelSecret === undefined ? {} : { secretRef: modelSecret }) },
-      web: { port: webPort, ...(web.farsightOrigin === undefined ? {} : { farsightOrigin: origin(web.farsightOrigin, true).url }) },
+      backend: { mode: backend.mode, url: backend.mode === 'managed' ? address.url : address.exactUrl, ...(backendSecret === undefined ? {} : { secretRef: backendSecret }) },
+      model: { provider: model.provider, baseUrl: modelAddress.exactUrl, model: label(model.model, 'echo.config.shape', true), ...(modelSecret === undefined ? {} : { secretRef: modelSecret }) },
+      web: { port: webPort, ...(web.farsightOrigin === undefined ? {} : { farsightOrigin: origin(web.farsightOrigin, true).exactUrl }) },
       hooks: { claude: bool(hooks.claude), codex: bool(hooks.codex) },
       skills: { directories },
       budget: { briefMaxChars: integer(budget.briefMaxChars, 128, 16_384), modelMaxTokens: integer(budget.modelMaxTokens, 32, 4096), timeoutMs: integer(budget.timeoutMs, 100, 300_000) },

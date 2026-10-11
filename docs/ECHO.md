@@ -10,7 +10,7 @@ The intended workflow is a small brief before each agent request, with source li
 |---|---|
 | Separate personal and work profiles | Shared service authentication and team permissions |
 | Managed local or explicitly configured external agentmemory | Shared hosted deployment and synchronization |
-| Ollama model connection and synthetic summary check | Additional model adapters and provider selection policy |
+| Ollama and OpenAI-compatible model adapters; Ollama verified locally | Additional native provider adapters and provider selection policy |
 | Standalone local settings view with an allowed Farsight embedding origin | A Farsight navigation entry and integrated memory viewer |
 | Optional prepared Claude Code and Codex hook plugins | Automatic capture, memory briefs, follow-up retrieval tools |
 | Configured skill directories | Skill discovery, installation, and execution |
@@ -57,15 +57,27 @@ These identity fields are local routing metadata. They are not login, membership
 | `web` | Local port and optional exact Farsight origin allowed to embed the view |
 | `hooks` | Whether each host may bind sessions; preparation is separate from host activation |
 | `skills.directories` | Explicit future skill sources; no installation or execution |
-| `budget` | Model timeout and output limit; brief size is reserved for the future brief pipeline |
+| `budget` | Model timeout, generation limit, and final summary character limit; future briefs will use the same boundary |
 
 Credentials are references to local secret storage, never literal keys in settings. The settings view must not return credential values. A Farsight embedding origin permits framing the view; it does not grant access to memory or connect the two graphs.
+
+Use a service origin as the model address, without a path: Ollama uses its chat API, and the compatible adapter
+uses `/v1/chat/completions`. Compatibility is tested with a local fixture; each hosted provider still needs its own
+connection check. Ollama summaries use a structured response so thinking text is not mistaken for a brief.
+The final summary is capped by characters; this is not a claim about the main agent's exact token count.
 
 ## Memory runtime and storage
 
 The dependency is pinned to published `@agentmemory/agentmemory` **0.9.30**, with native **iii engine 0.22.1**. Managed mode installs the engine under Echo's own state directory and launches the released worker with an explicit environment and profile-specific storage. It does not use upstream's interactive onboarding or modify upstream's global hook settings. Native managed mode supports macOS and Linux on arm64 and x64; other platforms require an externally managed backend.
 
 Managed mode refuses to start if `~/.agentmemory/.env` exists: this release reads that file globally and provides no override. The refusal prevents unintended inheritance across personal and work contexts. Use a deliberately isolated external instance when that global configuration is needed elsewhere.
+
+Managed backend credentials are generated in memory for each run; a managed profile does not accept a credential
+reference. An external profile may resolve its explicit keychain reference and must report the supported
+agentmemory version. Echo never adopts an existing process on its configured ports. A crash or forced kill may
+leave `profiles/<profile>/echo-owner.json`: inspect its PID and all configured backend ports, stop any remaining
+owned children, and remove that one lock only after confirming no writer remains. Do not delete the memory store.
+Normal termination and interrupted CLI smoke tests close the owned children and remove the lock.
 
 Agentmemory persists its records through iii's file-backed state store. Echo's memory data is runtime state, not a Git merge format. Commit scrubbed configuration examples and documentation; do not commit live stores. External mode connects to an instance the user manages and does not start or stop it. A future hosted team service will need authentication and enforced tenant boundaries.
 
@@ -98,6 +110,12 @@ farsight-echo smoke
 farsight-echo smoke --with-model
 ```
 
-`doctor` checks the selected setup and model availability. The settings view also reports runtime readiness. `smoke` starts a disposable managed store, saves and searches synthetic text, restarts the service, checks persistence, then checks that a fresh store cannot find that text. `--with-model` also asks the configured Ollama model for a short synthetic summary. Smoke verification does not write to an external backend or a personal/work memory store.
+`doctor` checks the selected setup, Ollama model availability, and external backend identity/version when applicable.
+For compatible model endpoints it checks selection only; use `smoke --with-model` to verify an actual call.
+The settings view also reports runtime readiness. `smoke` starts a disposable managed store, saves and searches
+synthetic text, restarts on changed ports, checks persistence, then checks that a fresh store cannot find that text.
+`--with-model` also asks the configured model for a short synthetic summary. Smoke verification does not write to
+an external backend or a personal/work memory store. Failed checks retain synthetic diagnostics in a temporary
+directory; successful checks remove it. `pnpm test:echo:package` verifies the installable artifact without a model.
 
 The smoke result demonstrates package wiring and persistence. It does not establish retrieval quality, host-hook activation, shared-team security, or production summarization behavior.

@@ -12,7 +12,7 @@ the pnpm store cached on the lockfile.
 
 | job | steps | timeout |
 |---|---|---|
-| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm typecheck` (every package, then `e2e/`) → `pnpm -r test` → `pnpm lint:strings` | 20 min |
+| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm typecheck` (every package, then `e2e/`) → `pnpm -r test` → `pnpm test:scripts` → `pnpm lint:strings` → `pnpm test:echo:package` | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`, ~40 s; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
@@ -25,6 +25,10 @@ installed again.
 The live tracker tests (`packages/work-jira`, `packages/work-azdo`, `test/live.test.ts`) skip unless
 `FARSIGHT_LIVE=1`, which CI never sets. No test reads a keychain. Secret resolution is tested with an injected
 runner.
+
+Echo's package check builds its separate tarball, installs it into a temporary directory without optional embedding dependencies,
+downloads the checksum-pinned iii engine, and verifies synthetic save/recall, restart persistence, and separate stores.
+It makes no model calls and uses no real memories or agent hooks. This check needs npm and GitHub release downloads.
 
 A third job, **secrets**, runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
 how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in-ci).
@@ -39,6 +43,7 @@ pnpm build
 pnpm typecheck
 pnpm -r test
 pnpm lint:strings
+pnpm test:echo:package
 pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```

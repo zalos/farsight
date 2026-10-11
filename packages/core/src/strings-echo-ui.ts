@@ -42,7 +42,7 @@ export const ECHO_UI_STRINGS: Record<string, StringEntry> = {
   'echo.ui.modelUrl': word('Model address', 'The base address of the configured model service.'),
   'echo.ui.modelName': word('Model name', 'The model identifier available from the configured service.'),
   'echo.ui.hooks': word('Agent connections', 'Record which agent integrations setup should prepare.'),
-  'echo.ui.hooksNote': word('Record your hook preferences here. Use CLI setup to install them explicitly.', 'Saving these preferences does not install hooks or change another application’s settings.'),
+  'echo.ui.hooksNote': word('Record your hook preferences here. Use CLI setup to prepare them for review and activation.', 'Saving these preferences does not install hooks or change another application’s settings.'),
   'echo.ui.claude': word('Prepare Claude Code hooks', 'Record a preference to prepare the Claude Code integration.'),
   'echo.ui.codex': word('Prepare Codex hooks', 'Record a preference to prepare the Codex integration.'),
   'echo.ui.skills': word('Skills', 'Places Echo may later search for skills you have already configured.'),

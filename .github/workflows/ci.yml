@@ -85,7 +85,10 @@ jobs:
       - name: pnpm typecheck (every package, then e2e/)
         run: pnpm typecheck
       - run: pnpm -r test
+      - run: pnpm test:scripts
       - run: pnpm lint:strings
+      - name: Install and verify the separate Echo package with synthetic memory
+        run: pnpm test:echo:package
 
   e2e:
     name: e2e

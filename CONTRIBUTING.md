@@ -20,7 +20,7 @@ Thanks for helping. This page is the short version; the project contract (princi
   changelog and release notes are generated from these subjects (`scripts/changelog.mjs`), one line per PR with a
   link to it, so write the title for the person reading the changelog.
 - **Types:** `feat fix docs test chore build ci refactor perf style revert`. **Scopes:** the package (`core parsers
-  server mcp cli work work-jira work-azdo work-fixture`) or the surface (`e2e scripts ci docs proposals examples
+  server mcp cli echo work work-jira work-azdo work-fixture`) or the surface (`e2e scripts ci docs proposals examples
   release deps viewer skills`); a new scope is added to `SCOPES` in `scripts/lint-commits.mjs` in the same change. `!`
   after the scope or a `BREAKING CHANGE:` footer marks a breaking change. No full stop, under 120 characters.
 - **Commits on the branch** are conventional too, but they are working notes — commit often, don't polish, the squash

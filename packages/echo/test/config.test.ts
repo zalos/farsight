@@ -6,6 +6,17 @@ import { join } from 'node:path';
 import { defaultConfig, initConfig, loadContext, saveConfig, validateConfig } from '../dist/config.js';
 import { parseKeychainRef, resolveSecret } from '../dist/secrets.js';
 
+test('exact embedding origins and TLS hostnames survive canonical isolation checks', () => {
+  const config = defaultConfig();
+  config.profiles.personal!.web.farsightOrigin = 'http://localhost:4478';
+  config.profiles.personal!.model.baseUrl = 'https://localhost:11434';
+  config.profiles.work!.backend = { mode: 'external', url: 'https://localhost:5711' };
+  const result = validateConfig(config);
+  assert.equal(result.profiles.personal!.web.farsightOrigin, 'http://localhost:4478');
+  assert.equal(result.profiles.personal!.model.baseUrl, 'https://localhost:11434');
+  assert.equal(result.profiles.work!.backend.url, 'https://localhost:5711');
+});
+
 test('defaults are isolated and validate without credentials or selected models', () => {
   const config = validateConfig(defaultConfig());
   assert.equal(config.defaultProfile, 'personal');

@@ -33,6 +33,10 @@ import { STATE_STRINGS } from './strings-state.js';
 import { STOP_STRINGS } from './strings-stops.js';
 import { EVIDENCE_STRINGS } from './strings-evidence.js';
 import { AFFECTED_STRINGS } from './strings-affected.js';
+import { ECHO_RUNTIME_STRINGS } from './strings-echo-runtime.js';
+import { ECHO_CONFIG_STRINGS } from './strings-echo-config.js';
+import { ECHO_HOOK_STRINGS } from './strings-echo-hooks.js';
+import { ECHO_UI_STRINGS } from './strings-echo-ui.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -114,6 +118,10 @@ export const STRINGS: Record<string, StringEntry> = {
   ...LANES_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts
   ...AFFECTED_STRINGS,
+  ...ECHO_RUNTIME_STRINGS,
+  ...ECHO_CONFIG_STRINGS,
+  ...ECHO_HOOK_STRINGS,
+  ...ECHO_UI_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)

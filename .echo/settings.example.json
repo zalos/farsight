@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "defaultProfile": "personal",
+  "profiles": {
+    "personal": {
+      "identity": {
+        "individual": "local",
+        "project": "default"
+      },
+      "backend": {
+        "mode": "managed",
+        "url": "http://127.0.0.1:4611"
+      },
+      "model": {
+        "provider": "ollama",
+        "baseUrl": "http://127.0.0.1:11434",
+        "model": ""
+      },
+      "web": {
+        "port": 4480
+      },
+      "hooks": {
+        "claude": false,
+        "codex": false
+      },
+      "skills": {
+        "directories": []
+      },
+      "budget": {
+        "briefMaxChars": 1200,
+        "modelMaxTokens": 384,
+        "timeoutMs": 60000
+      }
+    },
+    "work": {
+      "identity": {
+        "individual": "local",
+        "project": "default",
+        "team": "team"
+      },
+      "backend": {
+        "mode": "managed",
+        "url": "http://127.0.0.1:4711"
+      },
+      "model": {
+        "provider": "ollama",
+        "baseUrl": "http://127.0.0.1:11434",
+        "model": ""
+      },
+      "web": {
+        "port": 4481
+      },
+      "hooks": {
+        "claude": false,
+        "codex": false
+      },
+      "skills": {
+        "directories": []
+      },
+      "budget": {
+        "briefMaxChars": 1200,
+        "modelMaxTokens": 384,
+        "timeoutMs": 60000
+      }
+    }
+  }
+}

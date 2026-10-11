@@ -43,6 +43,27 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Current state — 2026-10-10
 
+### Echo foundation branch
+
+`codex/echo-setup` adds the optional `packages/echo` companion; see [ECHO.md](ECHO.md).
+It prepares isolated profiles, a CLI and local settings view, opt-in Claude/Codex hook packages,
+agentmemory 0.9.30 with checksum-pinned iii 0.22.1, and bounded model connections. Automatic memory
+capture, relevant briefs, skill discovery, and shared-team authorization are still future work.
+The normal `farsight-cli` artifact retains its existing dependency list; Echo has its own tarball.
+
+Verified on this branch: full build, typecheck and package tests; script tests; catalog lint; all
+267 browser/MCP regressions; 34 Echo tests; clean standalone tarball install; synthetic save/recall,
+persistence after restart on changed ports, separate-store isolation, and a structured local Ollama
+summary. Standalone and embedded settings views were checked in a browser, including mobile layout.
+Real `serve` and interrupted `smoke` shutdowns released all owned ports. No real host hooks were enabled.
+The Git hook installer now handles linked worktrees' absolute common hooks path.
+
+Managed startup deliberately refuses the global agentmemory environment file because the published
+backend does not offer an override. External mode needs a dedicated compatible instance. No npm release
+was published by this setup work. The existing Farsight servers and dogfood graph were not refreshed.
+
+### Farsight main
+
 `main` is green. **The lanes round, wave 1, is merged and live** (item 15 below); wave 2 (U2: one address, the journey
 overlay retires) and wave 3 (B: compare two syncs · M: agent tiers) are in flight as lanes; F (walk and ask) follows U2.
 
