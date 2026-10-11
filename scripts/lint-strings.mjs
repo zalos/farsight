@@ -80,6 +80,8 @@ const CHROME_FILES = [
   'lib/multi-pick.js', 'lib/multi-pick-model.js',
   // export: the Save control, its menu and the saved picture's footer (round 2026-10-05, lane E)
   'lib/export.js', 'lib/export-model.js',
+  // compare two syncs on a storyline (round 2026-10-10, proposal 7)
+  'surfaces/map-compare.js', 'lib/compare-model.js',
   // the storyline as swimlanes (round 2026-10-10 §2)
   'surfaces/map-lanes.js', 'lib/map-lanes-model.js',
 ];

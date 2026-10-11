@@ -2851,6 +2851,41 @@
   .map-affb.corner{position:absolute;right:0;bottom:0;transform-origin:bottom right;transform:scale(var(--map-inv,1));font-size:13px;padding:4px 10px;z-index:5;border-width:2px;pointer-events:auto}
   .map-world.lvl-st .map-affb.corner{display:none}
   .map-afflist[hidden]{display:none}
+  /* compare two syncs on a storyline (round 2026-10-10, proposal 7; surfaces/map-compare.js) */
+  .map-cmp-pick{display:inline-flex;align-items:center;gap:6px;margin-right:8px;position:relative}
+  .map-cmp-pick .hud-label{font-size:9px;white-space:nowrap}
+  .map-cmp-pick .map-cmp-cur{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .map-cmp-pick.on .map-cmp-cur{color:var(--accent);border-color:var(--accent)}
+  .map-cmp-pick .map-cmp-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:8;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 6px 18px rgba(0,0,0,.35);max-height:60vh;overflow:auto;min-width:220px}
+  .map-cmp-pick.open .map-cmp-menu{display:flex}
+  .map-cmp-pick .map-cmp-menu .map-seg{text-align:left;border:0;border-top:1px solid var(--line)}
+  .map-cmp-pick .map-cmp-menu .map-seg:first-child{border-top:0}
+  .map-chip.map-cmp-chip{font-weight:600}
+  .map-chip.map-cmp-chip.t-up{color:var(--ok);border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+  .map-chip.map-cmp-chip.t-down{color:var(--err);border-color:var(--err);background:color-mix(in srgb,var(--err) 14%,transparent)}
+  .map-chip.map-cmp-chip.t-warn{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+  .map-chip.map-cmp-chip.t-contract{color:var(--cyan);border-color:var(--cyan);background:color-mix(in srgb,var(--cyan) 14%,transparent)}
+  .map-cmp-chips{display:inline-flex;flex-wrap:wrap;gap:4px}
+  .ln-stage.cmp-on .sub,.ln-stage.cmp-on .dec{display:none}
+  .map-cmp[hidden]{display:none}
+  .map-cmp{position:absolute;right:12px;top:calc(var(--map-chrome-h,52px) + 8px);z-index:6;width:340px;max-width:calc(100% - 24px);max-height:calc(100% - var(--map-chrome-h,52px) - 56px);overflow:auto;overscroll-behavior:contain;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 28px rgba(0,0,0,.45)}
+  .map-cmp .map-cmp-x{position:absolute;right:10px;top:8px;color:var(--muted);font-size:13px;background:none;border:0;cursor:pointer}
+  .map-cmp .map-cmp-title{color:var(--accent);padding-right:20px}
+  .map-cmp .map-cmp-range{font-family:var(--hud);letter-spacing:.06em;text-transform:uppercase;font-size:11px;color:var(--ink)}
+  .map-cmp .map-cmp-count,.map-cmp .map-cmp-head,.map-cmp .map-cmp-notes{font-size:12px;color:var(--muted)}
+  .map-cmp .map-cmp-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+  .map-cmp .map-cmp-item{border-left:3px solid var(--line);padding:2px 0 2px 10px}
+  .map-cmp .map-cmp-item.c-added{border-left-color:var(--ok)}
+  .map-cmp .map-cmp-item.c-removed{border-left-color:var(--err)}
+  .map-cmp .map-cmp-item.k-verdict{border-left-color:var(--warn)}
+  .map-cmp .map-cmp-item.k-contract{border-left-color:var(--cyan)}
+  .map-cmp .map-cmp-kind{font-family:var(--hud);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .map-cmp .map-cmp-say{font-size:13px;color:var(--ink);line-height:1.35;overflow-wrap:anywhere}
+  .map-cmp .map-cmp-say code{font-family:var(--mono);color:var(--cyan);font-size:12px}
+  .map-cmp .map-cmp-door{font-size:12px;cursor:pointer}
+  .map-cmp .map-cmp-err{color:var(--warn)}
+  .map-cmp .map-cmp-foot{border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:6px}
+  .map-cmp .map-cmp-closed{font-size:11px;color:var(--muted)}
   .map-afflist{position:absolute;right:12px;top:calc(var(--map-chrome-h,52px) + 8px);z-index:7;width:380px;max-width:calc(100% - 24px);max-height:calc(100% - 70px);overflow:auto;background:var(--panel);border:1px solid var(--accent);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 28px rgba(0,0,0,.45)}
   .map-afflist .al-top{display:flex;align-items:center;gap:8px}
   .map-afflist .al-top .hud-label{flex:1;color:var(--accent)}

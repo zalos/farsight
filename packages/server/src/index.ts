@@ -1,4 +1,5 @@
 import { readinessOf } from './readiness.js';
+import { syncGraph, syncGraphJson, syncParam, compareAnswer, type SyncGraph } from './compare.js';
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -810,6 +811,23 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
   const publicDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public');
   const ws = resolve(workspaceDir);
 
+  /**
+   * The graph a request reads: the served one, or — with `?asof=<sync>` — that sync rebuilt from history
+   * (`/graph`, `/api/journey`, `/api/journeys`, `/api/design`). `sync` is set only when the answer is not the
+   * served graph; a sync the history does not hold is the absence word *not indexed*.
+   */
+  const graphAt = (q: URLSearchParams): { g: JourneyGraph; sync?: SyncGraph } | { code: number; body: unknown } => {
+    const served = loadJourneyGraph(graphPath);
+    const raw = q.get('asof');
+    if (!raw) return { g: served };
+    const want = syncParam(raw);
+    if (want === null) return { code: 400, body: { error: `cannot read asof=${raw} as a sync: use a number or sync:N` } };
+    if (want === 'latest' || want === served.meta.sync) return { g: served };
+    const r = syncGraph(ws, want, served.roots);
+    if ('code' in r) return { code: r.code, body: { error: r.error, ...(r.absent ? { absent: r.absent, word: STRINGS['journey.absent.notIndexed']?.professional } : {}) } };
+    return { g: r.g, sync: r.g };
+  };
+
   // one-time size-based retention of the Model Hub event stream
   rotateEventsFile();
 
@@ -892,6 +910,21 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       return send(200, readFileSync(graphPath));
     }
+    if (url.startsWith('/graph?') && req.method === 'GET') {
+      // any sync the history holds, as a graph file (round 2026-10-10, compare two syncs — the swarm's 9.1: a
+      // pinned link could only say the server drew another sync). The served sync, or no asof, is the graph file.
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const at = graphAt(new URL(url, 'http://localhost').searchParams);
+      if ('code' in at) return send(at.code, JSON.stringify(at.body));
+      return send(200, at.sync == null ? readFileSync(graphPath) : syncGraphJson(at.sync));
+    }
+    if (url.startsWith('/api/compare') && req.method === 'GET') {
+      // two syncs of one storyline side by side (round 2026-10-10, proposal 7): ?storyline=&from=&to=[&repo=&format=diff&failOn=]
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const g = loadJourneyGraph(graphPath);
+      const answer = compareAnswer(ws, { index: g.index, meta: g.meta, roots: g.roots }, new URL(url, 'http://localhost').searchParams);
+      return send(answer.code, JSON.stringify(answer.body));
+    }
     if (url === '/api/version' && req.method === 'GET') {
       // which Farsight is serving (version · built · commit) and which one wrote the graph — a consumer's "when was this last updated"
       const m = existsSync(graphPath) ? loadJourneyGraph(graphPath).meta : {};
@@ -960,7 +993,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     if ((url === '/api/journeys' || url.startsWith('/api/journeys?')) && req.method === 'GET') {
       if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
-      const g = loadJourneyGraph(graphPath);
+      const at = graphAt(u.searchParams);
+      if ('code' in at) return send(at.code, JSON.stringify(at.body));
+      const g = at.g;
       const scopeParam = u.searchParams.get('scope');
       const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', tree: journeyTree(g.index, g.meta.journeys, scope) }));
@@ -985,7 +1020,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const q = new URL(url, 'http://localhost').searchParams;
       const entryArg = q.get('entry');
       if (!entryArg) return send(400, JSON.stringify({ error: 'missing ?entry=<node id or name>' }));
-      const g = loadJourneyGraph(graphPath);
+      const at = graphAt(q);
+      if ('code' in at) return send(at.code, JSON.stringify(at.body));
+      const g = at.g;
       // a name resolves the way the MCP `journey` tool resolves it; the payload carries the id it landed on
       const entryNode = resolveEntry(g.index, entryArg, { ...(q.get('repo') ? { repo: q.get('repo')! } : {}), ...(q.get('group') ? { group: q.get('group')! } : {}) });
       if (!entryNode) return send(404, JSON.stringify({ error: `nothing in the graph matches: ${entryArg}` }));
@@ -1246,7 +1283,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
     if (url.startsWith('/api/design') && req.method === 'GET') {
       if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
-      const g = loadJourneyGraph(graphPath);
+      const at = graphAt(u.searchParams);
+      if ('code' in at) return send(at.code, JSON.stringify(at.body));
+      const g = at.g;
       const scopeParam = u.searchParams.get('scope');
       const scope = scopeParam && scopeParam !== 'all' ? new Set(scopeParam.split(',').map((x) => x.trim()).filter(Boolean)) : null;
       const rest = u.pathname.slice('/api/design'.length).replace(/^\//, '');

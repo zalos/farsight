@@ -48,7 +48,7 @@ const TOOLS = [
   'gate',
   'graph_changes', 'graph_overview',
   'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
-  'search_graph', 'stories', 'test_coverage', 'trace_flow',
+  'search_graph', 'stories', 'storyline_diff', 'test_coverage', 'trace_flow',
   // in both tiers: the menu, and what a budget left out (round 2026-10-10, proposal 9)
   'expand', 'tools',
   // work items: always registered
@@ -504,6 +504,25 @@ describe('graph_changes — change history', () => {
 
   test('a bad ref is a sentence', async () => {
     assert.match(await call('graph_changes', { to: 'yesterday' }), /to expects sync:<N>/);
+  });
+});
+
+describe('storyline_diff — one storyline between two syncs', () => {
+  test('words by default, the closed set named; json is farsight-diff v1 with a storyline block', async () => {
+    const out = await call('storyline_diff', { storyline: 'invoice' });
+    assert.match(out, /what changed on this storyline/);
+    assert.match(out, /sync 1 .*→ sync 2/);
+    assert.match(out, /every change is one of: built · gate · writer · contract · verdict/);
+    const doc = JSON.parse(await call('storyline_diff', { storyline: 'invoice', json: true, failOn: 'gate' }));
+    assert.equal(doc.schema, 'farsight-diff v1');
+    assert.deepEqual(validate(doc, schema('farsight-diff-v1.schema.json')), []);
+    assert.equal(doc.storyline.id, 'invoice');
+    assert.equal(doc.gate.policy, '--fail-on gate');
+  });
+
+  test('an unknown kind and an unheld sync are sentences', async () => {
+    assert.match(await call('storyline_diff', { storyline: 'invoice', failOn: 'colour' }), /not a delta kind/);
+    assert.match(await call('storyline_diff', { storyline: 'invoice', from: '99' }), /not indexed/);
   });
 });
 

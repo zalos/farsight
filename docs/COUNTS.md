@@ -739,6 +739,22 @@ yet`**.
 | `notYet` | `history.fact.notYet` (`of` = read) | of those, the ones no sync ingested (`commitSpine().unindexed`) — *not indexed* | never printed as *never* |
 | `agents` | `history.fact.agents` (`of` = read) | of those, the ones whose co-author trailer names an AI assistant (core `agentOfMessage` → `commit.agent`; `commitSpine().agents`, summed) — *n of m commits made with an agent* (round 2026-10-10, proposal 9) | breakdown by assistant name (`history.fact.agentNamed`, `label` = the trailer's name, from `SnapshotDb.agentCounts`), only when the names sum to `n`; absent on a store read before the column existed (re-read on the next sync); re-check `farsight history --agents`. Printed by the front door's state of play, `graph_overview` and the session-start context; the Changes rows and the Map's Changes tab say *made with an agent · <name>* per commit. No session link is read or printed. |
 
+### Compare (`/api/compare` → core `storyline-diff.ts` `storylineDiff()`; the Map's compare panel and chips, MCP `storyline_diff`, CLI `farsight diff --storyline`)
+
+Two syncs of one storyline set side by side (round 2026-10-10, proposal 7). The scope is new, **`count.scope.compare`**
+(*over this storyline, between the two syncs*): the journeys and branches either sync declares for the storyline and
+what their walks reach. Every change is one of five kinds — a closed set (`DELTA_KINDS`), never a sixth.
+
+| number | field | what it counts | rule |
+|---|---|---|---|
+| `7 changes` | `counted.deltas` (`count.unit.deltas`) | the deltas between the two syncs | breakdown `count.part.delta.built` · `.gate` · `.writer` · `.contract` · `.verdict` — the five kinds, zeros included, summing to `n` |
+| `3 of 3 journeys changed` | `counted.journeys` (`count.unit.journeysChanged`, `of` = the journeys either sync draws) | journeys whose card carries at least one chip | `byJourney.length` |
+| `+2 gates` / `−1 gate` | `byJourney[].kinds.gate.added` / `.removed` | gate pairs (a gate and the call or action it stands in front of) present at one sync only, on this journey's walk | one pair counted once per journey; planned gates and config checks never count |
+| `now built · 3 of 3` | `byJourney[].built` | the journey's screens a page serves **at the later sync**, out of its screens | the chip appears only when a built delta touches the journey |
+| `+1 writer` | `byJourney[].kinds.writer` | (record, status, writer) moves present at one sync only, on a record the storyline reaches at both, credited to the journeys whose walk runs the writer | a record that joined or left the storyline is not a writer change |
+| `contract +1 operation` · `contract · 1 changed` | `byJourney[].kinds.contract` | operations the journey reaches, by `operationId` else method and path (`{id}` = `:id`), added to / taken off / changed on the contract | `changed` = the contract status moved (spec-only → both reads *now built*) or its params, request, answers or security did |
+| `passed → skipped` | `byJourney[].verdict` | the journey's one verdict (`testVerdict()`) at each end: the status, else the word; the skip counts when only they moved | freshness is never a verdict change (*stale* folds into its class) |
+
 ## 4. Open — found, not changed here
 
 - **The journey prints the typed counts** (`fix/journey-numbers-and-words`, 2026-09-25). The header

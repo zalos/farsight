@@ -72,3 +72,26 @@ export function makeProjectsWorkspace(label = 'projects') {
   execFileSync(process.execPath, [CLI, 'ingest', ...names, '--out', graph], { cwd: dir, stdio: ['ignore', 'ignore', 'pipe'] });
   return { dir, graph, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
+
+/**
+ * A workspace with two syncs of the fixture for the compare spec (round 2026-10-10, proposal 7): sync 1 is the
+ * example as checked in, sync 2 the same copy after `second-sync.mjs` edited it — Discard draft built and its DELETE
+ * served, two gates, a writer for `void`, a skipped case. Both ingests run from the workspace cwd, so the history is
+ * `<dir>/.farsight/farsight.db`. The Map is switched on in its settings.
+ */
+export async function makeCompareWorkspace(label = 'compare') {
+  const { applySecondSync } = await import('./second-sync.mjs');
+  const dir = mkdtempSync(join(tmpdir(), `farsight-e2e-${label}-`));
+  cpSync(FIXTURE_SRC, join(dir, FIXTURE_REPO), { recursive: true });
+  mkdirSync(join(dir, '.farsight'), { recursive: true });
+  writeFileSync(join(dir, '.farsight', 'settings.json'), JSON.stringify({
+    theme: 'dark', defaultLens: 'hybrid', flags: { map: true },
+    sources: [{ id: FIXTURE_REPO, name: FIXTURE_REPO, type: 'local', path: FIXTURE_REPO, enabled: true }],
+    collections: [],
+  }, null, 2));
+  const graph = join(dir, 'graph.json');
+  ingest(dir, graph);
+  applySecondSync(join(dir, FIXTURE_REPO));
+  ingest(dir, graph);
+  return { dir, graph, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}

@@ -33,6 +33,7 @@ import { STATE_STRINGS } from './strings-state.js';
 import { STOP_STRINGS } from './strings-stops.js';
 import { EVIDENCE_STRINGS } from './strings-evidence.js';
 import { AFFECTED_STRINGS } from './strings-affected.js';
+import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 
 export type Register = 'hud' | 'professional';
@@ -113,6 +114,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...DOOR_STRINGS,
   // the storyline as swimlanes (round 2026-10-10 §2) live in strings-lanes.ts (map.layout.*, lanes.*)
   ...LANES_STRINGS,
+  // compare two syncs on a storyline (round 2026-10-10, proposal 7) live in strings-compare.ts (compare.*, map.biz.compare.*, count.unit.deltas)
+  ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts
   ...AFFECTED_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)

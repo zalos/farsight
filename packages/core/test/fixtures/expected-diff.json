@@ -21,7 +21,12 @@
   "test_added": 0,
   "test_removed": 0,
   "coverage_lost": 0,
-  "uncovered_change": 0
+  "uncovered_change": 0,
+  "storyline_built": 0,
+  "storyline_gate": 0,
+  "storyline_writer": 0,
+  "storyline_contract": 0,
+  "storyline_verdict": 0
  },
  "changes": [
   {

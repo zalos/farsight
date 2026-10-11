@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { resolve, join, basename } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import {
   GraphStore, buildIndex, setFreshnessMeta,
@@ -12,6 +13,7 @@ import {
   packagesOf, importersOf, resolvePackage, configFilesText,
   journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, stateOfPlay, stateOfPlayLines, historyFact,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
+  storylineDiff, storylineDiffDocument, storylineDiffLines, resolveCompareFrom, compareSideOf, parseFailOn, DELTA_KINDS,
 } from '@farsight/core';
 import type {
   SourceStat, GraphDiff, GraphNode, GraphEdge, TestsMeta, TestsMatrixIdentity, TestMatrixCell, ImpactNode, ImpactReport,
@@ -62,6 +64,8 @@ usage:
                                                                (--releases proposes the tags it found; a release is declared, never found;
                                                                --agents lists the commits whose co-author trailer names an AI assistant)
   farsight diff --from sync:39 [--to sync:41] [--format json|sarif|md] [--attribute [--repo name]]
+  farsight diff --storyline <id> [--from sync:N|previous|YYYY-MM-DD|tag:<name>|last-green] [--to sync:N|now] [--repo r] [--json] [--business] [--fail-on built,gate,writer,contract,verdict]
+                                                          one storyline between two syncs: built · gate · writer · contract · verdict; --json is farsight-diff v1; exit 1 when a --fail-on kind changed
                                                                what changed between two snapshots (farsight-diff v1);
                                                                --attribute adds each change's file-level attribution: the commits
                                                                in that range that touched the file its subject lives in — the
@@ -334,6 +338,59 @@ function materializeAsOf(asOf: string): string {
   writeFileSync(path, JSON.stringify(store.toJSON(), null, 1));
   console.error(`as-of sync:${snap.sync} (${snap.at} ${snap.tz}${snap.commit ? ` · ${snap.commit.slice(0, 7)}` : ''}) → ${path}`);
   return path;
+}
+
+/**
+ * `farsight diff --storyline <id>` (round 2026-10-10, proposal 7): one storyline between two syncs, the deltas from
+ * the closed set of five kinds. The later end is the graph file when it is that sync (its meta is whole), else the
+ * sync read from history. `--fail-on` judges it the way `farsight gate` does: exit 1 when a listed kind changed.
+ */
+function runStorylineDiff(storyline: string): void {
+  const db = openDb();
+  const repo = flag('repo');
+  const latest = db.list(1)[0]?.sync;
+  if (latest == null) fail('no snapshots recorded yet — run `farsight ingest` first');
+  const toArg = flag('to', 'now')!;
+  const toSync = toArg === 'now' || toArg === 'latest' ? latest : parseSyncRef(toArg, 'to');
+  if (toSync === 'latest') fail('--to: use sync:N or now');
+  if (!db.has(toSync)) fail(`--to: sync ${toSync} is not indexed in this history (see \`farsight snapshots\`)`);
+  const graphFile = resolve(flag('graph', 'graph.json')!);
+  let b = compareSideOf(db, toSync);
+  if (existsSync(graphFile)) {
+    const store = GraphStore.load(graphFile);
+    if (store.meta.sync === toSync) {
+      const { nodes, edges } = store.toJSON();
+      const index = buildIndex(nodes, edges);
+      setFreshnessMeta(index, store.meta);
+      b = { index, meta: store.meta, end: b.end };
+    }
+  }
+  let fromArg = flag('from', 'previous')!;
+  let ref = resolveCompareFrom(db, fromArg, { head: toSync, storyline, ...(repo ? { repo } : {}), declaredBy: b });
+  if ('error' in ref && fromArg.startsWith('tag:')) {
+    // a release the history has no row for: the tag's commit date from git, read here, then the newest sync before it
+    try {
+      const at = execFileSync('git', ['log', '-1', '--format=%cI', fromArg.slice(4)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      if (at) { fromArg = at; ref = resolveCompareFrom(db, at, { head: toSync, storyline }); if (!('error' in ref)) ref = { ...ref, how: 'tag', label: flag('from')!.slice(4) }; }
+    } catch { /* not a git checkout, or no such tag: the history's answer stands */ }
+  }
+  if ('error' in ref) fail(`--from: ${ref.error}`);
+  if (ref.sync >= toSync) fail(`--from: sync ${ref.sync} is not before --to sync ${toSync}`);
+  const diff = storylineDiff(compareSideOf(db, ref.sync), b, storyline, repo ? { repo } : {});
+  if (!diff) fail(`no storyline ${storyline} at sync ${ref.sync} or sync ${toSync} — \`farsight journeys\` lists the storylines`);
+  let failOn: (typeof DELTA_KINDS)[number][] | undefined;
+  if (flag('fail-on')) {
+    const p = parseFailOn(flag('fail-on')!);
+    if (p.unknown.length) fail(`--fail-on: ${p.unknown.join(', ')} is not a delta kind (${DELTA_KINDS.join(' · ')})`);
+    failOn = p.kinds;
+  }
+  const doc = storylineDiffDocument(diff, failOn ? { failOn } : {});
+  if (hasFlag('json')) console.log(JSON.stringify(doc, null, 2));
+  else {
+    for (const line of storylineDiffLines(diff, { biz: hasFlag('business') })) console.log(line);
+    if (doc.gate) console.log(`gate ${doc.gate.result.toUpperCase()} — ${doc.gate.policy}${doc.gate.rules.filter((r) => r.result === 'fail').map((r) => ` · ${r.rule}: ${r.changes.join(', ')}`).join('')}`);
+  }
+  if (doc.gate?.exit) process.exit(1);
 }
 
 /** Resolve --from/--to into two stores + their changedBetween rows (defaults: latest-1 → latest). */
@@ -870,6 +927,7 @@ switch (command) {
     break;
   }
   case 'diff': {
+    if (flag('storyline')) { runStorylineDiff(flag('storyline')!); break; }
     const { base, head, db } = loadDiffEnds();
     const diff = diffGraphs(base.store, head.store, {
       changes: db.changedBetween(base.ref.sync, head.ref.sync),
