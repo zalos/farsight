@@ -4,7 +4,7 @@ import { isAbsolute, join } from 'node:path';
 import { ECHO_HOOK_STRINGS } from '@farsight/core/dist/strings-echo-hooks.js';
 import type { EchoContext } from './types.js';
 
-export type HookHost = 'claude' | 'codex';
+export type HookHost = 'claude' | 'codex' | 'vscode';
 
 /** Events shared by the verified command-hook formats of both hosts. */
 export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'PreCompact', 'Stop'] as const;
@@ -13,7 +13,7 @@ function words(key: string, values: Record<string, string> = {}): string {
   return ECHO_HOOK_STRINGS[key]!.professional.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match);
 }
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
@@ -27,13 +27,21 @@ async function save(path: string, value: string | object, executable = false): P
  * this helper never edits host settings or invokes host installation commands.
  */
 export async function prepareHooks(ctx: EchoContext, host: HookHost, executable: string): Promise<{ directory: string; instructions: string }> {
-  if (host !== 'claude' && host !== 'codex') throw new Error(words('echo.hooks.invalidHost'));
+  if (!['claude', 'codex', 'vscode'].includes(host)) throw new Error(words('echo.hooks.invalidHost'));
   if (process.platform === 'win32') throw new Error(words('echo.hooks.platform'));
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(ctx.profileId)) throw new Error(words('echo.hooks.invalidProfile'));
   if (![ctx.configPath, ctx.directory, executable].every(isAbsolute)) throw new Error(words('echo.hooks.absolutePaths'));
   if (!(await stat(executable).catch(() => undefined))?.isFile()) throw new Error(words('echo.hooks.missingExecutable'));
 
   const directory = join(ctx.directory, 'plugins', ctx.profileId, host);
+  if (host === 'vscode') {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const command = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host].map(shellQuote).join(' ');
+    await save(join(directory, 'echo.json'), { hooks: Object.fromEntries(HOOK_EVENTS.map(event => [event, [{ type: 'command', command, timeout: 5 }]])) });
+    const instructions = [words('echo.hooks.prepared'), words('echo.hooks.vscode'), words('echo.hooks.behavior'), words('echo.hooks.singleProfile'), words('echo.hooks.keepPaths')].join('\n\n');
+    await save(join(directory, 'README.txt'), `${instructions}\n`);
+    return { directory, instructions };
+  }
   const manifestDirectory = join(directory, host === 'claude' ? '.claude-plugin' : '.codex-plugin');
   for (const folder of [manifestDirectory, join(directory, 'hooks'), join(directory, 'scripts')]) {
     await mkdir(folder, { recursive: true, mode: 0o700 });

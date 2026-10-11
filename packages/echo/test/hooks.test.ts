@@ -37,7 +37,7 @@ for (const host of ['claude', 'codex'] as const) {
     const result = await prepareHooks(ctx, host, executable);
     assert.equal(result.directory, join(ctx.directory, 'plugins', 'personal', host));
     assert.match(result.instructions, /Prepared for review; hooks are not enabled/);
-    assert.match(result.instructions, /does not save conversation content/);
+    assert.match(result.instructions, /do not save conversation content/);
     assert.match(result.instructions, host === 'claude' ? /claude --plugin-dir/ : /codex plugin marketplace add/);
     assert.equal(ctx.profile.hooks[host], false, 'explicit helper does not mutate configuration');
     const manifest = JSON.parse(await readFile(join(result.directory, host === 'claude' ? '.claude-plugin' : '.codex-plugin', 'plugin.json'), 'utf8'));
