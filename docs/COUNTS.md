@@ -737,6 +737,7 @@ yet`**.
 | `read` | `history.fact.read` | commits read from git for the sources (`commitSpine().commits`, summed) | breakdown `history.fact.ingested` + `history.fact.notYet` = `read` |
 | `ingested` | `history.fact.ingested` (`of` = read) | of those, the ones a sync built a graph from | `read − notYet` |
 | `notYet` | `history.fact.notYet` (`of` = read) | of those, the ones no sync ingested (`commitSpine().unindexed`) — *not indexed* | never printed as *never* |
+| `agents` | `history.fact.agents` (`of` = read) | of those, the ones whose co-author trailer names an AI assistant (core `agentOfMessage` → `commit.agent`; `commitSpine().agents`, summed) — *n of m commits made with an agent* (round 2026-10-10, proposal 9) | breakdown by assistant name (`history.fact.agentNamed`, `label` = the trailer's name, from `SnapshotDb.agentCounts`), only when the names sum to `n`; absent on a store read before the column existed (re-read on the next sync); re-check `farsight history --agents`. Printed by the front door's state of play, `graph_overview` and the session-start context; the Changes rows and the Map's Changes tab say *made with an agent · <name>* per commit. No session link is read or printed. |
 
 ### Compare (`/api/compare` → core `storyline-diff.ts` `storylineDiff()`; the Map's compare panel and chips, MCP `storyline_diff`, CLI `farsight diff --storyline`)
 

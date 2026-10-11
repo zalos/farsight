@@ -8,7 +8,7 @@ import {
   stitchHttp, apiSurface, graphToSpec, reconcile, driftMarkdown,
   storybookLive,
   designSurface, reconcileDesign, designDriftMarkdown, isDesignManifest, buildLine, buildInfo, installState, currencyAdvice,
-  testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word,
+  testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word, agentsCounted,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
   journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, stateOfPlay, stateOfPlayLines, historyFact,
@@ -58,10 +58,11 @@ usage:
   farsight serve [graph.json] [--port 4477] [--as-of sync:N] [--read-only]   explore the graph in the HUD (--read-only, and every --as-of, refuses settings, syncs and work writes)
   farsight mcp [--graph graph.json] [--as-of sync:N]           feed the graph to LLM agents (MCP/stdio)
   farsight snapshots [--limit 20] [--pin sync:N] [--prune 10]  list snapshot history (pin / prune retention)
-  farsight history [--repo name] [<path>] [--since <date>] [--max 2000] [--releases] [--json]
+  farsight history [--repo name] [<path>] [--since <date>] [--max 2000] [--releases] [--agents] [--json]
                                                                read a repository's git log into the snapshot spine: what each sync
                                                                swept up, and how many of those commits no sync ever ingested
-                                                               (--releases proposes the tags it found; a release is declared, never found)
+                                                               (--releases proposes the tags it found; a release is declared, never found;
+                                                               --agents lists the commits whose co-author trailer names an AI assistant)
   farsight diff --from sync:39 [--to sync:41] [--format json|sarif|md] [--attribute [--repo name]]
   farsight diff --storyline <id> [--from sync:N|previous|YYYY-MM-DD|tag:<name>|last-green] [--to sync:N|now] [--repo r] [--json] [--business] [--fail-on built,gate,writer,contract,verdict]
                                                           one storyline between two syncs: built · gate · writer · contract · verdict; --json is farsight-diff v1; exit 1 when a --fail-on kind changed
@@ -438,23 +439,8 @@ const GIT_STATUS_WORD: Record<GitFileStatus, FileStatus> = {
  * rather than a stand-in zero, which is the same claim `binary: true` made.
  */
 function commitInputs(commits: readonly GitCommit[]): CommitInput[] {
-  return commits.map((c) => ({
-    sha: c.sha,
-    at: new Date(c.at * 1000).toISOString(),
-    author: c.author,
-    email: c.email,
-    subject: c.subject,
-    parents: c.parents,
-    merge: c.merge,
-    files: c.files.map((f) => ({
-      path: f.path,
-      status: GIT_STATUS_WORD[f.status] ?? 'unknown',
-      ...(f.oldPath ? { oldPath: f.oldPath } : {}),
-      ...(f.added === undefined ? {} : { added: f.added }),
-      ...(f.deleted === undefined ? {} : { deleted: f.deleted }),
-      ...(f.similarity === undefined ? {} : { similarity: f.similarity }),
-    })),
-  }));
+  // the parsers' reader without keys: the same rows, and the co-author assistant each commit names
+  return commitInputsOf(commits);
 }
 
 /** A release as §3 defines it: written down by a person, never discovered. */
@@ -717,6 +703,8 @@ switch (command) {
     const store = existsSync(graphFile) ? GraphStore.load(graphFile) : undefined;
     const asJson = rest.includes('--json');
     const wantTags = rest.includes('--releases');
+    // the commits made with an AI assistant (round 2026-10-10, proposal 9): a co-author trailer naming one
+    const wantAgents = rest.includes('--agents');
     const since = flag('since');
     const maxFlag = flag('max');
     const max = maxFlag === undefined ? DEFAULT_MAX_COMMITS : Number(maxFlag);
@@ -752,6 +740,9 @@ switch (command) {
       const spine = db.commitSpine(repo);
       const tags = wantTags ? gitTags(root) : undefined;
       const declared = declaredReleases(repo);
+      // read from the store, not this read: a bounded read still counts every commit the history holds
+      const agentRows = wantAgents ? db.commitsSince(repo, '').filter((c) => !!c.agent) : [];
+      const agents = wantAgents ? agentsCounted(spine.agents, spine.commits, db.agentCounts(repo)) : undefined;
 
       docs.push({
         repo,
@@ -807,6 +798,14 @@ switch (command) {
           commits: r.commits.map((c) => c.sha),
         })),
         releases: declared,
+        ...(agents ? {
+          agents: {
+            n: agents.n, of: agents.of,
+            byAgent: Object.fromEntries((agents.breakdown ?? []).map((p) => [p.label, p.n])),
+            // no session link is read or printed: the map of commits to sessions is the owner's
+            commits: agentRows.map((c) => ({ sha: c.sha, at: c.at, agent: c.agent, subject: c.subject })),
+          },
+        } : {}),
         ...(tags
           ? {
               tags: tags.available
@@ -886,6 +885,13 @@ switch (command) {
             `  ${String(r.sync).padStart(6)}  ${r.at.padEnd(24)}  ${(r.commit?.slice(0, 7) ?? '-').padEnd(7)}  ${swept.padStart(5)}  ${notIndexed.padStart(11)}  ${note}`,
           );
         }
+      }
+      if (agents) {
+        console.log('');
+        console.log(`  ${countedText(agents, { scope: false })}${agents.breakdown?.length ? ` — ${breakdownText(agents)}` : ''}`);
+        if (!spine.historyRead) console.log('  no history read for this source yet — run farsight history without --agents first');
+        for (const c of agentRows.slice(0, 50)) console.log(`    ${c.sha.slice(0, 7)}  ${c.at.slice(0, 10)}  ${word('history.agentMade', 'professional').replace('{name}', c.agent ?? '')}  ${c.subject.slice(0, 60)}`);
+        if (agentRows.length > 50) console.log(`    +${num(agentRows.length - 50)} more — --json lists them all`);
       }
       if (tags) {
         console.log('');

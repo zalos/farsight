@@ -25,7 +25,7 @@ import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
-import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml, copyDoorsHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
@@ -461,7 +461,11 @@ function readBand() {
  */
 function storylineToolHtml() {
   const list = (MAP.tree && MAP.tree.storylines) || [];
-  if (!list.length) return '';
+  // none declared: the picker still says it exists, why it has nothing, and where a storyline is declared (proposal 9)
+  if (!list.length) {
+    return MAP.tree ? '<span class="map-story-pick none" data-empty="mapStorylines"><span class="hud-label"' + tipAttrs({ key: 'map.storyline.pick', noFocus: true }) + '>' + esc(t('map.storyline.pick')) + '</span>'
+      + '<span class="map-chip k-absent"' + tipAttrs({ key: 'empty.mapStorylines' }) + '>' + esc(t('map.storyline.none')) + '</span></span>' : '';
+  }
   const on = MAP.nb.storyline ? MAP.nb.storyline.id : '';
   const opt = (id, words, tip) => '<button type="button" class="map-seg' + (on === id ? ' on' : '') + '" data-act="storyline" data-storyline="' + esc(id) + '" aria-pressed="' + (on === id) + '"'
     + tipAttrs({ ...tip, noFocus: true }) + '>' + esc(words) + '</button>';
@@ -491,7 +495,7 @@ function unknownStorylineHtml(id) {
     + '<span class="known">' + (list.length
       ? '<span class="hud-label"' + tipAttrs({ key: 'journeys.storyline.known', noFocus: true }) + '>' + esc(t('journeys.storyline.known')) + '</span>'
         + list.map((x) => door(x.id, x.name, { text: x.name + ' · ' + x.id + (x.description ? ' · ' + sentence(x.description) : '') })).join('')
-      : '<span' + tipAttrs({ key: 'journeys.storyline.noneKnown', noFocus: true }) + '>' + esc(t('journeys.storyline.noneKnown')) + '</span>')
+      : '<span' + tipAttrs({ key: 'empty.mapStorylines', noFocus: true }) + '>' + esc(t('empty.mapStorylines')) + '</span>')
     + door('', t('map.storyline.all'), { key: 'map.storyline.all' }) + '</span></span>';
 }
 /**
@@ -2225,8 +2229,9 @@ function renderAll() {
     MAP.world.innerHTML = '';
     MAP.world.appendChild(svg);
     svg.innerHTML = '';
-    const msg = MAP.failed ? t('map.failed') : !MAP.designs ? t('map.loading') : t('map.empty');
-    const key = MAP.failed ? 'map.failed' : !MAP.designs ? 'map.loading' : 'map.empty';
+    // an empty board says what it is for, why it is empty and what fills it (round 2026-10-10, proposal 9)
+    const msg = MAP.failed ? t('map.failed') : !MAP.designs ? t('map.loading') : t('empty.map');
+    const key = MAP.failed ? 'map.failed' : !MAP.designs ? 'map.loading' : 'empty.map';
     let note = MAP.stage.querySelector('.map-note');
     if (!note) {
       note = document.createElement('div');
@@ -2848,7 +2853,7 @@ function drawCard() {
   if (!box || !MAP.card || !MAP.card.tg) return;
   const tg = MAP.card.tg;
   const nodeId = tg.kind === 'call' ? tg.call.nodeId : tg.data.nodeId;
-  let head, ev = '', name, code, store = '', doors = [];
+  let head, ev = '', name, code, store = '', doors = [], copyNode = null, copyKind = 'call';
   if (tg.kind === 'call') {
     const c = tg.call;
     const modes = [...new Set(c.data.map((x) => x.mode).filter((x) => x !== 'reached'))];
@@ -2865,6 +2870,7 @@ function drawCard() {
     // every detail is a door (§3.2): the contract, the spec line, the handler, the card on the code map
     const route = nodeId && S.BYID[nodeId];
     if (route) doors = doorsFor('call', route, { handler: (c.marker && c.marker.handler) || null, flow: tg.flow });
+    if (route) { copyNode = route; copyKind = 'call'; }
   } else {
     const dd = tg.data;
     head = esc(dataKindWords(dd)) + ' · ' + esc(modeWord(dd.mode));
@@ -2882,6 +2888,7 @@ function drawCard() {
     }
     const dn = S.BYID[dd.nodeId] || n;
     if (dn) doors = doorsFor(dd.kind, dn, { flow: tg.flow });
+    if (dn && dn.id) { copyNode = dn; copyKind = dd.kind; }
   }
   const on = screensUsing(tg.model, tg.kind === 'call' ? 'call' : tg.kind, nodeId);
   // the same part in the journey's timeline, at the step whose markers include it, selected (§3.1)
@@ -2901,6 +2908,8 @@ function drawCard() {
       : '<span class="map-chip k-absent">' + esc(t('map.card.onNone')) + '</span>') + '</div>'
     + '<div class="acts">' + (nodeId ? '<button type="button" class="map-tb aff' + (affectedSpec() === nodeId ? ' on' : '') + '" data-act="affected"' + tipAttrs({ key: 'map.affected.action', noFocus: true }) + '>' + esc(t('map.affected.action')) + '</button>' : '')
     + doorsHtml(doors) + '</div>'
+    // copy as MCP call · curl · CLI with the full id (round 2026-10-10, proposal 9)
+    + (copyNode ? '<div class="acts copy">' + copyDoorsHtml(copyKind, copyNode) + '</div>' : '')
     // one stop down: the call's action opened into its beats on this surface (surfaces/map-stops.js)
     + (tg.kind === 'call' && tg.call.marker ? '<div class="tojrn"><button type="button" class="map-tb map-walk" data-act="beats"' + tipAttrs({ key: 'map.act.walk', noFocus: true }) + '>' + sym('bolt') + esc(t('map.act.walk')) + '</button></div>' : '')
     + (toJrn ? '<div class="tojrn">' + toJrn + '</div>' : '');

@@ -275,6 +275,10 @@ export class SnapshotDb {
     // change from a re-index there, and says nothing rather than guess)
     const cols = this.db.prepare('PRAGMA table_info(snapshot_source)').all() as { name: string }[];
     if (!cols.some((c) => c.name === 'source_digest')) this.db.exec('ALTER TABLE snapshot_source ADD COLUMN source_digest TEXT');
+    // additive (round 2026-10-10, proposal 9): the AI assistant a commit's trailers name as a co-author. A store
+    // read before it reads null — *not read*, never *made by a person* — until the next history read rewrites the row
+    const commitCols = this.db.prepare('PRAGMA table_info("commit")').all() as { name: string }[];
+    if (!commitCols.some((c) => c.name === 'agent')) this.db.exec('ALTER TABLE "commit" ADD COLUMN agent TEXT');
   }
 
   close(): void {
@@ -534,7 +538,7 @@ export class SnapshotDb {
     let files = 0;
     try {
       const commitStmt = this.db.prepare(
-        'INSERT OR REPLACE INTO "commit" (repo, sha, at, author, email, subject, parents, merge) VALUES (?,?,?,?,?,?,?,?)',
+        'INSERT OR REPLACE INTO "commit" (repo, sha, at, author, email, subject, parents, merge, agent) VALUES (?,?,?,?,?,?,?,?,?)',
       );
       const clearStmt = this.db.prepare('DELETE FROM commit_file WHERE repo = ? AND sha = ?');
       const fileStmt = this.db.prepare(
@@ -547,7 +551,7 @@ export class SnapshotDb {
       for (const c of commits) {
         const parents = c.parents ?? [];
         const merge = c.merge ?? parents.length > 1;
-        commitStmt.run(repo, c.sha, c.at, c.author ?? '', c.email ?? '', c.subject ?? '', parents.join(' '), merge ? 1 : 0);
+        commitStmt.run(repo, c.sha, c.at, c.author ?? '', c.email ?? '', c.subject ?? '', parents.join(' '), merge ? 1 : 0, c.agent ?? null);
         clearStmt.run(repo, c.sha);
         // keys and branches are rewritten only when the reader read them: absent is "not read", never "none"
         if (c.keys) {
@@ -673,11 +677,28 @@ export class SnapshotDb {
    * The commits whose sha starts with `prefix` (at least 4 hex characters), in any repository —
    * how a link that names a commit by its short sha finds it (the Map's Affected mode). Newest first.
    */
-  commitsByPrefix(prefix: string): { repo: string; sha: string; at: string; author: string; subject: string }[] {
+  commitsByPrefix(prefix: string): { repo: string; sha: string; at: string; author: string; subject: string; agent?: string }[] {
     const p = String(prefix || '').toLowerCase();
     if (!/^[0-9a-f]{4,40}$/.test(p)) return [];
-    return this.db.prepare('SELECT repo, sha, at, author, subject FROM "commit" WHERE substr(sha, 1, ?) = ? ORDER BY at DESC, repo')
-      .all(p.length, p) as { repo: string; sha: string; at: string; author: string; subject: string }[];
+    return (this.db.prepare('SELECT repo, sha, at, author, subject, agent FROM "commit" WHERE substr(sha, 1, ?) = ? ORDER BY at DESC, repo')
+      .all(p.length, p) as { repo: string; sha: string; at: string; author: string; subject: string; agent: string | null }[])
+      .map(({ agent, ...r }) => (agent ? { ...r, agent } : r));
+  }
+
+  /**
+   * The commits made with an AI assistant, by the assistant's name as its trailer wrote it — any repository
+   * unless `repo`. The names sum to the commits whose `agent` is set (round 2026-10-10, proposal 9).
+   */
+  agentCounts(repo?: string): Record<string, number> {
+    const rows = (repo
+      ? this.db.prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE repo = ? AND agent IS NOT NULL GROUP BY agent').all(repo)
+      : this.db.prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE agent IS NOT NULL GROUP BY agent').all()) as { agent: string; n: number }[];
+    return Object.fromEntries(rows.map((r) => [r.agent, r.n]));
+  }
+
+  /** One repository's commits authored after `since` (ISO 8601), newest first — *since your last session*. */
+  commitsSince(repo: string, since: string): CommitRow[] {
+    return this.commitRows(repo).filter((c) => c.at > since);
   }
 
   /** The nodes a commit changed, or `null` when they were never computed against `graph` (then compute, never assume none). */
@@ -714,12 +735,12 @@ export class SnapshotDb {
       for (const r of fileQ.all(repo, p.path, -tail.length, tail) as { sha: string }[]) credit(r.sha, p.node, 'file');
     }
     if (!by.size) return [];
-    const rowQ = this.db.prepare('SELECT sha, at, author, subject FROM "commit" WHERE repo = ? AND sha = ?');
-    const out: { sha: string; at: string; author: string; subject: string; parts: { node: string; how: 'lines' | 'file' }[] }[] = [];
+    const rowQ = this.db.prepare('SELECT sha, at, author, subject, agent FROM "commit" WHERE repo = ? AND sha = ?');
+    const out: { sha: string; at: string; author: string; subject: string; agent?: string; parts: { node: string; how: 'lines' | 'file' }[] }[] = [];
     for (const [sha, m] of by) {
-      const r = rowQ.get(repo, sha) as { sha: string; at: string; author: string; subject: string } | undefined;
+      const r = rowQ.get(repo, sha) as { sha: string; at: string; author: string; subject: string; agent: string | null } | undefined;
       if (!r) continue;
-      out.push({ sha: r.sha, at: r.at, author: r.author, subject: r.subject, parts: [...m].map(([node, how]) => ({ node, how })) });
+      out.push({ sha: r.sha, at: r.at, author: r.author, subject: r.subject, ...(r.agent ? { agent: r.agent } : {}), parts: [...m].map(([node, how]) => ({ node, how })) });
     }
     return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.sha.localeCompare(b.sha)));
   }
@@ -857,9 +878,9 @@ export class SnapshotDb {
    */
   private commitRows(repo: string, limit?: number): CommitRow[] {
     const rows = this.db
-      .prepare('SELECT sha, at, author, email, subject, parents, merge FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT ?')
+      .prepare('SELECT sha, at, author, email, subject, parents, merge, agent FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT ?')
       .all(repo, limit ?? Number.MAX_SAFE_INTEGER) as {
-      sha: string; at: string; author: string; email: string; subject: string; parents: string; merge: number;
+      sha: string; at: string; author: string; email: string; subject: string; parents: string; merge: number; agent: string | null;
     }[];
     const syncs = new Map<string, number[]>();
     for (const r of this.db
@@ -882,6 +903,7 @@ export class SnapshotDb {
         merge: r.merge === 1,
         indexed: mine.length > 0,
         syncs: mine,
+        ...(r.agent ? { agent: r.agent } : {}),
       };
     });
   }

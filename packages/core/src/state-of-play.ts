@@ -218,5 +218,7 @@ export function stateOfPlayLines(s: StateOfPlay, opts: { register?: Register } =
   out.push(`- ${w(s.open.screensNotBuilt)}${s.open.notBuiltNames.length ? ` (${s.open.notBuiltNames.join(', ')})` : ''}${re(s.open.screensNotBuilt)}`);
   for (const c of [s.open.operationsNotImplemented, s.open.blindSpots, s.open.drift]) out.push(`- ${w(c)}${re(c)}`);
   out.push(`- ${s.open.history ? `${historySentence(s.open.history, register)}${re(s.open.history.read)}` : t('state.historyNone', register)}`);
+  // of those commits, the ones made with an AI assistant (round 2026-10-10, proposal 9) — when the store keeps it
+  if (s.open.history?.agents) out.push(`- ${w(s.open.history.agents)}${s.open.history.agents.breakdown?.length ? ` (${breakdownText(s.open.history.agents, register)})` : ''}${re(s.open.history.agents)}`);
   return out;
 }

@@ -9,7 +9,7 @@ covers what it trusts, what it refuses, and how to report a problem.
 | part | who can reach it | what guards it |
 |---|---|---|
 | **viewer server** (`farsight serve`, default :4477) | processes on this machine; web pages open in your browser | binds `127.0.0.1` only. Answers loopback `Host` names only (`localhost`, `127.0.0.1`, `[::1]`), so a DNS-rebinding page gets 403. Refuses a `POST`/`PUT` whose `Origin` or `Sec-Fetch-Site` names another origin, so another site cannot start a sync, rewrite settings or queue a tracker write. Never sends CORS headers, so another origin cannot read a response. (`packages/server/src/guard.ts`) |
-| **MCP server** (`farsight mcp`) | the client that spawned it, over stdio | no network listener. Its tracker writes are stamped `requestedBy.kind: 'agent'` and go through the same gate as the viewer's. |
+| **MCP server** (`farsight mcp`) | the client that spawned it, over stdio | no network listener. Its tracker writes are stamped `requestedBy.kind: 'agent'` and go through the same gate as the viewer's. Of `.farsight/settings.json` it reads `sources` (for work and code-host sources) and, for the session-start context (`farsight://context`, `graph_overview brief:true`), **only** `mcp.tools`, `mcp.budget` and `lessons` (`packages/mcp/src/context.ts readAgentSettings` drops every other field unread), so a source, its `auth` block or a keychain reference never reaches an agent through the context — `test/mcp-agents.test.ts` asserts it. Lessons are written by a person on the Settings page; no tool writes them, and `PUT /api/settings` refuses a lesson shaped like a credential (a keychain or env reference, a bearer/basic header, a long unbroken token) without echoing it. The core tool tier (the default) is read-only. |
 | **CLI** | you | — |
 | **secrets** | this process only | settings hold a *reference* (`keychain:farsight/<provider>-<instance>`, or `env:NAME` for tests and CI), never a value. `packages/work/src/secrets.ts` resolves it in process with `security` (macOS) or `secret-tool` (Linux). `PUT /api/settings` refuses an `auth.secret` that is not a reference, without echoing what was sent. Errors name the reference, never the value. The Jira client scrubs the token and the encoded header from any error text it keeps. Only response bodies are recorded as fixtures or stored as an item's `raw`; request headers never are. |
 | **trackers** (Jira, Azure DevOps) | reached with your credential | a write needs three verdicts: the workspace policy (`permissions`), the tracker's own answer for this item and action, and a usable credential. A source is `read-only` unless its settings say `edit`. |
@@ -45,6 +45,9 @@ the viewer uses inline handlers.
 ## What Farsight never does
 
 - **No telemetry.** It sends nothing to its authors or to any service you did not configure.
+- **Never reads or prints a session link.** A commit's `Co-Authored-By` trailer names the AI assistant it was made
+  with, and that name is all the commit spine keeps (*made with an agent · <name>*). A `Claude-Session:` or any other
+  URL trailer is never read: which session made which commit is the owner's private record.
 - **Never prints a secret.** It does not log one, put one in an error message, write one to `graph.json`,
   `work.db`, a fixture or the settings file, or serve one over HTTP.
 - **Never writes to a tracker without the three verdicts** (policy, tracker, credential). A dry run

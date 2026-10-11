@@ -6,6 +6,8 @@ args = [
     "--graph",
     "graph.json",
 ]
+# the tool tier: core (the default — orient, find, walk, check a change) or all; .farsight/settings.json → mcp.tools wins
+env = { FARSIGHT_TOOLS = "core" }
 
 [mcp_servers.figma]
 url = "https://mcp.figma.com/mcp"

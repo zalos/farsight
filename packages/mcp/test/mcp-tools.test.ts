@@ -49,6 +49,8 @@ const TOOLS = [
   'graph_changes', 'graph_overview',
   'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
   'search_graph', 'stories', 'storyline_diff', 'test_coverage', 'trace_flow',
+  // in both tiers: the menu, and what a budget left out (round 2026-10-10, proposal 9)
+  'expand', 'tools',
   // work items: always registered
   'work_changes', 'work_item', 'work_items', 'work_links', 'work_sync',
 ];
@@ -128,7 +130,8 @@ before(async () => {
   const data = JSON.parse(readFileSync(graph, 'utf8')) as { nodes: GraphNode[]; edges: GraphEdge[] };
   index = buildIndex(data.nodes, data.edges);
 
-  const { server } = createMcpServer(graph);
+  // every tool: this suite drives the whole surface (the core tier is mcp-agents.test.ts)
+  const { server } = createMcpServer(graph, { tools: 'all' });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await server.connect(serverSide);
   client = new Client({ name: 'mcp-tools-test', version: '0' });
@@ -642,14 +645,14 @@ describe('work items — read from the local copy, written only where granted', 
     try {
       cpSync(graph, join(ro, 'graph.json'));
       writeWorkspace(ro, 'read-only');
-      const { server } = createMcpServer(join(ro, 'graph.json'));
+      const { server } = createMcpServer(join(ro, 'graph.json'), { tools: 'all' });
       const [c, s] = InMemoryTransport.createLinkedPair();
       await server.connect(s);
       const other = new Client({ name: 'mcp-tools-test-ro', version: '0' });
       await other.connect(c);
       try {
         const { tools } = await other.listTools();
-        assert.deepEqual(tools.map((t) => t.name).sort(), TOOLS);
+        assert.deepEqual(tools.map((t) => t.name).sort(), [...TOOLS].sort());
         const r = await other.callTool({ name: 'graph_overview', arguments: {} });
         const out = (r.content as { text: string }[]).map((x) => x.text).join('\n');
         assert.match(out, /agent writes: none/);

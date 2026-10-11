@@ -6,6 +6,7 @@ export * from './strings.js';
 export * from './modelhub.js';
 export * from './snapshots.js';
 export * from './history.js';
+export * from './agent-trailer.js';
 export * from './diff.js';
 export * from './openapi.js';
 export * from './stitch.js';

@@ -42,6 +42,9 @@ import { registerWorkTools } from './work.js';
 import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
 import { registerAffectedTools } from './affected-tools.js';
+import { cutToBudget, budgetFor, shortHeading, MIN_BUDGET, DEFAULT_BUDGET, type LeftOutPart } from './budget.js';
+import { resolveTier, inTier, tierOf, tierLine, CORE_TOOLS, type ToolTier } from './tiers.js';
+import { readAgentSettings, contextBlock, sinceOf } from './context.js';
 
 /** Serve the graph over stdio — what `farsight mcp` runs. */
 export async function runMcpServer(graphArg?: string): Promise<void> {
@@ -55,8 +58,12 @@ export async function runMcpServer(graphArg?: string): Promise<void> {
  * puts it on stdio, and the package's tests put it on an in-memory transport so
  * each tool is driven exactly as an agent drives it.
  */
-export function createMcpServer(graphArg?: string): { server: McpServer; graphPath: string; nodeCount: () => number } {
+export function createMcpServer(graphArg?: string, opts: { tools?: ToolTier } = {}): { server: McpServer; graphPath: string; nodeCount: () => number; tier: ToolTier } {
 const graphPath = resolve(graphArg ?? process.env.FARSIGHT_GRAPH ?? 'graph.json');
+// what this session reads from .farsight/settings.json: mcp.tools, mcp.budget and lessons — nothing else (context.ts)
+const agentSettings = readAgentSettings(dirname(graphPath));
+// the tool tier (tiers.ts): a caller's word (the tests), else settings, else FARSIGHT_TOOLS, else core
+const tierChoice = opts.tools ? { tier: opts.tools, from: 'settings' as const } : resolveTier(agentSettings.tools, process.env.FARSIGHT_TOOLS);
 
 // mutable so refresh_graph can swap the loaded graph in place
 let store = GraphStore.load(graphPath);
@@ -498,6 +505,46 @@ const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 
 const server = new McpServer({ name: 'farsight', version: '0.0.1' });
 
+// ── every tool through one door (round 2026-10-10, proposal 9) ─────────────────────────────────────────────
+// Each registration — here, in work.ts, config-tools.ts, journeys-tools.ts, affected-tools.ts — passes this
+// wrapper, so every tool (1) takes an optional `budget`, (2) has its answer cut to it at a clean boundary with
+// `## left out` naming the ids and the `expand` call, and (3) is recorded for the `tools` menu and the tier.
+interface ToolEntry { name: string; title: string; handle: { disable(): void; enabled: boolean }; call: (args: Record<string, unknown>) => Promise<unknown> }
+const toolRegistry: ToolEntry[] = [];
+/** the parts each budget cut left out, by its handle (`cut:N`) — what `expand` returns; the last 50 cuts */
+const cuts = new Map<string, { tool: string; parts: LeftOutPart[] }>();
+let cutSeq = 0;
+const BUDGET_INPUT = z.number().int().min(MIN_BUDGET).optional()
+  .describe(`rough token budget for this answer (characters ÷ 4), default ${agentSettings.budget ?? DEFAULT_BUDGET} (.farsight/settings.json → mcp.budget, else ${DEFAULT_BUDGET}); an answer over it is cut at a section or row and ends with ## left out — the ids it held and the expand call that returns them. A JSON answer is a contract and is never cut`);
+type ToolResult = { content: { type: string; text?: string }[] } & Record<string, unknown>;
+function budgeted(name: string, args: Record<string, unknown>, res: ToolResult): ToolResult {
+  if (!res || !Array.isArray(res.content)) return res;
+  const budget = budgetFor(typeof args.budget === 'number' ? args.budget : undefined, agentSettings.budget);
+  const { budget: _b, ...rest } = args;
+  const content = res.content.map((c) => {
+    if (c.type !== 'text' || typeof c.text !== 'string') return c;
+    const handle = `cut:${cutSeq + 1}`;
+    const r = cutToBudget(c.text, budget, { tool: name, args: rest }, handle);
+    if (!r.cut) return c;
+    cutSeq++;
+    cuts.set(handle, { tool: name, parts: r.leftOut });
+    if (cuts.size > 50) cuts.delete(cuts.keys().next().value!);
+    return { ...c, text: r.text };
+  });
+  return { ...res, content };
+}
+{
+  const original = server.registerTool.bind(server) as unknown as (name: string, config: Record<string, unknown>, cb: (args: Record<string, unknown>, extra: unknown) => unknown) => ToolEntry['handle'];
+  (server as unknown as { registerTool: unknown }).registerTool = (name: string, config: { title?: string; description?: string; inputSchema?: Record<string, unknown> }, cb: (...a: unknown[]) => unknown) => {
+    const hasInput = config.inputSchema !== undefined;
+    const run = async (args: Record<string, unknown>, extra?: unknown) => (hasInput ? cb(args, extra) : cb(extra)) as Promise<ToolResult>;
+    const wrapped = async (args: Record<string, unknown>, extra: unknown) => budgeted(name, args ?? {}, await run(args ?? {}, extra));
+    const handle = original(name, { ...config, inputSchema: { ...(config.inputSchema ?? {}), budget: BUDGET_INPUT } }, wrapped);
+    toolRegistry.push({ name, title: config.title ?? name, handle, call: (args) => run(args) });
+    return handle;
+  };
+}
+
 // work items (Jira / Azure DevOps): read tools always, write tools only where a source grants an agent the action
 const work = registerWorkTools({ server, graphPath, index: () => index, roots: () => store.roots });
 // every farsight.config.json per source — the root's and the ones scoped to a folder (config-tools.ts)
@@ -509,9 +556,13 @@ registerAffectedTools({ server, workspace: dirname(graphPath), index: () => inde
 
 server.registerTool('graph_overview', {
   title: 'Graph overview',
-  description: 'Orient in the codebase graph: which Farsight build is running (version · built · commit) and which wrote the graph, whether a newer build is installed, which graph file and workspace, freshness (when it was ingested), repos, node counts by kind, top tags, and entry points (pages, routes, UI components, and design flows — named features from a screens manifest that run as journeys; one journeys line counts them by persona and group, which the journeys tool lists). Also the tests freshness line, what is in it (flows, route prefixes, tables, third parties, queues), how much change history exists, and the work sources (Jira / Azure DevOps) with their freshness, items by state and which work_* write tools this server grants. Ends with "keeping current": what is out of date and the steps to check, update, restart and re-ingest. Use first in every session, and again when a result looks stale.',
-  inputSchema: {},
-}, async () => {
+  description: 'Orient in the codebase graph: which Farsight build is running (version · built · commit) and which wrote the graph, whether a newer build is installed, which graph file and workspace, freshness (when it was ingested), repos, node counts by kind, top tags, and entry points (pages, routes, UI components, and design flows — named features from a screens manifest that run as journeys; one journeys line counts them by persona and group, which the journeys tool lists). Also the tests freshness line, what is in it (flows, route prefixes, tables, third parties, queues), how much change history exists, and the work sources (Jira / Azure DevOps) with their freshness, items by state and which work_* write tools this server grants. Ends with "keeping current": what is out of date and the steps to check, update, restart and re-ingest, then which tool tier is on. brief:true returns only the session-start context instead (the same text as the farsight://context resource): the state of play in three lines, the history, what moved since your last session (pass since), and the lessons the owner pinned. Use first in every session (brief:true at session start), and again when a result looks stale.',
+  inputSchema: {
+    brief: z.boolean().optional().describe('the session-start context block only — the farsight://context resource'),
+    since: z.string().optional().describe('with brief: when your last session was (an ISO date or time) — default the last 24 hours'),
+  },
+}, async ({ brief, since }) => {
+  if (brief) return text(contextText(since).join('\n'));
   if (!nodes.length) {
     return text([
       '⚠ The graph is empty: 0 nodes, 0 edges.',
@@ -561,22 +612,60 @@ server.registerTool('graph_overview', {
     ...work.overviewLines(),
     '',
     ...currencyLines(),
+    toolsTierLine(),
   ];
   return text(lines.join('\n'));
 });
 
-/** `## state of play` — core stateOfPlay(), the fold the front door and GET /api/state print. */
-function stateOfPlaySection(): string[] {
-  let history = null;
+/** The tier line: which tier is on, how many tools, and how to get the other (tiers.ts). */
+function toolsTierLine(): string {
+  return tierLine({ tier: tierChoice.tier, from: tierChoice.from, on: toolRegistry.filter((x) => inTier(x.name, tierChoice.tier)).length, registered: toolRegistry.length });
+}
+
+/** The history store's fact over every source with its agent count, or null without a store. */
+function historyWithAgents(): ReturnType<typeof historyFact> | null {
+  const p = historyDbPath();
+  if (!p) return null;
+  let db: SnapshotDb | undefined;
+  try {
+    db = new SnapshotDb(p);
+    const repos = [...new Set(nodes.map((n) => n.loc?.repo).filter((r): r is string => !!r))];
+    if (!repos.length) return null;
+    const byAgent: Record<string, number> = {};
+    for (const r of repos) for (const [name, n] of Object.entries(db.agentCounts(r))) byAgent[name] = (byAgent[name] ?? 0) + n;
+    return historyFact(repos.map((r) => db!.commitSpine(r)), { byAgent });
+  } catch { return null; } finally { try { db?.close(); } catch { /* already closed */ } }
+}
+
+/** The session-start context (context.ts): the same lines for the resource and graph_overview brief:true. */
+function contextText(sinceArg?: string): string[] {
+  const since = sinceOf(sinceArg);
+  const history = historyWithAgents();
+  let syncsSince: { sync: number; at: string }[] | null = null;
+  let commitsSince: { n: number; agents: number } | null = null;
   const p = historyDbPath();
   if (p) {
     let db: SnapshotDb | undefined;
     try {
       db = new SnapshotDb(p);
+      syncsSince = db.list(10_000).filter((r) => r.at > since.at).map((r) => ({ sync: r.sync, at: r.at })).sort((a, b) => a.sync - b.sync);
       const repos = [...new Set(nodes.map((n) => n.loc?.repo).filter((r): r is string => !!r))];
-      history = repos.length ? historyFact(repos.map((r) => db!.commitSpine(r))) : null;
-    } catch { history = null; } finally { try { db?.close(); } catch { /* already closed */ } }
+      const rows = repos.flatMap((r) => db!.commitsSince(r, since.at));
+      commitsSince = { n: rows.length, agents: rows.filter((c) => !!c.agent).length };
+    } catch { syncsSince = null; commitsSince = null; } finally { try { db?.close(); } catch { /* already closed */ } }
   }
+  let state;
+  try { state = stateOfPlay(index, store.meta, { history }); } catch (err) { return [`<farsight-context>`, `the state of play could not be folded: ${(err as Error).message.split('\n')[0]}`, '</farsight-context>']; }
+  const b = buildInfo();
+  return contextBlock({
+    state, history, build: `${b.version}${b.commit ? `·${b.commit}` : ''}`, since, syncsSince, commitsSince,
+    lessons: agentSettings.lessons, tools: toolsTierLine(),
+  });
+}
+
+/** `## state of play` — core stateOfPlay(), the fold the front door and GET /api/state print. */
+function stateOfPlaySection(): string[] {
+  const history = historyWithAgents();
   try {
     return ['## state of play', ...stateOfPlayLines(stateOfPlay(index, store.meta, { history }))];
   } catch (err) {
@@ -1149,7 +1238,7 @@ server.registerTool('journey', {
     const sg = segAt.get(s.order);
     if (sg) {
       const gates = sg.gates.map((g) => `${g.kind === 'rule' ? '⛨' : '🔒'} ${g.name}${g.planned ? ' (planned)' : ''}${g.count > 1 ? ` ×${g.count}` : ''}`).join(' · ');
-      lines.push(`### segment ${sg.index + 1}${sg.screen ? ` · ${sg.screen.designId ? `${sg.screen.designId} ` : ''}${sg.screen.name}` : ' · before the first screen'} — ${sg.counts.calls} call(s)${sg.counts.planned ? `, ${sg.counts.planned} planned` : ''}${sg.counts.records ? `, ${sg.counts.records} record(s)` : ''}${sg.counts.messages ? `, ${sg.counts.messages} message(s)` : ''}${gates ? ` — ${gates}` : ''}`);
+      lines.push(`### segment ${sg.index + 1}${sg.screen ? ` · ${sg.screen.designId ? `${sg.screen.designId} ` : ''}${sg.screen.name}` : ' · before the first screen'} — ${sg.counts.calls} call(s)${sg.counts.planned ? `, ${sg.counts.planned} planned` : ''}${sg.counts.records ? `, ${sg.counts.records} record(s)` : ''}${sg.counts.messages ? `, ${sg.counts.messages} message(s)` : ''}${gates ? ` — ${gates}` : ''}${sg.screen ? ` \`${sg.screen.id}\`` : ''}`);
       // one coverage line per segment when the graph knows about tests at all
       const cov = sum.coverage?.segments[sg.index];
       // the end-to-end rung by name, never a boolean: `reached` means a test body
@@ -1613,6 +1702,15 @@ function historyLines(): string[] {
 
 const SEVERITY_ORDER = ['breaking', 'notable', 'info'] as const;
 
+/** ` · made with an agent · <name>` when the history names an AI assistant as the commit's co-author; '' otherwise. Never a session link. */
+function agentWords(db: SnapshotDb, sha: string | undefined | null): string {
+  if (!sha) return '';
+  try {
+    const agent = db.commitsByPrefix(sha)[0]?.agent;
+    return agent ? ` · ${t('history.agentMade', 'professional').replace('{name}', agent)}` : '';
+  } catch { return ''; }
+}
+
 server.registerTool('graph_changes', {
   title: 'What changed between two syncs',
   description: 'The semantic diff between two snapshots of the graph — the frozen farsight-diff v1 document the Changes tab, `farsight diff` and `farsight gate` use: routes, gates (guards), rules, records and their columns, messages, journeys, tests and coverage added or removed, renames, and edge-confidence changes, each with its severity (breaking · notable · info) and one sentence. Code-body edits that change none of those are deliberately not reported. Default compares the latest sync with the one before it. Use to review what a change did to the system\'s shape, to check a refactor removed no gate or route, or to catch coverage lost. list:true lists the recorded syncs. format:"json" is the frozen document; "md" and "sarif" are its renderings.',
@@ -1637,7 +1735,7 @@ server.registerTool('graph_changes', {
       if (!rows.length) return text('no snapshots recorded yet.');
       return text([
         `${rows.length} most recent sync(s) — newest first`,
-        ...rows.map((r) => `sync:${r.sync}${r.pinned ? ' (pinned)' : ''} · ${r.at} · ${r.commit ? r.commit.slice(0, 7) : 'no commit recorded'} · ${r.nodes} nodes · ${r.edges} edges · digest ${r.digest}`),
+        ...rows.map((r) => `sync:${r.sync}${r.pinned ? ' (pinned)' : ''} · ${r.at} · ${r.commit ? r.commit.slice(0, 7) : 'no commit recorded'}${agentWords(db, r.commit)} · ${r.nodes} nodes · ${r.edges} edges · digest ${r.digest}`),
       ].join('\n'));
     }
     const toRef = parseSyncRef(to ?? 'latest');
@@ -1657,7 +1755,7 @@ server.registerTool('graph_changes', {
     const nonzero = Object.entries(diff.counts).filter(([, n]) => n > 0);
     const bySev = diff.changes.reduce<Record<string, number>>((a, c) => { a[c.severity] = (a[c.severity] ?? 0) + 1; return a; }, {});
     const lines = [
-      `# changes ${diff.base} → ${diff.head}`,
+      `# changes ${diff.base} → ${diff.head}${head.ref.commit ? ` — head commit ${head.ref.commit.slice(0, 7)}${agentWords(db, head.ref.commit)}` : ''}`,
       nonzero.length
         ? `counts (every change of a kind farsight-diff v1 carries, between these two syncs): ${nonzero.map(([k, n]) => `${k} ${n}`).join(' · ')}`
         : 'no change of a kind farsight-diff v1 carries — routes, gates, rules, records, messages, journeys, tests, coverage. Code-body edits are not in this contract, so this is not a claim nothing was edited.',
@@ -2268,5 +2366,72 @@ server.registerTool('model_hub_state', {
   return text(lines.join('\n'));
 });
 
-return { server, graphPath, nodeCount: () => nodes.length };
+// ── the menu, and what a budget left out (in both tiers) ──────────────────────────────────────────────────
+server.registerTool('tools', {
+  title: 'Tools — every tool, its tier, and whether it is on',
+  description: 'The menu: every tool this server registered, one line each — its name, its tier (core: orient, find, walk and check a change; all: everything else — API and design surfaces, history, work items, stories, rules, refresh), whether it is on in this session, and what it answers. The core tier is on by default; .farsight/settings.json → "mcp": { "tools": "all" } (or FARSIGHT_TOOLS=all when the settings name none) turns every tool on after a restart. Every tool takes budget (a rough token count) and ends an answer it had to cut with ## left out and the expand call. Use when a tool you expected is missing, or to see what else this server can answer.',
+  inputSchema: {
+    tier: z.enum(['core', 'all']).optional().describe('list only the tools of one tier'),
+  },
+}, async ({ tier }) => {
+  const rows = toolRegistry.filter((x) => !tier || tierOf(x.name) === tier || (tier === 'all'));
+  const on = (x: ToolEntry) => inTier(x.name, tierChoice.tier);
+  const lines = [
+    `# tools — ${toolRegistry.filter(on).length} of ${toolRegistry.length} on (the ${tierChoice.tier} tier)${tierChoice.ignored ? ` · "${tierChoice.ignored}" is not a tier and was ignored` : ''}`,
+    toolsTierLine(),
+    '',
+  ];
+  for (const x of [...rows].sort((a, b) => (tierOf(a.name) === tierOf(b.name) ? a.name.localeCompare(b.name) : tierOf(a.name) === 'core' ? -1 : 1))) {
+    lines.push(`${on(x) ? '●' : '○'} ${x.name} · ${tierOf(x.name)}${on(x) ? '' : ' · off in this session'} — ${x.title}`);
+  }
+  if (!toolRegistry.some((x) => x.name === 'affected')) lines.push('', 'affected (core) is not registered: no code-host source in .farsight/settings.json grants agents read.');
+  if (!toolRegistry.some((x) => x.name.startsWith('work_') && !['work_items', 'work_item', 'work_links', 'work_changes', 'work_sync'].includes(x.name))) {
+    lines.push('work_comment · work_assign · work_transition · work_edit · work_label · work_link (all) register only where an edit-mode work source grants agents that action.');
+  }
+  return text(lines.join('\n'));
+});
+
+server.registerTool('expand', {
+  title: 'Expand — what a budget left out',
+  description: 'Returns the parts of an earlier answer that its budget left out. Pass the ids its ## left out section named (each returns the parts of the cut answers that name it, newest first), or the cut handle it printed (cut:N — every part left out of that answer). An id no answer this session cut is described instead (describe_node without its change context), so a left-out id is always readable. The expansion is budgeted too and ends with its own ## left out when it is still too long. Use right after an answer ends with ## left out, instead of guessing at what was cut.',
+  inputSchema: {
+    ids: z.array(z.string()).min(1).describe('node ids from a ## left out section, or its cut:N handle'),
+  },
+}, async ({ ids }) => {
+  const out: string[] = [];
+  const said = new Set<string>();
+  const partText = (tool: string, part: LeftOutPart) => {
+    const where = part.where.filter(Boolean).map(shortHeading).join(' › ');
+    return `${where ? `(${tool} › ${where})\n` : `(${tool})\n`}${part.text}`;
+  };
+  for (const id of ids) {
+    const cut = cuts.get(id);
+    if (cut) {
+      out.push(`## ${id} — every part left out of that ${cut.tool} answer`);
+      for (const part of cut.parts) { out.push(partText(cut.tool, part)); said.add(part.text); }
+      continue;
+    }
+    const hits = [...cuts.entries()].reverse().flatMap(([, c]) => c.parts.filter((p) => p.ids.includes(id)).map((p) => ({ tool: c.tool, part: p })));
+    if (hits.length) {
+      out.push(`## ${id}`);
+      for (const h of hits) { if (said.has(h.part.text)) continue; said.add(h.part.text); out.push(partText(h.tool, h.part)); }
+      continue;
+    }
+    const n = index.byId.get(id);
+    out.push(`## ${id}`, n ? `no answer this session left it out — what it is:\n${nodeDetail(n)}` : 'no answer this session left it out, and no node has this id — search_graph finds ids');
+  }
+  return text(out.join('\n'));
+});
+
+// ── the session-start context as a resource: what a client reads before its first call ─────────────────────
+server.registerResource('context', 'farsight://context', {
+  title: 'Farsight session-start context',
+  description: 'The state of play (built · validated by a run · still open), the history with how many commits were made with an agent, what moved in the last 24 hours, and the lessons the owner pinned — one <farsight-context> block. graph_overview brief:true returns the same text and takes since.',
+  mimeType: 'text/plain',
+}, async (uri) => ({ contents: [{ uri: uri.href, mimeType: 'text/plain', text: contextText().join('\n') }] }));
+
+// ── the tier: every tool is registered, so the menu is whole; the ones outside the tier are switched off ──
+for (const x of toolRegistry) if (!inTier(x.name, tierChoice.tier)) x.handle.disable();
+
+return { server, graphPath, nodeCount: () => nodes.length, tier: tierChoice.tier };
 }

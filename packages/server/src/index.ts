@@ -85,6 +85,16 @@ export interface Settings {
    * on one zoomable board) — a nav tab and a Portfolio button; read by the viewer only.
    */
   flags?: { journeyDrill?: boolean; designShots?: boolean; map?: boolean };
+  /**
+   * What an MCP session reads (round 2026-10-10, proposal 9): `tools` is the tier (`core` by default, `all` for
+   * every tool), `budget` the default answer budget in tokens. Read by `farsight mcp` only.
+   */
+  mcp?: { tools?: 'core' | 'all'; budget?: number };
+  /**
+   * The owner's lessons for agents: a pinned one is read at the start of every agent session (MCP resource
+   * `farsight://context`). Written by a person on the Settings page; no tool writes them. Never a secret.
+   */
+  lessons?: { text: string; pinned?: boolean; date?: string }[];
 }
 
 function settingsPath(ws: string) { return join(ws, '.farsight', 'settings.json'); }
@@ -115,6 +125,14 @@ export function settingsProblem(body: unknown): string | null {
   const s = body as { sources?: unknown; collections?: unknown };
   if (!Array.isArray(s.sources)) return 'settings.sources must be an array';
   if (s.collections !== undefined && !Array.isArray(s.collections)) return 'settings.collections must be an array';
+  const lp = lessonsProblem((body as { lessons?: unknown }).lessons);
+  if (lp) return lp;
+  const mcp = (body as { mcp?: { tools?: unknown; budget?: unknown } }).mcp;
+  if (mcp !== undefined) {
+    if (!mcp || typeof mcp !== 'object' || Array.isArray(mcp)) return 'settings.mcp must be an object';
+    if (mcp.tools !== undefined && mcp.tools !== 'core' && mcp.tools !== 'all') return 'settings.mcp.tools must be core or all';
+    if (mcp.budget !== undefined && !(typeof mcp.budget === 'number' && Number.isInteger(mcp.budget) && mcp.budget >= 500)) return 'settings.mcp.budget must be a whole number of tokens, 500 or more';
+  }
   for (const [i, src] of s.sources.entries()) {
     if (!src || typeof src !== 'object') return `sources[${i}] must be an object`;
     const x = src as { id?: unknown; name?: unknown; type?: unknown; path?: unknown; auth?: { secret?: unknown } };
@@ -128,6 +146,31 @@ export function settingsProblem(body: unknown): string | null {
       // never echo it: it may be a pasted token
       return `sources[${i}].auth.secret must be a keychain: or env: reference — secrets never go in settings`;
     }
+  }
+  return null;
+}
+
+/** A lesson's longest text, in characters (the MCP context clips to the same). */
+export const LESSON_MAX = 400;
+/** Text that looks like a credential: a keychain or env reference, a bearer/basic header, or a long unbroken token. */
+const SECRET_SHAPE = /keychain:|\benv:[A-Z_]|\b(?:bearer|basic)\s+[A-Za-z0-9+/=._-]{12,}|[A-Za-z0-9+_=-]{32,}/i;
+
+/**
+ * Lessons are read by every agent session, so one may never carry a credential: each is `{ text, pinned?, date? }`,
+ * text at most LESSON_MAX characters and not shaped like a token, a key or a keychain reference. Null when sound.
+ */
+export function lessonsProblem(v: unknown): string | null {
+  if (v === undefined) return null;
+  if (!Array.isArray(v)) return 'settings.lessons must be an array';
+  for (const [i, l] of v.entries()) {
+    if (!l || typeof l !== 'object' || Array.isArray(l)) return `lessons[${i}] must be an object`;
+    const x = l as { text?: unknown; pinned?: unknown; date?: unknown };
+    if (typeof x.text !== 'string' || !x.text.trim()) return `lessons[${i}].text must be a non-empty string`;
+    if (x.text.length > LESSON_MAX) return `lessons[${i}].text is longer than ${LESSON_MAX} characters`;
+    // never echo it: it may be a pasted token
+    if (SECRET_SHAPE.test(x.text)) return `lessons[${i}].text looks like a credential — a lesson is read by every agent, and a secret belongs in the keychain`;
+    if (x.pinned !== undefined && typeof x.pinned !== 'boolean') return `lessons[${i}].pinned must be true or false`;
+    if (x.date !== undefined && typeof x.date !== 'string') return `lessons[${i}].date must be a date string`;
   }
   return null;
 }
@@ -933,11 +976,16 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if (repos.length && existsSync(dbFile)) {
         try {
           const db = openHistory(ws);
-          try { history = historyFact(repos.map((r) => db.commitSpine(r))); } finally { db.close(); }
+          try {
+            // the commits made with an AI assistant, by name, over the same sources (round 2026-10-10, proposal 9)
+            const byAgent: Record<string, number> = {};
+            for (const r of repos) for (const [name, n] of Object.entries(db.agentCounts(r))) byAgent[name] = (byAgent[name] ?? 0) + n;
+            history = historyFact(repos.map((r) => db.commitSpine(r)), { byAgent });
+          } finally { db.close(); }
         } catch { history = null; }
       }
       const tests = folded(g.index, 'tests', scopeKey(scope) + '|all', () => testsSurface(g.index, scope, g.meta.tests));
-      const state = folded(g.index, 'state', scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}` : '-'), () => stateOfPlay(g.index, g.meta, { scope, tests, history }));
+      const state = folded(g.index, 'state', scopeKey(scope) + '|' + (history ? `${history.read.n}/${history.notYet.n}/${history.agents?.n ?? '-'}` : '-'), () => stateOfPlay(g.index, g.meta, { scope, tests, history }));
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, scope: scopeParam ?? 'all', ...state }));
     }
     // ── journeys organised by persona and group (journey-organisation-and-config-files.md §4.4) — before

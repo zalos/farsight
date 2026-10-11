@@ -959,6 +959,16 @@ string union, a const list; each write of the field). Config only names them, pe
 7. CLI equivalents: farsight design list · farsight journeys [--persona p] · farsight design diff
    --manifest <path> --repo <name> --strict.
 
+Which tools an agent sees: the core tier is on by default — graph_overview, journeys, journey,
+describe_node, search_graph, trace_flow, impact_of, gate, test_coverage (and affected when a code-host
+source grants agents read), plus tools (the menu) and expand. design_surface, design_drift, api_surface,
+api_drift and design_guide itself are in the all tier: set "mcp": { "tools": "all" } in
+.farsight/settings.json (or FARSIGHT_TOOLS=all when the settings name none) and restart the MCP server.
+Every tool takes budget (a rough token count, characters ÷ 4; default "mcp": { "budget": 8000 }); an answer
+over it is cut at a section or a segment and ends with ## left out — the ids it held and the expand call
+that returns them. At session start, read the farsight://context resource (or graph_overview brief:true
+since:<your last session>): the state of play, what moved since, and the lessons the owner pinned.
+
 ## 5 · How a journey is drawn (HUD) and printed (MCP) — the blueprint timeline
 
 Every journey — from a flow, a screen, a route or a function — folds into the same blueprint

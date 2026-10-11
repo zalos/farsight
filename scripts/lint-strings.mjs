@@ -74,6 +74,8 @@ const CHROME_FILES = [
   'surfaces/codemap-projects.js', 'lib/codemap-model.js',
   // the Config files list on the Settings page (round 2026-10-05 §6)
   'surfaces/settings-config.js',
+  // the lessons for agents and the empty states (round 2026-10-10, proposal 9)
+  'surfaces/settings-lessons.js', 'lib/empty-state.js', 'lib/copy-doors.js',
   // the project picker (one searchable list wherever a project, a tag value or a package is picked)
   'lib/multi-pick.js', 'lib/multi-pick-model.js',
   // export: the Save control, its menu and the saved picture's footer (round 2026-10-05, lane E)
