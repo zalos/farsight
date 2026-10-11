@@ -1565,7 +1565,9 @@
   #jrn-insp{width:min(38%,600px);flex-shrink:0;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel);min-height:0}
   #jrn-insp.empty{width:auto;max-width:210px}
   #jrn-insp.empty .jrn-insp-hint{padding:14px 12px;line-height:1.6;white-space:normal}
-  .jrn-insp .tabs{display:flex;gap:2px;padding:6px 10px 0;border-bottom:1px solid var(--line);flex-shrink:0;align-items:center}
+  .jrn-insp .tabs{display:flex;flex-wrap:wrap;gap:2px;padding:6px 10px 0;border-bottom:1px solid var(--line);flex-shrink:0;align-items:center}
+  /* a narrow dock (360 px): the tabs wrap to a second row rather than push the last tab and ✕ past its edge */
+  .jrn-insp .tabs button{padding-left:8px;padding-right:8px}
   .jrn-insp .tabs button{background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;padding:6px 10px;cursor:pointer;white-space:nowrap}
   .jrn-insp .tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
   .jrn-insp .tabs button:hover{color:var(--ink)}
