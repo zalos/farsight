@@ -98,12 +98,30 @@ export function clauseHtml(c, o = {}) {
 // ── the box and the card ────────────────────────────────────────────────────────────────────────────
 
 /** The question box: the input, the button, and where the answer lands. `o.id` names it for a redraw. */
+/**
+ * The box's example question, built from this graph's statuses (`GET /api/ask?example=1`, core `askExample`) — asked
+ * once, then every box on screen takes it; the catalog's example stands in until it lands (swarm round 3: the fixed
+ * example asked about a status the reference app does not have).
+ */
+let EXAMPLE = null;
+let EXAMPLE_ASKED = false;
+function askExampleNow() {
+  if (EXAMPLE_ASKED || typeof fetch === 'undefined') return;
+  EXAMPLE_ASKED = true;
+  fetch(API + '?example=1').then((r) => (r.ok ? r.json() : null)).then((b) => {
+    if (!b || !b.example) return;
+    EXAMPLE = b.example;
+    for (const q of document.querySelectorAll('.ask-q')) q.setAttribute('placeholder', EXAMPLE);
+  }).catch(() => {});
+}
+
 export function askBoxHtml(o = {}) {
+  askExampleNow();
   return '<div class="ask-wrap" data-ask="' + esc(o.id || 'ask') + '"' + (o.repo ? ' data-repo="' + esc(o.repo) + '"' : '') + '>'
     + '<div class="ask-title"><span class="hud-label"' + defAttrs('ask.title') + '>' + esc(t('ask.title')) + '</span>'
     + '<span class="ask-sub"' + defAttrs('ask.sub') + '>' + esc(t('ask.sub')) + '</span></div>'
     + '<form class="ask-box" role="search" onsubmit="return fsAsk(this, event)">'
-    + '<input type="text" class="ask-q" name="q" autocomplete="off" spellcheck="false" aria-label="' + esc(t('ask.title')) + '" placeholder="' + esc(t('ask.placeholder')) + '"'
+    + '<input type="text" class="ask-q" name="q" autocomplete="off" spellcheck="false" aria-label="' + esc(t('ask.title')) + '" placeholder="' + esc(EXAMPLE || t('ask.placeholder')) + '"'
     + (o.q ? ' value="' + esc(o.q) + '"' : '') + '>'
     + '<button type="submit" class="map-tb ask-go"' + defAttrs('ask.go') + '>' + esc(t('ask.go')) + '</button></form>'
     + '<div class="ask-out" aria-live="polite"></div></div>';
@@ -123,6 +141,11 @@ export function askCardHtml(a, o = {}) {
     + '<div class="ask-chips"><span class="ask-derived"' + defAttrs('ask.derived') + '>' + esc(t('ask.derived')) + '</span>'
     + (a.phrased ? '<span class="ask-phrased"' + defAttrs('ask.phrased') + '>' + esc(t('ask.phrased')) + '</span>' : '') + '</div>';
   for (const c of a.lead || []) html += '<p class="ask-lead r-' + esc(c.role) + (c.warn ? ' warn' : '') + '">' + line(c) + '</p>';
+  // did you mean: the nearest shapes filled with the question's own nouns — a click asks it (swarm round 3)
+  if (a.suggest && a.suggest.length) {
+    html += '<div class="ask-suggest"><span class="hud-label"' + defAttrs('ask.didYouMean') + '>' + esc(t('ask.didYouMean')) + '</span>'
+      + a.suggest.map((q) => '<button type="button" class="ask-sugg" data-q="' + esc(q) + '" onclick="fsAskSuggest(this)">' + esc(q) + '</button>').join('') + '</div>';
+  }
   if (a.shapes) html += '<ul class="ask-shapes">' + a.shapes.map((k) => '<li' + defAttrs(k) + '>' + esc(t(k)) + '</li>').join('') + '</ul>';
   for (const s of a.sections || []) {
     html += '<div class="ask-sec"><span class="hud-label"' + defAttrs(s.key) + '>' + esc(t(s.key)) + '</span><ul>'
@@ -182,3 +205,13 @@ function fsAsk(form, e) {
   return false;
 }
 if (typeof window !== 'undefined') window.fsAsk = fsAsk;
+
+/** A *did you mean* question: put it in the box and ask it. */
+function fsAskSuggest(btn) {
+  const wrap = btn && btn.closest('.ask-wrap');
+  const q = wrap && wrap.querySelector('.ask-q');
+  if (!wrap || !q) return;
+  q.value = btn.dataset.q || '';
+  askNow(wrap, q.value);
+}
+if (typeof window !== 'undefined') window.fsAskSuggest = fsAskSuggest;

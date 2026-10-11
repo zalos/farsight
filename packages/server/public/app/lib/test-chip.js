@@ -110,7 +110,7 @@ export function runsSentenceHtml(verdict, api) {
  * count came from (its tip), `opts.distinct` marks a total printed beside
  * per-screen counts (its tip is `opts.distinct`, the per-screen table args),
  * `opts.word: false` leaves the evidence word out (a caller that prints it
- * itself), `opts.cls` adds a class, `opts.zero` prints a 0 with its scope. `''` when the fold has no cases and no
+ * itself), `opts.basis: false` leaves out the declaring cases beside the word (a card with no room; the word's tip names them), `opts.cls` adds a class, `opts.zero` prints a 0 with its scope. `''` when the fold has no cases and no
  * report — the caller prints its absence words, which carry their own scope.
  */
 export function testChipHtml(facts, opts = {}) {
@@ -134,7 +134,7 @@ export function testChipHtml(facts, opts = {}) {
   const word = opts.word === false ? '' : testEvidenceHtml(f, opts);
   return CHIP_OPEN + esc(opts.cls || '') + '" data-scope="' + esc(k.scope || '') + '">'
     + num + SEP + scopeWordHtml(scope) + distinct
-    + (word ? SEP + word + testBasisHtml(f) : '')
+    + (word ? SEP + word + (opts.basis === false ? '' : testBasisHtml(f)) : '')
     + (opts.runs === false ? runPartsHtml(f.verdict, opts.api) : runsSentenceHtml(f.verdict, opts.api))
     + '</span>';
 }

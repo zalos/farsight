@@ -2306,12 +2306,15 @@ function jrnEvidenceTip(el, a) {
     // the cell's verdict (core `testVerdict().status`): none when a coverage report alone earned the word
     ['tip.journey.obs.verdict', a.verdict ? (a.verdict.status ? 'tests.run.' + a.verdict.status : '') : o.by === 'runs' ? '' : 'tests.run.' + (o.status || 'unknown')],
     ['tip.journey.obs.since', o.freshness === 'changed' && o.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + (o.freshness || 'unknown')],
-  ].filter((r) => r[1]) : [['tip.journey.obs.by', 'journey.obs.none']];
+  ].filter((r) => r[1]) : null;
   const biz = currentLens() === 'business';
+  // no run handed with the word: a word a run earned says nothing more here (its run is on the surface that drew it);
+  // a claim or a reading says so as a sentence — never a table row reading *observed by — nothing observed* (swarm round 3)
+  const noRun = !rows && ev.cls !== 'observed' && ev.cls !== 'stale' ? '<p class="tip-p">' + esc(def('journey.obs.none')) + '</p>' : '';
   return '<div class="tip-h">' + esc(t(ev.key)) + '</div>'
     + (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '')
     + (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '')
-    + tableTip({ caption: 'tip.journey.obs.head', rows })
+    + (rows ? tableTip({ caption: 'tip.journey.obs.head', rows }) : noRun)
     // *stale* as a comparison: the sentence that names the run's side and the code's (core freshness.ts)
     + (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '');
 }

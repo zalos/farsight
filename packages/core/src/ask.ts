@@ -76,6 +76,12 @@ export interface AskAnswer {
   resolved: { term: string; id: string; name: string }[];
   /** the catalog keys of the shapes Ask understands — on an unknown question */
   shapes?: string[];
+  /**
+   * *Did you mean*: the nearest shapes filled with the question's own nouns, each one Ask would answer (its terms
+   * resolve) — on a question it could not place or whose words matched nothing (swarm round 3, finding 2: *who
+   * approves an invoice* got *nothing matches*). Never answered on the reader's behalf: the reader picks one.
+   */
+  suggest?: string[];
   /** a model's rephrasing, beside the cited lines — only when a caller passed `phrase` */
   phrased?: { text: string; by: 'model' };
 }
@@ -195,12 +201,22 @@ function pool(index: GraphIndex): Cand[] {
 
 /** The best match for a phrase, preferring the kinds named first. */
 function resolveTerm(index: GraphIndex, term: string, prefer: readonly Cand['kind'][] = [], repo?: string): Cand | undefined {
+  return resolveTermAll(index, term, prefer, repo).best;
+}
+
+/**
+ * The best match and the others that matched as well (the same score, a different part): when the words name
+ * several parts, the answer says which it picked and lists the rest (swarm round 3: *which tests reach loadDraft*
+ * answered one of two `loadDraft`s without saying so; *what guards approve* picked the vendor account's approval).
+ */
+function resolveTermAll(index: GraphIndex, term: string, prefer: readonly Cand['kind'][] = [], repo?: string): { best?: Cand; others: Cand[] } {
   const direct = index.byId.get(term.trim());
-  if (direct) return { id: direct.id, kind: direct.kind, names: [direct.name] };
+  if (direct) return { best: { id: direct.id, kind: direct.kind, names: [direct.name] }, others: [] };
   const q = norm(term);
-  if (!q) return undefined;
+  if (!q) return { others: [] };
   const qt = q.split(' ');
   let best: { c: Cand; s: number } | undefined;
+  const scored: { c: Cand; s: number }[] = [];
   for (const c of pool(index)) {
     if (repo && !c.id.startsWith(`${repo}::`)) continue;
     let s = 0;
@@ -222,9 +238,109 @@ function resolveTerm(index: GraphIndex, term: string, prefer: readonly Cand['kin
     if (!s) continue;
     const pi = prefer.indexOf(c.kind);
     s += pi >= 0 ? (prefer.length - pi) * 3 : 0;
+    scored.push({ c, s });
     if (!best || s > best.s || (s === best.s && (KIND_RANK[c.kind] ?? 9) < (KIND_RANK[best.c.kind] ?? 9))) best = { c, s };
   }
-  return best && best.s >= 25 ? best.c : undefined;
+  if (!best || best.s < 25) return { others: [] };
+  const b = best;
+  // the others: as good a match, of the same kind, a different part (the same node met on two journeys is one part)
+  const seen = new Set([b.c.id]);
+  const others: Cand[] = [];
+  for (const x of scored) {
+    if (x.s < b.s || x.c.kind !== b.c.kind || seen.has(x.c.id)) continue;
+    seen.add(x.c.id);
+    others.push(x.c);
+  }
+  return { best: b.c, others };
+}
+
+/** Where a matched part sits, in words: the journey for a screen or an action, else its file. */
+function whereOf(index: GraphIndex, c: Cand): string {
+  if (c.flowId) { const f = index.byId.get(c.flowId); return f?.design?.name ?? f?.name ?? c.flowId; }
+  return locOf(index.byId.get(c.id)) || c.id.split('::')[0]!;
+}
+
+/** The line that says which part the words were read as, and the others they match as well — '' when only one. */
+function pickedLine(index: GraphIndex, best: Cand, others: Cand[]): TourClause | undefined {
+  if (!others.length) return undefined;
+  const nm = (c: Cand) => (c.kind === 'action' || c.kind === 'screen' ? c.names[0]! : index.byId.get(c.id)?.name ?? c.id);
+  const list = others.slice(0, 5).map((c) => `${bare(nm(c))} (${whereOf(index, c)})`).join(' · ') + (others.length > 5 ? ` · +${others.length - 5}` : '');
+  const c = counted(others.length, 'ask.unit.alsoMatch', 'count.scope.question', `${SRC} → resolveTermAll (as good a match, the same kind, another part)`, { bizUnit: 'ask.unit.alsoMatch' });
+  return line('words', 'ask.picked', { name: bare(nm(best)), where: whereOf(index, best), count: countWords(c), others: list }, [best.id, ...others.slice(0, 5).map((x) => x.id)],
+    { counted: c, bizKey: 'ask.biz.picked', bizVars: { name: bare(nm(best)), count: countWords(c, true), others: others.slice(0, 5).map((x) => bare(nm(x)) + (x.flowId ? ` (${whereOf(index, x)})` : '')).join(' · ') } });
+}
+
+// ── did you mean ────────────────────────────────────────────────────────────────────────────────────────
+
+const STOP = new Set(('who what where when which how why whose is are was were be been do does did can could may might must should will would '
+  + 'the a an of to for in on at by from with and or it its this that these those there any all some i we you me my our your their them '
+  + 'true first before after then than get gets got has have had not no yes please tell show me us about').split(' '));
+
+/** The question's own content words, in order: what a *did you mean* fills a shape with. */
+function nounsOf(q: string): string[] {
+  return norm(q).split(' ').filter((w) => w.length > 2 && !STOP.has(w));
+}
+
+/** A verb's stem, to meet a status the code declares: *approves* · *approve* → *approv* (meets `approved`). */
+const stem = (w: string) => w.replace(/(?:ies|ied)$/, 'y').replace(/(?:ing|ed|es|s|e)$/, '');
+
+/**
+ * The nearest shapes filled with the question's nouns, each one Ask would answer: a record whose statuses the code
+ * declares and a status the question's verb names (*who approves an invoice* → *where is invoice set to approved*),
+ * then *what guards* / *what proves* the nouns, then *how does A reach B* for two nouns that each resolve. At most three.
+ */
+export function suggestQuestions(index: GraphIndex, question: string, repo?: string): string[] {
+  const words = nounsOf(question);
+  if (!words.length) return [];
+  const out: string[] = [];
+  const tables = [...index.byId.values()].filter((n) => n.kind === 'table' && n.lifecycle?.statuses.length && (!repo || n.id.startsWith(`${repo}::`)));
+  for (const tb of tables) {
+    const rec = recordWord(tb.name);
+    const recWords = new Set([...norm(rec).split(' '), ...norm(humanizeName(tb.name)).split(' ')]);
+    if (!words.some((w) => recWords.has(w) || recWords.has(stem(w)) || recWords.has(`${w}s`))) continue;
+    const verbs = words.filter((w) => !recWords.has(w) && !recWords.has(stem(w)));
+    // the status the verb names: its past form first (*approves* → `approved`), then any status word it begins
+    const fit = (s: string) => {
+      let best = 0;
+      for (const v of verbs) {
+        const st = stem(v);
+        if (st.length < 4) continue;
+        for (const sw of norm(humanizeName(s)).split(' ')) {
+          if (sw === `${st}ed` || sw === `${st}d` || sw === st) best = Math.max(best, 2);
+          else if (sw.startsWith(st)) best = Math.max(best, 1);
+        }
+      }
+      return best;
+    };
+    const status = [...tb.lifecycle!.statuses].sort((x, y) => fit(y) - fit(x)).find((s) => fit(s) > 0);
+    if (status) { out.push(fillWords(t('ask.suggest.set'), { record: rec, status: norm(humanizeName(status)) })); break; }
+  }
+  // the nouns as a term: plurals and third-person verbs to their base (*approves invoices* → *approve invoice*)
+  const phrase = words.map((w) => (w.length > 4 && /[^s]s$/.test(w) ? w.slice(0, -1) : w)).join(' ');
+  if (resolveTerm(index, phrase, ['action', 'route', 'screen'], repo)) out.push(fillWords(t('ask.suggest.guards'), { term: phrase }));
+  if (out.length < 3 && resolveTerm(index, phrase, ['screen', 'action', 'guard', 'rule'], repo)) out.push(fillWords(t('ask.suggest.proves'), { term: phrase }));
+  if (out.length < 3 && words.length >= 2) {
+    const a = resolveTerm(index, words[0]!, ['screen', 'action', 'page'], repo);
+    const b = resolveTerm(index, words[words.length - 1]!, ['table', 'route'], repo);
+    if (a && b && a.id !== b.id && b.kind === 'table') out.push(fillWords(t('ask.suggest.path'), { a: words[0]!, b: words[words.length - 1]! }));
+  }
+  return [...new Set(out)].slice(0, 3);
+}
+
+/**
+ * The question Ask shows as its example, built from this graph: a record whose statuses the code declares and a
+ * status a writer moves it to — never a status the application does not have (the placeholder asked the reference
+ * app about an *open* invoice it has no status for). Undefined on a graph with no lifecycle.
+ */
+export function askExample(index: GraphIndex, repo?: string): string | undefined {
+  const tables = [...index.byId.values()]
+    .filter((n) => n.kind === 'table' && (n.lifecycle?.transitions.length ?? 0) > 0 && (!repo || n.id.startsWith(`${repo}::`)))
+    .sort((a, b) => b.lifecycle!.transitions.length - a.lifecycle!.transitions.length || a.id.localeCompare(b.id));
+  const tb = tables[0];
+  if (!tb) return undefined;
+  const moves = tb.lifecycle!.transitions.filter((x) => x.by);
+  const tr = moves[Math.floor(moves.length / 2)] ?? tb.lifecycle!.transitions[0]!;
+  return fillWords(t('ask.suggest.set'), { record: recordWord(tb.name), status: norm(humanizeName(tr.to)) });
 }
 
 // ── the shapes ──────────────────────────────────────────────────────────────────────────────────────────
@@ -271,6 +387,15 @@ export function ask(
   opts: { metas?: Record<string, JourneysMeta>; repo?: string; phrase?: (answer: AskAnswer) => string } = {},
 ): AskAnswer {
   const shape = askShapeOf(question);
+  // *what must be true before an invoice is approved*: a guards or proves question whose term is a record and one of
+  // its statuses is the set shape's question — answering it as an action's checks matched the wrong action (swarm round 3)
+  if ((shape?.shape === 'guards' || shape?.shape === 'proves') && /\b(?:is|are|gets?|becomes?|be)\s+\w+\s*$/i.test(shape.a ?? '')) {
+    const hit = recordAndStatus(index, shape.a!, opts.repo);
+    if (hit && 'status' in hit) {
+      const a = answerSet(index, question, opts);
+      if (a) return finish(index, a, opts.phrase);
+    }
+  }
   if (shape?.shape === 'set') {
     const a = answerSet(index, question, opts);
     if (a) return finish(index, a, opts.phrase);
@@ -284,6 +409,16 @@ export function ask(
   const a = emptyAnswer(question, 'unknown');
   a.lead.push(line('words', 'ask.unknown', {}, []));
   a.shapes = ASK_SHAPES.map((s) => `ask.shape.${s}`);
+  const suggest = suggestQuestions(index, question, opts.repo);
+  if (suggest.length) a.suggest = suggest;
+  return a;
+}
+
+/** A shape whose words matched nothing: the nearest questions Ask would answer, from the same nouns. */
+function notFound(index: GraphIndex, a: AskAnswer, term: string, repo?: string, cites: (string | undefined)[] = []): AskAnswer {
+  a.lead.push(line('words', 'ask.notFound', { term }, cites));
+  const suggest = suggestQuestions(index, a.question, repo).filter((s) => norm(s) !== norm(a.question));
+  if (suggest.length) a.suggest = suggest;
   return a;
 }
 function askShapeOfRest(q: string): ReturnType<typeof askShapeOf> {
@@ -477,12 +612,12 @@ function pathLine(index: GraphIndex, p: PathResult): TourClause {
 
 function answerPath(index: GraphIndex, question: string, ta: string, tb: string, repo?: string): AskAnswer {
   const a = emptyAnswer(question, 'path');
-  const A = resolveTerm(index, ta, ['screen', 'action', 'page', 'component', 'route', 'function'], repo);
-  const B = resolveTerm(index, tb, ['table', 'route', 'function', 'screen', 'action'], repo);
-  if (!A || !B) {
-    a.lead.push(line('words', 'ask.notFound', { term: !A ? ta : tb }, [A?.id ?? B?.id]));
-    return a;
-  }
+  const RA = resolveTermAll(index, ta, ['screen', 'action', 'page', 'component', 'route', 'function'], repo);
+  const RB = resolveTermAll(index, tb, ['table', 'route', 'function', 'screen', 'action'], repo);
+  const A = RA.best;
+  const B = RB.best;
+  if (!A || !B) return notFound(index, a, !A ? ta : tb, repo, [A?.id ?? B?.id]);
+  for (const [best, others] of [[A, RA.others], [B, RB.others]] as const) { const p = pickedLine(index, best, others); if (p) a.lead.push(p); }
   a.resolved.push({ term: ta, id: A.id, name: index.byId.get(A.id)?.name ?? A.id }, { term: tb, id: B.id, name: index.byId.get(B.id)?.name ?? B.id });
   const fwd = pathBetween(index, A.id, B.id);
   const p = fwd ?? (() => { const r = pathBetween(index, B.id, A.id); return r ? { ...r, reverse: true as const } : null; })();
@@ -525,10 +660,13 @@ function momentsOf(index: GraphIndex, c: Cand): { flowId: string; sg: JourneySeg
 
 function answerGuards(index: GraphIndex, question: string, term: string, repo?: string): AskAnswer {
   const a = emptyAnswer(question, 'guards');
-  const c = resolveTerm(index, term, ['action', 'route', 'screen', 'function', 'page'], repo);
-  if (!c) { a.lead.push(line('words', 'ask.notFound', { term }, [])); return a; }
+  const R = resolveTermAll(index, term, ['action', 'route', 'screen', 'function', 'page'], repo);
+  const c = R.best;
+  if (!c) return notFound(index, a, term, repo);
   const name = c.kind === 'action' || c.kind === 'screen' ? c.names[0]! : index.byId.get(c.id)?.name ?? c.id;
   a.resolved.push({ term, id: c.id, name });
+  const picked = pickedLine(index, c, R.others);
+  if (picked) a.lead.push(picked);
   const gates = new Map<string, { tier: GateTier; words: string; loc?: string }>();
   const moments = momentsOf(index, c);
   for (const m of moments) for (const p of m.mo.preconditions?.preconditions ?? []) {
@@ -571,10 +709,13 @@ function answerGuards(index: GraphIndex, question: string, term: string, repo?: 
 
 function answerProves(index: GraphIndex, question: string, term: string, repo?: string): AskAnswer {
   const a = emptyAnswer(question, 'proves');
-  const c = resolveTerm(index, term, ['guard', 'rule', 'screen', 'action', 'route', 'function'], repo);
-  if (!c) { a.lead.push(line('words', 'ask.notFound', { term }, [])); return a; }
+  const R = resolveTermAll(index, term, ['guard', 'rule', 'screen', 'action', 'route', 'function'], repo);
+  const c = R.best;
+  if (!c) return notFound(index, a, term, repo);
   const name = c.kind === 'action' || c.kind === 'screen' ? c.names[0]! : index.byId.get(c.id)?.name ?? c.id;
   a.resolved.push({ term, id: c.id, name });
+  const picked = pickedLine(index, c, R.others);
+  if (picked) a.lead.push(picked);
   let verdict: TestVerdict | undefined;
   let tests: CoverageTestRef[] = [];
   let notBuilt = false;
@@ -615,6 +756,7 @@ export function askLines(a: AskAnswer, opts: { business?: boolean } = {}): strin
   out.push(`${t('ask.title')} · ${t('ask.derived')}${a.phrased ? ` · ${t('ask.phrased')}` : ''}`);
   out.push(`> ${a.question}`);
   for (const c of a.lead) out.push(`${say(c)}${cite(c)}`);
+  if (a.suggest?.length) { out.push(t('ask.didYouMean')); for (const s of a.suggest) out.push(`  · ${s}`); }
   if (a.shapes) for (const s of a.shapes) out.push(`  · ${t(s)}`);
   for (const s of a.sections) {
     out.push('');

@@ -117,4 +117,16 @@ export const ASK_STRINGS: Record<string, StringEntry> = {
   'count.unit.checksOne': one('1 check', 'count.unit.checks'),
   'count.part.tierTechnical': same('{n} technical', 'Checks that keep the system safe — the shape of the input and platform rules.'),
   'count.scope.path': same('on this chain', 'The parts one chain passes through, from the first part named to the second, each link once.'),
+  // ── which part the words were read as, and did you mean (swarm round 3, 2026-10-11) ──
+  'count.scope.question': same('for these words', 'The parts of the graph the question’s words match as well as the one Ask read them as: the same kind, another place.'),
+  'ask.unit.alsoMatch': same('{n} others', 'Other parts these words match as well, of the same kind, somewhere else. Ask answers for the one it names; ask again with more words to pick another.'),
+  'ask.unit.alsoMatchOne': one('1 other', 'ask.unit.alsoMatch'),
+  'ask.picked': same('Read as {name} in {where} — the words also match {count}: {others}.',
+    'Several parts of the graph answer to these words. Ask answers for the one it names and lists the others, so an answer about the wrong one is never given as if it were the only one.'),
+  'ask.biz.picked': same('Read as {name} — the words also match {count}: {others}.', 'Several parts answer to these words. Ask answers for the one it names and lists the others.'),
+  'ask.didYouMean': same('Did you mean', 'Questions Ask can answer, built from the words of yours: the nearest of its four shapes, with your nouns in them. Pick one to ask it.'),
+  'ask.suggest.set': same('where is {record} set to {status}, and what must be true first?', 'A question in Ask’s first shape, with a record and a status this application declares.'),
+  'ask.suggest.guards': same('what guards {term}?', 'A question in Ask’s second shape, with the words of yours that name a part of the graph.'),
+  'ask.suggest.proves': same('what proves {term}?', 'A question in Ask’s fourth shape, with the words of yours that name a part of the graph.'),
+  'ask.suggest.path': same('how does {a} reach {b}?', 'A question in Ask’s third shape, between two parts your words name.'),
 };
