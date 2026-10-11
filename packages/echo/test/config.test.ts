@@ -51,10 +51,13 @@ test('URL aliases cannot share a store; every managed service and settings port 
     if (port === 19400) config.profiles.work!.web.port = 19402;
     assert.throws(() => validateConfig(config), /own memory address/);
   }
+  const modelCollision = defaultConfig();
+  modelCollision.profiles.personal!.model.baseUrl = 'http://localhost:4712';
+  assert.throws(() => validateConfig(modelCollision), /own memory address/);
 });
 
 test('service origins reject embedded credentials and unsafe transport, while remote HTTPS remains configurable', () => {
-  for (const url of ['https://user:literal-private-value@example.com', 'http://example.com', 'http://0.0.0.0:4611', 'file:///tmp/store', 'http://localhost:4611/path', 'http://localhost:4611?x=1', 'http://localhost:4611#fragment']) {
+  for (const url of ['https://user:literal-private-value@example.com', 'http://example.com', 'http://0.0.0.0:4611', 'file:///tmp/store', 'http://localhost:4611/path', 'http://localhost:4611/..', 'http://localhost:4611?x=1', 'http://localhost:4611#fragment', 'https://localhost:4611']) {
     const config = defaultConfig(); config.profiles.personal!.backend.url = url;
     assert.throws(() => validateConfig(config), error => error instanceof Error && !error.message.includes('literal-private-value'));
   }

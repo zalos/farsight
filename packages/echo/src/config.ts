@@ -39,7 +39,7 @@ function profileName(value: unknown): string {
 
 /** Canonical loopback aliases cannot bypass profile separation or port collisions. */
 function origin(value: unknown, localOnly = false): { url: string; local: boolean; port: number } {
-  if (typeof value !== 'string' || value !== value.trim() || /[\x00-\x20\x7f]/.test(value)) fail('echo.config.url');
+  if (typeof value !== 'string' || value !== value.trim() || /[\x00-\x20\x7f\\]/.test(value) || !/^https?:\/\/[^/?#]+\/?$/i.test(value)) fail('echo.config.url');
   let parsed: URL;
   try { parsed = new URL(value); } catch { fail('echo.config.url'); }
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash || value.includes('?') || value.includes('#')) fail('echo.config.url');
@@ -76,6 +76,7 @@ export function validateConfig(value: unknown): EchoConfig {
   const result: EchoConfig = { version: 1, defaultProfile: selected, profiles: {} };
   const addresses = new Set<string>();
   const ports = new Set<number>();
+  const modelPorts = new Set<number>();
   function reserve(port: number): void {
     if (ports.has(port)) fail('echo.config.ports');
     ports.add(port);
@@ -87,6 +88,7 @@ export function validateConfig(value: unknown): EchoConfig {
     const backend = record(profile.backend, ['mode', 'url', 'secretRef']);
     if (backend.mode !== 'managed' && backend.mode !== 'external') fail();
     const address = origin(backend.url, backend.mode === 'managed');
+    if (backend.mode === 'managed' && !address.url.startsWith('http:')) fail('echo.config.url');
     if (addresses.has(address.url)) fail('echo.config.ports');
     addresses.add(address.url);
     if (backend.mode === 'managed') {
@@ -97,6 +99,7 @@ export function validateConfig(value: unknown): EchoConfig {
     const model = record(profile.model, ['provider', 'baseUrl', 'model', 'secretRef']);
     if (model.provider !== 'ollama' && model.provider !== 'openai-compatible') fail();
     const modelAddress = origin(model.baseUrl);
+    if (modelAddress.local) modelPorts.add(modelAddress.port);
     const web = record(profile.web, ['port', 'farsightOrigin']);
     const webPort = integer(web.port, 1024, 65535, 'echo.config.ports');
     reserve(webPort);
@@ -120,6 +123,7 @@ export function validateConfig(value: unknown): EchoConfig {
       budget: { briefMaxChars: integer(budget.briefMaxChars, 128, 16_384), modelMaxTokens: integer(budget.modelMaxTokens, 32, 4096), timeoutMs: integer(budget.timeoutMs, 100, 300_000) },
     };
   }
+  if ([...modelPorts].some(port => ports.has(port))) fail('echo.config.ports');
   return result;
 }
 
