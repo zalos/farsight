@@ -15,12 +15,14 @@ export const STOP_STRINGS: Record<string, StringEntry> = {
     define: 'One thing a person does on a screen, opened into its beats: what the screen did, the call it made, what the service did in turn and what came back, with every layer of the system down the side.',
   },
   'map.level.act.short': { hud: 'Room', professional: 'Action', define: 'Short for one action opened into its beats. The same button as the whole name, on a narrow window.' },
+  // the last stop is LINES, not CODE (round-3 swarm: four controls said CODE on one screen, and the first click on the
+  // level went to the register's CODE) — only the register says CODE
   'map.level.code': {
     hud: 'Blueprint',
-    professional: 'Code',
-    define: 'The lines behind the beat you are on, opened in the dock beside the beats: its documentation, its code, its forks, its tests and what a change to it touches.',
+    professional: 'Lines',
+    define: 'The lines behind the beat you are on, opened in the dock beside the beats: its documentation, its code, its forks, its tests and what a change to it touches. Not the Code register, which changes the words on every page.',
   },
-  'map.level.code.short': { hud: 'Blueprint', professional: 'Code', define: 'Short for the code behind one beat, in the dock. The same button as the whole name, on a narrow window.' },
+  'map.level.code.short': { hud: 'Blueprint', professional: 'Lines', define: 'Short for the lines behind one beat, in the dock. The same button as the whole name, on a narrow window.' },
   'map.layout': same('Layout', 'How the stop you are at is drawn. The choices change with the stop; the lens, the calls and data, and where the code opens stay as they are.'),
   'map.layout.chain': same('chain', 'Every journey as a card, banded, the storyline drawn as a chain in its order.'),
   'map.layout.screens': same('screens', 'One journey as its screens in order, with each screen’s calls and data beneath it when they are shown.'),

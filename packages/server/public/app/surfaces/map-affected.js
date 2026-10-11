@@ -23,7 +23,7 @@ import { tipAttrs } from '../lib/tooltip.js';
 import { withParams } from '../lib/route-url.js';
 import {
   AFF_HOPS, AFF_MAX_HOPS, parseSeedSpec, hopsOf, pickSeeds, combineReaches, reachKey, hopGroups, testEvidenceKey,
-  groupScreens, furthestHop, affectedRows, affectedCsv, affectedJson,
+  groupScreens, furthestHop, affectedRows, affectedTests, affectedCsv, affectedJson,
 } from '../lib/map-affected-model.js';
 
 /** The mode's state. `state`: idle · loading · ok · failed · unknown · noParts. */
@@ -338,6 +338,20 @@ export function affectedListHtml(board = {}) {
     + '<button type="button" class="map-tb" data-act="aff-copy" data-kind="json"' + tipAttrs({ key: 'map.affected.copyJson', noFocus: true }) + '>' + esc(t('map.affected.copyJson')) + '</button>'
     + '<span class="al-copied" aria-live="polite"></span></div>';
   const bound = AFF.entries.map((e) => boundHtml(e.report)).filter((x, i, a) => a.indexOf(x) === i).join('');
+  // the tests first, each once: the list a person runs — its spec file and line, its level, its own last run
+  const tests = affectedTests(rows);
+  const runWord = (r) => (['passed', 'failed', 'skipped', 'flaky', 'unknown'].includes(r.lastRun) ? t('tests.run.' + r.lastRun) : '');
+  const testRow = (r) => {
+    const loc = r.spec && !biz() ? '<span class="loc map-code"' + tipAttrs({ text: r.spec + (r.line !== '' ? ':' + r.line : ''), noFocus: true }) + '>'
+      + esc(r.spec.split('/').pop() + (r.line !== '' ? ':' + r.line : '')) + '</span>' : '';
+    const run = runWord(r);
+    const facts = [r.level ? t('tests.level.' + r.level) : '', run ? t('map.affected.lastRun').replace('{status}', run) : r.evidence].filter(Boolean).map(esc);
+    if (run && r.at) facts.push('<span class="at">' + esc(String(r.at).slice(0, 10)) + '</span>');
+    return '<div class="al-row" data-kind="test" data-run="' + esc(r.lastRun || '') + '"><span class="nm">' + esc(r.name) + '</span><span class="sub">' + loc + (loc && facts.length ? ' · ' : '') + facts.join(' · ') + '</span></div>';
+  };
+  const testsSec = tests.length
+    ? '<section class="al-tests"><div class="mp-affsub hud-label"' + defAttrs('map.affected.testsToRun') + '>' + esc(t('map.affected.testsToRun')) + ' · ' + tests.length + '</div>' + tests.map(testRow).join('') + '</section>'
+    : '';
   let body = '';
   for (const [seed, groups] of bySeed) {
     if (bySeed.size > 1) body += '<h3 class="hud-label al-seed">' + esc(seed) + '</h3>';
@@ -350,11 +364,10 @@ export function affectedListHtml(board = {}) {
         + sec('journey', 'map.affected.journeys', (r) => '<div class="al-row" data-kind="journey"><span class="nm">' + esc(r.name) + '</span>' + (r.owner ? '<span class="sub">' + esc(r.owner) + '</span>' : '') + '</div>')
         + sec('screen', 'map.affected.screens', (r) => '<div class="al-row" data-kind="screen"><span class="nm">' + esc(r.name) + '</span><span class="sub">' + esc(t('map.affected.onJourneys').replace('{list}', r.journeys)) + '</span></div>')
         + sec('owner', 'map.affected.owners', (r) => '<div class="al-row" data-kind="owner"><span class="nm">' + esc(r.name) + '</span></div>')
-        + sec('test', biz() ? 'map.affected.tests' : 'map.affected.tests', (r) => '<div class="al-row" data-kind="test"><span class="nm">' + esc(r.name) + '</span><span class="sub">' + esc(r.evidence) + '</span></div>')
         + '</section>';
     }
   }
-  return head + bound + (body || '<p class="mp-dim">' + esc(t('impact.none')) + '</p>');
+  return head + bound + testsSec + (body || testsSec ? body : '<p class="mp-dim">' + esc(t('impact.none')) + '</p>');
 }
 
 // ── the explore card and the property speak the mode's words ──────────────

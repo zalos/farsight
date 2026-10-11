@@ -68,6 +68,9 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   const get = lookup(config.byId);
   const notes = [];
   const story = storyline || { journeys: [], branches: [] };
+  // one journey drawn as lanes (the journey stop's *lanes* layout): its counts are over the journey, never a storyline
+  const single = story.kind === 'journey';
+  const scopeAll = single ? 'journey.scopeAll' : 'count.scope.storyline';
   const steps = Array.isArray(story.journeys) ? story.journeys : [];
   const branches = Array.isArray(story.branches) ? story.branches : [];
   const laneDecls = Array.isArray(config.lanes) ? config.lanes : Array.isArray(story.lanes) ? story.lanes : [];
@@ -392,7 +395,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
       const mine = pills.filter((p) => p.lane === l.id);
       const foldedN = (l.folded || []).reduce((n, r) => n + r.writes, 0);
       const moves = mine.filter((p) => p.kind !== 'written').length;
-      l.count = { n: mine.length + foldedN, unit: 'lanes.count.writes', bizUnit: 'lanes.count.writes', scope: 'count.scope.storyline', source: SRC + ' → write markers + lifecycles',
+      l.count = { n: mine.length + foldedN, unit: 'lanes.count.writes', bizUnit: 'lanes.count.writes', scope: scopeAll, source: SRC + ' → write markers + lifecycles',
         breakdown: [{ key: 'lanes.part.statusMoves', n: moves }, { key: 'lanes.part.recordsWritten', n: mine.length - moves }, ...(foldedN ? [{ key: 'lanes.part.folded', n: foldedN }] : [])] };
     }
   }
@@ -400,16 +403,17 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   for (const s of stages) if (!distinct.has(s.designId)) distinct.set(s.designId, s);
   const built = [...distinct.values()].filter((s) => s.state === 'built').length;
   const counts = {
-    journeys: (story.counts && story.counts.journeys) || { n: steps.length + branches.length, unit: 'map.band.journeys', scope: 'count.scope.storyline', source: SRC },
-    screens: { n: distinct.size, unit: 'lanes.count.distinctScreens', bizUnit: 'lanes.count.distinctScreens', scope: 'count.scope.storyline', source: SRC + ' → stages by screen', // str:ok a Counted's source: where the number was read, for the tip's from line
+    journeys: (!single && story.counts && story.counts.journeys) || { n: steps.length + branches.length, unit: 'map.band.journeys', scope: scopeAll, source: SRC },
+    screens: { n: distinct.size, unit: 'lanes.count.distinctScreens', bizUnit: 'lanes.count.distinctScreens', scope: scopeAll, source: SRC + ' → stages by screen', // str:ok a Counted's source: where the number was read, for the tip's from line
       breakdown: [{ key: 'lanes.part.built', n: built }, { key: 'lanes.part.notBuilt', n: distinct.size - built }] },
-    built: { n: built, of: distinct.size, unit: 'lanes.count.built', bizUnit: 'lanes.count.built', scope: 'count.scope.storyline', source: SRC + ' → stages by screen · state' }, // str:ok a Counted's source: where the number was read, for the tip's from line
-    branches: { n: branches.length, unit: 'lanes.count.branches', bizUnit: 'lanes.count.branches', scope: 'count.scope.storyline', source: 'laneLayout ← /api/journeys storyline.branches' },
+    built: { n: built, of: distinct.size, unit: 'lanes.count.built', bizUnit: 'lanes.count.built', scope: scopeAll, source: SRC + ' → stages by screen · state' }, // str:ok a Counted's source: where the number was read, for the tip's from line
+    branches: { n: branches.length, unit: 'lanes.count.branches', bizUnit: 'lanes.count.branches', scope: scopeAll, source: 'laneLayout ← /api/journeys storyline.branches' },
   };
   const read = [...steps, ...branches].filter((j) => answerOf(summaries, j.nodeId)).length;
 
   return {
     storyline: { id: story.id || '', name: story.name || story.id || '', description: story.description || '' },
+    single,
     ready: read === steps.length + branches.length,
     read, of: steps.length + branches.length, stepsOf: steps.length, firstFlow: steps.length ? steps[0].nodeId : '',
     lanes: ordered.map(({ rows, ref, declared, ...l }) => l),
@@ -428,8 +432,10 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
  */
 export const LANE_K = 2;
 export const LANE_GEOM = Object.freeze({
-  head: 124, col: 158, cardW: 144, cardH: 148, rowGap: 10, pad: 8, pillH: 44, pillRow: 50,
-  laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 66,
+  // a card is wide enough for a screen name's longest word at the stylesheet's size (round-3 swarm: CONTRACTO R SIGN-IN);
+  // a pill holds the record and its status on two lines of their own, whole, then the code that moves it and what it needs
+  head: 124, col: 176, cardW: 162, cardH: 148, rowGap: 10, pad: 8, pillH: 70, pillRow: 76,
+  laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 104,
 });
 
 /**

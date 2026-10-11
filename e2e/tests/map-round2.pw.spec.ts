@@ -316,7 +316,7 @@ test.describe('map round 2 — the Affected mode at board altitude', () => {
     await list.locator('[data-act="aff-copy"][data-kind="csv"]').click();
     await expect(page.locator('.map-toast')).toBeVisible();
     const csv = await page.evaluate(() => navigator.clipboard.readText());
-    expect(csv.split('\n')[0]).toBe('seed,distance,kind,id,name,journeys,owner,evidence');
+    expect(csv.split('\n')[0]).toBe('seed,distance,kind,id,name,journeys,owner,evidence,level,spec,line,lastRun,at');
     await list.locator('[data-act="aff-copy"][data-kind="json"]').click();
     const json = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
     expect([json.format, json.version, json.frozen]).toEqual(['farsight-affected', 0, false]);

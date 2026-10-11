@@ -9,7 +9,7 @@ Deliberately vanilla JS, no framework, no build step (Phase 1; replaced by the c
 ## The five stops — one journey, read on the Map (lanes round 2026-10-10, proposal 1)
 
 The Map is the one place a journey is read. One zoom runs **ALL JOURNEYS → ONE JOURNEY → ONE SCREEN → ONE ACTION →
-CODE**; one **LAYOUT** control changes meaning per stop; the lens, the calls and data (`p`) and the dock hold at every
+LINES** (the code behind a beat; the stop is *Lines* so only the register says CODE — round-3 swarm, 2026-10-11); one **LAYOUT** control changes meaning per stop; the lens, the calls and data (`p`) and the dock hold at every
 stop. The front door (`#/journeys`: state of play, storylines, the journeys organised, designs, entry points) stays a
 surface of its own; every door on it opens the Map.
 
@@ -19,15 +19,18 @@ surface of its own; every door on it opens the Map.
 | one journey | its screens under the journey head (below) | `screens` (the street; the business register adds each screen's own sentence — the storyboard's look) · `lanes` (the one journey as swimlanes: `laneLayout` over a storyline of one journey — its persona's lane, a lane per store it writes, record pills — on `.map-jlanes-host`, fitted; a stage card opens its screen) · `table` (the Sheet: every stop across, every layer down) · `drill` (opens the action stop with the rail — below) | `surfaces/map.js`, `surfaces/map-stops.js` + `lib/journey-draw.js` |
 | one screen | the property: the picture, the rail of eight tabs, the step bar | — (the slot says *one view*) | `surfaces/map-property.js` |
 | one action | the action's beats across the layers of the system, the journey's screens as a strip | `beats` · `ladder` (time running down, one line per thing it did) · `drill` (the journey's **action rail** — every action of every screen as a numbered stop, the screens spanning them, `jrnDrillRailHtml` — over the beats in place of the strip; `[` `]` and a click move along it; the address is the action's, `?screen=&action=&layout=drill`) | `surfaces/map-stops.js` + `surfaces/journey-drill.js` |
-| code | the drill's inspector on the beat — DOCS · REQUEST / RESPONSE · CODE · FORKS · TESTS · CHANGE IMPACT — in the dock (right · bottom), or in place under the beats | — | `surfaces/journey-drill.js` inspector, `lib/map-dock.js` |
+| lines (the code) | the drill's inspector on the beat — DOCS · REQUEST / RESPONSE · CODE · FORKS · TESTS · CHANGE IMPACT — in the dock (right · bottom), or in place under the beats | — | `surfaces/journey-drill.js` inspector, `lib/map-dock.js` |
 
 **The chrome holds still** (cleanup pass 2026-10-11, lane P1 — the owner's *"too difficult to know where the buttons are
 as they keep changing"*). `chromeHtml` draws two rows that keep their places at every stop and width: **row 1** — the
-level control in its short words (ALL · JOURNEY · SCREEN · ACTION · CODE; ACTION and CODE work from the journey stop:
+level control in its short words (ALL · JOURNEY · SCREEN · ACTION · LINES; ACTION and LINES work from the journey stop:
 its first action, the code in the dock), the LAYOUT control in one slot (`.map-layout-slot`; its choices change, the
 slot does not), and the tools right-aligned (CALLS AND DATA · + − FIT · FULL SCREEN · COPY LINK · SAVE · the legend
 glyph — Save saves the board at ALL and the stop on screen below it, `street` → `stopPicture`); the Affected bar, when
-on, is a row of its own; **row 2** — the crumb on the left (clamped, whole in its tip) and on the right the as-of
+on, is a **third row under the crumb** (round-3 swarm: between rows 1 and 2 it moved WALK down a row and, wrapping,
+widened the chrome past the window), so rows 1 and 2 never move; its LIST THESE opens the answer in the dock — the
+tests to run first (spec file and line, each case's own last run), then journeys, screens and owners by distance, with
+copy as CSV or JSON; **row 2** — the crumb on the left (clamped, whole in its tip) and on the right the as-of
 stamp, the board's pickers (at ALL: storyline and *band by* inline, the comparison inline only while it is on;
 otherwise — and below the board, all three — one **VIEW** menu, `pickersHtml` / `viewMenuHtml`), then **WALK at the
 row's right end**, the same pixel column at every stop. `fitChrome` folds by measurement, row 2 first (`f-story` ·
@@ -697,7 +700,7 @@ do. Leaving a screen lands on the street at scale **1.0** centred on it; a ⌘/C
 or a two-finger pinch out, over the open screen leaves it (the rest of that scroll is swallowed for 400 ms).
 
 **Below the screen: the action and the code, and one LAYOUT control** (lanes round 2026-10-10, proposal 1 steps 1–2;
-`surfaces/map-stops.js`). The level control reads **ALL · JOURNEY · SCREEN · ACTION · CODE** (`map.level.act`,
+`surfaces/map-stops.js`). The level control reads **ALL · JOURNEY · SCREEN · ACTION · LINES** (`map.level.act`,
 `map.level.code`, both registers; `stopNow()` says which is on). The first three are the board, the street and the
 property; the last two are drawn by the journey's own drill code on the Map's stage, never by a second surface:
 - **the action stop** (`openAction(flow, ci, { order, beat, code, dock })`, `ci` a Sheet column — the journey's stop):

@@ -20,7 +20,7 @@
 import { S, esc, expose, currentLens } from '../store.js';
 import { t, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
-import { showTip, hideTip, tipAnchor, tipOpen } from './tooltip.js';
+import { showTip, hideTip, tipAnchor, tipOpen, repositionTip } from './tooltip.js';
 import { doorsFor, doorsHtml, fetchSource, copyDoorsHtml } from './detail-doors.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { mapEvidenceChip } from './map-chips.js';
@@ -204,7 +204,7 @@ function modelFor(el, answer) {
 function fillCodeIn(layerRoot, id) {
   const slot = layerRoot && layerRoot.querySelector('.gc-code[data-gc-src]');
   if (!slot) return;
-  fetchSource(id).then((src) => { if (slot.isConnected) slot.innerHTML = codeHtml(src); });
+  fetchSource(id).then((src) => { if (slot.isConnected) { slot.innerHTML = codeHtml(src); repositionTip(); } });
 }
 function show(el, m, via) {
   const step = el.getAttribute('data-gate-step');

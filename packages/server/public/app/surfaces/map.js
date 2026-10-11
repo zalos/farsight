@@ -30,7 +30,7 @@ import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml, copyDoorsHtml } f
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip, foldMapChips } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
-import { lanesHtml } from './map-lanes.js';
+import { lanesHtml, fitLaneText } from './map-lanes.js';
 import { pathHtml } from '../lib/fold-row.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
@@ -57,7 +57,7 @@ import {
 import { jrnFirstSentence, jrnLifecycleHtml } from '../lib/journey-draw.js';
 import { walkToolHtml, bindWalk, openWalk, closeWalk, toggleWalk, walkOpen, drawWalk } from '../lib/tour.js';
 import { dockHtml, bindDock, unbindDock, dockPanel, openPanel, closePanel, panelOpen, redrawDock } from '../lib/map-dock.js';
-import { lifecycleTableInto } from '../lib/lifecycle-strip.js';
+import { lifecycleTableInto, foldLifecycleStrips } from '../lib/lifecycle-strip.js';
 import { mapScreenHash } from '../lib/route-url.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
@@ -645,11 +645,16 @@ function drawLanes() {
       foldMapChips(el);
     };
     paint();
+    // the names keep their words and the pills their two lines (round-3 swarm): a pill that needs more room than the
+    // geometry gave lays the lanes out again with it
+    let geom;
+    const more = fitLaneText(el);
+    if (more) { geom = { pillH: G.geom.pillH + more, pillRow: G.geom.pillRow + more }; G = laneGeometry(model, { aspect, extraH, k: kPick || undefined, geom }); paint(); fitLaneText(el); }
     // what is drawn under the lanes is measured (offset sizes are layout units, untouched by the scale): when it is not
     // the height the wrap was chosen for, choose again with the real one, so the board fits as large as it can
     let bottom = el.querySelector('.ln-bottom');
     const real = bottom ? bottom.offsetHeight + 12 : extraH;
-    if (Math.abs(real - extraH) > 8) { G = laneGeometry(model, { aspect, extraH: real, k: kPick || undefined }); paint(); bottom = el.querySelector('.ln-bottom'); }
+    if (Math.abs(real - extraH) > 8) { G = laneGeometry(model, { aspect, extraH: real, k: kPick || undefined, geom }); paint(); fitLaneText(el); bottom = el.querySelector('.ln-bottom'); }
     const need = bottom ? bottom.offsetTop + bottom.offsetHeight + G.geom.margin : G.size.h;
     if (need > G.size.h) { G.size.h = need; el.style.height = need + 'px'; }
     bands.push({ model, G, y, story });
@@ -699,7 +704,7 @@ function journeyStory(flow) {
   if (!d) return null;
   let row = null;
   for (const p of (MAP.tree && MAP.tree.personas) || []) for (const g of p.groups || []) for (const r of g.journeys || []) if (!row && r.nodeId === flow) row = r;
-  return { id: 'journey:' + (d.flowId || flow), name: d.name, repo: d.repo || '', journeys: [row || { nodeId: flow, id: d.flowId || flow, name: d.name, screens: [] }], branches: [] };
+  return { id: 'journey:' + (d.flowId || flow), kind: 'journey', name: d.name, repo: d.repo || '', journeys: [row || { nodeId: flow, id: d.flowId || flow, name: d.name, screens: [] }], branches: [] };
 }
 /** Draw (or, with `force`, draw again) the one journey's lanes on their host. */
 function drawJourneyLanes(force) {
@@ -715,11 +720,17 @@ function drawJourneyLanes(force) {
   const model = laneLayout(story, MAP.designs, MAP.tree, sums, { byId: S.BYID });
   const W = host.clientWidth, H = host.clientHeight;
   const extraH = 40 + (model.lifecycles.length ? 50 : 0);
-  const G = laneGeometry(model, { aspect: W > 0 && H > 0 ? W / H : 1.6, extraH });
-  const k = Math.max(0.55, Math.min(1.25, (W - 32) / G.size.w, (H - 32) / G.size.h));
-  host.innerHTML = '<div class="map-jlanes" style="width:' + Math.ceil(G.size.w * k) + 'px;height:' + Math.ceil(G.size.h * k) + 'px">'
-    + '<div class="map-lanes" style="width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + k + ')">'
-    + lanesHtml(model, G, { sentence }) + '</div></div>';
+  const aspect = W > 0 && H > 0 ? W / H : 1.6;
+  let G = laneGeometry(model, { aspect, extraH });
+  const paint = () => {
+    const k = Math.max(0.55, Math.min(1.25, (W - 32) / G.size.w, (H - 32) / G.size.h));
+    host.innerHTML = '<div class="map-jlanes" style="width:' + Math.ceil(G.size.w * k) + 'px;height:' + Math.ceil(G.size.h * k) + 'px">'
+      + '<div class="map-lanes" style="width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + k + ')">'
+      + lanesHtml(model, G, { sentence }) + '</div></div>';
+    return fitLaneText(host.querySelector('.map-lanes'));
+  };
+  const more = paint();
+  if (more) { G = laneGeometry(model, { aspect, extraH, geom: { pillH: G.geom.pillH + more, pillRow: G.geom.pillRow + more } }); paint(); }
   host.dataset.drawn = flow + '|' + (j && j.model ? 1 : 0);
   if (!host.dataset.wired) {
     host.dataset.wired = '1';
@@ -1940,7 +1951,6 @@ function stageHtml() {
     + '<button type="button" class="map-backto" hidden></button>'
     + '<div class="map-zoomro"' + tipAttrs({ key: 'map.zoom', noFocus: true }) + '></div>'
     + '<div class="map-legend" hidden role="dialog" aria-label="' + esc(t('map.legend.title')) + '"></div>'
-    + '<div class="map-afflist" hidden role="dialog" data-map-wheel="own" aria-label="' + esc(t('map.affected.listTitle')) + '"></div>'
     + '<div class="map-toast" role="status" aria-live="polite" hidden></div>'
     + '<div class="map-prop-host" hidden></div>'
     // the stops below the street (surfaces/map-stops.js): the journey as a table, one action's beats; the one journey's
@@ -1955,7 +1965,7 @@ function stageHtml() {
  * buttons are as they keep changing"). Row 1: the level control in its short words, the LAYOUT control in the same
  * slot at every stop (its choices change, the slot does not), the tools right-aligned. Row 2: the crumb on the left;
  * on the right the board's pickers (at ALL) or one VIEW menu holding them (below it), then WALK at the right end — the
- * same pixel column at every stop and width. The Affected bar, when on, is a row between them.
+ * same pixel column at every stop and width. The Affected bar, when on, is a third row under them.
  */
 function chromeHtml() {
   const lvl = (l, key) => '<button type="button" data-l="' + l + '" aria-pressed="false" aria-label="' + esc(t(key)) + '"' + tipAttrs({ key, noFocus: true }) + '>'
@@ -1977,10 +1987,11 @@ function chromeHtml() {
     // the legend has a glyph of its own — `?` is the keymap's, everywhere (swarm 2026-10-05: `?` had four jobs)
     + tool('legend', 'map.tool.legend', sym('legend'), MAP.legend ? ' on map-tb-legend' : ' map-tb-legend')
     + '</div></div>'
-    // the Affected mode's bar, a row of its own under the toolbar (lane I)
-    + affectedBarHtml()
     + '<div class="map-crumbs"><div class="map-crumb"></div>'
-    + '<div class="map-row2-r"><span class="map-asof"></span><span class="map-pickers">' + pickersHtml() + '</span>' + walkToolHtml() + '</div></div>';
+    + '<div class="map-row2-r"><span class="map-asof"></span><span class="map-pickers">' + pickersHtml() + '</span>' + walkToolHtml() + '</div></div>'
+    // the Affected mode's bar: a third row under the crumb, so rows 1 and 2 — the levels, the tools, the crumb and WALK —
+    // never move when it opens (round-3 swarm: it pushed the toolbar off the right edge and WALK down a row)
+    + affectedBarHtml();
 }
 /** Whether the stop on screen is below the board (the board's pickers fold into the VIEW menu there). */
 function belowBoard() { return !!(MAP.cv && stopNow() !== 'nb'); }
@@ -2141,6 +2152,8 @@ function headBarHtml(d, j, tbl) {
  * freshness sentence, whole in the verdict word's tip). Measured, never a breakpoint.
  */
 function foldHead(el) {
+  // each record's lifecycle line folds its last statuses into `+n` (round-3 swarm: cut at 1280 with no mark)
+  foldLifecycleStrips(el.querySelector('.jh-lc'));
   const agg = el.querySelector('.jh-l2 .agg');
   if (!agg) return;
   const box = agg.querySelector(':scope > .jrn-count') || agg;
@@ -2374,6 +2387,8 @@ function onFullscreen() {
 let resizeT = null;
 function onResize() {
   fitChrome();
+  const head = MAP.stage && MAP.stage.querySelector('.map-jhead');
+  if (head && !head.hidden) { foldHead(head); setHeadH(); }
   clearTimeout(resizeT);
   resizeT = setTimeout(() => {
     if (!MAP.cv || !MAP.designs) return;
@@ -2499,26 +2514,30 @@ const affBoard = {
   owner: (f) => { const d = (MAP.nb.districts || []).find((x) => x.id === f); return (d && d.owner) || ''; },
   name: (f) => { const d = (MAP.nb.districts || []).find((x) => x.id === f); return d ? nameWords(d.name) : ''; },
 };
+/**
+ * LIST THESE: the answer written out in the dock — the tests to run first (each at its spec file and line, with its
+ * own last run), then the journeys, screens and owners by distance — and copied as CSV or JSON (round-3 swarm: on the
+ * stage the list opened under the screen's property, so the button seemed to do nothing).
+ */
 function toggleAffList(force) {
-  const box = MAP.stage && MAP.stage.querySelector('.map-afflist');
-  if (!box) return;
-  const open = force != null ? force : box.hidden;
+  const open = force != null ? force : !MAP.affList;
   MAP.affList = open && affectedOn();
-  if (!MAP.affList) { box.hidden = true; box.innerHTML = ''; return; }
-  if (MAP.legend) closeLegend();
+  if (!MAP.affList) { if (panelOpen('affected')) closePanel('affected', { quiet: true }); return; }
   drawAffList();
 }
 function drawAffList() {
-  const box = MAP.stage && MAP.stage.querySelector('.map-afflist');
-  if (!box || !MAP.affList) return;
-  box.innerHTML = affectedListHtml(affBoard);
-  box.hidden = false;
+  if (!MAP.affList) return;
+  const panel = dockPanel('affected', { key: 'map.affected.listTitle', close: () => { MAP.affList = false; } });
+  if (!panel) return;
+  panel.innerHTML = '<div class="md-scroll map-afflist" role="region" aria-label="' + esc(t('map.affected.listTitle')) + '">' + affectedListHtml(affBoard) + '</div>';
+  const box = panel.querySelector('.map-afflist');
   box.onclick = (e) => {
     const b = e.target.closest('button');
     if (!b) return;
     if (b.dataset.act === 'aff-list-close') toggleAffList(false);
     else if (b.dataset.act === 'aff-copy') copyAffected(b.dataset.kind, box);
   };
+  if (!panelOpen('affected')) openPanel('affected');
 }
 /** Copy the list's rows as CSV or JSON: the clipboard, else a copy command, else a selected field in the panel. */
 function copyAffected(kind, box) {
@@ -2573,7 +2592,6 @@ function openLegend(opts = {}) {
   MAP.legend = true;
   MAP.legendAuto = !!opts.auto;
   MAP.legendCollapsed = !!opts.collapsed;
-  if (MAP.affList) toggleAffList(false);
   drawLegend();
   const b = MAP.stage && MAP.stage.querySelector('[data-act="legend"]');
   if (b) { b.classList.add('on'); b.setAttribute('aria-expanded', 'true'); }

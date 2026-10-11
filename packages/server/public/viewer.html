@@ -90,6 +90,8 @@
   .searchbox{display:flex;align-items:center;gap:8px;background:var(--ground);border:1px solid var(--line);border-radius:3px;padding:4px 10px;color:var(--muted);cursor:pointer;min-width:150px}
   /* narrow windows: the box gives up its word before any control gives up its place */
   .topbar .searchbox{flex:0 1 auto;min-width:118px}
+  .topbar .searchbox.squeeze{min-width:0}
+  .topbar .searchbox.squeeze .q{display:none}
   .searchbox .q{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .searchbox:hover{border-color:var(--accent)}
   kbd{font-family:var(--mono);font-size:10px;background:var(--raised);border:1px solid var(--line);border-radius:3px;padding:1px 5px;color:var(--muted);margin-left:auto}
@@ -2633,7 +2635,6 @@
   /* round 2: with the Affected bar the chrome may wrap, and a crumb sized to its whole name pushed the tools to a second
      row — its basis is 0 there, so the first row keeps the tools and the crumb takes only the room left (≤ 460 px),
      its whole trail in its tip */
-  @media (min-width:1281px){ .map-chrome:has(.map-affbar) .map-crumb{flex:1 1 0;max-width:min(40%,460px)} }
   @media (max-width:1280px){
     .map-chrome{gap:6px;flex-wrap:wrap}
     /* the as-of stamp, the levels and Band by fold first (under 1360 px), so the crumb keeps the first row */
@@ -2646,8 +2647,8 @@
   }
   @media (max-width:860px){ .map-chrome{flex-wrap:wrap} .map-crumb{max-width:100%} .map-tools{flex-wrap:wrap} }
   /* ── MAP Affected mode — surfaces/map-affected.js (lane I): dimmed, not hidden; badged with how a thing is reached ── */
-  .map-chrome:has(.map-affbar){flex-wrap:wrap}
-  .map-affbar{flex-basis:100%;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--accent);padding-top:8px;min-width:0}
+  /* the Affected bar is a third row under the crumb (round-3 swarm): it wraps inside itself, never widens the chrome */
+  .map-affbar{order:10;flex:none;display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;border-top:1px solid var(--accent);padding-top:8px;min-width:0;max-width:100%}
   .map-affbar .ttl{color:var(--accent)}
   .map-affbar .on{font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46%}
   .map-affname{color:var(--ink);font-weight:500}
@@ -2719,6 +2720,10 @@
   .map-tour .tw-needs{margin:4px 0 0;font-size:9.5px;color:var(--muted)}
   .tw-cites{display:inline-flex;flex-wrap:wrap;gap:3px;vertical-align:baseline}
   .tw-chip{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);border-radius:3px;padding:0 5px;font-size:10.5px;font-family:var(--mono);color:var(--cyan,#5BC8DD);text-decoration:none;cursor:pointer;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* in the dock and the walk a chip is whole: it wraps at its spaces inside the panel, never ellipsized (round-3 swarm) */
+  .map-dock .tw-chip,.map-tour .tw-chip{max-width:100%;white-space:normal;overflow-wrap:normal;text-overflow:clip;overflow:visible;display:inline;line-height:1.5;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+  .map-dock .tw-chip .sym,.map-tour .tw-chip .sym{vertical-align:-1px}
+  .map-dock .tw-chip[hidden],.map-tour .tw-chip[hidden]{display:none}
   body.lens-business .tw-chip,[data-lens="business"] .tw-chip{font-family:inherit;color:var(--accent)}
   .tw-chip.k-guard,.tw-chip.k-rule{color:var(--guard,#A78BE0);border-color:color-mix(in srgb,var(--guard,#A78BE0) 50%,transparent)}
   .tw-chip.k-table{color:var(--table,#C287D6)}
@@ -2973,6 +2978,8 @@
   .mp-gdoors{display:flex;margin-top:3px}
   .mp-row.gate:hover{background:var(--accent-dim)}
   .fs-tip.gc-tip{max-width:min(620px,calc(100vw - 16px));width:min(620px,calc(100vw - 16px))}
+  /* the card scrolls inside itself, never past the window (round-3 swarm): a backstop for the placement's own height */
+  .fs-tip.gc-tip .tip-body{max-height:calc(100vh - 40px);overflow-y:auto;overscroll-behavior:contain}
   .gc{display:flex;flex-direction:column;gap:8px}
   .gc-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
   .gc-head .gc-name{margin:0;font-size:13.5px}
@@ -3071,7 +3078,7 @@
   .ln-stage>*{flex:none}
   .ln-stage .ttl{display:flex;align-items:flex-start;gap:0}
   .ln-stage .ttl .map-step{font-size:9.5px;flex:none;margin-right:5px}
-  .ln-stage .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.03em;font-size:16.5px;line-height:1.05;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word}
+  .ln-stage .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.03em;font-size:16.5px;line-height:1.05;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:normal;word-break:normal;hyphens:manual;min-width:0;flex:1 1 auto}
   .ln-stage .sub{font-size:10.5px;line-height:1.2;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ln-stage .ln-chips{display:flex;flex-wrap:wrap;gap:2px 3px;min-height:0}
   .ln-stage .ln-chips{align-items:center;font-size:10px;line-height:1.4}
@@ -3087,14 +3094,17 @@
   .ln-stage .dec .w{overflow:hidden;text-overflow:ellipsis}
   .ln-stage .dec .more{color:var(--muted);flex:none}
   .ln-pill{position:absolute;box-sizing:border-box;border:1px solid color-mix(in srgb,var(--tbl) 70%,transparent);border-radius:17px;background:color-mix(in srgb,var(--tbl) 10%,var(--panel));padding:3px 10px;display:flex;flex-direction:column;justify-content:center;gap:1px;overflow:hidden;cursor:help}
-  .ln-pill .mv{display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--ink);white-space:nowrap;overflow:hidden}
+  .ln-pill .mv,.ln-pill .rc{display:flex;align-items:flex-start;gap:4px;font-size:11.5px;line-height:1.2;color:var(--ink);white-space:normal;overflow-wrap:normal}
+  .ln-pill .rc .sym{width:9px;height:9px;color:var(--tbl);flex:none;margin-top:2px}
   .ln-pill .mv .sym{width:9px;height:9px;color:var(--tbl);flex:none}
   .ln-pill .rec{color:var(--tbl)} .ln-pill .sep{color:var(--dim)}
   /* the record and its move ellipsise inside the pill (its tip says both whole); the sentence gives way first */
-  .ln-pill .w,.ln-pill .rec{min-width:0;overflow:hidden;text-overflow:ellipsis}
-  .ln-pill .rec{flex:0 1 auto;max-width:45%} .ln-pill .w{flex:1 1 auto}
+  .ln-pill .w,.ln-pill .rec{min-width:0}
+  .ln-pill .rec,.ln-pill .w{flex:1 1 auto}
   .ln-stage>.sub[hidden]{display:none}
-  .ln-pill .by{font-size:10px;color:var(--fn);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ln-pill .by{font-size:10px;line-height:1.2;color:var(--fn);white-space:normal;overflow-wrap:normal}
+  .ln-pill{justify-content:flex-start}
+  .ln-empty{position:absolute;top:50%;transform:translateY(-50%);right:12px;font-size:11px;font-style:italic;color:var(--muted);cursor:help}
   .ln-pill.written{border-style:dashed}
   .ln-pill .nd{display:flex;align-items:center;gap:4px;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
   .ln-pill .nd .sym{width:9px;height:9px;color:var(--auth);flex:none}
@@ -3245,6 +3255,7 @@
   .map-jhead .jh-lc .lc-status.unwritten .lc-w{color:var(--dim);font-style:italic}
   .map-jhead .jh-lc .lc-toggle{flex:none;order:-1}
   .map-jhead .jh-lc .lc-head{flex:none}
+  .map-jhead .jh-lc .lc-strip.lc-tight .lc-counts{display:none}
   .map-jhead .jh-desc{display:flex;align-items:baseline;gap:8px;min-width:0;color:var(--muted)}
   .map-jhead .jh-desc .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .map-more{flex:none;background:none;border:0;color:var(--accent);font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;cursor:pointer;padding:0 2px}
@@ -3272,13 +3283,34 @@
   .md-panel[hidden]{display:none}
   .md-scroll{flex:1;min-height:0;overflow:auto;padding:10px 12px;overscroll-behavior:contain}
   .md-lc-head{margin-bottom:8px;font-size:11.5px;color:var(--muted)}
+  .md-lc-head .lc-head{white-space:normal;flex-wrap:wrap;row-gap:2px}
+  .md-scroll{overflow-wrap:break-word}
   .md-lc-tbl .lc-table{width:100%}
+  /* a narrow dock stacks each status (round-3 swarm: three columns in 360 px): the word, its constant beneath, what
+     moves a record into it beneath that — the table's own columns come back when the dock is wide (along the bottom) */
+  .md-panels{container-type:inline-size}
+  @container (max-width:560px){
+    .md-lc-tbl .lc-table thead{display:none}
+    .md-lc-tbl .lc-table,.md-lc-tbl .lc-table tbody{display:block;width:100%}
+    .md-lc-tbl .lc-table tr{display:flex;flex-direction:column;gap:2px;padding:6px 2px;border-bottom:1px solid var(--line-soft)}
+    .md-lc-tbl .lc-table td{display:block;padding:0;border:0;min-width:0}
+    .md-lc-tbl .lc-table td.lc-tw{font-weight:600;color:var(--ink)}
+    .md-lc-tbl .lc-table td.lc-tc{overflow-wrap:anywhere}
+    .md-lc-tbl .lc-table td.lc-tm{padding-left:10px;font-size:12px}
+    .md-lc-tbl .lc-table td.lc-tm .lc-mover{margin-top:2px}
+  }
   .md-about-nm{margin:0 0 8px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:14px;color:var(--ink);font-weight:500}
   .md-about-desc{margin:0;color:var(--ink);font-size:13px;line-height:1.5;user-select:text}
   .map-dock .jrn-insp,.map-dock #jrn-insp,.map-dock #jrn-insp.empty{width:auto;max-width:none;border-left:0;flex:1;min-height:0;display:flex;flex-direction:column}
   .map-dock .jrn-insp .body{overscroll-behavior:contain}
   .map-dock .jrn-dock{width:auto !important;height:auto !important;max-width:none;max-height:none;flex:1;min-height:0;border:0}
   .map-dock .jrn-dock-grip{display:none}
+  .map-dock .map-afflist{position:static;inset:auto;width:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  .map-afflist .al-tests{display:flex;flex-direction:column}
+  .map-dock .map-afflist .al-top{display:none}
+  .map-afflist .al-row .at{white-space:nowrap}
+  .map-afflist .al-row .loc{font-family:var(--mono);font-size:10.5px;color:var(--fn);overflow-wrap:anywhere}
+  .map-afflist .al-row[data-run="skipped"] .sub,.map-afflist .al-row[data-run="failed"] .sub{color:var(--warn)}
   .md-compare .map-cmp{position:static;inset:auto;width:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;flex:1;min-height:0;overflow:auto}
   /* the walk, as the dock's panel: the stop line pinned on top, the sentences scrolling, ASK pinned at the foot */
   .map-dock .map-tour{position:absolute;inset:0;top:0;right:0;left:0;bottom:0;width:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;padding:0;gap:0;overflow:hidden;display:flex;flex-direction:column}

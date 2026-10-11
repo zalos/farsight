@@ -114,6 +114,28 @@ test.describe('a read-only session', () => {
     await page.waitForTimeout(300);
     expect(writes).toEqual([]);
   });
+
+  /**
+   * The round-3 swarm (five roles): at 1280 the READ-ONLY chip folded into ⋯ first — the one chip a reviewer must
+   * always see. It never folds now; the search box gives up its word instead.
+   * @covers packages/server/public/app/shell.js::fitTopbar
+   */
+  for (const [w, h] of [[1440, 900], [1280, 800]]) {
+    test(`READ-ONLY stays in the bar at ${w}, on the Portfolio and the Map`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: h });
+      for (const hash of ['#/portfolio', '#/map']) {
+        await page.goto(base + hash);
+        await expect(page.locator('#stats')).not.toHaveText('loading…');
+        await expect.poll(() => page.evaluate(() => (window as any).readOnlyWhy())).toBe('flag');
+        const chip = page.locator('.topbar > #readonly');
+        await expect(chip).toBeVisible();
+        const box = await chip.boundingBox();
+        expect(box && box.x + box.width).toBeLessThanOrEqual(w);
+        // the bar itself never scrolls sideways
+        expect(await page.evaluate(() => { const b = document.querySelector('.topbar') as HTMLElement; return b.scrollWidth - b.clientWidth; })).toBeLessThanOrEqual(1);
+      }
+    });
+  }
 });
 
 /** Every visible control that would write, and which of them are live — none may be, on a read-only server. */
