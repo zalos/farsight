@@ -57,7 +57,7 @@ function defaultProfile(index: number): EchoProfile {
     backend: { mode: 'managed', url: `http://127.0.0.1:${4611 + index * 100}` },
     model: { provider: 'ollama', baseUrl: 'http://127.0.0.1:11434', model: '' },
     web: { port: 4480 + index },
-    hooks: { claude: false, codex: false },
+    hooks: { claude: false, codex: false, vscode: false },
     skills: { directories: [] },
     budget: { briefMaxChars: 1200, modelMaxTokens: 384, timeoutMs: 60_000 },
   };
@@ -104,7 +104,7 @@ export function validateConfig(value: unknown): EchoConfig {
     const web = record(profile.web, ['port', 'farsightOrigin']);
     const webPort = integer(web.port, 1024, 65535, 'echo.config.ports');
     reserve(webPort);
-    const hooks = record(profile.hooks, ['claude', 'codex']);
+    const hooks = record(profile.hooks, ['claude', 'codex', 'vscode']);
     const skills = record(profile.skills, ['directories']);
     if (!Array.isArray(skills.directories) || skills.directories.length > 64) fail();
     const directories = skills.directories.map(value => {
@@ -121,7 +121,7 @@ export function validateConfig(value: unknown): EchoConfig {
       backend: { mode: backend.mode, url: backend.mode === 'managed' ? address.url : address.exactUrl, ...(backendSecret === undefined ? {} : { secretRef: backendSecret }) },
       model: { provider: model.provider, baseUrl: modelAddress.exactUrl, model: label(model.model, 'echo.config.shape', true), ...(modelSecret === undefined ? {} : { secretRef: modelSecret }) },
       web: { port: webPort, ...(web.farsightOrigin === undefined ? {} : { farsightOrigin: origin(web.farsightOrigin, true).exactUrl }) },
-      hooks: { claude: bool(hooks.claude), codex: bool(hooks.codex) },
+      hooks: { claude: bool(hooks.claude), codex: bool(hooks.codex), vscode: hooks.vscode === undefined ? false : bool(hooks.vscode) },
       skills: { directories },
       budget: { briefMaxChars: integer(budget.briefMaxChars, 128, 16_384), modelMaxTokens: integer(budget.modelMaxTokens, 32, 4096), timeoutMs: integer(budget.timeoutMs, 100, 300_000) },
     };

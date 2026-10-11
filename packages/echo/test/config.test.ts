@@ -27,6 +27,17 @@ test('defaults are isolated and validate without credentials or selected models'
   assert.notEqual(config.profiles.personal, defaultConfig().profiles.personal);
 });
 
+test('older settings retain their hook choices while VS Code defaults off', () => {
+  const config = defaultConfig();
+  delete config.profiles.personal!.hooks.vscode;
+  config.profiles.personal!.hooks.claude = true;
+  assert.deepEqual(validateConfig(config).profiles.personal!.hooks, { claude: true, codex: false, vscode: false });
+  config.profiles.personal!.hooks.vscode = true;
+  assert.equal(validateConfig(config).profiles.personal!.hooks.vscode, true);
+  (config.profiles.personal!.hooks as any).vscode = 'true';
+  assert.throws(() => validateConfig(config));
+});
+
 test('unknown fields, credential values, wildcard identities and unsafe profile names fail without echoing input', () => {
   const changes: ((value: any) => void)[] = [
     value => { value.profiles.personal.backend.apiKey = 'literal-private-value'; },

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initConfig, loadContext, saveConfig } from '../dist/config.js';
-import { bindSession } from '../dist/sessions.js';
+import { bindSession, contextFingerprint } from '../dist/sessions.js';
 import type { EchoContext } from '../dist/types.js';
 
 async function fixture(run: (path: string) => Promise<void>): Promise<void> {
@@ -70,4 +70,20 @@ test('corrupt bindings and missing session identifiers fail closed', async () =>
   const [name] = await readdir(directory);
   await writeFile(join(directory, name!), '{');
   await assert.rejects(bindSession(context, 'codex', 'corrupt-session'), /could not be verified/);
+}));
+
+test('VS Code sessions keep an independent immutable binding and use the shared context fingerprint', async () => fixture(async path => {
+  const context = loadContext(path);
+  await bindSession(context, 'vscode', 'shared-id');
+  await bindSession(loadContext(path, 'work'), 'claude', 'shared-id');
+  await assert.rejects(bindSession(loadContext(path, 'work'), 'vscode', 'shared-id'), /already bound/);
+  const files = await readdir(join(context.directory, 'sessions'));
+  const bindings = await Promise.all(files.map(name => readFile(join(context.directory, 'sessions', name), 'utf8').then(JSON.parse)));
+  assert.equal(bindings.find(value => value.host === 'vscode').fingerprint, contextFingerprint(context));
+  const updated = structuredClone(context);
+  updated.profile.hooks.vscode = true;
+  updated.profile.web.port = 8999;
+  assert.equal(contextFingerprint(updated), contextFingerprint(context), 'non-identity setup changes do not invalidate a session');
+  updated.profile.identity.project = 'different';
+  assert.notEqual(contextFingerprint(updated), contextFingerprint(context));
 }));

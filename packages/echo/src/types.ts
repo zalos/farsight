@@ -10,7 +10,7 @@ export interface EchoProfile {
   backend: { mode: 'managed' | 'external'; url: string; secretRef?: string };
   model: { provider: 'ollama' | 'openai-compatible'; baseUrl: string; model: string; secretRef?: string };
   web: { port: number; farsightOrigin?: string };
-  hooks: { claude: boolean; codex: boolean };
+  hooks: { claude: boolean; codex: boolean; vscode?: boolean };
   skills: { directories: string[] };
   budget: { briefMaxChars: number; modelMaxTokens: number; timeoutMs: number };
 }

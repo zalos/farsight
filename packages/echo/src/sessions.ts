@@ -12,13 +12,18 @@ function stable(value: unknown): string {
   return `{${Object.keys(object).sort().filter(key => object[key] !== undefined).map(key => `${JSON.stringify(key)}:${stable(object[key])}`).join(',')}}`;
 }
 
-/** One immutable binding per host session, shared by every profile in the same configuration directory. */
-export async function bindSession(ctx: EchoContext, host: 'claude' | 'codex', sessionId: string): Promise<void> {
-  if (!['claude', 'codex'].includes(host) || typeof sessionId !== 'string' || !sessionId.trim() || sessionId.length > 1024 || /[\x00-\x1f\x7f]/.test(sessionId)) throw new Error(echoConfigWord('echo.session.invalid'));
-  const fingerprint = hash(stable({
+/** Identity of the immutable store/model selection shared by sessions and local memory access. */
+export function contextFingerprint(ctx: EchoContext): string {
+  return hash(stable({
     configPath: ctx.configPath, profileId: ctx.profileId, dataDirectory: ctx.dataDirectory,
     identity: ctx.profile.identity, backend: ctx.profile.backend, model: ctx.profile.model,
   }));
+}
+
+/** One immutable binding per host session, shared by every profile in the same configuration directory. */
+export async function bindSession(ctx: EchoContext, host: 'claude' | 'codex' | 'vscode', sessionId: string): Promise<void> {
+  if (!['claude', 'codex', 'vscode'].includes(host) || typeof sessionId !== 'string' || !sessionId.trim() || sessionId.length > 1024 || /[\x00-\x1f\x7f]/.test(sessionId)) throw new Error(echoConfigWord('echo.session.invalid'));
+  const fingerprint = contextFingerprint(ctx);
   const directory = join(ctx.directory, 'sessions');
   const destination = join(directory, `${hash(`${host}:${sessionId}`)}.json`);
   const temporary = join(directory, `.${randomUUID()}.tmp`);
