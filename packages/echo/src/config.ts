@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { parseKeychainRef } from './secrets.js';
 import { withSettingsLock } from './settings-lock.js';
-import { pinConfigCredentials, recordFileTrust, requireFileTrust } from './trust.js';
+import { withConfigCredentialPins, recordFileTrust, requireFileTrust } from './trust.js';
 import type { EchoConfig, EchoContext, EchoProfile } from './types.js';
 
 function fail(key = 'echo.config.shape'): never { throw new Error(echoConfigWord(key)); }
@@ -155,7 +155,6 @@ export function loadContext(configPath: string, profileId?: string): EchoContext
 
 async function writeConfig(configPath: string, value: unknown, exclusive: boolean): Promise<EchoConfig> {
   const config = validateConfig(value);
-  pinConfigCredentials(config);
   const destination = resolve(configPath);
   const directory = dirname(destination);
   const temporary = join(directory, `.echo-settings-${randomUUID()}.tmp`);
@@ -170,12 +169,15 @@ async function writeConfig(configPath: string, value: unknown, exclusive: boolea
     const file = await open(temporary, 'wx', 0o600);
     const contents = `${JSON.stringify(config, null, 2)}\n`;
     try { await file.writeFile(contents); await file.sync(); } finally { await file.close(); }
-    if (exclusive) await link(temporary, destination);
-    else await rename(temporary, destination);
-    recordFileTrust('configs', destination, contents);
+    await withConfigCredentialPins(config, async () => {
+      if (exclusive) await link(temporary, destination);
+      else await rename(temporary, destination);
+      recordFileTrust('configs', destination, contents);
+    });
     return config;
   } catch (error) {
     if (exclusive && (error as NodeJS.ErrnoException).code === 'EEXIST') fail('echo.config.exists');
+    if (error instanceof Error && error.message === echoConfigWord('echo.secret.origin')) throw error;
     fail('echo.config.write');
   } finally { await unlink(temporary).catch(() => {}); }
 }
@@ -188,9 +190,10 @@ export async function trustConfig(configPath: string): Promise<EchoConfig> {
     const path = realpathSync(resolve(configPath));
     const contents = readFileSync(path, 'utf8');
     const config = validateConfig(JSON.parse(contents));
-    pinConfigCredentials(config);
-    recordFileTrust('configs', path, contents);
-    return config;
+    return withConfigCredentialPins(config, () => {
+      recordFileTrust('configs', path, contents);
+      return config;
+    });
   });
 }
 

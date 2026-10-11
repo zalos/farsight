@@ -121,7 +121,7 @@ test('keychain access never inherits credentials or returns command diagnostics 
   assert.equal(await resolveSecret(), '');
   assert.equal(parseKeychainRef('keychain:farsight-echo/provider/account'), null);
   assert.equal(parseKeychainRef('keychain:farsight/jira-example'), null);
-  pinCredentialOrigin('keychain:farsight-echo/test', 'https://models.example.com');
+  await pinCredentialOrigin('keychain:farsight-echo/test', 'https://models.example.com');
   const calls: [string, string[]][] = [];
   const runner = async (command: string, args: string[]) => { calls.push([command, args]); return 'test-secret'; };
   assert.equal(await resolveSecret('keychain:farsight-echo/test', { platform: 'darwin', runner, origin: 'https://models.example.com' }), 'test-secret');

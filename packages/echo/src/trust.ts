@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
+import { withSettingsLock } from './settings-lock.js';
 import type { EchoConfig } from './types.js';
 
 type Kind = 'configs' | 'connections' | 'credentials';
@@ -64,26 +65,69 @@ export function forgetFileTrust(kind: 'configs' | 'connections', path: string): 
   if (readReceipt(kind, subject)) unlinkSync(receiptPath(kind, subject));
 }
 
-/** A credential reference is permanently tied to one exact origin in user state. */
-export function pinCredentialOrigin(ref: string, origin: string): void {
-  const value = new URL(origin).origin;
-  const existing = readReceipt('credentials', ref);
-  if (existing) {
-    if (existing.value !== value) throw new Error(echoConfigWord('echo.secret.origin'));
-    return;
+type Pin = readonly [ref: string, origin: string];
+function preflightPins(pins: Pin[]): Map<string, string> {
+  const selected = new Map<string, string>();
+  for (const [ref, origin] of pins) {
+    const value = new URL(origin).origin;
+    if (selected.has(ref) && selected.get(ref) !== value) throw new Error(echoConfigWord('echo.secret.origin'));
+    selected.set(ref, value);
   }
-  const path = receiptPath('credentials', ref, true);
-  try { writeFileSync(path, `${JSON.stringify({ version: 1, subject: ref, value })}\n`, { flag: 'wx', mode: 0o600 }); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST' || readReceipt('credentials', ref)?.value !== value) throw new Error(echoConfigWord('echo.secret.origin'));
+  for (const [ref, value] of selected) {
+    const existing = readReceipt('credentials', ref);
+    if (existing && existing.value !== value) throw new Error(echoConfigWord('echo.secret.origin'));
   }
+  return selected;
+}
+
+/** A failed settings write must not reserve a new credential reference permanently. */
+async function withCredentialPins<T>(pins: Pin[], action: () => T | Promise<T>): Promise<T> {
+  // Every configuration and standalone pin shares this user-state writer lock;
+  // per-config locks alone cannot serialize workspaces saving different files.
+  privateDirectory(trustDirectory(), true);
+  const directory = join(trustDirectory(), 'credentials');
+  privateDirectory(directory, true);
+  const result = await withSettingsLock(join(directory, '.pin-transaction'), async () => {
+    const selected = preflightPins(pins);
+    const created: Array<{ path: string; ino: number; dev: number }> = [];
+    try {
+      for (const [ref, value] of selected) {
+        if (readReceipt('credentials', ref)) continue;
+        const path = receiptPath('credentials', ref);
+        const file = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        try {
+          const info = fstatSync(file);
+          created.push({ path, ino: info.ino, dev: info.dev });
+          writeFileSync(file, `${JSON.stringify({ version: 1, subject: ref, value })}\n`);
+        } finally { closeSync(file); }
+      }
+      return { ok: true as const, value: await action() };
+    } catch (error) {
+      for (const owned of created.reverse()) {
+        const current = lstatSync(owned.path, { throwIfNoEntry: false });
+        if (current?.ino === owned.ino && current.dev === owned.dev) unlinkSync(owned.path);
+      }
+      // An operation may itself fail with EEXIST (exclusive initialization).
+      // Return it through the lock so it cannot be mistaken for lock contention.
+      return { ok: false as const, error };
+    }
+  });
+  if (!result.ok) throw result.error;
+  return result.value;
+}
+
+/** A successful credential selection permanently ties the reference to one exact origin. */
+export async function pinCredentialOrigin(ref: string, origin: string): Promise<void> {
+  await withCredentialPins([[ref, origin]], () => {});
 }
 export function requireCredentialOrigin(ref: string, origin?: string): void {
   if (!origin || readReceipt('credentials', ref)?.value !== new URL(origin).origin) throw new Error(echoConfigWord('echo.secret.origin'));
 }
-export function pinConfigCredentials(config: EchoConfig): void {
+export async function withConfigCredentialPins<T>(config: EchoConfig, action: () => T | Promise<T>): Promise<T> {
+  const pins: Pin[] = [];
   for (const profile of Object.values(config.profiles)) {
-    if (profile.model.secretRef) pinCredentialOrigin(profile.model.secretRef, profile.model.baseUrl);
-    if (profile.backend.secretRef) pinCredentialOrigin(profile.backend.secretRef, profile.backend.url);
+    if (profile.model.secretRef) pins.push([profile.model.secretRef, profile.model.baseUrl]);
+    if (profile.backend.secretRef) pins.push([profile.backend.secretRef, profile.backend.url]);
   }
+  return withCredentialPins(pins, action);
 }
