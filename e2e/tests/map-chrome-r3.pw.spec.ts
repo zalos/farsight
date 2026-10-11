@@ -85,6 +85,14 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
         return { under: bar.top >= crumbs.bottom - 1, wide: [...c.querySelectorAll<HTMLElement>('.map-row1,.map-crumbs,.map-affbar')].some((e) => e.getBoundingClientRect().right > innerWidth + 1 || e.scrollWidth > e.clientWidth + 1) };
       });
       expect(r).toEqual({ under: true, wide: false });
+      // at an action too (the reference app's graph put WALK 600 px past the window there with the bar on)
+      await go(page, STREET + '?screen=1&action=1');
+      await expect(page.locator('.map-act-host')).toBeVisible();
+      const atAction = await box(page, '.map-crumbs .map-tb-walk');
+      await go(page, STREET + '?screen=1&action=1&affected=' + encodeURIComponent(TABLE) + '&ahops=3');
+      await expect(page.locator('.map-affbar')).toBeVisible();
+      expect(await box(page, '.map-crumbs .map-tb-walk')).toEqual(atAction);
+      expect(atAction![0] + atAction![2]).toBeLessThanOrEqual(W);
     });
 
     /**
