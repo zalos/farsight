@@ -148,6 +148,32 @@ test.describe('on invoice-app and the NX example together', () => {
     await expect(page).toHaveURL(/view=app&project=ops-admin/);
   });
 
+  /**
+   * A cold load of a Map journey address on a multi-source graph lands at the JOURNEY stop — by the journey's full id,
+   * by the name a person types (the address is rewritten to the id), from either source, and through an old journey
+   * link's redirect. The live dogfood server (22k nodes, six sources) used to leave `#/map/new-invoice` at ALL JOURNEYS.
+   * @covers packages/server/public/app/surfaces/map.js::entryTarget
+   * @covers packages/server/public/app/surfaces/map.js::resolveEntryName
+   */
+  test('a Map journey address cold-loads at the journey stop, by id or by name, from either source', async ({ page }) => {
+    const atTable = async (re: RegExp) => {
+      await expect(page).toHaveURL(re);
+      await expect(page).toHaveURL(/layout=table/);
+      await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
+    };
+    await go(page, '#/map/' + encodeURIComponent('invoice-app::flow::new-invoice') + '?layout=table&lens=hybrid');
+    await atTable(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);
+    await expect(page.locator('.map-crumbs')).toContainText('Start a new invoice');
+    await go(page, '#/map/new-invoice?screen=1&layout=table&lens=hybrid');
+    await atTable(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);
+    await go(page, '#/journeys/new-invoice?view=sheet&step=1&lens=hybrid');
+    await atTable(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);
+    // a journey of the second source, by its name alone
+    await go(page, '#/map/review-open-invoices?lens=hybrid');
+    await atTable(/#\/map\/[^?]*%3A%3Aflow%3A%3Areview-open-invoices/);
+    expect(page.url()).not.toContain('invoice-app%3A%3Aflow%3A%3Areview');
+  });
+
   test('the Map bands by domain when asked, and says no domain for the rest', async ({ page }) => {
     await go(page, '#/map?lens=hybrid');
     // at 1440 px Band by is folded to its current value, the choices in its menu
