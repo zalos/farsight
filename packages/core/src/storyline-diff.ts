@@ -92,6 +92,8 @@ export interface StorylineDelta {
   to?: string;
   /** contract: whether the storyline's code calls the operation at sync B (A for a removal) */
   called?: boolean;
+  /** verdict: the short words the card's chip prints (the status, else the word; the skips when only they moved) */
+  chip?: { from: string; to: string };
   loc?: Loc;
   /** the hybrid and code words */
   sentence: DeltaSentence;
@@ -255,7 +257,7 @@ function statusWords(record: GraphNode | undefined, status: string): string {
 }
 
 /** A verdict's identity: the word without its freshness (stale is the one freshness fact, never a verdict change), the status, the skips and failures. */
-function verdictOf(sum: JourneySummary): { key: string; text: string; biz: string } | null {
+function verdictOf(sum: JourneySummary): { key: string; text: string; biz: string; short: string; skipped: number } | null {
   const v = sum.coverage?.journey?.verdict;
   if (!v) return null;
   const base = v.word.key === 'journey.evidence.stale' ? 'journey.evidence.observed' : v.word.key.replace(/Stale$/, '');
@@ -264,7 +266,7 @@ function verdictOf(sum: JourneySummary): { key: string; text: string; biz: strin
   const text = v.status ? [v.status, ...parts.slice(1)].join(' · ') : [word, ...parts].join(' · ');
   // the verdict's words are the chip's in every register (lib/test-chip.js prints the same word in business)
   const biz = text;
-  return { key: [v.word.cls === 'stale' ? 'observed' : v.word.cls, base, v.status ?? '', v.skipped ?? 0, v.failed ?? 0].join('|'), text, biz };
+  return { short: v.status ?? word, skipped: v.skipped ?? 0, key: [v.word.cls === 'stale' ? 'observed' : v.word.cls, base, v.status ?? '', v.skipped ?? 0, v.failed ?? 0].join('|'), text, biz };
 }
 
 const SEVERITY_ORDER: Record<DeltaKind, number> = { built: 0, gate: 1, writer: 2, contract: 3, verdict: 4 };
@@ -405,8 +407,13 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     const vb = verdictOf(wbj.sum);
     if (!va || !vb || va.key === vb.key) continue;
     const args = { journey: wbj.row.name, from: va.text, to: vb.text };
+    // the card's chip: the status (else the word) on each side; the skips when that is all that moved
+    const same = va.short === vb.short;
+    const chip = same
+      ? { from: t('compare.verdict.skipped', 'professional').replace('{n}', String(va.skipped)), to: t('compare.verdict.skipped', 'professional').replace('{n}', String(vb.skipped)) }
+      : { from: va.short, to: vb.short };
     out.push({
-      kind: 'verdict', change: 'changed',
+      kind: 'verdict', change: 'changed', chip,
       subject: { id: flow, name: wbj.row.name, kind: 'flow' },
       journeys: [flow], from: va.text, to: vb.text,
       sentence: { key: 'compare.delta.verdict.changed', args },
@@ -437,7 +444,7 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     byJourney.push({
       flow, kinds,
       ...(kinds.built && w ? { built: { n: w.sum.user.filter((u) => !!u.loc).length, of: w.sum.user.length } } : {}),
-      ...(v ? { verdict: { from: v.from!, to: v.to! } } : {}),
+      ...(v ? { verdict: v.chip ?? { from: v.from!, to: v.to! } } : {}),
     });
   }
 
