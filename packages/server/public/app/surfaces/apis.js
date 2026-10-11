@@ -11,6 +11,7 @@ import { sym } from '../sym.js';
 import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs, registerTip, numberTip, tipSource } from '../lib/tooltip.js';
 import { defAttrs, unCode } from '../lib/counted.js';
+import { emptyHtml } from '../lib/empty-state.js';
 
 /** True in the business lens: no methods, paths, identifiers or spec lines. @group APIs */
 function biz() { return currentLens() === 'business'; }
@@ -83,7 +84,7 @@ async function loadList(el) {
   let html = '<div class="set-wrap api-wrap"><div class="api-head"><h1>' + esc(t('nav.apis')) + '</h1>'
     + '<span class="api-scope">' + esc(t('apis.scopeLabel')) + ' · ' + esc(scopeLabel()) + '</span></div>'
     + '<p class="sub">' + esc(t('apis.sub')) + '</p>';
-  if (!data.apis.length) html += '<div class="set-sec"><p class="set-note">' + esc(t('apis.empty')) + '</p></div>';
+  if (!data.apis.length) html += '<div class="set-sec">' + emptyHtml('apis') + '</div>';
   else html += '<div class="api-grid">' + data.apis.map(cardHtml).join('') + '</div>';
   el.innerHTML = html + '</div>';
 }

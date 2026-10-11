@@ -412,7 +412,8 @@ export async function saveView(surface, format, opts = {}) {
     const src = await reg.provider();
     if (!src) throw new Error(t('export.why.notDrawn'));
     const f = factsFor(surface, src.title);
-    const lines = footerLines(f, t);
+    // a provider may add lines under the footer's own (the Map's comparison: one line per change)
+    const lines = [...footerLines(f, t), ...(src.extraLines || [])];
     const name = exportFilename({ surface, source: f.source, subject: src.subject, sync: f.sync, date: f.date, ext: format });
     let out = { file: name, footer: lines.join(' | ') };
     if (format === 'csv') {

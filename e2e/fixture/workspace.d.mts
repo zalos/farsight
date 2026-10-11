@@ -8,3 +8,4 @@ export interface FixtureWorkspace { dir: string; graph: string; cleanup: () => v
 export function makeWorkspace(label?: string, opts?: { fixed?: boolean }): FixtureWorkspace;
 export function ingest(dir: string, graph: string): void;
 export function makeProjectsWorkspace(label?: string): FixtureWorkspace;
+export function makeCompareWorkspace(label?: string): Promise<FixtureWorkspace>;

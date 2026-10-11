@@ -25,7 +25,7 @@ import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
-import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
+import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml, copyDoorsHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
@@ -40,7 +40,11 @@ import {
   paintDistrict, affectedBarHtml, screenChipReach, affectedFlows, affectedListHtml, affectedExport, affectedReady,
 } from './map-affected.js';
 import { shareLink } from '../share.js';
-import { exportToolHtml, registerExport } from '../lib/export.js';
+import { exportToolHtml, registerExport, saveView } from '../lib/export.js';
+import {
+  CMP, readCompare, compareHashValue, loadCompare, setCompareSpec, compareAsOf, compareToolHtml, compareChromeClick,
+  paintCompareCovers, paintCompareLanes, drawComparePanel, compareExportFacts,
+} from './map-compare.js';
 import { mapStopOf } from '../lib/route-url.js';
 import { sheetModel, screenActions } from '../lib/journey-model.js';
 import {
@@ -130,6 +134,8 @@ const MAP = {
   nbAll: { districts: [] },
   /** the storyline the board draws (`?storyline=<id>`), or null for every journey */
   storyline: null,
+  /** the sync the board is drawn at when a comparison's later end is not the served one (surfaces/map-compare.js), else null */
+  asof: null,
   storyMenu: false,
   /** banded by persona: each group's run (`layoutDistricts()` `subs`) — where the group words sit */
   subs: [],
@@ -165,12 +171,14 @@ const MAP = {
 
 /** Per-sync cache of journey answers, keyed `flowId@sync` — a register flip never refetches. */
 const JOURNEY_CACHE = new Map();
-function syncKey() { return (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || ''; }
+function syncKey() { return MAP.asof || (S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync) || ''; }
+/** `&asof=<sync>` while a comparison draws a sync the server does not serve (compareAsOf), else nothing. */
+function asofParam() { return MAP.asof ? '&asof=' + MAP.asof : ''; }
 function fetchJourney(flowId) {
   const key = flowId + '@' + syncKey();
   if (!JOURNEY_CACHE.has(key)) {
     // the summary without the walk's steps: nothing on the board reads them (lane X, perf round 2026-10-05)
-    JOURNEY_CACHE.set(key, fetch('/api/journey?entry=' + encodeURIComponent(flowId) + '&steps=0')
+    JOURNEY_CACHE.set(key, fetch('/api/journey?entry=' + encodeURIComponent(flowId) + '&steps=0' + asofParam())
       .then((r) => (r.ok ? r.json() : null)).catch(() => null));
   }
   return JOURNEY_CACHE.get(key);
@@ -264,6 +272,8 @@ export function mountMap(route, el) {
   MAP.band = readBand();
   MAP.storyline = (route && route.storyline) || null;
   MAP.layout = routeLayout(route);
+  setCompareSpec(readCompare(route && route.raw));
+  MAP.asof = null;
   MAP.lanesAway = false;
   MAP.storyMenu = false;
   MAP.fitted = false;
@@ -320,6 +330,7 @@ export function mountMap(route, el) {
   MAP.board.addEventListener('pointermove', (e) => { const r = MAP.board.getBoundingClientRect(); MAP.ptr = { x: e.clientX - r.left, y: e.clientY - r.top }; }, { passive: true });
   MAP.board.addEventListener('wheel', (e) => { const r = MAP.board.getBoundingClientRect(); MAP.ptr = { x: e.clientX - r.left, y: e.clientY - r.top }; }, { capture: true, passive: true });
   MAP.stage.querySelector('.map-chrome').addEventListener('click', onChromeClick);
+  MAP.stage.querySelector('.map-cmp').addEventListener('click', onComparePanelClick);
   const host = MAP.stage.querySelector('.map-prop-host');
   host.addEventListener('wheel', onPropWheel, { passive: false });
   host.addEventListener('pointerdown', onPropPointer);
@@ -342,6 +353,7 @@ export function mapRefresh(reason) {
   if (!MAP.el || !MAP.world) return;
   if (reason === 'lens' || reason === 'register') {
     redrawChrome();
+    drawComparePanel(MAP.stage && MAP.stage.querySelector('.map-cmp'));
     drawRisk();
     // a call's height follows its words in the lens, so the districts re-lay (the journey in view stays put)
     relayoutKeeping(() => renderAll());
@@ -352,7 +364,7 @@ export function mapRefresh(reason) {
     return;
   }
   // a new graph: the cached walks describe the old one
-  if (reason === 'sync') { JOURNEY_CACHE.clear(); forgetWalks(); }
+  if (reason === 'sync') { JOURNEY_CACHE.clear(); forgetWalks(); CMP.key = null; }
   closeStops();
   closeCard();
   closeProperty({ keepHash: true });
@@ -371,6 +383,8 @@ export function mapUpdate(route) {
   // the back button or a link moved the storyline: the board redraws before going where the route says
   if ((route.storyline || null) !== (MAP.storyline || null) && MAP.designs) applyStoryline(route.storyline || null, { fromRoute: true });
   if (routeLayout(route) !== MAP.layout && MAP.designs) setLanesLayout(routeLayout(route), { fromRoute: true });
+  const cmp = readCompare(route.raw);
+  if (JSON.stringify(cmp) !== JSON.stringify(CMP.spec) && MAP.designs) { setCompareSpec(cmp); syncCompare(); }
   applyRouteTarget(route, true);
 }
 
@@ -447,7 +461,11 @@ function readBand() {
  */
 function storylineToolHtml() {
   const list = (MAP.tree && MAP.tree.storylines) || [];
-  if (!list.length) return '';
+  // none declared: the picker still says it exists, why it has nothing, and where a storyline is declared (proposal 9)
+  if (!list.length) {
+    return MAP.tree ? '<span class="map-story-pick none" data-empty="mapStorylines"><span class="hud-label"' + tipAttrs({ key: 'map.storyline.pick', noFocus: true }) + '>' + esc(t('map.storyline.pick')) + '</span>'
+      + '<span class="map-chip k-absent"' + tipAttrs({ key: 'empty.mapStorylines' }) + '>' + esc(t('map.storyline.none')) + '</span></span>' : '';
+  }
   const on = MAP.nb.storyline ? MAP.nb.storyline.id : '';
   const opt = (id, words, tip) => '<button type="button" class="map-seg' + (on === id ? ' on' : '') + '" data-act="storyline" data-storyline="' + esc(id) + '" aria-pressed="' + (on === id) + '"'
     + tipAttrs({ ...tip, noFocus: true }) + '>' + esc(words) + '</button>';
@@ -477,7 +495,7 @@ function unknownStorylineHtml(id) {
     + '<span class="known">' + (list.length
       ? '<span class="hud-label"' + tipAttrs({ key: 'journeys.storyline.known', noFocus: true }) + '>' + esc(t('journeys.storyline.known')) + '</span>'
         + list.map((x) => door(x.id, x.name, { text: x.name + ' · ' + x.id + (x.description ? ' · ' + sentence(x.description) : '') })).join('')
-      : '<span' + tipAttrs({ key: 'journeys.storyline.noneKnown', noFocus: true }) + '>' + esc(t('journeys.storyline.noneKnown')) + '</span>')
+      : '<span' + tipAttrs({ key: 'empty.mapStorylines', noFocus: true }) + '>' + esc(t('empty.mapStorylines')) + '</span>')
     + door('', t('map.storyline.all'), { key: 'map.storyline.all' }) + '</span></span>';
 }
 /**
@@ -502,6 +520,7 @@ function applyStoryline(id, opts = {}) {
   if (!opts.fromRoute) writeHash(null, null);
   fillWork(MAP.gen);
   walk(MAP.gen);
+  syncCompare();
 }
 
 // ── the storyline as swimlanes (round 2026-10-10 §2) ─────────────────────
@@ -574,6 +593,7 @@ function drawLanes() {
   const paint = () => {
     el.style.cssText = 'width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + LANE_K + ')';
     el.innerHTML = lanesHtml(model, G, { evidenceHtml: storyEvidenceHtml(), doorHtml: readinessDoorHtml(story.id, 'map-story-ready', story.repo), sentence });
+    paintCompareLanes(el);
   };
   paint();
   // what is drawn under the lanes is measured (offset sizes are layout units, untouched by the scale): when it is not
@@ -692,7 +712,7 @@ function start() {
   MAP.failed = false;
   renderAll();
   const scope = S.scope === 'all' || !S.scope || !S.scope.length ? 'all' : S.scope.join(',');
-  fetch('/api/design?scope=' + encodeURIComponent(scope)).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then((design) => {
+  fetch('/api/design?scope=' + encodeURIComponent(scope) + asofParam()).then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status))))).then((design) => {
     if (gen !== MAP.gen) return;
     const sources = design.designs || design.sources || (Array.isArray(design) ? design : []);
     MAP.designs = Array.isArray(sources) ? sources : [];
@@ -715,6 +735,7 @@ function start() {
     fillWork(gen);
     applyRouteTarget(MAP.route, false);
     walk(gen);
+    syncCompare();
   }).catch(() => {
     if (gen !== MAP.gen) return;
     MAP.failed = true;
@@ -866,6 +887,8 @@ function writeHash(flow, node) {
     dock: ap ? ap.dock : null,
     // the storyline on the board is part of the picture
     storyline: MAP.storyline || null,
+    // a comparison of two syncs is part of the picture, and only on a storyline (surfaces/map-compare.js)
+    compare: MAP.storyline ? compareHashValue() : null,
     // the Affected mode is part of the picture (lane I)
     ...affectedParams(),
   });
@@ -1658,6 +1681,8 @@ function stageHtml() {
     + '<div class="map-afflist" hidden role="dialog" data-map-wheel="own" aria-label="' + esc(t('map.affected.listTitle')) + '"></div>'
     + '<div class="map-toast" role="status" aria-live="polite" hidden></div>'
     + '<div class="map-prop-host" hidden></div>'
+    // compare two syncs on a storyline (surfaces/map-compare.js): what changed, beside the board
+    + '<aside class="map-cmp" hidden data-map-wheel="own" aria-label="' + esc(t('compare.panel.title')) + '"></aside>'
     // the stops below the street (surfaces/map-stops.js): the journey as a table, one action's beats with the code's dock
     + '<div class="map-table-host" hidden></div><div class="map-act-host" hidden></div>'
     + '</div><div class="map-xcard" hidden role="dialog"></div></div>';
@@ -1675,6 +1700,7 @@ function chromeHtml() {
     // the one LAYOUT control: its choices are the stop's (surfaces/map-stops.js MAP_LAYOUTS)
     + '<span class="map-layout-slot"></span>'
     + storylineToolHtml()
+    + compareToolHtml(MAP.nb && MAP.nb.storyline)
     + bandToolHtml()
     + tool('plumb', 'map.tool.plumb', esc(t('map.tool.plumb')), MAP.plumb ? ' on' : '')
     + tool('in', 'map.tool.zoomIn', '+')
@@ -1852,7 +1878,7 @@ function onChromeClick(e) {
     case 'storyline': applyStoryline(b.dataset.storyline || null); break;
     case 'storyline-menu': MAP.storyMenu = !MAP.storyMenu; MAP.bandMenu = false; redrawChrome(); if (MAP.storyMenu) { const f = MAP.stage.querySelector('.map-story-pick .map-seg.on') || MAP.stage.querySelector('.map-story-pick .map-seg'); if (f) f.focus(); } break;
     case 'band-menu': MAP.bandMenu = !MAP.bandMenu; MAP.storyMenu = false; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-band-pick .map-segs .map-seg'); if (f) f.focus(); } break;
-    default:
+    default: onCompareAct(b);
   }
 }
 /** The level pills: each goes to its height. */
@@ -2203,8 +2229,9 @@ function renderAll() {
     MAP.world.innerHTML = '';
     MAP.world.appendChild(svg);
     svg.innerHTML = '';
-    const msg = MAP.failed ? t('map.failed') : !MAP.designs ? t('map.loading') : t('map.empty');
-    const key = MAP.failed ? 'map.failed' : !MAP.designs ? 'map.loading' : 'map.empty';
+    // an empty board says what it is for, why it is empty and what fills it (round 2026-10-10, proposal 9)
+    const msg = MAP.failed ? t('map.failed') : !MAP.designs ? t('map.loading') : t('empty.map');
+    const key = MAP.failed ? 'map.failed' : !MAP.designs ? 'map.loading' : 'empty.map';
     let note = MAP.stage.querySelector('.map-note');
     if (!note) {
       note = document.createElement('div');
@@ -2259,6 +2286,7 @@ function renderDistrict(id) {
   sizeDistrict(id);
   tabDistrict(el);
   paintDistrict(el, id, j && j.model);
+  paintCompareCovers(el);
   // a district drawn before it is placed has no size yet: placeDistricts() folds it once it has one
   if (el.style.width) foldCoverChips(el);
   if (had) focusQuiet(el.querySelector(had));
@@ -2825,7 +2853,7 @@ function drawCard() {
   if (!box || !MAP.card || !MAP.card.tg) return;
   const tg = MAP.card.tg;
   const nodeId = tg.kind === 'call' ? tg.call.nodeId : tg.data.nodeId;
-  let head, ev = '', name, code, store = '', doors = [];
+  let head, ev = '', name, code, store = '', doors = [], copyNode = null, copyKind = 'call';
   if (tg.kind === 'call') {
     const c = tg.call;
     const modes = [...new Set(c.data.map((x) => x.mode).filter((x) => x !== 'reached'))];
@@ -2842,6 +2870,7 @@ function drawCard() {
     // every detail is a door (§3.2): the contract, the spec line, the handler, the card on the code map
     const route = nodeId && S.BYID[nodeId];
     if (route) doors = doorsFor('call', route, { handler: (c.marker && c.marker.handler) || null, flow: tg.flow });
+    if (route) { copyNode = route; copyKind = 'call'; }
   } else {
     const dd = tg.data;
     head = esc(dataKindWords(dd)) + ' · ' + esc(modeWord(dd.mode));
@@ -2859,6 +2888,7 @@ function drawCard() {
     }
     const dn = S.BYID[dd.nodeId] || n;
     if (dn) doors = doorsFor(dd.kind, dn, { flow: tg.flow });
+    if (dn && dn.id) { copyNode = dn; copyKind = dd.kind; }
   }
   const on = screensUsing(tg.model, tg.kind === 'call' ? 'call' : tg.kind, nodeId);
   // the same part in the journey's timeline, at the step whose markers include it, selected (§3.1)
@@ -2878,6 +2908,8 @@ function drawCard() {
       : '<span class="map-chip k-absent">' + esc(t('map.card.onNone')) + '</span>') + '</div>'
     + '<div class="acts">' + (nodeId ? '<button type="button" class="map-tb aff' + (affectedSpec() === nodeId ? ' on' : '') + '" data-act="affected"' + tipAttrs({ key: 'map.affected.action', noFocus: true }) + '>' + esc(t('map.affected.action')) + '</button>' : '')
     + doorsHtml(doors) + '</div>'
+    // copy as MCP call · curl · CLI with the full id (round 2026-10-10, proposal 9)
+    + (copyNode ? '<div class="acts copy">' + copyDoorsHtml(copyKind, copyNode) + '</div>' : '')
     // one stop down: the call's action opened into its beats on this surface (surfaces/map-stops.js)
     + (tg.kind === 'call' && tg.call.marker ? '<div class="tojrn"><button type="button" class="map-tb map-walk" data-act="beats"' + tipAttrs({ key: 'map.act.walk', noFocus: true }) + '>' + sym('bolt') + esc(t('map.act.walk')) + '</button></div>' : '')
     + (toJrn ? '<div class="tojrn">' + toJrn + '</div>' : '');
@@ -3360,10 +3392,61 @@ async function mapPicture() {
   fitAll(false);
   await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
   const story = MAP.nb && MAP.nb.storyline;
-  if (lanesShown() && MAP.lanes) return { world: MAP.world, size: MAP.lanes.size, scale: MAP.cv.state().s, title: story.name, subject: story.id + '-lanes' };
-  return { world: MAP.world, size: MAP.size, scale: MAP.cv.state().s, title: story ? story.name : t('export.board.all'), subject: story ? story.id : '' };
+  // comparing: the title names both syncs, the file is named for them, and the changes ride under the picture
+  const cmp = story ? compareExportFacts(story) : null;
+  const extra = cmp ? { title: cmp.title, subject: cmp.subject + (lanesShown() ? '-lanes' : ''), extraLines: cmp.lines } : null;
+  if (lanesShown() && MAP.lanes) return { world: MAP.world, size: MAP.lanes.size, scale: MAP.cv.state().s, title: story.name, subject: story.id + '-lanes', ...(extra || {}) };
+  return { world: MAP.world, size: MAP.size, scale: MAP.cv.state().s, title: story ? story.name : t('export.board.all'), subject: story ? story.id : '', ...(extra || {}) };
 }
 registerExport('map', mapPicture);
+
+// ── compare two syncs on a storyline (round 2026-10-10, proposal 7; surfaces/map-compare.js) ──────────────
+/**
+ * Ask for the comparison the address names on the storyline drawn, then paint it: the control, the chips on the
+ * covers and the lanes, the panel. When the later end is not the sync the server serves, the board is drawn again
+ * as of it (the journeys and the designs read `asof`), once.
+ */
+function syncCompare() {
+  const host = MAP.stage && MAP.stage.querySelector('.map-cmp');
+  const story = MAP.nb && MAP.nb.storyline;
+  if (!story || !CMP.spec) {
+    if (host) { host.hidden = true; host.innerHTML = ''; }
+    if (MAP.asof) { MAP.asof = null; start(); return; }
+    if (MAP.world) { paintCompareCovers(MAP.world); const ln = MAP.world.querySelector('.map-lanes'); if (ln) paintCompareLanes(ln); }
+    return;
+  }
+  const key = story.id + '|' + JSON.stringify(CMP.spec);
+  const paint = () => {
+    if (!MAP.stage) return;
+    redrawChrome();
+    drawComparePanel(MAP.stage.querySelector('.map-cmp'));
+    if (MAP.world) { paintCompareCovers(MAP.world); const ln = MAP.world.querySelector('.map-lanes'); if (ln) paintCompareLanes(ln); }
+  };
+  if (CMP.key === key && (CMP.data || CMP.error)) { paint(); return; }
+  CMP.key = key;
+  paint();
+  loadCompare(story.id, story.repo, () => {
+    const want = compareAsOf();
+    if ((want || null) !== (MAP.asof || null)) { MAP.asof = want; start(); return; }
+    paint();
+  });
+}
+/** A click on the Compare control or in the panel. */
+function onCompareAct(b) {
+  if (b.dataset.act === 'cmp-save') { saveView('map', 'pdf').catch(() => {}); return; }
+  const next = compareChromeClick(b);
+  if (next === undefined) return;
+  if (next === 'menu') { redrawChrome(); if (CMP.menu) { const f = MAP.stage.querySelector('.map-cmp-pick .map-cmp-menu .map-seg'); if (f) f.focus(); } return; }
+  setCompareSpec(next);
+  CMP.key = null;
+  writeHash(null, null);
+  syncCompare();
+}
+/** Clicks in the panel: close it, save the A → B document. */
+function onComparePanelClick(e) {
+  const b = e.target.closest('button[data-act]');
+  if (b) onCompareAct(b);
+}
 
 // the stops below the street (surfaces/map-stops.js) move the board through these, and only these
 bindStops({

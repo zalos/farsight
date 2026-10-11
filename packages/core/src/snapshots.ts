@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import { GraphStore } from './store.js';
+import { GraphStore, type GraphMeta } from './store.js';
 import type { GraphNode, GraphEdge } from './graph.js';
 import { spineOf, commitsInRange } from './history.js';
 import type {
@@ -96,6 +96,14 @@ export interface SnapshotRef {
   digest: string;
 }
 
+/** One sync rebuilt from history: its graph, its identity, and whether its meta was kept (a sync written before 2026-10-10 has none). */
+export interface SnapshotRead {
+  store: GraphStore;
+  ref: SnapshotRef;
+  /** false: this sync was recorded before meta was kept — its journeys, storylines and test reports are not in history */
+  metaKept: boolean;
+}
+
 /** One `farsight snapshots` row — a SnapshotRef plus the display counts. */
 export interface SnapshotListing extends SnapshotRef {
   files: number;
@@ -182,6 +190,11 @@ CREATE TABLE IF NOT EXISTS snapshot_source (sync INTEGER, name TEXT, commit_sha 
 CREATE TABLE IF NOT EXISTS node (id TEXT, first_sync INTEGER, last_sync INTEGER, hash TEXT, json TEXT);
 CREATE TABLE IF NOT EXISTS edge (key TEXT, first_sync INTEGER, last_sync INTEGER, hash TEXT, json TEXT);
 CREATE TABLE IF NOT EXISTS blind_spot (sync INTEGER, kind TEXT, note TEXT, metric TEXT, affects TEXT);
+-- the graph's meta at each sync (round 2026-10-10, compare two syncs): the journeys' personas, groups and
+-- storylines, the test reports and their digests, the stores, the projects — what a sync's nodes alone cannot
+-- say. One row per sync, written with it. A sync recorded before this table has no row, and a read of it says
+-- so (SnapshotRead.metaKept) rather than borrowing today's.
+CREATE TABLE IF NOT EXISTS snapshot_meta (sync INTEGER PRIMARY KEY, json TEXT);
 CREATE INDEX IF NOT EXISTS node_alive ON node(id, first_sync, last_sync);
 CREATE INDEX IF NOT EXISTS edge_alive ON edge(key, first_sync, last_sync);
 
@@ -262,6 +275,10 @@ export class SnapshotDb {
     // change from a re-index there, and says nothing rather than guess)
     const cols = this.db.prepare('PRAGMA table_info(snapshot_source)').all() as { name: string }[];
     if (!cols.some((c) => c.name === 'source_digest')) this.db.exec('ALTER TABLE snapshot_source ADD COLUMN source_digest TEXT');
+    // additive (round 2026-10-10, proposal 9): the AI assistant a commit's trailers name as a co-author. A store
+    // read before it reads null — *not read*, never *made by a person* — until the next history read rewrites the row
+    const commitCols = this.db.prepare('PRAGMA table_info("commit")').all() as { name: string }[];
+    if (!commitCols.some((c) => c.name === 'agent')) this.db.exec('ALTER TABLE "commit" ADD COLUMN agent TEXT');
   }
 
   close(): void {
@@ -292,6 +309,10 @@ export class SnapshotDb {
       this.db
         .prepare('INSERT INTO snapshot (sync, at, tz, commit_sha, digest, files, nodes, edges, pinned) VALUES (?,?,?,?,?,?,?,?,0)')
         .run(sync, at, tz, ctx.commit ?? null, digest, store.meta.files ?? 0, g.nodes.length, g.edges.length);
+      // what the nodes cannot carry: the identity fields come from the snapshot row on a read, never from here
+      const kept: Partial<GraphMeta> = { ...store.meta };
+      for (const k of ['sync', 'digest', 'tz', 'commit', 'generatedAt', 'graphPath'] as const) delete kept[k];
+      this.db.prepare('INSERT OR REPLACE INTO snapshot_meta (sync, json) VALUES (?, ?)').run(sync, JSON.stringify(kept));
       const srcStmt = this.db.prepare(
         'INSERT INTO snapshot_source (sync, name, commit_sha, files, status, source_digest) VALUES (?,?,?,?,?,?)',
       );
@@ -346,7 +367,7 @@ export class SnapshotDb {
    * Note: `roots` (per-machine checkout paths) are not persisted in history;
    * the returned store has none.
    */
-  read(ref: 'latest' | number): { store: GraphStore; ref: SnapshotRef } {
+  read(ref: 'latest' | number): SnapshotRead {
     const snap = this.snapshotRow(ref);
     const nodes = (
       this.db
@@ -361,7 +382,11 @@ export class SnapshotDb {
 
     const store = new GraphStore();
     store.addFragment({ repo: '', nodes, edges });
+    const metaRow = this.db.prepare('SELECT json FROM snapshot_meta WHERE sync = ?').get(snap.sync) as { json: string } | undefined;
+    let kept: Partial<GraphMeta> = {};
+    if (metaRow) { try { kept = JSON.parse(metaRow.json) as Partial<GraphMeta>; } catch { kept = {}; } }
     store.meta = {
+      ...kept,
       generatedAt: snap.at,
       files: snap.files,
       sync: snap.sync,
@@ -376,7 +401,36 @@ export class SnapshotDb {
       ...(snap.commit ? { commit: snap.commit } : {}),
       digest: snap.digest,
     };
-    return { store, ref: ref2 };
+    return { store, ref: ref2, metaKept: !!metaRow };
+  }
+
+  /** Whether this history holds a sync (a pruned or never-written one does not) — `/graph?asof=` answers from it. */
+  has(sync: number): boolean {
+    return !!this.db.prepare('SELECT 1 AS x FROM snapshot WHERE sync = ?').get(sync);
+  }
+
+  /**
+   * The newest sync recorded at or before a moment (an ISO date or timestamp; a bare day means the end of
+   * that day, UTC) — *since 2026-10-03* reads the state the graph was in on that day. `undefined` when the
+   * history begins after it.
+   */
+  syncAtOrBefore(when: string): number | undefined {
+    const end = /^\d{4}-\d{2}-\d{2}$/.test(when) ? `${when}T23:59:59.999Z` : when;
+    const row = this.db.prepare('SELECT MAX(sync) AS s FROM snapshot WHERE at <= ?').get(end) as { s: number | null };
+    return row?.s ?? undefined;
+  }
+
+  /**
+   * The sync a release tag stands for: the newest sync that ingested the tag's commit (`commit_sync`), else
+   * the newest sync recorded at or before the tag's date. `undefined` when this history holds no release of
+   * that name for the repository or no sync before it.
+   */
+  syncOfRelease(repo: string, name: string): { sync: number; sha: string; at: string } | undefined {
+    const rel = this.db.prepare('SELECT sha, at FROM "release" WHERE repo = ? AND name = ?').get(repo, name) as { sha: string; at: string } | undefined;
+    if (!rel) return undefined;
+    const linked = this.db.prepare('SELECT MAX(sync) AS s FROM commit_sync WHERE repo = ? AND sha = ?').get(repo, rel.sha) as { s: number | null };
+    const sync = linked?.s ?? this.syncAtOrBefore(rel.at);
+    return sync == null ? undefined : { sync, sha: rel.sha, at: rel.at };
   }
 
   /** Newest first. */
@@ -484,7 +538,7 @@ export class SnapshotDb {
     let files = 0;
     try {
       const commitStmt = this.db.prepare(
-        'INSERT OR REPLACE INTO "commit" (repo, sha, at, author, email, subject, parents, merge) VALUES (?,?,?,?,?,?,?,?)',
+        'INSERT OR REPLACE INTO "commit" (repo, sha, at, author, email, subject, parents, merge, agent) VALUES (?,?,?,?,?,?,?,?,?)',
       );
       const clearStmt = this.db.prepare('DELETE FROM commit_file WHERE repo = ? AND sha = ?');
       const fileStmt = this.db.prepare(
@@ -497,7 +551,7 @@ export class SnapshotDb {
       for (const c of commits) {
         const parents = c.parents ?? [];
         const merge = c.merge ?? parents.length > 1;
-        commitStmt.run(repo, c.sha, c.at, c.author ?? '', c.email ?? '', c.subject ?? '', parents.join(' '), merge ? 1 : 0);
+        commitStmt.run(repo, c.sha, c.at, c.author ?? '', c.email ?? '', c.subject ?? '', parents.join(' '), merge ? 1 : 0, c.agent ?? null);
         clearStmt.run(repo, c.sha);
         // keys and branches are rewritten only when the reader read them: absent is "not read", never "none"
         if (c.keys) {
@@ -623,11 +677,28 @@ export class SnapshotDb {
    * The commits whose sha starts with `prefix` (at least 4 hex characters), in any repository —
    * how a link that names a commit by its short sha finds it (the Map's Affected mode). Newest first.
    */
-  commitsByPrefix(prefix: string): { repo: string; sha: string; at: string; author: string; subject: string }[] {
+  commitsByPrefix(prefix: string): { repo: string; sha: string; at: string; author: string; subject: string; agent?: string }[] {
     const p = String(prefix || '').toLowerCase();
     if (!/^[0-9a-f]{4,40}$/.test(p)) return [];
-    return this.db.prepare('SELECT repo, sha, at, author, subject FROM "commit" WHERE substr(sha, 1, ?) = ? ORDER BY at DESC, repo')
-      .all(p.length, p) as { repo: string; sha: string; at: string; author: string; subject: string }[];
+    return (this.db.prepare('SELECT repo, sha, at, author, subject, agent FROM "commit" WHERE substr(sha, 1, ?) = ? ORDER BY at DESC, repo')
+      .all(p.length, p) as { repo: string; sha: string; at: string; author: string; subject: string; agent: string | null }[])
+      .map(({ agent, ...r }) => (agent ? { ...r, agent } : r));
+  }
+
+  /**
+   * The commits made with an AI assistant, by the assistant's name as its trailer wrote it — any repository
+   * unless `repo`. The names sum to the commits whose `agent` is set (round 2026-10-10, proposal 9).
+   */
+  agentCounts(repo?: string): Record<string, number> {
+    const rows = (repo
+      ? this.db.prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE repo = ? AND agent IS NOT NULL GROUP BY agent').all(repo)
+      : this.db.prepare('SELECT agent, COUNT(*) AS n FROM "commit" WHERE agent IS NOT NULL GROUP BY agent').all()) as { agent: string; n: number }[];
+    return Object.fromEntries(rows.map((r) => [r.agent, r.n]));
+  }
+
+  /** One repository's commits authored after `since` (ISO 8601), newest first — *since your last session*. */
+  commitsSince(repo: string, since: string): CommitRow[] {
+    return this.commitRows(repo).filter((c) => c.at > since);
   }
 
   /** The nodes a commit changed, or `null` when they were never computed against `graph` (then compute, never assume none). */
@@ -664,12 +735,12 @@ export class SnapshotDb {
       for (const r of fileQ.all(repo, p.path, -tail.length, tail) as { sha: string }[]) credit(r.sha, p.node, 'file');
     }
     if (!by.size) return [];
-    const rowQ = this.db.prepare('SELECT sha, at, author, subject FROM "commit" WHERE repo = ? AND sha = ?');
-    const out: { sha: string; at: string; author: string; subject: string; parts: { node: string; how: 'lines' | 'file' }[] }[] = [];
+    const rowQ = this.db.prepare('SELECT sha, at, author, subject, agent FROM "commit" WHERE repo = ? AND sha = ?');
+    const out: { sha: string; at: string; author: string; subject: string; agent?: string; parts: { node: string; how: 'lines' | 'file' }[] }[] = [];
     for (const [sha, m] of by) {
-      const r = rowQ.get(repo, sha) as { sha: string; at: string; author: string; subject: string } | undefined;
+      const r = rowQ.get(repo, sha) as { sha: string; at: string; author: string; subject: string; agent: string | null } | undefined;
       if (!r) continue;
-      out.push({ sha: r.sha, at: r.at, author: r.author, subject: r.subject, parts: [...m].map(([node, how]) => ({ node, how })) });
+      out.push({ sha: r.sha, at: r.at, author: r.author, subject: r.subject, ...(r.agent ? { agent: r.agent } : {}), parts: [...m].map(([node, how]) => ({ node, how })) });
     }
     return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : a.sha.localeCompare(b.sha)));
   }
@@ -807,9 +878,9 @@ export class SnapshotDb {
    */
   private commitRows(repo: string, limit?: number): CommitRow[] {
     const rows = this.db
-      .prepare('SELECT sha, at, author, email, subject, parents, merge FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT ?')
+      .prepare('SELECT sha, at, author, email, subject, parents, merge, agent FROM "commit" WHERE repo = ? ORDER BY at DESC, sha LIMIT ?')
       .all(repo, limit ?? Number.MAX_SAFE_INTEGER) as {
-      sha: string; at: string; author: string; email: string; subject: string; parents: string; merge: number;
+      sha: string; at: string; author: string; email: string; subject: string; parents: string; merge: number; agent: string | null;
     }[];
     const syncs = new Map<string, number[]>();
     for (const r of this.db
@@ -832,6 +903,7 @@ export class SnapshotDb {
         merge: r.merge === 1,
         indexed: mine.length > 0,
         syncs: mine,
+        ...(r.agent ? { agent: r.agent } : {}),
       };
     });
   }

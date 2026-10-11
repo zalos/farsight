@@ -82,6 +82,7 @@ export const COUNT_SCOPES = [
   'count.scope.group',      // the journeys of one group under one persona (core journeys.ts)
   'count.scope.storyline',  // the journeys one storyline chains, each once (core journeys.ts)
   'count.scope.gate',       // one gate: the gate itself and the calls a request goes through to meet it (core gates.ts)
+  'count.scope.compare',    // one storyline between two syncs (core storyline-diff.ts): its journeys and branches as either sync declares them, and what their walks reach
   'count.scope.route',      // the routes a designed, not-built screen will call (core coverage.ts `notBuilt`): the screen has no code a test can reach
 ] as const;
 export type CountScope = typeof COUNT_SCOPES[number];

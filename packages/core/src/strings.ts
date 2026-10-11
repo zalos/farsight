@@ -39,6 +39,8 @@ import { ECHO_HOOK_STRINGS } from './strings-echo-hooks.js';
 import { ECHO_UI_STRINGS } from './strings-echo-ui.js';
 import { ECHO_MEMORY_STRINGS } from './strings-echo-memory.js';
 import { ECHO_INSTALLATION_STRINGS } from './strings-echo-installation.js';
+import { COMPARE_STRINGS } from './strings-compare.js';
+import { AGENT_STRINGS } from './strings-agents.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -118,6 +120,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...DOOR_STRINGS,
   // the storyline as swimlanes (round 2026-10-10 §2) live in strings-lanes.ts (map.layout.*, lanes.*)
   ...LANES_STRINGS,
+  // compare two syncs on a storyline (round 2026-10-10, proposal 7) live in strings-compare.ts (compare.*, map.biz.compare.*, count.unit.deltas)
+  ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts
   ...AFFECTED_STRINGS,
   ...ECHO_RUNTIME_STRINGS,
@@ -140,6 +144,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...STOP_STRINGS,
   // the test chip's words live in strings-evidence.ts (count.over.*, the not-built sentence, distinct)
   ...EVIDENCE_STRINGS,
+  // what an agent gets (copy doors, commits made with an agent, lessons, empty states) lives in strings-agents.ts
+  ...AGENT_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 

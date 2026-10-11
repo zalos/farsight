@@ -1264,3 +1264,27 @@ after a page break. Save (`registerExport('readiness', …, { csv })`) writes a 
 line per row. The doors are `readinessDoorHtml(id, cls, repo)`: one call site in `map.js bandHeadHtml` (the storyline
 band head) and one in `journeys.js` (the storyline card's ways in). e2e: `e2e/tests/readiness.pw.spec.ts`.
 
+
+## Compare two syncs on a storyline — `surfaces/map-compare.js`, `lib/compare-model.js` (round 2026-10-10, proposal 7)
+
+`#/map?storyline=<id>&compare=<a>..<b>`: the Map's **Compare** control (beside the storyline picker, only while a
+storyline is drawn; `compareToolHtml`) picks the earlier end — the sync before, a sync the history holds, *since the
+last green run*, *since a day…*, *since a release…* — and `<b>` defaults to the served sync. One answer,
+`GET /api/compare?storyline=&from=&to=` (core `storylineDiff` over two `compareSideOf` reads; server `compare.ts`), feeds
+everything: the chips on the chain's covers (`paintCompareCovers`, a row under the cover's `.agg`) and on the lanes'
+stage cards (`paintCompareLanes`, under the name; `.ln-stage.cmp-on` hides the sub-line and the decision so the
+changes fit), the right-hand panel `.map-cmp` (*what changed on this storyline*: the range, the `Counted` with its
+kind breakdown, one item per delta with its kind · change label, its sentence — identifiers in `<code>` in hybrid and
+code, `map.biz.compare.*` words in business — and its door: the gate card in place (`gateAttrs`), the screen on its
+journey, the writer on the code map, the cases, the contract on APIs). When the later end is not the served sync the
+board is drawn **as of** it: `MAP.asof` adds `&asof=` to `/api/design` and every `/api/journey` (the cache keys on it).
+The map.js hooks are `syncCompare()` (ask, then paint; asks again only when the storyline or the spec moved),
+`onCompareAct()` and `onComparePanelClick()`; `writeHash` carries `compare=` only with a storyline. Save while
+comparing (the panel's *save A → B*, or the toolbar's Save) titles the picture *changes on <storyline> · sync a → sync b*,
+names the file `…-<storyline>-sync<a>-to-sync<b>-…` and writes one line per change under the footer (`extraLines`,
+`lib/export.js`). The Changes page draws one row per storyline linking into the same range on the Map. A sync the
+history does not hold is the panel's one sentence with the absence word *not indexed*, and no chip is drawn.
+`/graph?asof=<sync>`, `/api/journey?…&asof=`, `/api/journeys?asof=` and `/api/design?asof=` answer from the snapshot
+store for any sync it holds (the swarm's 9.1); every sync now keeps its meta (`snapshot_meta`) so an older sync draws
+its storylines — a sync recorded before 2026-10-10 is read with the later sync's declaration and says so.
+e2e: `e2e/tests/map-compare.pw.spec.ts` (its own server on a two-sync workspace, `makeCompareWorkspace`).
