@@ -1,0 +1,19 @@
+{
+  "name": "@farsight/echo",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": { "farsight-echo": "dist/cli.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@farsight/core": "workspace:*",
+    "@agentmemory/agentmemory": "0.9.30"
+  },
+  "engines": { "node": ">=24" }
+}
