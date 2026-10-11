@@ -54,6 +54,8 @@ import {
   registerView, tableAtPart, tableParams, tableKey, tableEscape, forLineHtml,
 } from './map-stops.js';
 import { jrnFirstSentence } from '../lib/journey-draw.js';
+import { walkToolHtml, walkHostHtml, bindWalk, openWalk, closeWalk, toggleWalk, walkOpen, drawWalk } from '../lib/tour.js';
+import { mapScreenHash } from '../lib/route-url.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
 // lane L widened the column (480 → 600) so a call's words and path and a data node's kind line show whole at the
@@ -329,6 +331,7 @@ export function mountMap(route, el) {
   MAP.board.addEventListener('wheel', (e) => { const r = MAP.board.getBoundingClientRect(); MAP.ptr = { x: e.clientX - r.left, y: e.clientY - r.top }; }, { capture: true, passive: true });
   MAP.stage.querySelector('.map-chrome').addEventListener('click', onChromeClick);
   MAP.stage.querySelector('.map-cmp').addEventListener('click', onComparePanelClick);
+  mountWalk(route);
   const host = MAP.stage.querySelector('.map-prop-host');
   host.addEventListener('wheel', onPropWheel, { passive: false });
   host.addEventListener('pointerdown', onPropPointer);
@@ -352,6 +355,7 @@ export function mapRefresh(reason) {
   if (reason === 'lens' || reason === 'register') {
     redrawChrome();
     drawComparePanel(MAP.stage && MAP.stage.querySelector('.map-cmp'));
+    drawWalk();
     drawRisk();
     // a call's height follows its words in the lens, so the districts re-lay (the journey in view stays put)
     relayoutKeeping(() => renderAll());
@@ -389,6 +393,7 @@ export function mapUpdate(route) {
 /** Leave: stop every listener, every fetch's effect and the property. @group Map */
 export function unmountMap() {
   MAP.gen++;
+  closeWalk({ quiet: true });
   closeStops();
   if (MAP.offAffected) { MAP.offAffected(); MAP.offAffected = null; }
   resetAffected();
@@ -1787,6 +1792,8 @@ function stageHtml() {
     + '<div class="map-prop-host" hidden></div>'
     // compare two syncs on a storyline (surfaces/map-compare.js): what changed, beside the board
     + '<aside class="map-cmp" hidden data-map-wheel="own" aria-label="' + esc(t('compare.panel.title')) + '"></aside>'
+    // walk me through it (lib/tour.js): the guided walk and Ask, beside the board
+    + walkHostHtml()
     // the stops below the street (surfaces/map-stops.js): the journey as a table, one action's beats with the code's dock
     + '<div class="map-table-host" hidden></div><div class="map-act-host" hidden></div>'
     + '</div><div class="map-xcard" hidden role="dialog"></div></div>';
@@ -1819,7 +1826,9 @@ function chromeHtml() {
     // the Affected mode's bar, a row of its own under the toolbar (lane I)
     + affectedBarHtml()
     // the crumb strip under the toolbar: where the reader is, at every stop
-    + '<div class="map-crumbs"><div class="map-crumb"></div></div>';
+    // and, at its end, WALK (lib/tour.js): the guided walk and Ask beside the board — on the crumb's row, so the
+    // toolbar's measured folds are not moved by it
+    + '<div class="map-crumbs"><div class="map-crumb"></div>' + walkToolHtml() + '</div>';
 }
 function redrawChrome() {
   const c = MAP.stage && MAP.stage.querySelector('.map-chrome');
@@ -1979,6 +1988,7 @@ function onChromeClick(e) {
     case 'aff-list': toggleAffList(); break;
     case 'aff-hops': setAffectedHops(+b.dataset.h); break;
     case 'band': MAP.bandMenu = false; setBand(b.dataset.band); break;
+    case 'walk': mapToggleWalk(); break;
     case 'storyline': applyStoryline(b.dataset.storyline || null); break;
     case 'storyline-menu': MAP.storyMenu = !MAP.storyMenu; MAP.bandMenu = false; redrawChrome(); if (MAP.storyMenu) { const f = MAP.stage.querySelector('.map-story-pick .map-seg.on') || MAP.stage.querySelector('.map-story-pick .map-seg'); if (f) f.focus(); } break;
     case 'band-menu': MAP.bandMenu = !MAP.bandMenu; MAP.storyMenu = false; redrawChrome(); if (MAP.bandMenu) { const f = MAP.stage.querySelector('.map-band-pick .map-segs .map-seg'); if (f) f.focus(); } break;
@@ -3382,6 +3392,8 @@ export function mapKey(e) {
   const k = e.key;
   // `?` is the keymap's everywhere (keymap.js); the legend is g — its own key, beside its own glyph
   if (k === 'g' || k === 'G') return mapToggleLegend();
+  // a — walk me through it (lib/tour.js); w is the lanes', t the tests'
+  if (k === 'a' || k === 'A') { mapToggleWalk(); return true; }
   // the open screen and the explore card keep their own keys; the board's walk keys are the board's
   // at an action: ← → the beats, [ ] the actions, d the dock, t the tests (surfaces/map-stops.js)
   if (MAP.act && actionKey(e)) return true;
@@ -3566,3 +3578,61 @@ bindStops({
   },
 });
 expose({ mapFit, mapZoom });
+
+// ── walk me through it (round 2026-10-10, proposal 8; lib/tour.js) ────────────────────────────────────────
+// The WALK control and the `a` key open the guided walk beside the board; `?walk=1` on a link opens it (the front
+// door's *walk me through it*). The walk is the storyline drawn, else the journey on screen, else the first storyline
+// the tree declares. Each stop moves the board: a screen is framed on its journey's street; a hand-off frames the call
+// that makes the move with its explore card open — or, when the reader had the lanes on, the lanes with the move's
+// pill marked.
+/** Bind the panel and open it when the link asks. @group Map */
+function mountWalk(route) {
+  bindWalk(MAP.stage.querySelector('.map-tour'), { target: walkTarget, frame: walkFrame, closed: () => redrawChrome() });
+  if (/(?:^|[?&])walk=1(?:&|$)/.test(String((route && route.raw) || ''))) openWalk(null, { lanes: MAP.layout === 'lanes' });
+}
+/** What the walk walks: `{ storyline, repo }` or `{ flow }`, or null while the tree is still being read. @group Map */
+function walkTarget() {
+  const tree = MAP.tree;
+  if (MAP.storyline) {
+    if (!tree) return null;
+    const st = findStoryline(tree, MAP.storyline);
+    return st ? { storyline: st.id, repo: st.repo } : null;
+  }
+  const flow = MAP.journey || MAP.focus || (MAP.prop && MAP.prop.flow);
+  if (flow) return { flow };
+  if (!tree) return null;
+  const first = (tree.storylines || [])[0];
+  if (first) return { storyline: first.id, repo: first.repo };
+  const d = MAP.nb && MAP.nb.districts && MAP.nb.districts[0];
+  return d ? { flow: d.id } : null;
+}
+/** WALK pressed or `a`. @group Map */
+function mapToggleWalk() {
+  if (walkOpen()) closeWalk();
+  else toggleWalk({ lanes: MAP.layout === 'lanes' });
+  redrawChrome();
+}
+/** Move the board with a stop. @group Map */
+function walkFrame(stop, tour, o) {
+  const story = tour.target.kind === 'storyline' ? tour.target.id : null;
+  if (stop.kind === 'handoff' && story && o && o.lanes && stop.move) {
+    const h = withParams('#/map', { storyline: story, layout: 'lanes' });
+    if (location.hash !== h) location.hash = h;
+    markLanesMove(stop.move.table, stop.move.status, 0);
+    return;
+  }
+  let h = stop.kind === 'handoff' && stop.place.node
+    ? mapScreenHash(stop.place.flowId, stop.place.screen, { node: stop.place.node, kind: 'call' })
+    : mapScreenHash(stop.place.flowId, stop.place.screen);
+  if (story) h = withParams(h, { storyline: story });
+  if (location.hash !== h) location.hash = h;
+}
+/** Mark the pill of the move a hand-off stop is about, once the lanes are drawn (two seconds at most). @group Map */
+function markLanesMove(table, status, tries) {
+  const world = MAP.world;
+  if (!world) return;
+  for (const el of world.querySelectorAll('.ln-pill.walk-hot')) el.classList.remove('walk-hot');
+  const pill = [...world.querySelectorAll('.ln-pill[data-record]')].find((el) => el.dataset.record === table && el.dataset.status === status);
+  if (pill) { pill.classList.add('walk-hot'); return; }
+  if (tries < 20) setTimeout(() => markLanesMove(table, status, tries + 1), 100);
+}

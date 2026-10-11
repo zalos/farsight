@@ -25,7 +25,7 @@ import { t as tr, type Register } from './strings.js';
 /** A catalog word in the professional register unless another is named (the tour's text is the professional register's). */
 const t = (key: string, reg: Register = 'professional'): string => tr(key, reg);
 import { stepCoverage, segmentNotBuilt, type TestVerdict } from './coverage.js';
-import { gateCard } from './gates.js';
+import { gateCard, gateNameParts } from './gates.js';
 import { lifecycleViews, type LifecyclePersona } from './lifecycle.js';
 
 /** One clause of a stop: a template, its fills, the sentence in each lens, and what it cites. */
@@ -492,12 +492,25 @@ export function needWord(v: TestVerdict): string {
   return v.word.cls === 'none' && !v.runs.n ? t('tour.noneKnown') : t(v.word.key);
 }
 
+/** A route's name in words when nobody wrote one: the verb, then the path's meaningful parts (never api, a version or a parameter). */
+export function routeWords(name: string): string {
+  const m = /^(GET|POST|PATCH|PUT|DELETE)\s+(.*)$/.exec(String(name || ''));
+  if (!m) return humanizeName(name);
+  const verb = ({ GET: 'View', POST: 'Submit', PATCH: 'Update', PUT: 'Replace', DELETE: 'Remove' } as Record<string, string>)[m[1]!]!;
+  const parts = m[2]!.split('/').filter((p) => p && !/^(api|v\d+)$/i.test(p) && !/^[:{[]/.test(p));
+  return `${verb} ${humanizeName(parts.join(' ')).toLowerCase()}`.trim();
+}
+
 /** What a cited node is, for a chip and its tip. */
 export function nodeRef(index: GraphIndex, id: string): TourNodeRef {
   const n = index.byId.get(id);
   if (!n) return { kind: 'function', name: id.split('::').pop() ?? id, words: id.split('::').pop() ?? id };
   const loc = locOf(n);
-  const words = n.kind === 'table' ? humanizeName(n.name) : n.kind === 'test' ? n.name : wordsOf(n, n.name);
+  const words = codeFree(n.kind === 'table' ? humanizeName(n.name)
+    : n.kind === 'test' ? n.name
+      : n.kind === 'route' ? bare(n.facets?.business?.label ?? n.contract?.summary ?? routeWords(n.name))
+        : n.kind === 'guard' || n.kind === 'rule' ? bare(n.precondition?.words ?? (gateNameParts(n.name).ident ? gateNameParts(n.name).phrase : '') ?? '') || wordsOf(n, n.name)
+          : wordsOf(n, n.name));
   return { kind: n.kind, name: n.name, words, ...(loc ? { loc } : {}) };
 }
 

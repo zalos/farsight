@@ -920,6 +920,28 @@ string union, a const list; each write of the field). Config only names them, pe
   and "what each one means" opens one table — the word · in the code · what moves it — the writer a door
   to the journey screen it runs from (GET /api/lifecycle?node=&flow=). describe_node prints the words.
 
+## 1⅞+ · The guided walk and Ask read what you write (no prose of their own)
+
+"Walk me through it" (the Map's WALK, MCP tour, farsight tour) and Ask (MCP ask, farsight ask) are assembled
+from the graph — every sentence a template filled with what the code, this manifest and the test runs say, each
+clause citing the node it was read from. Nothing is written by a model, so a walk reads only as well as what the
+team declared. To improve it:
+
+- Write a @business sentence on each page (or a screens[].description here): it is the first line of the
+  screen's stop. With neither, the stop says nobody has written what the screen is for yet.
+- Put a @business label on the actions (the client functions or handlers) — the stop lists them by it, and Ask's
+  "where is X set to Y" names the action and screen by it.
+- Declare personas[] and place each flow under one (§1½): a stop says who uses the screen, and a hand-off says
+  who moves the record. Declare storylines[] (§1¾): the walk follows a storyline's journeys in order, each screen
+  once, then its branches.
+- Name a record's statuses per persona (§1⅞): a hand-off's title reads "The invoice becomes Sent" in the
+  business register, not the constant.
+- Write the precondition's words: a @business sentence on the check (or the message of the refusal it throws)
+  becomes "what must be true first" on the hand-off and in Ask's answer. A move whose code never compares the
+  record's status says "not checked by the code" — the fix is in the code, not in the words.
+- Stamp the test runs (tests.e2e results, coverage): each stop and each precondition carries the one verdict with
+  its scope; a skipped case is said, never hidden.
+
 ## 2 · What the graph does with it (no code needed yet)
 
 - Each screen resolves to the page/component node the code adapter emitted, or becomes a page node

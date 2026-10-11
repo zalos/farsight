@@ -21,6 +21,7 @@ export const TOUR_STRINGS: Record<string, StringEntry> = {
     define: 'A guided walk through a storyline or a journey: one stop per screen and one per hand-off, where the code moves the record on. Every sentence is put together from facts the graph holds, and each part of a sentence names the thing it was read from.',
   },
   'tour.open': same('walk me through it', 'Opens the guided walk through this storyline or journey on the Map: one stop per screen and per hand-off, each sentence read from the graph.'),
+  'key.walk': same('On the Map: walk me through it — the guided walk and Ask beside the board', 'Opens or closes the guided walk beside the Map: one stop per screen and per hand-off, and a box to ask a question answered from the graph.'),
   'tour.tool': same('WALK', 'The guided walk through the storyline or journey on the Map: one stop per screen and per hand-off. Every sentence is read from the graph and names what it was read from.'),
   'tour.stopOf': same('stop {n} of {m}', 'Where this stop sits in the walk: one stop per screen, in the order the storyline runs, and one per hand-off between them.'),
   'tour.prev': same('‹ prev', 'The stop before this one; the Map moves with it.'),
@@ -36,7 +37,7 @@ export const TOUR_STRINGS: Record<string, StringEntry> = {
   'tour.kind.screen': same('screen', 'A stop on one screen of a journey: what it is for, what it reads and writes, what must be true before its actions go through, and what its tests say.'),
   'tour.kind.handoff': same('hand-off', 'A stop on a move the code makes to a record: who makes it, to what status, what must be true first, and whether the code checks the status it moves from.'),
   'tour.kind.handoffs': same('hand-offs', 'The moves the code makes to a record along the walk, each its own stop.'),
-  'tour.branch': same('branch of {name} · when {when}', 'This journey leaves the storyline from the step named, under the condition given, as the design declares it.'),
+  'tour.branch': same('branch of {name} · when {when}', 'This journey leaves the storyline from the journey named, under the condition given, as the design declares it.'),
   'tour.cite': same('read from', 'What this part of the sentence was read from. A click frames it on the Map at the right stop; its tip names it as the code does.'),
   'tour.notChecked': same('not checked by the code', 'The code that makes this move does not compare the status the record is in before it writes the new one: nothing in the code stops the move from any status. The design may expect a check; the graph found none.'),
 

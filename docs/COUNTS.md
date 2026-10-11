@@ -755,6 +755,24 @@ what their walks reach. Every change is one of five kinds — a closed set (`DEL
 | `contract +1 operation` · `contract · 1 changed` | `byJourney[].kinds.contract` | operations the journey reaches, by `operationId` else method and path (`{id}` = `:id`), added to / taken off / changed on the contract | `changed` = the contract status moved (spec-only → both reads *now built*) or its params, request, answers or security did |
 | `passed → skipped` | `byJourney[].verdict` | the journey's one verdict (`testVerdict()`) at each end: the status, else the word; the skip counts when only they moved | freshness is never a verdict change (*stale* folds into its class) |
 
+### Walk me through it, and Ask (`/api/tour` → core `tour.ts` `tourOf()`; `/api/ask` → core `ask.ts` `ask()` / `pathBetween()`; the Map's walk panel, the front door's Ask box, MCP `tour` / `ask`, CLI `farsight tour` / `ask`)
+
+The walk and the answers print **no number of their own making** beyond the five below: every other number in a
+sentence is a count another fold already types — a screen's or an action's verdict (`testVerdict().runs`, scoped *over
+this screen* / *over this action*), a writer's (`stepCoverage().verdict.runs`, *over this part alone*), a gate's
+(`gateCard().verdict.runs`, *over this gate*) — carried on the clause as `counted` / `evidence` and printed with its
+tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cite*). A position — *stop n of m*, *(stop
+2)*, *screen 2, action 6* — is not a count. One scope is new, **`count.scope.path`** (*on this chain*).
+
+| number | field | what it counts | scope | rule |
+|---|---|---|---|---|
+| `5 stops` (*stop n of m*'s m) | `tour.counted.stops` (`count.unit.tourStops`) | the walk's stops: screens each once however many journeys of the storyline show them, then one per move a screen's actions make to a record (each `table · status · writer` once) | `count.scope.storyline` · `journey.scopeAll` for one journey | breakdown `count.part.tourScreens` · `count.part.tourHandoffs`, summing to `n` |
+| `…and 2 technical checks` (a screen stop) | clause `counted` (`count.unit.gatesTechnical`) | distinct preconditions of tier technical on the screen's actions | `journey.scopeHere` | the business and policy ones are listed by their words beside it, never counted twice |
+| `…and 4 technical checks` (a hand-off, an answer's *must be true first*) | clause `counted` (`count.unit.gatesTechnical`) | the same, on the one action that makes the move | `count.scope.action` | the action's `preconditions.counted` technical part |
+| `in 5 hops` / `in 5 links` (business) | `PathResult.counted` (`ask.unit.pathLinks`, biz `ask.biz.pathLinks`) | the links of the shortest chain from one part to another: calls, requests, renders, reads, writes, sends, receives | `count.scope.path` | breadth first over the edge index; `more` (`count.unit.paths`) = other chains of the same length, capped at 9 |
+| `12 checks` (*what guards …*) | lead `counted` (`count.unit.checks`) | the distinct gates and rules on an action, a call or a screen | `count.scope.action` · `journey.scopeHere` · `count.scope.node` | breakdown `count.part.tierBusiness` · `tierPolicy` · `tierTechnical`, summing to `n` |
+| `2 more places` (*where is … set to …*) | lead `counted` (`count.unit.places`) | other actions on journeys whose walk makes the same move, after the first one named | `count.scope.node` | each action once |
+
 ## 4. Open — found, not changed here
 
 - **The journey prints the typed counts** (`fix/journey-numbers-and-words`, 2026-09-25). The header

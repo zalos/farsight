@@ -2886,6 +2886,68 @@
   .map-cmp .map-cmp-say{font-size:13px;color:var(--ink);line-height:1.35;overflow-wrap:anywhere}
   .map-cmp .map-cmp-say code{font-family:var(--mono);color:var(--cyan);font-size:12px}
   .map-cmp .map-cmp-door{font-size:12px;cursor:pointer}
+  /* walk me through it, and ask (round 2026-10-10, proposal 8; lib/tour.js, lib/ask.js) */
+  .map-crumbs .map-tb-walk{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:5px;align-self:center}
+  .map-crumbs .map-tb-walk svg{width:12px;height:12px}
+  .map-tour[hidden]{display:none}
+  .map-tour{position:absolute;right:12px;top:calc(var(--map-chrome-h,52px) + 8px);z-index:7;width:360px;max-width:calc(100% - 24px);max-height:calc(100% - var(--map-chrome-h,52px) - 24px);overflow:auto;overscroll-behavior:contain;background:var(--panel);border:1px solid var(--line);border-left:2px solid var(--accent);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 28px rgba(0,0,0,.45);font-size:12.5px;line-height:1.4}
+  .map-tour.dock-bottom{top:auto;bottom:12px;left:12px;right:12px;width:auto;max-height:46%}
+  .map-tour .tw-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-right:22px}
+  .map-tour .tw-title{color:var(--accent);display:inline-flex;align-items:center;gap:5px}
+  .map-tour .tw-title svg{width:13px;height:13px}
+  .map-tour .tw-of{display:inline-flex;gap:6px;align-items:center;font-family:var(--hud);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .map-tour .tw-kind{border:1px solid var(--line);border-radius:3px;padding:0 5px;font-size:9.5px}
+  .map-tour .tw-kind.k-handoff{color:var(--rule,#E8A13C);border-color:var(--rule,#E8A13C)}
+  .map-tour .tw-x{position:absolute;right:10px;top:8px;color:var(--muted);font-size:13px;background:none;border:0;cursor:pointer}
+  .map-tour .tw-stop-title{margin:0;font-size:15px;color:var(--ink);font-weight:600}
+  .map-tour .tw-sub,.map-tour .tw-branch{margin:0;color:var(--muted);font-size:11.5px}
+  .map-tour .tw-text{display:flex;flex-direction:column;gap:5px}
+  .map-tour .tw-cl{margin:0;color:var(--ink);overflow-wrap:anywhere}
+  .map-tour .tw-cl svg,.ask-card svg{width:12px;height:12px;vertical-align:-2px;margin-right:4px}
+  .map-tour .tw-cl.r-need,.map-tour .tw-cl.r-decision{padding-left:12px;font-size:12px}
+  .map-tour .tw-cl.warn,.ask-card .warn{color:var(--warn,#E8A13C)}
+  .map-tour .tw-needs{margin:4px 0 0;font-size:9.5px;color:var(--muted)}
+  .tw-cites{display:inline-flex;flex-wrap:wrap;gap:3px;vertical-align:baseline}
+  .tw-chip{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);border-radius:3px;padding:0 5px;font-size:10.5px;font-family:var(--mono);color:var(--cyan,#5BC8DD);text-decoration:none;cursor:pointer;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  body.lens-business .tw-chip,[data-lens="business"] .tw-chip{font-family:inherit;color:var(--accent)}
+  .tw-chip.k-guard,.tw-chip.k-rule{color:var(--guard,#A78BE0);border-color:color-mix(in srgb,var(--guard,#A78BE0) 50%,transparent)}
+  .tw-chip.k-table{color:var(--table,#C287D6)}
+  .tw-chip.k-page,.tw-chip.k-component{color:var(--comp,#6FCF8E)}
+  .tw-chip.k-function{color:var(--fn,#D8C27A)}
+  .tw-chip.k-test{color:var(--muted)}
+  .tw-chip:hover,.tw-chip:focus-visible{border-color:var(--accent)}
+  .tw-more{font-size:10.5px;color:var(--muted)}
+  .map-tour .tw-refs{display:flex;flex-wrap:wrap;gap:4px;align-items:center;border-top:1px solid var(--line);padding-top:6px}
+  .map-tour .tw-refs .hud-label{font-size:9.5px;color:var(--muted);margin-right:4px}
+  .map-tour .tw-nav{display:flex;align-items:center;justify-content:space-between;gap:6px}
+  .map-tour .tw-dots{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;flex:1}
+  .map-tour .tw-dot{width:9px;height:9px;border-radius:50%;border:1px solid var(--muted);background:transparent;padding:0;cursor:pointer}
+  .map-tour .tw-dot.k-handoff{border-radius:2px;transform:rotate(45deg) scale(.85)}
+  .map-tour .tw-dot.on{background:var(--accent);border-color:var(--accent)}
+  .map-tour .tw-derived{margin:0;font-size:10.5px;color:var(--muted);font-style:italic}
+  .map-tour .tw-wait,.map-tour .tw-err,.map-tour .tw-empty{margin:0;color:var(--muted)}
+  .map-tour .tw-ask{border-top:1px solid var(--line);padding-top:8px}
+  .ln-pill.walk-hot{outline:2px solid var(--accent);outline-offset:2px}
+  .ask-wrap{display:flex;flex-direction:column;gap:6px}
+  .ask-title{display:flex;gap:8px;align-items:baseline}
+  .ask-title .hud-label{color:var(--accent)}
+  .ask-sub{font-size:11px;color:var(--muted)}
+  .ask-box{display:flex;gap:6px}
+  .ask-box .ask-q{flex:1;min-width:0;background:var(--bg,#0A0D14);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:5px 8px;font:inherit;font-size:12.5px}
+  .ask-box .ask-q:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+  .ask-card{border:1px solid var(--line);border-radius:5px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.4;overflow-wrap:anywhere}
+  .ask-chips{display:flex;gap:6px}
+  .ask-derived,.ask-phrased{font-family:var(--hud);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--ok,#6FCF8E);color:var(--ok,#6FCF8E);border-radius:3px;padding:0 5px}
+  .ask-phrased{border-color:var(--warn,#E8A13C);color:var(--warn,#E8A13C)}
+  .ask-lead{margin:0}
+  .ask-shapes{margin:0;padding-left:18px;color:var(--muted)}
+  .ask-sec .hud-label{font-size:9.5px;color:var(--muted)}
+  .ask-sec ul{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+  .ask-row{display:flex;gap:4px;align-items:flex-start}
+  .ask-row.t-technical{opacity:.8}
+  .ask-doors{display:flex;flex-wrap:wrap;gap:6px;align-items:center;border-top:1px solid var(--line);padding-top:6px}
+  .ask-wait,.ask-err{margin:0;color:var(--muted)}
+  .jrn-ask{max-width:860px}
   .map-cmp .map-cmp-err{color:var(--warn)}
   .map-cmp .map-cmp-foot{border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:6px}
   .map-cmp .map-cmp-closed{font-size:11px;color:var(--muted)}
