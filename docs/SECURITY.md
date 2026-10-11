@@ -14,6 +14,10 @@ covers what it trusts, what it refuses, and how to report a problem.
 | **secrets** | this process only | settings hold a *reference* (`keychain:farsight/<provider>-<instance>`, or `env:NAME` for tests and CI), never a value. `packages/work/src/secrets.ts` resolves it in process with `security` (macOS) or `secret-tool` (Linux). `PUT /api/settings` refuses an `auth.secret` that is not a reference, without echoing what was sent. Errors name the reference, never the value. The Jira client scrubs the token and the encoded header from any error text it keeps. Only response bodies are recorded as fixtures or stored as an item's `raw`; request headers never are. |
 | **trackers** (Jira, Azure DevOps) | reached with your credential | a write needs three verdicts: the workspace policy (`permissions`), the tracker's own answer for this item and action, and a usable credential. A source is `read-only` unless its settings say `edit`. |
 | **code hosts** (GitHub) | reached with your credential: `keychain:farsight/github-<org>` on a `type: 'code-host'` source, read in process; the GitHub CLI's own login **only** when you pass `--via gh` | `farsight affected --post` writes one comment (found again by its marker line and edited in place) and one commit status, through the same three verdicts as a tracker write (the source's `allow.people` / `allow.agents` and `mode: 'edit'` — default deny · the host says the pull request is open and the credential may push · the credential is accepted) and `--confirm`. MCP `affected` reads only, and is registered only when a source grants agents `read`. Azure DevOps posting is refused with words (not built). |
+| **Echo settings** (`farsight-echo serve`, workspace defaults :4480/:4481; global defaults :4490/:4491) | processes on this machine; the local settings page | binds `127.0.0.1`. Checks the exact loopback `Host` and port, `Origin`, and `Sec-Fetch-Site`; settings writes require JSON, a body no larger than 64 KB, and the current `If-Match` revision. Cross-process locking prevents a stale browser or CLI update from silently overwriting another edit. No CORS headers; CSP permits embedding only by the explicitly configured local Farsight origin. A permitted frame can navigate to the HTML shell, but data requests still require the Echo origin. Responses contain credential references, never resolved values. (`echo/src/web.ts`, `settings-lock.ts`) |
+| **Echo managed backend** (agentmemory + iii) | processes on this machine, through four loopback ports per running profile | with configured REST port `p`, Echo reserves `p` (REST), `p+1` (stream), `p+2` (agentmemory viewer), and `p+46023` (engine worker connection), then refuses any occupied port. REST calls use a fresh random Bearer secret per run, retained in process and the deliberately restricted child environment. The upstream viewer proxies to REST with that secret; these loopback services are not a per-user or team-authentication boundary. Echo owns two foreground child processes and stops only those processes. (`echo/src/runtime.ts`) |
+| **Echo memory bridge** | the current OS user through `/tmp/farsight-echo-<uid>/<profile-hash>.sock` | requires an owner-held 0700 directory and 0600 Unix socket, refuses foreign or symbolic replacements, and checks inode identity before removing a stale socket. Requests and replies have size limits and deadlines. Each request must match the running configuration, profile and identity fingerprint; backend secrets remain in the service. (`echo/src/memory.ts`) |
+| **Echo configuration, hooks and runtime** | the user who explicitly sets up Echo and grants host hook trust | user-state receipts bind the exact configuration and workspace connection bytes to their canonical paths. Repository-supplied settings or edited pointers cannot grant themselves trust. Runtime downloads and execution follow the checksum rules below; a workspace cannot supply the engine executable. Hooks are local opt-in files, protected from ordinary Git staging, and host trust remains separate. (`echo/src/trust.ts`, `installation.ts`, `workspace-hooks.ts`, `runtime.ts`) |
 
 The server trusts any process that runs as you. That process can already read your files and run `git`, so
 it is inside the boundary. The guard draws the line at other web origins, not at other local programs.
@@ -22,6 +26,70 @@ it is inside the boundary. The guard draws the line at other web origins, not at
 the request body (`human` unless it says `agent`), so a local program can say it is a person. Inside the
 boundary above, this is by design: the policy's `human`/`agent` grants guard against mistakes, not against a
 hostile local process. An agent that should not write as a person must reach trackers only through MCP.
+
+## Echo's separate local boundary
+
+Echo is optional and has its own package, settings, store and processes. Farsight does not start it or depend on
+its runtime. Each workspace selects one Echo configuration and one profile; choosing the same global profile
+in two workspaces shares that store deliberately. Profiles keep separate stores and identity namespaces, and
+a host session cannot switch identity or store mid-chat. These controls prevent accidental mixing; team
+authentication and permission enforcement are not built. Keep managed ports local rather than publishing them
+as a shared team service.
+
+**A checkout cannot approve its own configuration.** Echo records configuration, connection and credential-origin
+receipts under `${XDG_STATE_HOME:-~/.local/state}/farsight-echo/`, outside the workspace. The directories are
+owner-only (0700) and receipts are owner-only regular files (0600), with symbolic links refused. A configuration
+receipt binds its canonical path and exact contents; a connection receipt similarly binds the workspace's
+selected configuration and profile. Echo creates or refreshes these receipts when it writes settings or connects
+a workspace. A file copied from another machine or edited outside Echo is untrusted until explicitly reviewed
+and adopted; `doctor`, model discovery and normal startup do not silently approve it. Use Echo's settings view
+for edits, or review the complete file before the explicit `trust --confirm` command. Reconnect a workspace
+through Echo instead of hand-editing its pointer.
+
+**Credentials have an Echo-only namespace and one origin.** Echo accepts only
+`keychain:farsight-echo/<account>` references. It cannot resolve a Farsight tracker credential or an inherited
+environment secret. Saving or explicitly adopting settings pins each reference to its exact origin (scheme,
+host and port) in user state; resolution checks that pin before reading the OS keychain. Reusing a reference
+for a different origin is refused, so use a separate Echo account for a different endpoint. Endpoints outside
+loopback require HTTPS, and authenticated requests refuse redirects. Echo and Work share the OS keychain
+transport in `packages/core/src/keychain.ts`; their reference and authorization policies stay separate. The model adapter bounds
+input, output and elapsed time. Live hooks currently retrieve bounded saved excerpts; they do not call a model
+or automatically capture conversation content.
+
+**Only the explicitly installed engine runs.** `install-runtime` fetches a pinned iii release from GitHub and
+compares the complete archive with its compiled-in SHA-256 before extraction. It stores the executable under
+`~/.cache/farsight-echo/runtime/<version>/<platform>/`, never under a checkout's `.echo/` directory. The cache
+and files must belong to the current user, with private permissions and no symbolic replacements. Installation
+records the extracted executable's SHA-256; every version probe and engine launch verifies it again before
+execution. There is no implicit download during `serve` and no engine install from an npm lifecycle script.
+An invalid hash refuses execution rather than trying to repair or run the file.
+
+Managed startup refuses an existing `~/.agentmemory/.env`: the pinned backend can read that global file, so
+allowing it would bypass profile separation. Echo supplies a restricted child environment instead of inheriting
+process credentials, proxy settings or another model's settings. It disables the agent SDK, automatic capture,
+compression, consolidation, automatic forgetting, lesson/insight decay, snapshots, the Claude memory bridge
+and OpenTelemetry. The profile owner lock is recovered only for a confirmed dead process; a live or malformed
+lock is not removed. External mode requires an independently secured compatible backend and remains read-only
+through Echo because the pinned upstream write path can supersede legacy records outside Echo's namespace.
+
+**Local hooks stay local and can be removed.** Installation appends workspace-relative rules to Git's local
+`info/exclude`: `.echo/*` with the two example twins exempted, and exact paths for Claude, Codex and VS Code
+hook files. It preserves shared ignore files and refuses tracked destinations or a higher-priority rule that
+leaves a generated file trackable. The repository itself ignores `.codex/hooks.json` and `.github/hooks/echo.json`
+as well. Host trust is still required; installing files never grants it. Only `SessionStart` and
+`UserPromptSubmit` are registered. `disconnect` removes marker-owned commands and restores the original bytes
+when the installed file is unchanged. If other edits were made, it preserves those edits and removes only Echo
+commands. Restoration records live in the private user-state `hooks/` directory; ignore rules remain in place.
+
+**Memories are historical, untrusted reference data.** Explicit saves reject the same credential-shaped content
+as pinned lessons, without echoing it back. Each new memory has an independently recorded workspace, HEAD
+commit when available, and save time bound to its exact content. Hook output labels that provenance and says
+the memory was not read from the code; older or changed records have unknown provenance. Records are encoded
+as JSON strings, bounded by the configured brief budget, and accompanied by an omission notice when truncated.
+The current checkout remains the source of truth. These checks reduce accidental credential capture and prompt
+confusion; they do not make arbitrary saved prose authoritative.
+
+## Workspace reads and rendering
 
 **What the server will fetch or run on its own:** `git clone` / `git pull` for `type: 'git'` sources, and
 `git log` / `git show` on configured checkouts (commit ids are checked as hex, and a clone URL is passed after

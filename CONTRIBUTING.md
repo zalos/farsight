@@ -7,6 +7,9 @@ Thanks for helping. This page is the short version; the project contract (princi
 
 - Node 24+ (`.nvmrc` — `nvm use`) and pnpm 9 (`packageManager` in `package.json`).
 - `pnpm install --frozen-lockfile && pnpm build`. **Build before tests**: every test imports compiled `dist/`.
+- Workspace dependency install scripts are allowlisted with `pnpm.onlyBuiltDependencies: ["esbuild"]`. Echo's
+  dependency tree is still resolved by the workspace install, but other dependencies' build scripts are not
+  approved. Echo's pinned engine is installed only by its explicit `install-runtime` command.
 - Install Git LFS once per machine (see [Git LFS](#git-lfs) below).
 
 ## Branches, commits, pull requests
@@ -73,6 +76,19 @@ file. **Copy `X.example` to `X`, edit `X`, and never commit a value from it.**
 |---|---|---|
 | `.farsight/settings.example.json` | `.farsight/settings.json` | workspace sources, collections, theme, work-item sources (site, scope, keychain reference) |
 | `.claude/settings.local.example.json` | `.claude/settings.local.json` | Claude Code permissions (allow / deny) and env for this repo |
+| `.echo/settings.example.json` | `.echo/settings.json` | Echo profiles, identities, ports, model selection and Echo-only keychain references |
+| `.echo/connection.example.json` | `.echo/connection.json` | one workspace's selected Echo configuration and profile; no copied memories or credentials |
+
+Echo also requires a user-owned trust receipt for the exact settings and connection files. Prefer `farsight-echo
+init` / `setup` and `connect` to create these local files; a copied example is review material until it is
+explicitly adopted through Echo. Settings-view edits maintain the receipt. Review a manually edited settings
+file before `farsight-echo trust --confirm`, and recreate connection pointers with `connect`.
+
+Echo's generated `.codex/hooks.json` and `.github/hooks/echo.json` contain machine-specific paths and are local,
+not team configuration. Hook installation adds local Git excludes for these paths, Claude's local settings and
+`.echo/*` (preserving the two example twins), verifies they are ignored, and refuses already tracked targets.
+It leaves shared ignore files alone. `disconnect` removes Echo-owned hooks, restoring exact original bytes when
+there have been no later edits; its restoration records stay outside the repository in private user state.
 
 The other tracked configs are shared and generic — no personal values, relative paths only: `.mcp.json` and
 `.codex/config.toml` (the workspace MCP server: `node packages/cli/dist/cli.js mcp --graph graph.json`),

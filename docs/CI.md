@@ -6,16 +6,18 @@ cancels the run in progress. The workflow has read-only repository access and no
 
 ## What runs
 
-Four jobs on `ubuntu-latest` run **in parallel**, so a red e2e and a red unit test are separate signals. All four
-are required on `main`. The two build jobs use Node from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with
-the pnpm store cached on the lockfile.
+Four required jobs on `ubuntu-latest` run **in parallel**, so a red e2e and a red unit test are separate signals.
+An additional, non-required `echo-package` job runs its integration check only when Echo or its packaging inputs
+change. Build jobs use Node from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store cached
+on the lockfile.
 
 | job | steps | timeout |
 |---|---|---|
-| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm typecheck` (every package, then `e2e/`) → `pnpm -r test` → `pnpm test:scripts` → `pnpm lint:strings` → `pnpm test:echo:package` | 20 min |
+| **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm typecheck` (every package, then `e2e/`) → `pnpm -r test` → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`, ~40 s; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
+| **echo-package** (non-required) | inspect changed paths → when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
 
 On the first runs (2026-10-01), **validate** took 1–1¼ min and **e2e** about 1½ min, of which the 109-test
 suite itself takes about 41 s on the runner (13 s on a warm Mac). The first run of a new `@playwright/test`
@@ -26,13 +28,23 @@ The live tracker tests (`packages/work-jira`, `packages/work-azdo`, `test/live.t
 `FARSIGHT_LIVE=1`, which CI never sets. No test reads a keychain. Secret resolution is tested with an injected
 runner.
 
-Echo's package check builds its separate tarball, installs it into a temporary directory without optional embedding dependencies,
+Workspace installs allow dependency build scripts only for `esbuild` (`pnpm.onlyBuiltDependencies` in
+`package.json`). Echo remains part of the workspace dependency resolution; the allowlist prevents its other
+transitive dependencies from running install scripts. The explicit engine installation is tested separately.
+
+Echo's optional package job watches `packages/echo/**` and its catalog, shared credential helpers, packaging
+scripts, example settings, Echo overview, package manifest, lockfile and CI workflow inputs. An unrelated change
+skips the job's install and package-check steps. The required `validate` job retains all Echo unit tests, whose
+runner gives each run a temporary `XDG_STATE_HOME` so tests never approve files in the developer's real trust state.
+
+The package check builds Echo's separate tarball, installs it into a temporary directory without optional embedding dependencies,
 downloads the checksum-pinned iii engine, and verifies synthetic save/recall, restart persistence, and separate stores.
 It also installs all three workspace hook formats into a temporary fixture and invokes their exact commands against
-the running memory bridge. It makes no model calls and uses no real memories or host sessions. This check needs npm
-and GitHub release downloads.
+the running memory bridge, including sharing one profile between two workspaces. It makes no model calls and uses
+no real memories or host sessions. This check needs npm and GitHub release downloads; a failure is reported in
+`echo-package` rather than blocking the four required checks.
 
-A third job, **secrets**, runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
+The **secrets** job runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
 how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in-ci).
 
 ## Run the same thing locally
@@ -45,7 +57,7 @@ pnpm build
 pnpm typecheck
 pnpm -r test
 pnpm lint:strings
-pnpm test:echo:package
+pnpm test:echo:package                  # optional network integration check for Echo changes
 pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```
