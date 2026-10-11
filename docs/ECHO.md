@@ -68,7 +68,8 @@ copied, moved, or manually edited settings require an explicit review followed b
 `farsight-echo trust --config /absolute/path/settings.json --confirm`. No credential lookup, model request, or runtime
 startup occurs before that approval. Trust receipts bind the canonical path and exact bytes in private user state
 under `${XDG_STATE_HOME:-~/.local/state}/farsight-echo/`; a repository cannot supply its own receipt. Reconnect copied
-or older-preview connections with `connect`. After upgrading, run `install-runtime` for the new private cache.
+or older-preview connections with `connect`. After upgrading, run `install-runtime` and `connect` with explicit `--scope global`, `--scope workspace`, or `--config PATH`
+until reconnection approves the legacy pointer. Bare commands will refuse that untrusted pointer.
 
 `serve` runs in the foreground and prints the settings URL. The view remains available if the model or memory service needs fixing. Stop with Ctrl-C; Echo shuts down only its own child processes. Externally managed memory services remain running. Restart `serve` after changing runtime settings so its active services use the saved configuration.
 
@@ -177,7 +178,7 @@ Normal termination and interrupted CLI smoke tests close the owned children and 
 Source workspace installs include agentmemory's dependency tree, with dependency lifecycle scripts permitted only
 for esbuild. The normal Farsight artifact remains independent.
 
-Managed mode disables consolidation, automatic fact supersession, and lesson/insight decay. Upstream still owns
+Managed mode disables consolidation, scheduled automatic forgetting, and lesson/insight decay. Similar new saves can still supersede earlier facts. Upstream still owns
 maintenance; normal restart persistence is tested, but long-term retention is not established.
 
 Agentmemory persists its records through iii's file-backed state store. Echo's memory data is runtime state, not a Git merge format. Commit scrubbed configuration examples and documentation; do not commit live stores. External mode connects to an instance the user manages and does not start or stop it. A future hosted team service will need authentication and enforced tenant boundaries.

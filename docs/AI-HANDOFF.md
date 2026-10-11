@@ -565,6 +565,27 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       30 syncs one by one; `refresh_graph` is outside core but some answers still name it; no `farsight context` CLI;
       the dogfood workspace counts the invoice example's commits twice (it reads the repo root's log).
 
+17. **Echo optional memory foundation and review hardening** (2026-10-11; PR #84, `codex/echo-setup`,
+    based on main `8614429`; not merged): separate package, workspace/global settings, one connected profile per
+    workspace, explicit managed saves and scoped prompt recall, standalone settings view, and Ollama verification.
+    Repository files require exact-byte approval in private user state before use; Echo-only keychain references
+    are pinned to an origin with transactional saves. The native engine is checksum-pinned in a private user cache
+    and hash-checked before execution. Generated hooks are locally ignored; `disconnect` restores unchanged files
+    byte for byte and preserves later unrelated edits. Only session-start and prompt events are registered. Memories
+    refuse credential-shaped input and report historical workspace/revision/date; truncation is visible. Shared
+    keychain transport retains separate Work/Echo policy. Source installs allow only esbuild dependency scripts;
+    network-dependent package verification is a separate optional CI job.
+    - **Verified:** full build/typecheck and package unit suites: **1,331 tests, 1,329 passed, 2 live-tracker skips**,
+      including **103 Echo tests**; script tests **14/14**, catalog lint, browser/MCP regressions **277/277**. The
+      standalone package passed clean install, synthetic save/recall, restart persistence, isolated stores, shared
+      recall through all three host runners, provenance, local switch-back, disconnect and owned-process shutdown.
+      An offline pnpm 9 fixture verified that the allowlist suppresses both direct and transitive dependency scripts.
+    - **Still open:** automatic capture, model-curated briefs, skills, team authorization, Farsight's combined brief,
+      long-term retention validation and release publication. Prompt recall does not call Ollama. Similar saves can
+      supersede earlier facts despite disabled scheduled forgetting/decay. The canonical Echo catalogs remain in
+      the shared catalog; Farsight's published runtime dependencies remain unchanged. See [ECHO.md](ECHO.md) and
+      [the package README](../packages/echo/README.md) for setup, explicit preview-upgrade trust and host trust steps.
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`

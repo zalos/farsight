@@ -219,3 +219,25 @@ test('bridge refuses live duplicates and non-sockets, recovers a crashed owned s
     } finally { await bridge.close(); }
   });
 });
+
+test('a prompt hook reports omitted matches even when no record is returned', async () => {
+  await fixture(async (ctx, connection, state) => {
+    ctx.profile.hooks.claude = true;
+    ctx.config.profiles.personal!.hooks.claude = true;
+    await saveConfig(ctx.configPath, ctx.config);
+    state.override = (_req, res) => { res.end(JSON.stringify({ memories: [], nextCursor: 'more' })); return true; };
+    const bridge = await startMemoryBridge(ctx, connection);
+    try {
+      const { fileURLToPath } = await import('node:url');
+      const child = spawn(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'hook', '--config', ctx.configPath, '--host', 'claude'], { cwd: ctx.directory, stdio: ['pipe', 'pipe', 'pipe'] });
+      let stdout = '', stderr = '';
+      child.stdout.on('data', chunk => { stdout += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      const exited = new Promise(resolve => child.once('exit', resolve));
+      child.stdin.end(JSON.stringify({ session_id: 'omitted-matches', hook_event_name: 'UserPromptSubmit', prompt: 'Synthetic query' }));
+      assert.equal(await exited, 0, stderr);
+      assert.equal(stderr, '');
+      assert.match(JSON.parse(stdout).hookSpecificOutput.additionalContext, /More matched; not shown/);
+    } finally { await bridge.close(); }
+  });
+});

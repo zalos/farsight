@@ -181,7 +181,7 @@ Global means a store owned by the current operating-system user. New global prof
 farsight-echo trust --config /absolute/path/to/.echo/settings.json --confirm
 ```
 
-Use `trust --scope global --confirm` for an existing global configuration. After upgrading an older preview, trust your existing configuration, run `install-runtime` to populate the private engine cache, and reconnect each selected workspace. A connection copied from another workspace is not trusted: run `connect` to create this user's receipt. Moving or editing settings requires fresh trust; hooks never grant it automatically.
+Use `trust --scope global --confirm` for an existing global configuration. After upgrading an older preview, trust your existing configuration, run `install-runtime --scope global` to populate the private engine cache, and reconnect each selected workspace with `connect --scope global --workspace /absolute/path/to/workspace`. For a workspace store, use `--scope workspace`; for a custom configuration, use `--config PATH` on each step. Explicit selection bypasses the untrusted legacy pointer until reconnection approves it. A connection copied from another workspace is not trusted: run `connect` to create this user's receipt. Moving or editing settings requires fresh trust; hooks never grant it automatically.
 
 Trust receipts and credential-origin pins live under `${XDG_STATE_HOME:-~/.local/state}/farsight-echo/`, outside repositories. Credential references must use `keychain:farsight-echo/ACCOUNT`. Each reference is permanently pinned to the exact service origin first approved for it; use a different account for a different origin. Never approve an unfamiliar repository's settings without reviewing them.
 
@@ -323,7 +323,7 @@ A connected workspace also has `.echo/connection.json`. When connected globally,
 
 The native executable lives separately in `~/.cache/farsight-echo/runtime/0.22.1/<platform-architecture>/`; repository-local engine files are never executed. New saves also keep content-bound provenance files inside the selected profile.
 
-Managed mode disables upstream consolidation, automatic fact supersession, and lesson/insight decay. This is not a long-term retention guarantee: the pinned backend still owns storage maintenance, and verification covers normal restart persistence only.
+Managed mode disables upstream consolidation, scheduled automatic forgetting, and lesson/insight decay. Similar new saves can still supersede earlier facts. This is not a long-term retention guarantee: the pinned backend still owns storage maintenance, and verification covers normal restart persistence only.
 
 Agentmemory uses iii's file-backed state store. These live files are not a Git collaboration format. Keep `.echo` runtime state ignored; commit only scrubbed examples such as this repository's `.echo/settings.example.json`. Moving a configuration file also changes where its adjacent runtime state is located.
 
@@ -333,7 +333,7 @@ Agentmemory uses iii's file-backed state store. These live files are not a Git c
 |---|---|
 | Model unavailable or no models listed | Confirm Ollama is running and check `ollama list`. Select that exact name. If necessary, explicitly download your chosen model with `ollama pull MODEL_NAME`, then rerun setup. |
 | Model stops before completing its brief | Increase the generation limit or choose a suitable local model. For a slow first load, increase the timeout. Echo refuses incomplete output. |
-| Engine missing or checksum mismatch | Run `install-runtime` to download and verify the pinned engine again. |
+| Engine missing or checksum mismatch | For a missing engine, run `install-runtime` with explicit scope. If an installed cache fails verification, inspect and move the affected version/platform cache directory aside before reinstalling; Echo will not execute or overwrite a suspicious cached binary. |
 | Managed mode refuses global agentmemory configuration | The published worker reads `~/.agentmemory/.env` globally. Use a deliberately isolated external instance if you need that existing installation. Do not delete another tool's settings to bypass the check. |
 | Port already in use | Stop your own existing Echo instance or select non-overlapping ports. Do not kill unrelated servers. |
 | Profile locked after a crash or forced kill | Restart normally: Echo recovers a verifiably dead owner lock and still refuses occupied ports. Live, malformed, or symlinked locks require inspection; preserve the store and any unrelated processes. |

@@ -7,7 +7,7 @@ import { pinCredentialOrigin } from '../dist/trust.js';
 test('shared keychain transport cannot bypass Echo reference restrictions or origin authorization', async () => {
   const ref = 'keychain:farsight-echo/transport-test';
   const origin = 'https://models.example.com';
-  pinCredentialOrigin(ref, origin);
+  await pinCredentialOrigin(ref, origin);
   let calls = 0;
   const runner = async () => { calls++; return 'synthetic-value'; };
   for (const forbidden of ['env:ECHO_SYNTHETIC_SECRET', 'keychain:farsight/work-account', 'keychain:farsight-echo/provider/account', 'literal-private-value']) {
@@ -25,7 +25,7 @@ test('shared keychain transport cannot bypass Echo reference restrictions or ori
 test('Echo masks transport details and refuses empty or multiline values', async () => {
   const ref = 'keychain:farsight-echo/transport-value-test';
   const origin = 'https://models.example.com';
-  pinCredentialOrigin(ref, origin);
+  await pinCredentialOrigin(ref, origin);
   for (const value of ['', 'line one\nline two', 'line one\rline two']) {
     await assert.rejects(resolveSecret(ref, { platform: 'linux', origin, runner: async () => value }), (error: Error) => error.message === echoConfigWord('echo.secret.unavailable'));
   }

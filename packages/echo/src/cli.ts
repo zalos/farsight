@@ -173,7 +173,7 @@ async function hook(): Promise<void> {
       print(hookContext(ctx, fileURLToPath(import.meta.url), 'SessionStart'));
     } else if (payload.hook_event_name === 'UserPromptSubmit' && typeof payload.prompt === 'string' && payload.prompt.trim()) {
       const result = await memoryRequest(ctx, 'recall', { query: payload.prompt.slice(0, 2000), limit: 5 }, { timeoutMs: 1800 });
-      if (result.memories.length) print(hookContext(ctx, fileURLToPath(import.meta.url), 'UserPromptSubmit', result));
+      if (result.memories.length || result.truncated) print(hookContext(ctx, fileURLToPath(import.meta.url), 'UserPromptSubmit', result));
     }
   } catch { process.stderr.write(`${word('hookRefused')}\n`); }
   finally { clearTimeout(deadline); }
