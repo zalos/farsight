@@ -27,7 +27,42 @@ export type ChangeKind =
   | 'node_renamed'
   // additive 2026-09 (tests in the graph) — see the version note in the contract doc
   | 'test_added' | 'test_removed'
-  | 'coverage_lost' | 'uncovered_change';
+  | 'coverage_lost' | 'uncovered_change'
+  // additive 2026-10-10 (compare two syncs on a storyline) — fire only in a storyline diff, never in diffGraphs
+  | 'storyline_built' | 'storyline_gate' | 'storyline_writer' | 'storyline_contract' | 'storyline_verdict';
+
+/**
+ * Optional (v1 addition, 2026-10-10): the storyline delta a `storyline_*` change carries — which of the five kinds,
+ * which way it went, its sentence in the hybrid and the business words, the journeys whose cards carry it, and its
+ * door. Only `storylineDiffDocument()` sets it.
+ */
+export interface DiffDelta {
+  kind: 'built' | 'gate' | 'writer' | 'contract' | 'verdict';
+  change: 'added' | 'removed' | 'changed';
+  text: string;
+  biz: string;
+  journeys: string[];
+  screen?: { id: string; name: string; flow: string; index: number };
+  target?: { id: string; name: string; kind: NodeKind };
+  tier?: 'business' | 'policy' | 'technical';
+  status?: string;
+  from?: string;
+  to?: string;
+  called?: boolean;
+  door: { kind: 'gate' | 'move' | 'cases' | 'contract' | 'screen'; node?: string; flow?: string; screen?: number; api?: string };
+}
+
+/** Optional (v1 addition, 2026-10-10): the storyline a storyline diff is over, its two ends, and its counts. */
+export interface DiffStoryline {
+  id: string;
+  name: string;
+  repo: string;
+  from: { sync: number | null; at?: string; commit?: string; metaKept?: boolean };
+  to: { sync: number | null; at?: string; commit?: string; metaKept?: boolean };
+  /** every delta, by kind — the same five keys always, zeros included */
+  byKind: Record<DiffDelta['kind'], number>;
+  notes: string[];
+}
 
 export interface DiffChange {
   id: string;                                  // "c1" — stable within a diff, referenced by permalinks
@@ -57,6 +92,8 @@ export interface DiffChange {
    * `commits: []` means the history was read and nothing in the range touched the file.
    */
   attribution?: FileAttribution;
+  /** Optional (v1 addition, 2026-10-10): on a `storyline_*` change, the delta it reports — see `DiffDelta`. */
+  delta?: DiffDelta;
 }
 
 export interface GraphDiff {
@@ -71,6 +108,8 @@ export interface GraphDiff {
     exit: 0 | 1;
     rules: { rule: string; result: string; changes: string[] }[];
   };
+  /** Optional (v1 addition, 2026-10-10): present only on a storyline diff (`farsight diff --storyline`). */
+  storyline?: DiffStoryline;
 }
 
 export const CHANGE_KINDS: ChangeKind[] = [
@@ -84,6 +123,7 @@ export const CHANGE_KINDS: ChangeKind[] = [
   'node_renamed',
   'test_added', 'test_removed',
   'coverage_lost', 'uncovered_change',
+  'storyline_built', 'storyline_gate', 'storyline_writer', 'storyline_contract', 'storyline_verdict',
 ];
 
 /** Severity is a fact of the contract (documented in farsight-diff-v1.md), not a judgment call per diff. */
@@ -106,6 +146,11 @@ const SEVERITY: Record<ChangeKind, DiffChange['severity']> = {
   test_removed: 'notable',
   test_added: 'info',
   uncovered_change: 'info',
+  storyline_built: 'notable',
+  storyline_gate: 'notable',
+  storyline_writer: 'notable',
+  storyline_contract: 'notable',
+  storyline_verdict: 'notable',
 };
 
 export interface DiffOptions {
@@ -489,6 +534,11 @@ const SENTENCES: Record<ChangeKind, (c: DiffChange) => string> = {
   test_removed: (c) => `test removed: ${c.subject.name}`,
   coverage_lost: (c) => `no test covers ${c.subject.name} (${c.subject.kind}) any more — it had at least one before`,
   uncovered_change: (c) => `changed with nothing verifying it: ${c.subject.name} (${c.subject.kind})`,
+  storyline_built: (c) => c.delta?.text ?? `screen built status changed: ${c.subject.name}`,
+  storyline_gate: (c) => c.delta?.text ?? `gate changed on the storyline: ${c.subject.name}`,
+  storyline_writer: (c) => c.delta?.text ?? `writer changed on the storyline: ${c.subject.name}`,
+  storyline_contract: (c) => c.delta?.text ?? `contract changed on the storyline: ${c.subject.name}`,
+  storyline_verdict: (c) => c.delta?.text ?? `test verdict changed on the storyline: ${c.subject.name}`,
 };
 
 export function changeSentence(change: DiffChange): string {

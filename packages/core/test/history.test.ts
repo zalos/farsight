@@ -155,6 +155,8 @@ test('an existing database gains the history tables and keeps every row it had',
   for (const t of ['commit_file', 'commit_sync', 'sync_shot']) raw.exec(`DROP TABLE ${t}`);
   // nor the work-items tables (2026-09-30), which it gains the same additive way
   for (const t of ['commit_key', 'commit_branch', 'commit_node', 'commit_node_done', 'spine_read']) raw.exec(`DROP TABLE ${t}`);
+  // nor the meta kept per sync (2026-10-10, compare two syncs): a sync read from it says its meta was not kept
+  raw.exec('DROP TABLE snapshot_meta');
   const tables = () =>
     (raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[])
       .map((r) => r.name);
@@ -166,6 +168,7 @@ test('an existing database gains the history tables and keeps every row it had',
   const back = db.read(1);
   assert.deepEqual(back.store.toJSON().nodes.map((n) => n.id).sort(), ['r::also', 'r::kept']);
   assert.equal(back.ref.digest, digest);
+  assert.equal(back.metaKept, false);
   assert.equal(db.list().length, 1);
 
   const written = db.writeCommits('r', chain(2));
@@ -180,7 +183,7 @@ test('an existing database gains the history tables and keeps every row it had',
   assert.deepEqual(
     (after.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as { name: string }[])
       .map((r) => r.name),
-    ['blind_spot', 'commit', 'commit_branch', 'commit_file', 'commit_key', 'commit_node', 'commit_node_done', 'commit_sync', 'edge', 'node', 'release', 'snapshot', 'snapshot_source', 'spine_read', 'sync_shot'],
+    ['blind_spot', 'commit', 'commit_branch', 'commit_file', 'commit_key', 'commit_node', 'commit_node_done', 'commit_sync', 'edge', 'node', 'release', 'snapshot', 'snapshot_meta', 'snapshot_source', 'spine_read', 'sync_shot'],
   );
   after.close();
 });

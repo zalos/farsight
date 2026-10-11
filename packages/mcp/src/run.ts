@@ -22,6 +22,7 @@ import {
   impactOf, IMPACT_MAX_HOPS, impactTestsV1, impactTestsReaching, nodesInHunks, flowActions,
   testsMatrixV1, testsMatrixCsv, testsIdentity, stepCoverage,
   SnapshotDb, parseSyncRef, diffGraphs, changeSentence, toSarif, toMarkdown, CHANGE_KINDS,
+  storylineDiff, storylineDiffDocument, storylineDiffLines, resolveCompareFrom, compareSideOf, parseFailOn, DELTA_KINDS, type CompareSide,
   type GraphDiff, type ImpactFlowRef,
   type ImpactCut, type ImpactNode, type ImpactReport,
   type CoverageFacts, type CoverageTestRef,
@@ -1774,6 +1775,50 @@ server.registerTool('graph_changes', {
       }
     }
     if (shown.length > printed) lines.push('', `… +${shown.length - printed} more listed change(s) not printed — kind:<kind> narrows, format:"json" returns the whole document`);
+    return text(lines.join('\n'));
+  } finally {
+    try { db.close(); } catch { /* already closed */ }
+  }
+});
+
+// ── Compare two syncs on a storyline (round 2026-10-10, proposal 7) ──────────
+
+server.registerTool('storyline_diff', {
+  title: 'What changed on a storyline between two syncs',
+  description: `One storyline between two syncs, in the units a storyline reader reads, from a closed set of five kinds: built (a screen designed-not-built became built, or the reverse), gate (a gate or precondition added to or removed from a call or action of the storyline, with its tier), writer (a status of a record the storyline reaches gained or lost its writer), contract (an operation added, removed or changed on the API contract, and whether the storyline calls it), verdict (a journey's one test verdict changed its word, status, skips or failures). Each change is a sentence with where to read it. Use to review what a sprint did to one storyline, to fail CI when a gate or a verdict moved, or to write the Monday report. Default: the sync before the served one → the served one. from: sync:N | N | previous | YYYY-MM-DD | tag:<name> | last-green. json:true returns the frozen farsight-diff v1 document (storyline_* change kinds, a storyline block); failOn names kinds whose change fails its gate block. Read-only.`,
+  inputSchema: {
+    storyline: z.string().describe('the storyline id (the journeys tool lists them)'),
+    from: z.string().optional().describe('the earlier end: sync:N, previous (default), a day YYYY-MM-DD, tag:<name>, last-green'),
+    to: z.string().optional().describe('the later end: sync:N or latest (default: the served graph)'),
+    repo: z.string().optional().describe('the source, when two declare the same storyline id'),
+    business: z.boolean().optional().describe('the business words: no identifiers'),
+    failOn: z.string().optional().describe(`comma-separated kinds that fail the gate block: ${DELTA_KINDS.join(',')}`),
+    json: z.boolean().optional().describe('the farsight-diff v1 document instead of words'),
+  },
+}, async ({ storyline, from, to, repo, business, failOn, json }) => {
+  const p = historyDbPath();
+  if (!p) return text(`no snapshot history next to this graph — every \`farsight ingest\` and server sync writes one snapshot; run two, then ask again.`);
+  let db: SnapshotDb;
+  try { db = new SnapshotDb(p); } catch (err) { return text((err as Error).message); }
+  try {
+    const served = store.meta.sync;
+    const want = to && to !== 'latest' ? parseSyncRef(to) : served ?? db.list(1)[0]?.sync ?? null;
+    if (want == null || want === 'latest') return text('no sync to compare to — the graph carries no sync number');
+    if (!db.has(want)) return text(`sync ${want} is not indexed in this history`);
+    const b: CompareSide = want === served
+      ? { index, meta: store.meta, end: { sync: want, ...(store.meta.generatedAt ? { at: store.meta.generatedAt } : {}), ...(store.meta.commit ? { commit: store.meta.commit } : {}), metaKept: true } }
+      : compareSideOf(db, want);
+    const ref = resolveCompareFrom(db, from ?? 'previous', { head: want, storyline, ...(repo ? { repo } : {}), declaredBy: b });
+    if ('error' in ref) return text(ref.error);
+    if (ref.sync >= want) return text(`the earlier end (sync ${ref.sync}) must come before the later one (sync ${want})`);
+    const diff = storylineDiff(compareSideOf(db, ref.sync), b, storyline, repo ? { repo } : {});
+    if (!diff) return text(`no storyline ${storyline} at sync ${ref.sync} or sync ${want} — the journeys tool lists the storylines`);
+    const kinds = failOn ? parseFailOn(failOn) : undefined;
+    if (kinds?.unknown.length) return text(`failOn: ${kinds.unknown.join(', ')} is not a delta kind (${DELTA_KINDS.join(' · ')})`);
+    const doc = storylineDiffDocument(diff, kinds ? { failOn: kinds.kinds } : {});
+    if (json) return text(JSON.stringify(doc, null, 2));
+    const lines = storylineDiffLines(diff, { biz: !!business });
+    if (doc.gate) lines.push(`gate ${doc.gate.result.toUpperCase()} — ${doc.gate.policy}`);
     return text(lines.join('\n'));
   } finally {
     try { db.close(); } catch { /* already closed */ }
