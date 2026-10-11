@@ -27,6 +27,7 @@ import {
   jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnSegDecisions, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml, jrnSchemaChipHtml, jrnFirstSentence, jrnSheetModel, jrnMarkerAt, jrnSelect, jrnScrollTo, jrnTxLineHtml, jrnTestsFootHtml, jrnStepTestFacts, jrnCountedHtml, jrnMoLabel, jrnUntranslatedHtml, jrnActionUntrList, jrnWords, jrnCallWords, jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts, jrnStopText, jrnRowLabel as jrnRowLabelOf, jrnHelperTest as jrnHelperOf, jrnScreenNode, jrnDesignIdHtml,
 } from '../lib/journey-draw.js';
 import { tipAttrs, tipSource } from '../lib/tooltip.js';
+import { foldRow, pathHtml } from '../lib/fold-row.js';
 import { drillLayers, drillLayerOf, drillBeats } from '../lib/journey-model.js';
 import { impactBodyHtml, impactCached, impactFetch, impactHasHops, impactOpts, impactRings, impactHash } from '../impact.js';
 
@@ -238,7 +239,7 @@ function jrnDrillBoxHtml(m, layer, tree, also) {
   return '<div class="jrn-bx ' + cls + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" id="jrn-bx-' + m.stepOrder + '" data-order="' + m.stepOrder + '" tabindex="0"'
     + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc(title) + '">'
     + '<span class="k">' + sym(glyph) + esc(kindWord) + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
-    + '<span class="n">' + esc(name) + (loc ? '<span class="loc">' + esc(loc.path + ':' + loc.line) + vsl(loc.repo, loc.path, loc.line) + '</span>' : '') + '</span>'
+    + '<span class="n">' + esc(name) + (loc ? '<span class="loc">' + pathHtml(loc.path + ':' + loc.line, { max: 30 }) + vsl(loc.repo, loc.path, loc.line) + '</span>' : '') + '</span>'
     + (label ? '<span class="b">' + esc(label) + '</span>' : '')
     + (biz && biz !== label ? '<span class="b">' + esc(biz) + '</span>' : '')
     + (m.cut ? '<span class="b cut" title="' + esc(def('journey.cutPoints')) + '">▸ ' + esc(t('journey.notFollowed').replace('{n}', m.cut)) + '</span>' : '')
@@ -250,7 +251,7 @@ function jrnDrillScreenBoxHtml(comp, sg) {
   const n = S.BYID[comp.id] || {};
   return '<div class="jrn-bx ui dim" id="jrn-bx-' + comp.stepOrder + '" tabindex="0" onclick="jrnScrollTo(' + comp.stepOrder + ')" title="' + esc(comp.name) + '">'
     + '<span class="k">' + sym('screen') + esc(currentLens() === 'business' ? t('journey.biz.kind.onScreen') : (n.kind || t('journey.kind.screen'))) + ' · ' + esc(t('journey.stillOpen')) + '</span>'
-    + '<span class="n">' + esc(currentLens() === 'business' ? comp.label : comp.name) + (n.loc ? '<span class="loc">' + esc(n.loc.path + ':' + n.loc.line) + vsl(n.repo, n.loc.path, n.loc.line) + '</span>' : '') + '</span>'
+    + '<span class="n">' + esc(currentLens() === 'business' ? comp.label : comp.name) + (n.loc ? '<span class="loc">' + pathHtml(n.loc.path + ':' + n.loc.line, { max: 30 }) + vsl(n.repo, n.loc.path, n.loc.line) + '</span>' : '') + '</span>'
     + (comp.label && comp.label !== comp.name && currentLens() !== 'business' ? '<span class="b">' + esc(comp.label) + '</span>' : '')
     + '</div>';
 }
@@ -283,7 +284,7 @@ function jrnDrillGateBoxHtml(g, bi, k) {
   return '<div class="jrn-bx gate' + (g.planned ? ' planned' : '') + '" id="jrn-bg-' + bi + '-' + k + '"'
     + (gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
     + '<span class="k">' + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(g.kind === 'rule' ? t('journey.kind.rule') : t('journey.kind.gate')) + (g.count > 1 ? ' ×' + g.count : '') + '</span>'
-    + '<span class="n">' + esc(jrnGateLabel(g)) + (gn && gn.loc ? '<span class="loc">' + esc(gn.loc.path + ':' + gn.loc.line) + vsl(gn.repo, gn.loc.path, gn.loc.line) + '</span>' : '') + '</span>'
+    + '<span class="n">' + esc(jrnGateLabel(g)) + (gn && gn.loc ? '<span class="loc">' + pathHtml(gn.loc.path + ':' + gn.loc.line, { max: 30 }) + vsl(gn.repo, gn.loc.path, gn.loc.line) + '</span>' : '') + '</span>'
     + (g.planned ? '<span class="b">' + esc(t('journey.plannedGate')) + '</span>' : '') + '</div>';
 }
 /** A translated decision on the gates row: the fork the flow can take here.
@@ -595,8 +596,8 @@ function jrnInspHeadHtml(i, mk) {
   // hybrid keeps both names; business keeps one, and not the code's
   return '<div class="sel"><span class="hud-label">' + esc(word) + (bi != null && !biz ? ' · ' + esc(t('journey.insp.beat').replace('{n}', bi + 1)) : '') + '</span>'
     + '<div class="nm">' + (mk && mk.method && !biz ? '<b>' + esc(mk.method) + '</b>' : '') + esc(name) + (n.name && n.name !== name && lens === 'hybrid' ? '<span class="jrn-code-name">' + esc(n.name) + '</span>' : '') + '</div>'
-    + (n.loc && !biz ? '<div class="loc">' + esc(n.loc.path + ':' + n.loc.line) + vsl(n.repo, n.loc.path, n.loc.line) + (n.repo ? ' · ' + esc(n.repo) : '') + '</div>' : '')
-    + (c.spec && c.spec.path && !biz ? '<div class="loc">' + esc(c.spec.path + (c.spec.line ? ':' + c.spec.line : '')) + vsl(n.repo, c.spec.path, c.spec.line || 1) + ' · ' + esc(t('journey.contractHead')) + '</div>' : '')
+    + (n.loc && !biz ? '<div class="loc">' + pathHtml(n.loc.path + ':' + n.loc.line, { max: 64 }) + vsl(n.repo, n.loc.path, n.loc.line) + (n.repo ? ' · ' + esc(n.repo) : '') + '</div>' : '')
+    + (c.spec && c.spec.path && !biz ? '<div class="loc">' + pathHtml(c.spec.path + (c.spec.line ? ':' + c.spec.line : ''), { max: 64 }) + vsl(n.repo, c.spec.path, c.spec.line || 1) + ' · ' + esc(t('journey.contractHead')) + '</div>' : '')
     // every detail is a door (round 2026-10-05 §3.2): where this part is read in full
     + jrnInspDoorsHtml(mk, n)
     + jrnTxLineHtml(mk)
@@ -855,12 +856,18 @@ function jrnDrillRenderAction() {
   S.JRN_DRAWN = new Set(Array.from(host.querySelectorAll('[data-order]')).map((el) => +el.dataset.order));
   if (S.jrnDrillRO) S.jrnDrillRO.disconnect();
   if (window.ResizeObserver) {
-    S.jrnDrillRO = new ResizeObserver(() => jrnDrillWires());
+    // a dock that opens or a pane that resizes: the wires redraw and the legend folds again to its one line
+    S.jrnDrillRO = new ResizeObserver(() => { jrnDrillWires(); jrnFoldLegend(); });
     S.jrnDrillRO.observe(host);
     const lanes = document.getElementById('jrn-lanes');
     if (lanes) S.jrnDrillRO.observe(lanes);
   }
-  requestAnimationFrame(jrnDrillWires);
+  requestAnimationFrame(() => { jrnDrillWires(); jrnFoldLegend(); });
+}
+/** The wires' legend keeps to one line beside the caption: what has no room folds to `+n`, its tip naming them. */
+function jrnFoldLegend() {
+  const lg = document.querySelector('#jrn-dcap .legend');
+  if (lg) foldRow(lg, { maxRows: 1, scope: 'fold.scopeRow' });
 }
 /**
  * The drill without its rail, for a host that keeps its own sense of where it is — the Map's action stop draws the

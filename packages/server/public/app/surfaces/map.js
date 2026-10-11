@@ -28,9 +28,10 @@ import { freshAttrs, freshSentence } from '../lib/freshness.js';
 import { withParams, screenRowAt, partOrder } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml, copyDoorsHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
+import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip, foldMapChips } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
 import { lanesHtml } from './map-lanes.js';
+import { pathHtml } from '../lib/fold-row.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
 import { findStoryline, firstScreenOf } from '../lib/journeys-model.js';
@@ -63,8 +64,10 @@ import { mapScreenHash } from '../lib/route-url.js';
 // lane L widened the column (480 → 600) so a call's words and path and a data node's kind line show whole at the
 // calls stop: a call wraps its name and path onto as many lines as they need (`callTextH`), never an ellipsis
 // the journey's head left the world for the chrome bar above the stage (cleanup pass 2026-10-11): a street keeps one
-// line in the world — its name, so two streets side by side are told apart — and its screens start under it
-const SW = 260, SH = 236, COL = 600, HEAD = 56, SY = HEAD + 36, PAD = 60;
+// line in the world — its name, so two streets side by side are told apart — and its screens start under it.
+// SH: a screen card holds its picture, a two-line name, its route and the test chip whole — verdict and skips — with
+// one row of chips beside (236 cut the skips off; nothing clips)
+const SW = 260, SH = 264, COL = 600, HEAD = 56, SY = HEAD + 36, PAD = 60;
 const PL_TOP = SY + SH + 76, OPW = 250, DX = 280, DW = 280, ROW = 40, OPMIN = 68, OPGAP = 16;
 /** A call node's text metrics (CSS `.map-pl`): characters per line of its name and of its path, and line heights — on the safe side, so the box is never shorter than its words. */
 const CALL_NAME_CH = 31, CALL_PATH_CH = 35, CALL_NAME_LH = 16, CALL_PATH_LH = 13, CALL_CHROME_H = 36;
@@ -102,6 +105,8 @@ const FLOOR_PX = 8, COVER_MIN_PX = 10;
 const STREET_FIT_MAX = 0.95;
 /** …and never below this: under LEVEL_NB the board draws covers, so a journey stop below it would not be a street. */
 const STREET_FIT_MIN = LEVEL_NB + 0.02;
+/** Under this scale a street card's ordinary type would draw under 9 px on screen: it keeps its name and its verdict. */
+const STREET_FLOOR = 0.6;
 /** Screen px kept clear around a framed journey. */
 const FRAME_PAD = 24;
 /** The size, in px on screen, a data node's name reads at from the calls stop on. */
@@ -623,6 +628,10 @@ function drawLanes() {
     // under the lanes: the record's strip, the footer and the legend — measured below once drawn
     const extraH = 40 + (model.lifecycles.length ? 50 : 0);
     let G = laneGeometry(model, { aspect, extraH });
+    // the reading floor: a board that would fit only under it wraps into more segments (fewer stages a row) until its
+    // width fits at the floor, and the reader pans down — the type never shrinks under 9 px (cleanup pass 2026-10-11)
+    const kPick = laneFloorK(model, G, { aspect, extraH, w: b.w, h });
+    if (kPick && kPick !== G.k) G = laneGeometry(model, { aspect, extraH, k: kPick });
     let el = existing[i];
     if (!el) { el = document.createElement('div'); el.className = 'map-lanes'; MAP.world.appendChild(el); }
     el.dataset.storyline = story.id;
@@ -630,13 +639,15 @@ function drawLanes() {
       el.style.cssText = 'top:' + y + 'px;width:' + G.size.w + 'px;height:' + G.size.h + 'px;transform:scale(' + LANE_K + ')';
       el.innerHTML = lanesHtml(model, G, { evidenceHtml: one ? storyEvidenceHtml() : '', doorHtml: readinessDoorHtml(story.id, 'map-story-ready', story.repo), sentence });
       if (one) paintCompareLanes(el);
+      // the stage cards' chips fold to what each card has left, the verdict whole
+      foldMapChips(el);
     };
     paint();
     // what is drawn under the lanes is measured (offset sizes are layout units, untouched by the scale): when it is not
     // the height the wrap was chosen for, choose again with the real one, so the board fits as large as it can
     let bottom = el.querySelector('.ln-bottom');
     const real = bottom ? bottom.offsetHeight + 12 : extraH;
-    if (Math.abs(real - extraH) > 8) { G = laneGeometry(model, { aspect, extraH: real }); paint(); bottom = el.querySelector('.ln-bottom'); }
+    if (Math.abs(real - extraH) > 8) { G = laneGeometry(model, { aspect, extraH: real, k: kPick || undefined }); paint(); bottom = el.querySelector('.ln-bottom'); }
     const need = bottom ? bottom.offsetTop + bottom.offsetHeight + G.geom.margin : G.size.h;
     if (need > G.size.h) { G.size.h = need; el.style.height = need + 'px'; }
     bands.push({ model, G, y, story });
@@ -723,13 +734,47 @@ function drawLanesSoon() {
   clearTimeout(lanesT);
   lanesT = setTimeout(drawLanes, 40);
 }
-/** Fit the lanes board on the stage, under the risk headline. */
+/**
+ * The lanes' reading floor, as a scale of the world: the smallest type on the lanes (9.5 px, the stylesheet's
+ * `.ln-*` and `.lc-*` rules) drawn at LANE_K never under 9 px on the screen.
+ */
+const LANE_TYPE_MIN = 9.5;
+const LANE_FLOOR_PX = 9.25;   // a quarter pixel over the floor: the stage the engine fits to is a few px smaller than the board
+const LANE_FLOOR_S = LANE_FLOOR_PX / (LANE_TYPE_MIN * LANE_K);
+/** The board's fit on the stage (≤ 1), for a size in world units. */
+function lanesFitOf(sz) {
+  const b = boardSize();
+  return Math.min(1, (b.w - FRAME_PAD * 2) / sz.w, (b.h - FRAME_PAD * 2 - riskTop()) / sz.h);
+}
+/**
+ * The segments to wrap the lanes into when the best-shaped board fits only under the floor: the fewest whose width
+ * fits the stage at the floor (the reader pans down), else the most there are. null when the board fits as it is.
+ */
+function laneFloorK(model, G, o) {
+  const fitOf = (g) => Math.min(1, (o.w - FRAME_PAD * 2) / (g.size.w * LANE_K), (o.h - FRAME_PAD * 2) / (g.size.h * LANE_K));
+  if (fitOf(G) >= LANE_FLOOR_S) return null;
+  const maxK = Math.max(1, Math.ceil((model.columns || 1) / 2));
+  let last = null;
+  for (let k = 1; k <= maxK; k++) {
+    const g = laneGeometry(model, { aspect: o.aspect, extraH: o.extraH, k });
+    last = k;
+    if ((o.w - FRAME_PAD * 2) / (g.size.w * LANE_K) >= LANE_FLOOR_S) return k;
+  }
+  return last;
+}
+/** Fit the lanes board on the stage, under the risk headline — never under the reading floor: there, the board's top
+ * at the floor's scale, centred across, and the rest a pan away. */
 function fitLanes(anim) {
   if (!MAP.cv || !MAP.lanes) return;
   const sz = MAP.lanes.size;
-  MAP.cv.fit({ x: 0, y: 0, w: sz.w, h: sz.h }, { pad: FRAME_PAD, top: riskTop(), max: 1, anim });
-  const b = boardSize();
-  MAP.lanesFitS = Math.min(1, (b.w - FRAME_PAD * 2) / sz.w, (b.h - FRAME_PAD * 2 - riskTop()) / sz.h);
+  const fit = lanesFitOf(sz);
+  if (fit >= LANE_FLOOR_S) MAP.cv.fit({ x: 0, y: 0, w: sz.w, h: sz.h }, { pad: FRAME_PAD, top: riskTop(), max: 1, anim });
+  else {
+    const b = boardSize();
+    const s = LANE_FLOOR_S;
+    MAP.cv.set(Math.max(FRAME_PAD, (b.w - sz.w * s) / 2), riskTop() + FRAME_PAD, s, anim);
+  }
+  MAP.lanesFitS = Math.max(fit, LANE_FLOOR_S);
   writeHash(null, null);
 }
 /** Back from a street to the lanes: the districts hide, the lanes show. */
@@ -748,8 +793,7 @@ function laneEnterScale() {
 /** The stops on the lanes: the board fitted, and a screen large enough to enter. */
 function laneStops() {
   if (!MAP.lanes || !MAP.cv) return [];
-  const b = boardSize(), sz = MAP.lanes.size;
-  const fit = Math.min(1, (b.w - FRAME_PAD * 2) / sz.w, (b.h - FRAME_PAD * 2 - riskTop()) / sz.h);
+  const fit = Math.max(lanesFitOf(MAP.lanes.size), LANE_FLOOR_S);
   return [{ id: 'board', s: fit, frame: () => fitLanes(true) }, { id: 'enter', s: laneEnterScale(), frame: (a) => frameStage(a, laneEnterScale()) }];
 }
 /** The lanes' enter stop: the screen nearest the zoom's point centred, large enough to arm, its hint on screen. */
@@ -1702,6 +1746,9 @@ function onCanvasChange(st) {
   MAP.world.classList.toggle('lvl-nb', st.level === 'nb');
   MAP.world.classList.toggle('lvl-st', st.level !== 'nb');
   MAP.world.classList.toggle('floor', st.level === 'nb' && underFloor(st.s));
+  // the street under its reading floor: its cards keep the name and the verdict, counter-scaled (cleanup pass)
+  const stFloor = st.level === 'st' && st.s < STREET_FLOOR;
+  if (MAP.world.classList.contains('st-floor') !== stFloor) { MAP.world.classList.toggle('st-floor', stFloor); foldMapChips(MAP.world); }
   MAP.stage.querySelectorAll('.map-lvls button').forEach((b) => {
     const on = b.dataset.l === lvl;
     b.classList.toggle('on', on);
@@ -2739,35 +2786,12 @@ function focusKey(a) {
 }
 /**
  * A cover's chips wrap to a second row; past two rows the last ones fold into one `+n` chip whose tip lists them —
- * measured, because the cover's box follows the zoom (`--map-inv`). Run when a district draws and when the zoom
- * moves the counter-scale.
+ * measured, because the cover's box follows the zoom (`--map-inv`); a screen card's chips fold to what its box has
+ * left. The test verdict is never folded. Run when a district draws and when the zoom moves the counter-scale.
  */
 function foldCoverChips(scope) {
-  const aggs = scope ? scope.querySelectorAll('.map-dcover .agg') : MAP.world ? MAP.world.querySelectorAll('.map-dcover .agg') : [];
-  aggs.forEach((agg) => {
-    agg.querySelectorAll(':scope > .map-more').forEach((x) => x.remove());
-    const kids = [...agg.children];
-    kids.forEach((k) => { k.hidden = false; });
-    const shown = () => kids.filter((k) => !k.hidden && k.offsetParent !== null && k.offsetWidth > 0);
-    const vis = shown();
-    if (!vis.length) return;
-    const top0 = vis[0].offsetTop, rowH = vis[0].offsetHeight;
-    const row = (el) => Math.round((el.offsetTop - top0) / (rowH + 4));
-    if (vis.every((k) => row(k) <= 1)) return;
-    const hidden = [];
-    let more = null;
-    for (let i = vis.length - 1; i > 0; i--) {
-      vis[i].hidden = true;
-      hidden.unshift(vis[i]);
-      if (more) more.remove();
-      const n = hidden.length;
-      const rows = hidden.map((h) => [h.textContent.trim(), 1]);
-      agg.insertAdjacentHTML('beforeend', '<span class="map-chip map-more"' + plainTip(n, 'map.cover.moreOf', 'map.fold.scopeJourney', '/api/journey', rows).replace(' tabindex="0"', '') + '>'
-        + esc(t('map.cover.more').replace('{n}', String(n))) + '</span>');
-      more = agg.lastElementChild;
-      if (row(more) <= 1 && shown().every((k) => row(k) <= 1)) break;
-    }
-  });
+  // the covers, the street's screen cards and (on the lanes) the stage cards: lib/map-chips.js, the verdict never folded
+  foldMapChips(scope || MAP.world);
 }
 function sizeDistrict(id) {
   const el = districtEl(id);
@@ -2921,7 +2945,8 @@ function screenHtml(d, m, s, x, y, n) {
     + '<div class="stripe"></div>'
     + '<div class="map-thumbwrap">' + (thumb || ph) + '</div>'
     + '<div class="body"><div class="ttl"><span class="ord"' + tipAttrs({ key: 'map.screen.ordinal', noFocus: true }) + '>' + s.ordinal + '</span>'
-    + '<span class="nm">' + esc(s.name) + '</span></div>'
+    // the name clamps to two lines; its tip carries it whole
+    + '<span class="nm"' + tipAttrs({ text: s.name, noFocus: true }) + '>' + esc(s.name) + '</span></div>'
     + '<div class="route map-code">' + esc(s.route || '') + '</div>'
     // the business register reads the street the way the journey page's storyboard did: the screen's own sentence
     // under its name (the first sentence somebody wrote for it, in plain words)
@@ -2977,7 +3002,8 @@ function dataHtml(d, s, c, dd, si, ci, k, x, y) {
     + (dd.store ? ' data-store="' + esc(dd.store.name) + '" data-store-kind="' + esc(storeKind(dd.store)) + '"' : '')
     + ' data-flow="' + esc(d.id) + '" data-si="' + si + '" data-ci="' + ci + '" data-di="' + k + '" style="left:' + x + 'px;top:' + y + 'px">'
     // the kind line truncates (kind · identifier, then what the call does to it); the name has the node's width
-    + '<span class="top"><span class="kd"' + (biz() ? tipAttrs({ key: dataBizKey(dd), noFocus: true }) : '') + '>' + esc(dataKindWords(dd)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
+    // the kind line ellipsises; its tip is the whole line (the business register's tip keeps its definition)
+    + '<span class="top"><span class="kd"' + (biz() ? tipAttrs({ key: dataBizKey(dd), noFocus: true }) : tipAttrs({ text: dataKindWords(dd) + ' · ' + dd.name, noFocus: true })) + '>' + esc(dataKindWords(dd)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
     + '<span class="rw ' + esc(dd.mode) + '"' + tipAttrs({ key: modeKey(dd.mode), noFocus: true }) + '>' + esc(modeWord(dd.mode)) + '</span></span>'
     + '<span class="nm">' + esc(dataWords(dd)) + '</span></div>';
 }
@@ -3271,8 +3297,9 @@ function drawCard() {
     // a handler is often named for its verb (a function called GET): its file and line stand beside the name (round 2)
     const hn = h && S.BYID[h.nodeId];
     const hloc = (hn && hn.loc) || (h && h.path ? { path: h.path, line: h.line } : null);
-    const handler = h ? h.name + (hloc && hloc.path ? ' (' + hloc.path + (hloc.line ? ':' + hloc.line : '') + ')' : '') : '';
-    code = [(c.method + ' ' + c.path).trim(), c.operationId, handler ? t('map.card.handler') + ' ' + handler : ''].filter(Boolean).join(' · ');
+    // the file keeps its two ends and breaks at `/`, its tip the whole path (cleanup pass: nothing wraps mid-word)
+    const handler = h ? esc(h.name) + (hloc && hloc.path ? ' (' + pathHtml(hloc.path + (hloc.line ? ':' + hloc.line : ''), { max: 44 }) + ')' : '') : '';
+    code = [esc((c.method + ' ' + c.path).trim()), esc(c.operationId || ''), handler ? esc(t('map.card.handler')) + ' ' + handler : ''].filter(Boolean).join(' · ');
     // every detail is a door (§3.2): the contract, the spec line, the handler, the card on the code map
     const route = nodeId && S.BYID[nodeId];
     if (route) doors = doorsFor('call', route, { handler: (c.marker && c.marker.handler) || null, flow: tg.flow });
@@ -3282,7 +3309,7 @@ function drawCard() {
     head = esc(dataKindWords(dd)) + ' · ' + esc(modeWord(dd.mode));
     name = dataWords(dd);
     const n = dd.node;
-    code = [dd.name, n && n.loc ? n.loc.path + (n.loc.line ? ':' + n.loc.line : '') : ''].filter(Boolean).join(' · ');
+    code = [esc(dd.name || ''), n && n.loc ? pathHtml(n.loc.path + (n.loc.line ? ':' + n.loc.line : ''), { max: 44 }) : ''].filter(Boolean).join(' · ');
     // the store, and — outside the business register — how it is known
     if (dd.store) {
       const via = dd.store.via ? 'map.store.via.' + dd.store.via : '';
@@ -3303,7 +3330,7 @@ function drawCard() {
     // where this journey stands in a storyline (lane S), when it is a step of one
     + (storylineLineHtml(MAP.tree, tg.flow) ? '<div class="story">' + storylineLineHtml(MAP.tree, tg.flow) + '</div>' : '')
     + store
-    + (code ? '<div class="sent map-code">' + esc(code) + '</div>' : '')
+    + (code ? '<div class="sent map-code">' + code + '</div>' : '')
     + '<div class="where"><span class="hud-label"' + tipAttrs({ key: 'map.card.on', noFocus: true }) + '>' + esc(t('map.card.on')) + '</span>'
     + (on.length ? on.map((s) => '<button type="button" class="map-chip go" data-go="' + s.index + '" data-flow="' + esc(tg.flow) + '">' + esc(s.name) + screenChipReach(tg.flow, s.id) + '</button>').join('')
       : '<span class="map-chip k-absent">' + esc(t('map.card.onNone')) + '</span>') + '</div>'

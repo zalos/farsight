@@ -97,7 +97,22 @@ street head), and the overlay's *Esc twice to close* (Esc goes up one stop). e2e
 retired view), `journey-ladder`, `journey-numbers` (the identifier walk over the business street, every screen, the
 table and every action), `map-journey-links` (the redirect), `escape-focus`.
 
-### Projects and packages — `surfaces/codemap-projects.js`, `lib/codemap-model.js` (2026-10-04)
+#### Nothing on the Map overflows — `lib/fold-row.js`, `lib/fold-model.js` (cleanup pass 2026-10-11)
+
+The rule: text wraps or folds to `+n` with a tip, never clips, and nothing scrolls the page sideways. `foldRow(row, opts)`
+folds a wrapping chip row's last items into one `+n` (`fold.more`, its tip lists them) by measurement, never an item
+matching `opts.keep`, then checks the page (`opts.fits`) and folds one more or gives one back; `foldPlan()` is its pure,
+tested half. `foldMapChips(scope)` (`lib/map-chips.js`) runs it over covers (two rows), street screen cards and lane
+stage cards (what the card has left) with the **test verdict always whole** (`.tchip`, `.k-ev`); a stage card hides its
+sub-line before the verdict loses room. `pathHtml(path)` keeps a path's first and last two segments (`apps/…/api/x.ts:18`),
+breaks at `/`, its tip the whole path — used by the seam card, the beats' boxes, the ladder and the explore card. The
+beats' legend folds to one line and refolds when the dock opens (the drill's ResizeObserver). The **reading floor**: the
+lanes wrap into more segments (`laneFloorK`) rather than fit under 9 px on screen, and `fitLanes` stops at the floor (the
+rest a pan away); the street under ×0.6 (`.st-floor`) keeps a card's name and verdict counter-scaled and drops the rest.
+The code stop's class `code` also matched the stylesheet's code-block rule (`.code` — preformatted, a scroller): undone
+on `.map-act.code`. e2e: `map-overflow.pw.spec.ts` at 1440 and 1280.
+
+## Projects and packages — `surfaces/codemap-projects.js`, `lib/codemap-model.js` (2026-10-04)
 
 The code map reads the projects and packages lanes X and D put in the graph (docs/proposals/dependencies-and-nx.md
 §2.3). **State** is one bag, `S.cmap` (made by `cmap()`): `group` (`none · project · <dimension key>`, `?group=`,

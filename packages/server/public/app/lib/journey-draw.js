@@ -24,6 +24,7 @@ import { vsl, linkHtml, designThumbHtml } from './graph-render.js';
 import { doorsFor, doorsHtml } from './detail-doors.js';
 import { gateAttrs } from './gate-card.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from './tooltip.js';
+import { pathHtml } from './fold-row.js';
 import { defAttrs, countKey } from './counted.js';
 import { jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnInspPanelHtml } from '../surfaces/journey-drill.js';
 import { lifecycleStripHtml, headerLifecycles } from './lifecycle-strip.js';
@@ -1300,7 +1301,7 @@ export function jrnMarkerHtml(m) {
     + (txKey ? ' · ' + t(txKey) : '');
   return '<span class="jrn-mk ' + (m.choice ? 'oneof ' : '') + gk.c + (m.tx ? ' tx-' + m.tx : '') + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + (m.helper ? ' helper' : '')
     + '" data-order="' + m.stepOrder + '" tabindex="0" onclick="event.stopPropagation();jrnSelect(' + m.stepOrder + ')" title="' + esc(title) + '">'
-    + sym(m.choice ? 'oneof' : gk.g) + label + (m.op ? '<i>' + esc(t('journey.op.' + m.op)) + '</i>' : '') + (m.repeat ? '<span class="rep">↺</span>' : '')
+    + sym(m.choice ? 'oneof' : gk.g) + '<span class="lb">' + label + '</span>' + (m.op ? '<i>' + esc(t('journey.op.' + m.op)) + '</i>' : '') + (m.repeat ? '<span class="rep">↺</span>' : '')
     + (m.cut ? '<span class="cut" title="' + esc(def('journey.cutPoints')) + '">▸ ' + esc(t('journey.notFollowed').replace('{n}', m.cut)) + '</span>' : '')
     + '</span>';
 }
@@ -1326,14 +1327,15 @@ export function jrnSeamCardHtml(m) {
     : c.status === 'declared' ? 'apis.status.declared' : c.status === 'code-only' ? 'apis.status.codeOnly' : 'apis.status.implemented';
   const statusCls = c.status === 'both' ? ' ok' : c.status === 'code-only' ? ' warn' : c.status === 'spec-only' ? ' stub' : '';
   const end = (e, cls, word) => e
-    ? '<span class="' + cls + '">' + esc(word) + ' ' + esc(e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
+    // the path keeps its two ends and breaks at `/`; its tip carries it whole (nothing clips at the column's edge)
+    ? '<span class="' + cls + '">' + esc(word) + ' ' + pathHtml(e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
     : '<span class="' + cls + ' miss">' + esc(word) + ': ' + esc(t('journey.seam.notBuilt')) + '</span>';
   return '<span class="jrn-seam' + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" data-order="' + m.stepOrder + '" tabindex="0"'
     + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc((m.method || '') + ' ' + (m.path || '')) + '">'
     + '<span class="l1">' + sym('api') + (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') + '<span class="nm">' + esc(name) + '</span>'
     // the code names no method and several endpoints share the address: the read one is shown, and says so
     + (m.methodAssumed ? '<span class="api-chip warn"' + tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) + '>' + esc(t('journey.seam.methodAssumed')) + '</span>' : '')
-    + (summary ? '<span class="sum">' + proseHtml(summary) + '</span>' : '')
+    + (summary ? '<span class="sum"' + tipAttrs({ text: summary, noFocus: true }) + '>' + proseHtml(summary) + '</span>' : '')
     // whether the spec and the code agree is a developer's question
     + (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>')
     + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
@@ -1491,11 +1493,12 @@ const { TIME: JRN_LAD_TIME, SKIP: JRN_LAD_SKIP, END: JRN_LAD_END } = LADDER;
 function jrnLadderModel(sum, sg) {
   const lm = ladderModel(sum, sg, { steps: S.JOURNEY.steps, text: jrnMarkerText, word: (key) => jrnAbsentWord(sg, null, key) });
   // the model's cells are plain descriptors; the overlay draws them as it always has
-  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + esc(c.at) + ' →</span>'
+  // a path keeps its two ends and its tip carries it whole; a name ellipsises inside its column (the marker's title)
+  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + pathHtml(c.at, { max: 34 }) + ' →</span>'
     : c.type === 'seam' ? jrnSeamCardHtml(c.m) + '<span class="go"> →</span>'
     : c.type === 'out' ? '<span class="go out">→</span>'
     : c.type === 'marker' ? jrnMarkerHtml(c.m)
-    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + esc(c.loc) + '</span>' : ''));
+    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + pathHtml(c.loc, { max: 34 }) + '</span>' : ''));
   lm.lines = lm.lines.map((l) => {
     const cells = {};
     Object.keys(l.cells).forEach((k) => { cells[k] = cell(l.cells[k]); });
@@ -2059,13 +2062,14 @@ export function jrnSchemaChipHtml(m) {
   const res = (c.responses || []).filter((r) => /^2/.test(String(r.status))).map((r) => r.schema).filter(Boolean)[0] || '';
   if (!req && !res) return '';
   const text = req ? t('journey.schemaChip').replace('{req}', req).replace('{res}', res) : t('journey.schemaOut').replace('{res}', res);
-  return '<span class="jrn-mk schema" onclick="jrnSelect(' + m.stepOrder + ')">' + esc(text.trim()) + '</span>';
+  return '<span class="jrn-mk schema" onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc(text.trim()) + '"><span class="lb">' + esc(text.trim()) + '</span></span>';
 }
 /** One translated decision as a sheet chip — a fork the flow can take in this action.
  * @group Journey view */
 function jrnSheetDecChipHtml(d) {
-  return '<span class="jrn-mk dec" onclick="jrnScrollTo(' + d.order + ')" title="' + esc(t('journey.decisionChip')) + '">'
-    + sym('fork') + esc(d.label) + '</span>';
+  // the condition is code and can be long: it ellipsises inside its cell, and the tip carries it whole
+  return '<span class="jrn-mk dec" onclick="jrnScrollTo(' + d.order + ')" title="' + esc(d.label + ' · ' + t('journey.decisionChip')) + '">'
+    + sym('fork') + '<span class="lb">' + esc(d.label) + '</span></span>';
 }
 /**
  * The chips of one cell under the fold rule: two are shown, the rest hide
@@ -2075,9 +2079,16 @@ function jrnSheetDecChipHtml(d) {
  */
 function jrnSheetChipsHtml(chips, li, ci) {
   const rest = chips.slice(2);
+  // the `+n` names what it folds: its tip lists the rest, one name each, in the cell's order
   return chips.slice(0, 2).join('')
     + (rest.length ? '<span class="jrn-sx">' + rest.join('') + '</span>'
-      + '<button class="jrn-smore" onclick="jrnSheetOpen(' + li + ',' + ci + ',\'open\',this)">' + esc(t('journey.moreChips')).replace('{n}', () => jrnNumHtml(rest.length, 'journey.moreChips', 'count.scope.action', { num: true, noFocus: true })) + '</button>' : '')
+      + '<button class="jrn-smore" onclick="jrnSheetOpen(' + li + ',' + ci + ',\'open\',this)"' + tipAttrs({ text: rest.map(chipText).filter(Boolean).join(' · '), noFocus: true }) + '>' + esc(t('journey.moreChips')).replace('{n}', () => jrnNumHtml(rest.length, 'journey.moreChips', 'count.scope.action', { num: true, noFocus: true })) + '</button>' : '')
+}
+/** The words a chip's HTML reads as (its text, entities decoded) — what a `+n` tip lists. */
+function chipText(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  return tpl.content.textContent.replace(/\s+/g, ' ').trim();
 }
 /** Open the rest of a cell's chips and re-walk the j/k order so the revealed steps join it.
  * @group Journey view */
@@ -2444,8 +2455,9 @@ function jrnSheetHeadHtml(col) {
   }).join('');
   const cut = jrnMomentCut(sg, mo);
   return '<div class="jrn-sbh' + (mo.repeat ? ' rep' : '') + '" data-col="' + col.index + '"'
-    + ' onclick="jrnScrollTo(' + (mo.callStep != null ? mo.callStep : mo.actionStep) + ')" title="' + esc(mo.business || mo.label) + '">'
-    + '<span class="t"><span class="ord">' + (col.index + 1) + '</span>' + sym(mo.component ? 'human' : 'automation') + esc(jrnMoLabel(mo)) + '</span>'
+    + ' onclick="jrnScrollTo(' + (mo.callStep != null ? mo.callStep : mo.actionStep) + ')" title="' + esc([jrnMoLabel(mo), mo.business || mo.label].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ')) + '">'
+    // the name clamps to two lines inside its column; the title carries it whole
+    + '<span class="t"><span class="ord">' + (col.index + 1) + '</span>' + sym(mo.component ? 'human' : 'automation') + '<span class="tx">' + esc(jrnMoLabel(mo)) + '</span></span>'
     + '<span class="out">' + outs
       + (mo.repeat ? '<span class="api-chip rep">' + esc(t('journey.repeated')) + '</span>' : '')
       + (cut ? '<span class="api-chip warn">' + esc(t('journey.countCut').replace('{n}', cut)) + '</span>' : '')
