@@ -121,6 +121,8 @@ export function go(i) {
   if (!d || !d.stops.length) { draw(); return; }
   TOUR.at = Math.max(0, Math.min(d.stops.length - 1, i));
   draw();
+  // a new stop reads from its top
+  if (TOUR.host) TOUR.host.scrollTop = 0;
   const stop = d.stops[TOUR.at];
   if (TOUR.api && TOUR.api.frame) TOUR.api.frame(stop, d, { lanes: TOUR.lanes });
 }
