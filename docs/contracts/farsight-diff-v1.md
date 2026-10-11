@@ -32,7 +32,7 @@ This document is versioned **before** any UI renders it (Anna's ADOPT condition,
 
 ## Change kinds (closed set)
 
-Only these eighteen kinds exist in v1 (fourteen frozen 2026-07-29 plus four added 2026-09 — see the version note below). Graph changes outside this set (a function's body changed, docs changed, …) do **not** appear in the diff — the contract reports contract-level surface, not churn.
+Only these twenty-three kinds exist in v1 (fourteen frozen 2026-07-29, four added 2026-09 and five storyline kinds added 2026-10-10 — see the version notes below). Graph changes outside this set (a function's body changed, docs changed, …) do **not** appear in the diff — the contract reports contract-level surface, not churn.
 
 | kind | fires when | severity | subject |
 |---|---|---|---|
@@ -119,6 +119,36 @@ Four honesty rules travel with it, and a renderer that breaks one is misreportin
 `attribution` is also **not** an evidence chip: evidence says whether something runs (tests), attribution says who touched a file. The two never share a row.
 
 **The diff never produces it.** `diffGraphs()` does not read git and has no access to the history tables; `attributeChanges()` in `packages/core/src/history.ts` joins the `commit`/`commit_file` rows onto a **copy** of a diff on the way out, and `farsight diff --attribute` is the one shipped caller. That is what keeps `diff.ts` pure and the golden fixture frozen. The join normalises the monorepo prefix — `commit_file.path` is repository-root-relative while `loc.path` is source-root-relative — because without it a source mounted below its repository root would attribute nothing and print the earned empty list it has not earned.
+
+### Version note — 2026-10-10, a storyline diff
+
+Five change kinds and two optional fields were added on 2026-10-10 (round 2026-10-10, proposal 7) under the same
+additive rule: `storyline_built`, `storyline_gate`, `storyline_writer`, `storyline_contract` and `storyline_verdict`,
+all **notable**. They fire **only in a storyline diff** — `farsight diff --storyline <id>`, MCP `storyline_diff`,
+`GET /api/compare?format=diff` (core `storylineDiffDocument()`) — and never in `diffGraphs()`, whose documents carry
+them as five zero counts (`counts` still names every kind). A storyline diff carries only these five, so its other
+counts are zero by construction.
+
+| kind | fires when | subject |
+|---|---|---|
+| `storyline_built` | a screen of the storyline (by its design id) is served by a page at one sync and not the other | the screen's page |
+| `storyline_gate` | a gate or precondition stands in front of a call or action of the storyline's walks at one sync and not the other (planned gates and config checks never count) | the gate; `delta.target` the call |
+| `storyline_writer` | a status of a record the storyline reaches at both syncs gained or lost a writer | the writer; `delta.target` the record, `delta.status` the status |
+| `storyline_contract` | an operation the storyline reaches (by `operationId`, else method and path) was added to, taken off or changed on the contract | the route; `delta.called` whether the storyline calls it |
+| `storyline_verdict` | a journey's one verdict (`testVerdict()`) changed its word, status, skips or failures — freshness is not a change | the journey (flow) |
+
+- **`delta`** *(optional, per change)* — `{ kind, change, text, biz, journeys, screen?, target?, tier?, status?, from?, to?, called?, door }`:
+  the delta kind (`built` · `gate` · `writer` · `contract` · `verdict`, a closed set) and the way it went (`added` ·
+  `removed` · `changed`), its sentence in the hybrid words and the business words, the journeys whose cards carry it,
+  and its door (`gate` · `move` · `cases` · `contract` · `screen`, with the node, flow, screen or API it opens on).
+- **`storyline`** *(optional, top level)* — `{ id, name, repo, from, to, byKind, notes }`: the storyline, its two ends
+  (`{ sync, at?, commit?, metaKept? }` — `metaKept: false` says the sync was recorded before history kept its meta and
+  was read with the other end's declaration), the five counts by kind, and what the comparison could not say.
+- **`--fail-on built,gate,…`** writes the existing `gate` block: policy `--fail-on <kinds>`, one rule per kind
+  (`fail on gate`) failing when that kind has a change, exit 1 when any does — the CI check.
+
+`base` / `head` are labelled as `diffGraphs` labels its ends; `permalink` keeps the frozen `/compare/<a>...<b>#cN`
+shape. The enumeration is pinned against a literal list and this schema by `packages/core/test/compare.test.ts`.
 
 ## Fingerprints — PLANNED, not shipped
 
