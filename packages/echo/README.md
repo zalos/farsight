@@ -2,12 +2,12 @@
 
 Echo is an optional, independently running memory companion for Farsight. It has its own package, settings, model connection, and memory stores. The regular Farsight CLI does not need Echo or agentmemory.
 
-**This iteration is ready to test setup and connections.** It can run agentmemory locally, save and recall synthetic memories, verify persistence, ask a model for a bounded summary, and prepare optional agent hooks. Automatic memory capture and request-specific briefs are still to come.
+**This iteration supports explicit memory storage and scoped recall.** With `serve` running, you can save a memory, retrieve it from the CLI, and let supported host hooks add a small amount of relevant memory context to a new prompt. It also provides the settings view, isolated profiles, runtime verification, and a model summary check. Automatic conversation capture and a model-driven memory agent are still to come.
 
 ## Prerequisites
 
 - **Node 24 or newer.** Source development also requires **pnpm 9.0.0**.
-- **macOS or Linux, arm64 or x64**, for the managed memory runtime. Other platforms require an external backend; hook preparation and credential-store support currently target macOS/Linux.
+- **macOS or Linux, arm64 or x64**, for the managed memory runtime. The local memory bridge, hooks, and credential-store integration target macOS/Linux in this iteration. An external backend can be hosted elsewhere.
 - **Ollama running with a local text model**, for the model test. Use an existing model shown by `ollama list`. Echo does not install Ollama or silently download a model. See [Ollama setup](https://docs.ollama.com/quickstart) if needed.
 - Network access for initial package and engine downloads. The local memory and Ollama path does not require a hosted model API key.
 
@@ -75,6 +75,7 @@ The rest of this guide uses `farsight-echo`. When working from source, substitut
 |---|---|---|
 | Configuration | Run `doctor` | The pinned package, managed engine, isolation precondition, and chosen Ollama model are available. Managed `doctor` does not start the backend. |
 | Memory storage | Run `smoke` | `remember-recall`, `restart-persistence`, and `store-isolation` each report `ok: true`. |
+| Persistent memory | Keep `serve` running, then use `remember` and `recall` as shown below | The explicitly saved fact is returned from the selected managed profile and survives restart. |
 | Model connection | Run `smoke --with-model` | The same storage checks pass, plus `model-summary` returns a short summary of synthetic shipping text. |
 | Settings view | Run `serve`, open its URL, and refresh the checks | The settings page loads and the running backend reports readiness. The view remains available if the backend needs attention. |
 | Save/reload | Change a harmless setting, save, and reload the page | The saved value persists. Restart `serve` to apply runtime changes. |
@@ -84,7 +85,26 @@ Smoke uses disposable stores and synthetic text. It never writes into your perso
 
 The optional model check summarizes the synthetic sample directly after the storage assertions. It verifies the model connection independently; it is not an agentic retrieve-and-summarize workflow.
 
-The web view currently manages configuration and connection checks. It is not a memory browser, a prompt playground, or a capture history view. There is no main-agent memory brief to inspect yet.
+The web view currently manages configuration and connection checks. Use the CLI and host verification below to inspect memory access; the web view is not a memory browser or a capture history view.
+
+## Save and recall a memory
+
+Keep `serve` running for the selected **managed** profile. In another terminal, use the same configuration and profile. This example deliberately saves a synthetic test fact to your selected profile's persistent store:
+
+```sh
+farsight-echo remember --profile personal --topic echo-test --content "The synthetic echocoldtest shipment uses a blue insulated test container."
+farsight-echo recall --profile personal --query "echocoldtest" --limit 3
+```
+
+`remember` returns the stored `id` and `createdAt`. `recall` returns a `memories` list with each record's `id`, `title`, `content`, and `timestamp`, plus a `truncated` indicator. The list should contain the test fact. Stop and restart `serve`, then repeat `recall` to check that it persists. Unlike `smoke`, `remember` writes a real memory to the selected store; it is not a disposable test operation.
+
+Repeat `--topic` to attach more than one topic. Topics and timestamps are stored metadata; day/topic browsing and rollups are not implemented. Recall returns at most five records, with combined title/content bounded by the profile's brief-character limit. `--limit` can request fewer records; it cannot bypass that ceiling.
+
+You can ask a host agent to invoke these commands after the hook has supplied the access instructions. Storing a memory is an explicit action. Echo does not import old chats or silently save each prompt, tool result, or response.
+
+Commands and hooks connect to the running Echo process through a local filesystem-protected Unix socket. The settings website does not expose a public memory read/write API. If Echo is stopped or its selected configuration has changed since startup, restart `serve` before using memory commands.
+
+**Explicit saves currently require managed mode.** External mode supports scoped recall only. Echo refuses external writes because the pinned backend's memory supersession can affect older unscoped records. External recall accepts only records already in the exact Echo namespace and individual scope; it does not import legacy unscoped memories.
 
 ## Configuration and profiles
 
@@ -114,7 +134,7 @@ farsight-echo install-runtime
 | Memory connection | Choose `managed` for Echo-owned local processes or `external` for your own agentmemory instance. |
 | Model | Select `ollama`, an origin such as `http://127.0.0.1:11434`, and an installed model name. An `openai-compatible` adapter is also available. |
 | Limits | Set the request timeout, generated-token limit, and final summary-character limit. An incomplete model response fails the check. |
-| Hooks | Record which host may bind sessions. These switches do not install a plugin into either host. |
+| Hooks | Record which host may bind sessions and use prompt recall. These switches do not install hook definitions into a host. |
 | Skill directories | Save explicit future discovery locations. Echo does not yet read, install, or execute these skills. |
 | Farsight address for embedding | Optionally allow an exact local Farsight origin to frame the view. Farsight navigation integration is not built yet. |
 
@@ -134,31 +154,65 @@ For an external instance, edit the selected profile in the settings view:
 
 External mode expects agentmemory **0.9.30**. It does not install, start, or stop that service. Give personal and work different instances; project filters alone do not establish tenant security. `smoke` intentionally requires managed mode so it cannot insert test records into an external store.
 
+The external connection is read-only through Echo's memory bridge in this iteration. `remember` is refused; `recall` still applies the selected Echo namespace and individual filter.
+
 Echo resolves `keychain:<service>/<account>` locally. In the example, the service is `farsight` and the account is `echo-example`. Do not put secret values into settings, URLs, command arguments, or committed files. Keychain integration currently supports macOS and Linux.
 
-## Optional Claude Code and Codex hooks
+## Connect a workspace to its agents
 
-Package installation never prompts or modifies your agent's settings. `setup` asks whether to **prepare** each plugin, or prepare one explicitly:
+Package installation never prompts or modifies your agent's settings. To explicitly install workspace hook definitions for all supported hosts, run:
+
+```sh
+farsight-echo hooks --host all --install --workspace /absolute/path/to/workspace --profile personal
+```
+
+Add `--config /absolute/path/to/echo/settings.json` if your settings are not in the current directory's `.echo` folder. The installer preserves unrelated hooks/settings, backs up changed files under the configuration directory's `backups/` folder, and can be run again to update its own definitions. It refuses malformed existing settings before writing. Installing definitions does not bypass host trust or install editor extensions.
+
+The generated definitions contain this machine's absolute Echo/configuration paths. Keep them local and untracked; they are not portable team configuration.
+
+| Host | Workspace configuration | What to do after installation |
+|---|---|---|
+| Claude Code CLI and Claude Code's VS Code extension | `.claude/settings.local.json` | Open that workspace and start a fresh Claude session. Review the host's hook settings and permissions. |
+| Codex CLI and the Codex VS Code extension | `.codex/hooks.json` | Ensure hooks are enabled, trust the project, and review the exact hook definitions. Start `codex -C /absolute/path/to/workspace`, use `/hooks` for inspection and trust, then start a new session in the intended host. |
+| VS Code Local chat | `.github/hooks/echo.json` | Use a trusted workspace and a Local chat session with `chat.useHooks` enabled. This does not target Copilot Agent Host sessions. |
+
+Do not enable the same Echo hook through both a plugin and workspace settings. For VS Code Local chat, avoid loading the Echo hooks again through `chat.useClaudeHooks` when the dedicated `.github/hooks/echo.json` is installed. The installer refuses an installation that would create that duplicate path; it does not rewrite editor preferences to bypass the conflict. Use `--host claude`, `--host codex`, or `--host vscode` with `--install` to select one workspace integration.
+
+To prepare a reviewable plugin without installing workspace definitions, the earlier commands remain available:
 
 ```sh
 farsight-echo hooks --host claude --profile personal
 farsight-echo hooks --host codex --profile personal
 ```
 
-The result includes the plugin directory and loading instructions. Review those files before enabling them. They are stored under `.echo/plugins/<profile>/<host>/` when using the default configuration.
+They write `.echo/plugins/<profile>/<host>/` and print manual loading instructions. Without `--install`, `--host all` prepares all three hosts' files instead of changing workspace settings. Claude can load the plugin with `claude --plugin-dir <generated-directory>`. Codex uses the generated local marketplace, then separate installation and hook trust. Prefer one integration route per host.
 
-- **Claude Code:** start a new session with `claude --plugin-dir <generated-directory>`.
-- **Codex:** run the printed `codex plugin marketplace add <generated-directory>` command, restart the desktop app, install the plugin from that marketplace, and review and trust its hooks. Host policy can prevent hook activation.
+The lifecycle points are `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PreCompact`, and `Stop`:
 
-The prepared lifecycle events are `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PreCompact`, and `Stop`. In this foundation, their only effect is binding session metadata. They discard prompt/tool content and do not call the model, save memories, or inject context. After enabling a plugin and starting a new session, a binding can appear under `.echo/sessions/`; that proves binding only, not memory capture.
+- `SessionStart` binds the session and supplies brief instructions for memory access.
+- `UserPromptSubmit` searches the selected memory scope and adds bounded relevant context to the request.
+- The remaining events maintain the session boundary; they do not capture conversation content.
 
-Enable one Echo profile per host session. Disabling its hook preference in Echo stops future binding calls; disable the plugin in the host to stop launching the hook runner. Reprepare hooks after moving the Echo installation or configuration: the generated runner uses their absolute paths. Host activation is separate from the automated synthetic runner tests.
+The hook lookup does not call the configured model. It provides bounded search results rather than an autonomous agent-generated summary. The total injected text, including instructions and record metadata, stays within the profile's brief-character limit. If Echo is unavailable, hooks let the host continue without memory context. Explicit `remember` with a managed profile is the way to store a memory in this iteration.
+
+Enable one Echo profile per host session. Disabling its hook preference stops Echo processing future callbacks; disable the host definition or plugin to stop launching the runner. Reinstall or reprepare hooks after moving Echo or its configuration because generated runners use absolute paths.
+
+### Verify memory in a fresh chat
+
+1. Start `serve`, save the `echocoldtest` fact above, and confirm that CLI `recall` returns it.
+2. Install hooks for the intended workspace, complete the host's trust steps, and open a **new** chat in that workspace.
+3. Ask: **“What does Echo remember about echocoldtest? Use only the stored memory.”** The relevant result is the blue insulated test container.
+4. If needed, ask the agent to run Echo's printed recall command explicitly. This separates a working memory connection from a host that has not loaded its hooks.
+
+A session binding file under `.echo/sessions/` only demonstrates that a callback reached Echo. It does not prove prompt recall worked. Verify the stored fact in the actual host response or its hook diagnostics; synthetic runner tests do not establish that an editor extension loaded the definitions.
+
+For VS Code Local, **Chat: Configure Hooks** shows discovered files, and the **GitHub Copilot Chat Hooks** output channel reports callback output/errors. Those Local controls do not configure the Claude or Codex extension's hooks.
 
 ## Stop, restart, and local files
 
 Stop `serve` with **Ctrl-C** and wait for it to exit. It closes the settings view and only the backend processes it started. Externally managed services stay running. Start the same command again to apply saved runtime settings. A normal restart preserves the selected profile's store.
 
-With the default configuration, Echo keeps its state in:
+With the default configuration, Echo keeps its persistent settings and state in:
 
 ```text
 .echo/
@@ -168,6 +222,7 @@ With the default configuration, Echo keeps its state in:
   profiles/work/         Work store, runtime config, and logs
   sessions/              Session binding metadata
   plugins/               Prepared host plugins
+  backups/               Previous settings from workspace hook installs
 ```
 
 Agentmemory uses iii's file-backed state store. These live files are not a Git collaboration format. Keep `.echo` runtime state ignored; commit only scrubbed examples such as this repository's `.echo/settings.example.json`. Moving a configuration file also changes where its adjacent runtime state is located.
@@ -184,6 +239,8 @@ Agentmemory uses iii's file-backed state store. These live files are not a Git c
 | Profile locked after a crash or forced kill | Inspect `.echo/profiles/<profile>/echo-owner.json` and its PID. Confirm that process and all owned backend children are stopped and its ports are free before removing only that stale lock. Preserve the store. |
 | Saved setting is not active | Restart `serve`. Editing another profile or changing the default does not switch an already running process or host session. |
 | Settings changed elsewhere | Reload the view, review the new values, and reapply your changes. Conflicting edits are refused rather than silently overwritten. |
-| No memories appear in the main agent | Expected in this iteration: hooks bind sessions only. Automatic capture, briefs, detail tools, skill discovery, and daily/topic rollups are deferred. |
+| Recall cannot reach Echo | Start `serve` with the same configuration and profile. After changing identity, backend, or model settings, restart it and use a fresh host session. |
+| No memories appear in the main agent | First confirm CLI `recall` finds an explicitly saved memory. Then check the intended workspace, host support, hook preference, exact-definition trust, and a fresh chat. Hooks fail open if Echo is unavailable. |
+| A conversation was not saved | Automatic capture, daily/topic rollups, skill discovery, and agentic summarization are deferred. Use explicit `remember` for selected facts. |
 
-For the architecture boundaries and configuration reference, see [Echo setup and boundaries](../../docs/ECHO.md). For hook installation policy and event support, see the [Claude plugin reference](https://code.claude.com/docs/en/plugins-reference) and [Codex hooks](https://learn.chatgpt.com/docs/hooks).
+For the architecture boundaries and configuration reference, see [Echo setup and boundaries](../../docs/ECHO.md). Host references: [Claude hooks](https://code.claude.com/docs/en/hooks), [Codex hooks](https://learn.chatgpt.com/docs/hooks), and [VS Code hooks](https://code.visualstudio.com/docs/agent-customization/hooks).

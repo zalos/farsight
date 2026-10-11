@@ -12,7 +12,8 @@ The intended workflow is a small brief before each agent request, with source li
 | Managed local or explicitly configured external agentmemory | Shared hosted deployment and synchronization |
 | Ollama and OpenAI-compatible model adapters; Ollama verified locally | Additional native provider adapters and provider selection policy |
 | Standalone local settings view with an allowed Farsight embedding origin | A Farsight navigation entry and integrated memory viewer |
-| Optional prepared Claude Code and Codex hook plugins | Automatic capture, memory briefs, follow-up retrieval tools |
+| Explicit managed-memory saves, scoped recall, and bounded prompt context | Automatic capture and model-driven memory briefs |
+| Workspace hooks for Claude Code, Codex, and VS Code Local; optional Claude/Codex plugin preparation | Copilot Agent Host integration and automatic host trust |
 | Configured skill directories | Skill discovery, installation, and execution |
 | Synthetic save, search, restart, and isolation verification | Production retention, daily/topic rollups, and memory review |
 
@@ -64,7 +65,7 @@ These identity fields are local routing metadata. They are not login, membership
 | `backend` | Managed or external agentmemory connection and credential reference |
 | `model` | Ollama or OpenAI-compatible provider, endpoint, model, and optional credential reference |
 | `web` | Local port and optional exact Farsight origin allowed to embed the view |
-| `hooks` | Whether each host may bind sessions; preparation is separate from host activation |
+| `hooks` | Whether each host may bind sessions and use prompt recall; installation is separate from host trust |
 | `skills.directories` | Explicit future skill sources; no installation or execution |
 | `budget` | Model timeout, generation limit, and final summary character limit; future briefs will use the same boundary |
 
@@ -76,6 +77,10 @@ Service. Provision the secret through that local store, select external mode, sa
 for the selected profile. The connection must report agentmemory 0.9.30. No general external-backend write test is
 provided; smoke intentionally requires managed mode.
 
+The memory bridge permits explicit writes only to managed profiles. In this published backend, remember's
+supersession behavior can reach legacy unscoped records, so Echo refuses external writes. External recall is kept
+to the exact Echo namespace and individual scope; it does not import existing unscoped memories.
+
 Use a service origin as the model address, without a path: Ollama uses its chat API, and the compatible adapter
 uses `/v1/chat/completions`. Compatibility is tested with a local fixture; each hosted provider still needs its own
 connection check. Ollama summaries use a structured response so thinking text is not mistaken for a brief.
@@ -83,7 +88,7 @@ The final summary is capped by characters; this is not a claim about the main ag
 
 ## Memory runtime and storage
 
-The dependency is pinned to published `@agentmemory/agentmemory` **0.9.30**, with native **iii engine 0.22.1**. Managed mode installs the engine under Echo's own state directory and launches the released worker with an explicit environment and profile-specific storage. It does not use upstream's interactive onboarding or modify upstream's global hook settings. Native managed mode supports macOS and Linux on arm64 and x64; other platforms require an externally managed backend.
+The dependency is pinned to published `@agentmemory/agentmemory` **0.9.30**, with native **iii engine 0.22.1**. Managed mode installs the engine under Echo's own state directory and launches the released worker with an explicit environment and profile-specific storage. It does not use upstream's interactive onboarding or modify upstream's global hook settings. Native managed mode supports macOS and Linux on arm64 and x64. An external backend may be hosted elsewhere, but Echo's local memory bridge and hook integration currently target macOS/Linux.
 
 Managed mode refuses to start if `~/.agentmemory/.env` exists: this release reads that file globally and provides no override. The refusal prevents unintended inheritance across personal and work contexts. Use a deliberately isolated external instance when that global configuration is needed elsewhere.
 
@@ -96,7 +101,37 @@ Normal termination and interrupted CLI smoke tests close the owned children and 
 
 Agentmemory persists its records through iii's file-backed state store. Echo's memory data is runtime state, not a Git merge format. Commit scrubbed configuration examples and documentation; do not commit live stores. External mode connects to an instance the user manages and does not start or stop it. A future hosted team service will need authentication and enforced tenant boundaries.
 
-Agentmemory can store and search without an external model API. In this foundation, the backend handles storage and recall; Echo's selected Ollama model handles the optional synthetic summary check. Engine/package installation requires downloads. Local model inference does not require a hosted model API, although a model may need an initial download. Future brief generation still consumes sidecar compute, and any brief injected into a main agent will consume that agent's context.
+Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo's selected model handles the optional synthetic summary check. Prompt-time recall currently makes no model call. Engine/package installation requires downloads. Local model inference does not require a hosted model API, although a model may need an initial download. Future agentic brief generation will consume sidecar compute; the memory context already injected by hooks consumes the main agent's context.
+
+## Memory access and isolation
+
+`serve` starts a filesystem-protected local memory bridge alongside the settings view. The bridge uses a Unix socket
+under a current-user-only temporary directory on macOS/Linux, with owner-only socket access. It holds backend
+credentials in memory and exposes no memory HTTP route on the settings server. Local callers connect with a
+fingerprint of the configuration path, profile, data path, identity, backend, and model. A stale caller is refused;
+restart the service and use a new host session after changing those boundaries.
+
+Memory scope hashes the selected project, profile, individual, and team into a namespace, with a separate individual
+filter. Recall checks that exact scope after backend lookup. This avoids mixing similarly named profiles or
+upstream legacy unscoped results; it does not turn identity labels into authenticated tenant permissions. Changing
+identity changes the lookup namespace and does not migrate earlier memories.
+
+Keep the selected managed `serve` process running, then explicitly save and retrieve a test fact:
+
+```sh
+farsight-echo remember --profile personal --topic echo-test --content "The synthetic echocoldtest shipment uses a blue insulated test container."
+farsight-echo recall --profile personal --query "echocoldtest" --limit 3
+```
+
+Remember returns `{id, createdAt}`. Recall returns `{memories, truncated}`; each memory contains its backend source
+`id`, `title`, `content`, and `timestamp`. `--topic` is repeatable and maps to concepts metadata. There is no date or
+topic navigation yet. Recall returns at most five records and caps combined title/content at `budget.briefMaxChars`.
+The released backend supplies ranking; it is keyword-based unless that backend has embeddings. Echo does not call
+Ollama to rerank or summarize these results.
+
+Unlike the disposable smoke test, this explicit remember command writes to the chosen persistent managed store.
+It remains after a normal restart. There is no implicit conversation import or automatic capture of prompts, tool
+results, or responses.
 
 ## Optional host hooks
 
@@ -107,7 +142,7 @@ farsight-echo hooks --host claude --profile personal
 farsight-echo hooks --host codex --profile personal
 ```
 
-Each command creates reviewable files under `.echo/plugins/<profile>/<host>/` and prints loading instructions. The runner forwards event input to Echo with a fixed configuration and profile. The foundation records the session binding and discards conversation content. It does not call a model, search memory, or inject context.
+Each command creates reviewable files under `.echo/plugins/<profile>/<host>/` and prints loading instructions. The runner forwards event input to Echo with a fixed configuration and profile. Preparing files does not install them in a host.
 
 The prepared events are `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PreCompact`, and `Stop`. Hook commands have short time limits. Hooks currently target macOS and Linux. Keep the installed Echo executable and configuration at their generated locations, or prepare the plugin again after moving them.
 
@@ -115,7 +150,36 @@ For Claude Code, review the generated files and start a new session with `claude
 
 For Codex, review the generated files and register their local marketplace with `codex plugin marketplace add <generated-directory>`. Restart the desktop app, install the plugin from that marketplace, and review and trust its hooks. Marketplace registration, plugin installation, and hook trust are separate steps. Admin policy may prevent non-managed hooks. See [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) and [Codex hooks](https://learn.chatgpt.com/docs/hooks).
 
-Enable one Echo profile per host session. A prepared plugin is not evidence that a host loaded it or delivered events. Automated tests exercise the generated runner with synthetic input; real host activation remains a user choice. A successfully delivered event creates session binding metadata under `.echo/sessions/`, not a captured memory. The web view's hook preferences do not prepare or install host plugins.
+For direct workspace installation instead of plugin preparation:
+
+```sh
+farsight-echo hooks --host all --install --workspace /absolute/path/to/workspace --profile personal
+```
+
+The installer merges Echo-owned definitions into Claude's `.claude/settings.local.json`, Codex's `.codex/hooks.json`,
+and VS Code Local's `.github/hooks/echo.json`. It preserves unrelated settings, backs up changed files next to Echo's
+configuration under `backups/`, and refuses malformed existing files before writing. Individual host selection is
+available with `claude`, `codex`, or `vscode`. Without `--install`, `all` prepares all three hosts' files only.
+Workspace installation requires `--workspace`. The generated definitions contain machine-local absolute paths;
+keep them untracked rather than treating them as portable team settings.
+
+Claude's workspace settings apply to its CLI and VS Code extension. Codex still needs the project and exact hook
+definition trusted; enable hooks and use `/hooks` in its CLI for review. VS Code support targets Local chat, with
+workspace trust and `chat.useHooks` enabled, not Copilot Agent Host. The installer refuses duplicate discovery through `chat.useClaudeHooks` rather than changing
+editor preferences. See [VS Code's hook guide](https://code.visualstudio.com/docs/agent-customization/hooks).
+
+`SessionStart` establishes the session binding and supplies bounded memory-access instructions. `UserPromptSubmit`
+uses the prompt as a scoped recall query and returns bounded results through additional context. Neither calls the
+configured model. The other events only maintain the session boundary. If the service is unavailable, hooks fail
+open and the host continues without memory context. They do not automatically save the prompt or the response.
+The complete injected context, including instructions and record metadata, is capped at `budget.briefMaxChars`.
+This is stricter than CLI recall's title/content cap and is still a character budget rather than an exact token count.
+
+Enable one Echo profile per host session and choose one integration route per host. A prepared or installed
+definition is not evidence that the host loaded it. Start `serve`, explicitly save the synthetic fact above, confirm
+CLI recall, and ask a fresh trusted host chat what Echo remembers about `echocoldtest`. The expected stored fact is
+the blue insulated test container. A file under `.echo/sessions/` proves a binding callback only; it does not prove
+that prompt recall succeeded. The settings view's hook preferences do not install definitions or grant host trust.
 
 ## Verify the setup
 
