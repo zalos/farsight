@@ -30,6 +30,10 @@ For a standalone install, `pnpm pack:echo` creates `build/echo/farsight-echo-<ve
 
 Interactive setup creates `.echo/settings.json` if needed, offers installed Ollama models, asks separately whether to prepare each host's hooks, and offers installation of the pinned local engine. Answers default to no for hooks and engine installation. If no model is installed, setup explains how to download one explicitly. Echo does not choose and download a model silently.
 
+For the first local test, choose an installed model, leave both host hooks unprepared, and accept the engine
+installation. Setup writes configuration; it does not start the settings view or backend. The `personal` and
+`work` profiles are both created, but setup configures only the profile selected by `--profile` or `defaultProfile`.
+
 For scripted setup:
 
 ```sh
@@ -43,9 +47,14 @@ Every command accepts `--config <path>` and `--profile <name>`. `init` refuses t
 
 `serve` runs in the foreground and prints the settings URL. The view remains available if the model or memory service needs fixing. Stop with Ctrl-C; Echo shuts down only its own child processes. Externally managed memory services remain running. Restart `serve` after changing runtime settings so its active services use the saved configuration.
 
+The default personal settings URL is `http://127.0.0.1:4480`; work uses port `4481`. Selecting work in the settings
+view edits that profile and does not switch the running service. Start `serve --profile work` in another terminal
+to run its distinct store. The default backend base ports are `4611` and `4711`; each managed instance also uses
+base plus 1, plus 2, and plus 46023. Echo rejects configuration collisions and occupied runtime ports.
+
 ## Profiles and identity
 
-A profile selects one individual, optional team, project, memory connection, model connection, web port, and hook preference. Personal and work profiles use distinct local stores. A host session is bound to its selected profile and its identity/store/model configuration. Changing that boundary requires a new host session; an existing session cannot silently switch to another profile.
+A profile selects one individual, optional team, project, memory connection, model connection, web port, and hook preference. Personal and work profiles use distinct local stores. Within one configuration directory, a host session is bound to its selected profile and its identity/store/model configuration. Changing that boundary requires a new host session; an existing session cannot silently switch to another profile. Keep personal and work profiles in the same configuration file so their bindings use the same registry.
 
 These identity fields are local routing metadata. They are not login, membership verification, or authorization. Run separate local instances in this phase. Do not treat an agentmemory project filter as a security boundary between teams, and do not expose the local settings service as a shared team service.
 
@@ -53,13 +62,19 @@ These identity fields are local routing metadata. They are not login, membership
 |---|---|
 | `identity` | Individual, optional team, and project labels |
 | `backend` | Managed or external agentmemory connection and credential reference |
-| `model` | Selected provider, endpoint, model, and optional credential reference; Ollama is implemented first |
+| `model` | Ollama or OpenAI-compatible provider, endpoint, model, and optional credential reference |
 | `web` | Local port and optional exact Farsight origin allowed to embed the view |
 | `hooks` | Whether each host may bind sessions; preparation is separate from host activation |
 | `skills.directories` | Explicit future skill sources; no installation or execution |
 | `budget` | Model timeout, generation limit, and final summary character limit; future briefs will use the same boundary |
 
 Credentials are references to local secret storage, never literal keys in settings. The settings view must not return credential values. A Farsight embedding origin permits framing the view; it does not grant access to memory or connect the two graphs.
+
+External backend setup uses a service origin and an optional `keychain:<service>/<account>` reference. For example,
+`keychain:farsight/echo-example` reads service `farsight`, account `echo-example`, from macOS Keychain or Linux Secret
+Service. Provision the secret through that local store, select external mode, save, restart Echo, and run `doctor`
+for the selected profile. The connection must report agentmemory 0.9.30. No general external-backend write test is
+provided; smoke intentionally requires managed mode.
 
 Use a service origin as the model address, without a path: Ollama uses its chat API, and the compatible adapter
 uses `/v1/chat/completions`. Compatibility is tested with a local fixture; each hosted provider still needs its own
@@ -100,7 +115,7 @@ For Claude Code, review the generated files and start a new session with `claude
 
 For Codex, review the generated files and register their local marketplace with `codex plugin marketplace add <generated-directory>`. Restart the desktop app, install the plugin from that marketplace, and review and trust its hooks. Marketplace registration, plugin installation, and hook trust are separate steps. Admin policy may prevent non-managed hooks. See [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) and [Codex hooks](https://learn.chatgpt.com/docs/hooks).
 
-Enable one Echo profile per host session. A prepared plugin is not evidence that a host loaded it or delivered events. Automated tests exercise the generated runner with synthetic input; real host activation remains a user choice.
+Enable one Echo profile per host session. A prepared plugin is not evidence that a host loaded it or delivered events. Automated tests exercise the generated runner with synthetic input; real host activation remains a user choice. A successfully delivered event creates session binding metadata under `.echo/sessions/`, not a captured memory. The web view's hook preferences do not prepare or install host plugins.
 
 ## Verify the setup
 
@@ -111,11 +126,22 @@ farsight-echo smoke --with-model
 ```
 
 `doctor` checks the selected setup, Ollama model availability, and external backend identity/version when applicable.
+For a managed profile it checks prerequisites without starting the backend; use the running settings view's checks
+or smoke to verify readiness.
 For compatible model endpoints it checks selection only; use `smoke --with-model` to verify an actual call.
-The settings view also reports runtime readiness. `smoke` starts a disposable managed store, saves and searches
-synthetic text, restarts on changed ports, checks persistence, then checks that a fresh store cannot find that text.
+The settings view also reports runtime readiness. `smoke` selects separate available ports and starts a disposable
+managed store, saves and searches synthetic text, restarts on changed ports, checks persistence, then checks that a
+fresh store cannot find that text. It can run in another terminal alongside `serve` and leaves the running profile's
+store untouched.
 `--with-model` also asks the configured model for a short synthetic summary. Smoke verification does not write to
 an external backend or a personal/work memory store. Failed checks retain synthetic diagnostics in a temporary
 directory; successful checks remove it. `pnpm test:echo:package` verifies the installable artifact without a model.
+The model step summarizes the synthetic sample directly after the retrieval assertions; it verifies the model
+connection independently and does not implement an agentic retrieve-and-summarize pipeline.
+
+Successful output includes `remember-recall`, `restart-persistence`, and `store-isolation` with `ok: true`; the model
+option adds `model-summary` and its short synthetic summary. In the web view, test saving a harmless setting and
+reloading it. Restart the service to apply runtime changes. Conflicting settings edits are refused, so reload before
+reapplying a change when another editor saved first.
 
 The smoke result demonstrates package wiring and persistence. It does not establish retrieval quality, host-hook activation, shared-team security, or production summarization behavior.
