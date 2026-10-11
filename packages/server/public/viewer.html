@@ -1355,6 +1355,10 @@
   .jrn-mks{display:flex;flex-wrap:wrap;gap:5px;align-items:center;min-width:0;max-width:100%}
   .jrn-mk{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:3px;padding:2px 7px;font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--ground);cursor:pointer;max-width:100%;line-height:1.5;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
   .jrn-mk .sym{width:12px;height:12px;flex-shrink:0}
+  /* the marker's name is the one part that gives way: it ellipsises inside the chip (the title carries it whole) and
+     what follows it — the read/write word, the ↺, the cut — stays whole (cleanup pass, nothing clips) */
+  .jrn-mk .lb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .jrn-mk>i,.jrn-mk>.rep,.jrn-mk>.cut{flex:none}
   .jrn-mk b{color:var(--cyan);font-weight:600}
   .jrn-mk i{font-style:normal;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:8px;color:var(--dim)}
   .jrn-mk.k-route .sym{color:var(--cyan)} .jrn-mk.k-function .sym{color:var(--fn)} .jrn-mk.k-page .sym{color:#7FB4F5} .jrn-mk.k-table .sym{color:var(--tbl)} .jrn-mk.k-queue .sym{color:var(--warn)} .jrn-mk.k-external .sym{color:var(--muted)}
@@ -1845,7 +1849,8 @@
   /* the action stops */
   .jrn-sbh{position:sticky;top:0;z-index:4;border-right:1px solid var(--line-soft);border-bottom:1px solid var(--line);padding:6px 9px;background:var(--panel);display:flex;flex-direction:column;gap:3px;cursor:pointer;min-width:0}
   .jrn-sbh:hover .t{color:var(--accent)}
-  .jrn-sbh .t{font-weight:600;font-size:11px;color:var(--ink);display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .jrn-sbh .t{font-weight:600;font-size:11px;color:var(--ink);display:flex;align-items:flex-start;gap:6px;min-width:0}
+  .jrn-sbh .t .tx{min-width:0;line-height:1.3;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .jrn-sbh .t .sym{width:13px;height:13px;color:var(--muted);flex-shrink:0}
   .jrn-sbh .ord{font-family:var(--mono);font-size:9px;color:var(--accent);border:1px solid var(--accent);border-radius:8px;min-width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;padding:0 3px;flex-shrink:0}
   .jrn-sbh .out{display:flex;gap:3px;flex-wrap:wrap}
@@ -1885,7 +1890,8 @@
   /* the seam card is the API cell: the operation and its status, compact —
      the two ⧉ ends live in the splice the cell opens, not in the cell */
   .jrn-sheet .jrn-seam{font-size:9.5px;padding:3px 7px}
-  .jrn-sheet .jrn-seam .l1{flex-wrap:nowrap}
+  .jrn-sheet .jrn-seam .l1{flex-wrap:wrap}
+  .jrn-sheet .jrn-seam .l1 .nm{white-space:normal;overflow-wrap:anywhere;min-width:0}
   .jrn-sheet .jrn-seam .l1 .sum,.jrn-sheet .jrn-seam .l2{display:none}
   .jrn-sheet .jrn-seam .api-chip{font-size:8px;padding:0 5px}
   .jrn-sheet .jrn-exp{width:calc(100vw - 16px);grid-column:1/-1}
