@@ -10,7 +10,7 @@ import { test, expect, gotoReady } from './support';
 const FLOW = 'invoice-app::flow::billing-cycle';
 const STREET = '#/map/' + encodeURIComponent(FLOW);
 const LIST_PAGE = 'invoice-app::page::/invoices';
-const HEAD = `.map-district[data-flow="${FLOW}"] .map-dhead .agg`;
+const HEAD = `.map-jhead[data-flow="${FLOW}"] .agg`;
 
 /** The journey-numbers identifier check, the bar every business view is held to. */
 const IDENTIFIER = new RegExp([
@@ -205,7 +205,7 @@ test.describe('map — one number, one word', () => {
     await stubFewerReached(page);
     await mapOn(page, 'business');
     await openStreet(page);
-    const text = await page.locator(`.map-district[data-flow="${FLOW}"] .map-dhead`).innerText();
+    const text = await page.locator(`.map-jhead[data-flow="${FLOW}"]`).innerText();
     expect(text).toContain('owner · Billing team');
     expect([...new Set(text.match(IDENTIFIER) || [])], 'identifier-shaped words on the business head').toEqual([]);
   });

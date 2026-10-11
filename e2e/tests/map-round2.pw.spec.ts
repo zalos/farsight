@@ -248,11 +248,10 @@ test.describe('map round 2 — zoom', () => {
     expect(after.s).toBeGreaterThan(0.5);
     expect(Math.abs(after.x - before.x) * after.s).toBeLessThan(80);
     await expect(page.locator('#fs-tip')).toBeHidden();
-    // the open journey's name is on the stage
-    const nm = (await page.locator(`.map-district[data-flow="${WIDE_ID}"] .map-dhead .nm`).boundingBox())!;
+    // the open journey's name is in the head above the stage (cleanup pass 2026-10-11: never in the world)
+    const nm = (await page.locator(`.map-jhead[data-flow="${WIDE_ID}"] .nm`).boundingBox())!;
     const board = (await page.locator('.map-board').boundingBox())!;
-    expect(nm.x).toBeGreaterThanOrEqual(board.x - 1);
-    expect(nm.y).toBeGreaterThanOrEqual(board.y - 1);
+    expect(nm.y + nm.height).toBeLessThanOrEqual(board.y + 1);
   });
 
   test('a link naming only the zoom opens at that zoom', async ({ page }) => {

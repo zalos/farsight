@@ -30,7 +30,7 @@ test.describe('work chips', () => {
     await routeWorkSettings(page);
     await routeWork(page);
     await page.goto('/#/map/' + encodeURIComponent('invoice-app::flow::draft-and-send') + '?layout=table');
-    const chip = page.locator('.map-table-head .map-work .wk-chip');
+    const chip = page.locator('.map-jhead .map-work .wk-chip');
     await expect(chip).toContainText('3 work items');
     await chip.getByRole('link').click();
     await expect(page).toHaveURL(/#\/work\?flow=/);

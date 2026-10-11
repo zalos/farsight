@@ -9,7 +9,9 @@
 // had the storyline's lanes on — stays on the lanes and marks the move's pill.
 //
 // The Map owns the board and the address; it hands this module `frame(stop, tour)` and `target()` (what to walk: the
-// storyline drawn, else the journey on screen). The panel sits right or at the bottom, as the dock does (`jrnDock()`).
+// storyline drawn, else the journey on screen), `at()` (where the reader is, so the walk starts there) and
+// `shown(open)`. The panel is one of the Map's dock panels (lib/map-dock.js, cleanup pass 2026-10-11): its stop line —
+// *stop n of m* · ‹ PREV · NEXT › · ✕ — is pinned at its top, its sentences scroll under it, ASK is pinned at its foot.
 
 import { esc, currentLens } from '../store.js';
 import { t } from '../strings.js';
@@ -47,11 +49,6 @@ export function walkToolHtml() {
     + tipAttrs({ key: 'tour.tool', noFocus: true }) + '>' + sym('human') + esc(t('tour.tool')) + '</button>';
 }
 
-/** The panel's host in the stage. */
-export function walkHostHtml() {
-  return '<aside class="map-tour" hidden data-map-wheel="own" role="complementary" aria-label="' + esc(t('tour.title')) + '"></aside>';
-}
-
 /** Bind the panel to the Map: its host, and how the board moves. */
 export function bindWalk(host, api) {
   TOUR.host = host;
@@ -85,7 +82,8 @@ export function closeWalk(o = {}) {
   if (!TOUR.open) return;
   TOUR.open = false;
   TOUR.gen++;
-  if (TOUR.host) { TOUR.host.hidden = true; TOUR.host.innerHTML = ''; }
+  if (TOUR.host) TOUR.host.innerHTML = '';
+  if (TOUR.api && TOUR.api.shown) TOUR.api.shown(false);
   if (!o.quiet && TOUR.api && TOUR.api.closed) TOUR.api.closed();
 }
 
@@ -110,7 +108,11 @@ function load(at) {
       TOUR.loading = false;
       if (!ok || !body || !body.tour) { TOUR.error = (body && body.error) || '?'; draw(); return; }
       TOUR.data = body.tour;
-      go(Math.min(at, Math.max(0, body.tour.stops.length - 1)));
+      // opened at a screen (an action, a table, a screen up close): the walk starts at that screen's stop, so the
+      // Map stays where the reader is
+      const here = !at && TOUR.api && TOUR.api.at ? TOUR.api.at() : null;
+      const hi = here && here.screen ? body.tour.stops.findIndex((x) => x.kind !== 'handoff' && x.place && x.place.flowId === here.flowId && x.place.screen === here.screen) : -1;
+      go(hi >= 0 ? hi : Math.min(at, Math.max(0, body.tour.stops.length - 1)));
     })
     .catch((err) => { if (gen !== TOUR.gen) return; TOUR.loading = false; TOUR.error = String(err && err.message || err); draw(); });
 }
@@ -122,7 +124,8 @@ export function go(i) {
   TOUR.at = Math.max(0, Math.min(d.stops.length - 1, i));
   draw();
   // a new stop reads from its top
-  if (TOUR.host) TOUR.host.scrollTop = 0;
+  const body = TOUR.host && TOUR.host.querySelector('.tw-body');
+  if (body) body.scrollTop = 0;
   const stop = d.stops[TOUR.at];
   if (TOUR.api && TOUR.api.frame) TOUR.api.frame(stop, d, { lanes: TOUR.lanes });
 }
@@ -138,9 +141,8 @@ export function drawWalk() { if (TOUR.open) draw(); }
 function draw() {
   const host = TOUR.host;
   if (!host) return;
-  host.hidden = !TOUR.open;
+  if (TOUR.api && TOUR.api.shown) TOUR.api.shown(TOUR.open);
   if (!TOUR.open) return;
-  host.classList.toggle('dock-bottom', dockPlace() === 'bottom');
   const head = '<div class="tw-head"><span class="hud-label tw-title"' + defAttrs('tour.title') + '>' + sym('human') + esc(t('tour.title')) + '</span>'
     + '<span class="tw-of"></span><button type="button" class="tw-x" data-tw="close" aria-label="' + esc(t('tour.close')) + '"' + tipAttrs({ key: 'tour.close', noFocus: true }) + '>✕</button></div>';
   const ask = '<div class="tw-ask">' + askBoxHtml({ id: 'walk', repo: (TOUR.data && TOUR.data.target.repo) || (TOUR.target && TOUR.target.repo) || '' }) + '</div>';
@@ -158,7 +160,7 @@ function draw() {
   const branch = stop.journey.branch ? '<p class="tw-branch"' + defAttrs('tour.branch') + '>' + esc(fill('tour.branch', { name: stop.journey.branch.ofName, when: stop.journey.branch.when })) + '</p>' : '';
   const clauses = stop.clauses.map((c) => '<p class="tw-cl r-' + esc(c.role) + (c.warn ? ' warn' : '') + (c.tier ? ' t-' + esc(c.tier) : '') + '" data-role="' + esc(c.role) + '">'
     + (c.warn ? sym('warning') : c.role === 'need' ? sym('gate') : c.role === 'decision' ? sym('decision') : '')
-    + clauseHtml(c, { nodes: d.nodes, place, api: API }) + '</p>').join('');
+    + (c.role === 'words' ? wordsHtml(c, { nodes: d.nodes, place, api: API }) : clauseHtml(c, { nodes: d.nodes, place, api: API })) + '</p>').join('');
   const needsAt = stop.clauses.findIndex((c) => c.role === 'need');
   const body = needsAt >= 0
     ? clauses.replace('<p class="tw-cl r-need', '<p class="tw-needs hud-label"' + defAttrs('tour.handoff.needsHead') + '>' + esc(t('tour.handoff.needsHead')) + '</p><p class="tw-cl r-need')
@@ -173,22 +175,43 @@ function draw() {
     + dots
     + '<button type="button" class="map-tb tw-next" data-tw="next"' + (TOUR.at >= d.stops.length - 1 ? ' disabled' : '') + tipAttrs({ key: 'tour.next', noFocus: true }) + '>' + esc(t('tour.next')) + '</button></div>';
   const copy = copyDoorsHtml('tour', { id: d.target.id, ...(d.target.kind === 'storyline' ? { storyline: true } : {}), repo: d.target.repo }, { compact: true });
-  host.innerHTML = head.replace('<span class="tw-of"></span>', '<span class="tw-of">' + of + kind + '</span>')
+  // pinned: the stop line and its ‹ PREV · NEXT ›; scrolling: the stop's sentences; pinned at the foot: ASK
+  host.innerHTML = '<div class="tw-pin">' + head.replace('<span class="tw-of"></span>', '<span class="tw-of">' + of + kind + '</span>') + nav + '</div>'
     + '<div class="tw-body" tabindex="-1">'
     + '<h3 class="tw-stop-title">' + esc(b ? stop.title.biz : stop.title.text) + '</h3>'
     + '<p class="tw-sub">' + esc(b ? stop.sub.biz : stop.sub.text) + '</p>' + branch
     + '<div class="tw-text">' + body + '</div>'
-    + referenced + '</div>'
-    + nav
+    + referenced
     + '<p class="tw-derived"' + defAttrs('tour.derived') + '>' + esc(t('tour.derived')) + '</p>'
-    + (copy ? '<div class="tw-copy">' + copy + '</div>' : '')
+    + (copy ? '<div class="tw-copy">' + copy + '</div>' : '') + '</div>'
     + ask;
   redrawAsk(host);
 }
 
-/** Where the panel sits: at the bottom when the reader docks the code there, else on the right. */
-function dockPlace() {
-  try { return localStorage.getItem('fs-jrn-dock') === 'bottom' ? 'bottom' : 'right'; } catch (e) { return 'right'; }
+/** The sentences of a text, split where a sentence ends (a full stop, ? or ! before a space and a capital or digit). */
+function sentencesOf(text) {
+  const out = [];
+  const src = String(text || '');
+  const re = /[.!?]+\s+(?=[A-Z0-9(])/g;
+  let from = 0, m;
+  while ((m = re.exec(src))) { out.push(src.slice(from, m.index + m[0].length)); from = m.index + m[0].length; }
+  if (from < src.length) out.push(src.slice(from));
+  return out;
+}
+/**
+ * The words somebody wrote for a screen, at most two sentences — a screen's whole description dumped into the walk
+ * pushed everything else off the panel (the sweep's 1440 walk) — with *more ›* opening the rest in place.
+ */
+function wordsHtml(c, o) {
+  const b = biz();
+  const vars = (b ? c.bizVars : c.vars) || c.vars || {};
+  const all = String(vars.words || '');
+  const parts = sentencesOf(all);
+  if (parts.length <= 2) return clauseHtml(c, o);
+  const short = parts.slice(0, 2).join('').trim();
+  const cut = { ...c, vars: { ...(c.vars || {}), words: short }, bizVars: c.bizVars ? { ...c.bizVars, words: short } : c.bizVars };
+  return '<span class="tw-words short">' + clauseHtml(cut, o) + ' <button type="button" class="tw-more-btn" data-tw="more"' + tipAttrs({ key: 'tour.more', noFocus: true }) + '>' + esc(t('tour.more')) + '</button></span>'
+    + '<span class="tw-words long" hidden>' + clauseHtml(c, o) + ' <button type="button" class="tw-more-btn" data-tw="less"' + tipAttrs({ key: 'tour.less', noFocus: true }) + '>' + esc(t('tour.less')) + '</button></span>';
 }
 
 function onClick(e) {
@@ -200,6 +223,10 @@ function onClick(e) {
   else if (act === 'prev') go(TOUR.at - 1);
   else if (act === 'next') go(TOUR.at + 1);
   else if (act === 'stop') go(+b.dataset.i);
+  else if (act === 'more' || act === 'less') {
+    const p = b.closest('.tw-cl');
+    if (p) { p.querySelector('.tw-words.short').hidden = act === 'more'; p.querySelector('.tw-words.long').hidden = act === 'less'; }
+  }
 }
 
 /** Inside the panel: ← → walk the stops, Esc closes the walk. The box's own typing is its own. */
