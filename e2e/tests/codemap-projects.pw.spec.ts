@@ -168,6 +168,20 @@ test.describe('on invoice-app and the NX example together', () => {
     await atTable(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);
     await go(page, '#/journeys/new-invoice?view=sheet&step=1&lens=hybrid');
     await atTable(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);
+    // the name's resolution keeps the address's other parameters: screen 2 of Billing cycle, named in the crumb
+    const billing = /#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?(.*&)?screen=2(&|$)/;
+    await go(page, '#/map/billing-cycle?screen=2&layout=table&lens=hybrid');
+    await atTable(billing);
+    await expect(page.locator('.map-crumbs')).toContainText(/screen 2 of \d+/);
+    await expect(page.locator('.map-table .jrn-sbh.at').first()).toBeVisible();
+    await go(page, '#/journeys/billing-cycle?view=sheet&step=2&lens=hybrid');
+    await atTable(billing);
+    await expect(page.locator('.map-crumbs')).toContainText(/screen 2 of \d+/);
+    // and every other parameter rides through the rewrite (a stop below, its dock, the register)
+    await go(page, '#/map/billing-cycle?screen=2&action=1&dock=right&lens=code');
+    await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?(.*&)?screen=2&action=1(&.*)?&dock=right/);
+    await expect(page.locator('.map-act.code')).toBeVisible();
+    await expect(page.locator('body')).toHaveClass(/lens-code/);
     // a journey of the second source, by its name alone
     await go(page, '#/map/review-open-invoices?lens=hybrid');
     await atTable(/#\/map\/[^?]*%3A%3Aflow%3A%3Areview-open-invoices/);

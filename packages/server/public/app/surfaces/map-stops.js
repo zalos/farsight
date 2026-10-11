@@ -34,7 +34,7 @@ import {
   jrnLifecycleHtml, jrnMoLabel, jrnMarkerAt, jrnNav, jrnApplyDock, jrnCollectForks, jrnForksPanelHtml, jrnToggleForks,
   jrnForksBtnHtml, jrnImpactRings, jrnCutChip, jrnHeaderHtml, jrnToggleCuts, cutsOpen, forksOpen, expandedOpen, closeExpanded, jrnScrollTo,
 } from '../lib/journey-draw.js';
-import { partOrder } from '../lib/route-url.js';
+import { partOrder, screenRowAt } from '../lib/route-url.js';
 import { jrnDrillIndex, jrnDrillStageHtml, jrnDrillMount } from './journey-drill.js';
 
 // ── the layout control's registration point ─────────────────────────────────
@@ -172,7 +172,7 @@ function fetchFull(flow) {
 export function forgetWalks() { ST.full.clear(); }
 /** A part was selected on the stop (a click, j / k, a door): the address follows it. */
 function onSelect() {
-  if (ST.api && (ST.table || ST.act)) ST.api.writeHash();
+  if (ST.api && (ST.table || ST.act)) { ST.api.writeHash(); if (ST.table) ST.api.refresh(); }
 }
 /** The drawing asked for the stop to be drawn again (a business tab of the checks lane moved). */
 function onRedraw() { redrawStops(); }
@@ -498,11 +498,15 @@ export function crumbHtml(o) {
   const top = lvl === 'st';
   let html = esc(rootWord) + sep + (top ? '<b>' : '') + esc(o.nameWords(o.d.name)) + (top ? '</b>' : '') + (step ? ' ' + pos(step) : '');
   const model = o.model;
-  const si = ST.act ? ST.act.si : o.propIndex;
-  if ((lvl === 'pr' || ST.act) && model && model.screens[si]) {
+  // the table at a screen (`screen=`) names it too, as the property and the action do
+  const ts = !ST.act && lvl === 'st' && model ? tableScreen() : null;
+  const tsi = ts != null ? screenRowAt(model.screens, ts) : null;
+  const si = ST.act ? ST.act.si : tsi != null ? tsi : o.propIndex;
+  if ((lvl === 'pr' || ST.act || tsi != null) && model && model.screens[si]) {
     const s = model.screens[si];
     const sPos = t('map.crumb.screen').replace('{n}', si + 1).replace('{m}', model.screens.length);
-    html += sep + (ST.act ? '' : '<b>') + esc(s.name) + (ST.act ? '' : '</b>') + ' ' + pos(sPos);
+    const bold = !ST.act;
+    html += sep + (bold ? '<b>' : '') + esc(s.name) + (bold ? '</b>' : '') + ' ' + pos(sPos);
   }
   if (ST.act && S.JRN_DRILL) {
     const acts = screenActions(S.JRN_DRILL.cols, model.screens, ST.act.si);
@@ -546,17 +550,22 @@ function closeTable() {
 async function drawTable(flow) {
   const M = ST.api.MAP;
   const host = M.stage.querySelector('.map-table-host');
-  ST.table = { flow, host, part: ST.tablePart && ST.tablePart.flow === flow ? ST.tablePart : null };
+  ST.table = { flow, host, part: ST.tablePart && ST.tablePart.flow === flow ? ST.tablePart : null,
+    screen: ST.tableScreen && ST.tableScreen.flow === flow ? ST.tableScreen.screen : null };
   ST.tablePart = null;
+  ST.tableScreen = null;
   host.hidden = false;
   M.stage.classList.add('in-table');
   host.innerHTML = '<div class="map-act-wait">' + esc(t('map.act.loading')) + '</div>';
+  // an action opened while the walk was on its way (a link to a stop below) wins: the table it left must not draw,
+  // nor write its address over the action's
+  const gen = ST.gen;
   const [j, data] = await Promise.all([ST.api.ensureJourney(flow), fetchFull(flow)]);
-  if (!ST.table || ST.table.flow !== flow) return;
+  if (!ST.table || ST.table.flow !== flow || gen !== ST.gen) return;
   if (!data || !data.summary || !j) { closeTable(); return; }
-  drawTableNow(j, data);
+  drawTableNow(j, data, { first: true });
 }
-function drawTableNow(j, data) {
+function drawTableNow(j, data, o = {}) {
   const { flow, host } = ST.table;
   const keep = S.JOURNEY === data && S.journeyActive >= 0 ? S.journeyActive : -1;
   useJourney(data, host);
@@ -589,9 +598,43 @@ function drawTableNow(j, data) {
   // the part a link names (`part=`), else the one selected before a redraw, opens with its code in the dock
   const want = ST.table.part;
   ST.table.part = null;
+  ST.table.data = data;
   const order = want ? partOrder(data.summary.segments, want.screen, want.node) : keep;
   if (order != null && order >= 0 && S.JRN_MARK[order]) jrnSelect(order);
-  else jrnImpactRings();
+  else { jrnImpactRings(); showTableScreen(); }
+  // the address and the crumb follow the table now that it has drawn the first time (a write before the walk landed
+  // knew no part); a redraw for the register writes nothing — a link that moved the register may name another stop
+  if (o.first) { ST.api.writeHash(); ST.api.refresh(); }
+}
+/** Bring the screen the address names (`screen=`) to the table's left edge, its columns marked. */
+function showTableScreen() {
+  const n = ST.table && ST.table.screen;
+  if (!n || !S.JRN_SHEET) return;
+  const cols = S.JRN_SHEET.cols.filter((c) => c.sg.index === n - 1).map((c) => c.index);
+  const host = ST.table.host;
+  host.querySelectorAll('.jrn-sbh[data-col]').forEach((el) => el.classList.toggle('at', cols.includes(+el.dataset.col)));
+  const first = cols.length ? host.querySelector('.jrn-sbh[data-col="' + cols[0] + '"]') : null;
+  const scroll = host.querySelector('.map-table-scroll');
+  const lane = host.querySelector('.jrn-slane');
+  if (first && scroll) scroll.scrollLeft += first.getBoundingClientRect().left - scroll.getBoundingClientRect().left - (lane ? lane.getBoundingClientRect().width : 0) - 8;
+}
+/**
+ * Open the table at one screen (`screen=n`, a 1-based segment — an old link's `step=`): its columns come to the left
+ * edge and the crumb names the screen; the address keeps `screen` while no part is selected.
+ * @group Map
+ */
+export function tableAtScreen(flow, screen) {
+  ST.tableScreen = screen ? { flow, screen } : null;
+  if (ST.table && ST.table.flow === flow && ST.tableScreen) { ST.table.screen = screen; ST.tableScreen = null; showTableScreen(); }
+}
+/** The screen the table is at (1-based segment), or null. @group Map */
+export function tableScreen() {
+  if (!ST.table || S.JRN_DRILL) return null;
+  if (S.JOURNEY && S.JOURNEY === ST.table.data && S.journeyActive >= 0) {
+    const sg = (S.JOURNEY.summary.segments || []).find((x) => S.journeyActive >= x.from && S.journeyActive <= x.to);
+    if (sg) return sg.index + 1;
+  }
+  return ST.table.screen || null;
 }
 /**
  * Open the table for a journey with one part of its walk selected (`part=` — an old link's `node=`, a lifecycle
@@ -608,9 +651,10 @@ export function tableAtPart(flow, node, screen) {
 }
 /** The table's part of the address: the part selected and where its code opens. @group Map */
 export function tableParams() {
-  if (!ST.table || !S.JOURNEY || S.JRN_DRILL || !(S.journeyActive >= 0)) return null;
-  const mk = jrnMarkerAt(S.journeyActive);
-  if (!mk || !mk.nodeId) return null;
+  if (!ST.table || S.JRN_DRILL) return null;
+  // no part selected (or the walk not landed yet): the screen the table was opened at, when the address named one
+  const mk = S.JOURNEY && S.JOURNEY === ST.table.data && S.journeyActive >= 0 ? jrnMarkerAt(S.journeyActive) : null;
+  if (!mk || !mk.nodeId) return ST.table.screen ? { part: null, screen: String(ST.table.screen), dock: null } : null;
   const sg = (S.JOURNEY.summary.segments || []).find((x) => S.journeyActive >= x.from && S.journeyActive <= x.to);
   return { part: mk.nodeId, screen: sg ? String(sg.index + 1) : null, dock: jrnDock() };
 }

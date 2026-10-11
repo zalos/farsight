@@ -51,7 +51,7 @@ import { sheetModel, actionAtSegment } from '../lib/journey-model.js';
 import {
   bindStops, stopNow, drawLayoutTool, setLayout, cycleLayout, layoutAt, registerMapLayout, MAP_LAYOUTS, openAction, openActionAt, openScreenAction, closeAction, actionOpen,
   actionParams, actionKey, stopZoom, openCode, closeCode, crumbHtml, syncTable, tableOpen, redrawStops, closeStops, streetFactsHtml, forgetWalks,
-  registerView, tableAtPart, tableParams, tableKey, tableEscape, forLineHtml,
+  registerView, tableAtPart, tableAtScreen, tableParams, tableKey, tableEscape, forLineHtml,
 } from './map-stops.js';
 import { jrnFirstSentence } from '../lib/journey-draw.js';
 import { walkToolHtml, walkHostHtml, bindWalk, openWalk, closeWalk, toggleWalk, walkOpen, drawWalk } from '../lib/tour.js';
@@ -877,7 +877,9 @@ async function applyRouteTarget(route, animate) {
   if (gen0 !== MAP.gen) return;
   if (!ent) { fitAll(false); MAP.fitted = true; return; }
   if (ent.flow !== flow || ent.node) {
-    history.replaceState(null, '', withParams(location.hash.replace(/^#\/map\/[^?@]*/, '#/map/' + encodeURIComponent(ent.flow)), { node: ent.node || null }));
+    // the address the route was read from, whole — every parameter it carried rides through the rewrite
+    const from = String(route.raw || location.hash);
+    history.replaceState(null, '', withParams(from.replace(/^#\/map\/[^?@]*/, '#/map/' + encodeURIComponent(ent.flow)), { node: ent.node || null }));
     S.route = parseRoute();
     MAP.route = S.route;
     return applyRouteTarget(S.route, animate);
@@ -927,6 +929,7 @@ async function applyRouteTarget(route, animate) {
     }
   }
   if (stop.part && layoutAt('st') === 'table') tableAtPart(flow, stop.part, stop.screen);
+  else if (stop.screen && layoutAt('st') === 'table') tableAtScreen(flow, stop.screen);
   if (MAP.act) closeAction({ quiet: true });
   if (!node) {
     if (MAP.prop) closeProperty({ keepHash: true });
