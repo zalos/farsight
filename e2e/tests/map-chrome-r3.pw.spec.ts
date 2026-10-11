@@ -53,6 +53,9 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
         .filter((p) => p.scrollHeight > p.clientHeight + 1 || [...p.querySelectorAll<HTMLElement>('.rec,.w,.by')].some((x) => x.scrollWidth > x.clientWidth + 1))
         .map((p) => p.textContent));
       expect(cut).toEqual([]);
+      // a lane's head shows its count and the scope it counts over, never clipped by the lane
+      const heads = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.map-lanes .ln-headbox')].filter((h) => h.scrollHeight > h.clientHeight + 1).length);
+      expect(heads).toBe(0);
       await expect(page.locator('.map-lanes .ln-lane.store .ln-head .sc').first()).toHaveText(/in this storyline/);
       // one journey's lanes: its counts are over the journey, never a storyline
       await go(page, STREET + '?layout=lanes');

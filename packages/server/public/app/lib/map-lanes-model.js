@@ -435,7 +435,7 @@ export const LANE_GEOM = Object.freeze({
   // a card is wide enough for a screen name's longest word at the stylesheet's size (round-3 swarm: CONTRACTO R SIGN-IN);
   // a pill holds the record and its status on two lines of their own, whole, then the code that moves it and what it needs
   head: 124, col: 176, cardW: 162, cardH: 148, rowGap: 10, pad: 8, pillH: 70, pillRow: 76,
-  laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 66,
+  laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 104,
 });
 
 /**
