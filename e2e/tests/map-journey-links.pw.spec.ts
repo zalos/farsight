@@ -168,7 +168,7 @@ test('a storyline opens its journeys on the Map, the first one by its own door',
   await card.getByRole('button', { name: 'open the first journey' }).click();
   await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);
   // the hybrid register reads a journey as its table, the journey's name at its head
-  await expect(page.locator('.map-table-head .nm')).toContainText('Start a new invoice');
+  await expect(page.locator('.map-jhead .nm')).toContainText('Start a new invoice');
   // the crumb says where it stands in the storyline
   await expect(page.locator('.map-crumbs')).toContainText('step 1 of 2');
 });

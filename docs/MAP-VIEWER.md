@@ -15,11 +15,45 @@ surface of its own; every door on it opens the Map.
 
 | stop | draws | layouts (`v` cycles, the first is the default) | drawn by |
 |---|---|---|---|
-| all journeys | every journey as a card, banded; a storyline as its chain | `chain` · `lanes` (with a storyline) | `surfaces/map.js`, `surfaces/map-lanes.js` |
-| one journey | the journey's head (its chips, who it is for — `forLineHtml` — the storyline position with ‹ › to the journeys before and after, the lifecycle strip, Save) over its screens | `screens` (the street; the business register adds each screen's own sentence — the storyboard's look) · `table` (the Sheet: every stop across, every layer down; its head prints the journey's own count line, `jrnHeaderHtml`) | `surfaces/map.js`, `surfaces/map-stops.js` + `lib/journey-draw.js` |
-| one screen | the property: the picture, the rail of eight tabs, the step bar | — | `surfaces/map-property.js` |
-| one action | the action's beats across the layers of the system, the journey's screens as a strip | `beats` · `ladder` (time running down, one line per thing it did) | `surfaces/map-stops.js` + `surfaces/journey-drill.js` |
-| code | the dock opening on the beat: DOCS · REQUEST / RESPONSE · CODE · FORKS · TESTS · CHANGE IMPACT, in place · bottom · right | — | `surfaces/journey-drill.js` inspector |
+| all journeys | every journey as a card, banded; a storyline as its chain | `chain` · `lanes` (offered whenever the tree declares a storyline: one storyline's lanes, or with *All journeys* every storyline as its own band of lanes, stacked, each with its header) | `surfaces/map.js`, `surfaces/map-lanes.js` |
+| one journey | its screens under the journey head (below) | `screens` (the street; the business register adds each screen's own sentence — the storyboard's look) · `lanes` (the one journey as swimlanes: `laneLayout` over a storyline of one journey — its persona's lane, a lane per store it writes, record pills — on `.map-jlanes-host`, fitted; a stage card opens its screen) · `table` (the Sheet: every stop across, every layer down) · `drill` (opens the action stop with the rail — below) | `surfaces/map.js`, `surfaces/map-stops.js` + `lib/journey-draw.js` |
+| one screen | the property: the picture, the rail of eight tabs, the step bar | — (the slot says *one view*) | `surfaces/map-property.js` |
+| one action | the action's beats across the layers of the system, the journey's screens as a strip | `beats` · `ladder` (time running down, one line per thing it did) · `drill` (the journey's **action rail** — every action of every screen as a numbered stop, the screens spanning them, `jrnDrillRailHtml` — over the beats in place of the strip; `[` `]` and a click move along it; the address is the action's, `?screen=&action=&layout=drill`) | `surfaces/map-stops.js` + `surfaces/journey-drill.js` |
+| code | the drill's inspector on the beat — DOCS · REQUEST / RESPONSE · CODE · FORKS · TESTS · CHANGE IMPACT — in the dock (right · bottom), or in place under the beats | — | `surfaces/journey-drill.js` inspector, `lib/map-dock.js` |
+
+**The chrome holds still** (cleanup pass 2026-10-11, lane P1 — the owner's *"too difficult to know where the buttons are
+as they keep changing"*). `chromeHtml` draws two rows that keep their places at every stop and width: **row 1** — the
+level control in its short words (ALL · JOURNEY · SCREEN · ACTION · CODE; ACTION and CODE work from the journey stop:
+its first action, the code in the dock), the LAYOUT control in one slot (`.map-layout-slot`; its choices change, the
+slot does not), and the tools right-aligned (CALLS AND DATA · + − FIT · FULL SCREEN · COPY LINK · SAVE · the legend
+glyph — Save saves the board at ALL and the stop on screen below it, `street` → `stopPicture`); the Affected bar, when
+on, is a row of its own; **row 2** — the crumb on the left (clamped, whole in its tip) and on the right the as-of
+stamp, the board's pickers (at ALL: storyline and *band by* inline, the comparison inline only while it is on;
+otherwise — and below the board, all three — one **VIEW** menu, `pickersHtml` / `viewMenuHtml`), then **WALK at the
+row's right end**, the same pixel column at every stop. `fitChrome` folds by measurement, row 2 first (`f-story` ·
+`f-band` · `f-asof`); row 1 wraps (`f-wrap`) only on a window narrower than the product is read on.
+
+**The journey head** (`drawHead` / `headBarHtml` in `map.js`) is a bar of the chrome under the toolbar at the JOURNEY ·
+SCREEN · ACTION · CODE stops, never in the zoomable world (it rode over the first screen card at every zoom): line 1
+the name (one line, whole in its tip), *For <persona> · <group>* (`forLineHtml`), the storyline position with ‹ ›
+(`storyNavLineHtml`); line 2 the numbers — the street's chips (`aggHtml`), or at the table layout the table's own count
+line (`tableCountHtml` ← `jrnHeaderHtml`) — on one line, folded to `+n` by measurement (`foldHead`: the test chip, the
+one verdict with its scope and skips, never folds — it gives way at its tail); then each record's lifecycle strip as
+one line (its *what each one means* opens the table in the dock, `lifecycleTableInto`); then the description's first
+sentence with *more ›* (the rest in the dock). Every host of the stage starts under the chrome and the head
+(`--map-top` = `--map-chrome-h` + `--map-head-h`, both measured); a move to a journey draws the head first
+(`drawHead(id)`, `MAP.headHold`), so the frame is measured under it. In the world a street keeps one line: its name.
+
+**One dock** (`lib/map-dock.js`): the walk, the code at an action (`#jrn-insp`), a table part's pane (`#jrn-dock`), the
+lifecycle table, the comparison of two syncs and a journey's description are its panels — one tab each in a pinned
+header with the place switch (IN PLACE · BOTTOM · RIGHT, the journey's one setting `fs-jrn-dock`, right by default) and
+✕. It takes its own column (`--map-dock-w`: 360 px, 320 under 1400) or row: the stage shrinks (`.map-stage.dock-r` /
+`.dock-b`), nothing is drawn over it, and the board refits at ALL. *In place* puts the code back under the beats and a
+part's pane under its row (the switch then rides at the action's top); the other panels stay on the right. Each panel
+lays out its own body: the walk keeps *stop n of m* · ‹ PREV · NEXT › · ✕ pinned on top and ASK pinned at its foot,
+its sentences scroll between, and a screen's description is clamped to two sentences with *more ›*. Opened at a
+table, an action or a screen, the walk starts at that screen's stop and keeps the reader at their stop (the table
+brings the screen's columns to its edge, the action stop opens the screen's first action).
 
 **The table** (`syncTable` / `drawTableNow`) is the journey page's Sheet and its header in one: `j` / `k` walk its parts
 (`tableKey` → `jrnNav`), each opening its expansion — the seam splice for a call, the spliced code otherwise — in the
@@ -44,18 +78,18 @@ on its table, or its first action in the code register.
 `dock` beside it), else the action that holds it (`partOrder`), and the address is rewritten to `action` and `beat`.
 `step=` is the storyline position only: an old `step=` reads as `screen=` and is rewritten. An old journey link
 `#/journeys/<entry>?view=&step=&node=&band=&dock=` is converted by `overlayToMap` (storyboard → `screens`, timeline and
-sheet → `table`, drill → `beats`, `band=ladder` on the drill → `ladder`, `node` → `part`, `dock` beside a part, `biz`
+sheet → `table`, drill → `drill`, `band=ladder` on the drill → `ladder`, `node` → `part`, `dock` beside a part, `biz`
 dropped, the rest kept) and the shell replaces it with one `history.replaceState` before it routes — no history entry.
 
-**Keys** (`keymap.js`, one table, each key once): `+` / `−` a stop, `0` fit, `v` the layout at the stop, `d` the dock,
+**Keys** (`keymap.js`, one table, each key once): `+` / `−` a stop, `0` fit, `v` the layout at the stop, `d` the dock's place, `a` the walk,
 `j` / `k` the parts at the stop (screens on the street, parts on the table), `[` `]` the screens of an open screen's
 journey or the actions at an action, `←` `→` the beats, `Esc` up one stop.
 
 **What retired, and where it went.** The overlay (`openJourney`/`renderJourney`/`closeJourney`, the skip link, the
 header's fill) → the Map's stops; the storyboard → the business street (`screens`) and the screen stop (its ledger was
-the property); the blueprint timeline's grid → the table (its seam splice and spliced code → the table's dock and the
+the property); the blueprint timeline's grid → the table (its seam splice and spliced code → a part's pane in the dock and the
 CODE tab; its forks drawer → the table's head and the FORKS tab; its ladder band → the action's `ladder`); the Sheet →
-the table; the drill → the action stop (its rail → the strip and `[` `]`); the header's *see it on the Map*, the
+the table; the drill → the action stop, its rail → the `drill` layout (asked back by the owner, 2026-10-11); the header's *see it on the Map*, the
 Map's *open the journey here* → gone (the same place); the storyboard export → the street export; the `journeyDrill`
 and `map` workspace flags → gone (the Map has its tab and the Portfolio's Board door always). Dropped on purpose: the
 timeline's *business lane* (its tabs live on in the table's checks lane), the storyline ‹ › in a header (now on the

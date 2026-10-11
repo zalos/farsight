@@ -102,7 +102,7 @@ test.describe('tips', () => {
   test('on a journey\'s table: the screens tip lists the screens, and Esc closes the tip before the table', async ({ page }) => {
     await openJourneyAt(page, 'table', 'hybrid');
     const journey = page.locator('.map-table .jrn-sheet');
-    const screens = page.locator('.map-table-head .jrn-count .jrn-screens');
+    const screens = page.locator('.map-jhead .jrn-count .jrn-screens');
     await expect(screens).toHaveText('3 screens');
     await screens.hover();
     await expect(tip(page)).toBeVisible();
@@ -121,7 +121,7 @@ test.describe('tips', () => {
   /** @covers packages/server/public/app/lib/journey-draw.js::jrnScreensTip */
   test('the business lens reads the same tip without the endpoint', async ({ page }) => {
     await openJourneyAt(page, 'table', 'business');
-    const screens = page.locator('.map-table-head .jrn-count .jrn-screens');
+    const screens = page.locator('.map-jhead .jrn-count .jrn-screens');
     await expect(screens).toHaveText('3 screens');
     await screens.hover();
     await expect(tip(page)).toBeVisible();
@@ -137,7 +137,7 @@ test.describe('tips', () => {
   test('the conditions not in plain language are listed behind their number, in every lens, in words', async ({ page }) => {
     for (const lens of ['business', 'hybrid', 'code']) {
       await openJourneyAt(page, 'table', lens);
-      const n = page.locator('.map-table-head .jrn-count .jrn-untrn');
+      const n = page.locator('.map-jhead .jrn-count .jrn-untrn');
       await expect(n).toBeVisible();
       const count = Number(((await n.textContent()) || '').match(/\d+/)![0]);
       expect(count).toBeGreaterThan(0);

@@ -16,7 +16,7 @@ test.describe('a journey on the Map', () => {
   test('opens Billing cycle from the front door on the Map, at the hybrid register\'s table, with its counts', async ({ page }) => {
     await openBillingCycle(page);
     await expect(page).toHaveURL(/layout=table/);
-    const head = page.locator('.map-table-head .jrn-count');
+    const head = page.locator('.map-jhead .jrn-count');
     await expect(head).toContainText('3 screens');
     await expect(head).toContainText('2 of 3 screens built');
   });
@@ -43,7 +43,7 @@ test.describe('a journey on the Map', () => {
       await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
       await expect(page).toHaveURL(/layout=table/);
     }
-    await page.locator('.map-table-head .nm').click();
+    await page.locator('.map-jhead .nm').click();
     await page.keyboard.press('v');
     await expect(page.locator('.map-table')).toHaveCount(0);
     await expect(page.locator('.map-scr').first()).toBeVisible();
@@ -53,10 +53,16 @@ test.describe('a journey on the Map', () => {
    * the drill → the action stop; the timeline's ladder band → the action's ladder layout
    * @covers packages/server/public/app/surfaces/map-stops.js::openScreenAction
    */
-  test('an old drill link is the action stop, and its ladder is the other layout there', async ({ page }) => {
+  test('an old drill link is the drill — the action rail over the beats — and its ladder is a layout there', async ({ page }) => {
     await gotoReady(page, '#/journeys/' + FLOW + '?view=drill&step=1&lens=hybrid');
     await expect(page.locator('.map-act')).toBeVisible();
-    await expect(page).toHaveURL(/screen=1&action=1/);
+    await expect(page.locator('.map-act .map-rail .jrn-stop.on')).toBeVisible();
+    await expect(page).toHaveURL(/screen=1/);
+    await expect(page).toHaveURL(/action=1/);
+    await expect(page).toHaveURL(/layout=drill/);
+    // v walks the action stop's layouts: beats, then the ladder
+    await page.keyboard.press('v');
+    await expect(page.locator('.map-act .map-rail')).toHaveCount(0);
     await page.keyboard.press('v');
     await expect(page.locator('.map-act .map-ladder')).toBeVisible();
     await expect(page).toHaveURL(/layout=ladder/);
@@ -69,7 +75,7 @@ test.describe('a journey on the Map', () => {
    */
   test('on the table j opens a part\'s code in the dock, d moves the dock, and the address names the part', async ({ page }) => {
     await openJourneyAt(page, 'table');
-    await page.locator('.map-table-head .nm').click();
+    await page.locator('.map-jhead .nm').click();
     await page.keyboard.press('j');
     await expect(page.locator('#jrn-dock')).not.toHaveClass(/\bempty\b/);
     await expect(page).toHaveURL(/part=/);

@@ -1380,7 +1380,7 @@ export function jrnRowLabel(r) {
 export function jrnDock() {
   if (!S.jrnDock) {
     try { S.jrnDock = localStorage.getItem('fs-jrn-dock'); } catch (e) { S.jrnDock = null; }
-    if (!/^(inline|bottom|right)$/.test(S.jrnDock || '')) S.jrnDock = 'bottom';
+    if (!/^(inline|bottom|right)$/.test(S.jrnDock || '')) S.jrnDock = 'right';
   }
   return S.jrnDock;
 }
@@ -1391,7 +1391,7 @@ export function jrnDock() {
  * @business Pins the code and contract pane where it can be read without scrolling away from the journey.
  */
 export function jrnSetDock(v) {
-  S.jrnDock = /^(inline|bottom|right)$/.test(v) ? v : 'bottom';
+  S.jrnDock = /^(inline|bottom|right)$/.test(v) ? v : 'right';
   try { localStorage.setItem('fs-jrn-dock', S.jrnDock); } catch (e) { /* private mode: the pane is just not remembered */ }
   jrnApplyDock();
   if (S.JOURNEY && S.JRN_MARK && !S.JRN_DRILL) jrnSelect(S.journeyActive, true);

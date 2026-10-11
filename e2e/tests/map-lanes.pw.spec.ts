@@ -106,9 +106,17 @@ test('the layout control and w switch between the chain and the lanes; the chain
   await page.locator('.map-board').focus();
   await page.keyboard.press('w');
   await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
-  // with no storyline drawn there is no layout to pick
+  // with All journeys the lanes are still a choice (cleanup pass 2026-10-11): every storyline as its own band of lanes,
+  // stacked, each with its header
   await page.evaluate(() => { location.hash = '#/map'; });
-  await expect(page.locator('.map-layout .map-seg[data-layout="lanes"]')).toHaveCount(0);
+  await page.locator('.map-layout .map-seg[data-layout="lanes"]').click();
+  const ids = await page.evaluate(async () => (await (await fetch('/api/journeys')).json()).tree.storylines.map((x: any) => x.id));
+  expect(ids.length).toBeGreaterThan(0);
+  await expect(page.locator('.map-world')).toHaveClass(/lanes-on/);
+  await expect(page.locator('.map-lanes')).toHaveCount(ids.length);
+  expect(await page.locator('.map-lanes').evaluateAll((els) => els.map((e) => e.getAttribute('data-storyline')))).toEqual(ids);
+  await expect(page.locator('.map-lanes .ln-top .nm')).toHaveCount(ids.length);
+  expect(await page.evaluate(() => location.hash)).toContain('layout=lanes');
 });
 
 /**
