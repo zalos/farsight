@@ -127,8 +127,9 @@ export function writeSpine(db: SnapshotDb, store: GraphStore, src: CodeSourceRea
   try {
     const detect = keyDetector(keys.orgs);
     // `r` is the detection rules' revision: bumping it re-reads the window once, so keys an older rule
-    // recorded wrongly (a squash merge's PR number as an ADO item, r2) are rewritten
-    const sig = JSON.stringify({ p: keys.projects, a: keys.ado, r: 2 });
+    // recorded wrongly (a squash merge's PR number as an ADO item, r2) are rewritten, and a commit read before
+    // the spine kept its co-author assistant gains it (r3, round 2026-10-10 proposal 9)
+    const sig = JSON.stringify({ p: keys.projects, a: keys.ado, r: 3 });
     const newest = db.newestCommit(src.name);
     const incremental = newest && db.spineReadSig(src.name) === sig && gitKnows(src.dir, newest.sha);
     const wantKeys = (keys.projects?.length ?? 0) > 0 || keys.ado;

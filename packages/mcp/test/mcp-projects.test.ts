@@ -34,7 +34,7 @@ before(async () => {
   graph = join(work, 'graph.json');
   const r = spawnSync(process.execPath, [cli, 'ingest', join(repoRoot, 'examples/nx-workspace'), '--repo', 'nx-workspace', '--out', graph], { cwd: work, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
-  const { server } = createMcpServer(graph);
+  const { server } = createMcpServer(graph, { tools: 'all' });
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
   await server.connect(serverSide);
   client = new Client({ name: 'mcp-projects-test', version: '0' });

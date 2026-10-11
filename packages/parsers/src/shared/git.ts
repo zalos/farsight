@@ -26,7 +26,7 @@
  *   "no commits touched this".
  */
 import { execFileSync } from 'node:child_process';
-import { mergeSubjectBranch, commitKeysOf } from '@farsight/core';
+import { mergeSubjectBranch, commitKeysOf, agentOfMessage } from '@farsight/core';
 import type { CommitInput, FileStatus, KeyDetectOptions, KeyDetector } from '@farsight/core';
 
 /** Why no history came back. Each maps to a sentence a surface can render. */
@@ -701,7 +701,10 @@ export const GIT_STATUS_WORD: Record<GitFileStatus, FileStatus> = {
  * so a plain history read never erases what a keyed read recorded.
  */
 export function commitInputsOf(commits: readonly GitCommit[], keys?: { opts: KeyDetectOptions; detect?: KeyDetector }): CommitInput[] {
-  return commits.map((c) => ({
+  return commits.map((c) => {
+    // the assistant a co-author trailer names (round 2026-10-10, proposal 9) — never a session link
+    const agent = agentOfMessage(c.body);
+    return {
     sha: c.sha,
     at: new Date(c.at * 1000).toISOString(),
     author: c.author,
@@ -723,5 +726,7 @@ export function commitInputsOf(commits: readonly GitCommit[], keys?: { opts: Key
         branches: [...new Set((c.branches ?? []).map((b) => b.ref))],
       }
       : {}),
-  }));
+    ...(agent ? { agent } : {}),
+  };
+  });
 }

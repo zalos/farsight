@@ -21,7 +21,7 @@ import { S, esc, expose, currentLens } from '../store.js';
 import { t, plainWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { showTip, hideTip, tipAnchor, tipOpen } from './tooltip.js';
-import { doorsFor, doorsHtml, fetchSource } from './detail-doors.js';
+import { doorsFor, doorsHtml, fetchSource, copyDoorsHtml } from './detail-doors.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { mapEvidenceChip } from './map-chips.js';
 import { testChipHtml } from './test-chip.js';
@@ -178,6 +178,8 @@ export function gateCardHtml(m, opts = {}) {
   return '<div class="gc" data-gc="' + esc(m.id) + '">'
     + '<div class="gc-head">' + kind + '<b class="tip-h gc-name">' + esc(gateName(m)) + '</b>' + at + '</div>'
     + (doors ? '<div class="gc-doors">' + doors + '</div>' : '')
+    // copy as MCP call · curl · CLI with the full id (round 2026-10-10, proposal 9) — every register
+    + (n && n.id ? '<div class="gc-copy">' + copyDoorsHtml(m.gateKind === 'rule' ? 'rule' : 'gate', n) + '</div>' : '')
     + tierHtml(m)
     + '<section class="gc-sec">' + secHead('gate.sec.allows') + sentenceHtml(m) + '</section>'
     + '<section class="gc-sec" data-gc-sec="where">' + secHead('gate.sec.where') + whereHtml(m) + '</section>'

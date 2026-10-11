@@ -47,11 +47,14 @@ const base = `http://127.0.0.1:${SYNC_PORT}`;
 
 test.beforeAll(async () => {
   ws = makeWorkspace('mcp') as Ws;
+  // every tool: this spec drives refresh_graph, which is outside the core tier (round 2026-10-10, proposal 9)
+  const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string'));
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [CLI, 'mcp', '--graph', ws.graph],
     cwd: ws.dir,
     stderr: 'ignore',
+    env: { ...env, FARSIGHT_TOOLS: 'all' },
   });
   client = new Client({ name: 'farsight-e2e', version: '0.0.0' });
   await client.connect(transport);
@@ -64,6 +67,30 @@ test.afterAll(async () => {
 });
 
 test.describe('MCP data flow', () => {
+  /**
+   * The default an agent gets is the core tier (round 2026-10-10, proposal 9): the nine tools that orient, find,
+   * walk and check a change, plus the menu and expand — no code-host source here, so no affected.
+   * @covers packages/mcp/src/run.ts::createMcpServer
+   * @covers packages/mcp/src/tiers.ts::resolveTier
+   */
+  test('by default the server lists the core tier, and the session-start context is a resource', async () => {
+    const env = Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => typeof e[1] === 'string' && e[0] !== 'FARSIGHT_TOOLS'));
+    const core = new Client({ name: 'farsight-e2e-core', version: '0.0.0' });
+    await core.connect(new StdioClientTransport({ command: process.execPath, args: [CLI, 'mcp', '--graph', ws.graph], cwd: ws.dir, stderr: 'ignore', env }));
+    try {
+      const { tools } = await core.listTools();
+      expect(tools.map((t) => t.name).sort()).toEqual([
+        'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'search_graph', 'test_coverage', 'tools', 'trace_flow',
+      ]);
+      const ctx = await core.readResource({ uri: 'farsight://context' });
+      const text = (ctx.contents[0] as { text: string }).text;
+      expect(text).toMatch(/^<farsight-context sync=1 /);
+      expect(text).toContain('tools: the core tier is on (11 of ');
+    } finally {
+      await core.close();
+    }
+  });
+
   /** @covers packages/mcp/src/run.ts::runMcpServer */
   test('the server lists the tools agents depend on', async () => {
     const { tools } = await client.listTools();

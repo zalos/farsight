@@ -2,7 +2,15 @@
   "mcpServers": {
     "farsight": {
       "command": "node",
-      "args": ["packages/cli/dist/cli.js", "mcp", "--graph", "graph.json"]
+      "args": [
+        "packages/cli/dist/cli.js",
+        "mcp",
+        "--graph",
+        "graph.json"
+      ],
+      "env": {
+        "FARSIGHT_TOOLS": "core"
+      }
     },
     "figma": {
       "type": "http",

@@ -22,6 +22,7 @@ import { kindWord } from '../lib/graph-render.js';
 import { openImpact } from '../impact.js';
 import { readOnlyWhy } from '../lib/read-only.js';
 import { CAT_KEY, CATS, providerWord, sourceName, stateHtml, freshHtml, whenWords, workBiz, forgetFlowWork } from '../work-chips.js';
+import { emptyHtml } from '../lib/empty-state.js';
 
 const VIEWS = ['list', 'board', 'sources'];
 const ACTION_KEY = { comment: 'work.hud.action.comment', edit: 'work.hud.action.edit', assign: 'work.hud.action.assign', transition: 'work.hud.action.transition', link: 'work.hud.action.link', label: 'work.hud.action.label', create: 'work.hud.action.create' };
@@ -181,7 +182,7 @@ export function workSync(source) {
 /** The source cards, the filters, then the list, the board or the sources' outbox. @group Work */
 function listBodyHtml(d) {
   const sources = d.sources || [];
-  if (!sources.length) return '<div class="wk-body"><p class="wk-note"' + defAttrs('work.hud.empty') + '>' + esc(t('work.hud.empty')) + '</p></div>';
+  if (!sources.length) return '<div class="wk-body">' + emptyHtml('work') + '</div>';
   const items = d.items || [];
   let main;
   if (VIEW === 'sources') main = outboxHtml();
