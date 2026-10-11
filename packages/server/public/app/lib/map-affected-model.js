@@ -160,6 +160,20 @@ export function furthestHop(entries) {
 }
 
 /**
+ * The tests of the rows, each once across seeds and distances (its nearest distance kept), nearest first, then by
+ * spec file and line — the list a person runs.
+ */
+export function affectedTests(rows) {
+  const at = new Map();
+  for (const r of rows || []) {
+    if (r.kind !== 'test') continue;
+    const had = at.get(r.id);
+    if (!had || r.distance < had.distance) at.set(r.id, r);
+  }
+  return [...at.values()].sort((a, b) => (a.distance - b.distance) || String(a.spec).localeCompare(String(b.spec)) || (Number(a.line) || 0) - (Number(b.line) || 0) || String(a.name).localeCompare(String(b.name)));
+}
+
+/**
  * The rows the list panel shows and the CSV / JSON copy carries — the same rows in both: per seed and distance,
  * the journeys (with their owner), the screens (once, with their journeys), the owners of those journeys, and the
  * tests first met there. `owner(flowId)` and `journeyName(flowId)` are the board's.
@@ -181,13 +195,20 @@ export function affectedRows(entries, { owner = () => '', journeyName = (id) => 
         rows.push({ seed, distance: g.hop, kind: 'screen', id: s.screenId, name: s.name, journeys: s.flows.map((f) => journeyName(f)).join('; '), owner: os.join('; '), evidence: '' });
       }
       for (const o of owners) rows.push({ seed, distance: g.hop, kind: 'owner', id: o, name: o, journeys: '', owner: o, evidence: '' });
-      for (const x of g.tests) rows.push({ seed, distance: g.hop, kind: 'test', id: x.id, name: x.name, journeys: '', owner: '', evidence: evidence(x) });
+      // a test carries where it is written (spec file and line) and its own last run (status and when), so the list
+      // is the one to run — a coverage run reached as a whole has no line of its own (round-3 swarm, LIST THESE)
+      for (const x of g.tests) {
+        rows.push({ seed, distance: g.hop, kind: 'test', id: x.id, name: x.name, journeys: '', owner: '', evidence: evidence(x),
+          level: x.level || '', spec: (x.loc && x.loc.path) || '', line: x.loc && x.loc.line != null ? x.loc.line : '',
+          lastRun: x.runLevel ? '' : x.status || '', at: x.at || '' });
+      }
     }
   }
   return rows;
 }
 
-const CSV_COLS = ['seed', 'distance', 'kind', 'id', 'name', 'journeys', 'owner', 'evidence'];
+// additive (farsight-affected v0, not frozen): the test columns ride after the first eight
+const CSV_COLS = ['seed', 'distance', 'kind', 'id', 'name', 'journeys', 'owner', 'evidence', 'level', 'spec', 'line', 'lastRun', 'at'];
 /** The rows as CSV (RFC 4180 quoting), one header line. */
 export function affectedCsv(rows) {
   const q = (v) => { const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };

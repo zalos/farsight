@@ -201,3 +201,13 @@ test('the stage card\'s sub-line is the first sentence of the screen\'s words', 
   assert.equal(firstSentence('Every invoice, newest first.'), 'Every invoice, newest first');
   assert.equal(firstSentence(''), '');
 });
+
+test('one journey drawn as lanes counts over the journey, never a storyline (round-3 swarm)', () => {
+  const f = fx.invoice;
+  const one = { ...f.storyline, kind: 'journey', journeys: f.storyline.journeys.slice(0, 1), branches: [] };
+  const m = laneLayout(one, fx.designs, fx.tree, new Map(Object.entries(f.journeys)), {});
+  assert.equal(m.single, true);
+  for (const l of m.lanes) assert.notEqual(l.count.scope, 'count.scope.storyline', l.id);
+  for (const c of Object.values(m.counts) as AnyRec[]) assert.equal(c.scope, 'journey.scopeAll');
+  assert.equal(model('invoice').single, false);
+});
