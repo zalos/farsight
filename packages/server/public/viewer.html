@@ -3412,15 +3412,15 @@
   .map-jhead .jh-l1 .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:16px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
   .map-jhead .jh-l1 .for,.map-jhead .jh-l1 .story{flex:none;font-size:11.5px;color:var(--muted)}
   .map-jhead .jh-l1 .for a{color:var(--accent)}
-  .map-jhead .jh-l2{display:flex;align-items:center;min-width:0;overflow:hidden;white-space:nowrap}
-  .map-jhead .jh-l2 .agg{display:flex;flex-wrap:nowrap;gap:6px;align-items:center;min-width:0}
-  .map-jhead .jh-l2 .agg > .jrn-count{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:0;white-space:nowrap}
+  .map-jhead .jh-l2{display:flex;align-items:center;min-width:0;overflow:hidden}
+  .map-jhead .jh-l2 .agg{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;min-width:0;max-width:100%}
+  .map-jhead .jh-l2 .agg > .jrn-count{display:flex;flex:1 1 auto;flex-wrap:wrap;align-items:center;gap:4px 0;max-width:100%}
   .map-jhead .jh-l2 [hidden]{display:none !important}
   .map-jhead .jh-l2 .agg > *{flex:none}
-  .map-jhead .jh-l2 .agg *{white-space:nowrap;flex-wrap:nowrap}
+  .map-jhead .jh-l2 .agg > * > *,.map-jhead .jh-l2 .agg .map-chip{white-space:nowrap}
+  .map-jhead .jh-l2 .agg > *,.map-jhead .jh-l2 .jrn-count > *{max-width:100%;overflow:hidden;text-overflow:ellipsis}
   .map-jhead .jh-l2 .jrn-hg{display:inline-flex;align-items:center;gap:4px}
-  .map-jhead .jh-l2 .agg > .jrn-count{flex:0 1 auto;min-width:0}
-  .map-jhead .jh-l2 .jh-keep{flex:0 1 auto !important;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l2 .jrn-hg,.map-jhead .jh-l2 .jrn-hg *{flex-wrap:nowrap;white-space:nowrap}
   .map-jhead .jh-more{cursor:help;flex:none}
   .map-jhead .jh-lc{display:flex;flex-direction:column;gap:3px;min-width:0}
   .map-jhead .jh-lc .lc-strip{flex-wrap:nowrap;white-space:nowrap;overflow:hidden;min-width:0;gap:4px 8px}

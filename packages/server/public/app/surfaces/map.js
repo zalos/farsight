@@ -2082,8 +2082,9 @@ function headBarHtml(d, j, tbl) {
       + (more ? '<button type="button" class="map-more" data-act="head-more"' + tipAttrs({ key: 'map.head.more', noFocus: true }) + '>' + esc(t('map.head.more')) + '</button>' : '') + '</div>' : '');
 }
 /**
- * Line 2 on one line: past its width the last numbers fold into one `+n` whose tip lists them — the test chip (the
- * one verdict, its scope and skips) is folded last, measured, never by a breakpoint.
+ * Line 2: the numbers on at most two rows — past them the last ones fold into one `+n` whose tip lists them. The test
+ * chip (the one verdict with its scope and skips) never folds; a chip wider than the line gives way at its tail (the
+ * freshness sentence, whole in the verdict word's tip). Measured, never a breakpoint.
  */
 function foldHead(el) {
   const agg = el.querySelector('.jh-l2 .agg');
@@ -2092,14 +2093,10 @@ function foldHead(el) {
   box.querySelectorAll(':scope > .jh-more').forEach((x) => x.remove());
   const kids = [...box.children].filter((k) => !k.classList.contains('jrn-hsep'));
   kids.forEach((k) => { k.hidden = false; const p = k.previousElementSibling; if (p && p.classList.contains('jrn-hsep')) p.hidden = false; });
-  const line = el.querySelector('.jh-l2');
-  // the test chip — the one verdict with its scope and skips — never folds: it gives way by ellipsis at its tail (its
-  // word stays), down to its own first 240 px; the other numbers fold before it does
+  if (!kids.length) return;
   const keep = (k) => k.matches('.k-test,.k-ev,.jrn-htests,.jrn-e2e,.map-work') || !!k.querySelector('.jrn-htests,.jrn-e2e,.k-test,.k-ev');
-  const kept = kids.filter(keep).map((k) => { k.classList.remove('jh-keep'); k.style.minWidth = ''; const w = k.offsetWidth; k.classList.add('jh-keep'); k.style.minWidth = w + 'px'; return [k, w]; });
-  const over = () => line.scrollWidth > line.clientWidth + 1;
-  // only once everything else is folded may the test chip give way at its tail
-  const giveWay = () => { if (over()) kept.forEach(([k, w]) => { k.style.minWidth = Math.min(w, 240) + 'px'; }); };
+  const rowH = Math.max(...kids.map((k) => k.offsetHeight)) || 20;
+  const over = () => box.offsetHeight > rowH * 2 + 8;
   if (!over()) return;
   const order = kids.filter((k) => !keep(k)).reverse();
   const hidden = [];
@@ -2118,7 +2115,6 @@ function foldHead(el) {
     more = box.lastElementChild;
     if (!over()) break;
   }
-  giveWay();
 }
 /** The head's own doors: *more ›* opens the description in the dock; *what each one means* opens a lifecycle's table there. */
 function onHeadClick(e) {
