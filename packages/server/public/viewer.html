@@ -796,6 +796,9 @@
   .lc-table .lc-door.none{text-decoration:none}
   .lc-table .lc-at{color:var(--dim);font-size:11px}
   .lc-foot{font-size:10.5px;color:var(--dim);margin:4px 2px 0}
+  /* in the property's rail the strip's head wraps: its counts never run past the rail (cleanup pass 2026-10-11) */
+  .map-prop-host .lc-head{white-space:normal;flex-wrap:wrap;row-gap:2px}
+  .map-prop-host .lc-head>.lc-word,.map-prop-host .lc-head>.lc-rec{white-space:nowrap}
   .jrn-story-line{display:inline-flex;align-items:center;gap:4px}
   .jrn-story-nav{background:none;border:1px solid var(--line);border-radius:4px;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:1px 6px}
   .jrn-story-nav:hover{border-color:var(--accent)}
