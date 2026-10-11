@@ -56,11 +56,11 @@ export const AGENT_STRINGS: Record<string, StringEntry> = {
   'empty.work': two(
     'The bounty board shows the work your tracker holds and what each item changed. It is empty because no tracker is connected — ask whoever runs Farsight to add a work source.',
     'Work shows the items a tracker holds (Jira, Azure DevOps) and the code each changed. It is empty because no work source is configured: add one to .farsight/settings.json (type work), then run farsight work sync.',
-    'Why the Work page has nothing to show, and the step that fills it.'),
+    'Why the Work page has nothing to show, and what fills it.'),
   'empty.tests': two(
     'Tests shows which checks run over each journey and what their last run said. It is empty because no test was found in these sources — ask for the test folders to be read.',
     'Tests shows every test case, what it reaches and its own last run. It is empty because no test is indexed in scope: the sources have none, or their spec files are excluded. Drop the exclude, then run farsight ingest (or Sync), and attach a run with farsight tests import.',
-    'Why the Tests page has nothing to show, and the steps that fill it. It says what Farsight read, never that the application is untested.'),
+    'Why the Tests page has nothing to show, and what fills it. It says what Farsight read, never that the application is untested.'),
   'empty.changes': two(
     'Changes shows what moved between two reads of the code, and the commits behind it. It is empty because the history has not been read yet — a sync reads it.',
     'Changes shows what moved between two syncs and the commits behind it. It is empty because no sync has been recorded for this source, or its git history was never read: run farsight ingest (or Sync), then farsight history.',

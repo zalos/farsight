@@ -74,10 +74,10 @@ export function copyDoors(kind, node, ctx = {}) {
     return out(mcp('journey', { entry: id }), curl(origin, '/api/journey?entry=' + enc),
       node.kind === 'flow' || kind === 'flow' || kind === 'journey' ? 'farsight journeys' : 'farsight impact ' + shellQuote(id) + ' --flows');
   }
-  if (row === 'test') return out(mcp('test_coverage', { test: id }), curl(origin, '/api/tests?node=' + enc), 'farsight tests list');
+  if (row === 'test') return out(mcp('test_coverage', { test: id }), curl(origin, '/api/tests?node=' + enc), 'farsight tests list'); // str:ok a command line, not prose
   if (row === 'package') {
     const name = packageName(node);
-    return out(mcp('describe_node', { node_id: id }), curl(origin, '/api/deps/where?package=' + encodeURIComponent(name)), 'farsight deps where ' + shellQuote(name));
+    return out(mcp('describe_node', { node_id: id }), curl(origin, '/api/deps/where?package=' + encodeURIComponent(name)), 'farsight deps where ' + shellQuote(name)); // str:ok a command line, not prose
   }
   return out(mcp('describe_node', { node_id: id }), curl(origin, '/api/impact?node=' + enc), 'farsight impact ' + shellQuote(id) + ' --tests');
 }
