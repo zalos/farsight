@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 // Installs the repo's git hooks and the commit template into this clone. Run by
-// `pnpm install` (the root `prepare` script) and harmless anywhere else: without a
-// .git directory (a CI checkout of a tarball, a worktree whose hooks live in the
-// main clone) it says so and exits 0. It copies into .git/hooks rather than
+// `pnpm install` (the root `prepare` script) and harmless outside a Git checkout.
+// Linked worktrees share the main clone's hooks directory. It copies there rather than
 // setting core.hooksPath, so the Git LFS hooks that already live there stay.
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, chmodSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,7 +14,8 @@ let hooksDir;
 try {
   hooksDir = execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
   if (!hooksDir) throw new Error('no hooks path');
-  hooksDir = join(root, hooksDir);
+  // Linked worktrees return an absolute path into the common Git directory.
+  hooksDir = resolve(root, hooksDir);
 } catch {
   console.log('install-hooks: not a git checkout, nothing to install');
   process.exit(0);

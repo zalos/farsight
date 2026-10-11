@@ -43,16 +43,16 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Current state — 2026-10-10
 
-`main` is green. **The lanes round, its cleanup pass and swarm round 3's fixes are live** (items 15–17 below, PRs
-#74–#96: the journey overlay is retired and the Map is the one place a journey is read, with a chrome that holds
+`main` is green. **The lanes round, its cleanup pass and swarm round 3's fixes are live** (items 15–18 below, PRs
+#74–#97: the journey overlay is retired and the Map is the one place a journey is read, with a chrome that holds
 still; the storyline draws as lanes; gates carry tiers and preconditions; every test number its scope and build
 state wins the journey verdict; a tour and an ask answered from the graph; a PR gets its affected set; two syncs
 compare; agents get tiers and budgets). In flight: lane S `fix/map-space` (the head at two lines, the lanes at the
-street's density, a flat legend, whole cards at the floor) and the re-review of Echo's PR #84.
+street's density, a flat legend, whole cards at the floor). Echo (PR #84, item 17) merged on 2026-10-11 after its re-review.
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`227fb80`** after the lanes round, the cleanup pass and swarm 3's fixes (PRs #74–#96, items 15–17 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`227fb80`** after the lanes round, the cleanup pass, swarm 3's fixes and Echo (PRs #74–#97, items 15–18 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
 | tests | **1245** — core 362 · work 64 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 73 · server 370 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 316/316** (`journeys-organised`'s Map-head spec failed once under the full suite and passed alone — timing) (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
 | string/symbol lint | **2889 entries · 35 sprite symbols · 70 modules** (60 retired view words left with the overlay); the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-evidence.ts`, `strings-stops.ts`, `strings-state.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
 | servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `227fb80` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 71, 4477 sync 113, then 4477 restarted `--read-only`); both prefixes' global `farsight` print `commit 227fb80`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
@@ -602,7 +602,27 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       button in the toolbar row moved the *link is the picture* landing by 1.3 px (cause not found; the button sits on
       the crumbs row).
 
-17. **The cleanup pass and swarm round 3** (2026-10-11; from the owner's verdict after using the merged round — *"a lot
+17. **Echo optional memory foundation and review hardening** (2026-10-11; PR #84, `codex/echo-setup`,
+    based on main `227fb80`; not merged): separate package, workspace/global settings, one connected profile per
+    workspace, explicit managed saves and scoped prompt recall, standalone settings view, and Ollama verification.
+    Repository files require exact-byte approval in private user state before use; Echo-only keychain references
+    are pinned to an origin with transactional saves. The native engine is checksum-pinned in a private user cache
+    and hash-checked before execution. Generated hooks are locally ignored; `disconnect` restores unchanged files
+    byte for byte and preserves later unrelated edits. Only session-start and prompt events are registered. Memories
+    refuse credential-shaped input and report historical workspace/revision/date; truncation is visible. Shared
+    keychain transport retains separate Work/Echo policy. Source installs allow only esbuild dependency scripts;
+    network-dependent package verification is a separate optional CI job.
+    - **Verified:** full build/typecheck and package unit suites: **1,355 tests, 1,353 passed, 2 live-tracker skips**,
+      including **103 Echo tests**; script tests **14/14**, catalog lint, browser/MCP regressions **316/316**. The
+      standalone package passed clean install, synthetic save/recall, restart persistence, isolated stores, shared
+      recall through all three host runners, provenance, local switch-back, disconnect and owned-process shutdown.
+      An offline pnpm 9 fixture verified that the allowlist suppresses both direct and transitive dependency scripts.
+    - **Still open:** automatic capture, model-curated briefs, skills, team authorization, Farsight's combined brief,
+      long-term retention validation and release publication. Prompt recall does not call Ollama. Similar saves can
+      supersede earlier facts despite disabled scheduled forgetting/decay. The canonical Echo catalogs remain in
+      the shared catalog; Farsight's published runtime dependencies remain unchanged. See [ECHO.md](ECHO.md) and
+      [the package README](../packages/echo/README.md) for setup, explicit preview-upgrade trust and host trust steps.
+18. **The cleanup pass and swarm round 3** (2026-10-11; from the owner's verdict after using the merged round — *"a lot
     of overflow issues; the guided-journey buttons should be fixed at the top; I liked the older drill view and the
     lanes but can't find them"* — then the eight-persona swarm on the result and its two fixes lanes; PRs #93–#96).
     - **The Map's chrome holds still** (#93): the journey head left the zoomable world for a chrome bar under the
@@ -689,8 +709,8 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 a good use of space — the steps text is too large and the keys use vertical space; the header takes a third of the
 screen*): the head bar at two lines plus a clamped description (≤ 170 px of chrome), the lanes at the street's card
 density with the legend lying flat, the street floor keeping a whole card with the verdict chip on one line, the
-beats' screen strip as one line of names. Echo's PR #84 was re-merged with main by its author and is being
-re-reviewed against the four blocking items before it merges. Then, in order: (1) a handoff prompt to
+beats' screen strip as one line of names. Echo's PR #84 merged after a second review found its four blocking items fixed (the
+reviews stay outside the repo). Then, in order: (1) a handoff prompt to
 the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
 `farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
 and its lifecycle words are humanized constants), re-run its suites with the reporters, restart its server
