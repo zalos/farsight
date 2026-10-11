@@ -87,11 +87,26 @@ test('the list rows: journeys with owners, screens once, owners, tests — the s
   assert.equal(rows[2].journeys, 'a; b');
   assert.equal(M.furthestHop([{ report }]), 1, 'nothing further out than 1');
   const csv = M.affectedCsv(rows);
-  assert.equal(csv.split('\n')[0], 'seed,distance,kind,id,name,journeys,owner,evidence');
+  assert.equal(csv.split('\n')[0], 'seed,distance,kind,id,name,journeys,owner,evidence,level,spec,line,lastRun,at');
   assert.match(csv, /"pays, ""fast"""/);
   const json = JSON.parse(M.affectedJson(rows, { hops: 2 }));
   assert.equal(json.format, 'farsight-affected');
   assert.equal(json.version, 0);
   assert.equal(json.frozen, false);
   assert.equal(json.rows.length, rows.length);
+});
+
+test('the tests to run: each test once at its nearest distance, with its spec file, line and its own last run', () => {
+  const t1 = { id: 't1', name: 'pays', level: 'e2e', loc: { path: 'e2e/pay.spec.ts', line: 12 }, status: 'skipped', at: '2026-10-08T00:00:00Z' };
+  const run = { id: 'r1', name: 'unit run', level: 'unit', runLevel: true, status: 'unknown' };
+  const report = { hops: [{ hop: 1, nodes: [{ nodeId: 'x', tests: [run] }] }, { hop: 2, nodes: [{ nodeId: 'y', tests: [t1] }] }], reach: { journeys: [], screens: [], calls: [] } };
+  const near = { hops: [{ hop: 1, nodes: [{ nodeId: 'z', tests: [t1] }] }], reach: { journeys: [], screens: [], calls: [] } };
+  const rows = M.affectedRows([{ seed: 'a', report }, { seed: 'b', report: near }]);
+  const tests = M.affectedTests(rows);
+  assert.deepEqual(tests.map((r: any) => [r.id, r.distance]), [['r1', 1], ['t1', 1]]);
+  const t = tests.find((r: any) => r.id === 't1');
+  assert.deepEqual([t.spec, t.line, t.lastRun, t.level, t.at], ['e2e/pay.spec.ts', 12, 'skipped', 'e2e', '2026-10-08T00:00:00Z']);
+  // a run reached as a whole has no line and no case of its own to report a run for
+  const r = tests.find((x: any) => x.id === 'r1');
+  assert.deepEqual([r.spec, r.line, r.lastRun], ['', '', '']);
 });

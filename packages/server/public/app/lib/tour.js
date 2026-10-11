@@ -20,6 +20,7 @@ import { tipAttrs } from './tooltip.js';
 import { countedAttrs, defAttrs } from './counted.js';
 import { copyDoorsHtml } from './detail-doors.js';
 import { clauseHtml, citeChipHtml, askBoxHtml, redrawAsk } from './ask.js';
+import { foldRow } from './fold-row.js';
 
 const API = '/api/tour';
 const biz = () => currentLens() === 'business';
@@ -186,6 +187,18 @@ function draw() {
     + (copy ? '<div class="tw-copy">' + copy + '</div>' : '') + '</div>'
     + ask;
   redrawAsk(host);
+  foldWalkChips(host);
+}
+
+/**
+ * The walk's chips never clip at the panel's edge (round-3 swarm: *assertSameOrigin: same-origin o*): each chip is
+ * whole, wrapping at its spaces, and the *referenced* row folds its last chips into one `+n` past three lines, its tip
+ * naming them. Measured once the panel is on screen; safe to call again.
+ */
+export function foldWalkChips(host) {
+  const refs = host && host.querySelector('.tw-refs');
+  if (!refs || !refs.clientWidth) return;
+  foldRow(refs, { maxRows: 3, keep: '.hud-label', of: 'fold.chipsOf', scope: 'fold.scopeRow' });
 }
 
 /** The sentences of a text, split where a sentence ends (a full stop, ? or ! before a space and a capital or digit). */

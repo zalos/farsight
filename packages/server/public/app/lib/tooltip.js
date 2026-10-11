@@ -313,6 +313,11 @@ let layer = null;
 /** The open tip: its trigger, its kind, whether a click pinned it, how it opened. */
 const st = { el: null, rich: false, pinned: false, via: '', sig: '', describedBy: null };
 let hoverTimer = 0, leaveTimer = 0, pendingEl = null;
+/**
+ * The trigger a click just went to: its hover tip does not open again until the pointer has left it (round-3 swarm —
+ * a click on LANES, *next ›* or a layout redrew the control under a still pointer and its tip opened over the board).
+ */
+let clickedSig = '';
 const lastPt = { x: -1, y: -1 };
 /** Until this time (ms) no tip opens on hover — a surface moving under a still pointer is not the reader resting on a word. */
 let quietUntil = 0;
@@ -345,6 +350,13 @@ function ensureLayer() {
   document.body.appendChild(layer);
   return layer;
 }
+
+/**
+ * Place the open tip again — for a rich tip whose content grew after it opened (the gate card fills its code and its
+ * tests from the service), so it takes the room the page has and its body scrolls inside it rather than run off the
+ * bottom of the window (round-3 swarm: the card could not be scrolled to its tests).
+ */
+export function repositionTip() { if (st.el && layer && !layer.hidden) position(); }
 
 /** True while a tip is open (the Escape ladder asks). */
 export function tipOpen() { return !!st.el && !!layer && !layer.hidden; }
@@ -477,8 +489,9 @@ function onPointerOver(e) {
   lastPt.x = e.clientX; lastPt.y = e.clientY;
   if (layer && layer.contains(e.target)) { clearTimeout(leaveTimer); return; }
   const trg = e.target.closest && e.target.closest(TIP_SELECTOR);
-  if (!trg) return;
+  if (!trg) { clickedSig = ''; return; }
   if (trg === st.el) { clearTimeout(leaveTimer); return; }
+  if (clickedSig) { if (sigOf(trg) === clickedSig) return; clickedSig = ''; }
   if (trg === pendingEl) return;
   if (e.pointerType === 'touch') return;
   if (Date.now() < quietUntil) return;
@@ -532,8 +545,11 @@ function onClick(e) {
     return;
   }
   const trg = tgt.closest && tgt.closest(TIP_SELECTOR);
+  // a click closes whatever tip is open and drops one about to open; the trigger clicked stays quiet until left
+  cancelPending();
+  clickedSig = trg ? sigOf(trg) : '';
   // in a hover-mode container a click is for what the trigger sits on; the tip already showed on hover
-  if (trg && hoverMode(trg)) { cancelPending(); if (st.el) hideTip(); return; }
+  if (trg && hoverMode(trg)) { if (st.el) hideTip(); return; }
   if (trg && !isInteractive(trg)) {
     cancelPending();
     if (st.el === trg && st.pinned) hideTip();

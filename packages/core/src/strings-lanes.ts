@@ -45,6 +45,9 @@ export const LANES_STRINGS: Record<string, StringEntry> = {
   'lanes.hint': same('click a screen, or zoom into it, to walk its journey from there', 'A screen on the lanes is a screen of a journey: opening it lands on that journey’s street at that screen, the same zoom that goes on to the screen itself.'),
   'lanes.persona.none': same('nobody named', 'Journeys whose design names no persona: their screens share one lane.'),
   'lanes.store.sub': same('{kind} · written by this storyline', 'A store this storyline’s code writes to; its lane holds the records it writes, the moves first.'),
+  'lanes.store.subJourney': same('{kind} · written by this journey', 'A store this one journey’s code writes to; its lane holds the records it writes, the moves first.'),
+  'lanes.empty.elsewhere': same('none of their screens falls in these columns — they act in row {rows} of the lanes', 'The lanes wrap into rows of columns, and this kind of person has no screen in this row’s columns: their screens come in another row, which this names. The lane is not empty.'),
+  'lanes.empty.none': same('no screen of theirs is drawn', 'This kind of person owns a journey here, but none of its screens could be placed in the lanes yet — its walk may still be reading.'),
 
   // the stages and their decisions
   'lanes.stage.open': same('walk this journey from this screen', 'Opens the journey this screen belongs to on its street, at this screen.'),

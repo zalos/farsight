@@ -16,4 +16,7 @@ export const FOLD_STRINGS: Record<string, StringEntry> = {
   'fold.scopeRow': same('this row', 'One row of items on the Map: a legend, a list of names, the chips under a heading.'),
   'fold.path': same('the whole path', 'The full path of the file, of which the line shows the start and the end.'),
   'fold.tabs': same('more', 'The tabs that do not fit on the rail beside the others. Pick one to open it.'),
+  'fold.statusesOf': same('statuses folded here', 'The statuses this lifecycle line would print if it had room, in the order the code declares them. The table behind what each one means lists them all.'),
+  'fold.scopeLifecycle': same('this record’s lifecycle', 'Every status the code declares for this one record, in its declared order.'),
+  'fold.chipsOf': same('parts folded here', 'The parts this line cites that do not fit beside the others, in the order it cites them. Each is a door to the part.'),
 };

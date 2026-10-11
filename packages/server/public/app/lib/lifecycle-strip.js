@@ -14,7 +14,7 @@ import { S, esc, expose, currentLens, bizLabel, humanize } from '../store.js';
 import { t } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs } from './tooltip.js';
-import { countedHtml, defAttrs } from './counted.js';
+import { countedHtml, defAttrs, plainTip } from './counted.js';
 import { lifecycleStripModel, pickView, stripItems, stripCounts, tableRows, placedView } from './lifecycle-model.js';
 import { mapStopHash } from './route-url.js';
 
@@ -152,4 +152,45 @@ export function lifecycleStripHtml(lc, api, opts = {}) {
       + defAttrs('lifecycle.toggle') + '>' + esc(t('lifecycle.toggle')) + ' <span class="lc-chev" aria-hidden="true">▾</span></button>' : '')
     + (view ? '<div class="lc-tblbox" id="' + id + '-tbl" hidden></div>' : '')
     + '</div>';
+}
+
+/**
+ * A strip drawn on one line (the journey head) folds its last statuses into one `+n` whose tip lists them, by
+ * measurement — never cut off at the edge with nothing to say so (round-3 swarm: at 1280 the invoice's strip stopped at
+ * *Compiled →*, and *Scheduled*, *Paid*, *Denied* and *Cancelled* were gone with no mark). Safe to call again: it
+ * unfolds first. The first status never folds.
+ * @param {Element} root  the element holding one or more strips
+ */
+export function foldLifecycleStrips(root) {
+  if (!root) return;
+  for (const box of root.querySelectorAll('.lc-statuses')) {
+    const strip = box.closest('.lc-strip');
+    if (strip) strip.classList.remove('lc-tight');
+    foldOne(box);
+    // a line with no room even for its first status gives up its counts (they are in the table and its tip) first
+    if (strip && box.scrollWidth > box.clientWidth + 1) { strip.classList.add('lc-tight'); foldOne(box); }
+  }
+}
+/** Fold one line's statuses, the last first, until it fits (the first never folds). */
+function foldOne(box) {
+  box.querySelectorAll(':scope > [data-fold-more]').forEach((x) => x.remove());
+  const kids = [...box.children];
+  kids.forEach((k) => { if (k.dataset.folded) { k.hidden = false; delete k.dataset.folded; } });
+  const over = () => box.scrollWidth > box.clientWidth + 1;
+  if (!box.clientWidth || !over()) return;
+  const statuses = kids.filter((k) => k.classList.contains('lc-status'));
+  const hidden = [];
+  for (let i = statuses.length - 1; i > 0; i--) {
+    const st = statuses[i];
+    st.hidden = true; st.dataset.folded = '1';
+    const sep = st.previousElementSibling;
+    if (sep && sep.classList.contains('lc-sep')) { sep.hidden = true; sep.dataset.folded = '1'; }
+    hidden.unshift(st);
+    box.querySelectorAll(':scope > [data-fold-more]').forEach((x) => x.remove());
+    const rows = hidden.map((h) => [h.querySelector('.lc-w') ? h.querySelector('.lc-w').textContent.trim() : h.textContent.trim(), 1]);
+    box.insertAdjacentHTML('beforeend', '<span class="lc-sep" aria-hidden="true" data-fold-more="1">·</span><span class="lc-foldmore fold-more" data-fold-more="1"'
+      + plainTip(hidden.length, 'fold.statusesOf', 'fold.scopeLifecycle', '/api/journey', rows).replace(' tabindex="0"', '') + '>'
+      + esc(t('fold.more').replace('{n}', String(hidden.length))) + '</span>');
+    if (!over()) break;
+  }
 }
