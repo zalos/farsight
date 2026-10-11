@@ -457,20 +457,20 @@ document's `counted` block carries them and `docs/contracts/farsight-affected-v1
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
 | `6 journeys` (business and hybrid; the rows) | C:`counted.steps` (unit `count.unit.journeys`; breakdown `count.part.storylineSteps` · `storylineBranches`) | the storyline's steps and branches, one row each | storyline | the summary strip |
-| `2 ship` · `4 hold` | C:`counted.ship` / `counted.hold` (hold's breakdown by first reason: `count.part.holdNotBuilt` · `holdFailed` · `holdSkipped`) | rows with no hold reason / with one; they sum to the rows | storyline | the summary strip |
-| `1 skipped case` | C:`counted.skipped` | distinct cases over the storyline whose own last run skipped them | storyline | the summary strip |
-| `1 gate no test is known to reach` | C:`counted.unreached` | distinct gates on the storyline's screens whose gate card lists no case | storyline | the summary strip |
+| `2 ship` · `4 hold` | C:`counted.ship` / `counted.hold` (hold's breakdown by first reason: `count.part.holdNotBuilt` · `holdFailed` · `holdSkipped`) | rows with no hold reason / with one; they sum to the rows. **A row holds only on a screen not built or on one of its own declared cases** (an end-to-end case whose `@covers` names the journey) failed or skipped, and names that case (`rows[].holdCases`); any other skipped or failed case in scope is a note on the row (`rows[].notes`, `readiness.note.*`), never a hold (swarm round 3) | storyline | the summary strip |
+| `12 distinct skipped cases` · *distinct* | C:`counted.skipped` | distinct cases over the storyline whose own last run skipped them — the rows count a shared case on each journey, so they add up to more (the reference app: 12 here, 46 on the rows); the *distinct* word's tip lists each row's own count, the rows added up and the distinct total (`distinct.skipped`) | storyline | the summary strip |
+| `5 distinct gates no test is known to reach` · *distinct* | C:`counted.unreached` | distinct gates on the storyline's screens whose gate card lists no case; the rows add up to more (8 on the reference app); tip as above (`distinct.unreached`) | storyline | the summary strip |
 | `5 gates and rules` | C:`counted.rules` | distinct gates and rules the storyline's screens meet | storyline | the rules register heading |
 | per row: `n / m` skipped / never run · `k / g` gates · commits since green | `rows[].skipped` · `.unrun` (the journey's `testVerdict().runs` parts) · `.gates.unreached` of `.gates.n` · `.commitsSince` (`SnapshotDb.commitsTouching` after `lastGreen`) | the journey's own scope (`journey.scopeAll`) | journey | the table |
-| per rule: `n screens` · `n cases` | `rules[].screens` · `.tests` (the gate card's cases, run-level reports apart) | the storyline's screens that meet it · cases reaching it or a call it guards | gate | the register |
+| per rule: `n screens` · `n cases` | `rules[].screens` · `.tests` (the gate card's cases, run-level reports apart) | the storyline's screens that meet it · cases reaching it or a call it guards; the register reads business tier first, then policy, then technical, and within a tier the fewest cases first (swarm round 3) | gate | the register |
 
 #### Risk headline and scope words (round 2, `surfaces/map.js` `riskCounteds()`)
 
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
-| `2 journeys stale` | viewer Counted `count.unit.riskStale` ← each journey's `summary.coverage.journey.evidenceWord.cls === 'stale'` | journeys whose evidence word is *stale* (the card's at-risk mark); each once | `count.scope.workspace` | the risk line over the board, once every walk has landed; not drawn at 0 |
-| `1 not fully built` | viewer Counted `count.unit.riskNotBuilt` ← `summary.counted.built` with `n < of` | journeys with at least one screen designed and not built | `count.scope.workspace` | the same line |
-| `1 reaches the ERP` | viewer Counted `count.unit.riskErp` ← `erpReached(summary)` (the head's ERP chip) | journeys whose calls reach the ERP | `count.scope.workspace` | the same line |
+| `2 journeys stale` | viewer Counted `count.unit.riskStale` ← each journey's `summary.coverage.journey.evidenceWord.cls === 'stale'` | journeys whose evidence word is *stale* (the card's at-risk mark); each once | the board the address names: `count.scope.storyline` with `?storyline=`, else `count.scope.workspace` — printed beside the title (`.map-risk-scope`) and redrawn when the storyline moves (swarm round 3: the bar read the whole app or one storyline by how you arrived, and said neither) | the risk line over the board, once every walk has landed; not drawn at 0 |
+| `1 not fully built` | viewer Counted `count.unit.riskNotBuilt` ← `summary.counted.built` with `n < of` | journeys with at least one screen designed and not built | as above | the same line |
+| `1 reaches the ERP` | viewer Counted `count.unit.riskErp` ← `erpReached(summary)` (the head's ERP chip) | journeys whose calls reach the ERP | as above | the same line |
 | *on this journey* | `map.screen.onJourney` (words + tip, no number) | names the scope of the screen card's and the property's numbers: this screen's part of this journey's walk — the same screen on another journey prints its own | — | the screen card's chips, the property's head |
 
 #### Swimlanes (round 2026-10-10 §2; `surfaces/map-lanes.js` over `lib/map-lanes-model.js` `laneLayout()`)
@@ -652,9 +652,9 @@ The statuses one field of a record (a table node) may hold, read from the code b
 
 | number | unit / bizUnit | scope | source | counts |
 |---|---|---|---|---|
-| statuses | `lifecycle.count.statuses` *n statuses* (both) | `count.scope.node` | `lifecycleCounts().statuses` over `lifecycle.statuses` | the declared statuses of the record's status field, each once, in declared order; breakdown `lifecycle.part.written` *some code moves to* · `lifecycle.part.unwritten` *no code moves to* — a partition |
+| statuses | `lifecycle.count.statuses` *n statuses* (both) | `count.scope.node` | `lifecycleCounts().statuses` over `lifecycle.statuses` | the declared statuses of the record's status field, each once, in declared order; breakdown `lifecycle.part.written` *some code moves a record into* · `lifecycle.part.unwritten` *no code moves a record into* — a partition |
 | moves with a writer | `lifecycle.count.transitions` *n moves with a writer* (both) | `count.scope.node` | `lifecycleCounts().transitions` over `lifecycle.transitions` | one per (from, to, writer): the same move by two functions is two, the same move written twice in one function is one; breakdown `lifecycle.part.withFrom` *check the status first* · `lifecycle.part.noFrom` — a partition |
-| statuses no code moves to | `lifecycle.count.unwritten` *n statuses no code moves to* (both) | `count.scope.node` | `lifecycleCounts().unwritten` = statuses − `transitions[].to` | the declared statuses no function writes (an initial status set by a column default or an INSERT parameter is one of them — the literal is not in the code) |
+| statuses no code moves a record into | `lifecycle.count.unwritten` *n statuses no code moves a record into* (both) | `count.scope.node` | `lifecycleCounts().unwritten` = statuses − `transitions[].to` | the declared statuses no function writes (an initial status set by a column default or an INSERT parameter is one of them — the literal is not in the code). Said *into* since swarm round 3: *Draft* read *no code moves to* beside a drawn *Draft → Submitted*; a move may leave a status nothing moves into. The strip draws an arrow from every status a move leaves — the one its writer checks (`from`) or any its table of moves lets it leave (`fromAny`, on the mover since round 3) — and the table prints *from …* under each mover |
 
 **One record read by a persona** (round 2026-10-10 §3; core `lifecycleViews()` → `/api/journey` `lifecycles[].views[]`, `GET /api/lifecycle`, the strip and its *what each one means* table). The same record and scope; the words for each status come from `farsight.config.json → lifecycle.<record>.views.<persona>` (else the constant through `humanizeName`), the statuses and the moves from the code. The strip prints *statuses · moved · unmoved* in business and *statuses · moves with a writer · statuses no code moves to* in code and hybrid.
 
@@ -715,7 +715,8 @@ none of the re-check commands.
 | `built.screens` | `state.unit.screensBuilt` (`of`) | screens built, of the screens the designs declare (code-only pages left out) | `designSurface().counts.built / .designed` | `farsight design list` · `design_surface` |
 | `built.operations` | `state.unit.operations` (`of`; no business unit) | operations with code, of every operation on the API surfaces | `apiSurface().counts.implemented / .operations` | `farsight api list` · `api_surface` |
 | `built.storylines` · `built.branches` | `count.unit.storylines` · `count.part.storylineBranches` | storylines, and the branches they declare | `journeyTree().storylines[].branches` | `farsight journeys` · `journeys` |
-| `validated.byVerdict[].journeys` | `count.unit.journeys` + the word (`verdict.word.key`, lane V's words) | journeys by their one test verdict, strongest class first | `testsSurface().journeys[].coverage.verdict.word` | `farsight tests matrix` · `test_coverage` |
+| `validated.byVerdict[].journeys` | `count.unit.journeys` + the word (`verdict.word.key`, lane V's words) | the **fully built** journeys by their one test verdict, strongest class first — build state wins (swarm round 3: *10 of 18 journeys built* beside *17 journeys passed*) | `testsSurface().journeys[].coverage.verdict.word` | `farsight tests matrix` · `test_coverage` |
+| `validated.notFullyBuilt` | `state.unit.journeysBuiltOnly` *n journeys not fully built, so no journey verdict* | journeys with a screen designed and not built, whatever their word: counted apart, never under one | breakdown `count.part.partlyBuilt` (`verdict.word.builtOnly`) · `count.part.noScreenBuilt` (`coverage.sharedEvidence`) | `farsight tests matrix` · `test_coverage` |
 | `validated.lastE2e` | not a count: the newest end-to-end run and its one freshness fact | `freshnessFact()` over every active end-to-end case's run | `testNodes()` → `freshness.ts` | — |
 | `validated.cases` | `count.unit.cases` (business `journey.biz.countTests`) | every case by its own last run: passed · failed · skipped · flaky · no run recorded (sums to the cases) | `testsSurface().sources[].runs` | `farsight tests list` · `test_coverage` |
 | `open.screensNotBuilt` | `state.unit.screensNotBuilt` | screens a design declares that no code builds (first five named in `notBuiltNames`) | `designSurface().counts.designOnly` | `farsight design list` · `design_surface` |
@@ -770,8 +771,28 @@ tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cit
 | `…and 2 technical checks` (a screen stop) | clause `counted` (`count.unit.gatesTechnical`) | distinct preconditions of tier technical on the screen's actions | `journey.scopeHere` | the business and policy ones are listed by their words beside it, never counted twice |
 | `…and 4 technical checks` (a hand-off, an answer's *must be true first*) | clause `counted` (`count.unit.gatesTechnical`) | the same, on the one action that makes the move | `count.scope.action` | the action's `preconditions.counted` technical part |
 | `in 5 hops` / `in 5 links` (business) | `PathResult.counted` (`ask.unit.pathLinks`, biz `ask.biz.pathLinks`) | the links of the shortest chain from one part to another: calls, requests, renders, reads, writes, sends, receives | `count.scope.path` | breadth first over the edge index; `more` (`count.unit.paths`) = other chains of the same length, capped at 9 |
+| `2 others` (*read as X in Y — the words also match …*) | lead `counted` (`ask.unit.alsoMatch`) | the parts the question's words match as well as the one Ask answered for: the same kind, as good a match, another node (swarm round 3: *which tests reach loadDraft* answered one of two unnamed) | `count.scope.question` (new) | listed by name and place, the first five cited |
 | `12 checks` (*what guards …*) | lead `counted` (`count.unit.checks`) | the distinct gates and rules on an action, a call or a screen | `count.scope.action` · `journey.scopeHere` · `count.scope.node` | breakdown `count.part.tierBusiness` · `tierPolicy` · `tierTechnical`, summing to `n` |
 | `2 more places` (*where is … set to …*) | lead `counted` (`count.unit.places`) | other actions on journeys whose walk makes the same move, after the first one named | `count.scope.node` | each action once |
+
+### Swarm round 3 (2026-10-11): build state, the runs sentence, scope words on positions and not-in-words counts
+
+- **A partly built journey's word** carries `EvidenceWord.builtOnly = { built, of }` (core `coverageFor` over a flow:
+  `0 < built < screens`, the matrix row's `loc` rule). Not a count of its own: every printer of a journey's word —
+  the head's test chip, the storyline and board cards, the Portfolio row, the Tests matrix cell, the readiness
+  verdict — prints *partly built · n of m* before it and *over the n built screens* after it, without the pass colour.
+- **The runs line is one sentence** — `testChipHtml` prints *by their own last runs: 389 passed · 9 skipped · 3 with no
+  run recorded* (the parts of `verdict.runs`, which sum to the chip's number) whenever a part is not *passed*, and the
+  word's basis *29 end-to-end cases that declare it, each passed* (`observation.cases`, `journey.obs.passed`) beside
+  the word — never a bare *29 of them passed* that read as 29 of the 401. (The synthesis proposed *29 passed · 362 no
+  run recorded*: on the reference app 389 of the 401 cases passed on their own runs; the 29 are the declaring cases.)
+- **Positions say what they are a position in**: the crumb's and the screen strip's *action k of m* (the screen's
+  actions); the caption under the strip `map.act.onScreen` *action k of m on this screen*; the drill's rail
+  `journey.drill.actionOf` *stop n of t on this journey*; the walk `tour.stopOf` *stop n of m on this walk*. Pinned in
+  core `position-words.test.ts`.
+- **Conditions not in plain language** print their scope words beside the number on every panel (`lib/scope-words.js`,
+  the viewer's copy of `SCOPE_WORDS`, pinned equal by `server/test/scope-words.test.ts`): *over this journey* · *over
+  this screen* · *over this action*.
 
 ## 4. Open — found, not changed here
 
