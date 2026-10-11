@@ -22,7 +22,7 @@
 import { S, esc, currentLens, expose } from '../store.js';
 import { t } from '../strings.js';
 import { sym } from '../sym.js';
-import { tipAttrs } from '../lib/tooltip.js';
+import { tipAttrs, registerTip } from '../lib/tooltip.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { storylineOf, placesOf } from '../lib/journeys-model.js';
 import { jrnPersonaName, jrnGroupName } from '../lib/journeys-tree.js';
@@ -460,7 +460,10 @@ function dockSwitchHtml() {
     + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
   return '<span class="map-segs" role="group" aria-label="' + esc(t('map.dock')) + '">' + b('inline', 'journey.dock.inline') + b('bottom', 'journey.dock.bottom') + b('right', 'journey.dock.right') + '</span>';
 }
-/** The journey's screens as a slim strip, the one the action is on lit with *action n of m*. */
+/**
+ * The journey's screens as one line of numbered names (cleanup pass 2026-10-11, lane S: three 48-px pictures took 60 px
+ * of the beats' height), the one the action is on lit with *action n of m*; each screen's picture is in its tip.
+ */
 function stripHtml() {
   const a = ST.act, model = a.model, cols = S.JRN_DRILL ? S.JRN_DRILL.cols : [];
   const acts = screenActions(cols, model.screens, a.si);
@@ -469,14 +472,21 @@ function stripHtml() {
     + '<span class="hud-label"' + tipAttrs({ key: 'map.act.strip', noFocus: true }) + '>' + esc(t('map.act.strip')) + '</span>'
     + model.screens.map((s, i) => {
       const on = i === a.si;
-      const thumb = s.node && s.node.design && currentLens() !== 'code' ? designThumbHtml(s.node, 'sheet') : '<span class="ph">' + sym('screen') + '</span>';
       const sub = on && k >= 0 ? t('map.crumb.action').replace('{n}', k + 1).replace('{m}', acts.length)
         : s.state === 'planned' ? t('map.screen.planned') : '';
       return '<button type="button" class="map-act-scr' + (on ? ' on' : '') + (s.state === 'planned' ? ' planned' : '') + '" data-si="' + i + '"'
-        + ' aria-current="' + (on ? 'step' : 'false') + '">' + thumb
-        + '<span class="t"><span class="o">' + s.ordinal + '</span>' + esc(s.name) + (sub ? '<span class="s">' + esc(sub) + '</span>' : '') + '</span></button>';
+        + ' aria-current="' + (on ? 'step' : 'false') + '"' + tipAttrs({ id: 'mapActScreen', args: { si: i }, noFocus: true }) + '>'
+        + '<span class="t"><span class="o">' + s.ordinal + '</span><span class="n">' + esc(s.name) + '</span>' + (sub ? '<span class="s">' + esc(sub) + '</span>' : '') + '</span></button>';
     }).join('') + '</div>';
 }
+// a strip screen's tip: its picture (the design's, or the placeholder) over its name and where it stands
+registerTip('mapActScreen', (el, args) => {
+  const s = ST.act && ST.act.model && ST.act.model.screens[args && args.si];
+  if (!s) return '';
+  const thumb = s.node && s.node.design && currentLens() !== 'code' ? designThumbHtml(s.node, 'sheet') : '<span class="ph">' + sym('screen') + '</span>';
+  return '<div class="map-act-tip">' + thumb + '<div class="nm">' + esc(s.ordinal + ' · ' + s.name) + '</div>'
+    + (s.state === 'planned' ? '<div class="st">' + esc(t('map.screen.planned')) + '</div>' : '') + '</div>';
+});
 /** Draw the action stop: the strip, the drill (or its ladder), the dock and the hint. */
 function drawAct() {
   const a = ST.act;

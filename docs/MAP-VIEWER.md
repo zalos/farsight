@@ -37,15 +37,41 @@ row's right end**, the same pixel column at every stop. `fitChrome` folds by mea
 `f-band` · `f-asof`); row 1 wraps (`f-wrap`) only on a window narrower than the product is read on.
 
 **The journey head** (`drawHead` / `headBarHtml` in `map.js`) is a bar of the chrome under the toolbar at the JOURNEY ·
-SCREEN · ACTION · CODE stops, never in the zoomable world (it rode over the first screen card at every zoom): line 1
-the name (one line, whole in its tip), *For <persona> · <group>* (`forLineHtml`), the storyline position with ‹ ›
-(`storyNavLineHtml`); line 2 the numbers — the street's chips (`aggHtml`), or at the table layout the table's own count
-line (`tableCountHtml` ← `jrnHeaderHtml`) — on one line, folded to `+n` by measurement (`foldHead`: the test chip, the
-one verdict with its scope and skips, never folds — it gives way at its tail); then each record's lifecycle strip as
-one line (its *what each one means* opens the table in the dock, `lifecycleTableInto`); then the description's first
-sentence with *more ›* (the rest in the dock). Every host of the stage starts under the chrome and the head
-(`--map-top` = `--map-chrome-h` + `--map-head-h`, both measured); a move to a journey draws the head first
-(`drawHead(id)`, `MAP.headHold`), so the frame is measured under it. In the world a street keeps one line: its name.
+SCREEN · ACTION · CODE stops, never in the zoomable world (it rode over the first screen card at every zoom). It takes
+**two lines and the description** (cleanup pass 2026-10-11, lane S — the owner's *"the header is now taking up 1/3 of the
+screen height"*; with the chrome it stays within 170 px at 1920, 1440 and 1280 in every register, ~153 px on the
+reference app, was ~188): **line 1** the name (one line, whole in its tip), *For <persona> · <group>* (`forLineHtml`), the
+storyline position with ‹ › (`storyNavLineHtml`), then the numbers on what the line has left — the street's chips
+(`aggHtml`), or at the table layout the table's own count line (`tableCountHtml` ← `jrnHeaderHtml`) — folded to one `+n`
+by measurement (`foldHead`): the status (`.k-built`, *n of m screens built*) and the test chip (the one verdict with its
+scope and skips) never fold; the rest fold from the end, the `+n`'s tip lists them and its click opens the whole row in
+the dock's *about* tab (`openAbout`, `.md-about-chips`). With no room even for the kept chips the storyline's words and
+*For …* give way first (`.tight`), then the test chip at its tail (`.tight2`); the head never scrolls sideways. **Line 2**
+the main record's lifecycle on one line (`headLifecycleHtml`: the record the journey's screens move most; its *what each
+one means* is a glyph, `lifecycleStripHtml(…, { compact: true })`, opening the table in the dock; a second record is one
+`+n record ▸` that opens the others' strips and tables in the dock). Then the description's first sentence, one clamped
+line, with *more ›* (the rest in the dock). Every host of the stage starts under the chrome and the head (`--map-top` =
+`--map-chrome-h` + `--map-head-h`, both measured); a move to a journey draws the head first (`drawHead(id)`,
+`MAP.headHold`), so the frame is measured under it. In the world a street keeps one line: its name.
+
+**The lanes at the street's density** (lane S — the owner's *"the steps text is too large and the keys are using
+vertical space"*). `LANE_K` is 1 (a board px is a world unit, so ×1.0 reads at the stylesheet's sizes) and one journey's
+lanes (`drawJourneyLanes`) are never drawn past ×1.0. `LANE_GEOM`: a stage card is 236 × 96 in a 248 column (four to six
+across a 1440 window): its step badge (one journey's lanes print the screen's place, not *step 1 of 1*), its name on one
+line at the street card's size with the status chip beside it, its sub-line, the test chip's count and scope on one row
+and the verdict (with what did not pass) on the next — the verdict never folds and gives way at its tail. A lane's head
+is the persona's name at the HUD label size with its count beside it and its description on one line. A pill is the
+record · its move on one line, the code that moves it small beneath with *needs n* as a chip. Under the lanes: the
+record's lifecycle as the same one-line strip (only at ALL — one journey's lanes sit under its head, which prints it),
+then the footer's counts and **the legend lying flat on one row** (`.ln-footrow`; on a narrow board the legend wraps
+under the counts), never a stacked box. The invoice storyline fits 1440×900 at ×1.0; one four-screen journey's lanes take
+~370 px under the head at 1440, room beneath.
+
+**The street under its reading floor** (×0.6, `.st-floor`): a card keeps its picture (the room the name and the verdict
+leave, ~95 px on the screen at ×0.5), its name on one line and the verdict as one chip at the chip size that ends in an
+ellipsis (its tip whole) — never three lines of a word broken in the middle. The pathway cards are unchanged. At the
+action stop the journey's screens are one line of numbered names (`stripHtml` in `map-stops.js`), the current one lit
+with *action n of m*, each picture in its tip (`mapActScreen`).
 
 **One dock** (`lib/map-dock.js`): the walk, the code at an action (`#jrn-insp`), a table part's pane (`#jrn-dock`), the
 lifecycle table, the comparison of two syncs and a journey's description are its panels — one tab each in a pinned

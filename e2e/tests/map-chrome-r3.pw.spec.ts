@@ -146,7 +146,8 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
         .filter((s) => s.scrollWidth > s.clientWidth + 1).length);
       expect(await clipped()).toBe(0);
       // squeezed: the line folds, says how many, and its tip lists them
-      await page.setViewportSize({ width: 900, height: H });
+      // (the head's strip is one compact line since lane S: 620 still holds it whole, so squeeze further)
+      await page.setViewportSize({ width: 440, height: H });
       await expect.poll(clipped).toBe(0);
       await expect(page.locator('.map-jhead .jh-lc .lc-foldmore')).toBeVisible();
       await expect(page.locator('.map-jhead .jh-lc .lc-foldmore')).toHaveText(/^\+\d+$/);

@@ -145,7 +145,7 @@ test.describe('map — neighbourhood and street', () => {
     await expect(screens.locator('.nm')).toHaveText(['New invoice', 'Invoice list', 'Discard draft']);
     await expect(screens.nth(2)).toHaveClass(/planned/);
     await expect(page.locator('.map-crumb')).toContainText('Billing cycle');
-    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .agg .map-chip`).first()).toBeVisible();
+    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .agg .map-chip.k-built`)).toBeVisible();
   });
 
   /**

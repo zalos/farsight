@@ -121,7 +121,8 @@ export function lifecycleTableInto(id, box) {
  * table (closed).
  * @param {object} lc   one entry of `/api/journey`'s `lifecycles`
  * @param {string} api  where the counts came from, for their tips
- * @param {{flow?: string}} [opts]  the journey the strip sits in, so its screens are placed first
+ * @param {{flow?: string, compact?: boolean}} [opts]  the journey the strip sits in, so its screens are placed first;
+ *   `compact` draws *what each one means* as a glyph (one line, the Map's journey head)
  */
 export function lifecycleStripHtml(lc, api, opts = {}) {
   const m = lifecycleStripModel(lc);
@@ -155,8 +156,10 @@ export function lifecycleStripHtml(lc, api, opts = {}) {
     + '<div class="lc-head"><span class="lc-word"' + defAttrs('lifecycle.word') + '>' + esc(t('lifecycle.word')) + '</span> '
     + rec + ' <span class="lc-counts">' + counts + '</span></div>'
     + '<div class="lc-statuses" role="list" aria-label="' + esc(t('lifecycle.word')) + '">' + statuses + '</div>'
-    + (view ? '<button type="button" class="lc-toggle" data-lc="' + id + '" aria-expanded="false" aria-controls="' + id + '-tbl" onclick="event.stopPropagation();lcToggle(this)"'
-      + defAttrs('lifecycle.toggle') + '>' + esc(t('lifecycle.toggle')) + ' <span class="lc-chev" aria-hidden="true">▾</span></button>' : '')
+    + (view ? '<button type="button" class="lc-toggle' + (opts.compact ? ' lc-glyph' : '') + '" data-lc="' + id + '" aria-expanded="false" aria-controls="' + id + '-tbl" onclick="event.stopPropagation();lcToggle(this)"'
+      // one line (the Map's journey head): the toggle is a small glyph, its words its name and its tip
+      + (opts.compact ? ' aria-label="' + esc(t('lifecycle.toggle')) + '"' : '')
+      + defAttrs('lifecycle.toggle') + '>' + (opts.compact ? sym('legend') : esc(t('lifecycle.toggle')) + ' <span class="lc-chev" aria-hidden="true">▾</span>') + '</button>' : '')
     + (view ? '<div class="lc-tblbox" id="' + id + '-tbl" hidden></div>' : '')
     + '</div>';
 }

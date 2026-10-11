@@ -89,6 +89,11 @@ test.describe('two syncs of the invoice storyline', () => {
   test('the lanes carry the chips on their stage cards', async ({ page }) => {
     await go(page, '#/map?storyline=invoice&layout=lanes&compare=1..2');
     await expect(page.locator('.map-lanes .ln-stage')).toHaveCount(5);
+    // the lanes laid out (names fitted, chips folded) and the comparison painted on them, then refolded — the
+    // comparison's chips are kept like the verdict, never folded into +n (a Linux font's width once folded them)
+    await expect(page.locator('.map-lanes[data-laid][data-cmp="1"]')).toHaveCount(1);
+    await expect.poll(() => page.locator('.map-lanes .ln-stage .map-cmp-chip:visible').count()).toBeGreaterThan(0);
+    await expect(page.locator('.map-lanes .ln-stage .map-cmp-chip[data-folded]')).toHaveCount(0);
     await expect(page.locator('.map-lanes .ln-stage .map-cmp-chip').first()).toBeVisible();
     await expect(page.locator('.map-lanes .ln-stage .map-cmp-chip', { hasText: 'now built' })).toHaveCount(2);
   });

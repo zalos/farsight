@@ -427,15 +427,18 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
 }
 
 /**
- * The lanes board's geometry in *board px*: the surface draws the board at LANE_K world units a board px (the way the
- * chain board draws its cards at BOARD_K), so the stylesheet's ordinary type sizes read at the fit.
+ * The lanes board's geometry in *board px*: the surface draws the board at LANE_K world units a board px. One since the
+ * cleanup pass (lane S): at ×1.0 the lanes read at the stylesheet's own sizes, the street's density — at two, a small
+ * storyline fitted at ×1.0 drew every word twice its size.
  */
-export const LANE_K = 2;
+export const LANE_K = 1;
 export const LANE_GEOM = Object.freeze({
-  // a card is wide enough for a screen name's longest word at the stylesheet's size (round-3 swarm: CONTRACTO R SIGN-IN);
-  // a pill holds the record and its status on two lines of their own, whole, then the code that moves it and what it needs
-  head: 124, col: 176, cardW: 162, cardH: 148, rowGap: 10, pad: 8, pillH: 70, pillRow: 76,
-  laneGap: 6, segGap: 34, top: 44, margin: 16, storeMinH: 104,
+  // the street's density (cleanup pass 2026-10-11, lane S — the owner's *"the lanes view is not a good use of space"*):
+  // a card is a name on one line with its status, a sub-line, the test chip and the verdict, 12 px apart, four to six
+  // across a 1440 window; a pill is the record and its move on one line, the code that moves it and what it needs
+  // beneath (a pill that needs more lays the lanes out again with it, surfaces/map-lanes.js fitLaneText)
+  head: 150, col: 248, cardW: 236, cardH: 96, rowGap: 10, pad: 8, pillH: 44, pillRow: 50,
+  laneGap: 6, segGap: 28, top: 36, margin: 16, storeMinH: 66,
 });
 
 /**
