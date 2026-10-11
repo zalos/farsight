@@ -20,6 +20,7 @@ test('unknown fields, credential values, wildcard identities and unsafe profile 
   const changes: ((value: any) => void)[] = [
     value => { value.profiles.personal.backend.apiKey = 'literal-private-value'; },
     value => { value.profiles.personal.backend.secretRef = 'literal-private-value'; },
+    value => { value.profiles.personal.backend.secretRef = 'keychain:echo/managed'; },
     value => { value.profiles.personal.model.secretRef = 'env:OPENAI_API_KEY'; },
     value => { value.profiles.personal.identity.individual = '*'; },
     value => { value.profiles.personal.identity.team = 'team*'; },

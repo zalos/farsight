@@ -112,6 +112,8 @@ export function validateConfig(value: unknown): EchoConfig {
     });
     const budget = record(profile.budget, ['briefMaxChars', 'modelMaxTokens', 'timeoutMs']);
     const backendSecret = secret(backend.secretRef);
+    // Managed instances use runtime-owned ephemeral authentication, never a user credential.
+    if (backend.mode === 'managed' && backendSecret !== undefined) fail('echo.config.secret');
     const modelSecret = secret(model.secretRef);
     result.profiles[name] = {
       identity: { individual: identity(id.individual), project: identity(id.project), ...(id.team === undefined ? {} : { team: identity(id.team) }) },
