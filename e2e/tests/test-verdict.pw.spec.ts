@@ -31,7 +31,7 @@ test.describe('one test verdict per cell', () => {
 
     // the journey's table on the Map (the Sheet the journey page drew), its count line at its head
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
-    const head = page.locator('.map-table-head .jrn-e2e').first();
+    const head = page.locator('.map-jhead .jrn-e2e').first();
     await expect(head).toBeVisible();
     const word = (await head.textContent())!.trim();
     // the tip under the word names the run behind it — and that run's verdict is the word's (on the Map: on hover)

@@ -476,8 +476,9 @@ export function renderChrome() {
  * drawing a copy of it. One control, one accessible name, one place it lives.
  * @group Shell
  */
-// READ-ONLY folds last before the tabs: it says what every greyed control on the page is about (round 2026-10-10)
-const TOPBAR_FOLD = ['hubbtn', 'sharewrap', 'regtoggle', 'kmbtn', 'gearbtn', 'readonly', 'nav'];
+// READ-ONLY never folds (round-3 swarm, five roles: at 1280 it was the first chip a reviewer missed): it says what
+// every greyed control on the page is about, so the search box gives up its word before it would go
+const TOPBAR_FOLD = ['hubbtn', 'sharewrap', 'regtoggle', 'kmbtn', 'gearbtn', 'nav'];
 /**
  * Fold the bar until it fits the window.
  *
@@ -517,6 +518,8 @@ export function fitTopbar() {
   // for a workspace whose name is longer than any window.
   const chip = document.getElementById('syncchipwrap');
   if (chip) { chip.style.flexShrink = '0'; chip.style.minWidth = ''; }
+  const search = bar.querySelector('.searchbox');
+  if (search) search.classList.remove('squeeze');
   const fits = () => bar.scrollWidth <= bar.clientWidth + 1;
   let folded = 0;
   const fold = (k) => {
@@ -555,6 +558,8 @@ export function fitTopbar() {
     }
     fold(k);
   }
+  // READ-ONLY wins over the search box's width: the box keeps its glyph and ⌘K, its word is in its own label
+  if (!fits() && search) search.classList.add('squeeze');
   if (chip) chip.style.flexShrink = '';
   if (!fits() && chip) chip.style.minWidth = '0';
   if (!fits()) fold('nav');

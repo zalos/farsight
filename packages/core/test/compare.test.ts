@@ -10,7 +10,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   GraphStore, SnapshotDb, sqliteAvailable, DELTA_KINDS, DELTA_CHANGES, DELTA_DOORS, CHANGE_KINDS, COUNT_SCOPES,
-  storylineDiffDocument, parseFailOn, countedProblems, t,
+  storylineDiffDocument, parseFailOn, countedProblems, t, resolveCompareFrom,
 } from '../dist/index.js';
 import type { GraphNode, StorylineDiff } from '../dist/index.js';
 import { validate } from './validate.ts';
@@ -108,4 +108,30 @@ test('--fail-on: a listed kind that changed fails the gate block (exit 1); an un
   quiet.deltas = quiet.deltas.filter((d) => d.kind === 'built');
   assert.equal(storylineDiffDocument(quiet, { failOn: ['gate'] }).gate!.exit, 0);
   assert.deepEqual(parseFailOn('gate, verdict,colour'), { kinds: ['gate', 'verdict'], unknown: ['colour'] });
+});
+
+test('the sync before is the newest earlier sync that read other code; no green run is an absence, not an error', opts, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'farsight-compare-'));
+  try {
+    const db = new SnapshotDb(join(dir, 'farsight.db'));
+    const at = (commit: string) => {
+      const store = new GraphStore();
+      store.addFragment({ repo: 'r', nodes: [{ id: 'r::a', kind: 'function', name: 'a', tags: [] } as GraphNode], edges: [] });
+      return db.write(store, { commit }).sync;
+    };
+    const one = at('a'.repeat(40));
+    const two = at('b'.repeat(40));
+    const three = at('b'.repeat(40));
+    // swarm round 3: nine syncs re-read one commit, so *the sync before* compared to nothing — it skips them now
+    assert.equal(db.previous(three), two);
+    assert.equal(db.previousChanged(three), one);
+    assert.deepEqual(resolveCompareFrom(db, 'previous', { head: three, storyline: 's' }), { sync: one, how: 'previous' });
+    // the first sync has nothing before it, changed or not
+    assert.equal(db.previousChanged(one), undefined);
+    const green = resolveCompareFrom(db, 'last-green', { head: three, storyline: 's', lastGreen: () => undefined });
+    assert.ok('error' in green && green.noGreen && green.absent === 'notIndexed');
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -151,11 +151,11 @@ test.describe('journeys organised by persona and group, as the fixture declares 
   test('the open journey\'s head on the Map says who it is for and its group', async ({ page }) => {
     const DS = 'invoice-app::flow::draft-and-send';
     await gotoReady(page, '#/map/' + encodeURIComponent(DS) + '?layout=screens');
-    const org = page.locator(`.map-district[data-flow="${DS}"] .agg .for`);
+    const org = page.locator(`.map-jhead[data-flow="${DS}"] .for`);
     await expect(org).toContainText('For Billing · Review and send');
     await expect(org).toContainText('also for Operations');
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens');
-    await expect(page.locator(`.map-district[data-flow="${FLOW}"] .agg .for`)).toHaveText('For Billing · Invoices');
+    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .for`)).toHaveText('For Billing · Invoices');
   });
 
   /** @covers packages/server/public/app/surfaces/portfolio.js::render */
@@ -185,14 +185,16 @@ test.describe('journeys organised by persona and group, as the fixture declares 
       S.SETTINGS = Object.assign({}, S.SETTINGS, { flags: Object.assign({}, S.SETTINGS && S.SETTINGS.flags, { map: true }) });
     });
     await page.evaluate(() => { location.hash = '#/map'; });
-    // at 1440 px Band by is folded to its current value: its menu holds the choices
-    await page.locator('.map-band-cur').click();
-    await expect(page.locator('.map-band-cur')).toHaveAttribute('aria-expanded', 'true');
+    // Band by on the toolbar's second row: folded to its current value only when the row is too narrow for it
+    if (await page.locator('.map-band-cur').isVisible()) {
+      await page.locator('.map-band-cur').click();
+      await expect(page.locator('.map-band-cur')).toHaveAttribute('aria-expanded', 'true');
+    }
     const persona = page.locator('.map-band-pick [data-band="persona"]');
     await persona.click();
     await expect(persona).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.map-band-cur')).toHaveText('persona');
-    await expect(page.locator('.map-band-cur')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.map-band-pick')).not.toHaveClass(/open/);
     // each band a panel headed by the person, how many journeys and who they are
     await expect(page.locator('.map-band.per .w')).toHaveText(['Billing', 'Operations']);
     await expect(page.locator('.map-band.per .n')).toHaveText(['3 journeys', '1 journey']);
@@ -249,8 +251,8 @@ test.describe('storylines', () => {
   /** @covers packages/server/public/app/surfaces/map-stops.js::storyNavHtml */
   test('the journey\'s head on the Map says storyline · step n of m, and ‹ › open the journeys before and after it', async ({ page }) => {
     // on the street the district's head; a ‹ › door opens the journey at the register's own view — hybrid: its table
-    const street = (id: string) => page.locator(`.map-district[data-flow="${id}"] .facts .story`);
-    const table = (id: string) => page.locator(`.map-table-head[data-flow="${id}"] .facts .story`);
+    const street = (id: string) => page.locator(`.map-jhead[data-flow="${id}"] .story`);
+    const table = (id: string) => page.locator(`.map-jhead[data-flow="${id}"] .story`);
     await gotoReady(page, '#/map/' + encodeURIComponent(STEPS[0]!) + '?layout=screens');
     await expect(street(STEPS[0]!)).toContainText(STORY.name);
     await expect(street(STEPS[0]!)).toContainText(`step 1 of ${STEPS.length}`);
@@ -271,10 +273,10 @@ test.describe('storylines', () => {
     await mapOn(page);
     await page.evaluate(() => { location.hash = '#/map'; });
     await expect(page.locator('.map-district')).toHaveCount(MANIFEST.flows.length);
-    // at 1440 px the picker is folded to its current value: its menu holds the storylines
-    await page.locator('.map-story-cur').click();
+    // the picker on the toolbar's second row (folded to its current value only when the row is too narrow)
+    if (await page.locator('.map-story-cur').isVisible()) await page.locator('.map-story-cur').click();
     await page.locator(`.map-story-pick [data-storyline="${STORY.id}"]`).click();
-    await expect(page.locator('.map-story-cur')).toHaveText(STORY.name);
+    await expect(page.locator(`.map-story-pick [data-storyline="${STORY.id}"]`)).toHaveAttribute('aria-pressed', 'true');
     await expect(page).toHaveURL(new RegExp(`[?&]storyline=${STORY.id}(&|$)`));
     await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
     await expect(page.locator('.map-band.story .n')).toHaveText(`${STEPS.length + BRANCHES.length} journeys`);
@@ -305,7 +307,7 @@ test.describe('storylines', () => {
     await expect(fresh.locator('.map-district')).toHaveCount(STEPS.length + BRANCHES.length);
     await fresh.close();
     // All restores every journey and drops the parameter
-    await page.locator('.map-story-cur').click();
+    if (await page.locator('.map-story-cur').isVisible()) await page.locator('.map-story-cur').click();
     await page.locator('.map-story-pick [data-storyline=""]').click();
     await expect(page.locator('.map-district')).toHaveCount(MANIFEST.flows.length);
     await expect(page.locator('.map-band.story')).toHaveCount(0);
@@ -352,7 +354,7 @@ test.describe('storylines', () => {
     await row.locator('a.jrn-story-step').click();
     await expect(page.locator('.map-crumbs')).toContainText(NAME(id));
     await page.evaluate((f) => { location.hash = '#/map/' + encodeURIComponent(f) + '?layout=screens'; }, id);
-    const line = page.locator(`.map-district[data-flow="${id}"] .facts .story`);
+    const line = page.locator(`.map-jhead[data-flow="${id}"] .story`);
     await expect(line).toContainText(`branch of ${NAME(of)} · when ${B.when}`);
     await line.getByRole('link', { name: /before this one/ }).click();
     await expect(page.locator('.map-crumbs')).toContainText(NAME(of));

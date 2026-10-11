@@ -14,7 +14,8 @@ import { t, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { tipAttrs } from './tooltip.js';
-import { testChipHtml } from './test-chip.js';
+import { testChipHtml, builtOnlyHtml } from './test-chip.js';
+import { foldRow } from './fold-row.js';
 
 const API = '/api/journey';
 
@@ -38,9 +39,10 @@ export function mapEvidenceChip(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (!cls || cls === 'none') return '';
-  return '<span class="map-chip k-ev ev-' + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
+  const pb = builtOnlyHtml(ev);
+  return pb.before + '<span class="map-chip k-ev ev-' + esc(cls) + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-    + esc(t(ev.key)) + '</span>';
+    + esc(t(ev.key)) + '</span>' + pb.after;
 }
 
 /**
@@ -53,8 +55,10 @@ export function mapTestsChips(tests, facts, opts = {}) {
   if (opts.hideZero && !tests.n && !(facts && facts.notBuilt)) return '';
   // one chip with the count, the scope it counts over, the word and the skips (lib/test-chip.js, round 2026-10-10)
   if (facts && facts.counted && facts.counted.tests) {
-    if (facts.sharedEvidence) return testChipHtml(facts, { cls: 'map-chip k-test', api: API, word: false, zero: true }) + mapEvidenceChip(facts);
-    return testChipHtml(facts, { cls: 'map-chip k-test', api: API, zero: true, evCls: 'map-chip k-ev' });
+    if (facts.sharedEvidence) return testChipHtml(facts, { cls: 'map-chip k-test', api: API, word: false, zero: true, basis: false }) + mapEvidenceChip(facts);
+    // `builtShown`: the caller printed *n of m screens built* beside it, so the word keeps only its scope after it;
+    // `runs: false`: a one-row head prints only the parts that are not *passed* (the full sentence is the count's tip)
+    return testChipHtml(facts, { cls: 'map-chip k-test', api: API, zero: true, evCls: 'map-chip k-ev', basis: false, builtShown: !!opts.builtShown, ...(opts.runs === false ? { runs: false } : {}) });
   }
   const n = mapCountChip(tests, 'k-test');
   if (!n) return '';
@@ -103,4 +107,52 @@ export function mapScreensChips(k) {
   if (!k || !k.screens) return '';
   const r = k.screensReached;
   return mapCountChip(k.screens, '') + (r && r.n < k.screens.n ? mapCountChip(r, 'k-warn') : '');
+}
+
+// ── nothing clips: a card's chip row folds to `+n` by measurement (cleanup pass 2026-10-11) ─────────────────────
+// The test verdict is the one chip that is always whole (`.tchip`, `.k-ev`): the others fold first, from the last.
+// A cover keeps two rows; a screen card and a lane's stage card keep what their box has left under the chips' row.
+const KEEP = '.tchip,.k-ev';
+
+/** The bottom a chip row must end above: its card's content box, less what the card draws under the row. */
+function bottomFor(row, card) {
+  const cs = getComputedStyle(card);
+  let bottom = card.clientHeight - (parseFloat(cs.paddingBottom) || 0);
+  const gap = parseFloat(getComputedStyle(row.parentElement).rowGap) || 0;
+  for (let e = row.nextElementSibling; e; e = e.nextElementSibling) if (e.offsetHeight) bottom -= e.offsetHeight + gap;
+  return bottom;
+}
+/** The rows a chip row has left before the bottom of its card, at its own line height. */
+function rowsLeft(row, card, lineH) {
+  if (!card) return 2;
+  const gap = parseFloat(getComputedStyle(row).rowGap) || 0;
+  return Math.floor((bottomFor(row, card) - offsetIn(row, card) + gap) / (lineH + gap));
+}
+/** `el`'s top inside `card`, in layout px (offsets ignore the zoom's transforms). */
+function offsetIn(el, card) {
+  let y = 0;
+  for (let e = el; e && e !== card; e = e.offsetParent) y += e.offsetTop;
+  return y;
+}
+/** The row ends inside its card. */
+const endsIn = (card) => (row) => offsetIn(row, card) + row.offsetHeight <= bottomFor(row, card) + 0.5;
+
+/**
+ * Fold every chip row of the Map's cards under `scope` (a district, the lanes layer, the world): covers, the street's
+ * screen cards and the lanes' stage cards. Safe to call again — after a zoom, a lens change or a journey landing.
+ */
+export function foldMapChips(scope) {
+  if (!scope) return;
+  scope.querySelectorAll('.map-dcover .agg').forEach((agg) => foldRow(agg, {
+    maxRows: 2, keep: KEEP, moreCls: 'map-chip map-more', moreKey: 'map.cover.more', of: 'map.cover.moreOf', scope: 'map.fold.scopeJourney',
+  }));
+  scope.querySelectorAll('.map-scr .map-chips, .ln-stage .ln-chips').forEach((row) => {
+    const card = row.closest('.map-scr, .ln-stage');
+    const fold = () => foldRow(row, { maxRows: (lineH) => rowsLeft(row, card, lineH), keep: KEEP, moreCls: 'map-chip map-more', fits: endsIn(card) });
+    // a stage card's sub-line gives its room to the verdict when the verdict has none (the name's tip says it)
+    const sub = card.classList.contains('ln-stage') ? card.querySelector(':scope > .sub') : null;
+    if (sub) sub.hidden = false;
+    fold();
+    if (sub && !endsIn(card)(row)) { sub.hidden = true; fold(); }
+  });
 }

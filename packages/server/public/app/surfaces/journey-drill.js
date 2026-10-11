@@ -20,13 +20,14 @@
 import { S, expose, esc, currentLens, humanize } from '../store.js';
 import { t, def, plainWords, proseHtml } from '../strings.js';
 import { sym } from '../sym.js';
-import { vsl } from '../lib/graph-render.js';
+import { vsl, designThumbHtml } from '../lib/graph-render.js';
 import { doorsFor, doorsHtml } from '../lib/detail-doors.js';
 import { gateAttrs } from '../lib/gate-card.js';
 import {
-  jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnSegDecisions, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml, jrnSchemaChipHtml, jrnFirstSentence, jrnSheetModel, jrnMarkerAt, jrnSelect, jrnScrollTo, jrnTxLineHtml, jrnTestsFootHtml, jrnStepTestFacts, jrnCountedHtml, jrnMoLabel, jrnUntranslatedHtml, jrnActionUntrList, jrnWords, jrnCallWords, jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts, jrnStopText, jrnRowLabel as jrnRowLabelOf, jrnHelperTest as jrnHelperOf,
+  jrnCellFoldsHtml, jrnSeamCardHtml, jrnMarkerHtml, jrnMarkerText, jrnMarkerTitle, jrnSegDecisions, jrnGateLabel, jrnGatesShown, jrnBizTab, jrnBizTabsHtml, jrnExpBodyHtml, jrnContractHtml, jrnForkEntryHtml, jrnReqChips, jrnRefAnchors, jrnLabel, jrnChoiceHtml, jrnSchemaChipHtml, jrnFirstSentence, jrnSheetModel, jrnMarkerAt, jrnSelect, jrnScrollTo, jrnTxLineHtml, jrnTestsFootHtml, jrnStepTestFacts, jrnCountedHtml, jrnMoLabel, jrnUntranslatedHtml, jrnActionUntrList, jrnWords, jrnCallWords, jrnAbsentWord, jrnAbsentKindWord, jrnAbsentText, jrnAbsentHtml, jrnStepActionFacts, jrnStopText, jrnRowLabel as jrnRowLabelOf, jrnHelperTest as jrnHelperOf, jrnScreenNode, jrnDesignIdHtml,
 } from '../lib/journey-draw.js';
 import { tipAttrs, tipSource } from '../lib/tooltip.js';
+import { foldRow, pathHtml } from '../lib/fold-row.js';
 import { drillLayers, drillLayerOf, drillBeats } from '../lib/journey-model.js';
 import { impactBodyHtml, impactCached, impactFetch, impactHasHops, impactOpts, impactRings, impactHash } from '../impact.js';
 
@@ -238,7 +239,7 @@ function jrnDrillBoxHtml(m, layer, tree, also) {
   return '<div class="jrn-bx ' + cls + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" id="jrn-bx-' + m.stepOrder + '" data-order="' + m.stepOrder + '" tabindex="0"'
     + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc(title) + '">'
     + '<span class="k">' + sym(glyph) + esc(kindWord) + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
-    + '<span class="n">' + esc(name) + (loc ? '<span class="loc">' + esc(loc.path + ':' + loc.line) + vsl(loc.repo, loc.path, loc.line) + '</span>' : '') + '</span>'
+    + '<span class="n">' + esc(name) + (loc ? '<span class="loc">' + pathHtml(loc.path + ':' + loc.line, { max: 30 }) + vsl(loc.repo, loc.path, loc.line) + '</span>' : '') + '</span>'
     + (label ? '<span class="b">' + esc(label) + '</span>' : '')
     + (biz && biz !== label ? '<span class="b">' + esc(biz) + '</span>' : '')
     + (m.cut ? '<span class="b cut" title="' + esc(def('journey.cutPoints')) + '">▸ ' + esc(t('journey.notFollowed').replace('{n}', m.cut)) + '</span>' : '')
@@ -250,7 +251,7 @@ function jrnDrillScreenBoxHtml(comp, sg) {
   const n = S.BYID[comp.id] || {};
   return '<div class="jrn-bx ui dim" id="jrn-bx-' + comp.stepOrder + '" tabindex="0" onclick="jrnScrollTo(' + comp.stepOrder + ')" title="' + esc(comp.name) + '">'
     + '<span class="k">' + sym('screen') + esc(currentLens() === 'business' ? t('journey.biz.kind.onScreen') : (n.kind || t('journey.kind.screen'))) + ' · ' + esc(t('journey.stillOpen')) + '</span>'
-    + '<span class="n">' + esc(currentLens() === 'business' ? comp.label : comp.name) + (n.loc ? '<span class="loc">' + esc(n.loc.path + ':' + n.loc.line) + vsl(n.repo, n.loc.path, n.loc.line) + '</span>' : '') + '</span>'
+    + '<span class="n">' + esc(currentLens() === 'business' ? comp.label : comp.name) + (n.loc ? '<span class="loc">' + pathHtml(n.loc.path + ':' + n.loc.line, { max: 30 }) + vsl(n.repo, n.loc.path, n.loc.line) + '</span>' : '') + '</span>'
     + (comp.label && comp.label !== comp.name && currentLens() !== 'business' ? '<span class="b">' + esc(comp.label) + '</span>' : '')
     + '</div>';
 }
@@ -283,7 +284,7 @@ function jrnDrillGateBoxHtml(g, bi, k) {
   return '<div class="jrn-bx gate' + (g.planned ? ' planned' : '') + '" id="jrn-bg-' + bi + '-' + k + '"'
     + (gn ? gateAttrs(g.id, { step: g.stepOrder, config: g.config }) : ' tabindex="0" onclick="jrnScrollTo(' + g.stepOrder + ')"') + ' title="' + esc(g.name || '') + '">'
     + '<span class="k">' + sym(g.kind === 'rule' ? 'shield' : 'lock') + esc(g.kind === 'rule' ? t('journey.kind.rule') : t('journey.kind.gate')) + (g.count > 1 ? ' ×' + g.count : '') + '</span>'
-    + '<span class="n">' + esc(jrnGateLabel(g)) + (gn && gn.loc ? '<span class="loc">' + esc(gn.loc.path + ':' + gn.loc.line) + vsl(gn.repo, gn.loc.path, gn.loc.line) + '</span>' : '') + '</span>'
+    + '<span class="n">' + esc(jrnGateLabel(g)) + (gn && gn.loc ? '<span class="loc">' + pathHtml(gn.loc.path + ':' + gn.loc.line, { max: 30 }) + vsl(gn.repo, gn.loc.path, gn.loc.line) + '</span>' : '') + '</span>'
     + (g.planned ? '<span class="b">' + esc(t('journey.plannedGate')) + '</span>' : '') + '</div>';
 }
 /** A translated decision on the gates row: the fork the flow can take here.
@@ -294,6 +295,38 @@ function jrnDrillDecBoxHtml(d, bi, k) {
 }
 
 // ── the rail ─────────────────────────────────────────────────────
+/**
+ * The action rail: every action of the journey as a stop on one line — its ordinal, a person glyph when a screen made
+ * the call or a system glyph when nothing client-side did, ↺ when the walk already ran it — with the screens spanning
+ * the stops they own (name, design id, thumbnail outside the code lens). The selected stop is ringed. The Map's
+ * *drill* layout draws it over the action's beats (cleanup pass 2026-10-11: the owner's "I liked the older drill
+ * view"); its host routes the clicks — a stop by `data-col`, a screen by `data-seg`.
+ * @group Journey drill
+ * @business The whole journey as numbered stops, the screens above them — pick one to see its beats.
+ */
+export function jrnDrillRailHtml(sum, cols, active) {
+  // one column per stop at the stop's width: a long action name ellipsizes in its stop (its whole name is the tip)
+  let html = '<div class="jrn-rail-wrap map-rail" role="group" aria-label="' + esc(t('map.rail')) + '"><div class="jrn-rail" style="grid-template-columns:repeat(' + cols.length + ',' + JRN_DRILL_STOP + 'px)">';
+  let at = 0;
+  (sum.segments || []).forEach((sg) => {
+    const span = cols.filter((c) => c.sg.index === sg.index).length;
+    if (!span) return;
+    const n = jrnScreenNode(sg);
+    const name = (sg.screen && sg.screen.name) || (n && n.name) || t('journey.beforeFirstScreen');
+    html += '<button type="button" class="jrn-rscr' + (sg.screen ? '' : ' entry') + '" data-seg="' + sg.index + '" style="grid-column:' + (at + 1) + ' / span ' + span + '"'
+      + tipAttrs({ text: name, noFocus: true }) + '>'
+      + (n && currentLens() !== 'code' ? designThumbHtml(n, 'sheet') : '') + '<span class="t">' + jrnDesignIdHtml(sg) + esc(name) + '</span></button>';
+    at += span;
+  });
+  html += cols.map((col) => {
+    const mo = col.mo;
+    const on = col.index === active;
+    return '<button type="button" class="jrn-stop' + (on ? ' on' : '') + (mo.component ? '' : ' auto') + (mo.repeat ? ' rep' : '') + '" data-col="' + col.index + '"'
+      + (on ? ' aria-current="step"' : '') + tipAttrs({ text: (col.index + 1) + ' · ' + (mo.business || mo.label || jrnMoLabel(mo)), noFocus: true }) + '><span class="dot"></span>'
+      + '<span class="t"><span class="ord">' + (col.index + 1) + '</span>' + sym(mo.component ? 'human' : 'automation') + '<span class="n">' + esc(jrnMoLabel(mo)) + '</span>' + (mo.repeat ? '<span class="rep">↺</span>' : '') + '</span></button>';
+  }).join('');
+  return html + '</div></div>';
+}
 /**
  * One legend swatch: a line drawn with the **same class** the wire on the canvas
  * carries, so it takes the same dash pattern and the same hue from the same CSS
@@ -322,8 +355,12 @@ function jrnDrillCaptionHtml(cols, model) {
   // visit a second stop — typed by the core as `counted.actionStops` (31 on the POC,
   // where the header's actions are 13), so the tip carries the split that reconciles them
   const stops = S.JOURNEY && S.JOURNEY.summary && S.JOURNEY.summary.counted && S.JOURNEY.summary.counted.actionStops;
-  const of = esc(t('journey.drill.actionOf').replace('{n}', S.jrnAction + 1)).replace('{t}', () => (stops && stops.n === cols.length
-    ? jrnCountedHtml(stops, { num: true, noFocus: true }) : String(cols.length)));
+  // one unit per panel (swarm round 3): under the Map's screen strip the caption counts the screen's actions, as the
+  // breadcrumb does; under the journey's rail it counts the rail's stops
+  const onScreen = typeof S.jrnActionOnScreen === 'function' ? S.jrnActionOnScreen(S.jrnAction) : null;
+  const of = onScreen ? esc(t('map.act.onScreen').replace('{n}', onScreen.k).replace('{m}', onScreen.m))
+    : esc(t('journey.drill.actionOf').replace('{n}', S.jrnAction + 1)).replace('{t}', () => (stops && stops.n === cols.length
+      ? jrnCountedHtml(stops, { num: true, noFocus: true }) : String(cols.length)));
   // the beats of the open action — a developer's unit, said as *things happen* in the business lens
   const beatKey = biz ? 'journey.biz.countSteps' : 'journey.drill.countBeats';
   const beats = '<span class="jrn-num"' + tipAttrs({ number: { count: model.beats.length, of: beatKey, scope: 'count.scope.action', source: tipSource('/api/journey') }, noFocus: true }) + '>'
@@ -563,8 +600,8 @@ function jrnInspHeadHtml(i, mk) {
   // hybrid keeps both names; business keeps one, and not the code's
   return '<div class="sel"><span class="hud-label">' + esc(word) + (bi != null && !biz ? ' · ' + esc(t('journey.insp.beat').replace('{n}', bi + 1)) : '') + '</span>'
     + '<div class="nm">' + (mk && mk.method && !biz ? '<b>' + esc(mk.method) + '</b>' : '') + esc(name) + (n.name && n.name !== name && lens === 'hybrid' ? '<span class="jrn-code-name">' + esc(n.name) + '</span>' : '') + '</div>'
-    + (n.loc && !biz ? '<div class="loc">' + esc(n.loc.path + ':' + n.loc.line) + vsl(n.repo, n.loc.path, n.loc.line) + (n.repo ? ' · ' + esc(n.repo) : '') + '</div>' : '')
-    + (c.spec && c.spec.path && !biz ? '<div class="loc">' + esc(c.spec.path + (c.spec.line ? ':' + c.spec.line : '')) + vsl(n.repo, c.spec.path, c.spec.line || 1) + ' · ' + esc(t('journey.contractHead')) + '</div>' : '')
+    + (n.loc && !biz ? '<div class="loc">' + pathHtml(n.loc.path + ':' + n.loc.line, { max: 64 }) + vsl(n.repo, n.loc.path, n.loc.line) + (n.repo ? ' · ' + esc(n.repo) : '') + '</div>' : '')
+    + (c.spec && c.spec.path && !biz ? '<div class="loc">' + pathHtml(c.spec.path + (c.spec.line ? ':' + c.spec.line : ''), { max: 64 }) + vsl(n.repo, c.spec.path, c.spec.line || 1) + ' · ' + esc(t('journey.contractHead')) + '</div>' : '')
     // every detail is a door (round 2026-10-05 §3.2): where this part is read in full
     + jrnInspDoorsHtml(mk, n)
     + jrnTxLineHtml(mk)
@@ -823,12 +860,18 @@ function jrnDrillRenderAction() {
   S.JRN_DRAWN = new Set(Array.from(host.querySelectorAll('[data-order]')).map((el) => +el.dataset.order));
   if (S.jrnDrillRO) S.jrnDrillRO.disconnect();
   if (window.ResizeObserver) {
-    S.jrnDrillRO = new ResizeObserver(() => jrnDrillWires());
+    // a dock that opens or a pane that resizes: the wires redraw and the legend folds again to its one line
+    S.jrnDrillRO = new ResizeObserver(() => { jrnDrillWires(); jrnFoldLegend(); });
     S.jrnDrillRO.observe(host);
     const lanes = document.getElementById('jrn-lanes');
     if (lanes) S.jrnDrillRO.observe(lanes);
   }
-  requestAnimationFrame(jrnDrillWires);
+  requestAnimationFrame(() => { jrnDrillWires(); jrnFoldLegend(); });
+}
+/** The wires' legend keeps to one line beside the caption: what has no room folds to `+n`, its tip naming them. */
+function jrnFoldLegend() {
+  const lg = document.querySelector('#jrn-dcap .legend');
+  if (lg) foldRow(lg, { maxRows: 1, scope: 'fold.scopeRow' });
 }
 /**
  * The drill without its rail, for a host that keeps its own sense of where it is — the Map's action stop draws the
@@ -836,10 +879,15 @@ function jrnDrillRenderAction() {
  * `jrnDrillMount()`, the wires and the inspector fill it; one drill is on the page at a time.
  * @group Journey drill
  */
-export function jrnDrillStageHtml() {
+export function jrnDrillStageHtml(o = {}) {
+  // the Map's dock holds the inspector unless the code is docked in place (lib/map-dock.js): `o.insp === false`
   return '<div class="jrn-drill map-drill"><div class="jrn-dcap" id="jrn-dcap"></div>'
     + '<div class="jrn-drill-main"><div class="jrn-lanes-wrap" id="jrn-dlanes"></div>'
-    + '<div class="jrn-insp" id="jrn-insp" role="region" aria-label="' + esc(t('journey.insp.title')) + '"></div></div></div>';
+    + (o.insp === false ? '' : jrnInspHostHtml()) + '</div></div>';
+}
+/** The inspector's empty host, for whichever place holds it (the drill's own column, or the Map's dock). @group Journey drill */
+export function jrnInspHostHtml() {
+  return '<div class="jrn-insp" id="jrn-insp" role="region" aria-label="' + esc(t('journey.insp.title')) + '"></div>';
 }
 /** Fill the drill's lanes after its markup landed, and show the inspector's hint.
  * @group Journey drill */

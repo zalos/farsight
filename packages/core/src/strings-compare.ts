@@ -89,7 +89,7 @@ export const COMPARE_STRINGS: Record<string, StringEntry> = {
   'compare.control.off': same('off', 'No comparison: the board draws the sync this server serves, with no change marks.'),
   'compare.control.range': same('sync {a} → sync {b}', 'The earlier sync and the later one being compared. The board draws the later one.'),
   'compare.control.since': same('since {date}', 'The earlier sync is the last one recorded on or before this day.'),
-  'compare.choice.previous': same('the sync before', 'Compare the sync this server serves with the one recorded just before it.'),
+  'compare.choice.previous': same('the sync before', 'Compare the sync this server serves with the newest earlier sync that read different code. A sync that re-read the same commit has nothing to compare, so it is skipped; when every earlier sync read the same code, the one just before.'),
   'compare.choice.sync': same('sync {n} · {date}', 'Compare from this recorded sync to the one this server serves.'),
   'compare.choice.lastGreen': same('since the last green run', 'Compare from the newest earlier sync at which no case of this storyline had failed or been skipped on its own last run.'),
   'compare.choice.date': same('since a day…', 'Compare from the last sync recorded on or before the day you give.'),

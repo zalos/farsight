@@ -1,6 +1,6 @@
 // What an agent gets, in the HUD (round 2026-10-10, proposal 9): every record carries *copy as MCP call · curl ·
 // CLI* with its full id (the gate card, the code map inspector, the front door's numbers), a press shows a
-// *copied* chip for two seconds, the business register keeps the doors; the Settings page holds the owner's
+// *copied* chip for two seconds, the business register draws none; the Settings page holds the owner's
 // lessons for agents and refuses one shaped like a credential before it is sent; an empty surface names what
 // fills it.
 import type { Page } from '@playwright/test';
@@ -40,9 +40,10 @@ test('the gate card copies the MCP call, the curl and the CLI line with the full
 });
 
 /** @covers packages/server/public/app/lib/detail-doors.js::copyDoorsHtml */
-test('the business register keeps the copy doors: an agent brief is not code', async ({ page }) => {
+test('the business register draws no copy doors: MCP, curl and CLI are a developer\'s (swarm round 3)', async ({ page }) => {
   const c = await openGate(page, 'business');
-  await expect(c.locator('.gc-copy button.dd-door.copy')).toHaveCount(3);
+  await expect(c.locator('.gc-head, .gc-h, h3, .gc').first()).toBeVisible();
+  await expect(c.locator('button.dd-door.copy')).toHaveCount(0);
 });
 
 /** @covers packages/server/public/app/lib/graph-render.js::select */

@@ -43,15 +43,17 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Current state — 2026-10-10
 
-`main` is green. **The lanes round's waves 1–3 are merged and live** (items 15 and 16 below: the journey overlay is
-retired, the Map is the one place a journey is read); the last lane, F (walk and ask), is in flight.
+`main` is green. **The lanes round is closed and live** (items 15 and 16 below, PRs #74–#91: the journey overlay is
+retired and the Map is the one place a journey is read; the storyline draws as lanes; gates carry tiers and
+preconditions; every test number its scope; a tour and an ask answered from the graph; a PR gets its affected set;
+two syncs compare; agents get tiers and budgets). Nothing is in flight.
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`3d331d2`** after the lanes round's waves 1–3 (PRs #74–#87, items 15–16 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
-| tests | **1221** — core 354 · work 64 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 71 · server 356 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 277/277** (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
-| string/symbol lint | **2670 entries · 35 sprite symbols · 64 modules** (60 retired view words left with the overlay); the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-evidence.ts`, `strings-stops.ts`, `strings-state.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
-| servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `3d331d2` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 68, 4477 sync 110); both prefixes' global `farsight` print `commit 3d331d2`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`f2fb199`** after the lanes round (PRs #74–#91, items 15–16 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1227** — core 354 · work 64 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 73 · server 360 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 281/281** (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
+| string/symbol lint | **2817 entries · 35 sprite symbols · 66 modules** (60 retired view words left with the overlay); the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-evidence.ts`, `strings-stops.ts`, `strings-state.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
+| servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `f2fb199` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 69, 4477 sync 111); both prefixes' global `farsight` print `commit f2fb199`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -557,16 +559,49 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       Measured on the dogfood graph: 11 of 28 tools on in core; the reference app's widest journey (~44k tokens)
       answered under 8k with `expand` returning the cut segments; this repo's spine: 246 of 269 commits made with an
       agent.
+    - **Walk me through it, and ask** (#91): core `tour.ts` — `tourOf(index, storyline | flow, { persona, repo })`
+      gives one stop per screen in storyline order (branches after the main path) and one per hand-off (a move the
+      code makes to a record); every clause is a template from `strings-tour.ts` (business twins `tour.biz.*`) and
+      carries the node ids it cites, a `Counted` behind any number, the `testVerdict()` behind any evidence word and
+      the earlier stop it refers to; a move whose code checks nothing says so. Core `ask.ts` — a **grammar of four
+      shapes**, never a model (*where is <record> set to <status>, and what must be true first · what guards X · how
+      does A reach B · what proves Y*), `pathBetween()` over the edge indexes (`count.scope.path`), any other question
+      answered with the four shapes; one named extension point `phrase?` whose output would sit beside the cited lines
+      labelled *phrased by a model* (nothing passes one). `GET /api/tour`, `GET /api/ask`, MCP `ask` (core tier) and
+      `tour` (`all`, long answers), `farsight tour <id>`, `farsight ask "<question>"`; the viewer's WALK panel in the
+      dock (`lib/tour.js`, key `a`, the Map moves with each stop, *walk me through it* doors on the front door's
+      storyline and journey cards) and the ASK box (`lib/ask.js`, also under the state of play); `copy-doors.js`
+      gains `tour` and `ask`. Measured on the reference app's main storyline: 26 stops (19 screens · 7 hand-offs), 227
+      clauses, 0 uncited, 45 numbers each a sound `Counted`, 0 identifier tokens in business; *where is an invoice set
+      to approved, and what must be true first* names the writer with file:line, the move's own status check, the
+      identity-link and vendor-account preconditions each *reached by tests · 3 cases over this gate*, the proving
+      cases, and an 8-hop screen → table path.
+    - **Two fixes the lead's live check found** (#89, #90): a cold load of a Map journey address by its short name
+      (`#/map/new-invoice?…`, the old-link redirect) stayed at ALL JOURNEYS on the multi-source graph — the Map's
+      `entryTarget` knew only full node ids while the retired page resolved a name server-side; it now resolves
+      through `resolveEntryName` and rewrites the address to the full id. Then three address-write races dropped the
+      other parameters: the table wrote `screen=` only beside a selected part, a lens redraw wrote the table's address
+      while the name was still resolving, and a late table draw overwrote a stop below; the table now writes its
+      address once, keeps `screen=n` (scrolling that screen's columns into view, the crumb *screen n of m*), a lens
+      redraw writes nothing, and a late draw after an action opened is skipped; the two-source e2e cold-loads by id,
+      by name, through the redirect and with `action`, `dock` and `lens`. The 28-door measurement in #87 had used
+      full ids and in-app clicks, which is why neither showed.
     - **Left open by waves 2–3:** the overlay's CSS is still in `viewer.html` (dead, not deleted); a journey head with
       two lifecycle strips draws over its first screen card on the reference app (pre-existing); Esc in the instant a
       door lands can keep `layout=table`; the compare panel sits over the board (fits under, not beside); a removed
       gate's door opens on the served graph where it no longer exists; the journey tree is always the served graph's
       even when the board draws an older sync; older syncs cannot name their Farsight build; `last-green` walks up to
       30 syncs one by one; `refresh_graph` is outside core but some answers still name it; no `farsight context` CLI;
-      the dogfood workspace counts the invoice example's commits twice (it reads the repo root's log).
+      the dogfood workspace counts the invoice example's commits twice (it reads the repo root's log); the weekly
+      cycle's move to Paid has no tour stop (the precondition fold does not find it); the open tour stop is not in the
+      address and the panel has no persona picker; the lanes hand-off marks the pill but does not pan to it; a
+      journey name two sources share resolves to whichever the server picks first, and a name matching nothing lands
+      on the board with no sentence; on the street the board replaces `screen=` with `z/x/y` after a gesture; a WALK
+      button in the toolbar row moved the *link is the picture* landing by 1.3 px (cause not found; the button sits on
+      the crumbs row).
 
 17. **Echo optional memory foundation and review hardening** (2026-10-11; PR #84, `codex/echo-setup`,
-    based on main `7660893`; not merged): separate package, workspace/global settings, one connected profile per
+    based on main `227fb80`; not merged): separate package, workspace/global settings, one connected profile per
     workspace, explicit managed saves and scoped prompt recall, standalone settings view, and Ollama verification.
     Repository files require exact-byte approval in private user state before use; Echo-only keychain references
     are pinned to an origin with transactional saves. The native engine is checksum-pinned in a private user cache
@@ -575,8 +610,8 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
     refuse credential-shaped input and report historical workspace/revision/date; truncation is visible. Shared
     keychain transport retains separate Work/Echo policy. Source installs allow only esbuild dependency scripts;
     network-dependent package verification is a separate optional CI job.
-    - **Verified:** full build/typecheck and package unit suites: **1,331 tests, 1,329 passed, 2 live-tracker skips**,
-      including **103 Echo tests**; script tests **14/14**, catalog lint, browser/MCP regressions **278/278**. The
+    - **Verified:** full build/typecheck and package unit suites: **1,355 tests, 1,353 passed, 2 live-tracker skips**,
+      including **103 Echo tests**; script tests **14/14**, catalog lint, browser/MCP regressions **316/316**. The
       standalone package passed clean install, synthetic save/recall, restart persistence, isolated stores, shared
       recall through all three host runners, provenance, local switch-back, disconnect and owned-process shutdown.
       An offline pnpm 9 fixture verified that the allowlist suppresses both direct and transitive dependency scripts.
@@ -621,14 +656,17 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**In flight (2026-10-11):** F — walk and ask (`core/tour.ts`: a tour over a storyline assembled from the graph's own
-sentences with a citation on every clause; `core/ask.ts`: a four-shape grammar — *where is X set and what must be
-true first · what guards Y · how does A reach B · what proves Z* — answered from the index, never a model; a WALK
-panel in the Map's dock and an ASK box; MCP `tour` and `ask`). Then the ritual, a handoff prompt to the reference-app
-session (add `gateTiers` and `lifecycle` blocks; restart its server `--read-only`), and **swarm round 3** on one
-build and one sync (target fit 7.5; *which scope* absent from every report). **Beside the round:** PR #84, *Farsight
-Echo*, an optional memory companion by another agent, was reviewed on 2026-10-11 (the review stays outside the repo);
-it merges after its blocking items are fixed and main re-merged.
+**The lanes round is closed (2026-10-11, PRs #74–#91; nothing in flight).** Next, in order: (1) a handoff prompt to
+the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
+`farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
+and its lifecycle words are humanized constants), re-run its suites with the reporters, restart its server
+`--read-only`; (2) **swarm round 3** — the same eight personas, cold, on that build and sync, asked *do you trust what
+it tells you* and *what do you want next* (target fit 7.5; *which scope* absent from every report; the five stops, the
+lanes, the tour and the compare are what is new since round 2); (3) the left-open lists above, the lane for the
+overlay's dead CSS and the head-over-screens overlap first. **Beside the round:** PR #84, *Farsight Echo*, an optional
+memory companion by another agent, was reviewed on 2026-10-11 (the review stays outside the repo); it merges after its
+blocking items are fixed and main re-merged. The server-side query API round (`/graph` at 245k nodes) stays next after
+the swarm.
 
 **Swarm round 2 (2026-10-06, the same eight personas, cold, on the reference app's own server at `81a455e`, sync 108,
 `--read-only`, after the application re-ran and stamped its own suites; reports and `_synthesis.md` outside the repo) —

@@ -51,10 +51,13 @@ test.describe('journey numbers', () => {
    * @covers GET /api/journey
    */
   test('every number on the table\'s head carries a tip that says what it counts, and a breakdown that adds up to it', async ({ page }) => {
+    // two registers × every tip on the head, each hovered and closed: the runs sentence and the build state added triggers
+    test.setTimeout(75_000);
     for (const lens of ['hybrid', 'business'] as const) {
       await openJourneyAt(page, 'table', lens);
       // the freshness sentence is a trigger too, and not a number: its own spec is freshness.pw.spec.ts
-      const nums = page.locator('.map-table-head .jrn-count [data-tip-id]:not(.fresh)');
+      // a number folded into the head's `+n` is listed in that chip's tip (cleanup pass 2026-10-11): the ones on the line
+      const nums = page.locator('.map-jhead .jrn-count [data-tip-id]:not(.fresh):not(.jh-more):visible');
       const n = await nums.count();
       expect(n, 'the head prints its numbers as tip triggers').toBeGreaterThanOrEqual(3);
       let split = 0;
@@ -80,7 +83,7 @@ test.describe('journey numbers', () => {
       }
       expect(split, 'at least one head number splits into parts').toBeGreaterThan(0);
       // the groups are separated by real text, so the line pastes into a ticket as it reads
-      await expect(page.locator('.map-table-head .jrn-count')).toContainText(' · ');
+      await expect(page.locator('.map-jhead .jrn-count')).toContainText(' · ');
     }
   });
 
@@ -178,7 +181,7 @@ test.describe('the table from the keyboard', () => {
   test('a drawer parked off the edge takes no Tab stops', async ({ page }) => {
     await openJourneyAt(page, 'table', 'code');
     await expect(page.locator('#jrn-forks')).toHaveAttribute('inert', '');
-    await page.locator('.map-table-head .nm').click();
+    await page.locator('.map-jhead .nm').click();
     for (let i = 0; i < 40; i++) {
       await page.keyboard.press('Tab');
       const inDrawer = await page.evaluate(() => !!document.activeElement?.closest('#jrn-forks,#jrn-cutlist'));

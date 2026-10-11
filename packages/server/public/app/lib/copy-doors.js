@@ -3,8 +3,8 @@
 // A person reading the HUD often briefs an agent next. Every record a tool can answer — a gate, a call, a record,
 // a journey or a screen, a test, a package, a number — carries three copy doors: the MCP call an agent makes, the
 // curl against this server, and the CLI line, each with the record's **full id**, so what is pasted is exactly
-// what was on screen. The doors are not code: an agent brief is the business reader's too, so every register
-// draws them.
+// what was on screen. The business register draws none (swarm round 3: three business roles read the pills as code
+// they had to skip); hybrid and code keep them.
 //
 // Pure: no DOM, no catalog. `word` is a catalog key the surface translates; `text` is what lands on the clipboard.
 // lib/detail-doors.js draws them (`copyDoorsHtml`) and answers the press.
@@ -18,6 +18,10 @@ const KIND = {
   test: 'test',
   package: 'package',
   count: 'count',
+  // walk me through it, and ask (round 2026-10-10, proposal 8): `node` is `{ id: <storyline id | flow id>, storyline?, repo? }`
+  // for a tour and `{ id: <the question>, repo? }` for an answer
+  tour: 'tour',
+  ask: 'ask',
 };
 
 /** A value in single quotes for a POSIX shell (a `'` closes, escapes and reopens). */
@@ -68,6 +72,11 @@ export function copyDoors(kind, node, ctx = {}) {
   const id = node.id;
   if (!id) return [];
   const enc = encodeURIComponent(id);
+  const repoArg = node.repo ? { repo: node.repo } : {};
+  const repoQ = node.repo ? '&repo=' + encodeURIComponent(node.repo) : '';
+  const repoF = node.repo ? ' --repo ' + shellQuote(node.repo) : '';
+  if (row === 'tour') return out(mcp('tour', { target: id, ...repoArg }), curl(origin, '/api/tour?' + (node.storyline ? 'storyline=' : 'flow=') + enc + repoQ), 'farsight tour ' + shellQuote(id) + repoF);
+  if (row === 'ask') return out(mcp('ask', { question: id, ...repoArg }), curl(origin, '/api/ask?q=' + enc + repoQ), 'farsight ask ' + shellQuote(id) + repoF);
   if (row === 'gate') return out(mcp('gate', { node_id: id }), curl(origin, '/api/gate?node=' + enc), 'farsight impact ' + shellQuote(id) + ' --tests');
   if (row === 'journey') {
     // a journey walks from its flow; a screen or a page is an entry the journey tool takes too

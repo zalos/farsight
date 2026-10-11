@@ -52,7 +52,7 @@ test.describe('every test number carries its scope', () => {
     // the head: the table's (the journey page's header retired into it) — the journey's cases, *over this journey*,
     // *distinct* beside the per-screen counts of the street
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
-    const head = page.locator('.map-table-head .jrn-htests');
+    const head = page.locator('.map-jhead .jrn-htests');
     await expect(head).toBeVisible();
     await expect(head.locator('.tc-scope')).toHaveText('over this journey');
     await expect(head.locator('.tc-distinct')).toHaveText('distinct');
@@ -60,7 +60,7 @@ test.describe('every test number carries its scope', () => {
     await expect(page.locator('#fs-tip')).toContainText('per screen');
     await expect(page.locator('#fs-tip')).toContainText('test cases');
     await page.keyboard.press('Escape');
-    heldToScope(await chips(page, '.map-table-head .jrn-hg'), 'the head');
+    heldToScope(await chips(page, '.map-jhead .jrn-hg'), 'the head');
     const skips = await skippedBySegment(page);
     // the street (the storyboard's look): each screen's cases over this screen, and the skips wherever its fold counts some
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens&lens=hybrid');

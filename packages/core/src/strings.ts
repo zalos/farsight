@@ -25,6 +25,7 @@ import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { DOOR_STRINGS } from './strings-doors.js';
 import { LANES_STRINGS } from './strings-lanes.js';
+import { FOLD_STRINGS } from './strings-fold.js';
 import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
@@ -41,6 +42,9 @@ import { ECHO_MEMORY_STRINGS } from './strings-echo-memory.js';
 import { ECHO_INSTALLATION_STRINGS } from './strings-echo-installation.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
+import { TOUR_STRINGS } from './strings-tour.js';
+import { ASK_STRINGS } from './strings-ask.js';
+import { VERDICT_STRINGS } from './strings-verdict.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -118,8 +122,11 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  ...VERDICT_STRINGS,
   // the storyline as swimlanes (round 2026-10-10 §2) live in strings-lanes.ts (map.layout.*, lanes.*)
   ...LANES_STRINGS,
+  // the fold's words: a row of chips folded to +n, a path that keeps its two ends, a rail's tabs folded to a menu
+  ...FOLD_STRINGS,
   // compare two syncs on a storyline (round 2026-10-10, proposal 7) live in strings-compare.ts (compare.*, map.biz.compare.*, count.unit.deltas)
   ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts
@@ -152,6 +159,9 @@ export const STRINGS: Record<string, StringEntry> = {
   ...EVIDENCE_STRINGS,
   // what an agent gets (copy doors, commits made with an agent, lessons, empty states) lives in strings-agents.ts
   ...AGENT_STRINGS,
+  // the guided walk and Ask (round 2026-10-10, proposal 8) live in strings-tour.ts and strings-ask.ts (tour.*, ask.*, their counts)
+  ...TOUR_STRINGS,
+  ...ASK_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
@@ -2249,9 +2259,9 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.obs.cases': same('{n} of them ran',
     'The run behind the evidence word: test cases a results report named running over this code. The only kind of evidence that names a test.'),
   'journey.obs.casesOne': one('1 of them ran', 'journey.obs.cases'),
-  'journey.obs.passed': same('{n} of them passed',
-    'The run behind the evidence word: end-to-end cases a results report says passed, each declaring that it covers this code.'),
-  'journey.obs.passedOne': one('1 of them passed', 'journey.obs.passed'),
+  'journey.obs.passed': same('{n} declaring end-to-end cases passed',
+    'The run behind the evidence word: end-to-end cases a results report says passed, each declared by its own @covers to cover this code. Not the cases by their own runs, which are counted beside it.'),
+  'journey.obs.passedOne': one('1 declaring end-to-end case passed', 'journey.obs.passed'),
   'journey.obs.none': same('nothing observed',
     'No run of any kind reached this code: the evidence word beside it is a claim or a reading of the test bodies, and no run stands behind it.'),
   'journey.tests.theirRun': same('their own last run',

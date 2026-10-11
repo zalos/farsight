@@ -11,6 +11,8 @@ import { t, proseHtml } from '../strings.js';
 import { sym } from '../sym.js';
 import { vsl, linkHtml } from '../lib/graph-render.js';
 import { stateOfPlayShellHtml, mountStateOfPlay } from '../lib/state-of-play.js';
+import { walkDoorHtml } from '../lib/tour.js';
+import { askBoxHtml, redrawAsk } from '../lib/ask.js';
 import { tipAttrs, tipSource } from '../lib/tooltip.js';
 import { plainTip, countedHtml, defAttrs } from '../lib/counted.js';
 import { loadJourneyTree, jrnPersonaName, jrnGroupName, jrnOrgCountsHtml, screenThumbHtml } from '../lib/journeys-tree.js';
@@ -74,6 +76,8 @@ function renderPicker(el) {
   let html = '<div class="set-wrap"><h1>' + esc(t('journeys.pickerTitle')) + '</h1><p class="sub">' + esc(t('journeys.pickerSub')) + '</p>'
     // READ THIS IF beside the STATE OF PLAY, and the words this application leans on (round 2026-10-10)
     + stateOfPlayShellHtml()
+    // Ask, under the state of play (round 2026-10-10, proposal 8): a question answered from the graph
+    + '<div class="set-sec jrn-ask">' + askBoxHtml({ id: 'front', repo: S.scope !== 'all' && S.scope.length === 1 ? S.scope[0] : '' }) + '</div>'
     + '<div id="jrn-storylines"></div>'
     + '<div id="jrn-organised"></div>'
     + '<div id="jrn-designs"></div>';
@@ -93,6 +97,7 @@ function renderPicker(el) {
   });
   html += '</div>';
   el.innerHTML = html;
+  redrawAsk(el);
   // both reads start now; the state of play paints first, then the journeys under it — one order, so nothing
   // the reader is pointing at moves when the card above it fills
   jrnFrontDoorData();
@@ -187,6 +192,7 @@ function jrnStorylinesHtml(org) {
       + '<div class="jrn-story-go">'
       + '<a class="rel jrn-story-map" href="' + esc('#/map?storyline=' + encodeURIComponent(st.id)) + '">' + sym('open') + ' ' + esc(t('journeys.storyline.openMap')) + '</a>'
       + readinessDoorHtml(st.id, 'jrn-story-ready', st.repo)
+      + walkDoorHtml({ storyline: st.id }, 'jrn-story-walk')
       + (steps.length ? '<button class="rel jrn-story-first" onclick="openJourney(' + jsArg(steps[0].nodeId) + ')">' + sym('start') + ' ' + esc(t('journeys.storyline.openFirst')) + '</button>' : '')
       + '</div></div>';
   }
@@ -399,6 +405,7 @@ function jrnFlowCardHtml(f, rows, repo, pinned, extra) {
     + (chips ? '<div class="dsg-chips">' + chips + '</div>' : '')
     + (docs ? '<div class="dsg-docs">' + docs + '</div>' : '')
     + (f.nodeId ? '<button class="rel" onclick="openJourney(' + jsArg(f.nodeId) + ')">' + sym('start') + ' ' + esc(t('journey.openJourney')) + '</button>' : '')
+    + (f.nodeId ? walkDoorHtml({ flow: f.nodeId }, 'jrn-walk') : '')
     + '</div>';
 }
 /**

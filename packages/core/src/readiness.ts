@@ -6,10 +6,15 @@
  * screens meet, in the words somebody wrote for it, with the screens it sits on, the cases that reach it
  * and the owner the design names.
  *
- * The policy is stated, not tuned: a row **holds** when a screen it names is not built, or a case in its
- * scope failed or was skipped on its own last run. Nothing else holds a row — a step no run names ships
- * with that said beside it (its verdict word), because the brief prints evidence and its absence, never
- * a confidence it does not have. Pure over the graph; the commits come from a callback the caller backs
+ * The policy is stated, not tuned: a row **holds** when a screen it names is not built, or **one of its own
+ * declared cases** — an end-to-end case whose `@covers` names this journey — failed or was skipped on its
+ * own last run; the hold names the case. Any other case in scope that skipped or failed is a **note** on the
+ * row, never a hold: under the first policy every row of the reference app's storyline held *because a case
+ * was skipped* (a unit case three screens away), and a brief that always says *hold* says nothing (swarm
+ * round 3, finding 5). A step no run names ships with that said beside it (its verdict word), because the
+ * brief prints evidence and its absence, never a confidence it does not have. The header's numbers are
+ * **distinct** over the storyline — a case or a gate shared by two journeys is counted once — and say so,
+ * with the per-row numbers in `distinct` for their tip. Pure over the graph; the commits come from a callback the caller backs
  * with the commit spine (server: `SnapshotDb.commitsTouching`), absent = not known.
  */
 import type { GraphNode, GateClass, GateTier } from './graph.js';
@@ -51,6 +56,12 @@ export interface ReadinessRow {
   commitsSince: number | null;
   ship: boolean;
   hold: ReadinessHoldReason[];
+  /** the journey's own declared cases (an end-to-end `@covers` naming it) that hold it: each named, with its run */
+  holdCases: { id: string; name: string; status: 'failed' | 'skipped' }[];
+  /** its own declared cases, how many — the cases the policy reads */
+  ownCases: number;
+  /** cases in scope that skipped or failed and are not its own declared cases: said on the row, never a hold */
+  notes: { skipped: number; failed: number };
   owner?: string;
 }
 
@@ -77,7 +88,16 @@ export interface Readiness {
   rows: ReadinessRow[];
   rules: ReadinessRule[];
   counted: { steps: Counted; ship: Counted; hold: Counted; skipped: Counted; unreached: Counted; rules: Counted };
+  /**
+   * The header's two distinct totals beside what each row counts, for their tip: a case or a gate two journeys
+   * share is one in the header and one on each row, so the rows add up to more (the reference app: 12 distinct
+   * skipped cases, 46 on the rows; 5 gates, 8 on the rows).
+   */
+  distinct: { skipped: { label: string; name: string; n: number }[]; unreached: { label: string; name: string; n: number }[] };
 }
+
+/** The order the register reads: business first, then policy, then technical — and within a tier the fewest tests first. */
+const TIER_RANK: Record<string, number> = { business: 0, policy: 1, technical: 2 };
 
 const SRC = 'core readiness.ts readiness';
 type CommitsSince = (repo: string, parts: { node: string; path?: string }[], since: string) => number | null;
@@ -130,6 +150,20 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
     const ats = refs.map((t) => t.at).filter((x): x is string => !!x).sort();
     const greens = refs.filter((t) => t.status === 'passed' && t.at).map((t) => t.at!).sort();
     const lastGreen = greens.pop() ?? null;
+    // the journey's own declared cases: an end-to-end case whose `@covers` names this journey (by its id or node id)
+    const own = refs.filter((t) => {
+      if (t.level !== 'e2e') return false;
+      const d = index.byId.get(t.id)?.test?.declares ?? [];
+      return d.includes(r.id) || d.includes(r.nodeId);
+    });
+    const ownIds = new Set(own.map((t) => t.id));
+    const holdCases = own.filter((t) => t.status === 'failed' || t.status === 'skipped')
+      .map((t) => ({ id: t.id, name: t.name, status: t.status as 'failed' | 'skipped' }))
+      .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'failed' ? -1 : 1));
+    const notes = {
+      skipped: refs.filter((t) => t.status === 'skipped' && !ownIds.has(t.id)).length,
+      failed: refs.filter((t) => t.status === 'failed' && !ownIds.has(t.id)).length,
+    };
     const unreached = [...gateIds].filter((id) => (card(id)?.tests.length ?? 0) === 0)
       .map((id) => ({ id, name: index.byId.get(id)?.name ?? id }));
     const builtN = screens.length ? screens.filter((s) => s.built).length : r.built;
@@ -137,8 +171,8 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
     const allBuilt = of > 0 ? builtN === of : r.status === 'both';
     const hold: ReadinessHoldReason[] = [];
     if (!allBuilt) hold.push('notBuilt');
-    if (part('failed')) hold.push('failed');
-    if (part('skipped')) hold.push('skipped');
+    if (holdCases.some((c) => c.status === 'failed')) hold.push('failed');
+    if (holdCases.some((c) => c.status === 'skipped')) hold.push('skipped');
     const commitsSince = lastGreen && opts.commitsSince && parts.length ? opts.commitsSince(r.repo, parts, lastGreen) : null;
     return {
       label, kind, flowId: r.nodeId, name: r.name,
@@ -153,6 +187,9 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
       commitsSince,
       ship: hold.length === 0,
       hold,
+      holdCases,
+      ownCases: own.length,
+      notes,
       ...(r.owner ? { owner: r.owner } : {}),
     };
   };
@@ -181,7 +218,9 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
       owners: [...owners].sort(),
       tier: t.tier, class: t.class,
     };
-  }).sort((a, b) => b.screens - a.screens || a.name.localeCompare(b.name));
+  // ranked by tier, then by how few cases reach it: the business rule no test reaches reads first (swarm round 3,
+  // the executive: the one rule that gates paying money had 0 tests and sorted below cookie checks)
+  }).sort((a, b) => (TIER_RANK[a.tier ?? 'business']! - TIER_RANK[b.tier ?? 'business']!) || a.tests - b.tests || b.screens - a.screens || a.name.localeCompare(b.name));
 
   const steps = rows.filter((r) => r.kind === 'step').length;
   const ship = rows.filter((r) => r.ship).length;
@@ -206,9 +245,13 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
           { key: 'count.part.holdSkipped', n: rows.filter((r) => r.hold[0] === 'skipped').length },
         ],
       }),
-      skipped: counted(skippedCases, 'count.unit.readinessSkipped', scope, `${SRC} → distinct cases over the storyline whose own last run skipped`, { bizUnit: 'count.unit.readinessSkipped' }),
+      skipped: counted(skippedCases, 'count.unit.readinessSkipped', scope, `${SRC} → distinct cases over the storyline whose own last run skipped (rows: ${rows.reduce((s, r) => s + r.skipped, 0)})`, { bizUnit: 'count.unit.readinessSkipped' }),
       unreached: counted(unreachedIds.size, 'count.unit.readinessUnreached', scope, `${SRC} → distinct gates on its screens with no case in their gate card`, { bizUnit: 'count.unit.readinessUnreached' }),
       rules: counted(ruleRows.length, 'count.unit.readinessRules', scope, `${SRC} → distinct gates and rules on its screens`, { bizUnit: 'count.unit.readinessRules' }),
+    },
+    distinct: {
+      skipped: rows.map((r) => ({ label: r.label, name: r.name, n: r.skipped })),
+      unreached: rows.map((r) => ({ label: r.label, name: r.name, n: r.gates.unreached.length })),
     },
   };
 }
@@ -222,7 +265,7 @@ export function readinessCsvRows(r: Readiness, word: (key: string) => string): {
     x.verdict ? word(x.verdict.word.key) : '', x.lastRun ?? '',
     String(x.skipped), String(x.failed), String(x.unrun), String(x.gates.n), String(x.gates.unreached.length),
     x.commitsSince == null ? '' : String(x.commitsSince),
-    x.ship ? 'ship' : 'hold', x.hold.map((h) => word(`readiness.hold.${h}`)).join(' · '), x.owner ?? '',
+    x.ship ? 'ship' : 'hold', [...x.hold.map((h) => word(`readiness.hold.${h}`)), ...x.holdCases.map((c) => c.name)].join(' · '), x.owner ?? '',
   ]);
   return { header, rows };
 }

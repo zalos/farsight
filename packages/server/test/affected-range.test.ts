@@ -142,8 +142,13 @@ test('the readiness brief: one row per step and branch, ship or hold by the stat
   assert.deepEqual(r.rows.map((x) => x.label), ['1', '1b', '2']);
   assert.equal(r.rows[1]!.kind, 'branch');
   for (const row of r.rows) {
-    const held = [!row.built.all && 'notBuilt', row.failed > 0 && 'failed', row.skipped > 0 && 'skipped'].filter(Boolean);
+    // swarm round 3: a screen not built, or the journey's own declared case failed or skipped — and the case is named;
+    // every other skipped or failed case is a note on the row
+    const own = (k: string) => row.holdCases.some((c) => c.status === k);
+    const held = [!row.built.all && 'notBuilt', own('failed') && 'failed', own('skipped') && 'skipped'].filter(Boolean);
     assert.deepEqual(row.hold, held, `${row.label} holds for exactly the policy's reasons`);
+    assert.equal(row.holdCases.length <= row.ownCases, true);
+    assert.equal(row.notes.skipped + row.holdCases.filter((c) => c.status === 'skipped').length, row.skipped, `${row.label}: every skipped case is a hold or a note`);
     assert.equal(row.ship, held.length === 0);
     for (const h of row.hold) assert.ok((READINESS_HOLD_REASONS as readonly string[]).includes(h));
     if (row.lastGreen) assert.equal(row.commitsSince, SPINE.filter((c) => c.at > row.lastGreen!).length);

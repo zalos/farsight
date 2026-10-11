@@ -24,12 +24,14 @@ import { vsl, linkHtml, designThumbHtml } from './graph-render.js';
 import { doorsFor, doorsHtml } from './detail-doors.js';
 import { gateAttrs } from './gate-card.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from './tooltip.js';
+import { pathHtml } from './fold-row.js';
 import { defAttrs, countKey } from './counted.js';
 import { jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnInspPanelHtml } from '../surfaces/journey-drill.js';
 import { lifecycleStripHtml, headerLifecycles } from './lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from './freshness.js';
 import { momOrdinal, buildTree, cellTree, sheetModel, stopOf, ladderModel, LADDER } from './journey-model.js';
-import { testChipHtml, distinctArgs } from './test-chip.js';
+import { testChipHtml, distinctArgs, builtOnlyHtml } from './test-chip.js';
+import { scopeWordKey } from './scope-words.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -746,7 +748,7 @@ function jrnGateRowHtml(g, qualifier) {
     + sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock')
     + '<span class="jrn-gl-w">' + esc(words) + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
     // the tier beside the name outside the business register, which groups by it instead
-    + (g.tier && currentLens() !== 'business' && !g.config ? ' <span class="gate-tier ' + esc(g.tier) + '"' + tipAttrs({ key: 'gate.tier.' + g.tier }) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
+    + (g.tier && !g.config ? ' <span class="gate-tier ' + esc(g.tier) + '"' + tipAttrs({ key: 'gate.tier.' + g.tier }) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
     // a real space, not only the margin: this row is read in a screenshot and
     // pasted into a ticket as often as it is clicked
     + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
@@ -848,8 +850,10 @@ export function jrnGateTiersHtml(gates, scopeKey, cfg, o) {
       + jrnGateGroupHtml(technical, 'gate.tier.technical', scopeKey, 'technical') + '</details>'
     : '';
   // the tier counts and where a tier comes from, once per screen's list — not in every action's cell
+  // counted by each check's own tier, never by the group it reads under (a sign-in check is *policy* under *who may*)
+  const byTier = (k) => (gates || []).filter((g) => (g.tier || 'business') === k).length;
   const legend = !opt.legend ? '' : '<div class="jrn-gl-legend">' + ['business', 'policy', 'technical'].map((k) => {
-    const n = { business: who.length + record.length, policy: policy.length, technical: technical.length }[k];
+    const n = byTier(k);
     return '<span class="gate-tier ' + k + '"' + tipAttrs({ key: 'gate.tier.' + k }) + '>' + esc(t('gate.tier.' + k)) + ' ' + n + '</span>';
   }).join('') + '<span class="jrn-gl-legend-w"' + tipAttrs({ key: 'gate.tierFrom.class' }) + '>' + esc(t('gate.tierFrom.class')) + '</span></div>';
   return '<div class="jrn-gatelist tiers">'
@@ -869,10 +873,14 @@ export function jrnGateTiersHtml(gates, scopeKey, cfg, o) {
 export function jrnGateTiers(gates) {
   const rows = (gates || []).slice().sort((a, b) => a.stepOrder - b.stepOrder);
   const technical = rows.filter((g) => g.tier === 'technical');
-  const policy = rows.filter((g) => g.tier === 'policy');
-  const biz = rows.filter((g) => g.tier !== 'technical' && g.tier !== 'policy');
-  const record = biz.filter((g) => g.class === 'record-state' || g.class === 'completeness');
-  const whoAll = biz.filter((g) => !record.includes(g));
+  const kept = rows.filter((g) => g.tier !== 'technical');
+  // the groups are by what a check is about; the tier stays the check's own and rides on its row (swarm round 3:
+  // a sign-in check is tier *policy* and still reads under *who may*; four-eyes is tier *business* and reads
+  // under *the record must be*)
+  const record = kept.filter((g) => g.class === 'record-state' || g.class === 'completeness' || g.class === 'integrity');
+  const isWho = (g) => g.class === 'identity' || g.class === 'authorisation' || (!g.class && g.tier !== 'policy');
+  const whoAll = kept.filter((g) => !record.includes(g) && (isWho(g) || (g.tier !== 'policy' && g.tier !== 'technical')));
+  const policy = kept.filter((g) => !record.includes(g) && !whoAll.includes(g));
   // sign-in checks say the same thing to a business reader: one row per wording, the times summed
   const who = [];
   const byWords = new Map();
@@ -941,9 +949,11 @@ export function jrnUntranslatedHtml(n, scope, c, list) {
   // with no typed count (an action's cell), the same builder over a bare one, so the list rides along
   const cc = c || { n, unit: 'count.unit.notInWords', bizUnit: 'journey.biz.untranslated', scope: scope || 'journey.scopeHere' };
   const tip = tipAttrs({ id: 'jrnCounted', args: { c: cc, list: list || undefined } });
+  // its scope beside it, every time: 10 · 27 · 96 · 136 on four panels read as one number that would not hold still (swarm round 3)
+  const over = ' <span class="tc-scope" data-scope-word="' + esc(scopeWordKey(cc.scope)) + '">' + esc(t(scopeWordKey(cc.scope))) + '</span>';
   return biz
-    ? '<div class="jrn-untr sentence"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + '</div>'
-    : '<span class="jrn-untr"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + '</span>';
+    ? '<div class="jrn-untr sentence"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + over + '</div>'
+    : '<span class="jrn-untr"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + over + '</span>';
 }
 /**
  * The three things the business lane can draw beneath its sentence. `words`
@@ -1300,7 +1310,7 @@ export function jrnMarkerHtml(m) {
     + (txKey ? ' · ' + t(txKey) : '');
   return '<span class="jrn-mk ' + (m.choice ? 'oneof ' : '') + gk.c + (m.tx ? ' tx-' + m.tx : '') + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + (m.helper ? ' helper' : '')
     + '" data-order="' + m.stepOrder + '" tabindex="0" onclick="event.stopPropagation();jrnSelect(' + m.stepOrder + ')" title="' + esc(title) + '">'
-    + sym(m.choice ? 'oneof' : gk.g) + label + (m.op ? '<i>' + esc(t('journey.op.' + m.op)) + '</i>' : '') + (m.repeat ? '<span class="rep">↺</span>' : '')
+    + sym(m.choice ? 'oneof' : gk.g) + '<span class="lb">' + label + '</span>' + (m.op ? '<i>' + esc(t('journey.op.' + m.op)) + '</i>' : '') + (m.repeat ? '<span class="rep">↺</span>' : '')
     + (m.cut ? '<span class="cut" title="' + esc(def('journey.cutPoints')) + '">▸ ' + esc(t('journey.notFollowed').replace('{n}', m.cut)) + '</span>' : '')
     + '</span>';
 }
@@ -1326,14 +1336,15 @@ export function jrnSeamCardHtml(m) {
     : c.status === 'declared' ? 'apis.status.declared' : c.status === 'code-only' ? 'apis.status.codeOnly' : 'apis.status.implemented';
   const statusCls = c.status === 'both' ? ' ok' : c.status === 'code-only' ? ' warn' : c.status === 'spec-only' ? ' stub' : '';
   const end = (e, cls, word) => e
-    ? '<span class="' + cls + '">' + esc(word) + ' ' + esc(e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
+    // the path keeps its two ends and breaks at `/`; its tip carries it whole (nothing clips at the column's edge)
+    ? '<span class="' + cls + '">' + esc(word) + ' ' + pathHtml(e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
     : '<span class="' + cls + ' miss">' + esc(word) + ': ' + esc(t('journey.seam.notBuilt')) + '</span>';
   return '<span class="jrn-seam' + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" data-order="' + m.stepOrder + '" tabindex="0"'
     + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc((m.method || '') + ' ' + (m.path || '')) + '">'
     + '<span class="l1">' + sym('api') + (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') + '<span class="nm">' + esc(name) + '</span>'
     // the code names no method and several endpoints share the address: the read one is shown, and says so
     + (m.methodAssumed ? '<span class="api-chip warn"' + tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) + '>' + esc(t('journey.seam.methodAssumed')) + '</span>' : '')
-    + (summary ? '<span class="sum">' + proseHtml(summary) + '</span>' : '')
+    + (summary ? '<span class="sum"' + tipAttrs({ text: summary, noFocus: true }) + '>' + proseHtml(summary) + '</span>' : '')
     // whether the spec and the code agree is a developer's question
     + (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>')
     + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
@@ -1380,7 +1391,7 @@ export function jrnRowLabel(r) {
 export function jrnDock() {
   if (!S.jrnDock) {
     try { S.jrnDock = localStorage.getItem('fs-jrn-dock'); } catch (e) { S.jrnDock = null; }
-    if (!/^(inline|bottom|right)$/.test(S.jrnDock || '')) S.jrnDock = 'bottom';
+    if (!/^(inline|bottom|right)$/.test(S.jrnDock || '')) S.jrnDock = 'right';
   }
   return S.jrnDock;
 }
@@ -1391,7 +1402,7 @@ export function jrnDock() {
  * @business Pins the code and contract pane where it can be read without scrolling away from the journey.
  */
 export function jrnSetDock(v) {
-  S.jrnDock = /^(inline|bottom|right)$/.test(v) ? v : 'bottom';
+  S.jrnDock = /^(inline|bottom|right)$/.test(v) ? v : 'right';
   try { localStorage.setItem('fs-jrn-dock', S.jrnDock); } catch (e) { /* private mode: the pane is just not remembered */ }
   jrnApplyDock();
   if (S.JOURNEY && S.JRN_MARK && !S.JRN_DRILL) jrnSelect(S.journeyActive, true);
@@ -1491,11 +1502,12 @@ const { TIME: JRN_LAD_TIME, SKIP: JRN_LAD_SKIP, END: JRN_LAD_END } = LADDER;
 function jrnLadderModel(sum, sg) {
   const lm = ladderModel(sum, sg, { steps: S.JOURNEY.steps, text: jrnMarkerText, word: (key) => jrnAbsentWord(sg, null, key) });
   // the model's cells are plain descriptors; the overlay draws them as it always has
-  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + esc(c.at) + ' →</span>'
+  // a path keeps its two ends and its tip carries it whole; a name ellipsises inside its column (the marker's title)
+  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + pathHtml(c.at, { max: 34 }) + ' →</span>'
     : c.type === 'seam' ? jrnSeamCardHtml(c.m) + '<span class="go"> →</span>'
     : c.type === 'out' ? '<span class="go out">→</span>'
     : c.type === 'marker' ? jrnMarkerHtml(c.m)
-    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + esc(c.loc) + '</span>' : ''));
+    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + pathHtml(c.loc, { max: 34 }) + '</span>' : ''));
   lm.lines = lm.lines.map((l) => {
     const cells = {};
     Object.keys(l.cells).forEach((k) => { cells[k] = cell(l.cells[k]); });
@@ -2059,13 +2071,14 @@ export function jrnSchemaChipHtml(m) {
   const res = (c.responses || []).filter((r) => /^2/.test(String(r.status))).map((r) => r.schema).filter(Boolean)[0] || '';
   if (!req && !res) return '';
   const text = req ? t('journey.schemaChip').replace('{req}', req).replace('{res}', res) : t('journey.schemaOut').replace('{res}', res);
-  return '<span class="jrn-mk schema" onclick="jrnSelect(' + m.stepOrder + ')">' + esc(text.trim()) + '</span>';
+  return '<span class="jrn-mk schema" onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc(text.trim()) + '"><span class="lb">' + esc(text.trim()) + '</span></span>';
 }
 /** One translated decision as a sheet chip — a fork the flow can take in this action.
  * @group Journey view */
 function jrnSheetDecChipHtml(d) {
-  return '<span class="jrn-mk dec" onclick="jrnScrollTo(' + d.order + ')" title="' + esc(t('journey.decisionChip')) + '">'
-    + sym('fork') + esc(d.label) + '</span>';
+  // the condition is code and can be long: it ellipsises inside its cell, and the tip carries it whole
+  return '<span class="jrn-mk dec" onclick="jrnScrollTo(' + d.order + ')" title="' + esc(d.label + ' · ' + t('journey.decisionChip')) + '">'
+    + sym('fork') + '<span class="lb">' + esc(d.label) + '</span></span>';
 }
 /**
  * The chips of one cell under the fold rule: two are shown, the rest hide
@@ -2075,9 +2088,16 @@ function jrnSheetDecChipHtml(d) {
  */
 function jrnSheetChipsHtml(chips, li, ci) {
   const rest = chips.slice(2);
+  // the `+n` names what it folds: its tip lists the rest, one name each, in the cell's order
   return chips.slice(0, 2).join('')
     + (rest.length ? '<span class="jrn-sx">' + rest.join('') + '</span>'
-      + '<button class="jrn-smore" onclick="jrnSheetOpen(' + li + ',' + ci + ',\'open\',this)">' + esc(t('journey.moreChips')).replace('{n}', () => jrnNumHtml(rest.length, 'journey.moreChips', 'count.scope.action', { num: true, noFocus: true })) + '</button>' : '')
+      + '<button class="jrn-smore" onclick="jrnSheetOpen(' + li + ',' + ci + ',\'open\',this)"' + tipAttrs({ text: rest.map(chipText).filter(Boolean).join(' · '), noFocus: true }) + '>' + esc(t('journey.moreChips')).replace('{n}', () => jrnNumHtml(rest.length, 'journey.moreChips', 'count.scope.action', { num: true, noFocus: true })) + '</button>' : '')
+}
+/** The words a chip's HTML reads as (its text, entities decoded) — what a `+n` tip lists. */
+function chipText(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  return tpl.content.textContent.replace(/\s+/g, ' ').trim();
 }
 /** Open the rest of a cell's chips and re-walk the j/k order so the revealed steps join it.
  * @group Journey view */
@@ -2259,10 +2279,12 @@ export function jrnCasesHref(scope) {
  * no run earned says *nothing observed*.
  * @group Journey view
  */
-export function jrnObsText(facts) {
+export function jrnObsText(facts, opts = {}) {
   const o = facts && facts.observation;
   if (!o) return facts && facts.evidenceWord && facts.evidenceWord.cls !== 'none' ? t('journey.obs.none') : '';
-  return [jrnObsWho(o), (o.at || '').slice(0, 10)].filter(Boolean).join(' · ');
+  // a chip that already names the declaring cases beside its word (`testBasisHtml`) keeps only the day here
+  const who = opts.chipNamesCases && o.by === 'declaration' ? '' : jrnObsWho(o);
+  return [who, (o.at || '').slice(0, 10)].filter(Boolean).join(' · ');
 }
 /** Who observed a run: the cases a results report named, and the coverage reports that name none.
  * @group Journey view */
@@ -2281,17 +2303,21 @@ function jrnEvidenceTip(el, a) {
   if (!ev.key) return '';
   const o = a.obs;
   const rows = o ? [
-    ['tip.journey.obs.by', jrnObsWho(o)],
+    // a declaration's cases earned the word; *observed by* would word a pass as a run seen reaching the code
+    [o.by === 'declaration' ? 'tip.journey.obs.byDecl' : 'tip.journey.obs.by', jrnObsWho(o)],
     ['tip.journey.obs.when', (o.at || '').slice(0, 10)],
     // the cell's verdict (core `testVerdict().status`): none when a coverage report alone earned the word
     ['tip.journey.obs.verdict', a.verdict ? (a.verdict.status ? 'tests.run.' + a.verdict.status : '') : o.by === 'runs' ? '' : 'tests.run.' + (o.status || 'unknown')],
     ['tip.journey.obs.since', o.freshness === 'changed' && o.changedBy === 'working-tree' ? 'tests.freshness.changedTree' : 'tests.freshness.' + (o.freshness || 'unknown')],
-  ].filter((r) => r[1]) : [['tip.journey.obs.by', 'journey.obs.none']];
+  ].filter((r) => r[1]) : null;
   const biz = currentLens() === 'business';
+  // no run handed with the word: a word a run earned says nothing more here (its run is on the surface that drew it);
+  // a claim or a reading says so as a sentence — never a table row reading *observed by — nothing observed* (swarm round 3)
+  const noRun = !rows && ev.cls !== 'observed' && ev.cls !== 'stale' ? '<p class="tip-p">' + esc(def('journey.obs.none')) + '</p>' : '';
   return '<div class="tip-h">' + esc(t(ev.key)) + '</div>'
     + (def(ev.key) ? '<p class="tip-p">' + esc(def(ev.key)) + '</p>' : '')
     + (biz && ev.biz ? '<p class="tip-p">' + esc(t(ev.biz)) + '</p>' : '')
-    + tableTip({ caption: 'tip.journey.obs.head', rows })
+    + (rows ? tableTip({ caption: 'tip.journey.obs.head', rows }) : noRun)
     // *stale* as a comparison: the sentence that names the run's side and the code's (core freshness.ts)
     + (freshShown(a.fresh) ? '<p class="tip-p jrn-fresh-tip">' + esc(freshSentence(a.fresh)) + '</p>' : '');
 }
@@ -2302,9 +2328,10 @@ export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
-  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
+  const pb = builtOnlyHtml(ev);
+  return pb.before + JRN_FOOT_EV + esc(cls) + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-    + esc(t(ev.key)) + '</span>';
+    + esc(t(ev.key)) + '</span>' + pb.after;
 }
 // written out whole: an attribute assembled from pieces reads as prose to the lint
 const JRN_IMPDOOR = '<div class="line imp-door"><a href="#" onclick="return impactGo(this)" data-node="';
@@ -2444,8 +2471,9 @@ function jrnSheetHeadHtml(col) {
   }).join('');
   const cut = jrnMomentCut(sg, mo);
   return '<div class="jrn-sbh' + (mo.repeat ? ' rep' : '') + '" data-col="' + col.index + '"'
-    + ' onclick="jrnScrollTo(' + (mo.callStep != null ? mo.callStep : mo.actionStep) + ')" title="' + esc(mo.business || mo.label) + '">'
-    + '<span class="t"><span class="ord">' + (col.index + 1) + '</span>' + sym(mo.component ? 'human' : 'automation') + esc(jrnMoLabel(mo)) + '</span>'
+    + ' onclick="jrnScrollTo(' + (mo.callStep != null ? mo.callStep : mo.actionStep) + ')" title="' + esc([jrnMoLabel(mo), mo.business || mo.label].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ')) + '">'
+    // the name clamps to two lines inside its column; the title carries it whole
+    + '<span class="t"><span class="ord">' + (col.index + 1) + '</span>' + sym(mo.component ? 'human' : 'automation') + '<span class="tx">' + esc(jrnMoLabel(mo)) + '</span></span>'
     + '<span class="out">' + outs
       + (mo.repeat ? '<span class="api-chip rep">' + esc(t('journey.repeated')) + '</span>' : '')
       + (cut ? '<span class="api-chip warn">' + esc(t('journey.countCut').replace('{n}', cut)) + '</span>' : '')
@@ -2599,7 +2627,10 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
   // the whole — technical conditions plus gate conditions nobody labelled — in
   // every lens: one concept, one number. The header uses the short words; the
   // tip heads with the business sentence in the business lens.
-  g('g-words', [jrnCountedHtml(C('notInWords'), { unit: 'count.unit.notInWords', cls: 'jrn-untrn', rel: [C('decisions'), C('inWords')], list: { t: true, g: true } })]);
+  const nw = C('notInWords');
+  g('g-words', [jrnCountedHtml(nw, { unit: 'count.unit.notInWords', cls: 'jrn-untrn', rel: [C('decisions'), C('inWords')], list: { t: true, g: true } })
+    // its scope, as every other panel's count of the same thing says its own (swarm round 3)
+    + (nw && nw.n ? ' <span class="tc-scope" data-scope-word="' + esc(scopeWordKey(nw.scope)) + '">' + esc(t(scopeWordKey(nw.scope))) + '</span>' : '')]);
   // the tests: how many reach the journey, the evidence word, and the run behind
   // it beside the word — so *seen by a coverage run* never stands alone above a
   // `0 observed` it does not explain. The e2e rung is in the tests' tip.
@@ -2611,13 +2642,17 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
   // built, so no word about it is a claim this flow can earn (blocker 2)
   const evHtml = cov && cov.sharedEvidence
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
-  const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
+    : chipCls ? builtOnlyHtml(ev).before + '<span class="jrn-e2e ' + esc(chipCls) + builtOnlyHtml(ev).cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' + builtOnlyHtml(ev).after : '';
+  const chipped = !!(cov && cov.counted && cov.counted.tests && cov.counted.tests.n);
+  // who earned the word and when is the word's own tip (*earned by* · *when*): the head keeps its one row for the chip
+  // and the freshness sentence (swarm round 3 — *29 of them passed* beside PASSED read as 29 of the 401)
+  const obs = !business && facts && !(cov && cov.sharedEvidence) && !chipped ? jrnObsText(facts) : '';
   g('g-tests', [
     // one chip: the cases, *over this journey*, *distinct* beside per-screen counts (its tip is the per-screen
     // table), the one word and the skips — the shared-evidence case keeps its sentence instead of the word
     cov && cov.counted && cov.counted.tests && cov.counted.tests.n
-      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests', evCls: 'jrn-e2e' }) + (cov.sharedEvidence ? ' ' + evHtml : '')
+      // the declaring cases are named in the word's tip (*earned by*), not on the line: the head keeps one row for the chip
+      ? testChipHtml(facts, { distinct: distinctArgs(sum), word: !cov.sharedEvidence, cls: 'jrn-htests', evCls: 'jrn-e2e', basis: false, builtShown: !!C('built') }) + (cov.sharedEvidence ? ' ' + evHtml : '')
       : jrnCountedHtml(tk.tests, { rel: [tk.e2e, tk.unit, tk.integration, tk.runReports] }) + evHtml,
     obs ? '<span class="jrn-obs">' + esc(obs) + '</span>' : '',
     // the freshness sentence beside the word: *stale* with both sides, or *current as of sync N* (finding 2)

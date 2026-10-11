@@ -76,7 +76,8 @@ function historyHtml(h) {
   if (!h) return '<li><span' + defAttrs('state.historyNone') + '>' + esc(t('state.historyNone')) + '</span></li>';
   return '<li class="sop-hist">' + [h.read, h.ingested, h.notYet].map((c) => countedHtml(c, API, { cls: 'sop-n' })).join(' · ') + recheckHtml(h.read) + '</li>'
     // of the commits read, the ones made with an AI assistant (round 2026-10-10, proposal 9)
-    + (h.agents ? lineHtml(h.agents, h.agents.breakdown && h.agents.breakdown.length
+    // the business register says how many, never which models (swarm round 3: a breakdown by AI model on a steering slide)
+    + (h.agents ? lineHtml(h.agents, !business() && h.agents.breakdown && h.agents.breakdown.length
       ? ' <span class="sop-names">(' + esc(h.agents.breakdown.map((p) => p.label + ' ' + p.n).join(' · ')) + ')</span>' : '') : '');
 }
 
@@ -98,6 +99,8 @@ export function stateOfPlayHtml(s) {
   const parts = (v.cases && v.cases.breakdown || []).filter((p) => p.n && p.key !== 'count.part.passed');
   const casesLine = v.cases ? lineHtml(v.cases, parts.length ? ' · ' + parts.map((p) => '<span' + defAttrs(p.key) + '>' + esc(t(p.key).replace('{n}', p.n)) + '</span>').join(' · ') : '') : '';
   const validated = words.map((x, i) => lineHtml(x.journeys, ' <span class="sop-word ev-' + esc(x.word.cls) + '"' + defAttrs(x.word.key) + '>' + esc(t(x.word.key)) + '</span>', i === 0)).join('')
+    // build state wins: journeys with a screen not built are counted apart, never under *passed* (swarm round 3)
+    + (v.notFullyBuilt && v.notFullyBuilt.n ? lineHtml(v.notFullyBuilt) : '')
     + runLine + casesLine;
   const names = (o.notBuiltNames || []).length ? ' <span class="sop-names">(' + esc(o.notBuiltNames.join(', ')) + ')</span>' : '';
   const stillOpen = [

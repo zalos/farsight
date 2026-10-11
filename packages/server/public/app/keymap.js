@@ -35,6 +35,7 @@ const KEYS = [
   { keys: 'p', desc: 'key.mapPlumb' },
   { keys: 'w', desc: 'key.mapLanes' },
   { keys: 'g', desc: 'key.mapLegend' },
+  { keys: 'a', desc: 'key.walk' },
   { keys: 't', desc: 'key.t' },
   { keys: 'b', desc: 'key.b' },
   { keys: 'enter · o', desc: 'key.doors' },

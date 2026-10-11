@@ -17,6 +17,7 @@ import { sym } from '../sym.js';
 import { storiesCatalogueHtml } from '../stories.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
 import { tipAttrs } from '../lib/tooltip.js';
+import { builtOnlyHtml } from '../lib/test-chip.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { loadJourneyTree } from '../lib/journeys-tree.js';
 import { treeFrom, journeysInOrder } from '../lib/journeys-model.js';
@@ -322,8 +323,9 @@ function testedCell(row) {
   const cls = ev.cls;
   // the row's tip is the journey chip's: the word, the run behind it, and — where the word
   // says *stale* or the run is current — the freshness sentence naming both sides (finding 2)
-  return '<span class="' + EV_CLS[cls] + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: c.observation || null, fresh: c.freshness || null } }) + '>'
-    + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : '') + esc(t(ev.key)) + '</span>'
+  const pb = builtOnlyHtml(ev);
+  return pb.before + '<span class="' + EV_CLS[cls] + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: c.observation || null, fresh: c.freshness || null } }) + '>'
+    + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : '') + esc(t(ev.key)) + '</span>' + pb.after
     + levels;
 }
 

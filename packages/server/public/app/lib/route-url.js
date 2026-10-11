@@ -65,7 +65,7 @@ export function isOverlayAddress(hash) {
 }
 
 /** What each retired view of the journey page became on the Map: a layout at the stop it described. */
-const VIEW_LAYOUT = { storyboard: 'screens', timeline: 'table', sheet: 'table', drill: 'beats' };
+const VIEW_LAYOUT = { storyboard: 'screens', timeline: 'table', sheet: 'table', drill: 'drill' };
 /** The overlay's own parameters, which the converter reads and never carries over. */
 const OVERLAY_ONLY = new Set(['view', 'step', 'node', 'band', 'dock', 'biz', 'screen', 'part', 'layout']);
 
@@ -75,7 +75,7 @@ const OVERLAY_ONLY = new Set(['view', 'step', 'node', 'band', 'dock', 'biz', 'sc
  * - `step=n` → `screen=n` (the same ordinal);
  * - `node=<id>` → `part=<id>`: the part that was selected, which the Map opens where the layout says (the table with
  *   that part's code in the dock, else the action stop holding it);
- * - `view=` → `layout=`: storyboard → `screens`, timeline and sheet → `table`, drill → `beats` (`band=ladder` on the
+ * - `view=` → `layout=`: storyboard → `screens`, timeline and sheet → `table`, drill → `drill` (the rail over the beats) (`band=ladder` on the
  *   drill, or on any link naming a part → `ladder`); a link that named no view names no layout, so the register's own
  *   choice applies;
  * - `dock=` survives only beside a part (the code opens there); `biz=` is dropped;
@@ -189,8 +189,8 @@ export function partOrder(segments, screen, nodeId) {
 // `dock` rides with it), at any other layout the Map opens the action that holds it and rewrites the address to
 // `action` and `beat`.
 
-const LAYOUTS = new Set(['chain', 'lanes', 'screens', 'table', 'beats', 'ladder']);
-const ACTION_LAYOUTS = new Set(['beats', 'ladder']);
+const LAYOUTS = new Set(['chain', 'lanes', 'screens', 'table', 'beats', 'ladder', 'drill']);
+const ACTION_LAYOUTS = new Set(['beats', 'ladder', 'drill']);
 const DOCKS = new Set(['inline', 'bottom', 'right']);
 
 /**

@@ -425,8 +425,10 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.edge.scope': same('this journey, past the edge of the board', 'The screens of the journey in view whose middle is outside the board on this side.'),
   // §R2 — round 2 of the map pass (the second swarm's fixes)
   'map.affected.fit': same('fit these', 'Frame the journeys that reach the thing picked, not the whole board, so the lit ones read at the fit. Fit and 0 do the same while the mode is on.'),
-  'map.affected.list': same('list these', 'Open the answer as a list: the journeys, screens, owners and tests that reach the thing picked, one distance at a time, with copy as CSV or JSON.'),
-  'map.affected.listTitle': same('What reaches it, as a list', 'The same answer the board is dimmed around, written out: per distance the journeys with their owners, each screen once with the journeys it is on, the owners, and the tests first met there.'),
+  'map.affected.list': same('list these', 'Open the answer as a list in the dock: first the tests to run, each at its spec file and line with its own last run, then the journeys, screens and owners that reach the thing picked, one distance at a time, with copy as CSV or JSON.'),
+  'map.affected.listTitle': same('What reaches it, as a list', 'The same answer the board is dimmed around, written out: the tests to run first, then per distance the journeys with their owners, each screen once with the journeys it is on, and the owners.'),
+  'map.affected.testsToRun': same('the tests to run', 'Every test that reaches the thing picked or something that uses it, as far out as asked, each listed once at its nearest distance: the spec file and line it is written at, its level and its own last run. The same rows the CSV and JSON copy carry.'),
+  'map.affected.lastRun': same('last run {status}', 'What this case’s own last run said, and the day it ran, as the run’s report records it.'),
   'map.affected.owners': same('owners', 'The owners the journey manifest names for the journeys reached at this distance, each once.'),
   'map.affected.listClose': same('Close the list', 'Close the list. The board stays dimmed until clear or Esc.'),
   'map.affected.copyCsv': same('copy as CSV', 'Copy these rows as comma-separated values: seed, distance, kind, id, name, journeys, owner, evidence. The same rows as the list.'),

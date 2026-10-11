@@ -65,8 +65,8 @@ function stageHtml(st, r, m, say) {
   return '<div class="ln-stage' + (st.state === 'planned' ? ' planned' : '') + (st.branch ? ' branch' : '') + '" role="button" tabindex="0"'
     + ' data-key="' + esc(st.key) + '" data-flow="' + esc(st.flowId) + '" data-index="' + st.screenIndex + '" data-name="' + esc(st.name) + '"'
     + ' aria-label="' + esc(label) + '" style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px">'
-    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: st.name + (st.words ? ' · ' + say(st.words) : ''), noFocus: true }) + '>' + esc(st.name) + '</span></div>'
-    + (st.sub ? '<div class="sub">' + esc(say(st.sub)) + '</div>' : '')
+    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: [st.name, st.sub ? say(st.sub) : '', st.words ? say(st.words) : ''].filter((x, i, a) => x && a.indexOf(x) === i).join(' · '), noFocus: true }) + '>' + esc(st.name) + '</span></div>'
+    + (st.sub ? '<div class="sub"' + tipAttrs({ text: say(st.sub), noFocus: true }) + '>' + esc(say(st.sub)) + '</div>' : '')
     + '<div class="ln-chips">' + status + tests + '</div>' + dec + '</div>';
 }
 
@@ -80,8 +80,16 @@ function pillHtml(p, r, m, say) {
   const tip = recordWords(p.record.name) + ' · ' + move + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '');
   return '<div class="ln-pill ' + p.kind + '" data-key="' + esc(p.key) + '" data-record="' + esc(p.record.id) + '"' + (p.status != null ? ' data-status="' + esc(p.status) + '"' : '')
     + ' style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px"' + tipAttrs({ text: tip, noFocus: true }) + '>'
-    + '<div class="mv">' + sym('record') + (p.first && !p.isStore ? '<span class="rec">' + esc(recordWords(p.record.name)) + '</span><span class="sep">·</span>' : '') + '<span class="w">' + esc(move) + '</span></div>'
-    + (by && !biz() ? '<div class="by map-code">' + esc(by) + '</div>' : '') + needsHtml(p, say) + '</div>';
+    // the record and the move on two lines of their own, each whole — never an ellipsis (round-3 swarm: *inv… · status → S…*)
+    + (p.first && !p.isStore ? '<div class="rc">' + sym('record') + '<span class="rec">' + esc(recordWords(p.record.name)) + '</span></div>' : '')
+    + '<div class="mv">' + (p.first && !p.isStore ? '' : sym('record')) + '<span class="w">' + esc(move) + '</span></div>'
+    // the code that makes it breaks after a dot, never inside a name (*by PgBcOutboxRepository.claimNext*)
+    + (by && !biz() ? '<div class="by map-code">' + codeBreaks(fill('lanes.pill.by', { name: p.writers[0] })) + (p.writers.length > 1 ? ' <span class="more">' + esc(fill('fold.more', { n: p.writers.length - 1 })) + '</span>' : '') + '</div>' : '') + needsHtml(p, say) + '</div>';
+}
+
+/** A code name with a break chance after each dot and between the words of a camelCase name — never inside a word. */
+function codeBreaks(text) {
+  return esc(text).split('.').join('.<wbr>').replace(/([a-z0-9])([A-Z])/g, '$1<wbr>$2');
 }
 
 const storeKindOf = (l) => (['sql', 'document', 'files', 'erp'].includes(l.store.kind) ? l.store.kind : 'other');
@@ -112,16 +120,36 @@ function needsHtml(p, say) {
 }
 
 /** The lane's head: its word, its second line, what it is, and its count with the scope it counts over. */
-function laneHeadHtml(l) {
+function laneHeadHtml(l, single) {
   const glyph = l.kind === 'store' ? sym('record') : sym('human');
   const sub = l.kind === 'store'
-    ? fill('lanes.store.sub', { kind: t('map.store.kind.' + storeKindOf(l)) })
+    ? fill(single ? 'lanes.store.subJourney' : 'lanes.store.sub', { kind: t('map.store.kind.' + storeKindOf(l)) })
     : l.description;
   const word = l.kind === 'store' ? (l.declaredName || storeShownName(l.store, biz()) || t('map.store.kind.' + storeKindOf(l))) : l.name || t('lanes.persona.none');
   return '<div class="ln-head"><div class="nm">' + glyph + '<span>' + esc(word) + '</span></div>'
     + (l.surface ? '<div class="surf">' + esc(l.surface) + '</div>' : '')
     + (sub ? '<div class="d">' + esc(sub) + '</div>' : '')
     + '<div class="n">' + countedHtml(l.count, API, { cls: 'ln-n' }) + ' <span class="sc">· ' + esc(t(l.count.scope)) + '</span></div>' + moreHtml(l) + '</div>';
+}
+
+/**
+ * A persona lane with no screen in this row of the lanes says why, beside its head, instead of looking empty (round-3
+ * swarm: the operator lane read as empty in the first row, though the operator verifies and approves — their screens
+ * were in the next row). It names the rows that hold them.
+ */
+function emptyHtml(l, lr, m, G) {
+  if (l.kind !== 'persona') return '';
+  const rows = new Set();
+  for (const st of m.stages) {
+    if (st.lane !== l.id) continue;
+    const r = G.rects.get(st.key);
+    if (r) rows.add(r.segment);
+  }
+  if (rows.has(lr.segment)) return '';
+  const words = rows.size
+    ? fill('lanes.empty.elsewhere', { rows: [...rows].sort((a, b) => a - b).map((x) => x + 1).join(', ') })
+    : t('lanes.empty.none');
+  return '<div class="ln-empty" style="left:' + (G.geom.head + 12) + 'px"' + tipAttrs({ key: rows.size ? 'lanes.empty.elsewhere' : 'lanes.empty.none', noFocus: true }) + '>' + esc(words) + '</div>';
 }
 
 /** The folded records of a store lane: one line in its head that names them in its tip. */
@@ -231,7 +259,7 @@ export function lanesHtml(m, G, ctx = {}) {
   const labels = [];
   let html = '';
   // the board's header: the storyline, the LANES tag, how many lanes, the evidence of its journeys, its sentence
-  const nLanes = { n: m.lanes.length, unit: 'lanes.count.lanes', bizUnit: 'lanes.count.lanes', scope: 'count.scope.storyline', source: 'laneLayout → lanes',
+  const nLanes = { n: m.lanes.length, unit: 'lanes.count.lanes', bizUnit: 'lanes.count.lanes', scope: m.single ? 'journey.scopeAll' : 'count.scope.storyline', source: 'laneLayout → lanes',
     breakdown: [{ key: 'lanes.part.personaLanes', n: m.lanes.filter((l) => l.kind === 'persona').length }, { key: 'lanes.part.storeLanes', n: m.lanes.filter((l) => l.kind === 'store').length }] };
   html += '<div class="ln-top" style="left:' + G.geom.margin + 'px;top:' + (G.geom.margin / 2) + 'px;width:' + (G.size.w - G.geom.margin * 2) + 'px">'
     + '<span class="nm">' + esc(m.storyline.name) + '</span>'
@@ -247,7 +275,7 @@ export function lanesHtml(m, G, ctx = {}) {
     const l = m.lanes.find((x) => x.id === lr.lane);
     if (!l) continue;
     html += '<div class="ln-lane ' + l.kind + '" data-lane="' + esc(l.id) + '" data-segment="' + lr.segment + '" style="left:' + lr.x + 'px;top:' + lr.y + 'px;width:' + lr.w + 'px;height:' + lr.h + 'px">'
-      + '<div class="ln-headbox" style="width:' + G.geom.head + 'px">' + laneHeadHtml(l) + '</div></div>';
+      + '<div class="ln-headbox" style="width:' + G.geom.head + 'px">' + laneHeadHtml(l, m.single) + '</div>' + emptyHtml(l, lr, m, G) + '</div>';
   }
   html += '<svg class="ln-arrows" aria-hidden="true" width="' + G.size.w + '" height="' + G.size.h + '">' + arrowsSvg(m, G, labels) + '</svg>';
   const say = ctx.sentence || ((x) => x);
@@ -260,6 +288,36 @@ export function lanesHtml(m, G, ctx = {}) {
   html += '<div class="ln-bottom" style="left:' + G.geom.margin + 'px;top:' + (G.lanesBottom + 12) + 'px;width:' + (G.size.w - G.geom.margin * 2) + 'px">'
     + '<div class="ln-lifes">' + lifeHtml(m) + footerHtml(m) + '</div>' + legendHtml(m) + '</div>';
   return html;
+}
+
+/**
+ * After the lanes are drawn: a screen name whose longest word is wider than its card steps its type down (never under
+ * 11 px) rather than break inside the word, and the pills' own height is measured — returns how many board px the
+ * tallest pill needs past the geometry's, so the caller lays the lanes out again with room for it (0 when it fits).
+ * Measured in layout px (offset sizes), so the scale the layer is drawn at does not change the answer.
+ * @group Map
+ */
+export function fitLaneText(el) {
+  if (!el) return 0;
+  const ctx = document.createElement('canvas').getContext('2d');
+  for (const nm of el.querySelectorAll('.ln-stage .nm')) {
+    nm.style.fontSize = '';
+    const words = nm.textContent.split(/\s+/).filter(Boolean);
+    const cs = getComputedStyle(nm);
+    let size = parseFloat(cs.fontSize) || 16;
+    const upper = cs.textTransform === 'uppercase';
+    const widest = () => {
+      ctx.font = cs.fontWeight + ' ' + size + 'px ' + cs.fontFamily;
+      const ls = (parseFloat(cs.letterSpacing) || 0) * (size / (parseFloat(cs.fontSize) || size));
+      return Math.max(0, ...words.map((w) => ctx.measureText(upper ? w.toUpperCase() : w).width + ls * w.length));
+    };
+    const room = nm.clientWidth;
+    while (room > 0 && size > 11 && widest() > room) size -= 0.5;
+    if (size !== parseFloat(cs.fontSize)) nm.style.fontSize = size + 'px';
+  }
+  let need = 0;
+  for (const p of el.querySelectorAll('.ln-pill')) need = Math.max(need, p.scrollHeight - p.clientHeight);
+  return need > 1 ? Math.ceil(need) : 0;
 }
 
 /** How many world units a board px is: the lanes layer is scaled by it (the stylesheet's sizes read at the fit). */

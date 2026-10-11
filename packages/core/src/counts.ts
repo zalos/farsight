@@ -84,6 +84,8 @@ export const COUNT_SCOPES = [
   'count.scope.gate',       // one gate: the gate itself and the calls a request goes through to meet it (core gates.ts)
   'count.scope.compare',    // one storyline between two syncs (core storyline-diff.ts): its journeys and branches as either sync declares them, and what their walks reach
   'count.scope.route',      // the routes a designed, not-built screen will call (core coverage.ts `notBuilt`): the screen has no code a test can reach
+  'count.scope.path',       // one chain from one part to another (core ask.ts `pathBetween`): its links, each once
+  'count.scope.question',   // the parts one question's words match as well as the one Ask read them as (core ask.ts `resolveTermAll`)
 ] as const;
 export type CountScope = typeof COUNT_SCOPES[number];
 

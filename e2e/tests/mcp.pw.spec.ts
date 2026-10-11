@@ -80,12 +80,12 @@ test.describe('MCP data flow', () => {
     try {
       const { tools } = await core.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
-        'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'search_graph', 'test_coverage', 'tools', 'trace_flow',
+        'ask', 'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'search_graph', 'test_coverage', 'tools', 'trace_flow',
       ]);
       const ctx = await core.readResource({ uri: 'farsight://context' });
       const text = (ctx.contents[0] as { text: string }).text;
       expect(text).toMatch(/^<farsight-context sync=1 /);
-      expect(text).toContain('tools: the core tier is on (11 of ');
+      expect(text).toContain('tools: the core tier is on (12 of ');
     } finally {
       await core.close();
     }

@@ -4,22 +4,59 @@
 > `packages/server/public/`. The invariants that always apply — every string through the two-register catalog,
 > every glyph through `sym()`, `pnpm lint:strings` gating both — stay in `AGENTS.md`.
 
-Deliberately vanilla JS, no framework, no build step (Phase 1; replaced by the canvas `packages/app` in Phase 2) — don't over-invest, but keep it working. Since V3 P2 the old single `viewer.js` is split into ES modules under `public/app/`: `shell.js` (hash router — `#/portfolio · #/journeys · #/map[/<flow>] · #/codemap[?node=id] · #/apis[/<apiId>][?op=<routeId>|view=spec&line=N|view=compare] · #/changes/N...M · #/grammar`, all accept `@sync:N` + `?scope=` + `?lens=` + `?band=`; nav, chrome, role-based landing via `defaultSurface`, deep link wins), `store.js` (shared mutable state `S.*` + fetch layer + `expose()` for inline-onclick globals), `strings.js`/`sym.js` (two-register catalog client + SVG sprite accessors — every user-facing string goes through `t()`, every symbol through `sym()`; `pnpm lint:strings` enforces this and the `#/grammar` page renders the whole book), `keymap.js` (ALL key bindings central, one keymap — `⌘K · + − 0 (a stop) · v (the layout at the stop) · d (the dock) · j/k (the parts at the stop) · [ ] · ← → (beats) · h/l · p · w · g (the Map legend) · t · b · f · y · ? (the keymap, its only job) · esc (up one stop)`), ⌘K fast travel (`shell.js` `pick` → `travelTarget(n)`, 2026-09-25) arrives on the surface where the node can be seen — a flow as its journey on the Map (`#/map/<flow>`, the register's own view), an API on APIs, a test on its Tests detail, a route/page as its journey on the Map in the business register (the screen that shows it, else the walk from it), a gate as what it guards, anything else on the code map selected with no focus filter (`S.pendingFocus`, spent by `mountCodemap` → `arriveAt`); on the Map (the surface on screen) `mapTravel(n)` keeps the arrival on the Map — a flow its street, a page its journey's street with the screen open, a route a journey calls that street with the call's card open — and the palette row says *Map*; the palette row names the destination, and in the business register shows only the business name, `stories.js` (`@group Stories`, ADR 9 — the one place a story is drawn: `storiesSecHtml(n)` the inspector's Stories section for a component/page — story tabs by name, the picked story framed live (300 px, a click opens it large), *What it shows* from the story's JSDoc, the file line outside the business register, the Docs page when the running Storybook lists one, `not reached` + the start command + *Check again* when the Storybook does not answer, `none indexed` plus chips for the parts it renders that have stories; `openStoryLightbox` the large view, every story down the side, the frame at ~92vw × 88vh; `storyChipsHtml(screenStoryIds(n, components))` the chips on a journey screen card and storyboard scene — the screen, its components and what it renders within two hops, never a `plumbing` part; `storiesCatalogueHtml()` the *Components on show* catalogue under the Portfolio table, one row per Storybook then components grouped by title; one cached `/api/stories` answer per 15 s, *Check again* re-reads with `?refresh=1`; the journey's component span gains a story glyph), `share.js` (the live and the pinned, dated link, and the pin note — see *Export* below)/`impact.js`/`provenance.js` (stubs growing in P6/P3), `surfaces/*.js` (journeys is the front door — the journey's drawing the Map's stops reuse is `lib/journey-draw.js`, its pure folds `lib/journey-model.js`; codemap hosts today's graph; `apis.js` is the APIs tab — cards with defined counts, operations by tag, contract panel with consumers + call sites, line-anchored spec view, READ-ONLY compare drawer, all facts from `/api/apis*`; portfolio/changes/stewardship are honest placeholders), `lib/graph-render.js` (node-card/lane/edge renderer). Key mechanics: `displayNodes()` builds the display list (guards→badges; grouping via `effectiveGroup()` — parser `group` field OR embedded-component detection `embeddedRootOf()`); groups render collapsed as nodes or expanded as in-place `.groupbox` containers with mini-card members; flowing variable-height column layout in `render()`; `positions{}` drives SVG edge routing; lens = body class + CSS; theme = `data-theme`. Scope = multi-select: `scope` is `'all'` or an array of source names (persisted `fs-scope-v2`), picked in a grouped dropdown where collections are checkable groups (`buildScope`/`toggleScopeSrc`/`toggleScopeColl`); filtering is by repo name. `vsl(repo,path,line)` appends a ⧉ `vscode://file` deep link wherever a file:line is shown (fail-soft off `GRAPH.roots`). A journey is read on the Map — see *The five stops* below (the `#journey` overlay and its storyboard · timeline · sheet · drill views retired into the Map's stops and layouts, lanes round 2026-10-10). The Journeys picker mounts the **organised journeys** (persona → group → journeys, below) above a **Designs** section (`jrnMountDesigns` from `/api/design`: one card per manifest with its counts and its designed-not-built / built screens; the flows moved up into the organised section).
+Deliberately vanilla JS, no framework, no build step (Phase 1; replaced by the canvas `packages/app` in Phase 2) — don't over-invest, but keep it working. Since V3 P2 the old single `viewer.js` is split into ES modules under `public/app/`: `shell.js` (hash router — `#/portfolio · #/journeys · #/map[/<flow>] · #/codemap[?node=id] · #/apis[/<apiId>][?op=<routeId>|view=spec&line=N|view=compare] · #/changes/N...M · #/grammar`, all accept `@sync:N` + `?scope=` + `?lens=` + `?band=`; nav, chrome, role-based landing via `defaultSurface`, deep link wins), `store.js` (shared mutable state `S.*` + fetch layer + `expose()` for inline-onclick globals), `strings.js`/`sym.js` (two-register catalog client + SVG sprite accessors — every user-facing string goes through `t()`, every symbol through `sym()`; `pnpm lint:strings` enforces this and the `#/grammar` page renders the whole book), `keymap.js` (ALL key bindings central, one keymap — `⌘K · + − 0 (a stop) · v (the layout at the stop) · d (the dock) · j/k (the parts at the stop) · [ ] · ← → (beats) · h/l · p · w · g (the Map legend) · a (walk me through it) · t · b · f · y · ? (the keymap, its only job) · esc (up one stop)`), ⌘K fast travel (`shell.js` `pick` → `travelTarget(n)`, 2026-09-25) arrives on the surface where the node can be seen — a flow as its journey on the Map (`#/map/<flow>`, the register's own view), an API on APIs, a test on its Tests detail, a route/page as its journey on the Map in the business register (the screen that shows it, else the walk from it), a gate as what it guards, anything else on the code map selected with no focus filter (`S.pendingFocus`, spent by `mountCodemap` → `arriveAt`); on the Map (the surface on screen) `mapTravel(n)` keeps the arrival on the Map — a flow its street, a page its journey's street with the screen open, a route a journey calls that street with the call's card open — and the palette row says *Map*; the palette row names the destination, and in the business register shows only the business name, `stories.js` (`@group Stories`, ADR 9 — the one place a story is drawn: `storiesSecHtml(n)` the inspector's Stories section for a component/page — story tabs by name, the picked story framed live (300 px, a click opens it large), *What it shows* from the story's JSDoc, the file line outside the business register, the Docs page when the running Storybook lists one, `not reached` + the start command + *Check again* when the Storybook does not answer, `none indexed` plus chips for the parts it renders that have stories; `openStoryLightbox` the large view, every story down the side, the frame at ~92vw × 88vh; `storyChipsHtml(screenStoryIds(n, components))` the chips on a journey screen card and storyboard scene — the screen, its components and what it renders within two hops, never a `plumbing` part; `storiesCatalogueHtml()` the *Components on show* catalogue under the Portfolio table, one row per Storybook then components grouped by title; one cached `/api/stories` answer per 15 s, *Check again* re-reads with `?refresh=1`; the journey's component span gains a story glyph), `share.js` (the live and the pinned, dated link, and the pin note — see *Export* below)/`impact.js`/`provenance.js` (stubs growing in P6/P3), `surfaces/*.js` (journeys is the front door — the journey's drawing the Map's stops reuse is `lib/journey-draw.js`, its pure folds `lib/journey-model.js`; codemap hosts today's graph; `apis.js` is the APIs tab — cards with defined counts, operations by tag, contract panel with consumers + call sites, line-anchored spec view, READ-ONLY compare drawer, all facts from `/api/apis*`; portfolio/changes/stewardship are honest placeholders), `lib/graph-render.js` (node-card/lane/edge renderer). Key mechanics: `displayNodes()` builds the display list (guards→badges; grouping via `effectiveGroup()` — parser `group` field OR embedded-component detection `embeddedRootOf()`); groups render collapsed as nodes or expanded as in-place `.groupbox` containers with mini-card members; flowing variable-height column layout in `render()`; `positions{}` drives SVG edge routing; lens = body class + CSS; theme = `data-theme`. Scope = multi-select: `scope` is `'all'` or an array of source names (persisted `fs-scope-v2`), picked in a grouped dropdown where collections are checkable groups (`buildScope`/`toggleScopeSrc`/`toggleScopeColl`); filtering is by repo name. `vsl(repo,path,line)` appends a ⧉ `vscode://file` deep link wherever a file:line is shown (fail-soft off `GRAPH.roots`). A journey is read on the Map — see *The five stops* below (the `#journey` overlay and its storyboard · timeline · sheet · drill views retired into the Map's stops and layouts, lanes round 2026-10-10). The Journeys picker mounts the **organised journeys** (persona → group → journeys, below) above a **Designs** section (`jrnMountDesigns` from `/api/design`: one card per manifest with its counts and its designed-not-built / built screens; the flows moved up into the organised section).
 
 ## The five stops — one journey, read on the Map (lanes round 2026-10-10, proposal 1)
 
 The Map is the one place a journey is read. One zoom runs **ALL JOURNEYS → ONE JOURNEY → ONE SCREEN → ONE ACTION →
-CODE**; one **LAYOUT** control changes meaning per stop; the lens, the calls and data (`p`) and the dock hold at every
+LINES** (the code behind a beat; the stop is *Lines* so only the register says CODE — round-3 swarm, 2026-10-11); one **LAYOUT** control changes meaning per stop; the lens, the calls and data (`p`) and the dock hold at every
 stop. The front door (`#/journeys`: state of play, storylines, the journeys organised, designs, entry points) stays a
 surface of its own; every door on it opens the Map.
 
 | stop | draws | layouts (`v` cycles, the first is the default) | drawn by |
 |---|---|---|---|
-| all journeys | every journey as a card, banded; a storyline as its chain | `chain` · `lanes` (with a storyline) | `surfaces/map.js`, `surfaces/map-lanes.js` |
-| one journey | the journey's head (its chips, who it is for — `forLineHtml` — the storyline position with ‹ › to the journeys before and after, the lifecycle strip, Save) over its screens | `screens` (the street; the business register adds each screen's own sentence — the storyboard's look) · `table` (the Sheet: every stop across, every layer down; its head prints the journey's own count line, `jrnHeaderHtml`) | `surfaces/map.js`, `surfaces/map-stops.js` + `lib/journey-draw.js` |
-| one screen | the property: the picture, the rail of eight tabs, the step bar | — | `surfaces/map-property.js` |
-| one action | the action's beats across the layers of the system, the journey's screens as a strip | `beats` · `ladder` (time running down, one line per thing it did) | `surfaces/map-stops.js` + `surfaces/journey-drill.js` |
-| code | the dock opening on the beat: DOCS · REQUEST / RESPONSE · CODE · FORKS · TESTS · CHANGE IMPACT, in place · bottom · right | — | `surfaces/journey-drill.js` inspector |
+| all journeys | every journey as a card, banded; a storyline as its chain | `chain` · `lanes` (offered whenever the tree declares a storyline: one storyline's lanes, or with *All journeys* every storyline as its own band of lanes, stacked, each with its header) | `surfaces/map.js`, `surfaces/map-lanes.js` |
+| one journey | its screens under the journey head (below) | `screens` (the street; the business register adds each screen's own sentence — the storyboard's look) · `lanes` (the one journey as swimlanes: `laneLayout` over a storyline of one journey — its persona's lane, a lane per store it writes, record pills — on `.map-jlanes-host`, fitted; a stage card opens its screen) · `table` (the Sheet: every stop across, every layer down) · `drill` (opens the action stop with the rail — below) | `surfaces/map.js`, `surfaces/map-stops.js` + `lib/journey-draw.js` |
+| one screen | the property: the picture, the rail of eight tabs, the step bar | — (the slot says *one view*) | `surfaces/map-property.js` |
+| one action | the action's beats across the layers of the system, the journey's screens as a strip | `beats` · `ladder` (time running down, one line per thing it did) · `drill` (the journey's **action rail** — every action of every screen as a numbered stop, the screens spanning them, `jrnDrillRailHtml` — over the beats in place of the strip; `[` `]` and a click move along it; the address is the action's, `?screen=&action=&layout=drill`) | `surfaces/map-stops.js` + `surfaces/journey-drill.js` |
+| lines (the code) | the drill's inspector on the beat — DOCS · REQUEST / RESPONSE · CODE · FORKS · TESTS · CHANGE IMPACT — in the dock (right · bottom), or in place under the beats | — | `surfaces/journey-drill.js` inspector, `lib/map-dock.js` |
+
+**The chrome holds still** (cleanup pass 2026-10-11, lane P1 — the owner's *"too difficult to know where the buttons are
+as they keep changing"*). `chromeHtml` draws two rows that keep their places at every stop and width: **row 1** — the
+level control in its short words (ALL · JOURNEY · SCREEN · ACTION · LINES; ACTION and LINES work from the journey stop:
+its first action, the code in the dock), the LAYOUT control in one slot (`.map-layout-slot`; its choices change, the
+slot does not), and the tools right-aligned (CALLS AND DATA · + − FIT · FULL SCREEN · COPY LINK · SAVE · the legend
+glyph — Save saves the board at ALL and the stop on screen below it, `street` → `stopPicture`); the Affected bar, when
+on, is a **third row under the crumb** (round-3 swarm: between rows 1 and 2 it moved WALK down a row and, wrapping,
+widened the chrome past the window), so rows 1 and 2 never move; its LIST THESE opens the answer in the dock — the
+tests to run first (spec file and line, each case's own last run), then journeys, screens and owners by distance, with
+copy as CSV or JSON; **row 2** — the crumb on the left (clamped, whole in its tip) and on the right the as-of
+stamp, the board's pickers (at ALL: storyline and *band by* inline, the comparison inline only while it is on;
+otherwise — and below the board, all three — one **VIEW** menu, `pickersHtml` / `viewMenuHtml`), then **WALK at the
+row's right end**, the same pixel column at every stop. `fitChrome` folds by measurement, row 2 first (`f-story` ·
+`f-band` · `f-asof`); row 1 wraps (`f-wrap`) only on a window narrower than the product is read on.
+
+**The journey head** (`drawHead` / `headBarHtml` in `map.js`) is a bar of the chrome under the toolbar at the JOURNEY ·
+SCREEN · ACTION · CODE stops, never in the zoomable world (it rode over the first screen card at every zoom): line 1
+the name (one line, whole in its tip), *For <persona> · <group>* (`forLineHtml`), the storyline position with ‹ ›
+(`storyNavLineHtml`); line 2 the numbers — the street's chips (`aggHtml`), or at the table layout the table's own count
+line (`tableCountHtml` ← `jrnHeaderHtml`) — on one line, folded to `+n` by measurement (`foldHead`: the test chip, the
+one verdict with its scope and skips, never folds — it gives way at its tail); then each record's lifecycle strip as
+one line (its *what each one means* opens the table in the dock, `lifecycleTableInto`); then the description's first
+sentence with *more ›* (the rest in the dock). Every host of the stage starts under the chrome and the head
+(`--map-top` = `--map-chrome-h` + `--map-head-h`, both measured); a move to a journey draws the head first
+(`drawHead(id)`, `MAP.headHold`), so the frame is measured under it. In the world a street keeps one line: its name.
+
+**One dock** (`lib/map-dock.js`): the walk, the code at an action (`#jrn-insp`), a table part's pane (`#jrn-dock`), the
+lifecycle table, the comparison of two syncs and a journey's description are its panels — one tab each in a pinned
+header with the place switch (IN PLACE · BOTTOM · RIGHT, the journey's one setting `fs-jrn-dock`, right by default) and
+✕. It takes its own column (`--map-dock-w`: 360 px, 320 under 1400) or row: the stage shrinks (`.map-stage.dock-r` /
+`.dock-b`), nothing is drawn over it, and the board refits at ALL. *In place* puts the code back under the beats and a
+part's pane under its row (the switch then rides at the action's top); the other panels stay on the right. Each panel
+lays out its own body: the walk keeps *stop n of m* · ‹ PREV · NEXT › · ✕ pinned on top and ASK pinned at its foot,
+its sentences scroll between, and a screen's description is clamped to two sentences with *more ›*. Opened at a
+table, an action or a screen, the walk starts at that screen's stop and keeps the reader at their stop (the table
+brings the screen's columns to its edge, the action stop opens the screen's first action).
 
 **The table** (`syncTable` / `drawTableNow`) is the journey page's Sheet and its header in one: `j` / `k` walk its parts
 (`tableKey` → `jrnNav`), each opening its expansion — the seam splice for a call, the spliced code otherwise — in the
@@ -44,18 +81,18 @@ on its table, or its first action in the code register.
 `dock` beside it), else the action that holds it (`partOrder`), and the address is rewritten to `action` and `beat`.
 `step=` is the storyline position only: an old `step=` reads as `screen=` and is rewritten. An old journey link
 `#/journeys/<entry>?view=&step=&node=&band=&dock=` is converted by `overlayToMap` (storyboard → `screens`, timeline and
-sheet → `table`, drill → `beats`, `band=ladder` on the drill → `ladder`, `node` → `part`, `dock` beside a part, `biz`
+sheet → `table`, drill → `drill`, `band=ladder` on the drill → `ladder`, `node` → `part`, `dock` beside a part, `biz`
 dropped, the rest kept) and the shell replaces it with one `history.replaceState` before it routes — no history entry.
 
-**Keys** (`keymap.js`, one table, each key once): `+` / `−` a stop, `0` fit, `v` the layout at the stop, `d` the dock,
+**Keys** (`keymap.js`, one table, each key once): `+` / `−` a stop, `0` fit, `v` the layout at the stop, `d` the dock's place, `a` the walk,
 `j` / `k` the parts at the stop (screens on the street, parts on the table), `[` `]` the screens of an open screen's
 journey or the actions at an action, `←` `→` the beats, `Esc` up one stop.
 
 **What retired, and where it went.** The overlay (`openJourney`/`renderJourney`/`closeJourney`, the skip link, the
 header's fill) → the Map's stops; the storyboard → the business street (`screens`) and the screen stop (its ledger was
-the property); the blueprint timeline's grid → the table (its seam splice and spliced code → the table's dock and the
+the property); the blueprint timeline's grid → the table (its seam splice and spliced code → a part's pane in the dock and the
 CODE tab; its forks drawer → the table's head and the FORKS tab; its ladder band → the action's `ladder`); the Sheet →
-the table; the drill → the action stop (its rail → the strip and `[` `]`); the header's *see it on the Map*, the
+the table; the drill → the action stop, its rail → the `drill` layout (asked back by the owner, 2026-10-11); the header's *see it on the Map*, the
 Map's *open the journey here* → gone (the same place); the storyboard export → the street export; the `journeyDrill`
 and `map` workspace flags → gone (the Map has its tab and the Portfolio's Board door always). Dropped on purpose: the
 timeline's *business lane* (its tabs live on in the table's checks lane), the storyline ‹ › in a header (now on the
@@ -63,7 +100,22 @@ street head), and the overlay's *Esc twice to close* (Esc goes up one stop). e2e
 retired view), `journey-ladder`, `journey-numbers` (the identifier walk over the business street, every screen, the
 table and every action), `map-journey-links` (the redirect), `escape-focus`.
 
-### Projects and packages — `surfaces/codemap-projects.js`, `lib/codemap-model.js` (2026-10-04)
+#### Nothing on the Map overflows — `lib/fold-row.js`, `lib/fold-model.js` (cleanup pass 2026-10-11)
+
+The rule: text wraps or folds to `+n` with a tip, never clips, and nothing scrolls the page sideways. `foldRow(row, opts)`
+folds a wrapping chip row's last items into one `+n` (`fold.more`, its tip lists them) by measurement, never an item
+matching `opts.keep`, then checks the page (`opts.fits`) and folds one more or gives one back; `foldPlan()` is its pure,
+tested half. `foldMapChips(scope)` (`lib/map-chips.js`) runs it over covers (two rows), street screen cards and lane
+stage cards (what the card has left) with the **test verdict always whole** (`.tchip`, `.k-ev`); a stage card hides its
+sub-line before the verdict loses room. `pathHtml(path)` keeps a path's first and last two segments (`apps/…/api/x.ts:18`),
+breaks at `/`, its tip the whole path — used by the seam card, the beats' boxes, the ladder and the explore card. The
+beats' legend folds to one line and refolds when the dock opens (the drill's ResizeObserver). The **reading floor**: the
+lanes wrap into more segments (`laneFloorK`) rather than fit under 9 px on screen, and `fitLanes` stops at the floor (the
+rest a pan away); the street under ×0.6 (`.st-floor`) keeps a card's name and verdict counter-scaled and drops the rest.
+The code stop's class `code` also matched the stylesheet's code-block rule (`.code` — preformatted, a scroller): undone
+on `.map-act.code`. e2e: `map-overflow.pw.spec.ts` at 1440 and 1280.
+
+## Projects and packages — `surfaces/codemap-projects.js`, `lib/codemap-model.js` (2026-10-04)
 
 The code map reads the projects and packages lanes X and D put in the graph (docs/proposals/dependencies-and-nx.md
 §2.3). **State** is one bag, `S.cmap` (made by `cmap()`): `group` (`none · project · <dimension key>`, `?group=`,
@@ -648,7 +700,7 @@ do. Leaving a screen lands on the street at scale **1.0** centred on it; a ⌘/C
 or a two-finger pinch out, over the open screen leaves it (the rest of that scroll is swallowed for 400 ms).
 
 **Below the screen: the action and the code, and one LAYOUT control** (lanes round 2026-10-10, proposal 1 steps 1–2;
-`surfaces/map-stops.js`). The level control reads **ALL · JOURNEY · SCREEN · ACTION · CODE** (`map.level.act`,
+`surfaces/map-stops.js`). The level control reads **ALL · JOURNEY · SCREEN · ACTION · LINES** (`map.level.act`,
 `map.level.code`, both registers; `stopNow()` says which is on). The first three are the board, the street and the
 property; the last two are drawn by the journey's own drill code on the Map's stage, never by a second surface:
 - **the action stop** (`openAction(flow, ci, { order, beat, code, dock })`, `ci` a Sheet column — the journey's stop):
@@ -1336,3 +1388,40 @@ history does not hold is the panel's one sentence with the absence word *not ind
 store for any sync it holds (the swarm's 9.1); every sync now keeps its meta (`snapshot_meta`) so an older sync draws
 its storylines — a sync recorded before 2026-10-10 is read with the later sync's declaration and says so.
 e2e: `e2e/tests/map-compare.pw.spec.ts` (its own server on a two-sync workspace, `makeCompareWorkspace`).
+
+## Walk me through it, and Ask — `lib/tour.js`, `lib/ask.js` (round 2026-10-10, proposal 8)
+
+**WALK** in the Map's toolbar (`walkToolHtml`, after the band control) and the **`a`** key (`w` is the lanes', `t` the
+tests') open the guided walk in an aside beside the board (`.map-tour`, `walkHostHtml` in `stageHtml`; on the right, or
+along the bottom when the reader docks the code there — the dock's own `fs-jrn-dock`). A link opens it with `walk=1`
+(`#/map?storyline=<id>&walk=1`, `#/map/<flow>?walk=1`): the front door's storyline cards and journey cards carry the
+door *walk me through it* (`walkDoorHtml`). What it walks (`walkTarget` in `map.js`): the storyline drawn, else the
+journey on screen, else the tree's first storyline; the panel asks again while the tree is still loading.
+
+The panel reads one `GET /api/tour` answer (core `tourOf()`) and prints, per stop: *stop n of m* (m is
+`tour.counted.stops`, with its tip) and the stop's kind (screen · hand-off), its title and sub-line, a branch's
+*branch of … · when …*, then each clause — its template filled from `vars` (`bizVars` in the business register, the code
+already said in words by core `codeFree()`), `{count}` as the clause's `Counted` with its tip, `{word}` as the one
+verdict's chip (`testEvidenceHtml`), a precondition's evidence after it (*no test is known to reach it* when none), a
+warn clause (*not checked by the code*) amber with its glyph — and after each a chip per cited part (`citeChipHtml` in
+`lib/ask.js`): a gate opens the gate card, a case the Tests page (cases fold into one *see the cases* door), a screen
+frames that screen on its street, a call or a record opens its explore card on the street, anything else opens the
+action that holds it (`part=`), the storyline kept in the address. Then REFERENCED (every cited part of the stop, each a
+chip), the dots, ‹ PREV · NEXT ›, *every sentence is read from the graph · nothing is inferred by a model*, the copy
+doors (`copyDoorsHtml('tour', …)`) and the ASK box. ← → walk the stops while the panel has the focus; Esc closes it.
+
+**The Map moves with the stop** (`walkFrame` in `map.js`): a screen stop sets `#/map/<flow>?screen=n` (the street,
+that screen framed); a hand-off sets the same with the call that makes the move as the open card
+(`&plumb=1&card=call:<route>`); when the reader opened the walk with the storyline's lanes on, a hand-off returns to the
+lanes (`?storyline=&layout=lanes`) and marks the move's pill (`.ln-pill.walk-hot`, matched by `data-record` and
+`data-status`).
+
+**Ask** (`askBoxHtml`, `askCardHtml`, `askNow`): a box in the walk panel and on the front door under the state of play
+(the front door scopes it to the one source picked, if one is). `GET /api/ask` answers; the card prints the
+*derived · no model* chip (a phrased answer would add *phrased by a model*, beside its cited lines), the lead lines, the
+sections — MUST BE TRUE FIRST · PROVEN BY · PATH · CHECKS · CASES — one row per line with its glyph and its chips, the
+four shapes when the question is in none of them, and the doors: the gate card, the Map at the action, the cases, and
+copy as MCP · curl · CLI. An answer is kept per box, so a lens change redraws it without asking again (`redrawAsk`).
+
+e2e: `tour.pw.spec.ts` (the walk on the fixture's storyline moving the Map, Ask's skipped proof, the business register's
+identifier walk over every stop, WALK and the front door's doors).

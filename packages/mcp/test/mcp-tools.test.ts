@@ -42,6 +42,8 @@ const schema = (name: string) => JSON.parse(readFileSync(join(repoRoot, 'schemas
 
 const TOOLS = [
   'api_drift', 'api_spec', 'api_surface',
+  // walk me through it, and ask (round 2026-10-10, proposal 8)
+  'ask', 'tour',
   'config_files',
   'describe_node',
   'design_drift', 'design_guide', 'design_surface',
@@ -169,6 +171,45 @@ describe('presence', () => {
     assert.ok(props('list_rules').includes('query'));
     for (const k of ['flow', 'node', 'test', 'gaps', 'raw', 'matrix']) assert.ok(props('test_coverage').includes(k), `test_coverage.${k}`);
     assert.ok(props('journey').includes('view'));
+  });
+});
+
+describe('tour and ask — assembled from the graph, every line cited (round 2026-10-10, proposal 8)', () => {
+  test('tour walks the storyline stop by stop, and every id a line cites is in the graph', async () => {
+    const out = await call('tour', { target: 'invoice' });
+    assert.match(out, /stop 1 of \d+ on this walk · screen · New invoice/);
+    assert.match(out, /hand-off · The invoice becomes open/);
+    assert.match(out, /Not checked by the code: nothing compares the status the invoice is in before finalizeInvoice moves it/);
+    assert.match(out, /every sentence is read from the graph · nothing is inferred by a model/);
+    const ids = [...out.matchAll(/`([^`]*::[^`]*)`/g)].map((m) => m[1]!);
+    assert.ok(ids.length > 10, 'the lines cite what they were read from');
+    for (const id of ids) assert.ok(index.byId.has(id), `${id} is a node of the graph`);
+    const biz = await call('tour', { target: 'invoice', business: true });
+    assert.equal(/`|::/.test(biz), false, 'the business register prints no ids');
+    assert.match(biz, /The invoice becomes Sent/, 'a status in the persona\'s words');
+    const doc = JSON.parse(await call('tour', { target: 'invoice', json: true }));
+    assert.equal(doc.derived, true);
+    assert.equal(doc.counted.stops.n, doc.stops.length);
+  });
+
+  test('ask answers the four shapes from the graph and says what it understands otherwise', async () => {
+    const set = await call('ask', { question: 'where is an invoice set to open, and what must be true first?' });
+    assert.match(set, /derived · no model/);
+    assert.match(set, /open is written by finalizeInvoice at src\/server\/invoiceService\.ts:\d+/);
+    assert.match(set, /## must be true first/);
+    assert.match(set, /## proven by[\s\S]*skipped/, 'the skipped proof is said, not flattered');
+    const path = await call('ask', { question: 'how does Invoice list reach invoices?' });
+    assert.match(path, /reaches invoices in \d+ hops/);
+    const guards = await call('ask', { question: 'what guards Finalize invoice' });
+    assert.match(guards, /What guards Finalize invoice: \d+ checks/);
+    const proves = await call('ask', { question: 'what proves Invoice list' });
+    assert.match(proves, /What proves Invoice list: /);
+    const other = await call('ask', { question: 'tell me a joke' });
+    assert.match(other, /not one of the shapes Ask understands/);
+    assert.match(other, /how does <A> reach <B>/);
+    const doc = JSON.parse(await call('ask', { question: 'what guards Finalize invoice', json: true }));
+    assert.equal(doc.derived, true);
+    assert.equal(doc.shape, 'guards');
   });
 });
 
