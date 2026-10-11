@@ -31,6 +31,7 @@ import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip, foldMapChips } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
 import { lanesHtml } from './map-lanes.js';
+import { pathHtml } from '../lib/fold-row.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
 import { findStoryline, firstScreenOf } from '../lib/journeys-model.js';
@@ -2713,7 +2714,8 @@ function dataHtml(d, s, c, dd, si, ci, k, x, y) {
     + (dd.store ? ' data-store="' + esc(dd.store.name) + '" data-store-kind="' + esc(storeKind(dd.store)) + '"' : '')
     + ' data-flow="' + esc(d.id) + '" data-si="' + si + '" data-ci="' + ci + '" data-di="' + k + '" style="left:' + x + 'px;top:' + y + 'px">'
     // the kind line truncates (kind · identifier, then what the call does to it); the name has the node's width
-    + '<span class="top"><span class="kd"' + (biz() ? tipAttrs({ key: dataBizKey(dd), noFocus: true }) : '') + '>' + esc(dataKindWords(dd)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
+    // the kind line ellipsises; its tip is the whole line (the business register's tip keeps its definition)
+    + '<span class="top"><span class="kd"' + (biz() ? tipAttrs({ key: dataBizKey(dd), noFocus: true }) : tipAttrs({ text: dataKindWords(dd) + ' · ' + dd.name, noFocus: true })) + '>' + esc(dataKindWords(dd)) + '<span class="map-code"> · ' + esc(dd.name) + '</span></span>'
     + '<span class="rw ' + esc(dd.mode) + '"' + tipAttrs({ key: modeKey(dd.mode), noFocus: true }) + '>' + esc(modeWord(dd.mode)) + '</span></span>'
     + '<span class="nm">' + esc(dataWords(dd)) + '</span></div>';
 }
@@ -3007,8 +3009,9 @@ function drawCard() {
     // a handler is often named for its verb (a function called GET): its file and line stand beside the name (round 2)
     const hn = h && S.BYID[h.nodeId];
     const hloc = (hn && hn.loc) || (h && h.path ? { path: h.path, line: h.line } : null);
-    const handler = h ? h.name + (hloc && hloc.path ? ' (' + hloc.path + (hloc.line ? ':' + hloc.line : '') + ')' : '') : '';
-    code = [(c.method + ' ' + c.path).trim(), c.operationId, handler ? t('map.card.handler') + ' ' + handler : ''].filter(Boolean).join(' · ');
+    // the file keeps its two ends and breaks at `/`, its tip the whole path (cleanup pass: nothing wraps mid-word)
+    const handler = h ? esc(h.name) + (hloc && hloc.path ? ' (' + pathHtml(hloc.path + (hloc.line ? ':' + hloc.line : ''), { max: 44 }) + ')' : '') : '';
+    code = [esc((c.method + ' ' + c.path).trim()), esc(c.operationId || ''), handler ? esc(t('map.card.handler')) + ' ' + handler : ''].filter(Boolean).join(' · ');
     // every detail is a door (§3.2): the contract, the spec line, the handler, the card on the code map
     const route = nodeId && S.BYID[nodeId];
     if (route) doors = doorsFor('call', route, { handler: (c.marker && c.marker.handler) || null, flow: tg.flow });
@@ -3018,7 +3021,7 @@ function drawCard() {
     head = esc(dataKindWords(dd)) + ' · ' + esc(modeWord(dd.mode));
     name = dataWords(dd);
     const n = dd.node;
-    code = [dd.name, n && n.loc ? n.loc.path + (n.loc.line ? ':' + n.loc.line : '') : ''].filter(Boolean).join(' · ');
+    code = [esc(dd.name || ''), n && n.loc ? pathHtml(n.loc.path + (n.loc.line ? ':' + n.loc.line : ''), { max: 44 }) : ''].filter(Boolean).join(' · ');
     // the store, and — outside the business register — how it is known
     if (dd.store) {
       const via = dd.store.via ? 'map.store.via.' + dd.store.via : '';
@@ -3039,7 +3042,7 @@ function drawCard() {
     // where this journey stands in a storyline (lane S), when it is a step of one
     + (storylineLineHtml(MAP.tree, tg.flow) ? '<div class="story">' + storylineLineHtml(MAP.tree, tg.flow) + '</div>' : '')
     + store
-    + (code ? '<div class="sent map-code">' + esc(code) + '</div>' : '')
+    + (code ? '<div class="sent map-code">' + code + '</div>' : '')
     + '<div class="where"><span class="hud-label"' + tipAttrs({ key: 'map.card.on', noFocus: true }) + '>' + esc(t('map.card.on')) + '</span>'
     + (on.length ? on.map((s) => '<button type="button" class="map-chip go" data-go="' + s.index + '" data-flow="' + esc(tg.flow) + '">' + esc(s.name) + screenChipReach(tg.flow, s.id) + '</button>').join('')
       : '<span class="map-chip k-absent">' + esc(t('map.card.onNone')) + '</span>') + '</div>'
