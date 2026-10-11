@@ -11,7 +11,7 @@ import { S, expose, esc } from './store.js';
 import { t } from './strings.js';
 import { openPalette, closePalette, paletteNav, clearFocus, focusOn, closeSettings, settingsOpen, closeModelHub, modelHubOpen, closeMore, moreOpen, closeScopeMenu } from './shell.js';
 import { jrnOpenTests, jrnOpenImpact } from './surfaces/journey-drill.js';
-import { actionOpen } from './surfaces/map-stops.js';
+import { actionOpen, tableOpen } from './surfaces/map-stops.js';
 import { openImpact, closeImpact, impactOpen } from './impact.js';
 import { mapOpen, mapEscape, mapKey, mapSelected, mapCopyLink } from './surfaces/map.js';
 import { copyLiveLink, closeShare } from './share.js';
@@ -119,16 +119,16 @@ function onKeydown(e) {
   if (doorKeydown(e)) { e.preventDefault(); return; }
   // the map's own keys — the stops, the layout, the dock, the parts, the beats, plumbing, the legend
   if (mapOpen() && mapKey(e)) { e.preventDefault(); return; }
-  // t asks one question — what proves this runs? At an action that is the open
-  // part's tests list; everywhere else it is the Tests surface. One key, two
-  // contexts, never two keys for one question.
-  const atAction = mapOpen() && actionOpen() && S.JOURNEY;
+  // t asks one question — what proves this runs? At an action, or on the table
+  // with a part open, that is the open part's tests list; everywhere else it is
+  // the Tests surface. One key, two contexts, never two keys for one question.
+  const atAction = mapOpen() && S.JOURNEY && (actionOpen() || (tableOpen() && S.journeyActive >= 0));
   if (e.key === 't') { e.preventDefault(); if (atAction) jrnOpenTests(); else location.hash = '#/tests'; return; }
   if (e.key === '?') { e.preventDefault(); toggleKeymapPanel(); return; }
   // on the map the link is brought up to date with the picture first (§K)
   if (e.key === 'y') { if (mapOpen()) mapCopyLink(); else copyLiveLink(); return; }
-  // b asks one question — what else uses this? At an action that is the open
-  // part's impact answer, everywhere else the drawer on the selected card. One
+  // b asks one question — what else uses this? At an action (or the table's open
+  // part) that is the open part's impact answer, everywhere else the drawer on the selected card. One
   // key, two contexts: the proposal's key `i` is declined (§10.1), because two
   // names for one question is the fault an earlier review told us to stop.
   if (atAction && e.key === 'b') { e.preventDefault(); jrnOpenImpact(); return; }

@@ -151,7 +151,7 @@ should print `counted.{screens, built, actions}` with their `bizUnit` (fixes `6 
 | `DECISIONS 28` | `counts.decisions` | = header | journey | per screen `segments[i].counted.decisions` |
 | `8 conditions … not in plain language` (screen 2) | viewer `sg.untranslated + unlabelled` (lens-dependent) → C:`segments[i].counted.notInWords` | §2 #2 | screen | hybrid printed 5: now 8 in both |
 
-### Timeline / Sheet / Storyboard / Drill
+### The table · the action stop (the journey page's Timeline · Sheet · Storyboard · Drill until 2026-10-10; on the Map since — docs/MAP-VIEWER.md *The five stops*)
 
 | printed | source | counts | scope | siblings |
 |---|---|---|---|---|
@@ -342,7 +342,7 @@ scope, endpoint and breakdown — and computes none of its own: a filter asks `/
 | items per source card | `count.unit.workItems` with its state breakdown | each source card |
 | links, commits (ItemSummary) | the bare number with its Counted tip; the business lens heads the column *code changes* (`work.hud.col.commitsBiz`) | the list's LINKED and COMMITS cells |
 | touched (item detail) | `work.count.touched` with its by-kind breakdown | *What this work changed* heading on the item pane |
-| items on a flow | `count.unit.workItems`, then the breakdown's own part words (*1 in progress · 2 done*) — they add up to it | the chip on a Portfolio row and in the journey header; not drawn at 0 |
+| items on a flow | `count.unit.workItems`, then the breakdown's own part words (*1 in progress · 2 done*) — they add up to it | the chip on a Portfolio row and in the journey's head on the Map (the street and the table); not drawn at 0 |
 | items on a node | the bare number with its Counted tip | the inspector's *Tracked work* heading; not drawn at 0 |
 
 The e2e stub (`e2e/tests/work-stub.ts`) builds the same shapes with the same keys where they exist, and
@@ -393,14 +393,14 @@ tab whose subject nothing types prints **no number**: Overview, UX, Route and Ch
 
 | printed | source | counts | scope | siblings |
 |---|---|---|---|---|
-| Gates tab `5` · Gates head · Overview chip `5 gates & rules` | `summary.segments[i].counted.gates` | distinct guards + rules by name on this screen (3 · 2 on Invoice list) | screen | the journey header's `gates & rules` is the journey's; the rows under the head are the same list (`jrnGatesShown`), so rows and number agree. In the business register the rows group by tier (*Who may* · *The record must be* · *Policy* · *+ n technical checks*, `jrnGateTiers`) — the same rows, grouped |
+| Gates tab `5` · Gates head · Overview chip `5 gates & rules` | `summary.segments[i].counted.gates` | distinct guards + rules by name on this screen (3 · 2 on Invoice list) | screen | the journey's head's `gates & rules` (the Map's table head) is the journey's; the rows under the head are the same list (`jrnGatesShown`), so rows and number agree. In the business register the rows group by tier (*Who may* · *The record must be* · *Policy* · *+ n technical checks*, `jrnGateTiers`) — the same rows, grouped |
 | APIs tab `5` · APIs head · Overview chip `5 actions` | `segments[i].counted.actions` | distinct operations code calls on this screen | screen | the street's call chip (same object); New invoice prints `1` above **two** rows — the second is a *declared, never called* row (`MapCall.evidence: 'declared'`), which the number does not count, and its chip says so |
 | APIs tab `1` on a screen not built · Overview chip `1 stop` | `segments[i].counted.actionStops` | the stops the design declares (breakdown: 0 called · 1 declared · 0 no call) | screen | Discard draft; never `actions`, which is 0 there |
 | Gates · Decisions head `3` · Overview chip `3 decisions` | `segments[i].counted.decisions` | decisions drawn on this screen | screen | not printed in the business register when some decisions are guard-class (the rows then are fewer than the number) |
 | Tests tab `5` · Cases head · Overview chip `5 test cases` | `coverage.segments[i].counted.tests` | cases (unit + integration + e2e) whose walk reaches the screen | screen | the case rows listed are the cases counted; coverage runs that name no case are listed apart under `counted.runReports` |
 | Coverage runs head `1` | `coverage.segments[i].counted.runReports` | coverage reports that touched the screen's code and name no case | screen | not a case; never in the tab's number |
 | the tests foot (`… e2e · … unit · … integration · … observed`, the evidence chip, *their own last runs* `N test cases`) | `coverage.segments[i]` through `jrnFoldFacts` | as the journey's tests foot | screen (`journey.scopeHere`, printed above the counts) | the same fold the journey's foot reads; never recomputed |
-| Work tab `N` · Work head | `/api/work/links?node=<page>` → `counts.items` | work items linked to the screen's page node, by state | node (`count.scope.node`) | the journey header's work chip counts the whole flow (`/api/work/flow`); asked only when a work source is configured |
+| Work tab `N` · Work head | `/api/work/links?node=<page>` → `counts.items` | work items linked to the screen's page node, by state | node (`count.scope.node`) | the journey head's work chip (the Map's street and table) counts the whole flow (`/api/work/flow`); asked only when a work source is configured |
 | `×2` beside a gate | `segments[i].gates[].count` (viewer, `plainTip` → `map.prop.times`) | times the walk of this screen met that checkpoint | screen | Σ over the rows is the screen's `counted.checks` |
 | `2 more that nobody put in plain words` (business) | `jrnGatesShown(rows).mute` (viewer, `plainTip` → `map.prop.gates.mute`) | gates on the screen whose only name is the code's | screen | drawn + mute = `counted.gates` |
 | `screen 2 of 3 reached · Billing cycle` | the position in `model.screens`; the `3` is C:`summary.counted.screensReached` (same object, `placeOf()`) when it counts the street's rows, else the rows with a plain tip | a position among the screens the walk reached | journey | the cover's `screens` counts the named ones; the drill's `stop n of t` counts stops — three units, three names |
@@ -529,7 +529,7 @@ package.json) are facts, not counts, and print beside the row.
 | journeys in a storyline | `count.unit.journeys` (both) | `count.scope.storyline` | `JourneyStoryline.counts.journeys` | the storyline's steps and branches: journeys it names that a manifest declares and the tree draws in scope, each once; with a branch, a breakdown `count.part.storylineSteps` (*n on the main path*) · `count.part.storylineBranches` (*n branches*) |
 | built journeys in a storyline | `count.unit.journeysBuilt` (both) | `count.scope.storyline` | `JourneyStoryline.counts.built` | its steps and branches whose every screen exists in code, of them all |
 | a storyline's test evidence (Map band header) | `count.unit.storylineObserved` *n of m journeys with a run's evidence* (both) | `count.scope.storyline` | `storylineEvidence()` (`lib/map-model.js`) over each journey's `summary.coverage.journey.evidenceWord` | `n` = journeys whose word is `observed` or `stale`, `of` = every journey on the board; breakdown `count.part.evRun` · `evPartly` (declared or reached only) · `evNone` (no test) · `evUnread` (not read yet) partitions them |
-| *step n of m* (journey header, Map card tip) · *journey n of m* (business lens) | `journeys.storyline.stepOf` / `bizStepOf`, `map.storyline.step` | one storyline | `stepIndex + 1` of `storyline.journeys.length` (`storylineOf()` in the viewer, `storylinePlacements()` in core) | a position, not a count — no `Counted`; its tip says what it is |
+| *step n of m* (the Map's street head and crumb, Map card tip) · *journey n of m* (business lens) | `journeys.storyline.stepOf` / `bizStepOf`, `map.storyline.step` | one storyline | `stepIndex + 1` of `storyline.journeys.length` (`storylineOf()` in the viewer, `storylinePlacements()` in core) | a position, not a count — no `Counted`; its tip says what it is |
 | *screen n of m* (Map crumb, the screen and action stops) | `map.crumb.screen` | one journey | the street row's index + 1 of `streetModel().screens.length` | a position, not a count — no `Counted`; its tip says what it is |
 | *action n of m* (Map crumb, the action stop's screen strip) | `map.crumb.action` | one screen | the action's place in `screenActions()` (`lib/journey-model.js`: the Sheet's stops of that screen, in the manifest's order) + 1 of their number | a position, not a count; *stop n of t* (`journey.drill.actionOf`) is the same action among the journey's stops |
 | a storyline band's *n journeys* (Map) | `map.band.journeys` | `count.scope.storyline` | `layoutDistricts().bands[0].n` over `storylineModel()` | the steps the board draws (a step out of scope is skipped) |
@@ -646,7 +646,7 @@ the actions themselves). The approve action needs, in order: signed in (×2 word
 (`OPS_INVOICE_ACTION_ROLES.approve` → `ops.approver`) · the four preconditions · the transition guard · submit
 readiness · four-eyes · OCR vendor-name agreement, and + 4 technical checks.
 
-### Lifecycle (`GraphNode.lifecycle` → core `lifecycle.ts` `lifecycleCounts()`; `/api/journey` `lifecycles[]`, the journey header and the Map property's Overview, MCP `describe_node`)
+### Lifecycle (`GraphNode.lifecycle` → core `lifecycle.ts` `lifecycleCounts()`; `/api/journey` `lifecycles[]`, the journey's head on the Map (street and table) and the Map property's Overview, MCP `describe_node`)
 
 The statuses one field of a record (a table node) may hold, read from the code by parsers `lifecycle.ts`: a SQL `CHECK (status IN (…))` on the column, or a `const … as const` list, a `z.enum`, a string-literal union or a string `enum` a field of that name is declared with, binding the record only when every status written to it fits that one declaration. A move is listed only with the function that writes it; `from` only when that function compares the status to exactly one prior status in an `if` that says what it was. Scope `count.scope.node` — one record, alone.
 
@@ -678,7 +678,7 @@ registered per index (`setFreshnessMeta`) by the server, MCP and the CLI.
 
 | printed | source | compares | scope | where |
 |---|---|---|---|---|
-| `stale — the tests ran on commit ffe2759 (2026-10-04); the code is at commit 4632734 now` | `coverage.freshness` | the runs that observed the scope (else the covering tests' own runs) vs the code read | journey · segment · action · step | journey header (`.jrn-fresh`), the evidence chip's tip (journey, Map, Portfolio row, Tests matrix) |
+| `stale — the tests ran on commit ffe2759 (2026-10-04); the code is at commit 4632734 now` | `coverage.freshness` | the runs that observed the scope (else the covering tests' own runs) vs the code read | journey · segment · action · step | the journey's count line on the Map's table head (`.jrn-fresh`), the evidence chip's tip (journey, Map, Portfolio row, Tests matrix) |
 | `current as of sync 106 — the tests ran on the code as it is now` | `coverage.freshness` | as above | as above | as above — a current journey says so instead of saying nothing |
 | `no source digest was recorded — the tests ran on …` + the stamp recipe | `sources[].fresh` / `coverage.freshness` | runs with no recorded digest | source card · scope | Tests cards |
 | `runs read: n current · n older than the code · n with no source digest` | `fresh.runs` | the runs the answer is computed over; sums to them | the fact's scope | the freshness tip (`count.part.fresh*`) |
@@ -689,7 +689,7 @@ registered per index (`setFreshnessMeta`) by the server, MCP and the CLI.
 One action read *passed, by its own declaration · stale*, *their own last run: skipped* and a tip saying *verdict:
 unknown* at once; the Tests matrix printed PASSED beside *skipped* on every row; `route.ts:24` read *reached by tests*
 on the route and *no test reaches this step* on its handler. The decision: **the cell's verdict is computed once, in
-core, and every surface prints it** — the journey header, the Sheet's *Verified by*, the timeline's screen foot, the
+core, and every surface prints it** — the journey's count line (the Map's table head), the table's *Verified by*, the street's screen chips, the
 drill and the inspector foot, the Map's property *Tests* tab and street chips, the Tests matrix, the scoped Tests page,
 MCP `test_coverage` and `farsight tests matrix`.
 
@@ -793,8 +793,8 @@ the scope's chip words, the cell's one word (`testVerdict()`), and `· n failed 
 
 | chip words (`count.over.*`, core `SCOPE_WORDS` / `scopeWord()`) | the scope (`COUNT_SCOPES`) | printed by |
 |---|---|---|
-| *over this journey* | `journey.scopeAll` | journey header (with *distinct*), Map journey head and board cards, Tests matrix cell, Portfolio |
-| *over this screen* | `journey.scopeHere` | storyboard scenes and screen cards, Map street screens, Map property headline chip and Overview |
+| *over this journey* | `journey.scopeAll` | the journey's count line on the Map's table head (with *distinct*), Map journey head and board cards, Tests matrix cell, Portfolio |
+| *over this screen* | `journey.scopeHere` | Map street screens (the storyboard's successor), Map property headline chip and Overview |
 | *over this action* | `count.scope.action` | Sheet *Verified by*, the Tests page opened on an action |
 | *over this part alone* | `count.scope.node` | the drill's step foot, the drawer |
 | *over this gate* | `count.scope.gate` | gate card *tests that reach it* |

@@ -51,7 +51,7 @@ import { sheetModel, actionAtSegment } from '../lib/journey-model.js';
 import {
   bindStops, stopNow, drawLayoutTool, setLayout, cycleLayout, layoutAt, registerMapLayout, MAP_LAYOUTS, openAction, openActionAt, openScreenAction, closeAction, actionOpen,
   actionParams, actionKey, stopZoom, openCode, closeCode, crumbHtml, syncTable, tableOpen, redrawStops, closeStops, streetFactsHtml, forgetWalks,
-  registerView, tableAtPart, tableParams, tableKey, tableEscape,
+  registerView, tableAtPart, tableParams, tableKey, tableEscape, forLineHtml,
 } from './map-stops.js';
 import { jrnFirstSentence } from '../lib/journey-draw.js';
 
@@ -2356,7 +2356,7 @@ function renderDistrict(id) {
   el.innerHTML = '<div class="map-dhead"><div class="nm">' + step + esc(nameWords(d.name)) + '</div>'
     + branchLineHtml(d)
     + (desc ? '<div class="desc">' + esc(desc) + '</div>' : '')
-    + '<div class="agg">' + agg + '</div>' + streetFactsHtml(id, j, MAP.tree) + '</div>'
+    + '<div class="agg">' + agg + forLineHtml(MAP.tree, id) + '</div>' + streetFactsHtml(id, j, MAP.tree) + '</div>'
     + '<div class="map-dstreet">' + streetHtml(d, j, g) + '</div>'
     // the cover is counter-scaled (--map-inv, set by the canvas) so its name reads at any zoom;
     // its whole sentence is the cover's tip
@@ -3545,7 +3545,7 @@ bindStops({
     const j = MAP.journeys.get(flow);
     // the trackers' work on the journey rides beside either line (filled by fillWork when it lands)
     const work = agg != null ? ' <span class="map-work" data-work-for="' + esc(d.id) + '">' + (d.work ? flowChipHtml(d.work) : '') + '</span>' : '';
-    return '<div class="nm">' + stepBadgeHtml(d) + esc(nameWords(d.name)) + '</div><div class="agg">' + (agg != null ? agg + work : aggHtml(d, j)) + '</div>' + streetFactsHtml(flow, j, MAP.tree);
+    return '<div class="nm">' + stepBadgeHtml(d) + esc(nameWords(d.name)) + '</div><div class="agg">' + (agg != null ? agg + work : aggHtml(d, j)) + forLineHtml(MAP.tree, flow) + '</div>' + streetFactsHtml(flow, j, MAP.tree);
   },
 });
 expose({ mapFit, mapZoom });

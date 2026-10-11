@@ -685,7 +685,7 @@ export function streetFactsHtml(flow, j, tree) {
   if (!j || !j.data) return '';
   const story = storylineLineHtml(tree, flow);
   const lc = jrnLifecycleHtml(j.data);
-  return '<div class="facts">' + forLineHtml(tree, flow)
+  return '<div class="facts">'
     + (story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + story + storyNavHtml(tree, flow, 'next') + '</span>' : '')
     + (lc ? '<span class="lc"' + tipAttrs({ key: 'map.head.lifecycle', noFocus: true }) + '>' + lc + '</span>' : '')
     + exportToolHtml('street', 'map-tb map-tb-save') + '</div>';
@@ -693,9 +693,11 @@ export function streetFactsHtml(flow, j, tree) {
 
 /**
  * Who the journey is for and its group, from the organised tree (the journey page's header said it):
- * *For <persona> · <group>*, a journey for two people naming the rest. '' when the tree does not place it.
+ * *For <persona> · <group>*, a journey for two people naming the rest. '' when the tree does not place it. Drawn at
+ * the end of the head's chip row, so the head grows by no line.
+ * @group Map
  */
-function forLineHtml(tree, flow) {
+export function forLineHtml(tree, flow) {
   const places = placesOf(tree, flow);
   if (!places.length) return '';
   const p = places[0];

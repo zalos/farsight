@@ -151,11 +151,11 @@ test.describe('journeys organised by persona and group, as the fixture declares 
   test('the open journey\'s head on the Map says who it is for and its group', async ({ page }) => {
     const DS = 'invoice-app::flow::draft-and-send';
     await gotoReady(page, '#/map/' + encodeURIComponent(DS) + '?layout=screens');
-    const org = page.locator(`.map-district[data-flow="${DS}"] .facts .for`);
+    const org = page.locator(`.map-district[data-flow="${DS}"] .agg .for`);
     await expect(org).toContainText('For Billing · Review and send');
     await expect(org).toContainText('also for Operations');
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens');
-    await expect(page.locator(`.map-district[data-flow="${FLOW}"] .facts .for`)).toHaveText('For Billing · Invoices');
+    await expect(page.locator(`.map-district[data-flow="${FLOW}"] .agg .for`)).toHaveText('For Billing · Invoices');
   });
 
   /** @covers packages/server/public/app/surfaces/portfolio.js::render */
