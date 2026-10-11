@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildIndex, journey, journeySummary, screensFor, journeyCoverage, coverageFor, builtOnlyWords, readiness, stateOfPlay, STRINGS,
+  buildIndex, journey, journeySummary, screensFor, journeyCoverage, coverageFor, builtOnlyWords, readiness, stateOfPlay, STRINGS, codeFree, httpWords,
 } from '../dist/index.js';
 import type { GraphNode, GraphEdge, JourneyTree } from '../dist/index.js';
 
@@ -97,4 +97,13 @@ test('readiness: the header totals are distinct, with every row’s own count be
   assert.equal(r.distinct.skipped.length, r.rows.length);
   assert.deepEqual(r.distinct.skipped.map((x) => x.n), r.rows.map((x) => x.skipped));
   assert.ok(r.distinct.skipped.reduce((a, x) => a + x.n, 0) >= r.counted.skipped.n, 'the rows add up to at least the distinct total');
+});
+
+test('the business register says an HTTP status in words, and leaves a count alone', () => {
+  assert.equal(codeFree('401 without an operator session'), 'a refusal (nobody is signed in) without an operator session');
+  assert.equal(codeFree('approve: 409 while SUBMITTED'), 'approve: a refusal (the record is not in the right state) while SUBMITTED');
+  assert.equal(codeFree('the service answers 422 when a field is missing'), 'the service answers a refusal (the details do not pass the checks) when a field is missing');
+  assert.equal(codeFree('401 test cases over this journey'), '401 test cases over this journey');
+  assert.equal(httpWords('29 passed of 401.', () => 'X'), '29 passed of 401.');
+  for (const c of ['400', '401', '403', '404', '409', '413', '415', '422', '429', '5xx']) assert.ok(STRINGS[`http.word.${c}`]?.define, c);
 });

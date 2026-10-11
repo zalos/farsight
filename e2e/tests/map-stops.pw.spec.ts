@@ -40,6 +40,8 @@ test('one zoom from the storyline board to a beat\'s code, with no change of sur
   await expect(pressed(page, 'act')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.map-crumb')).toContainText('screen 2 of 3');
   await expect(page.locator('.map-crumb')).toContainText('action 1 of 6');
+  // the caption under the screen strip counts what the crumb counts, with its scope (swarm round 3, one unit per panel)
+  await expect(page.locator('#jrn-dcap')).toContainText('action 1 of 6 on this screen');
   await expect(page.locator('.map-act-scr.on')).toContainText('Invoice list');
   expect(await hash(page)).toContain('screen=2&action=1');
   // ← → walk the beats; the address follows

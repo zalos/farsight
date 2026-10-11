@@ -23,7 +23,7 @@ export const TOUR_STRINGS: Record<string, StringEntry> = {
   'tour.open': same('walk me through it', 'Opens the guided walk through this storyline or journey on the Map: one stop per screen and per hand-off, each sentence read from the graph.'),
   'key.walk': same('On the Map: walk me through it — the guided walk and Ask beside the board', 'Opens or closes the guided walk beside the Map: one stop per screen and per hand-off, and a box to ask a question answered from the graph.'),
   'tour.tool': same('WALK', 'The guided walk through the storyline or journey on the Map: one stop per screen and per hand-off. Every sentence is read from the graph and names what it was read from.'),
-  'tour.stopOf': same('stop {n} of {m}', 'Where this stop sits in the walk: one stop per screen, in the order the storyline runs, and one per hand-off between them.'),
+  'tour.stopOf': same('stop {n} of {m} on this walk', 'Where this stop sits in the walk-through: one stop per screen, in the order the storyline runs, and one per hand-off between them. A walk’s stops are its own, not the journey’s actions.'),
   'tour.prev': same('‹ prev', 'The stop before this one; the Map moves with it.'),
   'tour.next': same('next ›', 'The next stop; the Map moves with it.'),
   'tour.close': same('close the walk', 'Closes the walk. The Map stays where the last stop put it.'),

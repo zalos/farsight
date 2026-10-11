@@ -76,7 +76,8 @@ function historyHtml(h) {
   if (!h) return '<li><span' + defAttrs('state.historyNone') + '>' + esc(t('state.historyNone')) + '</span></li>';
   return '<li class="sop-hist">' + [h.read, h.ingested, h.notYet].map((c) => countedHtml(c, API, { cls: 'sop-n' })).join(' · ') + recheckHtml(h.read) + '</li>'
     // of the commits read, the ones made with an AI assistant (round 2026-10-10, proposal 9)
-    + (h.agents ? lineHtml(h.agents, h.agents.breakdown && h.agents.breakdown.length
+    // the business register says how many, never which models (swarm round 3: a breakdown by AI model on a steering slide)
+    + (h.agents ? lineHtml(h.agents, !business() && h.agents.breakdown && h.agents.breakdown.length
       ? ' <span class="sop-names">(' + esc(h.agents.breakdown.map((p) => p.label + ' ' + p.n).join(' · ')) + ')</span>' : '') : '');
 }
 

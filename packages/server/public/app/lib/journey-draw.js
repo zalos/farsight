@@ -31,6 +31,7 @@ import { lifecycleStripHtml, headerLifecycles } from './lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from './freshness.js';
 import { momOrdinal, buildTree, cellTree, sheetModel, stopOf, ladderModel, LADDER } from './journey-model.js';
 import { testChipHtml, distinctArgs, builtOnlyHtml } from './test-chip.js';
+import { scopeWordKey } from './scope-words.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -948,9 +949,11 @@ export function jrnUntranslatedHtml(n, scope, c, list) {
   // with no typed count (an action's cell), the same builder over a bare one, so the list rides along
   const cc = c || { n, unit: 'count.unit.notInWords', bizUnit: 'journey.biz.untranslated', scope: scope || 'journey.scopeHere' };
   const tip = tipAttrs({ id: 'jrnCounted', args: { c: cc, list: list || undefined } });
+  // its scope beside it, every time: 10 · 27 · 96 · 136 on four panels read as one number that would not hold still (swarm round 3)
+  const over = ' <span class="tc-scope" data-scope-word="' + esc(scopeWordKey(cc.scope)) + '">' + esc(t(scopeWordKey(cc.scope))) + '</span>';
   return biz
-    ? '<div class="jrn-untr sentence"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + '</div>'
-    : '<span class="jrn-untr"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + '</span>';
+    ? '<div class="jrn-untr sentence"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + over + '</div>'
+    : '<span class="jrn-untr"' + tip + '>' + sym('warning') + esc(jrnCountWord(key, n)) + over + '</span>';
 }
 /**
  * The three things the business lane can draw beneath its sentence. `words`
@@ -2624,7 +2627,10 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
   // the whole — technical conditions plus gate conditions nobody labelled — in
   // every lens: one concept, one number. The header uses the short words; the
   // tip heads with the business sentence in the business lens.
-  g('g-words', [jrnCountedHtml(C('notInWords'), { unit: 'count.unit.notInWords', cls: 'jrn-untrn', rel: [C('decisions'), C('inWords')], list: { t: true, g: true } })]);
+  const nw = C('notInWords');
+  g('g-words', [jrnCountedHtml(nw, { unit: 'count.unit.notInWords', cls: 'jrn-untrn', rel: [C('decisions'), C('inWords')], list: { t: true, g: true } })
+    // its scope, as every other panel's count of the same thing says its own (swarm round 3)
+    + (nw && nw.n ? ' <span class="tc-scope" data-scope-word="' + esc(scopeWordKey(nw.scope)) + '">' + esc(t(scopeWordKey(nw.scope))) + '</span>' : '')]);
   // the tests: how many reach the journey, the evidence word, and the run behind
   // it beside the word — so *seen by a coverage run* never stands alone above a
   // `0 observed` it does not explain. The e2e rung is in the tests' tip.

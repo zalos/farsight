@@ -3,8 +3,8 @@
 // A person reading the HUD often briefs an agent next. Every record a tool can answer — a gate, a call, a record,
 // a journey or a screen, a test, a package, a number — carries three copy doors: the MCP call an agent makes, the
 // curl against this server, and the CLI line, each with the record's **full id**, so what is pasted is exactly
-// what was on screen. The doors are not code: an agent brief is the business reader's too, so every register
-// draws them.
+// what was on screen. The business register draws none (swarm round 3: three business roles read the pills as code
+// they had to skip); hybrid and code keep them.
 //
 // Pure: no DOM, no catalog. `word` is a catalog key the surface translates; `text` is what lands on the clipboard.
 // lib/detail-doors.js draws them (`copyDoorsHtml`) and answers the press.

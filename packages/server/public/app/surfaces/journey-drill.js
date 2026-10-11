@@ -355,8 +355,12 @@ function jrnDrillCaptionHtml(cols, model) {
   // visit a second stop — typed by the core as `counted.actionStops` (31 on the POC,
   // where the header's actions are 13), so the tip carries the split that reconciles them
   const stops = S.JOURNEY && S.JOURNEY.summary && S.JOURNEY.summary.counted && S.JOURNEY.summary.counted.actionStops;
-  const of = esc(t('journey.drill.actionOf').replace('{n}', S.jrnAction + 1)).replace('{t}', () => (stops && stops.n === cols.length
-    ? jrnCountedHtml(stops, { num: true, noFocus: true }) : String(cols.length)));
+  // one unit per panel (swarm round 3): under the Map's screen strip the caption counts the screen's actions, as the
+  // breadcrumb does; under the journey's rail it counts the rail's stops
+  const onScreen = typeof S.jrnActionOnScreen === 'function' ? S.jrnActionOnScreen(S.jrnAction) : null;
+  const of = onScreen ? esc(t('map.act.onScreen').replace('{n}', onScreen.k).replace('{m}', onScreen.m))
+    : esc(t('journey.drill.actionOf').replace('{n}', S.jrnAction + 1)).replace('{t}', () => (stops && stops.n === cols.length
+      ? jrnCountedHtml(stops, { num: true, noFocus: true }) : String(cols.length)));
   // the beats of the open action — a developer's unit, said as *things happen* in the business lens
   const beatKey = biz ? 'journey.biz.countSteps' : 'journey.drill.countBeats';
   const beats = '<span class="jrn-num"' + tipAttrs({ number: { count: model.beats.length, of: beatKey, scope: 'count.scope.action', source: tipSource('/api/journey') }, noFocus: true }) + '>'

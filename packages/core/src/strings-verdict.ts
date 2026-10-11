@@ -39,5 +39,16 @@ export const VERDICT_STRINGS: Record<string, StringEntry> = {
     'The header counts each case or gate once over the whole storyline. A row counts what its own journey reaches, so a case two journeys share is on both rows.'),
   'readiness.distinct.row': same('on its row', 'What this journey’s own row counts.'),
   'readiness.distinct.sum': same('rows added up', 'The rows added together: a shared case or gate counted once per journey.'),
+  // ── an HTTP status the code answers with, in words, for the business register (finding 10) ──
+  'http.word.400': same('a refusal (the request is not valid)', 'The service answers that what was sent is not a valid request.'),
+  'http.word.401': same('a refusal (nobody is signed in)', 'The service answers that the person is not signed in.'),
+  'http.word.403': same('a refusal (not allowed)', 'The service answers that the person is signed in and not allowed to do this.'),
+  'http.word.404': same('a not found', 'The service answers that what was asked for does not exist, or is not for this person to see.'),
+  'http.word.409': same('a refusal (the record is not in the right state)', 'The service answers that the record is in a state that does not allow this.'),
+  'http.word.413': same('a refusal (too large)', 'The service answers that what was sent is larger than it accepts.'),
+  'http.word.415': same('a refusal (a kind of file it does not take)', 'The service answers that what was sent is not a kind it accepts.'),
+  'http.word.422': same('a refusal (the details do not pass the checks)', 'The service answers that the request is well formed and its details do not pass the checks.'),
+  'http.word.429': same('a refusal (too many tries)', 'The service answers that too many requests came too quickly.'),
+  'http.word.5xx': same('a failure of the service', 'The service answers that it failed to do what was asked.'),
   'readiness.distinct.total': same('distinct', 'Each case or gate once, however many journeys reach it.'),
 };

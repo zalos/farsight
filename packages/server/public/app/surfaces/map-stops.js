@@ -314,6 +314,7 @@ export function closeAction(o = {}) {
   inspHost(false);
   if (S.JRN_HOST === host) S.JRN_HOST = null;
   S.JRN_DRILL = null;
+  S.jrnActionOnScreen = null;
   if (M.stage) M.stage.classList.remove('in-act');
   if (!o.quiet && si >= 0) ST.api.openProperty(flow, si);
   else ST.api.refresh();
@@ -484,6 +485,13 @@ function drawAct() {
   // the code opens in the Map's one dock (lib/map-dock.js) unless it is docked in place, under the beats
   const inPlace = dockPlace() === 'inline';
   inspHost(!inPlace);
+  // the caption under the beats counts what the panel above it shows: the screen's actions under the strip (the
+  // breadcrumb's count), the journey's stops under the drill's rail (swarm round 3, one unit per panel)
+  S.jrnActionOnScreen = layout === 'drill' ? null : (i) => {
+    const acts = screenActions(S.JRN_DRILL.cols, a.model.screens, a.si);
+    const k = acts.findIndex((c) => c.index === i);
+    return k >= 0 ? { k: k + 1, m: acts.length } : null;
+  };
   // the drill: the journey's action rail across the top in place of the street's strip (the owner's older drill view)
   const top = layout === 'drill' ? jrnDrillRailHtml(S.JOURNEY.summary, S.JRN_DRILL.cols, S.jrnAction) : stripHtml();
   a.host.innerHTML = '<div class="map-act' + (a.code ? ' code' : '') + '" data-dock="' + esc(jrnDock()) + '" data-layout="' + esc(layout) + '" data-map-wheel="own">'

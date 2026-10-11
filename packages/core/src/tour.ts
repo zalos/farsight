@@ -145,10 +145,23 @@ export function bizWords(vars: Record<string, string>): Record<string, string> {
  * session*, `UNDER_REVIEW` → *under review*), a path or a file reads as its name, a method and a path as the route's
  * words. Every other lens keeps the sentence as written.
  */
+/**
+ * An HTTP status the code answers with, said in words (`http.word.*`): *401 without an operator session* reads *a
+ * refusal (nobody is signed in) without an operator session*. Only a status a sentence uses as an answer — after
+ * *answers*, *returns* or *with*, or before *without*, *while*, *when*, a stop — so *401 test cases* stays a count.
+ */
+export function httpWords(text: string, word: (code: string) => string): string {
+  const say = (code: string) => word(code.startsWith('5') ? '5xx' : code);
+  return String(text ?? '')
+    .replace(/\b(answers?|returns?|responds?\s+with|refuses\s+with|fails\s+with|with)\s+(?:an?\s+)?([45]\d\d)\b/gi, (_m, v: string, code: string) => `${v} ${say(code)}`)
+    .replace(/(?<![\d.,])(?<!\bof\s)(?:\b(?:an?|the)\s+)?\b([45]\d\d)\b(?=\s*(?:$|[,.;:)!?]|\s(?:without|while|when|if|unless|for|on|otherwise|else|and|or|from)\b|\s[—–-]\s))/g, (_m, code: string) => say(code));
+}
+const HTTP_KNOWN = new Set(['400', '401', '403', '404', '409', '413', '415', '422', '429', '5xx']);
+
 export function codeFree(text: string): string {
   const words = (x: string) => String(x).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
   const file = (p: string) => words((String(p).split('/').filter(Boolean).pop() ?? '').replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
-  return String(text ?? '')
+  return httpWords(String(text ?? ''), (c) => (HTTP_KNOWN.has(c) ? t(`http.word.${c}`) : t('http.word.400')))
     .replace(/\s*\((?:[^()]*\b(?:[A-Z]{2,6}[- ]?#?\d[\w.]*|PBI)\b[^()]*)\)/g, '')
     // an aside in brackets that quotes code goes whole: the sentence reads without it
     .replace(/\s*\([^()]*`[^`]*`[^()]*\)/g, '')

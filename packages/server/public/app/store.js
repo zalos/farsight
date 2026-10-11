@@ -197,10 +197,20 @@ export function unCode(text) {
 export function commitWords(subject) {
   return unCode(String(subject || '').replace(/^\s*[a-z]+(?:\([^)]*\))?!?:\s*/i, ''));
 }
+/** An HTTP status a sentence answers with, in the catalog's words (core tour.ts `httpWords`, the same rule). */
+function httpWordsOf(text) {
+  const say = (code) => {
+    const e = S.STRINGS && (S.STRINGS['http.word.' + (code[0] === '5' ? '5xx' : code)] || S.STRINGS['http.word.400']);
+    return e ? (S.register === 'hud' ? e.hud : e.professional) : code;
+  };
+  return String(text || '')
+    .replace(/\b(answers?|returns?|responds?\s+with|refuses\s+with|fails\s+with|with)\s+(?:an?\s+)?([45]\d\d)\b/gi, (m, v, code) => v + ' ' + say(code))
+    .replace(/(?<![\d.,])(?<!\bof\s)(?:\b(?:an?|the)\s+)?\b([45]\d\d)\b(?=\s*(?:$|[,.;:)!?]|\s(?:without|while|when|if|unless|for|on|otherwise|else|and|or|from)\b|\s[—–-]\s))/g, (m, code) => say(code));
+}
 function unCodeAll(text) {
   const words = (s) => String(s).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
   const file = (p) => words((String(p).split('/').filter(Boolean).pop() || '').replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
-  return String(text || '')
+  return httpWordsOf(text)
     // a document's id in brackets — (SCR-08.5), (PBI #352) — is the docs' handle, not words;
     // an ADR number is the citation key a reader quotes the decision by, so a bracket that
     // cites only ADRs stays in every register (swarm 2026-10-05, the business analyst)
