@@ -8,6 +8,7 @@ export const ECHO_INSTALLATION_STRINGS: Record<string, StringEntry> = {
   'echo.installation.connection': same('The workspace Echo connection is invalid or could not be read. Repair it before continuing.', 'A workspace connection names one absolute settings location and one existing profile. Invalid connections never fall back to a different store.'),
   'echo.installation.profile': same('Choose an Echo profile with a valid name.', 'A profile name starts with a lowercase letter and contains only lowercase letters, digits and hyphens, with a maximum of forty-eight characters.'),
   'echo.installation.changed': same('The workspace Echo connection changed during installation. Retry after the other edit finishes.', 'The original connection is checked again before replacement so a concurrent edit is not silently overwritten.'),
+  'echo.installation.readOnly': same('Echo needs permission to write the workspace connection and its backups.', 'The connection and backup directories must allow changes before installation starts. Existing permissions are not changed to bypass this check.'),
   'echo.installation.write': same('The workspace Echo connection could not be saved. Any replaced connection is backed up in this workspace.', 'Connections are written privately and replaced atomically. The original contents are preserved in the local backups directory before replacement.'),
 };
 

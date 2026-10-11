@@ -1,4 +1,4 @@
-import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs';
+import { constants, accessSync, closeSync, fstatSync, lstatSync, openSync, readSync, realpathSync } from 'node:fs';
 import { chmod, link, mkdir, open, rename, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
@@ -178,10 +178,30 @@ export function resolveInstallation(options: InstallationOptions = {}): Installa
   return { scope: 'workspace', configPath: join(workspaceRoot, '.echo', 'settings.json'), workspaceRoot, ...(selectedProfile ? { profileId: selectedProfile } : {}) };
 }
 
+/** Read-only preflight for callers that must validate the connection before changing host settings. */
+export function preflightConnection(workspace: string, binding: Pick<WorkspaceConnection, 'configPath' | 'profileId'>): void {
+  const selected = parseConnection(JSON.stringify({ version: 1, ...binding }));
+  const directory = localDirectory(workspace);
+  const before = connectionContents(workspace);
+  if (before !== undefined) {
+    const old = parseConnection(before);
+    if (old.configPath === selected.configPath && old.profileId === selected.profileId) return;
+  }
+  const writable = [stat(directory) ? directory : resolve(workspace)];
+  if (before !== undefined) {
+    const backups = localDirectory(workspace, 'backups');
+    if (stat(backups)) writable.push(backups);
+  }
+  try {
+    for (const path of writable) accessSync(path, constants.W_OK | constants.X_OK);
+  } catch { fail('echo.installation.readOnly'); }
+}
+
 /** Persist a pointer only: no settings, memory or credential material is copied into a workspace. */
 export async function writeConnection(
   workspace: string, binding: Pick<WorkspaceConnection, 'configPath' | 'profileId'>,
 ): Promise<{ path: string; changed: boolean; backupPath?: string }> {
+  preflightConnection(workspace, binding);
   const selected = parseConnection(JSON.stringify({ version: 1, ...binding }));
   const path = connectionPath(workspace);
   const directory = localDirectory(workspace);

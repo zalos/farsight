@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { dirname, join, isAbsolute } from 'node:path';
 import { defaultConfig, loadContext, saveConfig } from '../dist/config.js';
 import { contextFingerprint } from '../dist/sessions.js';
-import { connectionPath, describeInstallation, globalConfigPath, readConnection, resolveInstallation, writeConnection } from '../dist/installation.js';
+import { connectionPath, describeInstallation, globalConfigPath, preflightConnection, readConnection, resolveInstallation, writeConnection } from '../dist/installation.js';
 
 async function fixture(run: (root: string) => Promise<void>): Promise<void> {
   const folder = await mkdtemp(join(tmpdir(), 'echo-installation-'));
@@ -197,5 +197,73 @@ test('installation descriptions follow existing canonical aliases and distinguis
     const local = join(root, 'workspace', '.echo', 'settings.json');
     assert.deepEqual(describeInstallation(local, globalPath), { scope: 'workspace', configPath: local, workspaceRoot: join(root, 'workspace') });
     assert.deepEqual(describeInstallation(join(root, 'custom.json'), globalPath), { scope: 'custom', configPath: join(root, 'custom.json') });
+  });
+});
+
+test('connection preflight validates proposed and existing bindings without creating files', async () => {
+  await fixture(async root => {
+    const binding = { configPath: join(root, 'global', 'settings.json'), profileId: 'work' };
+    preflightConnection(root, binding);
+    assert.deepEqual(await readdir(root), []);
+    assert.throws(() => preflightConnection(root, { ...binding, configPath: './settings.json' }));
+    assert.throws(() => preflightConnection(root, { ...binding, profileId: '../work' }));
+    assert.deepEqual(await readdir(root), []);
+    await mkdir(join(root, '.echo'));
+    await writeFile(connectionPath(root), '{"version":2}');
+    assert.throws(() => preflightConnection(root, binding));
+    assert.equal(await readFile(connectionPath(root), 'utf8'), '{"version":2}');
+    assert.deepEqual(await readdir(join(root, '.echo')), ['connection.json']);
+  });
+});
+
+test('invalid backup paths fail preflight and writes before any local permissions or files change', async () => {
+  await fixture(async root => {
+    const outside = join(root, 'outside'), workspace = join(root, 'workspace');
+    await mkdir(outside);
+    await mkdir(workspace);
+    const binding = { configPath: join(outside, 'settings.json'), profileId: 'work' };
+    await writeConnection(workspace, binding);
+    const local = join(workspace, '.echo'), backups = join(local, 'backups');
+    const original = await readFile(connectionPath(workspace), 'utf8');
+    await chmod(local, 0o750);
+    for (const type of ['file', 'symlink']) {
+      if (type === 'file') await writeFile(backups, 'preserve');
+      else await symlink(outside, backups);
+      const changed = { ...binding, profileId: 'personal' };
+      assert.throws(() => preflightConnection(workspace, changed));
+      await assert.rejects(writeConnection(workspace, changed));
+      assert.equal((await stat(local)).mode & 0o777, 0o750);
+      assert.equal(await readFile(connectionPath(workspace), 'utf8'), original);
+      assert.deepEqual((await readdir(local)).sort(), ['backups', 'connection.json']);
+      assert.deepEqual(await readdir(outside), []);
+      if (type === 'file') assert.equal(await readFile(backups, 'utf8'), 'preserve');
+      await rm(backups);
+    }
+  });
+});
+
+test('connection preflight refuses unwritable parent directories without changing their permissions', { skip: process.getuid?.() === 0 }, async () => {
+  await fixture(async root => {
+    const binding = { configPath: join(root, 'global', 'settings.json'), profileId: 'work' };
+    await chmod(root, 0o500);
+    try {
+      assert.throws(() => preflightConnection(root, binding), /permission/);
+      await assert.rejects(writeConnection(root, binding), /permission/);
+      assert.deepEqual(await readdir(root), []);
+    } finally { await chmod(root, 0o700); }
+    await writeConnection(root, binding);
+    const changed = { ...binding, profileId: 'personal' };
+    const local = join(root, '.echo'), backups = join(local, 'backups');
+    await mkdir(backups);
+    for (const path of [local, backups]) {
+      await chmod(path, 0o500);
+      try {
+        assert.throws(() => preflightConnection(root, changed), /permission/);
+        await assert.rejects(writeConnection(root, changed), /permission/);
+        assert.equal((await stat(path)).mode & 0o777, 0o500);
+        assert.equal(readConnection(root)?.profileId, 'work');
+        assert.deepEqual(await readdir(backups), []);
+      } finally { await chmod(path, 0o700); }
+    }
   });
 });
