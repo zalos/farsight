@@ -540,6 +540,8 @@ function applyStoryline(id, opts = {}) {
   layout();
   renderAll();
   redrawChrome();
+  // the AT RISK bar counts the board the address names: redrawn with it, never left over from the last one (swarm round 3)
+  drawRisk();
   if (MAP.legend) drawLegend();
   fitAll(false);
   if (!opts.fromRoute) writeHash(null, null);
@@ -1823,7 +1825,10 @@ function riskCounteds() {
     if (erpReached(sum)) erp++;
   }
   const src = 'surfaces/map.js riskCounteds ← each /api/journey summary (coverage.journey.evidenceWord · counted.built · systems)';
-  const c = (n, unit) => ({ n, unit, bizUnit: unit, scope: 'count.scope.workspace', source: src });
+  // the scope is the board's: the storyline the address names, else every journey in scope (swarm round 3: the bar read
+  // the whole app or one storyline depending on how you arrived, and said neither)
+  const scope = MAP.storyline ? 'count.scope.storyline' : 'count.scope.workspace';
+  const c = (n, unit) => ({ n, unit, bizUnit: unit, scope, source: src });
   const out = [c(stale, 'count.unit.riskStale'), c(notBuilt, 'count.unit.riskNotBuilt'), c(erp, 'count.unit.riskErp')];
   // every stale journey compared with one code: name it once on the bar, with the newest run among them
   const facts = [...why.values()];
@@ -1839,7 +1844,9 @@ function drawRisk() {
   if (!el) return;
   const k = riskCounteds();
   if (!k || !k.some((x) => x.n)) { el.hidden = true; el.innerHTML = ''; return; }
+  const scopeKey = k[0].scope;
   el.innerHTML = '<span class="hud-label"' + tipAttrs({ key: 'map.risk.title', noFocus: true }) + '>' + esc(t('map.risk.title')) + '</span>'
+    + '<span class="map-risk-scope tc-scope" data-scope="' + esc(scopeKey) + '"' + tipAttrs({ key: scopeKey, noFocus: true }) + '>' + esc(t(scopeKey)) + '</span>'
     + k.filter((x) => x.n).map((x) => countedHtml(x, '/api/journey', { cls: 'map-chip k-warn' })
       // *stale* said once, with what it compares, when every stale journey shares one comparison
       + (x.fresh ? '<span class="map-risk-why"' + freshAttrs(x.fresh, { noFocus: true }) + '>' + esc(freshSentence(x.fresh)) + '</span>' : '')).join('<span class="sep">·</span>');
