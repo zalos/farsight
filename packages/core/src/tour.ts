@@ -156,7 +156,12 @@ export function codeFree(text: string): string {
     .replace(/\b(?:GET|POST|PUT|PATCH|DELETE)\s+(\/[\w/:{}.[\]-]*)/g, (_m, p: string) => words(p.split('/').filter((x) => x && !/^(api|v\d+)$/i.test(x) && !/^[:{[]/.test(x)).join(' ')))
     .replace(/(?:[\w.-]+\/)+[\w.-]+/g, (m) => file(m))
     .replace(/\b[\w-]+\.(?:tsx?|jsx?|mjs|cjs|json|ya?ml|md)\b/g, (m) => file(m))
+    // a path on its own (/track, /me/verify) reads as its last name
+    .replace(/(^|[\s(])\/[\w.:{}[\]/-]+/g, (_m, pre: string, _o: number, _w: string) => `${pre}${words((_m.trim().split('/').filter((x) => x && !/^[:{[]/.test(x)).pop() ?? ''))}`)
+    // a method left alone, with no path after it, says nothing a reader can use
+    .replace(/\b(?:GET|POST|PUT|PATCH|DELETE)\b\s*/g, '')
     .replace(/\b[a-z]+[A-Z][A-Za-z0-9]*\b/g, (m) => words(m))
+    .replace(/\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b/g, (m) => words(m))
     .replace(/\b[A-Za-z0-9]+_[A-Za-z0-9_]+\b/g, (m) => words(m))
     .replace(/\b([a-z]+):([a-z]+)\b/g, '$1 $2')
     // a document's own id left in the sentence (OPS-04a, CON-02) is how the docs file it, not words
