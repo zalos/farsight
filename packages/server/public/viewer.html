@@ -2598,6 +2598,8 @@
     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .map-scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim);overflow-wrap:anywhere;line-height:1.25}
   .map-scr .route:empty{display:none}
+  /* the business street reads as the storyboard did: the picture and the screen's own sentence (one address) */
+  .map-scr .say{font-size:11px;line-height:1.35;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .map-scr .map-chips{display:flex;gap:5px;flex-wrap:wrap}
   .map-scr .map-chips .map-chip,.map-scr .state .map-chip{font-size:10px;padding:1px 7px}
   /* plumbing: the legend lane, call nodes with the service bar, data nodes with read/write */
@@ -3432,44 +3434,6 @@
     </div>
     <p class="sub">Live view of local AI models, tools, chains, and agents. Polls <span class="mono">/api/modelhub/state</span> every 2s while open; nodes pulse while active.</p>
     <div id="mh-body"><div class="mh-empty">loading…</div></div>
-  </div>
-</div>
-
-<div class="journey" id="journey" role="dialog" aria-label="Journey">
-  <!-- two rows: who this journey is and how to look at it, then the facts about
-       it. The count line used to sit on one row with the view switch and refuse
-       to shrink, which starved the flow's name to nothing and pushed the switch
-       off the right edge of the screen. -->
-  <div class="jrn-head">
-    <div class="jrn-head-top">
-      <span class="hud-label">Journey</span>
-      <h2 id="jrn-title">—</h2>
-      <span class="jrn-orgline" id="jrn-orgline"></span>
-      <span class="jrn-orgline jrn-storyline" id="jrn-storyline"></span>
-      <span class="jrn-viewslot" id="jrn-layoutsw"></span>
-      <button class="x" onclick="closeJourney()" aria-label="Close journey" title="Close (Esc)">✕</button>
-    </div>
-    <div class="jrn-head-facts">
-      <span class="jrn-count" id="jrn-count"></span>
-      <span class="jrn-head-chips">
-        <span class="jrn-tomap" id="jrn-tomap"></span>
-        <span class="jrn-export" id="jrn-export"></span>
-        <span class="jrn-partof" id="jrn-partof"></span>
-        <span class="jrn-work" id="jrn-work"></span>
-        <button class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button>
-        <span class="jrn-trunc" id="jrn-trunc" style="display:none">truncated</span>
-        <button class="jrn-forksbtn" id="jrn-forksbtn" style="display:none" onclick="jrnToggleForks()" title="Forks along this journey">forks</button>
-        <span class="jrn-layoutsw-wrap" id="jrn-docksw"></span>
-      </span>
-    </div>
-    <div class="jrn-lifecycle" id="jrn-lifecycle"></div>
-  </div>
-  <div class="jrn-body" id="jrn-body">
-    <div class="jrn-empty" id="jrn-empty" style="display:none"></div>
-    <div class="jrn-tl" id="jrn-tl"></div>
-    <div class="jrn-dock" id="jrn-dock" style="display:none" role="region" aria-label="Code pane"></div>
-    <div class="jrn-forks" id="jrn-forks" role="dialog" aria-label="Forks along this journey"></div>
-    <div class="jrn-cutlist" id="jrn-cutlist" role="dialog"></div>
   </div>
 </div>
 

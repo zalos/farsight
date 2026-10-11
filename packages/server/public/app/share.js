@@ -13,33 +13,17 @@ import { tipAttrs } from './lib/tooltip.js';
 import { pinnedHash, pinMismatch, dayOf, fill } from './lib/export-model.js';
 
 /**
- * The link this view is shared as. Everywhere but a journey that is the URL in
- * the bar; a journey link is written the way it is read — pinned to the sync
- * it was taken from (`@sync:N`) and carrying the three independent controls
- * the reader had on (`?lens=&view=storyboard|timeline|sheet|drill&band=&dock=&biz=`), so the person who opens it sees
- * the same picture.
+ * The link this view is shared as: the URL in the bar. On the Map — where a journey is read — the address already
+ * names the picture (the stop, its layout, the screen, the action, the dock), and the link adds the register it was
+ * read in.
  * @group Share
- * @business Writes the link to this journey so it opens on the same data, in the same words and the same shape.
+ * @business Writes the link to this view so it opens on the same picture, in the same words.
  */
 export function shareLink() {
   const hash = location.hash || '';
   // the Map writes its picture into the address as it moves (zoom, place, the open card); the link adds the words it was read in
   if (/^#\/map(?:[/?@]|$)/.test(hash)) return location.origin + location.pathname + withParams(hash, { lens: currentLens() });
-  if (!/^#\/journeys\/./.test(hash)) return location.href;
-  let h = hash.slice(1), query = '';
-  const qi = h.indexOf('?');
-  if (qi >= 0) { query = h.slice(qi + 1); h = h.slice(0, qi); }
-  h = h.replace(/@sync:\d+$/, '');
-  const sync = S.GRAPH && S.GRAPH.meta && S.GRAPH.meta.sync;
-  const q = new URLSearchParams(query);
-  q.set('lens', currentLens());
-  // the visual the reader actually had; unset only before a journey has drawn,
-  // and a link never names a view nobody was looking at
-  if (S.jrnLayout) q.set('view', S.jrnLayout);
-  q.set('band', S.jrnView || 'rows');
-  if (S.jrnDock) q.set('dock', S.jrnDock);
-  if (S.jrnBiz) q.set('biz', S.jrnBiz);
-  return location.origin + location.pathname + '#' + h + (sync != null ? '@sync:' + sync : '') + '?' + q.toString();
+  return location.href;
 }
 
 /**

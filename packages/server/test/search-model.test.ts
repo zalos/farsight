@@ -81,7 +81,7 @@ test('a keystroke over the folded strings is well under the palette budget', () 
   assert.ok(per < 25, `a keystroke took ${per.toFixed(1)} ms over ${nodes.length} nodes`);
 });
 
-test('fast travel finds a storyline by its name or id, outranks a journey on a tie, and lands on the Map (or the front door with the Map off)', () => {
+test('fast travel finds a storyline by its name or id, outranks a journey on a tie, and lands on the Map', () => {
   const metas = {
     app: { storylines: [{ id: 'invoice', name: 'An invoice, end to end', description: 'From upload to payment.', journeys: ['a', 'b'], branches: [{ id: 'c' }] }] },
     other: { storylines: [{ id: 'invoice', name: 'A duplicate id' }, { id: 'vendor', name: 'A vendor account', journeys: ['x'] }] },

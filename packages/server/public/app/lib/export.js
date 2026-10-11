@@ -34,7 +34,7 @@ const PROVIDERS = new Map();
 
 /**
  * Register what a surface's Save control draws.
- * @param {string} surface  `map` · `storyboard` · `portfolio`
+ * @param {string} surface  `map` · `street` (a stop below the board) · `portfolio`
  * @param {() => Promise<any>|any} provider
  * @param {{csv?: () => {header:string[], rows:string[][]}}} [extra]
  * @group Export

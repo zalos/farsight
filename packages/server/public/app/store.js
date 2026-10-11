@@ -13,7 +13,6 @@ export const S = {
   STRINGS: null,            // /api/strings catalog (null until loaded / on failure)
   register: 'professional', // 'hud' | 'professional' — persisted fs-register
   route: null,              // parsed hash route {surface,param,sync,scope,view,repo}
-  prevSurfaceHash: null,    // where closing a journey overlay returns to
   selected: null, activeTag: null, positions: {}, focusSet: null, palIndex: 0,
   // a fast-travel pick bound for the code map: focusOn() once the map has mounted (shell.js pick)
   pendingFocus: null,
@@ -21,11 +20,8 @@ export const S = {
   // the code map's projects and packages (surfaces/codemap-projects.js): group, filters, chips, the open view
   cmap: null,
   guardsByTarget: {}, validatesByTarget: {}, EDGES_OF: new Map(), displayCache: null, displayById: null, BYID: {}, RENDER_PARENTS: {},
-  JOURNEY: null, journeyObserver: null, journeyActive: 0,
+  JOURNEY: null, journeyActive: 0,
   JRN_TREE: null, jrnForksOpen: false, mhTimer: null,
-  jrnLayout: null,          // 'storyboard' | 'timeline' | 'sheet' | 'drill' — the journey view axis (persisted fs-jrn-layout; the register picks the default)
-  JRN_STORY: null,          // the storyboard's selection: {seg, mo, orders} — which screen, which action, the j/k order of its ledger
-  jrnView: null,            // 'rows' | 'ladder' — the system band's shape (persisted fs-jrn-view)
   jrnDock: null,            // 'inline' | 'bottom' | 'right' — where the code pane opens (persisted fs-jrn-dock)
   jrnBiz: null,             // 'words' | 'gates' | 'decisions' — what the business lane draws (persisted fs-jrn-biz)
 };

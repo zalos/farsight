@@ -49,6 +49,7 @@ import {
   actionParams, actionKey, stopZoom, openCode, closeCode, crumbHtml, syncTable, tableOpen, redrawStops, closeStops, streetFactsHtml, forgetWalks,
   registerView, tableAtPart, tableParams, tableKey, tableEscape,
 } from './map-stops.js';
+import { jrnFirstSentence } from '../lib/journey-draw.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
 // lane L widened the column (480 → 600) so a call's words and path and a data node's kind line show whole at the
@@ -837,7 +838,14 @@ async function applyRouteTarget(route, animate) {
   // `part=<node>` (a part of the walk); an address that names no place opens the register's own view of a journey
   const stop = mapStopOf(route.raw || location.hash);
   const bare = !node && !view && !route.card && stop.screen == null && !stop.part && !stop.layout && !stop.action;
-  const want = stop.layout || (bare && !MAP.act ? registerView() : null);
+  let want = stop.layout || (bare && !MAP.act ? registerView() : null);
+  // a walk from an entry that shows no screen has no street to draw: its table is the journey stop
+  const entryD = MAP.nb.districts.find((d) => d.id === flow && d.entry);
+  if (entryD && (!want || want === 'screens')) {
+    const j = await ensureJourney(flow);
+    if (gen !== MAP.gen) return;
+    if (j && j.model && !j.model.screens.length) want = 'table';
+  }
   if (want === 'table' || want === 'screens') setLayout('st', want);
   if (want === 'beats' || want === 'ladder') setLayout('act', want);
   if (!node && !stop.action && (want === 'beats' || want === 'ladder' || (stop.part && want !== 'table'))) {
@@ -846,11 +854,13 @@ async function applyRouteTarget(route, animate) {
     const j = await ensureJourney(flow);
     if (gen !== MAP.gen || !j || !j.model || !j.data) return;
     const order = stop.part ? partOrder(j.data.summary.segments, stop.screen, stop.part) : null;
-    const si = stop.screen != null ? screenRowAt(j.model.screens, stop.screen) : 0;
+    const si = !j.model.screens.length ? null : stop.screen != null ? screenRowAt(j.model.screens, stop.screen) : 0;
     if (!MAP.fitted && si != null) { centreScreen(flow, si, STREET_SCALE, false); MAP.fitted = true; }
     const code = !!stop.dock || (bare && !stop.layout);
     if (order != null) { await openActionAt(flow, order, { code, dock: stop.dock }); return; }
     if (si != null && (want === 'beats' || want === 'ladder') && await openScreenAction(flow, si, { code, dock: stop.dock })) return;
+    // a walk with no screen of its own: its first action
+    if (!j.model.screens.length && (want === 'beats' || want === 'ladder')) { await openAction(flow, 0, { code, dock: stop.dock }); return; }
   }
   if (!node && stop.action) {
     const j = await ensureJourney(flow);
@@ -917,7 +927,7 @@ function writeHash(flow, node) {
   const query = qi >= 0 ? h.slice(qi) : '';
   let base = '#/map' + (flow ? '/' + encodeURIComponent(flow) : '');
   // the link is the picture (§K): where the board is and which card is open, so the same link opens the same view
-  const v = node || MAP.act || lanesShown() ? null : viewParams(flow);
+  const v = node || MAP.act || lanesShown() || tableOpen() ? null : viewParams(flow);
   // below the screen the address names the place (surfaces/map-stops.js): screen · action · beat · layout · dock; at
   // the table, the part selected and where its code opens
   const ap = !node ? actionParams() : null;
@@ -2559,6 +2569,9 @@ function screenHtml(d, m, s, x, y, n) {
     + '<div class="body"><div class="ttl"><span class="ord"' + tipAttrs({ key: 'map.screen.ordinal', noFocus: true }) + '>' + s.ordinal + '</span>'
     + '<span class="nm">' + esc(s.name) + '</span></div>'
     + '<div class="route map-code">' + esc(s.route || '') + '</div>'
+    // the business register reads the street the way the journey page's storyboard did: the screen's own sentence
+    // under its name (the first sentence somebody wrote for it, in plain words)
+    + (biz() && s.business ? '<div class="say"' + tipAttrs({ text: plainWords(s.business), noFocus: true }) + '>' + esc(jrnFirstSentence(plainWords(s.business))) + '</div>' : '')
     + (s.state === 'planned' ? '<div class="state"><span class="map-chip k-warn"' + tipAttrs({ key: 'map.screen.planned', noFocus: true }) + '>' + sym('warning') + esc(t('map.screen.planned')) + '</span></div>' : '')
     // the numbers are this screen's part of this journey's walk: said, so two journeys printing two numbers for one
     // screen read as two scopes, not a contradiction (round 2) — plain words, so every lens prints them, with a tip
@@ -3435,10 +3448,11 @@ bindStops({
   MAP, ensureJourney, openProperty, closeProperty, closeCard, toast, nameWords,
   writeHash: () => { if (MAP.cv) writeHash(MAP.act ? MAP.act.flow : MAP.cv.level() === 'st' ? MAP.focus : null, null); },
   refresh: () => { if (MAP.cv) onCanvasChange(MAP.cv.state()); },
-  headHtml: (flow) => {
+  // `agg` replaces the chip row (the table prints the journey's own count line there)
+  headHtml: (flow, agg) => {
     const d = MAP.nb.districts.find((x) => x.id === flow) || { id: flow, name: '' };
     const j = MAP.journeys.get(flow);
-    return '<div class="nm">' + stepBadgeHtml(d) + esc(nameWords(d.name)) + '</div><div class="agg">' + aggHtml(d, j) + '</div>' + streetFactsHtml(flow, j, MAP.tree);
+    return '<div class="nm">' + stepBadgeHtml(d) + esc(nameWords(d.name)) + '</div><div class="agg">' + (agg != null ? agg : aggHtml(d, j)) + '</div>' + streetFactsHtml(flow, j, MAP.tree);
   },
 });
 expose({ mapFit, mapZoom });

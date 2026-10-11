@@ -1,5 +1,5 @@
 // Export's words (round 2026-10-05, lane E): saving the Map's storyline board,
-// the journey's storyboard and the Portfolio as a picture, a PDF or (the
+// a stop on the Map (round 2026-10-10: the storyboard's export became the street's) and the Portfolio as a picture, a PDF or (the
 // Portfolio) a spreadsheet, the footer written under every saved picture, and
 // the pinned, dated link. Spread into STRINGS in strings.ts. Same rules as the
 // rest of the catalog: both registers, a define on every word, defines in plain
@@ -29,7 +29,6 @@ export const EXPORT_STRINGS: Record<string, StringEntry> = {
   'export.why.notTable': same('this view is not a table', 'Only the Portfolio is saved as a spreadsheet; the other views are pictures.'),
   // what a saved picture shows, line one of its footer
   'export.surface.map': same('Map', 'The Map: the journeys drawn as one board.'),
-  'export.surface.storyboard': same('Storyboard', 'One journey as a person walks it: every screen in order, the things the person does on the open one, and what each does.'),
   'export.surface.portfolio': same('Portfolio', 'The table of every journey: what is built, what it calls, what proves it runs, whether it reaches the ERP and who owns it.'),
   'export.board.all': same('every journey', 'The whole board: every journey, in its bands.'),
   'export.footer.what': same('{surface} · {title}', 'What the saved picture shows: the view, and the journey, storyline or table in it.'),
@@ -45,6 +44,6 @@ export const EXPORT_STRINGS: Record<string, StringEntry> = {
   'share.pinnedLink': same('Copy pinned link', 'A link to this view that names the sync it was read at and the day, so whoever opens it can tell whether they are looking at the same facts. A server that has synced since says so beside its own sync chip.'),
   'share.pinnedLinkSub': same('pinned to sync {n} · as of {date}', 'The sync and the day this link names. The server that opens it draws its own latest sync, and says so when the two differ.'),
   'share.pinnedNone': same('this graph has no sync number to pin to', 'A graph written without the snapshot history carries no sync number, so a link to it cannot name one. The live link still works.'),
-  'share.saveHere': same('Save this view', 'The views that can be saved as a picture or a PDF have a Save control in their own toolbar: the Map, a journey (as its storyboard) and the Portfolio.'),
+  'share.saveHere': same('Save this view', 'The views that can be saved as a picture or a PDF have a Save control in their own toolbar: the Map (the board, or the stop on screen — one journey’s street, its table, or one action’s beats) and the Portfolio.'),
   'pin.note': same('pinned to sync {n} · this server shows sync {m}', 'This link names the sync it was taken at, and the server is drawing a later or earlier one, so a number here may differ from the one the link was shared with. The person who serves the graph can draw the older sync by starting the server as of that sync.'),
 };

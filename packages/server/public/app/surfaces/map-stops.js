@@ -31,7 +31,7 @@ import { exportToolHtml, registerExport } from '../lib/export.js';
 import {
   jrnBuildTree, jrnSheetIndex, jrnSheetHtml, jrnResetFolds, jrnSelect, jrnLadderCellHtml, jrnDock, jrnSetDock,
   jrnLifecycleHtml, jrnMoLabel, jrnMarkerAt, jrnNav, jrnApplyDock, jrnCollectForks, jrnForksPanelHtml, jrnToggleForks,
-  jrnForksBtnHtml, jrnImpactRings, jrnCutChip, jrnToggleCuts, cutsOpen, forksOpen, expandedOpen, closeExpanded, jrnScrollTo,
+  jrnForksBtnHtml, jrnImpactRings, jrnCutChip, jrnHeaderHtml, jrnToggleCuts, cutsOpen, forksOpen, expandedOpen, closeExpanded, jrnScrollTo,
 } from '../lib/journey-draw.js';
 import { partOrder } from '../lib/route-url.js';
 import { jrnDrillIndex, jrnDrillStageHtml, jrnDrillMount } from './journey-drill.js';
@@ -181,7 +181,6 @@ function useJourney(data, host) {
     S.JOURNEY = data;
     S.JRN_TREE = jrnBuildTree(data.steps || []);
     S.journeyActive = -1;
-    S.jrnStep = null;
   }
   S.JRN_HOST = host;
   // a part selected on the stop moves the address with it (the table's `part=`, the action's `beat=`)
@@ -570,8 +569,12 @@ function drawTableNow(j, data) {
   // drawer. The table, its dock (a part's code: `j` / `k` walk the parts, `d` moves the dock) and the two drawers
   // share one body, the way the journey page laid them out.
   host.innerHTML = '<div class="map-table" data-map-wheel="own"><div class="jrn-body map-table-body" id="jrn-body"><div class="map-table-scroll">'
-    + '<div class="map-table-head" data-flow="' + esc(flow) + '">' + ST.api.headHtml(flow)
+    // the table's head prints the journey's own count line — screens, actions, gates, what is not in words, the tests
+    // with their one word and freshness, the walk in the code register — where the street prints its chips
+    + '<div class="map-table-head" data-flow="' + esc(flow) + '">'
+    + ST.api.headHtml(flow, '<span class="jrn-count map-table-count">' + jrnHeaderHtml(data, data.summary, (data.summary && data.summary.counts) || {}, currentLens()) + '</span>')
     + '<div class="map-table-tools">' + jrnForksBtnHtml(data, forks)
+    + (data.truncated ? '<span class="jrn-trunc"' + tipAttrs({ key: 'journey.truncated', noFocus: true }) + '>' + sym('warning') + esc(t('journey.truncated').replace('{cap}', String((data.steps || []).length))) + '</span>' : '')
     + '<button type="button" class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button></div></div>'
     + '<div class="map-table-wrap">' + jrnSheetHtml(data.summary) + '</div></div>'
     + '<div class="jrn-dock" id="jrn-dock" style="display:none" role="region" aria-label="' + esc(t('map.dock')) + '"></div>'

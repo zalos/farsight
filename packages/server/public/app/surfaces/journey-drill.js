@@ -768,7 +768,6 @@ function jrnDrillInspect(i) {
   insp.classList.toggle('empty', !open);
   const bi = (S.JRN_DRILL && S.JRN_DRILL.colOf && i >= 0) ? S.JRN_DRILL.colOf[i] : null;
   document.querySelectorAll('#jrn-lanes .jrn-dbh[data-beat]').forEach((el) => el.classList.toggle('on', bi != null && +el.dataset.beat === bi));
-  document.querySelectorAll('#jrn-tl .jrn-stop').forEach((el) => el.classList.toggle('on', +el.dataset.col === S.jrnAction));
   jrnDrillWires();
 }
 
@@ -822,7 +821,6 @@ function jrnDrillRenderAction() {
   if (cap) cap.outerHTML = jrnDrillCaptionHtml(dr.cols, model).replace('class="jrn-dcap"', 'class="jrn-dcap" id="jrn-dcap"');
   host.innerHTML = jrnDrillLanesHtml(dr.cols, dr.layers, model, col);
   S.JRN_DRAWN = new Set(Array.from(host.querySelectorAll('[data-order]')).map((el) => +el.dataset.order));
-  document.querySelectorAll('#jrn-tl .jrn-stop').forEach((el) => el.classList.toggle('on', +el.dataset.col === S.jrnAction));
   if (S.jrnDrillRO) S.jrnDrillRO.disconnect();
   if (window.ResizeObserver) {
     S.jrnDrillRO = new ResizeObserver(() => jrnDrillWires());
@@ -849,21 +847,6 @@ export function jrnDrillMount() {
   jrnDrillRenderAction();
   jrnDrillInspect(-1);
 }
-/** Open an action from the rail: redraw the lanes for it and select its first drawn step (the action itself).
- * @group Journey drill
- * @business Jumps to one action of the journey and opens its beats. */
-export function jrnDrillGo(ci) {
-  const dr = S.JRN_DRILL;
-  if (!dr || !dr.cols[ci]) return;
-  S.jrnAction = ci;
-  jrnDrillRenderAction();
-  const wrap = document.getElementById('jrn-dlanes');
-  if (wrap) { wrap.scrollLeft = 0; wrap.scrollTop = 0; }
-  const first = jrnDrillOrders().find((o) => S.JRN_MARK[o] && S.JRN_MARK[o].col === ci);
-  if (first != null) jrnSelect(first, true); else jrnDrillInspect(-1);
-  const stop = document.querySelector('#jrn-tl .jrn-stop[data-col="' + ci + '"]');
-  if (stop) stop.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-}
 /** Make sure the action step i lives in is the open one (the selection path calls this before it reveals folds).
  * @group Journey drill */
 export function jrnDrillEnsureAction(i) {
@@ -876,4 +859,4 @@ export function jrnDrillEnsureAction(i) {
  * @group Journey drill */
 export function jrnDrillSelected(i) { jrnDrillInspect(i); }
 
-expose({ jrnDrillGo, jrnDrillInspTab });
+expose({ jrnDrillInspTab });

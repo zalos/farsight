@@ -152,23 +152,6 @@ export function screenRowAt(screens, screen) {
   return after >= 0 ? after : screens.length - 1;
 }
 
-/**
- * The screen (1-based) whose markers include `nodeId`: the preferred segment's
- * when it has the node, else the first segment that does, else the preferred
- * segment itself; null when there is nothing to name.
- * @param {Array<{index:number, markers?:Array<{nodeId:string}>}>} segments
- * @param {number|null} prefer  a 0-based segment index (the screen the reader is on)
- * @param {string|null} nodeId
- */
-export function screenOfNode(segments, prefer, nodeId) {
-  const segs = segments || [];
-  const has = (sg) => !!(sg && nodeId && (sg.markers || []).some((m) => m.nodeId === nodeId));
-  const p = prefer != null ? segs.find((sg) => sg.index === prefer) : null;
-  if (has(p)) return p.index + 1;
-  const any = segs.find(has);
-  if (any) return any.index + 1;
-  return p ? p.index + 1 : null;
-}
 
 /**
  * The walk order of the part a link names on a screen: the marker for `nodeId` on that screen's segment (a gate met

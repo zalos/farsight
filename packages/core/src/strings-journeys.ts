@@ -46,8 +46,6 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
   'journeys.persona.showAll': same('show everyone'),
   'journeys.persona.toggle': same('Show or hide this group of journeys'),
   'journeys.persona.empty': same('No journey matches this filter.'),
-  'journeys.persona.for': same('For',
-    'Who this journey is for and the group it sits in, as the design manifest or the configuration declares them.'),
   'journeys.persona.alsoUnder': same('also for {names}',
     'This journey is for more than one person, so it is listed under each of them and counted once in the total.'),
   // storylines (round-2026-10-05 §2): a named chain of journeys across features and personas — questline in
@@ -66,10 +64,6 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
     define: 'The whole life of one business thing across many journeys and both kinds of person, such as an invoice from upload to payment, as the design manifest or the configuration declares it, journey by journey in order.',
   },
   'journeys.storyline.sub': same('Each one follows one thing from start to end, journey by journey, whoever does the work.'),
-  'journeys.storyline.word': {
-    hud: 'Questline', professional: 'Storyline',
-    define: 'A named chain of journeys the design declares in order: the whole life of one business thing across features and kinds of person.',
-  },
   'journeys.storyline.stepOf': same('step {n} of {m}',
     'Where this journey stands in the storyline: its place in the order the design declares, out of the journeys the storyline chains.'),
   'journeys.storyline.bizStepOf': same('journey {n} of {m}',
@@ -78,8 +72,6 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
     hud: 'in questline: {name}', professional: 'in storyline: {name}',
     define: 'This journey is part of a storyline the design declares; the number after it says where it stands in that chain.',
   },
-  'journeys.storyline.prev': same('Open the journey before this one in the storyline'),
-  'journeys.storyline.next': same('Open the journey after this one in the storyline'),
   'journeys.storyline.openMap': same('open on the Map'),
   'journeys.storyline.openFirst': same('open the first journey'),
   'journeys.storyline.empty': same('No journey of this storyline is in scope.'),

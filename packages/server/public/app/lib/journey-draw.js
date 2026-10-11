@@ -1705,11 +1705,10 @@ function jrnUnfolded(o) {
   for (let f = (S.JRN_FOLD_OF || {})[o]; f; f = f.parent ? byId(f.parent) : null) if (!f.open) return false;
   return true;
 }
-/** The j/k walk: every marker the layout draws — step order on the timeline,
- * down a column then on to the next action in the sheet — minus what is still folded away.
+/** The j/k walk: every marker the stop draws — down a column then on to the next action on the table, the action's
+ * parts at the action stop — minus what is still folded away.
  * @group Journey view */
 function jrnOrdersNow() {
-  if (S.JRN_STORY) return (S.JRN_STORY.orders || []).slice();
   const all = S.JRN_SHEET ? jrnSheetOrders() : S.JRN_DRILL ? jrnDrillOrders() : Object.keys(S.JRN_MARK || {}).map(Number).sort((a, b) => a - b);
   return all.filter(jrnUnfolded);
 }
@@ -1725,7 +1724,7 @@ function jrnOrdersNow() {
  */
 function jrnRevealBizTab(i) {
   const sum = S.JOURNEY && S.JOURNEY.summary;
-  if (!sum || !document.querySelector('#jrn-tl .jrn-bizrow')) return;
+  if (!sum || !jrnHostEl().querySelector('.jrn-biztab')) return;
   const sg = (sum.segments || []).find((x) => i >= x.from && i <= x.to);
   if (!sg) return;
   const d = jrnBizDecs(sg);
@@ -2566,7 +2565,7 @@ export function jrnLifecycleHtml(data) {
  * @group Journey view
  * @business Says how big the journey is — screens, things to do, checks, what is not in plain words, and what proves it — each number with what it counts on hover or click.
  */
-function jrnHeaderHtml(data, sum, cnt, lens) {
+export function jrnHeaderHtml(data, sum, cnt, lens) {
   const business = lens === 'business';
   const C = (name) => jrnC(sum, name);
   const cov = (sum && sum.coverage && sum.coverage.journey) || null;
@@ -2812,9 +2811,6 @@ export function jrnHostEl() {
 /** Whether the forks drawer is open (Esc routing).
  * @group Journey view */
 export function forksOpen() { return S.jrnForksOpen; }
-/** Close just the forks drawer (Esc routing).
- * @group Journey view */
-export function closeForks() { jrnToggleForks(false); }
 /** Whether a marker's contract / code is expanded (Esc closes it before the stop).
  * @group Journey view */
 export function expandedOpen() { return !!(S.JOURNEY && S.JRN_MARK && S.journeyActive >= 0 && S.JRN_MARK[S.journeyActive]); }
@@ -2952,9 +2948,6 @@ function jrnCutJump(si, mi, order) {
 /** Whether the cut list is open (Esc routing).
  * @group Journey view */
 export function cutsOpen() { return !!S.jrnCutsOpen; }
-/** Close just the cut list (Esc routing).
- * @group Journey view */
-export function closeCuts() { jrnToggleCuts(false); }
 
 // ── impact rings on the sheet (B5.4 · dependency-impact §4.3) ────
 /**

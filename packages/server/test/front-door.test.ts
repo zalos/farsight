@@ -424,7 +424,8 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     // 2026-09-25: *"a run-on of 14 counts"*). The header has no runner of its own,
     // so the guard is at the source.
     const read = (f: string): string => readFileSync(join(repoRoot, 'packages/server/public/app/surfaces', f), 'utf8');
-    const header = read('journeys.js').split('function jrnHeaderHtml(')[1]?.split('\nfunction ')[0] ?? '';
+    // the count line moved with the journey page's drawing to lib/journey-draw.js: the Map's table prints it in its head
+    const header = readFileSync(join(repoRoot, 'packages/server/public/app/lib/journey-draw.js'), 'utf8').split('function jrnHeaderHtml(')[1]?.split('\nfunction ')[0] ?? '';
     assert.ok(header, 'jrnHeaderHtml is gone — this guard needs rewriting, not deleting');
     assert.match(header, /C\('actions'\)/, 'the header must print the typed count of actions (the fold\'s `called`), not the moments');
     assert.match(header, /cnt\.called/, 'and fall back to the fold\'s `called` on a server with no typed counts');
@@ -446,7 +447,8 @@ describe('the front door\'s cells cannot overclaim (swarm 2026-09-23)', () => {
     // this is the viewer half, and the viewer has no runner of its own — so it is
     // checked at the source, on the two functions that print the word.
     const read = (f: string): string => readFileSync(join(repoRoot, 'packages/server/public/app/surfaces', f), 'utf8');
-    const header = read('journeys.js').split('function jrnHeaderHtml(')[1]?.split('\nfunction ')[0] ?? '';
+    // the count line moved with the journey page's drawing to lib/journey-draw.js: the Map's table prints it in its head
+    const header = readFileSync(join(repoRoot, 'packages/server/public/app/lib/journey-draw.js'), 'utf8').split('function jrnHeaderHtml(')[1]?.split('\nfunction ')[0] ?? '';
     assert.ok(header, 'jrnHeaderHtml is gone — this guard needs rewriting, not deleting');
     // Since the visual swarm of 2026-09-24 the word itself comes from the fold
     // (`coverage.evidenceWord`), because printing the chip was not enough: two of
