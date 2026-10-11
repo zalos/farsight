@@ -6,7 +6,7 @@
 //
 //   keychain:<service>/<account>   macOS `security`, Linux `secret-tool`
 //   env:<NAME>                     the process environment (tests, CI)
-import { execFile } from 'node:child_process';
+import { KeychainReadError, readKeychain, type KeychainRunner } from '@farsight/core/dist/keychain.js';
 
 /** A reference could not be resolved. `message` names the ref and why — never a value. */
 export class SecretUnavailable extends Error {
@@ -29,23 +29,11 @@ export function isSecretRef(value: string | undefined): boolean {
   return typeof value === 'string' && /^(keychain|env):/.test(value);
 }
 
-type Runner = (cmd: string, args: string[]) => Promise<string>;
-
-// stdout only, trimmed of the one trailing newline the tools print; stderr is
-// dropped (it can echo the query, and we name the ref ourselves)
-const run: Runner = (cmd, args) =>
-  new Promise((resolve, reject) => {
-    execFile(cmd, args, { timeout: 15_000, maxBuffer: 64 * 1024 }, (err, stdout) => {
-      if (err) reject(err);
-      else resolve(String(stdout).replace(/\r?\n$/, ''));
-    });
-  });
-
 export interface ResolveOptions {
   platform?: NodeJS.Platform;
   env?: NodeJS.ProcessEnv;
   /** injectable for tests; defaults to execFile */
-  runner?: Runner;
+  runner?: KeychainRunner;
 }
 
 export async function resolveSecret(ref: string, opts: ResolveOptions = {}): Promise<string> {
@@ -59,30 +47,17 @@ export async function resolveSecret(ref: string, opts: ResolveOptions = {}): Pro
   if (ref.startsWith('keychain:')) {
     const k = parseKeychainRef(ref);
     if (!k) throw new SecretUnavailable(ref, 'expected keychain:<service>/<account>');
-    const platform = opts.platform ?? process.platform;
-    const runner = opts.runner ?? run;
-    let cmd: string;
-    let args: string[];
-    if (platform === 'darwin') {
-      cmd = 'security';
-      args = ['find-generic-password', '-s', k.service, '-a', k.account, '-w'];
-    } else if (platform === 'linux') {
-      cmd = 'secret-tool';
-      args = ['lookup', 'service', k.service, 'account', k.account];
-    } else if (platform === 'win32') {
-      throw new SecretUnavailable(ref, 'the Windows credential store (DPAPI) is not built yet');
-    } else {
-      throw new SecretUnavailable(ref, `no keychain support on ${platform}`);
-    }
-    let value: string;
     try {
-      value = await runner(cmd, args);
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      throw new SecretUnavailable(ref, code === 'ENOENT' ? `${cmd} is not installed` : 'not found in the keychain, or access was refused');
+      return await readKeychain(k, opts);
+    } catch (error) {
+      if (error instanceof KeychainReadError) {
+        if (error.code === 'unsupported') throw new SecretUnavailable(ref, error.platform === 'win32'
+          ? 'the Windows credential store (DPAPI) is not built yet' : `no keychain support on ${error.platform}`);
+        if (error.code === 'missing-tool') throw new SecretUnavailable(ref, `${error.command} is not installed`);
+        if (error.code === 'empty') throw new SecretUnavailable(ref, 'the keychain entry is empty');
+      }
+      throw new SecretUnavailable(ref, 'not found in the keychain, or access was refused');
     }
-    if (!value) throw new SecretUnavailable(ref, 'the keychain entry is empty');
-    return value;
   }
   // not a reference: it may BE a pasted secret, so it is never echoed
   throw new SecretUnavailable('(a literal value)', 'not a secret reference (expected keychain: or env:) — secrets never go in settings');

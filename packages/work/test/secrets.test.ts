@@ -35,6 +35,14 @@ test('keychain: Windows is a typed not-built error', async () => {
     e instanceof SecretUnavailable && /DPAPI/.test(e.message));
 });
 
+test('shared transport preserves Work diagnostics and its less restrictive value policy', async () => {
+  assert.deepEqual(parseKeychainRef('keychain:farsight/provider/account'), { service: 'farsight/provider', account: 'account' });
+  assert.equal(await resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: async () => 'line one\nline two' }), 'line one\nline two');
+  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'linux', runner: async () => { throw Object.assign(new Error(SENTINEL), { code: 'ENOENT' }); } }), (error: Error) => error instanceof SecretUnavailable && error.why === 'secret-tool is not installed' && !error.message.includes(SENTINEL));
+  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'darwin', runner: async () => '' }), (error: Error) => error instanceof SecretUnavailable && error.why === 'the keychain entry is empty');
+  await assert.rejects(resolveSecret('keychain:farsight/x', { platform: 'aix' }), (error: Error) => error instanceof SecretUnavailable && error.why === 'no keychain support on aix');
+});
+
 test('a literal is not a reference', async () => {
   await assert.rejects(resolveSecret('hunter2'), (e: Error) => !e.message.includes('hunter2'));
   assert.equal(await resolveMaybeSecret('dev@example.com'), 'dev@example.com');

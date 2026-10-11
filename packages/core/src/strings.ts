@@ -34,6 +34,12 @@ import { STATE_STRINGS } from './strings-state.js';
 import { STOP_STRINGS } from './strings-stops.js';
 import { EVIDENCE_STRINGS } from './strings-evidence.js';
 import { AFFECTED_STRINGS } from './strings-affected.js';
+import { ECHO_RUNTIME_STRINGS } from './strings-echo-runtime.js';
+import { ECHO_CONFIG_STRINGS } from './strings-echo-config.js';
+import { ECHO_HOOK_STRINGS } from './strings-echo-hooks.js';
+import { ECHO_UI_STRINGS } from './strings-echo-ui.js';
+import { ECHO_MEMORY_STRINGS } from './strings-echo-memory.js';
+import { ECHO_INSTALLATION_STRINGS } from './strings-echo-installation.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -125,6 +131,18 @@ export const STRINGS: Record<string, StringEntry> = {
   ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts
   ...AFFECTED_STRINGS,
+  // Echo's runtime and CLI words.
+  ...ECHO_RUNTIME_STRINGS,
+  // Echo's configuration validation words.
+  ...ECHO_CONFIG_STRINGS,
+  // Echo's host hooks and session boundaries words.
+  ...ECHO_HOOK_STRINGS,
+  // Echo's settings view words.
+  ...ECHO_UI_STRINGS,
+  // Echo's memory bridge words.
+  ...ECHO_MEMORY_STRINGS,
+  // Echo's installation scope and workspace connections words.
+  ...ECHO_INSTALLATION_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)
