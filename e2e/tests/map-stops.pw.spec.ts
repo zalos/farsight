@@ -100,7 +100,7 @@ test('a call card\'s door and a property call row open the action stop', async (
 
 test('the table layout draws the Sheet in place of the street, and a column opens its beats', async ({ page }) => {
   await mapOn(page);
-  await go(page, STREET);
+  await go(page, STREET + '?layout=screens');
   await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
   await page.locator('.map-layout [data-layout="table"]').click();
   await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();

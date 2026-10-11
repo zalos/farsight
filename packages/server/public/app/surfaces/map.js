@@ -809,6 +809,12 @@ function entryDistrict(n) {
   return MAP.geom.has(n.id);
 }
 
+/** True when a Map address carries nothing but the journey (and the register, scope or sync it was read in). */
+function onlyJourney(hash) {
+  const qi = String(hash || '').indexOf('?');
+  if (qi < 0) return true;
+  return [...new URLSearchParams(hash.slice(qi + 1)).keys()].every((k) => k === 'lens' || k === 'scope');
+}
 /** Go where the route says: a journey's street, or one of its screens. */
 async function applyRouteTarget(route, animate) {
   if (!MAP.world || !MAP.designs) return;
@@ -837,7 +843,9 @@ async function applyRouteTarget(route, animate) {
   // the stops below the screen and the layout a link names (lanes round 2026-10-10): `?screen=n&action=k[&beat][&layout][&dock]`,
   // `part=<node>` (a part of the walk); an address that names no place opens the register's own view of a journey
   const stop = mapStopOf(route.raw || location.hash);
-  const bare = !node && !view && !route.card && stop.screen == null && !stop.part && !stop.layout && !stop.action;
+  // bare: the address names the journey and nothing about how to look at it (a door, a pasted link) — any other
+  // parameter (a screen, a card, plumbing, the Affected mode, a view) is a picture of the street
+  const bare = !node && !view && onlyJourney(route.raw || location.hash);
   let want = stop.layout || (bare && !MAP.act ? registerView() : null);
   // a walk from an entry that shows no screen has no street to draw: its table is the journey stop
   const entryD = MAP.nb.districts.find((d) => d.id === flow && d.entry);

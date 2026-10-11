@@ -1,7 +1,6 @@
-// The Map and the journey open each other at the same step, and every detail is
-// a door (round 2026-10-05 §3). The fixture's Billing cycle has three screens —
-// New invoice, Invoice list, Discard draft — one segment each, so step 2 is the
-// Invoice list on both pictures. Its gates (`requireScope(billing:read)` met on the
+// One address (lanes round 2026-10-10): a journey is read on the Map, an old journey link is the same place there,
+// and every detail is a door (round 2026-10-05 §3). The fixture's Billing cycle has three screens — New invoice,
+// Invoice list, Discard draft — one segment each, so screen 2 is the Invoice list. Its gates (`requireScope(billing:read)` met on the
 // Invoice list) and its calls (`GET /invoices`, spec-backed by openapi.yaml) are
 // the details the doors are asked about.
 import type { Page } from '@playwright/test';
@@ -25,35 +24,36 @@ async function go(page: Page, hash: string) {
 }
 
 /**
- * @covers packages/server/public/app/lib/route-url.js::journeyStepHash
- * @covers packages/server/public/app/lib/route-url.js::mapScreenHash
- * @covers packages/server/public/app/surfaces/journeys.js::jrnApplyStep
+ * @covers packages/server/public/app/lib/route-url.js::overlayToMap
+ * @covers packages/server/public/app/lib/route-url.js::screenRowAt
+ * @covers packages/server/public/app/shell.js::applyRoute
  */
-test('the Map opens the journey at the same step, and the journey opens the Map back on it', async ({ page }) => {
+test('an old link to a step is the same screen on the Map — one replace, no history entry, no door back to a second page', async ({ page }) => {
   await mapOn(page);
-  await go(page, '#/map/' + enc(FLOW) + '?screen=2');
+  const before = await page.evaluate(() => history.length);
+  await go(page, '#/journeys/' + enc(FLOW) + '?step=2');
+  await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle/);
   const second = page.locator('.map-scr[data-flow="' + FLOW + '"][data-index="1"]');
   await expect(second).toBeFocused();
-  const door = second.locator('.map-tojrn a');
-  await expect(door).toHaveText('open the journey here');
-  await door.click();
-  await expect(page.getByRole('dialog', { name: 'Journey', exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?view=timeline&step=2/);
-  await expect(page.locator('#jrn-sh-1')).toHaveClass(/\bon\b/);
-  await expect(page.locator('.jrn-layoutsw .jrn-viewbtn.on')).toHaveText(/timeline/i);
-  // and back: the header's door names the step on screen
-  const back = page.locator('#jrn-tomap a');
-  await expect(back).toHaveAttribute('href', /#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?screen=2/);
-  await back.click();
-  await expect(page.locator('.map-scr[data-flow="' + FLOW + '"][data-index="1"]')).toBeFocused();
+  // the Map is where the journey is read: no screen carries a door to another picture of it
+  await expect(page.locator('.map-tojrn')).toHaveCount(0);
+  // the hash moved once (the reader's own navigation); the redirect replaced it, so Back leaves the Map
+  expect(await page.evaluate(() => history.length)).toBe(before + 1);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/portfolio/);
 });
 
-/** @covers packages/server/public/app/surfaces/journeys.js::jrnApplyStep */
-test('a link to a step and a node selects that part', async ({ page }) => {
+/**
+ * @covers packages/server/public/app/lib/route-url.js::partOrder
+ * @covers packages/server/public/app/surfaces/map-stops.js::openActionAt
+ */
+test('an old link to a step and a node opens the action that holds the part, its code in the dock it named', async ({ page }) => {
   await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&node=' + enc(ROUTE) + '&dock=right&lens=hybrid');
-  await expect(page.locator('#jrn-sh-1')).toHaveClass(/\bon\b/);
-  await expect(page).toHaveURL(/node=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices(&|$)/);
-  await expect(page.locator('#jrn-dock .jrn-insp-doors a.dd-door').first()).toHaveText('read the contract');
+  await expect(page.locator('.map-act')).toBeVisible();
+  await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?(.*&)?screen=2&(.*&)?action=1(&|$)/);
+  await expect(page).toHaveURL(/dock=right/);
+  await expect(page.locator('.map-act')).toHaveAttribute('data-dock', 'right');
+  await expect(page.locator('#jrn-insp a.dd-door').first()).toHaveText('read the contract');
 });
 
 // a gate's click — its code, its doors, the calls it guards and the tests that reach it — is gate-card.pw.spec.ts
@@ -71,8 +71,9 @@ test('a route call links to the APIs surface at its operation, its spec line and
   await expect(card.locator('a.dd-door', { hasText: 'open the handler in the editor' })).toHaveAttribute('href', /^vscode:\/\/file\//);
   // where the journey stands in its storyline (the fixture's invoice storyline ends with Billing cycle)
   await expect(card.locator('.dd-story')).toHaveText('in storyline: An invoice, end to end · step 2 of 2');
-  // the same part in the journey, selected
-  await expect(card.locator('.tojrn a')).toHaveAttribute('href', /step=\d&node=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices/);
+  // one stop down is on this surface: the call's action, never a second page
+  await expect(card.locator('.tojrn a')).toHaveCount(0);
+  await expect(card.locator('[data-act="beats"]')).toBeVisible();
   await doors.first().click();
   await expect(page).toHaveURL(/#\/apis\/invoice-app%3A%3Aapi%3A%3Aopenapi\.yaml\?op=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices/);
 });
@@ -89,8 +90,8 @@ test('on the property a row opens to its doors, and Enter on it opens the first'
   await expect(row.locator('.mp-exp a.dd-door').first()).toHaveText('read the contract');
   await expect(row.locator('.jrn-contract-card')).toBeVisible();
   await expect(page.locator('.mp-head .mp-story')).toContainText('step 2 of 2');
-  // the head opens the same screen in the journey
-  await expect(page.locator('.mp-tojrn a')).toHaveAttribute('href', /#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?view=timeline&step=2/);
+  // the property is the screen stop: no door to a second picture of it
+  await expect(page.locator('.mp-tojrn')).toHaveCount(0);
   await row.focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/#\/apis\/.+\?op=invoice-app%3A%3Aroute%3A%3AGET%20%2Finvoices/);
@@ -158,15 +159,16 @@ test('past the reading floor the board says so, and no card word draws under it'
   })).toBeGreaterThanOrEqual(7.9);
 });
 
-/** @covers packages/server/public/app/surfaces/journeys.js::gotoJourney */
-test('a storyline opens its journeys at their first step', async ({ page }) => {
+/** @covers packages/server/public/app/surfaces/journeys.js::openJourney */
+test('a storyline opens its journeys on the Map, the first one by its own door', async ({ page }) => {
   await gotoReady(page, '#/journeys?lens=hybrid');
   const card = page.locator('.jrn-story[data-storyline="invoice"]');
-  await expect(card.locator('.jrn-story-step').first()).toHaveAttribute('href', /#\/journeys\/invoice-app%3A%3Aflow%3A%3Anew-invoice\?view=\w+&step=1$/);
+  await expect(card.locator('.jrn-story-step').first()).toHaveAttribute('href', '#/map/invoice-app%3A%3Aflow%3A%3Anew-invoice');
+  await expect(card.locator('.jrn-story-map')).toHaveAttribute('href', '#/map?storyline=invoice');
   await card.getByRole('button', { name: 'open the first journey' }).click();
-  await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Anew-invoice\?view=\w+&step=1/);
-  await expect(page.locator('#jrn-title')).toHaveText('Start a new invoice');
-  // the header's arrow opens the next journey of the storyline at its first step too (the draft review is a branch, not a step)
-  await page.locator('#jrn-storyline .jrn-story-nav').last().click();
-  await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?view=\w+&step=1/);
+  await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Anew-invoice/);
+  // the hybrid register reads a journey as its table, the journey's name at its head
+  await expect(page.locator('.map-table-head .nm')).toContainText('Start a new invoice');
+  // the crumb says where it stands in the storyline
+  await expect(page.locator('.map-crumbs')).toContainText('step 1 of 2');
 });
