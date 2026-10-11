@@ -51,6 +51,8 @@ test.describe('journey numbers', () => {
    * @covers GET /api/journey
    */
   test('every number on the table\'s head carries a tip that says what it counts, and a breakdown that adds up to it', async ({ page }) => {
+    // two registers × every tip on the head, each hovered and closed: the runs sentence and the build state added triggers
+    test.setTimeout(75_000);
     for (const lens of ['hybrid', 'business'] as const) {
       await openJourneyAt(page, 'table', lens);
       // the freshness sentence is a trigger too, and not a number: its own spec is freshness.pw.spec.ts
