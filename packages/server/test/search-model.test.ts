@@ -86,13 +86,12 @@ test('fast travel finds a storyline by its name or id, outranks a journey on a t
     app: { storylines: [{ id: 'invoice', name: 'An invoice, end to end', description: 'From upload to payment.', journeys: ['a', 'b'], branches: [{ id: 'c' }] }] },
     other: { storylines: [{ id: 'invoice', name: 'A duplicate id' }, { id: 'vendor', name: 'A vendor account', journeys: ['x'] }] },
   };
-  const items = M.storylineTravelItems(metas, null, true);
+  const items = M.storylineTravelItems(metas, null);
   assert.deepEqual(items.map((x: AnyRec) => [x.id, x.repo, x.hash, x.steps, x.branches]), [
     ['storyline:invoice', 'app', '#/map?storyline=invoice', 2, 1],
     ['storyline:vendor', 'other', '#/map?storyline=vendor', 1, 0],
   ], 'one row per storyline id');
-  assert.equal(M.storylineTravelItems(metas, null, false)[0].hash, '#/journeys?storyline=invoice');
-  assert.deepEqual(M.storylineTravelItems(metas, new Set(['other']), true).map((x: AnyRec) => x.storyline), ['invoice', 'vendor'], 'scope narrows');
+  assert.deepEqual(M.storylineTravelItems(metas, new Set(['other'])).map((x: AnyRec) => x.storyline), ['invoice', 'vendor'], 'scope narrows');
   const inv = items[0];
   const score = (q: string) => { const raw = q.toLowerCase(); return M.scoreStoryline(inv, raw, raw.split(/\s+/)); };
   assert.ok(score('invoice') > 0);

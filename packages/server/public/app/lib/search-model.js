@@ -120,11 +120,11 @@ export function searchIndex(index, q, repos, limit = LIMIT) {
 /**
  * The storylines fast travel finds (swarm-fixes 2026-10-05 §6), folded once per graph: one row per storyline the
  * graph's `meta.journeys` declares in a source of `repos` (null = all) — matched on its name, its id and its
- * sentence. Picking one arrives on the Map drawing only it (`#/map?storyline=<id>`), or on the Journeys front door's
- * card when the Map is off (`#/journeys?storyline=<id>`). Not graph nodes: the palette's rows carry `kind: 'storyline'`.
+ * sentence. Picking one arrives on the Map drawing only it (`#/map?storyline=<id>`) — the Map is where every journey
+ * is read since the journey page retired into it. Not graph nodes: the palette's rows carry `kind: 'storyline'`.
  * @param {Record<string, { storylines?: { id: string, name: string, description?: string }[] }>} metas
  */
-export function storylineTravelItems(metas, repos, mapOn) {
+export function storylineTravelItems(metas, repos) {
   const out = [];
   const seen = new Set();
   for (const [repo, m] of Object.entries(metas || {})) {
@@ -136,7 +136,7 @@ export function storylineTravelItems(metas, repos, mapOn) {
       out.push({
         kind: 'storyline', id: 'storyline:' + st.id, storyline: st.id, repo, name: st.name || st.id, description: st.description || '',
         steps: (st.journeys || []).length, branches: (st.branches || []).length,
-        hash: mapOn ? '#/map?storyline=' + q : '#/journeys?storyline=' + q,
+        hash: '#/map?storyline=' + q,
         // what it is matched on, lower-cased once
         m: { name: String(st.name || st.id).toLowerCase(), id: String(st.id).toLowerCase(), words: String(st.description || '').toLowerCase() },
       });

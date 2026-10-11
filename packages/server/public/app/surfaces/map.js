@@ -8,7 +8,8 @@
 //   #/map/<flowNodeId>?node=<pageId>    the property — one screen up close (lane B's view)
 //   …?plumb=1                           the street with its calls and data shown
 //
-// Behind the `flags.map` workspace flag (Settings → Experiments). The board reads
+// The one place a journey is read since the journey page retired into it (lanes round 2026-10-10, proposal 1 —
+// the stops below the street are surfaces/map-stops.js; no workspace flag any more). The board reads
 // what the server already answers — `/api/design` flows for the districts and one
 // `/api/journey` per journey, fetched lazily one at a time under a generation and
 // cached per sync — and never writes `S.JOURNEY` (the journey overlay's helpers read
@@ -17,14 +18,14 @@
 // `surfaces/map-property.js`, reached through `openMapProperty(host, ctx)`.
 
 import { readinessDoorHtml } from '../lib/readiness-door.js';
-import { S, esc, expose, currentLens, humanize, bizName, unCode } from '../store.js';
+import { S, esc, expose, currentLens, humanize, bizName, unCode, repoOf } from '../store.js';
 import { t, def, plainWords, unTick } from '../strings.js';
 import { sym } from '../sym.js';
 import { designThumbHtml } from '../lib/graph-render.js';
 import { countedHtml, plainTip, countWords } from '../lib/counted.js';
 import { tipAttrs, TIP_SELECTOR, hideTip, quietHoverTips } from '../lib/tooltip.js';
 import { freshAttrs, freshSentence } from '../lib/freshness.js';
-import { withParams, journeyStepHash, screenAtStep, stepOfNode } from '../lib/route-url.js';
+import { withParams, screenRowAt, partOrder } from '../lib/route-url.js';
 import { doorsFor, doorsHtml, leadDoorHtml, storylineLineHtml } from '../lib/detail-doors.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip } from '../lib/map-chips.js';
@@ -42,10 +43,11 @@ import {
 import { shareLink } from '../share.js';
 import { exportToolHtml, registerExport } from '../lib/export.js';
 import { mapStopOf } from '../lib/route-url.js';
-import { sheetModel, screenActions } from '../lib/journey-model.js';
+import { sheetModel, actionAtSegment } from '../lib/journey-model.js';
 import {
   bindStops, stopNow, drawLayoutTool, setLayout, cycleLayout, layoutAt, registerMapLayout, MAP_LAYOUTS, openAction, openActionAt, openScreenAction, closeAction, actionOpen,
   actionParams, actionKey, stopZoom, openCode, closeCode, crumbHtml, syncTable, tableOpen, redrawStops, closeStops, streetFactsHtml, forgetWalks,
+  registerView, tableAtPart, tableParams, tableKey, tableEscape,
 } from './map-stops.js';
 
 // ── geometry (world units) — the prototype's, so the agreed look carries over ──
@@ -176,11 +178,6 @@ function fetchJourney(flowId) {
   return JOURNEY_CACHE.get(key);
 }
 
-/** Whether the workspace turned the map on. Off: no tab, no Portfolio button, `#/map` reads as `#/portfolio`. */
-export function mapEnabled() {
-  const f = S.SETTINGS && S.SETTINGS.flags;
-  return !!(f && f.map);
-}
 const biz = () => currentLens() === 'business';
 
 // ── words in the lens on screen ───────────────────────────────────────────
@@ -766,6 +763,51 @@ function decode(s) { try { return decodeURIComponent(s); } catch { return s; } }
 // a street is `#/map/<flow>`; `?j=<flow>` names the same street for a link written without the path (§3.1)
 function routeFlow(route) { return route && route.param ? decode(route.param) : route && route.j ? route.j : null; }
 
+/**
+ * Where an address that names an entry lands (lanes round 2026-10-10, one address): a journey on the board is itself;
+ * a page a journey on the board shows is that journey with the screen open (`node`); anything else a walk can start
+ * from — a route, a function, a page no journey shows, a journey out of scope — is drawn as a journey of its own on
+ * the board, walked from that entry (`entryDistrict`). Null when the graph has no such node.
+ */
+function entryTarget(id) {
+  if (MAP.geom.has(id)) return { flow: id };
+  const n = S.BYID && S.BYID[id];
+  if (!n) return null;
+  if (n.kind === 'page') {
+    const order = MAP.nb.districts.map((d) => d.id);
+    for (const fid of order) {
+      const j = MAP.journeys.get(fid);
+      if (j && j.model && j.model.screens.some((sc) => sc.id === n.id)) return { flow: fid, node: n.id };
+    }
+    const designId = designIdOf(n.id);
+    const d = designId && MAP.nb.districts.find((x) => x.screens.includes(designId));
+    if (d) return { flow: d.id, node: n.id };
+  }
+  return entryDistrict(n) ? { flow: id } : null;
+}
+/**
+ * Draw an entry as a journey of its own: a district in its source's band, named as the node is, walked from it by the
+ * same `/api/journey` every journey reads — the street, the table and the action stop all work on it. Kept for the
+ * visit (a new sync or scope builds the board again without it, and the address adds it back).
+ */
+function entryDistrict(n) {
+  if (!MAP.nbAll || !MAP.nb) return false;
+  if (!MAP.nbAll.districts.some((d) => d.id === n.id)) {
+    MAP.nbAll.districts.push({
+      id: n.id, flowId: null, name: biz() ? bizName(n) : n.name, description: '', screens: [], built: null, total: 0, status: null,
+      persona: null, owner: null, repo: repoOf(n), work: null, index: MAP.nbAll.districts.length, container: false,
+      personaIds: [], groupId: null, order: null, places: [], entry: true,
+    });
+  }
+  // a storyline draws only its own journeys: an entry is in none, so the board shows every journey to hold it
+  if (MAP.storyline) MAP.storyline = null;
+  MAP.nb = storylineBoard();
+  layout();
+  renderAll();
+  redrawChrome();
+  return MAP.geom.has(n.id);
+}
+
 /** Go where the route says: a journey's street, or one of its screens. */
 async function applyRouteTarget(route, animate) {
   if (!MAP.world || !MAP.designs) return;
@@ -780,25 +822,50 @@ async function applyRouteTarget(route, animate) {
     MAP.fitted = true;
     return;
   }
-  if (!MAP.geom.has(flow)) { fitAll(false); MAP.fitted = true; return; }
+  // an address that names no journey on the board: a screen is that screen on the journey that shows it; anything
+  // else a journey can start from is walked from where it starts (*Run journey*, the front door's entry points)
+  const ent = entryTarget(flow);
+  if (!ent) { fitAll(false); MAP.fitted = true; return; }
+  if (ent.flow !== flow || ent.node) {
+    history.replaceState(null, '', withParams(location.hash.replace(/^#\/map\/[^?@]*/, '#/map/' + encodeURIComponent(ent.flow)), { node: ent.node || null }));
+    S.route = parseRoute();
+    MAP.route = S.route;
+    return applyRouteTarget(S.route, animate);
+  }
   const gen = MAP.gen;
-  // the stops below the screen and the layout a link names (lanes round 2026-10-10): `?screen=n&action=k[&beat][&layout][&dock]`
+  // the stops below the screen and the layout a link names (lanes round 2026-10-10): `?screen=n&action=k[&beat][&layout][&dock]`,
+  // `part=<node>` (a part of the walk); an address that names no place opens the register's own view of a journey
   const stop = mapStopOf(route.raw || location.hash);
-  if (stop.layout === 'table' || stop.layout === 'screens') setLayout('st', stop.layout);
-  if (stop.layout === 'beats' || stop.layout === 'ladder') setLayout('act', stop.layout);
+  const bare = !node && !view && !route.card && stop.screen == null && !stop.part && !stop.layout && !stop.action;
+  const want = stop.layout || (bare && !MAP.act ? registerView() : null);
+  if (want === 'table' || want === 'screens') setLayout('st', want);
+  if (want === 'beats' || want === 'ladder') setLayout('act', want);
+  if (!node && !stop.action && (want === 'beats' || want === 'ladder' || (stop.part && want !== 'table'))) {
+    // the action stop a link names by a part of the walk (`part=`), or the code register's own view (the first action
+    // of the screen named, with the code open)
+    const j = await ensureJourney(flow);
+    if (gen !== MAP.gen || !j || !j.model || !j.data) return;
+    const order = stop.part ? partOrder(j.data.summary.segments, stop.screen, stop.part) : null;
+    const si = stop.screen != null ? screenRowAt(j.model.screens, stop.screen) : 0;
+    if (!MAP.fitted && si != null) { centreScreen(flow, si, STREET_SCALE, false); MAP.fitted = true; }
+    const code = !!stop.dock || (bare && !stop.layout);
+    if (order != null) { await openActionAt(flow, order, { code, dock: stop.dock }); return; }
+    if (si != null && (want === 'beats' || want === 'ladder') && await openScreenAction(flow, si, { code, dock: stop.dock })) return;
+  }
   if (!node && stop.action) {
     const j = await ensureJourney(flow);
     if (gen !== MAP.gen || !j || !j.model || !j.data) return;
-    const si = screenAtStep(j.model.screens, stop.screen);
-    const acts = si == null ? [] : screenActions(sheetModel(j.data.summary).cols, j.model.screens, si);
-    const col = acts[Math.min(acts.length, stop.action) - 1];
+    // `screen` + `action` name one action by its segment and its place in it (the Tests page's unit, 1-based)
+    const col = actionAtSegment(sheetModel(j.data.summary).cols, stop.screen, stop.action);
     if (col) {
-      if (!MAP.fitted) { centreScreen(flow, si, STREET_SCALE, false); MAP.fitted = true; }
+      const si = screenRowAt(j.model.screens, stop.screen);
+      if (!MAP.fitted && si != null) { centreScreen(flow, si, STREET_SCALE, false); MAP.fitted = true; }
       const a = MAP.act;
       if (!a || a.flow !== flow || a.ci !== col.index) openAction(flow, col.index, { beat: stop.beat ? stop.beat - 1 : 0, code: !!stop.dock, dock: stop.dock });
       return;
     }
   }
+  if (stop.part && layoutAt('st') === 'table') tableAtPart(flow, stop.part, stop.screen);
   if (MAP.act) closeAction({ quiet: true });
   if (!node) {
     if (MAP.prop) closeProperty({ keepHash: true });
@@ -812,11 +879,11 @@ async function applyRouteTarget(route, animate) {
       enterJourney(flow, animate && MAP.fitted);
     }
     MAP.fitted = true;
-    // `?screen=<n>` (§3.1): the street with that step's screen framed — the journey's `step`, the same number
+    // `?screen=<n>` (§3.1): the street with that screen framed (an old `step=` reads the same)
     if (route.screen && !view) {
       const j = await ensureJourney(flow);
       if (gen !== MAP.gen || !j || !j.model) return;
-      const si = screenAtStep(j.model.screens, route.screen);
+      const si = screenRowAt(j.model.screens, route.screen);
       if (si != null) {
         MAP.autoFit = null;
         centreScreen(flow, si, STREET_SCALE, false);
@@ -851,19 +918,21 @@ function writeHash(flow, node) {
   let base = '#/map' + (flow ? '/' + encodeURIComponent(flow) : '');
   // the link is the picture (§K): where the board is and which card is open, so the same link opens the same view
   const v = node || MAP.act || lanesShown() ? null : viewParams(flow);
-  // below the screen the address names the place (surfaces/map-stops.js): screen · action · beat · layout · dock
+  // below the screen the address names the place (surfaces/map-stops.js): screen · action · beat · layout · dock; at
+  // the table, the part selected and where its code opens
   const ap = !node ? actionParams() : null;
+  const tp = !node && !ap && flow && tableOpen() ? tableParams() : null;
   h = withParams(base + query, {
     node: node || null, plumb: MAP.plumb ? '1' : null,
     z: v ? v.z : null, x: v ? v.x : null, y: v ? v.y : null,
     card: !node && MAP.card ? MAP.card.spec : null,
     // the link names the picture from here on: `screen` and `j` were how it was arrived at — except at an action,
     // whose screen is part of its place
-    screen: ap ? ap.screen : null, j: null,
-    action: ap ? ap.action : null, beat: ap ? ap.beat : null,
+    screen: ap ? ap.screen : tp ? tp.screen : null, j: null, step: null,
+    action: ap ? ap.action : null, beat: ap ? ap.beat : null, part: tp ? tp.part : null,
     // the layout at the stop the address names: the action's, the journey's table, or the storyline's lanes on the board
     layout: ap ? ap.layout : !node && flow && layoutAt('st') === 'table' ? 'table' : !node && !flow && MAP.storyline && MAP.layout === 'lanes' ? 'lanes' : null,
-    dock: ap ? ap.dock : null,
+    dock: ap ? ap.dock : tp ? tp.dock : null,
     // the storyline on the board is part of the picture
     storyline: MAP.storyline || null,
     // the Affected mode is part of the picture (lane I)
@@ -1836,7 +1905,7 @@ function onChromeClick(e) {
   if (!b) return;
   if (b.dataset.l) { goLevel(b.dataset.l); return; }
   switch (b.dataset.act) {
-    case 'layout': setLayout(b.dataset.when, b.dataset.layout); break;
+    case 'layout': setLayout(b.dataset.when, b.dataset.layout, { remember: true }); break;
     case 'plumb': setPlumb(!MAP.plumb); break;
     case 'legend': toggleLegend(); break;
     case 'in': mapZoom(1.35); break;
@@ -2494,8 +2563,6 @@ function screenHtml(d, m, s, x, y, n) {
     // the numbers are this screen's part of this journey's walk: said, so two journeys printing two numbers for one
     // screen read as two scopes, not a contradiction (round 2) — plain words, so every lens prints them, with a tip
     + '<div class="map-chips">' + chips + (chips ? '<span class="map-scope"' + tipAttrs({ key: 'map.screen.onJourney', noFocus: true }) + '>' + esc(t('map.screen.onJourney')) + '</span>' : '') + '</div>'
-    // the same screen in the journey's timeline (§3.1)
-    + (s.segment ? '<div class="map-tojrn">' + leadDoorHtml('door.journey', journeyStepHash(d.id, s.segment.index + 1, { lens: currentLens() })) + '</div>' : '')
     + '</div></div>';
 }
 
@@ -2861,11 +2928,6 @@ function drawCard() {
     if (dn) doors = doorsFor(dd.kind, dn, { flow: tg.flow });
   }
   const on = screensUsing(tg.model, tg.kind === 'call' ? 'call' : tg.kind, nodeId);
-  // the same part in the journey's timeline, at the step whose markers include it, selected (§3.1)
-  const jd = MAP.journeys.get(tg.flow);
-  const segs = (jd && jd.data && jd.data.summary && jd.data.summary.segments) || [];
-  const step = nodeId ? stepOfNode(segs, tg.screen && tg.screen.segment ? tg.screen.segment.index : null, nodeId) : null;
-  const toJrn = step ? leadDoorHtml('door.journey', journeyStepHash(tg.flow, step, { node: nodeId, lens: currentLens() })) : '';
   box.innerHTML = '<div class="k"><span class="hud-label">' + head + '</span>' + ev
     + '<button type="button" class="x" data-act="close" aria-label="' + esc(t('map.card.close')) + '">✕</button></div>'
     + '<div class="nm">' + esc(name) + '</div>'
@@ -2879,8 +2941,7 @@ function drawCard() {
     + '<div class="acts">' + (nodeId ? '<button type="button" class="map-tb aff' + (affectedSpec() === nodeId ? ' on' : '') + '" data-act="affected"' + tipAttrs({ key: 'map.affected.action', noFocus: true }) + '>' + esc(t('map.affected.action')) + '</button>' : '')
     + doorsHtml(doors) + '</div>'
     // one stop down: the call's action opened into its beats on this surface (surfaces/map-stops.js)
-    + (tg.kind === 'call' && tg.call.marker ? '<div class="tojrn"><button type="button" class="map-tb map-walk" data-act="beats"' + tipAttrs({ key: 'map.act.walk', noFocus: true }) + '>' + sym('bolt') + esc(t('map.act.walk')) + '</button></div>' : '')
-    + (toJrn ? '<div class="tojrn">' + toJrn + '</div>' : '');
+    + (tg.kind === 'call' && tg.call.marker ? '<div class="tojrn"><button type="button" class="map-tb map-walk" data-act="beats"' + tipAttrs({ key: 'map.act.walk', noFocus: true }) + '>' + sym('bolt') + esc(t('map.act.walk')) + '</button></div>' : '');
   box.setAttribute('aria-label', name);
   box.setAttribute('data-doors', '');
   box.hidden = false;
@@ -3226,6 +3287,8 @@ export function mapEscape() {
   if (document.fullscreenElement && MAP.stage.contains(document.fullscreenElement) && !MAP.card && !MAP.prop && !MAP.legend) return false;
   if (MAP.card) { closeCard(); return true; }
   if (MAP.legend) { closeLegend(); return true; }
+  // the table's drawers and a part's code close before the table does
+  if (tableEscape()) return true;
   if (MAP.act) { stopZoom(-1); return true; }
   if (MAP.prop) { closeProperty(); return true; }
   if (MAP.cv && MAP.cv.level() === 'st') {
@@ -3252,6 +3315,8 @@ export function mapKey(e) {
   // the open screen and the explore card keep their own keys; the board's walk keys are the board's
   // at an action: ← → the beats, [ ] the actions, d the dock, t the tests (surfaces/map-stops.js)
   if (MAP.act && actionKey(e)) return true;
+  // at the table: j / k walk its parts with their code in the dock, d moves the dock (surfaces/map-stops.js)
+  if (tableOpen() && !MAP.prop && tableKey(e)) return true;
   if (k === 'v' || k === 'V') return cycleLayout();
   const inPanel = e.target && e.target.closest && e.target.closest('.map-prop-host,.map-xcard,.map-act-host,.map-table-host');
   if (!MAP.prop && !inPanel) {

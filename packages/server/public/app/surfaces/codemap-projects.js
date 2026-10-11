@@ -1083,7 +1083,7 @@ function packageBody(n, d) {
   if (ext) html += '<div class="cm-sublbl hud-label"' + tipAttrs({ key: 'codemap.pkg.external', noFocus: true }) + '>' + esc(t('codemap.pkg.external')) + '</div>'
     + '<button class="rel" onclick="select(' + jsArg(ext.id) + ')"><span class="rk">' + esc(kindWord(ext.kind)) + '</span>' + esc(bizName(ext)) + '</button>';
   if ((row.journeyRefs || []).length) html += '<div class="cm-sublbl hud-label"' + tipAttrs({ key: 'codemap.pkg.journeys', noFocus: true }) + '>' + esc(t('codemap.pkg.journeys')) + '</div>'
-    + row.journeyRefs.map((j) => '<a class="rel" href="#/journeys/' + encodeURIComponent(j.id) + '">' + esc(S.BYID[j.id] ? bizName(S.BYID[j.id]) : j.name) + '</a>').join('');
+    + row.journeyRefs.map((j) => '<a class="rel" href="#/map/' + encodeURIComponent(j.id) + '">' + esc(S.BYID[j.id] ? bizName(S.BYID[j.id]) : j.name) + '</a>').join('');
   if (row.note && !biz()) html += '<p class="cm-mdim">' + esc(row.note) + '</p>';
   return html;
 }

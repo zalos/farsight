@@ -26,7 +26,7 @@ import { countedHtml, defAttrs } from './counted.js';
 import { mapEvidenceChip } from './map-chips.js';
 import { testChipHtml } from './test-chip.js';
 import { gateCardModel } from './gate-card-model.js';
-import { jrnGateInWords, jrnGateText } from '../surfaces/journeys.js';
+import { jrnGateInWords, jrnGateText } from './journey-draw.js';
 
 const API = '/api/gate';
 /** How long the card waits for the service before it opens with *reading what reaches it…* instead. */
@@ -172,7 +172,8 @@ export function gateCardHtml(m, opts = {}) {
     + sym(m.kind === 'rule' ? 'shield' : m.kind === 'config' ? 'gear' : 'lock') + esc(t(kindKey(m))) + '</span>'
     + (m.declared ? ' <span class="gc-kind"' + defAttrs('gate.kind.declared') + '>' + esc(t('gate.kind.declared')) + '</span>' : '');
   const at = !biz() && m.facts.loc ? '<span class="gc-loc">' + esc(m.facts.loc.path + ':' + m.facts.loc.line) + '</span>' : '';
-  const lead = opts.step != null && typeof window !== 'undefined' && window.jrnScrollTo && S.JOURNEY
+  // the part on the Map: selected at the table or the action, else that action opened (surfaces/map-stops.js mapShowPart)
+  const lead = opts.step != null && typeof window !== 'undefined' && window.mapShowPart && S.JOURNEY
     ? '<button type="button" class="dd-door lead" data-gc-step="' + esc(String(opts.step)) + '"' + defAttrs('gate.atStep') + '>' + esc(t('gate.atStep')) + '</button>' : '';
   const doors = doorsHtml(doorsFor(m.gateKind === 'rule' ? 'rule' : 'gate', n), lead);
   return '<div class="gc" data-gc="' + esc(m.id) + '">'
@@ -211,7 +212,7 @@ function show(el, m, via) {
     root.closest('.fs-tip').classList.add('gc-tip');
     fillCodeIn(root, m.id);
     const go = root.querySelector('[data-gc-step]');
-    if (go) go.addEventListener('click', () => { const s = +go.getAttribute('data-gc-step'); hideTip(); window.jrnScrollTo(s); });
+    if (go) go.addEventListener('click', () => { const s = +go.getAttribute('data-gc-step'); hideTip(); window.mapShowPart(s); });
   }
   return root;
 }

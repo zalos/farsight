@@ -28,10 +28,9 @@ import { workSourcesConfigured, flowWork, stateHtml, sourceName } from '../work-
 import {
   jrnGateLabel, jrnGateText, jrnGatesShown, jrnGateTiers, jrnAbsentHtml, jrnWords, jrnRefAnchors,
   jrnFoldFacts, jrnEvChipHtml, jrnObsText, jrnRunLineHtml, jrnFootScopeHtml, jrnContractHtml, jrnMoLabel,
-} from './journeys.js';
+} from '../lib/journey-draw.js';
 import { testChipHtml } from '../lib/test-chip.js';
 import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLineHtml } from '../lib/detail-doors.js';
-import { journeyStepHash } from '../lib/route-url.js';
 import { gateAttrs } from '../lib/gate-card.js';
 import { lifecycleStripHtml, screenLifecycles } from '../lib/lifecycle-strip.js';
 import { propertyModel } from '../lib/map-property-model.js';
@@ -821,8 +820,6 @@ function headHtml(pm, ctx) {
     + (biz() || !pm.tabs.route.route ? '' : '<span class="sep">·</span>' + code(pm.tabs.route.route)) + '</nav>'
     // where this journey stands in a storyline (lane S)
     + (ctx.tree && ctx.flow ? storylineLineHtml(ctx.tree, ctx.flow).replace('class="dd-story"', 'class="dd-story mp-story"') : '')
-    // the same screen in the journey's timeline (§3.1)
-    + (pm.screen && pm.screen.segment && ctx.flow ? '<span class="mp-tojrn">' + leadDoorHtml('door.journey', journeyStepHash(ctx.flow, pm.screen.segment.index + 1, { lens: currentLens() })) + '</span>' : '')
     + (pm.node ? '<button type="button" class="btn mp-affact' + (affectedSpec() === pm.node.id ? ' on' : '') + '" data-act="affected" data-seed="' + esc(pm.node.id) + '"' + defAttrs('map.affected.action') + '>' + esc(t('map.affected.action')) + '</button>' : '')
     // while the board is dimmed around something, the head says around what and how much (round 2)
     + affectedSummaryHtml()

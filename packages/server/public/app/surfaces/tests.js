@@ -32,6 +32,7 @@ import { vsl, scopeLabel } from '../lib/graph-render.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { freshLineHtml, freshAttrs } from '../lib/freshness.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
+import { mapStopHash } from '../lib/route-url.js';
 
 /** True while the business lens is on: file names, runners, globs and hashes stay out.
  * @group Tests tab */
@@ -752,7 +753,7 @@ function scopedHtml() {
   const tchip = cov ? testChipHtml(cov, { api: '/api/tests', cls: 'tst-tchip' }) : '';
   const verdict = '<div class="tst-gap tst-scoped-verdict">' + (tchip || evChipHtml(ew.cls, ew.key))
     + (cov ? ' ' + runsLineHtml(cov, !!tchip) : '') + '</div>'
-    + '<p class="tst-gap">' + (flow ? '<a href="#/journeys/' + encodeURIComponent(flow) + '">' + esc(t('tests.scoped.journey')) + '</a> · ' : '') + back + '</p>';
+    + '<p class="tst-gap">' + (flow ? '<a href="' + esc(mapStopHash(flow, { screen: SCOPED.seg != null ? SCOPED.seg + 1 : null, action: SCOPED.action != null ? SCOPED.action + 1 : null })) + '">' + esc(t('tests.scoped.journey')) + '</a> · ' : '') + back + '</p>';
   const CAP = 200;
   const list = cases.length
     ? CASES_OPEN + cases.slice(0, CAP).map(scopedCaseHtml).join('') + '</ul>'
@@ -791,7 +792,7 @@ function matrixRowHtml(row, business, e2eCol = true) {
   const decl = tests.declaredPassed || 0;
   const zero = m && m.value == null;
   return '<tr' + (zero ? ' class="zero"' : '') + '>'
-    + '<td><span class="t"><a href="#/journeys/' + encodeURIComponent(row.flowId) + '">' + esc(row.name) + '</a></span>'
+    + '<td><span class="t"><a href="#/map/' + encodeURIComponent(row.flowId) + '">' + esc(row.name) + '</a></span>'
     + (business ? '' : '<span class="tst-lift">' + esc(row.flowId) + '</span>') + '</td>'
     + '<td class="mono"><span' + plainTip(row.built || 0, 'journey.status.partly', 'journey.scopeAll', '/api/tests', null, 'tests.col.screens', { m: row.screens || 0 }) + '>'
     + esc(builtWord(row)) + '</span></td>'
@@ -1355,7 +1356,7 @@ function dtlJourneysHtml(d) {
   const js = d.journeys || [];
   return '<div class="tst-sec"><h2>' + esc(t('tests.detail.journeys')) + '</h2>'
     + (js.length
-      ? '<ul class="tst-cases" role="list">' + js.map((j) => '<li><a href="#/journeys/'
+      ? '<ul class="tst-cases" role="list">' + js.map((j) => '<li><a href="#/map/'
         + encodeURIComponent(j.id) + '">' + esc(j.name) + '</a>'
         + '<span class="tst-lift mono">' + esc(j.id) + '</span></li>').join('') + '</ul>'
       : '<p class="tst-gap">' + tagOpen(EV_CLS.none, 'tests.detail.journeysNone')
