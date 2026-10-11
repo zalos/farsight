@@ -45,7 +45,7 @@ import { shareLink } from '../share.js';
 import { exportToolHtml, registerExport, saveView } from '../lib/export.js';
 import {
   CMP, readCompare, compareHashValue, loadCompare, setCompareSpec, compareAsOf, compareToolHtml, compareChromeClick,
-  paintCompareCovers, paintCompareLanes, drawComparePanel, compareExportFacts,
+  paintCompareCovers, paintCompareLanes, drawComparePanel, compareExportFacts, comparing,
 } from './map-compare.js';
 import { mapStopOf } from '../lib/route-url.js';
 import { sheetModel, actionAtSegment } from '../lib/journey-model.js';
@@ -657,6 +657,8 @@ function drawLanes() {
     if (Math.abs(real - extraH) > 8) { G = laneGeometry(model, { aspect, extraH: real, k: kPick || undefined, geom }); paint(); fitLaneText(el); bottom = el.querySelector('.ln-bottom'); }
     const need = bottom ? bottom.offsetTop + bottom.offsetHeight + G.geom.margin : G.size.h;
     if (need > G.size.h) { G.size.h = need; el.style.height = need + 'px'; }
+    // laid out: the names fitted, the pills measured, the chips folded (a spec waits on it before it reads a card)
+    el.dataset.laid = String((+el.dataset.laid || 0) + 1);
     bands.push({ model, G, y, story });
     y += G.size.h * LANE_K + (i < stories.length - 1 ? 120 * LANE_K : 0);
   });
@@ -733,6 +735,8 @@ function drawJourneyLanes(force) {
   };
   const more = paint();
   if (more) { G = laneGeometry(model, { aspect, extraH, geom: { pillH: G.geom.pillH + more, pillRow: G.geom.pillRow + more } }); paint(); }
+  const laid = host.querySelector('.map-lanes');
+  if (laid) laid.dataset.laid = '1';
   host.dataset.drawn = flow + '|' + (j && j.model ? 1 : 0);
   if (!host.dataset.wired) {
     host.dataset.wired = '1';
@@ -3917,7 +3921,7 @@ function syncCompare() {
   if (!story || !CMP.spec) {
     if (host) { host.hidden = true; host.innerHTML = ''; closePanel('compare', { quiet: true }); }
     if (MAP.asof) { MAP.asof = null; start(); return; }
-    if (MAP.world) { paintCompareCovers(MAP.world); const ln = MAP.world.querySelector('.map-lanes'); if (ln) paintCompareLanes(ln); }
+    if (MAP.world) { paintCompareCovers(MAP.world); const ln = MAP.world.querySelector('.map-lanes'); if (ln) { paintCompareLanes(ln); foldMapChips(ln); ln.dataset.cmp = comparing() ? '1' : ''; } }
     return;
   }
   const key = story.id + '|' + JSON.stringify(CMP.spec);
@@ -3925,7 +3929,7 @@ function syncCompare() {
     if (!MAP.stage) return;
     redrawChrome();
     drawCmp();
-    if (MAP.world) { paintCompareCovers(MAP.world); const ln = MAP.world.querySelector('.map-lanes'); if (ln) paintCompareLanes(ln); }
+    if (MAP.world) { paintCompareCovers(MAP.world); const ln = MAP.world.querySelector('.map-lanes'); if (ln) { paintCompareLanes(ln); foldMapChips(ln); ln.dataset.cmp = comparing() ? '1' : ''; } }
   };
   if (CMP.key === key && (CMP.data || CMP.error)) { paint(); return; }
   CMP.key = key;
