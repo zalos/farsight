@@ -21,6 +21,7 @@ import { mountTests, testsRefresh } from './surfaces/tests.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
 import { mountMap, mapRefresh, mapUpdate, unmountMap, mapOpen, mapTravel } from './surfaces/map.js';
 import { renderConfigFiles } from './surfaces/settings-config.js';
+import { renderLessons } from './surfaces/settings-lessons.js';
 import { mountReadiness, unmountReadiness, readinessRefresh } from './surfaces/readiness.js';
 import { closeShare } from './share.js';
 import { initKeymap } from './keymap.js';
@@ -1291,6 +1292,8 @@ export function renderSettings() {
   const ll = document.getElementById('set-landing-label'); if (ll) ll.textContent = t('set.landing');
   // the config files each source holds, read only (GET /api/config)
   renderConfigFiles();
+  // the owner's lessons for agents (round 2026-10-10, proposal 9)
+  renderLessons();
   applyReadOnly();
 }
 /**

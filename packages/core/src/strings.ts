@@ -33,6 +33,7 @@ import { STATE_STRINGS } from './strings-state.js';
 import { STOP_STRINGS } from './strings-stops.js';
 import { EVIDENCE_STRINGS } from './strings-evidence.js';
 import { AFFECTED_STRINGS } from './strings-affected.js';
+import { AGENT_STRINGS } from './strings-agents.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -128,6 +129,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...STOP_STRINGS,
   // the test chip's words live in strings-evidence.ts (count.over.*, the not-built sentence, distinct)
   ...EVIDENCE_STRINGS,
+  // what an agent gets (copy doors, commits made with an agent, lessons, empty states) lives in strings-agents.ts
+  ...AGENT_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 

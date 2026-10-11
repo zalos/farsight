@@ -33,6 +33,7 @@ import { tipAttrs } from '../lib/tooltip.js';
 import { freshLineHtml, freshAttrs } from '../lib/freshness.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
 import { mapStopHash } from '../lib/route-url.js';
+import { emptyHtml } from '../lib/empty-state.js';
 
 /** True while the business lens is on: file names, runners, globs and hashes stay out.
  * @group Tests tab */
@@ -254,7 +255,7 @@ function renderBody() {
   // no test node in scope: say that and nothing else — an empty table would be
   // read as "nothing is tested", which is a different claim about the code
   if (!d.counts || !d.counts.cases) {
-    b.innerHTML = '<div class="tst-sec"><p class="set-note">' + esc(t('tests.empty')) + '</p></div>' + blindSection(d);
+    b.innerHTML = '<div class="tst-sec">' + emptyHtml('tests') + '</div>' + blindSection(d);
     return;
   }
   b.innerHTML = scopedHtml() + kpisHtml(d) + sourcesHtml(d)
@@ -887,7 +888,7 @@ function suitesHtml(d) {
   const suites = d.suites || [];
   if (!suites.length) {
     return '<div class="tst-sec"><h2>' + esc(t('tests.view.suites')) + '</h2>'
-      + '<p class="set-note">' + esc(t('tests.empty')) + '</p></div>';
+      + emptyHtml('tests') + '</div>';
   }
   // a source column, and the rows grouped by it: Farsight's own end-to-end specs
   // used to sit between two client apps', told apart only by the shape

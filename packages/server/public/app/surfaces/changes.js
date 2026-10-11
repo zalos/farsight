@@ -32,6 +32,7 @@ import { sym, symWord } from '../sym.js';
 import { vsl } from '../lib/graph-render.js';
 import { defAttrs, plainTip, unCode } from '../lib/counted.js';
 import { tipAttrs } from '../lib/tooltip.js';
+import { emptyHtml } from '../lib/empty-state.js';
 
 /** The business lens reads the sentences the core wrote with their code said in words. */
 function said(text) { return currentLens() === 'business' ? unCode(text) : String(text || ''); }
@@ -275,7 +276,9 @@ function draw() {
     return;
   }
   if (!ST.history) { body.innerHTML = '<p class="set-note">' + esc(t('portfolio.loading')) + '</p>'; return; }
-  body.innerHTML = rangeHtml() + spineHtml() + measuredHtml() + narrativeHtml()
+  // no sync on this source's spine: say what the page is for, why it is empty and what fills it (proposal 9)
+  const empty = !((ST.history.rows || []).length) ? emptyHtml('changes') : '';
+  body.innerHTML = empty + rangeHtml() + spineHtml() + measuredHtml() + narrativeHtml()
     + '<p class="set-note"><a href="#/grammar">' + esc(t('journeys.startGrammar')) + '</a></p>';
 }
 
@@ -633,6 +636,8 @@ function commitListHtml(commits) {
     + '<td>' + esc(c.author || '') + '</td>'
     + '<td class="note">' + esc(currentLens() === 'business' ? commitWords(c.subject) : String(c.subject || ''))
     + (c.indexed ? '' : '<span class="pf-sub dim">' + symWord('absent', 'journey.absent.notIndexed') + '</span>')
+    // a co-author trailer named an AI assistant (round 2026-10-10, proposal 9) — never a session link
+    + (c.agent ? ' <span class="ch-agent"' + defAttrs('history.agentMade') + '>' + esc(t('history.agentMade').replace('{name}', c.agent)) + '</span>' : '')
     + '</td></tr>').join('') + '</tbody></table>';
 }
 

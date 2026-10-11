@@ -12,6 +12,7 @@ import { sym } from '../sym.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { tipAttrs, registerTip, tableTip, setTip, pinTip } from './tooltip.js';
 import { freshSentence, freshAttrs } from './freshness.js';
+import { copyDoorsHtml } from './detail-doors.js';
 
 const API = '/api/state';
 
@@ -53,7 +54,7 @@ function cmdHtml(c) {
 function lineHtml(c, extra, first) {
   const n = countedHtml(c, API, { cls: 'sop-n' });
   if (!n) return '';
-  return '<li>' + n + (extra || '') + (first ? cmdHtml(c) : '') + recheckHtml(c) + '</li>';
+  return '<li>' + n + (extra || '') + (first ? cmdHtml(c) : '') + recheckHtml(c) + copyDoorsHtml('count', c, { compact: true }) + '</li>';
 }
 
 function provenanceHtml(p) {
@@ -73,7 +74,10 @@ function provenanceHtml(p) {
 /** The history fact: one sentence, both halves, each number with its tip. */
 function historyHtml(h) {
   if (!h) return '<li><span' + defAttrs('state.historyNone') + '>' + esc(t('state.historyNone')) + '</span></li>';
-  return '<li class="sop-hist">' + [h.read, h.ingested, h.notYet].map((c) => countedHtml(c, API, { cls: 'sop-n' })).join(' · ') + recheckHtml(h.read) + '</li>';
+  return '<li class="sop-hist">' + [h.read, h.ingested, h.notYet].map((c) => countedHtml(c, API, { cls: 'sop-n' })).join(' · ') + recheckHtml(h.read) + '</li>'
+    // of the commits read, the ones made with an AI assistant (round 2026-10-10, proposal 9)
+    + (h.agents ? lineHtml(h.agents, h.agents.breakdown && h.agents.breakdown.length
+      ? ' <span class="sop-names">(' + esc(h.agents.breakdown.map((p) => p.label + ' ' + p.n).join(' · ')) + ')</span>' : '') : '');
 }
 
 /** The state of play card's body: provenance, then the three columns. */

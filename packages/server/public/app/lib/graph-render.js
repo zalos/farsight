@@ -11,6 +11,7 @@ import { storiesSecHtml } from '../stories.js';
 import { defAttrs, plainTip, unCode } from './counted.js';
 import { nodeWorkSecHtml } from '../work-chips.js';
 import { gateAttrs } from './gate-card.js';
+import { copyDoorsHtml } from './detail-doors.js';
 import { cmapHide, cmapGrouping, renderGrouped, projectSecHtml, packageSecHtml, packageActionsHtml, pkgScopeWord } from '../surfaces/codemap-projects.js';
 
 /** True in the business lens — the map and the inspector name things, never identify them. */
@@ -657,6 +658,8 @@ export function select(id) {
     + packageActionsHtml(n)
     // the editor is a developer's door; the business lens has no use for it
     + (href && !business ? '<a class="btn" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:5px" href="' + esc(href) + '">' + sym('open') + ' VS Code</a>' : '') + '</div>'
+    // copy as MCP call · curl · CLI with the full id (round 2026-10-10, proposal 9)
+    + '<div class="insp-copy">' + copyDoorsHtml(n.kind, n) + '</div>'
     + (bizText ? '<div class="insp-sec"><span class="hud-label">' + esc(t('surf.insp.summary')) + '</span><p>' + esc(business ? unCode(bizText) : bizText) + '</p></div>' : '')
     + projectSecHtml(n)
     + packageSecHtml(n)

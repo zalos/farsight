@@ -3252,6 +3252,9 @@
     body.rd-on .rd-table th{font-size:8.5px;padding:4px 5px}
     body.rd-on .rd-table td{padding:6px 5px}
   }
+.les-list{list-style:none;margin:6px 0;padding:0}.les-row{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line)}.les-text{flex:1}
+.dd-copy{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}.dd-copy .dd-door.copy{cursor:pointer;font:inherit}.dd-copy.compact .dd-door.copy{font-size:10px;padding:0 4px}.dd-copy-l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.7}.dd-copied{font-family:var(--mono);font-size:11px;color:var(--ok, #6FCF8E);border:1px solid currentColor;border-radius:3px;padding:0 5px;max-width:100%;overflow-wrap:anywhere}
+.ch-agent{font-size:11px;opacity:.85;border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:4px}
 </style>
 </head>
 <body class="lens-hybrid">
@@ -3397,6 +3400,17 @@
       <h2 id="set-config-title" tabindex="0">Config files</h2>
       <p class="set-note" id="set-config-sub" style="margin:0 0 10px"></p>
       <div id="cfgrows"></div>
+    </div>
+
+    <div class="set-sec" id="set-lessons">
+      <h2 id="set-lessons-title" tabindex="0"></h2>
+      <p class="set-note" id="set-lessons-sub" style="margin:0 0 10px"></p>
+      <div id="lessonrows"></div>
+      <div class="addrow">
+        <input id="lesson-text" data-write style="flex:3"/>
+        <button class="btn" id="lesson-add" data-write onclick="lessonAdd()"></button>
+      </div>
+      <p class="set-note warn" id="lesson-note" role="status" hidden></p>
     </div>
 
     <div class="set-sec">

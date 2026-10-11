@@ -14,6 +14,7 @@ import { tipAttrs } from './tooltip.js';
 import { detailLinks, editorDoor } from './detail-links.js';
 import { storylineOf } from './journeys-model.js';
 import { defAttrs } from './counted.js';
+import { copyDoors } from './copy-doors.js';
 
 /** The doors of one detail, with the viewer's own graph, roots, edge index and lens. */
 export function doorsFor(kind, node, extra = {}) {
@@ -133,3 +134,41 @@ export function doorKeydown(e) {
 }
 
 export { editorDoor };
+
+// ── copy as MCP call · curl · CLI (round 2026-10-10, proposal 9) ─────────────
+/**
+ * The three copy doors of a record (lib/copy-doors.js decides them), drawn as one row: *copy as* and three
+ * buttons. A press puts the full call on the clipboard and shows a *copied* chip with it for two seconds. Every
+ * register draws them: an agent brief is not code. `opts.compact` draws the three as short words (MCP · curl ·
+ * CLI) for a line that already carries a number. `''` when the record has nothing to copy.
+ */
+export function copyDoorsHtml(kind, node, opts = {}) {
+  const doors = copyDoors(kind, node, { origin: (typeof location !== 'undefined' && location.origin) || '' });
+  if (!doors.length) return '';
+  const btn = (d) => '<button type="button" class="dd-door copy" data-copy="' + esc(d.text) + '" data-via="' + d.via + '"'
+    + tipAttrs({ text: t(d.word + 'Tip') + ' · ' + d.text, noFocus: true }) + ' onclick="event.stopPropagation();fsCopyDoor(this)">'
+    + esc(t(opts.compact ? d.word + 'Short' : d.word)) + '</button>';
+  return '<span class="dd-copy' + (opts.compact ? ' compact' : '') + '" role="group" aria-label="' + esc(t('door.copy.group')) + '">'
+    + (opts.compact ? '' : '<span class="dd-copy-l"' + defAttrs('door.copy.group') + '>' + esc(t('door.copy.group')) + '</span>')
+    + doors.map(btn).join('') + '<span class="dd-copied" role="status" aria-live="polite" hidden></span></span>';
+}
+
+/** A press on a copy door: the text to the clipboard, then the chip for two seconds (said even when the clipboard refused). */
+function fsCopyDoor(el) {
+  const text = el && el.dataset.copy;
+  if (!text) return;
+  const row = el.closest('.dd-copy');
+  const chip = row && row.querySelector('.dd-copied');
+  const show = (ok) => {
+    if (!chip) return;
+    chip.hidden = false;
+    chip.textContent = t(ok ? 'door.copied' : 'door.copyFailed') + ' ' + text;
+    clearTimeout(chip._t);
+    chip._t = setTimeout(() => { chip.hidden = true; chip.textContent = ''; }, 2000);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => show(true), () => show(false));
+    else show(false);
+  } catch (e) { show(false); }
+}
+if (typeof window !== 'undefined') window.fsCopyDoor = fsCopyDoor;
