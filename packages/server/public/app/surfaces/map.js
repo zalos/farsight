@@ -2096,8 +2096,10 @@ function foldHead(el) {
   // the test chip — the one verdict with its scope and skips — never folds: it gives way by ellipsis at its tail (its
   // word stays), down to its own first 240 px; the other numbers fold before it does
   const keep = (k) => k.matches('.k-test,.k-ev,.jrn-htests,.jrn-e2e,.map-work') || !!k.querySelector('.jrn-htests,.jrn-e2e,.k-test,.k-ev');
-  kids.filter(keep).forEach((k) => { k.classList.remove('jh-keep'); k.style.minWidth = ''; const w = k.offsetWidth; k.classList.add('jh-keep'); k.style.minWidth = Math.min(w, 240) + 'px'; });
+  const kept = kids.filter(keep).map((k) => { k.classList.remove('jh-keep'); k.style.minWidth = ''; const w = k.offsetWidth; k.classList.add('jh-keep'); k.style.minWidth = w + 'px'; return [k, w]; });
   const over = () => line.scrollWidth > line.clientWidth + 1;
+  // only once everything else is folded may the test chip give way at its tail
+  const giveWay = () => { if (over()) kept.forEach(([k, w]) => { k.style.minWidth = Math.min(w, 240) + 'px'; }); };
   if (!over()) return;
   const order = kids.filter((k) => !keep(k)).reverse();
   const hidden = [];
@@ -2116,6 +2118,7 @@ function foldHead(el) {
     more = box.lastElementChild;
     if (!over()) break;
   }
+  giveWay();
 }
 /** The head's own doors: *more ›* opens the description in the dock; *what each one means* opens a lifecycle's table there. */
 function onHeadClick(e) {
