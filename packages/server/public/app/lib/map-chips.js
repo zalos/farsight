@@ -145,6 +145,11 @@ export function foldMapChips(scope) {
   }));
   scope.querySelectorAll('.map-scr .map-chips, .ln-stage .ln-chips').forEach((row) => {
     const card = row.closest('.map-scr, .ln-stage');
-    foldRow(row, { maxRows: (lineH) => rowsLeft(row, card, lineH), keep: KEEP, moreCls: 'map-chip map-more', fits: endsIn(card) });
+    const fold = () => foldRow(row, { maxRows: (lineH) => rowsLeft(row, card, lineH), keep: KEEP, moreCls: 'map-chip map-more', fits: endsIn(card) });
+    // a stage card's sub-line gives its room to the verdict when the verdict has none (the name's tip says it)
+    const sub = card.classList.contains('ln-stage') ? card.querySelector(':scope > .sub') : null;
+    if (sub) sub.hidden = false;
+    fold();
+    if (sub && !endsIn(card)(row)) { sub.hidden = true; fold(); }
   });
 }

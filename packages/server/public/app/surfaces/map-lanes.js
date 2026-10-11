@@ -65,7 +65,7 @@ function stageHtml(st, r, m, say) {
   return '<div class="ln-stage' + (st.state === 'planned' ? ' planned' : '') + (st.branch ? ' branch' : '') + '" role="button" tabindex="0"'
     + ' data-key="' + esc(st.key) + '" data-flow="' + esc(st.flowId) + '" data-index="' + st.screenIndex + '" data-name="' + esc(st.name) + '"'
     + ' aria-label="' + esc(label) + '" style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px">'
-    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: st.name + (st.words ? ' · ' + say(st.words) : ''), noFocus: true }) + '>' + esc(st.name) + '</span></div>'
+    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: [st.name, st.sub ? say(st.sub) : '', st.words ? say(st.words) : ''].filter((x, i, a) => x && a.indexOf(x) === i).join(' · '), noFocus: true }) + '>' + esc(st.name) + '</span></div>'
     + (st.sub ? '<div class="sub"' + tipAttrs({ text: say(st.sub), noFocus: true }) + '>' + esc(say(st.sub)) + '</div>' : '')
     + '<div class="ln-chips">' + status + tests + '</div>' + dec + '</div>';
 }
