@@ -46,6 +46,10 @@ export const JOURNEYS_STRINGS: Record<string, StringEntry> = {
   'journeys.persona.showAll': same('show everyone'),
   'journeys.persona.toggle': same('Show or hide this group of journeys'),
   'journeys.persona.empty': same('No journey matches this filter.'),
+  'journeys.persona.for': same('For',
+    'Who this journey is for and the group it sits in, as the design manifest or the configuration declares them.'),
+  'journeys.storyline.prev': same('Open the journey before this one in the storyline'),
+  'journeys.storyline.next': same('Open the journey after this one in the storyline'),
   'journeys.persona.alsoUnder': same('also for {names}',
     'This journey is for more than one person, so it is listed under each of them and counted once in the total.'),
   // storylines (round-2026-10-05 §2): a named chain of journeys across features and personas — questline in

@@ -29,12 +29,13 @@ test.describe('one test verdict per cell', () => {
     expect(row.coverage.verdict.word).toEqual(verdict.word);
     expect(row.coverage.verdict.runs.n).toBe(verdict.runs.n);
 
-    await gotoReady(page, '#/journeys/' + encodeURIComponent(FLOW) + '?view=sheet');
-    const head = page.locator('.jrn-e2e').first();
+    // the journey's table on the Map (the Sheet the journey page drew), its count line at its head
+    await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
+    const head = page.locator('.map-table-head .jrn-e2e').first();
     await expect(head).toBeVisible();
     const word = (await head.textContent())!.trim();
-    // the tip under the word names the run behind it — and that run's verdict is the word's
-    await head.click();
+    // the tip under the word names the run behind it — and that run's verdict is the word's (on the Map: on hover)
+    await head.hover();
     await expect(tip(page)).toBeVisible();
     await expect(tip(page)).toContainText(word);
     await expect(tip(page).locator('.tip-tbl')).toContainText('passed');
@@ -49,7 +50,7 @@ test.describe('one test verdict per cell', () => {
     const runs = page.locator('.jrn-scell .jrn-tfoot [data-tchip] .tc-n').first();
     await runs.scrollIntoViewIfNeeded();
     const n = Number(((await runs.textContent()) ?? '').match(/\d+/)![0]);
-    await runs.click();
+    await runs.hover();
     await expect(tip(page)).toBeVisible();
     const parts = (await tip(page).locator('.tip-tbl td.n').allTextContents()).map(Number);
     expect(parts.reduce((a, b) => a + b, 0)).toBe(n);
@@ -57,19 +58,20 @@ test.describe('one test verdict per cell', () => {
 
     // the Tests matrix prints the same word for this journey, and no weakest-run chip beside it
     await page.goto('/#/tests');
-    const mrow = page.locator('#tst-body table tbody tr').filter({ has: page.locator(`a[href="#/journeys/${encodeURIComponent(FLOW)}"]`) });
+    const mrow = page.locator('#tst-body table tbody tr').filter({ has: page.locator(`a[href="#/map/${encodeURIComponent(FLOW)}"]`) });
     await expect(mrow).toHaveCount(1);
     await expect(mrow.locator('td').nth(2).locator('.ev').first()).toHaveText(new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
     await expect(mrow.locator('td').nth(2).locator('.st')).toHaveCount(0);
   });
 
   /**
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnCasesHref
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnCasesHref
+   * @covers packages/server/public/app/lib/journey-model.js::actionAtSegment
    * @covers packages/server/public/app/surfaces/tests.js::scopedHtml
    * @covers GET /api/tests
    */
   test('a cell\'s *open the list* keeps its scope: the Tests page opens on that cell\'s cases, with the cell\'s word', async ({ page, request }) => {
-    await gotoReady(page, '#/journeys/' + encodeURIComponent(FLOW) + '?view=sheet');
+    await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
     const foot = page.locator('.jrn-scell .jrn-tfoot').filter({ has: page.locator('.jrn-cases a') }).first();
     await foot.scrollIntoViewIfNeeded();
     const cellWord = (await foot.locator('.ev').first().textContent())!.trim();
@@ -86,6 +88,16 @@ test.describe('one test verdict per cell', () => {
     expect(api.coverage.verdict.runs.n).toBe(api.cases.filter((c: { runLevel: boolean }) => !c.runLevel).length);
     // and the matrix under it is that journey alone
     await expect(page.locator('#tst-body table.tst-table tbody tr')).toHaveCount(1);
+    // the way back is the same action on the Map: the Tests page's `seg` + `action` are the address's `screen` + `action`
+    const [, seg, act] = /&seg=(\d+)&action=(\d+)$/.exec(href)!;
+    const back = scoped.locator('a', { hasText: /journey/i }).first();
+    await expect(back).toHaveAttribute('href', '#/map/' + encodeURIComponent(FLOW) + '?screen=' + (+seg! + 1) + '&action=' + (+act! + 1));
+    const crumbOf = await page.evaluate(([s0, a0]) => fetch('/api/tests?flow=' + encodeURIComponent('invoice-app::flow::billing-cycle') + '&seg=' + s0 + '&action=' + a0).then((r) => r.json()).then((j) => j.label), [seg, act]);
+    await back.click();
+    await expect(page.locator('.map-act')).toBeVisible();
+    await expect(page.locator('.map-crumbs')).toContainText(String(crumbOf).split(' · ').pop()!);
+    await page.goBack();
+    await expect(scoped).toBeVisible();
     // the way back to every journey drops the scope
     await scoped.getByRole('link', { name: /every journey/i }).click();
     await expect(page.locator('.tst-scoped')).toHaveCount(0);

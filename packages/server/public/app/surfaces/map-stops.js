@@ -24,7 +24,8 @@ import { t } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { designThumbHtml } from '../lib/graph-render.js';
-import { storylineOf } from '../lib/journeys-model.js';
+import { storylineOf, placesOf } from '../lib/journeys-model.js';
+import { jrnPersonaName, jrnGroupName } from '../lib/journeys-tree.js';
 import { sheetModel, screenActions, screenOfAction, actionOfMarker, beatOrder, segmentActionOf } from '../lib/journey-model.js';
 import { storylineLineHtml } from '../lib/detail-doors.js';
 import { exportToolHtml, registerExport } from '../lib/export.js';
@@ -684,9 +685,36 @@ export function streetFactsHtml(flow, j, tree) {
   if (!j || !j.data) return '';
   const story = storylineLineHtml(tree, flow);
   const lc = jrnLifecycleHtml(j.data);
-  return '<div class="facts">' + (story ? '<span class="story">' + story + '</span>' : '')
+  return '<div class="facts">' + forLineHtml(tree, flow)
+    + (story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + story + storyNavHtml(tree, flow, 'next') + '</span>' : '')
     + (lc ? '<span class="lc"' + tipAttrs({ key: 'map.head.lifecycle', noFocus: true }) + '>' + lc + '</span>' : '')
     + exportToolHtml('street', 'map-tb map-tb-save') + '</div>';
+}
+
+/**
+ * Who the journey is for and its group, from the organised tree (the journey page's header said it):
+ * *For <persona> · <group>*, a journey for two people naming the rest. '' when the tree does not place it.
+ */
+function forLineHtml(tree, flow) {
+  const places = placesOf(tree, flow);
+  if (!places.length) return '';
+  const p = places[0];
+  const others = [...new Set(places.slice(1).map((x) => x.persona))].filter((x) => x !== p.persona);
+  return '<span class="for g-org"><span' + tipAttrs({ key: 'journeys.persona.for', noFocus: true }) + '>' + esc(t('journeys.persona.for')) + '</span> '
+    + '<a href="' + esc('#/journeys?persona=' + encodeURIComponent(p.persona.id)) + '">' + esc(jrnPersonaName(p.persona)) + '</a>'
+    + ' · <span>' + esc(jrnGroupName(p.group)) + '</span>'
+    + (others.length ? ' <span' + tipAttrs({ key: 'journeys.persona.alsoUnder', noFocus: true }) + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
+    + '</span>';
+}
+/** ‹ or › beside the storyline: the journey before or after this one in it, on the Map. '' at an end or in none. */
+function storyNavHtml(tree, flow, dir) {
+  const a = storylineOf(tree, flow)[0];
+  const j = a && (dir === 'prev' ? a.prev : a.next);
+  const key = dir === 'prev' ? 'journeys.storyline.prev' : 'journeys.storyline.next';
+  const glyph = dir === 'prev' ? '‹' : '›';
+  if (!j) return '';
+  return '<a class="map-story-nav ' + dir + '" href="' + esc('#/map/' + encodeURIComponent(j.nodeId)) + '" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"'
+    + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id), noFocus: true }) + '>' + glyph + '</a>';
 }
 
 /**

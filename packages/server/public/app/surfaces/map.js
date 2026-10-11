@@ -3543,7 +3543,9 @@ bindStops({
   headHtml: (flow, agg) => {
     const d = MAP.nb.districts.find((x) => x.id === flow) || { id: flow, name: '' };
     const j = MAP.journeys.get(flow);
-    return '<div class="nm">' + stepBadgeHtml(d) + esc(nameWords(d.name)) + '</div><div class="agg">' + (agg != null ? agg : aggHtml(d, j)) + '</div>' + streetFactsHtml(flow, j, MAP.tree);
+    // the trackers' work on the journey rides beside either line (filled by fillWork when it lands)
+    const work = agg != null ? ' <span class="map-work" data-work-for="' + esc(d.id) + '">' + (d.work ? flowChipHtml(d.work) : '') + '</span>' : '';
+    return '<div class="nm">' + stepBadgeHtml(d) + esc(nameWords(d.name)) + '</div><div class="agg">' + (agg != null ? agg + work : aggHtml(d, j)) + '</div>' + streetFactsHtml(flow, j, MAP.tree);
   },
 });
 expose({ mapFit, mapZoom });

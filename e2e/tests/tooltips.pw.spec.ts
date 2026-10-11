@@ -5,7 +5,7 @@
 // overflow count and the journey header's `N screens` — are what the next
 // lanes copy, so they are what this spec drives.
 import type { Page } from '@playwright/test';
-import { test, expect, gotoReady, openBillingCycle } from './support';
+import { test, expect, gotoReady, openJourneyAt } from './support';
 
 const tip = (page: Page) => page.locator('#fs-tip');
 
@@ -96,16 +96,15 @@ test.describe('tips', () => {
   });
 
   /**
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnScreensTip
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnScreensTip
    * @covers packages/server/public/app/keymap.js::onKeydown
    */
-  test('inside a journey: the screens tip lists the screens, and Esc closes the tip before the journey', async ({ page }) => {
-    await openBillingCycle(page);
-    await page.locator('#lb-hybrid').click();
-    const journey = page.getByRole('dialog', { name: 'Journey', exact: true });
-    const screens = page.locator('#jrn-count .jrn-screens');
+  test('on a journey\'s table: the screens tip lists the screens, and Esc closes the tip before the table', async ({ page }) => {
+    await openJourneyAt(page, 'table', 'hybrid');
+    const journey = page.locator('.map-table .jrn-sheet');
+    const screens = page.locator('.map-table-head .jrn-count .jrn-screens');
     await expect(screens).toHaveText('3 screens');
-    await screens.click();
+    await screens.hover();
     await expect(tip(page)).toBeVisible();
     await expect(tip(page)).toContainText('/api/journey · sync');
     // the split (built · not built) adds up to the count; the screens follow as a list
@@ -116,17 +115,15 @@ test.describe('tips', () => {
     await expect(tip(page)).toBeHidden();
     await expect(journey).toBeVisible();
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    await expect(journey).toBeHidden();
+    await expect(journey).toHaveCount(0);
   });
 
-  /** @covers packages/server/public/app/surfaces/journeys.js::jrnScreensTip */
+  /** @covers packages/server/public/app/lib/journey-draw.js::jrnScreensTip */
   test('the business lens reads the same tip without the endpoint', async ({ page }) => {
-    await openBillingCycle(page);
-    await page.locator('#lb-business').click();
-    const screens = page.locator('#jrn-count .jrn-screens');
+    await openJourneyAt(page, 'table', 'business');
+    const screens = page.locator('.map-table-head .jrn-count .jrn-screens');
     await expect(screens).toHaveText('3 screens');
-    await screens.click();
+    await screens.hover();
     await expect(tip(page)).toBeVisible();
     await expect(tip(page)).toContainText('3 screens');
     await expect(tip(page)).toContainText(/sync \d+/);
@@ -134,18 +131,17 @@ test.describe('tips', () => {
   });
 
   /**
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnUntrListTip
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnCountedTip
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnUntrListTip
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnCountedTip
    */
   test('the conditions not in plain language are listed behind their number, in every lens, in words', async ({ page }) => {
-    await openBillingCycle(page);
     for (const lens of ['business', 'hybrid', 'code']) {
-      await page.locator('#lb-' + lens).click();
-      const n = page.locator('#jrn-count .jrn-untrn');
+      await openJourneyAt(page, 'table', lens);
+      const n = page.locator('.map-table-head .jrn-count .jrn-untrn');
       await expect(n).toBeVisible();
       const count = Number(((await n.textContent()) || '').match(/\d+/)![0]);
       expect(count).toBeGreaterThan(0);
-      await n.click();
+      await n.hover();
       await expect(tip(page)).toBeVisible();
       // the caption sits beside the table, not inside it — read the table that follows it
       const cap = tip(page).locator('.tip-cap', { hasText: 'where each one sits' });

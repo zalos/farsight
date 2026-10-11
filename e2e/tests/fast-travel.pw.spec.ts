@@ -89,9 +89,10 @@ test.describe('fast travel', () => {
     await expect(palette).toBeHidden();
 
     await travel(page, 'billing cycle', 'Billing cycle');
-    await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle/);
-    await expect(page.getByRole('dialog', { name: 'Journey', exact: true })).toBeVisible();
-    await expect(page.locator('#jrn-title')).toHaveText('Billing cycle');
+    // a journey is read on the Map: the business register's own view of it is the street
+    await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle/);
+    await expect(page.locator('.map-crumbs')).toContainText(/billing cycle/i);
+    await expect(page.locator('.map-scr[data-flow="invoice-app::flow::billing-cycle"]').first()).toBeVisible();
   });
 
   /**

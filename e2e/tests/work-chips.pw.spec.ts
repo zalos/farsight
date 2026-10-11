@@ -25,12 +25,12 @@ test.describe('work chips', () => {
     await expect(page.locator('.pf-table .wk-chip[data-flow="invoice-app::flow::billing-cycle"]')).toHaveCount(0);
   });
 
-  /** @covers packages/server/public/app/work-chips.js::fillJourneyWork */
-  test('a journey header carries the same chip, and it opens the work filtered to the journey', async ({ page }) => {
+  /** @covers packages/server/public/app/work-chips.js::flowChipHtml */
+  test('a journey\'s head on the Map carries the same chip, and it opens the work filtered to the journey', async ({ page }) => {
     await routeWorkSettings(page);
     await routeWork(page);
-    await page.goto('/#/journeys/' + encodeURIComponent('invoice-app::flow::draft-and-send'));
-    const chip = page.locator('#jrn-work .wk-chip');
+    await page.goto('/#/map/' + encodeURIComponent('invoice-app::flow::draft-and-send') + '?layout=table');
+    const chip = page.locator('.map-table-head .map-work .wk-chip');
     await expect(chip).toContainText('3 work items');
     await chip.getByRole('link').click();
     await expect(page).toHaveURL(/#\/work\?flow=/);
