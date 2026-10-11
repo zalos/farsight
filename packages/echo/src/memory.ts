@@ -1,0 +1,254 @@
+import { createHash } from 'node:crypto';
+import { chmod, lstat, mkdir, unlink } from 'node:fs/promises';
+import { createConnection, createServer, type Socket } from 'node:net';
+import { join } from 'node:path';
+import { echoMemoryWord } from '@farsight/core/dist/strings-echo-memory.js';
+import { loadContext } from './config.js';
+import { backendRequest } from './runtime.js';
+import { contextFingerprint } from './sessions.js';
+import type { BackendConnection, EchoContext } from './types.js';
+
+export interface RememberInput { content: string; topics?: string[] }
+export interface RecallInput { query: string; limit?: number }
+export interface RememberResult { id: string; createdAt: string }
+export interface RecalledMemory { id: string; title: string; content: string; timestamp: string }
+export interface RecallResult { memories: RecalledMemory[]; truncated: boolean }
+export interface MemoryRequestOptions { timeoutMs?: number }
+type Operation = 'remember' | 'recall';
+type FailureCode = 'unavailable' | 'input' | 'stale' | 'ownership' | 'running' | 'response' | 'timeout' | 'externalReadOnly';
+const REQUEST_BYTES = 160_000;
+const RESPONSE_BYTES = 160_000;
+const codes = new Set<FailureCode>(['unavailable', 'input', 'stale', 'ownership', 'running', 'response', 'timeout', 'externalReadOnly']);
+class MemoryFailure extends Error {
+  constructor(readonly code: FailureCode) { super(echoMemoryWord(code)); }
+}
+function fail(code: FailureCode): never { throw new MemoryFailure(code); }
+const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
+const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+const text = (value: unknown, max: number): value is string => typeof value === 'string' && !!value.trim() && value.length <= max && !value.includes('\0');
+const keys = (value: Record<string, unknown>, allowed: string[]): boolean => Object.keys(value).every(key => allowed.includes(key));
+
+/** Short fixed-root paths fit macOS's Unix socket limit even in a deeply nested workspace. */
+export function memorySocketPath(ctx: EchoContext): string {
+  if (!process.getuid) fail('ownership');
+  return join('/tmp', `farsight-echo-${process.getuid()}`, `${hash(`${ctx.configPath}\0${ctx.profileId}`).slice(0, 40)}.sock`);
+}
+
+async function checkDirectory(ctx: EchoContext, create = false): Promise<string> {
+  const path = memorySocketPath(ctx);
+  const directory = path.slice(0, path.lastIndexOf('/'));
+  if (create) {
+    try { await mkdir(directory, { mode: 0o700 }); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') fail('ownership'); }
+  }
+  let stat;
+  try { stat = await lstat(directory); } catch { fail(create ? 'ownership' : 'unavailable'); }
+  if (!stat.isDirectory() || stat.uid !== process.getuid!() || (stat.mode & 0o777) !== 0o700) fail('ownership');
+  return path;
+}
+
+async function socketStat(path: string) {
+  const stat = await lstat(path);
+  if (!stat.isSocket() || stat.uid !== process.getuid!() || (stat.mode & 0o777) !== 0o600) fail('ownership');
+  return stat;
+}
+
+async function recoverStaleSocket(path: string): Promise<void> {
+  let before;
+  try { before = await socketStat(path); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
+  const stale = await new Promise<boolean>(resolve => {
+    const socket = createConnection(path);
+    const timer = setTimeout(() => { socket.destroy(); resolve(false); }, 300);
+    socket.once('connect', () => { clearTimeout(timer); socket.destroy(); resolve(false); });
+    socket.once('error', error => { clearTimeout(timer); socket.destroy(); resolve((error as NodeJS.ErrnoException).code === 'ECONNREFUSED'); });
+  });
+  if (!stale) fail('running');
+  const after = await socketStat(path);
+  if (before.ino !== after.ino || before.dev !== after.dev) fail('ownership');
+  await unlink(path);
+}
+
+function inputFor(operation: Operation, input: unknown): RememberInput | RecallInput {
+  if (!object(input)) fail('input');
+  if (operation === 'remember') {
+    if (!keys(input, ['content', 'topics']) || !text(input.content, 24_000)) fail('input');
+    if (input.topics !== undefined && (!Array.isArray(input.topics) || input.topics.length > 20 || input.topics.some(topic => !text(topic, 80)))) fail('input');
+    return { content: input.content, ...(input.topics === undefined ? {} : { topics: input.topics as string[] }) };
+  }
+  if (operation !== 'recall' || !keys(input, ['query', 'limit']) || !text(input.query, 8_000)) fail('input');
+  if (input.limit !== undefined && (!Number.isSafeInteger(input.limit) || Number(input.limit) < 1 || Number(input.limit) > 5)) fail('input');
+  return { query: input.query, limit: input.limit === undefined ? 5 : Number(input.limit) };
+}
+
+function timeout(value: unknown): number {
+  if (value === undefined) return 10_000;
+  if (!Number.isSafeInteger(value) || Number(value) < 50 || Number(value) > 30_000) fail('input');
+  return Number(value);
+}
+
+// agentmemory 0.9.30 truncates agentId at 128 chars and scopes supersession by
+// project rather than agentId. Namespacing both fields preserves full identities
+// and prevents one Echo profile from superseding another profile's memories.
+function scope(ctx: EchoContext): { project: string; agentId: string } {
+  const identity = ctx.profile.identity;
+  return {
+    project: `echo:${hash(JSON.stringify([ctx.profileId, identity.individual, identity.team ?? null, identity.project]))}`,
+    agentId: `echo:${hash(identity.individual)}`,
+  };
+}
+
+function checkedMemory(value: unknown, expected: { project: string; agentId: string }): Record<string, unknown> {
+  if (!object(value) || !text(value.id, 256) || !text(value.createdAt, 64)
+    || !text(value.content, 1_000_000) || typeof value.title !== 'string'
+    || value.project !== expected.project || value.agentId !== expected.agentId) fail('response');
+  return value;
+}
+
+async function execute(ctx: EchoContext, connection: BackendConnection, operation: Operation, input: RememberInput | RecallInput, timeoutMs: number): Promise<RememberResult | RecallResult> {
+  const expected = scope(ctx);
+  if (operation === 'remember') {
+    if (ctx.profile.backend.mode !== 'managed') fail('externalReadOnly');
+    const remember = input as RememberInput;
+    const result = await backendRequest(connection, '/agentmemory/remember', {
+      content: remember.content, concepts: remember.topics ?? [], type: 'fact', ...expected,
+    }, timeoutMs);
+    if (!object(result) || result.success !== true) fail('response');
+    const memory = checkedMemory(result.memory, expected);
+    return { id: memory.id as string, createdAt: memory.createdAt as string };
+  }
+  const recall = input as RecallInput;
+  // This published endpoint ranks by q and applies exact project + agent filters.
+  // /search's observation conversion omits project and admits orphaned rows.
+  const query = new URLSearchParams({ q: recall.query, ...expected, latest: 'true', limit: String(recall.limit ?? 5) });
+  const result = await backendRequest(connection, `/agentmemory/memories?${query}`, undefined, timeoutMs);
+  if (!object(result) || !Array.isArray(result.memories) || result.memories.length > (recall.limit ?? 5)) fail('response');
+  let remaining = ctx.profile.budget.briefMaxChars;
+  let truncated = result.nextCursor !== null && result.nextCursor !== undefined;
+  const memories: RecalledMemory[] = [];
+  const records = result.memories.map(memory => checkedMemory(memory, expected));
+  for (let index = 0; index < records.length; index++) {
+    const memory = records[index]!;
+    if (remaining <= 0) { truncated = true; break; }
+    const allowance = Math.floor(remaining / (records.length - index));
+    const rawTitle = memory.title as string;
+    const rawContent = memory.content as string;
+    const title = rawTitle.slice(0, Math.min(120, Math.floor(allowance / 3)));
+    const content = rawContent.slice(0, Math.max(0, allowance - title.length));
+    remaining -= title.length + content.length;
+    truncated ||= title.length < rawTitle.length || content.length < rawContent.length;
+    memories.push({ id: memory.id as string, title, content, timestamp: memory.createdAt as string });
+  }
+  return { memories, truncated };
+}
+
+/** A filesystem-private bridge; backend credentials stay in the owning process. */
+export async function startMemoryBridge(ctx: EchoContext, connection: BackendConnection): Promise<{ close(): Promise<void> }> {
+  const snapshot = structuredClone(ctx);
+  const fingerprint = contextFingerprint(snapshot);
+  const path = await checkDirectory(snapshot, true);
+  await recoverStaleSocket(path);
+  const sockets = new Set<Socket>();
+  const server = createServer(socket => {
+    if (sockets.size >= 32) { socket.destroy(); return; }
+    sockets.add(socket);
+    let buffer = Buffer.alloc(0);
+    let received = false;
+    let timer = setTimeout(() => socket.destroy(), 3000);
+    socket.once('close', () => { clearTimeout(timer); sockets.delete(socket); });
+    socket.on('error', () => {});
+    socket.on('data', raw => {
+      const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      if (received) { socket.destroy(); return; }
+      if (buffer.byteLength + chunk.byteLength > REQUEST_BYTES) { socket.destroy(); return; }
+      buffer = Buffer.concat([buffer, chunk]);
+      const newline = buffer.indexOf(10);
+      if (newline < 0) return;
+      received = true;
+      clearTimeout(timer);
+      void (async () => {
+        try {
+          if (newline !== buffer.length - 1) fail('input');
+          const request: unknown = JSON.parse(buffer.subarray(0, newline).toString('utf8'));
+          if (!object(request) || !keys(request, ['version', 'fingerprint', 'operation', 'input', 'timeoutMs']) || request.version !== 1) fail('input');
+          if (request.fingerprint !== fingerprint || contextFingerprint(loadContext(snapshot.configPath, snapshot.profileId)) !== fingerprint) fail('stale');
+          if (request.operation !== 'remember' && request.operation !== 'recall') fail('input');
+          const input = inputFor(request.operation, request.input);
+          const deadline = timeout(request.timeoutMs);
+          timer = setTimeout(() => socket.destroy(), deadline);
+          const result = await execute(snapshot, connection, request.operation, input, deadline);
+          if (!socket.destroyed) socket.end(`${JSON.stringify({ ok: true, result })}\n`);
+        } catch (error) {
+          const code = error instanceof MemoryFailure ? error.code : 'unavailable';
+          if (!socket.destroyed) socket.end(`${JSON.stringify({ ok: false, code })}\n`);
+        }
+      })();
+    });
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(path, () => { server.off('error', reject); resolve(); });
+  });
+  try { await chmod(path, 0o600); } catch { await new Promise<void>(resolve => server.close(() => resolve())); fail('ownership'); }
+  const owned = await socketStat(path);
+  let closing: Promise<void> | undefined;
+  return { close() {
+    closing ??= (async () => {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      // Node usually removes its own socket. Never remove a replacement.
+      try { const current = await socketStat(path); if (current.ino === owned.ino && current.dev === owned.dev) await unlink(path); } catch {}
+    })();
+    return closing;
+  } };
+}
+
+export function memoryRequest(ctx: EchoContext, operation: 'remember', input: RememberInput, options?: MemoryRequestOptions): Promise<RememberResult>;
+export function memoryRequest(ctx: EchoContext, operation: 'recall', input: RecallInput, options?: MemoryRequestOptions): Promise<RecallResult>;
+export async function memoryRequest(ctx: EchoContext, operation: Operation, input: RememberInput | RecallInput, options: MemoryRequestOptions = {}): Promise<RememberResult | RecallResult> {
+  const validated = inputFor(operation, input);
+  const deadline = timeout(options.timeoutMs);
+  const path = await checkDirectory(ctx);
+  try { await socketStat(path); } catch (error) { if (error instanceof MemoryFailure) throw error; fail('unavailable'); }
+  return new Promise((resolve, reject) => {
+    const socket = createConnection(path);
+    let buffer = Buffer.alloc(0);
+    let settled = false;
+    const finish = (error?: FailureCode, result?: RememberResult | RecallResult) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); socket.destroy();
+      if (error) reject(new MemoryFailure(error)); else resolve(result!);
+    };
+    const timer = setTimeout(() => finish('timeout'), deadline);
+    socket.once('connect', () => socket.write(`${JSON.stringify({ version: 1, fingerprint: contextFingerprint(ctx), operation, input: validated, timeoutMs: deadline })}\n`));
+    socket.on('error', () => finish('unavailable'));
+    socket.once('close', () => finish('unavailable'));
+    socket.on('data', raw => {
+      const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      if (buffer.byteLength + chunk.byteLength > RESPONSE_BYTES) { finish('response'); return; }
+      buffer = Buffer.concat([buffer, chunk]);
+      const newline = buffer.indexOf(10);
+      if (newline < 0) return;
+      try {
+        if (newline !== buffer.length - 1) fail('response');
+        const reply: unknown = JSON.parse(buffer.subarray(0, newline).toString('utf8'));
+        if (!object(reply)) fail('response');
+        if (reply.ok === false && codes.has(reply.code as FailureCode)) { finish(reply.code as FailureCode); return; }
+        if (reply.ok !== true || !object(reply.result)) fail('response');
+        const result = reply.result;
+        if (operation === 'remember') {
+          if (!text(result.id, 256) || !text(result.createdAt, 64)) fail('response');
+        } else {
+          if (!Array.isArray(result.memories) || result.memories.length > 5 || typeof result.truncated !== 'boolean') fail('response');
+          let length = 0;
+          for (const memory of result.memories) {
+            if (!object(memory) || !text(memory.id, 256) || !text(memory.timestamp, 64) || typeof memory.title !== 'string' || typeof memory.content !== 'string') fail('response');
+            length += memory.title.length + memory.content.length;
+          }
+          if (length > ctx.profile.budget.briefMaxChars) fail('response');
+        }
+        finish(undefined, result as unknown as RememberResult | RecallResult);
+      } catch { finish('response'); }
+    });
+  });
+}
