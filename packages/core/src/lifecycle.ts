@@ -72,8 +72,8 @@ export function lifecycleLines(node: GraphNode, opts: { register?: Register; byN
     + ` — ${countedText(c.statuses, { register: reg, scope: false })} · ${countedText(c.transitions, { register: reg, scope: false })} · ${countedText(c.unwritten, { register: reg, scope: false })}`);
   lines.push(`  ${life.statuses.join(' · ')}`);
   for (const tr of life.transitions) {
-    const move = tr.from !== undefined
-      ? t('lifecycle.move', reg).replace('{from}', tr.from).replace('{to}', tr.to)
+    const move = tr.from !== undefined || tr.fromAny?.length
+      ? t('lifecycle.move', reg).replace('{from}', tr.from ?? tr.fromAny!.join(t('lifecycle.table.fromOr', reg))).replace('{to}', tr.to)
       : t('lifecycle.moveInto', reg).replace('{to}', tr.to);
     lines.push(`  ${move}  ${t('lifecycle.by', reg).replace('{name}', opts.byName?.(tr.by) ?? nameOfId(tr.by))} (${t(`lifecycle.via.${tr.via}`, reg)}) · ${tr.by}${tr.line ? `:${tr.line}` : ''}`);
   }
@@ -146,6 +146,8 @@ export interface LifecycleMover {
   /** how it writes; `writes` for an overlay table's writer */
   via: LifecycleTransition['via'] | 'writes';
   from?: string;
+  /** the statuses the code lets the record leave for this one, when its writer goes through a table of moves or a check */
+  fromAny?: string[];
   line?: number;
   at?: LifecyclePlace;
 }
@@ -193,13 +195,14 @@ function wordsFor(life: RecordLifecycle, persona?: LifecyclePersona): Record<str
   return hit ? views[hit] : undefined;
 }
 
-function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], locate?: (id: string) => LifecyclePlace | undefined, extra: { from?: string; line?: number } = {}): LifecycleMover {
+function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], locate?: (id: string) => LifecyclePlace | undefined, extra: { from?: string; fromAny?: string[]; line?: number } = {}): LifecycleMover {
   const n = index.byId.get(by);
   const name = n?.name ?? nameOfId(by);
   const at = locate?.(by);
   return {
     by, name, words: n?.facets?.business?.label ?? humanizeName((name.split(': ')[0] ?? name).split('.').pop() ?? name), via,
-    ...(extra.from !== undefined ? { from: extra.from } : {}), ...(extra.line ? { line: extra.line } : {}), ...(at ? { at } : {}),
+    ...(extra.from !== undefined ? { from: extra.from } : {}), ...(extra.fromAny?.length ? { fromAny: extra.fromAny } : {}),
+    ...(extra.line ? { line: extra.line } : {}), ...(at ? { at } : {}),
   };
 }
 
@@ -219,7 +222,9 @@ export function lifecycleViews(
   const movers = new Map<string, LifecycleMover[]>();
   for (const tr of life.transitions) {
     const list = movers.get(tr.to) ?? [];
-    if (!list.some((m) => m.by === tr.by)) list.push(moverOf(index, tr.by, tr.via, opts.locate, { ...(tr.from !== undefined ? { from: tr.from } : {}), ...(tr.line ? { line: tr.line } : {}) }));
+    // where the record comes from: the status the writer checks, else the statuses its table of moves or its check lets
+    // it leave (swarm round 3: approve requires *under review* and the lifecycle never said *from*)
+    if (!list.some((m) => m.by === tr.by)) list.push(moverOf(index, tr.by, tr.via, opts.locate, { ...(tr.from !== undefined ? { from: tr.from } : {}), ...(tr.fromAny?.length ? { fromAny: tr.fromAny } : {}), ...(tr.line ? { line: tr.line } : {}) }));
     movers.set(tr.to, list);
   }
   const overlays: LifecycleOverlayRow[] = (life.names?.overlays ?? []).map((o) => {

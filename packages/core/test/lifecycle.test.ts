@@ -37,7 +37,7 @@ test('three Counteds over one node, each breakdown summing to its number', () =>
 test('the text names the statuses in order, every move with its writer id, and what nothing writes', () => {
   const node = { id: 'a::table::invoices', kind: 'table', name: 'invoices', tags: [], lifecycle: life } as GraphNode;
   const lines = lifecycleLines(node);
-  assert.match(lines[0]!, /status lifecycle · invoices · status — 5 statuses · 3 moves with a writer · 2 statuses no code moves to/);
+  assert.match(lines[0]!, /status lifecycle · invoices · status — 5 statuses · 3 moves with a writer · 2 statuses no code moves a record into/);
   assert.equal(lines[1]!.trim(), 'draft · open · approved · paid · void');
   assert.ok(lines.some((l) => l.includes('draft → open') && l.includes('a::src/s.ts::finalizeInvoice:66')));
   assert.ok(lines.some((l) => l.includes('paid · void')));

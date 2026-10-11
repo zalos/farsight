@@ -75,7 +75,10 @@ export function stripItems(view, lens) {
   const rows = view.rows || [];
   return rows.map((r, i) => {
     const prev = i > 0 ? rows[i - 1] : null;
-    const arrow = !!prev && r.written && (r.movers || []).some((m) => m.from === prev.status || (m.from == null && (prev.written || i === 1)));
+    // an arrow from the status before when a move leaves it — the status the writer checks, or one of those its table of
+    // moves lets it leave (swarm round 3: *pending client approval → approved* was drawn with a dot)
+    const arrow = !!prev && r.written && (r.movers || []).some((m) => m.from === prev.status || (m.fromAny || []).includes(prev.status)
+      || (m.from == null && !(m.fromAny || []).length && (prev.written || i === 1)));
     return {
       status: r.status, word: r.word, declared: !!r.declared, written: !!r.written,
       sep: i === 0 ? '' : arrow ? '→' : '·',
@@ -100,7 +103,8 @@ export function stripCounts(lc, view, lens) {
  */
 export function tableRows(view, doorOf) {
   if (!view) return [];
-  const mv = (m) => ({ by: m.by, name: m.name, words: m.words, at: m.at || null, door: m.at ? doorOf(m) : null });
+  const mv = (m) => ({ by: m.by, name: m.name, words: m.words, at: m.at || null, door: m.at ? doorOf(m) : null,
+    from: m.from != null ? [m.from] : (m.fromAny || []) });
   return [
     ...(view.rows || []).map((r) => ({ kind: 'status', word: r.word, declared: !!r.declared, code: r.status, written: !!r.written, movers: (r.movers || []).map(mv) })),
     ...(view.overlays || []).map((o) => ({ kind: 'overlay', word: o.name, declared: true, code: o.tableName, when: o.when, written: (o.movers || []).length > 0, movers: (o.movers || []).map(mv) })),

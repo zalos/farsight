@@ -34,7 +34,14 @@ function tableHtml(view, lens) {
     const name = m.door
       ? '<a class="lc-door" href="' + esc(m.door) + '"' + tipAttrs({ text: t('lifecycle.table.on').replace('{journey}', m.at.flowName).replace('{n}', String(m.at.screen)) + (m.at.screenName ? ' · ' + m.at.screenName : '') }) + '>' + esc(label) + '</a>'
       : '<span class="lc-door none">' + esc(label) + '</span>';
-    return '<div class="lc-mover">' + name + ' ' + place + '</div>';
+    // where the record comes from, as the code checks it (swarm round 3: the lifecycle never said *from*)
+    const word = (s) => {
+      const r = view && (view.rows || []).find((x) => x.status === s);
+      return lens === 'code' || !r ? s : r.word;
+    };
+    const from = m.from && m.from.length
+      ? ' <span class="lc-from"' + defAttrs('lifecycle.table.from') + '>' + esc(t('lifecycle.table.from').replace('{from}', m.from.map(word).join(t('lifecycle.table.fromOr')))) + '</span>' : '';
+    return '<div class="lc-mover">' + name + from + ' ' + place + '</div>';
   };
   const body = rows.map((r) => {
     const word = '<td class="lc-tw' + (r.kind === 'status' && !r.declared ? ' undecl' : '') + '"'
