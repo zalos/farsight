@@ -24,6 +24,7 @@ import { vsl, linkHtml, designThumbHtml } from './graph-render.js';
 import { doorsFor, doorsHtml } from './detail-doors.js';
 import { gateAttrs } from './gate-card.js';
 import { registerTip, tipAttrs, numberTip, tableTip, tipSource } from './tooltip.js';
+import { pathHtml } from './fold-row.js';
 import { defAttrs, countKey } from './counted.js';
 import { jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnInspPanelHtml } from '../surfaces/journey-drill.js';
 import { lifecycleStripHtml, headerLifecycles } from './lifecycle-strip.js';
@@ -1326,14 +1327,15 @@ export function jrnSeamCardHtml(m) {
     : c.status === 'declared' ? 'apis.status.declared' : c.status === 'code-only' ? 'apis.status.codeOnly' : 'apis.status.implemented';
   const statusCls = c.status === 'both' ? ' ok' : c.status === 'code-only' ? ' warn' : c.status === 'spec-only' ? ' stub' : '';
   const end = (e, cls, word) => e
-    ? '<span class="' + cls + '">' + esc(word) + ' ' + esc(e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
+    // the path keeps its two ends and breaks at `/`; its tip carries it whole (nothing clips at the column's edge)
+    ? '<span class="' + cls + '">' + esc(word) + ' ' + pathHtml(e.path + ':' + e.line) + vsl(e.repo, e.path, e.line) + '</span>'
     : '<span class="' + cls + ' miss">' + esc(word) + ': ' + esc(t('journey.seam.notBuilt')) + '</span>';
   return '<span class="jrn-seam' + (m.planned ? ' planned' : '') + (m.repeat ? ' rep' : '') + '" data-order="' + m.stepOrder + '" tabindex="0"'
     + ' onclick="jrnSelect(' + m.stepOrder + ')" title="' + esc((m.method || '') + ' ' + (m.path || '')) + '">'
     + '<span class="l1">' + sym('api') + (m.method && !business ? '<b>' + esc(m.method) + '</b>' : '') + '<span class="nm">' + esc(name) + '</span>'
     // the code names no method and several endpoints share the address: the read one is shown, and says so
     + (m.methodAssumed ? '<span class="api-chip warn"' + tipAttrs({ key: 'journey.seam.methodAssumed', noFocus: true }) + '>' + esc(t('journey.seam.methodAssumed')) + '</span>' : '')
-    + (summary ? '<span class="sum">' + proseHtml(summary) + '</span>' : '')
+    + (summary ? '<span class="sum"' + tipAttrs({ text: summary, noFocus: true }) + '>' + proseHtml(summary) + '</span>' : '')
     // whether the spec and the code agree is a developer's question
     + (business ? '' : '<span class="api-chip' + statusCls + '">' + esc(t(statusKey)) + '</span>')
     + (m.repeat ? '<span class="rep">↺</span>' : '') + '</span>'
@@ -1491,11 +1493,12 @@ const { TIME: JRN_LAD_TIME, SKIP: JRN_LAD_SKIP, END: JRN_LAD_END } = LADDER;
 function jrnLadderModel(sum, sg) {
   const lm = ladderModel(sum, sg, { steps: S.JOURNEY.steps, text: jrnMarkerText, word: (key) => jrnAbsentWord(sg, null, key) });
   // the model's cells are plain descriptors; the overlay draws them as it always has
-  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + esc(c.at) + ' →</span>'
+  // a path keeps its two ends and its tip carries it whole; a name ellipsises inside its column (the marker's title)
+  const cell = (c) => (c.type === 'caller' ? '<span class="go">' + pathHtml(c.at, { max: 34 }) + ' →</span>'
     : c.type === 'seam' ? jrnSeamCardHtml(c.m) + '<span class="go"> →</span>'
     : c.type === 'out' ? '<span class="go out">→</span>'
     : c.type === 'marker' ? jrnMarkerHtml(c.m)
-    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + esc(c.loc) + '</span>' : ''));
+    : '<span class="ind"></span>'.repeat(c.tier) + jrnMarkerHtml(c.m) + (c.loc ? '<span class="back">' + pathHtml(c.loc, { max: 34 }) + '</span>' : ''));
   lm.lines = lm.lines.map((l) => {
     const cells = {};
     Object.keys(l.cells).forEach((k) => { cells[k] = cell(l.cells[k]); });

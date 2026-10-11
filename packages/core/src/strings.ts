@@ -25,6 +25,7 @@ import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { DOOR_STRINGS } from './strings-doors.js';
 import { LANES_STRINGS } from './strings-lanes.js';
+import { FOLD_STRINGS } from './strings-fold.js';
 import { GATE_STRINGS } from './strings-gate.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
@@ -116,6 +117,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...DOOR_STRINGS,
   // the storyline as swimlanes (round 2026-10-10 §2) live in strings-lanes.ts (map.layout.*, lanes.*)
   ...LANES_STRINGS,
+  // the fold's words: a row of chips folded to +n, a path that keeps its two ends, a rail's tabs folded to a menu
+  ...FOLD_STRINGS,
   // compare two syncs on a storyline (round 2026-10-10, proposal 7) live in strings-compare.ts (compare.*, map.biz.compare.*, count.unit.deltas)
   ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts

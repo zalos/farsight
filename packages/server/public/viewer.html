@@ -962,6 +962,10 @@
   .jrn-splice .jrn-sec{margin-bottom:8px}
   .jrn-splice .jrn-sec-head{position:static}
   .jrn-splice .jrn-banner{margin:0 0 8px}
+  /* a deep splice is narrower than its names: they wrap inside the section's head, never past the dock's edge */
+  .jrn-sec-head>*{min-width:0;max-width:100%}
+  .jrn-sec-head .jrn-code-name,.jrn-sec-head .jrn-biz,.jrn-callsite{overflow-wrap:anywhere}
+  .jrn-req{max-width:min(220px,100%)}
   .jrn-pre .lm{display:inline-block;width:2ch;color:var(--dim);user-select:none}
   .jrn-pre .lm .sym{width:1em;height:1em;vertical-align:-0.12em}
   .jrn-pre .cl.call{background:var(--accent-dim)}
@@ -1460,8 +1464,15 @@
   .jrn-ladderrow .jrn-seam{font-size:9.5px;flex-direction:row;align-items:center;gap:6px;padding:2px 7px}
   .jrn-ladderrow .jrn-seam .l1{flex-wrap:nowrap}
   .jrn-ladderrow .jrn-seam .l1 .sum,.jrn-ladderrow .jrn-seam .l2,.jrn-ladderrow .jrn-seam .api-chip{display:none}
-  .jrn-lline .lc .jrn-mk,.jrn-lline .lc .jrn-seam{flex-shrink:0;max-width:none}
-  .jrn-lline .lc .back{flex:1 1 auto;min-width:0}
+  /* a marker gives way before its path (its name ellipsises, the title carries it whole); a seam card wraps inside
+     its column — nothing runs under the next column (cleanup pass 2026-10-11) */
+  .jrn-lline .lc .jrn-mk{flex-shrink:1;min-width:0;max-width:100%}
+  .jrn-lline .lc .jrn-seam{flex-shrink:1;min-width:0;max-width:100%}
+  .jrn-lline .lc .jrn-seam .l1 .nm{white-space:normal;overflow-wrap:anywhere;min-width:0}
+  .jrn-lline .lc .jrn-seam .l1 .sum{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .jrn-lline .lc .go{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .jrn-lline .lc .back{flex:0 100 auto;min-width:0;white-space:nowrap}
+  .jrn-lline .lc .back wbr,.jrn-lline .lc .go wbr{display:none}
   .jrn-lmore{margin-top:6px;background:transparent;border:1px dashed var(--line);border-radius:3px;color:var(--accent);font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9px;padding:4px 10px;cursor:pointer}
   .jrn-lmore:hover{border-color:var(--accent)}
   /* a system the screen skips keeps its place, narrow: its name and absence word run down it */
@@ -1616,7 +1627,13 @@
   .jrn-stop .rep{color:var(--dim);font-size:11px}
   .jrn-dcap{display:flex;align-items:center;gap:14px;padding:5px 18px;border-bottom:1px solid var(--line-soft);font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9px;color:var(--accent);flex-shrink:0;min-height:26px}
   .jrn-dcap .cnt{color:var(--muted)}
-  .jrn-dcap .legend{margin-left:auto;display:flex;gap:12px;color:var(--muted);align-items:center;flex-wrap:wrap}
+  /* the caption, its counts and the legend share the row while they fit; past that the legend takes a line of its own
+     and folds to one line with +n (journey-drill.js jrnFoldLegend, measured again when the dock opens) */
+  .jrn-dcap{flex-wrap:wrap;row-gap:4px}
+  .jrn-dcap .legend{margin-left:auto;display:flex;gap:4px 12px;color:var(--muted);align-items:center;flex-wrap:wrap;justify-content:flex-end;flex:1 1 320px;min-width:0}
+  .jrn-dcap>span:first-child{flex:1 1 420px;min-width:0}
+  .jrn-dcap>.cnt{flex:none}
+  .jrn-dcap .legend>.fold-more{border:1px solid var(--line);border-radius:8px;padding:0 6px;cursor:help}
   .jrn-dcap .legend>span{display:inline-flex;align-items:center;gap:5px}
   .jrn-dcap .legend .lgsw{width:30px;height:7px;flex:0 0 auto;overflow:visible}
   .jrn-dcap .legend .lgnote{font-style:italic;opacity:.85}
@@ -1668,7 +1685,8 @@
   .jrn-bx .k .rep{color:var(--dim);font-size:11px;letter-spacing:0}
   .jrn-bx .n{font-family:var(--mono);font-size:10.5px;color:var(--ink);font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap;overflow-wrap:anywhere;min-width:0}
   .jrn-bx .n b{color:var(--cyan)}
-  .jrn-bx .n .loc{font-family:var(--mono);color:var(--dim);font-size:9px;font-weight:400;flex-basis:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:3px;align-items:center;min-width:0}
+  .jrn-bx .n .loc{font-family:var(--mono);color:var(--dim);font-size:9px;font-weight:400;flex-basis:100%;display:flex;flex-wrap:wrap;gap:3px;align-items:center;min-width:0}
+  .jrn-bx .n .loc .fold-path{min-width:0}
   .jrn-bx .b{font-size:10px;color:var(--muted);line-height:1.35}
   .jrn-bx .b.cut{color:var(--warn)}
   .jrn-bx.ui{border-color:rgba(111,207,142,.4)} .jrn-bx.ui .k{color:var(--ok)}
@@ -1685,6 +1703,14 @@
   /* a call's box is the seam card itself */
   .jrn-bx.api{border:none;padding:0;background:transparent;cursor:default;gap:4px}
   .jrn-bx.api .jrn-seam{width:100%}
+  /* a seam card in a beat's column keeps its words inside the column: the name wraps, the spec's summary clamps to
+     two lines (its tip carries it whole), the two ends' paths break at / and keep their two ends (lib/fold-row.js) */
+  .jrn-bx.api .jrn-seam .l1 .nm{white-space:normal;overflow-wrap:anywhere;min-width:0}
+  .jrn-bx.api .jrn-seam .l1 .sum{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .jrn-bx.api .jrn-seam .l2 .ux,.jrn-bx.api .jrn-seam .l2 .sv{overflow-wrap:normal}
+  .fold-path{overflow-wrap:break-word}
+  [data-folded]{display:none!important}
+  .fold-path[data-tip-text]{text-decoration:underline dotted;text-underline-offset:2px;cursor:help}
   .jrn-bx.api .outs{display:flex;gap:2px;flex-wrap:wrap;align-items:center}
   .jrn-bx.api .outs .api-chip.st{font-family:var(--mono);text-transform:none;letter-spacing:0}
   .jrn-bx.ans{border:1px dashed rgba(91,200,221,.5);padding:5px 8px;cursor:pointer;background:var(--panel)} .jrn-bx.ans .k{color:var(--cyan)}
@@ -2780,6 +2806,9 @@
   /* the screen the address names (`screen=`): its stops' heads underlined in the accent */
   .map-table-wrap .jrn-sbh.at{box-shadow:inset 0 -2px 0 var(--accent)}
   .map-act{position:absolute;inset:0;display:flex;flex-direction:column;font-family:var(--body)}
+  /* the code stop marks the stop with the class code, which the stylesheet's code-block rule (.code) also matches:
+     undo what that rule would do to the whole stop — preformatted text that never wraps, a scroller, a border */
+  .map-act.code{white-space:normal;overflow:hidden;padding:0;border:0;border-radius:0;background:var(--ground);color:inherit;font-size:inherit;line-height:normal}
   .map-act-top{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0;min-width:0}
   .map-act-strip{display:flex;align-items:center;gap:8px;min-width:0;overflow-x:auto;flex:1;scrollbar-width:thin}
   .map-act-strip .hud-label{font-size:9px;color:var(--muted);flex:none}
