@@ -11,7 +11,7 @@ import {
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word, agentsCounted,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
-  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, stateOfPlay, stateOfPlayLines, historyFact,
+  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
   storylineDiff, storylineDiffDocument, storylineDiffLines, resolveCompareFrom, compareSideOf, parseFailOn, DELTA_KINDS,
 } from '@farsight/core';
@@ -39,7 +39,7 @@ function flag(name: string, fallback?: string): string | undefined {
   return i >= 0 ? rest[i + 1] : fallback;
 }
 /** A flag that takes no value, so the word after it is a positional (`serve --read-only graph.json`). */
-const BOOL_FLAGS = new Set(['--read-only', '--json', '--post', '--confirm', '--csv']);
+const BOOL_FLAGS = new Set(['--read-only', '--json', '--post', '--confirm', '--csv', '--business']);
 function hasFlag(name: string): boolean { return rest.includes(`--${name}`); }
 const positional = rest.filter((a, i) => !a.startsWith('--') && (rest[i - 1]?.startsWith('--') !== true || BOOL_FLAGS.has(rest[i - 1] ?? '')));
 
@@ -165,6 +165,17 @@ usage:
                                                                sit indented under the step they leave from; --storyline keeps one
                                                                storyline and its journeys (an unknown one names those there are;
                                                                --json: the JourneyTree, as /api/journeys)
+  farsight tour <storyline|flow> [--repo name] [--persona p] [--business] [--json] [--graph graph.json]
+                                                               walk me through it: one stop per screen of the storyline (or one
+                                                               journey) and one per hand-off — a move the code makes to a record —
+                                                               every sentence assembled from the graph, each line with the ids it
+                                                               cites (--business: the business register; --json: the Tour, as
+                                                               /api/tour)
+  farsight ask "<question>" [--repo name] [--business] [--json] [--graph graph.json]
+                                                               a question answered from the graph, a small grammar and no model:
+                                                               where is <record> set to <status>, and what must be true first ·
+                                                               what guards <action|route|screen> · how does <A> reach <B> · what
+                                                               proves <screen|action|gate>; anything else lists those four
   farsight design list [--graph graph.json]                    every design source (screens manifest) with designed / built counts
   farsight design diff --manifest <path|url> [--repo <name>] [--format json|md] [--strict]
                                                                a proposed screens manifest vs the code: not built / undesigned /
@@ -1652,6 +1663,35 @@ switch (command) {
     if (storyline && !tree.storylines.length) fail(unknownStorylineText(whole, storyline));
     if (rest.includes('--json')) { console.log(JSON.stringify(tree, null, 2)); break; }
     console.log(journeyTreeLines(tree).join('\n'));
+    break;
+  }
+  case 'tour':
+  case 'ask': {
+    // walk me through it, and ask (round 2026-10-10, proposal 8): core tourOf() / ask(), the same folds
+    // GET /api/tour, GET /api/ask and the MCP tour / ask tools answer with
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
+    const repo = flag('repo');
+    const words = positional.join(' ').trim();
+    if (!words) fail(command === 'tour' ? 'usage: farsight tour <storyline id | flow node id> [--repo name] [--persona p] [--business] [--json]' : 'usage: farsight ask "<question>" [--repo name] [--business] [--json]');
+    if (command === 'tour') {
+      const persona = flag('persona');
+      const tour = tourOf(index, words, { metas: store.meta.journeys, ...(repo ? { repo } : {}), ...(persona ? { persona } : {}) });
+      if (!tour) {
+        const tree = journeyTree(index, store.meta.journeys, repo ? new Set([repo]) : null);
+        fail(`no storyline or journey "${words}" — storylines: ${tree.storylines.map((x) => `${x.id} (${x.repo})`).join(' · ') || 'none declared'}; or a flow node id (farsight journeys lists them)`);
+      }
+      if (hasFlag('json')) { console.log(JSON.stringify(tour, null, 2)); break; }
+      console.log(tourLines(tour!, { business: hasFlag('business') }).join('\n'));
+      break;
+    }
+    const answer = ask(index, words, { metas: store.meta.journeys, ...(repo ? { repo } : {}) });
+    if (hasFlag('json')) { console.log(JSON.stringify(answer, null, 2)); break; }
+    console.log(askLines(answer, { business: hasFlag('business') }).join('\n'));
     break;
   }
   case 'design': {

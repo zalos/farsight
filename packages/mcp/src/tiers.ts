@@ -13,11 +13,13 @@ export type ToolTier = 'core' | 'all';
 /**
  * The core tier: orient (`graph_overview`, `journeys`), find (`search_graph`), read one thing (`describe_node`,
  * `gate`), walk (`journey`, `trace_flow`), check a change (`impact_of`, `test_coverage`), and `affected` when a
- * code-host source grants agents read (it is not registered otherwise). Read-only, every one.
+ * code-host source grants agents read (it is not registered otherwise), and `ask` — a question in plain words
+ * answered from the graph, which lands an agent on the ids every other tool takes (the tour it sits beside is long,
+ * and in the all tier). Read-only, every one.
  */
 export const CORE_TOOLS: readonly string[] = [
   'graph_overview', 'journeys', 'journey', 'describe_node', 'search_graph', 'trace_flow', 'impact_of', 'gate', 'test_coverage',
-  'affected',
+  'affected', 'ask',
 ];
 
 /** In both tiers: the menu itself, and the call that returns what a budget left out. */

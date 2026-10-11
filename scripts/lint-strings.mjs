@@ -84,6 +84,8 @@ const CHROME_FILES = [
   'surfaces/map-compare.js', 'lib/compare-model.js',
   // the storyline as swimlanes (round 2026-10-10 §2)
   'surfaces/map-lanes.js', 'lib/map-lanes-model.js',
+  // walk me through it, and ask (round 2026-10-10, proposal 8)
+  'lib/tour.js', 'lib/ask.js',
 ];
 // journeys.js: only its NEW surface chrome is expected to use t(); its legacy
 // overlay strings are grandfathered line-by-line below.
@@ -192,7 +194,7 @@ for (const id of spriteIds) {
 
 // ── RULE 5: no developer's unit in the business register ────────────────────
 const BIZ_BANNED = /\b(steps?|cuts?|seams?|beats?|moments?|truncated|helpers?|hops?)\b/i;
-const BIZ_PREFIXES = ['journey.biz.', 'impact.biz.', 'count.', 'map.biz.'];
+const BIZ_PREFIXES = ['journey.biz.', 'impact.biz.', 'count.', 'map.biz.', 'tour.biz.', 'ask.biz.'];
 for (const [key, entry] of Object.entries(STRINGS)) {
   if (!BIZ_PREFIXES.some((p) => key.startsWith(p))) continue;
   for (const register of ['hud', 'professional']) {
