@@ -343,16 +343,22 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
     }
     return m;
   };
+  const unread = new Set<string>();
   const wa = writers(A);
   const wb = writers(B);
   const writerDelta = (mine: typeof wa, theirs: typeof wa, side: SideFacts, idx: GraphIndex, change: 'added' | 'removed') => {
     for (const [k, w] of mine) {
       if (theirs.has(k)) continue;
       // a record only one sync reaches is not a writer change: the record joined or left the storyline
-      if (!(change === 'added' ? A : B).records.has(w.record.id)) continue;
+      const other = (change === 'added' ? A : B).records.get(w.record.id);
+      if (!other) continue;
+      // a record whose statuses the other sync did not read at all is not a writer change either: that sync knows
+      // no lifecycle for it (an older build, or the declaration came later) — said once as a note, never as moves
+      if (!other.lifecycle) { unread.add(`${w.record.name}|${change === 'added' ? a.end.sync : b.end.sync}`); continue; }
       const writer = idx.byId.get(w.by);
       const journeys = [...side.reach].filter(([, r]) => r.has(w.by)).map(([f]) => f);
-      const args = { status: w.status, writer: writer?.name ?? w.by.split('::').pop()!, record: w.record.name };
+      const wname = writer ? (gateNameParts(writer.name).ident || writer.name) : w.by.split('::').pop()!;
+      const args = { status: w.status, writer: wname, record: w.record.name };
       const bizArgs = { status: statusWords(w.record, w.status), record: humanizeName(w.record.name).toLowerCase() };
       out.push({
         kind: 'writer', change,
@@ -367,6 +373,13 @@ export function storylineDiff(a: CompareSide, b: CompareSide, storylineId: strin
   };
   writerDelta(wb, wa, B, b.index, 'added');
   writerDelta(wa, wb, A, a.index, 'removed');
+  for (const u of unread) {
+    const [record, sync] = u.split('|');
+    notes.push(t('compare.note.noLifecycle', 'professional').replace('{record}', record!).replace('{sync}', sync!));
+  }
+  // two builds may read the same code differently: say so when both ends name the build that wrote them
+  const ba = a.meta.farsight?.commit, bb = b.meta.farsight?.commit;
+  if (ba && bb && ba !== bb) notes.push(t('compare.note.builds', 'professional').replace('{a}', ba.slice(0, 7)).replace('{b}', bb.slice(0, 7)));
 
   // contract — an operation the storyline reaches was added to, taken off or changed on the contract
   const shape = (n: GraphNode) => JSON.stringify([n.contract?.params ?? [], n.contract?.requestBody ?? null, n.contract?.responses ?? [], n.contract?.security ?? []]);

@@ -79,6 +79,8 @@ export const COMPARE_STRINGS: Record<string, StringEntry> = {
   // notes the comparison prints when it cannot say something
   'compare.note.metaA': same('sync {sync} was recorded before history kept the storyline’s declaration; it is read with the later sync’s', 'An older sync keeps its code, not the manifest’s words. Its journeys are found by the later sync’s storyline, which is said rather than assumed.'),
   'compare.note.newStoryline': same('sync {sync} draws no storyline of this id: everything on it is new since', 'The earlier sync does not declare this storyline, so every screen of the later one would be a change; none is listed one by one.'),
+  'compare.note.noLifecycle': same('sync {sync} read no statuses for {record}: its writers are not compared', 'That sync kept no status lifecycle for the record, so every move would read as new or gone. The moves are not listed; the record is named here instead.'),
+  'compare.note.builds': same('the two syncs were written by different Farsight builds ({a} → {b}): a change may be what the newer build reads, not what the code did', 'Each sync is written by one build of Farsight. A newer build may read more of the same code, a precondition or a status it did not read before, and that reads as a change here.'),
   'compare.note.goneStoryline': same('sync {sync} draws no storyline of this id: it was taken out since', 'The later sync does not declare this storyline.'),
 
   // the Map's compare control (toolbar) and the panel
