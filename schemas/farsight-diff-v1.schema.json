@@ -33,7 +33,8 @@
         "edge_confidence_changed",
         "node_renamed",
         "test_added", "test_removed",
-        "coverage_lost", "uncovered_change"
+        "coverage_lost", "uncovered_change",
+        "storyline_built", "storyline_gate", "storyline_writer", "storyline_contract", "storyline_verdict"
       ],
       "additionalProperties": false,
       "properties": {
@@ -54,17 +55,115 @@
         "test_added": { "$ref": "#/$defs/count" },
         "test_removed": { "$ref": "#/$defs/count" },
         "coverage_lost": { "$ref": "#/$defs/count" },
-        "uncovered_change": { "$ref": "#/$defs/count" }
+        "uncovered_change": { "$ref": "#/$defs/count" },
+        "storyline_built": { "$ref": "#/$defs/count" },
+        "storyline_gate": { "$ref": "#/$defs/count" },
+        "storyline_writer": { "$ref": "#/$defs/count" },
+        "storyline_contract": { "$ref": "#/$defs/count" },
+        "storyline_verdict": { "$ref": "#/$defs/count" }
       }
     },
     "changes": {
       "type": "array",
       "items": { "$ref": "#/$defs/change" }
     },
-    "gate": { "$ref": "#/$defs/gate" }
+    "gate": { "$ref": "#/$defs/gate" },
+    "storyline": { "$ref": "#/$defs/storyline" }
   },
   "$defs": {
     "count": { "type": "integer", "minimum": 0 },
+    "deltaKind": {
+      "description": "Optional (v1 addition, 2026-10-10): the closed set of storyline delta kinds. A storyline_<kind> change carries one.",
+      "enum": ["built", "gate", "writer", "contract", "verdict"]
+    },
+    "compareEnd": {
+      "type": "object",
+      "required": ["sync"],
+      "additionalProperties": false,
+      "properties": {
+        "sync": { "type": ["integer", "null"] },
+        "at": { "type": "string" },
+        "commit": { "type": "string" },
+        "metaKept": { "type": "boolean", "description": "false: the sync was recorded before history kept its meta; the storyline is read with the other end's declaration." }
+      }
+    },
+    "storyline": {
+      "type": "object",
+      "description": "Optional (v1 addition, 2026-10-10): present only on a storyline diff (farsight diff --storyline). The storyline compared, its two ends, the deltas by kind (the five keys always, zeros included), and what the comparison could not say.",
+      "required": ["id", "name", "repo", "from", "to", "byKind", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "repo": { "type": "string" },
+        "from": { "$ref": "#/$defs/compareEnd" },
+        "to": { "$ref": "#/$defs/compareEnd" },
+        "byKind": {
+          "type": "object",
+          "required": ["built", "gate", "writer", "contract", "verdict"],
+          "additionalProperties": false,
+          "properties": {
+            "built": { "$ref": "#/$defs/count" },
+            "gate": { "$ref": "#/$defs/count" },
+            "writer": { "$ref": "#/$defs/count" },
+            "contract": { "$ref": "#/$defs/count" },
+            "verdict": { "$ref": "#/$defs/count" }
+          }
+        },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "delta": {
+      "type": "object",
+      "description": "Optional (v1 addition, 2026-10-10): on a storyline_<kind> change, the delta it reports — its kind and the way it went, its sentence in the hybrid and the business words, the journeys whose cards carry it, and its door.",
+      "required": ["kind", "change", "text", "biz", "journeys", "door"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "$ref": "#/$defs/deltaKind" },
+        "change": { "enum": ["added", "removed", "changed"] },
+        "text": { "type": "string" },
+        "biz": { "type": "string" },
+        "journeys": { "type": "array", "items": { "type": "string" } },
+        "screen": {
+          "type": "object",
+          "required": ["id", "name", "flow", "index"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "flow": { "type": "string" },
+            "index": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "target": {
+          "type": "object",
+          "required": ["id", "name", "kind"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "kind": { "$ref": "#/$defs/nodeKind" }
+          }
+        },
+        "tier": { "enum": ["business", "policy", "technical"] },
+        "status": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "called": { "type": "boolean" },
+        "door": {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "enum": ["gate", "move", "cases", "contract", "screen"] },
+            "node": { "type": "string" },
+            "flow": { "type": "string" },
+            "screen": { "type": "integer", "minimum": 1 },
+            "api": { "type": "string" }
+          }
+        }
+      }
+    },
     "changeKind": {
       "enum": [
         "route_added", "route_removed",
@@ -76,7 +175,8 @@
         "edge_confidence_changed",
         "node_renamed",
         "test_added", "test_removed",
-        "coverage_lost", "uncovered_change"
+        "coverage_lost", "uncovered_change",
+        "storyline_built", "storyline_gate", "storyline_writer", "storyline_contract", "storyline_verdict"
       ]
     },
     "nodeKind": {
@@ -170,6 +270,7 @@
         "loc": { "$ref": "#/$defs/loc" },
         "permalink": { "type": "string" },
         "attribution": { "$ref": "#/$defs/attribution" },
+        "delta": { "$ref": "#/$defs/delta" },
         "contractStatus": {
           "type": "object",
           "description": "Optional (v1 addition, 2026-09): on a journey_changed whose entry is a route, the OpenAPI contract status on each side when they differ. spec-only → both reads as planned → built.",

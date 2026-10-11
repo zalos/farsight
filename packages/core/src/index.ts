@@ -31,3 +31,4 @@ export * from './freshness.js';
 export * from './state-of-play.js';
 export * from './readiness.js';
 export * from './affected-words.js';
+export * from './storyline-diff.js';

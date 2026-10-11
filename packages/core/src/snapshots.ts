@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import { GraphStore } from './store.js';
+import { GraphStore, type GraphMeta } from './store.js';
 import type { GraphNode, GraphEdge } from './graph.js';
 import { spineOf, commitsInRange } from './history.js';
 import type {
@@ -96,6 +96,14 @@ export interface SnapshotRef {
   digest: string;
 }
 
+/** One sync rebuilt from history: its graph, its identity, and whether its meta was kept (a sync written before 2026-10-10 has none). */
+export interface SnapshotRead {
+  store: GraphStore;
+  ref: SnapshotRef;
+  /** false: this sync was recorded before meta was kept — its journeys, storylines and test reports are not in history */
+  metaKept: boolean;
+}
+
 /** One `farsight snapshots` row — a SnapshotRef plus the display counts. */
 export interface SnapshotListing extends SnapshotRef {
   files: number;
@@ -182,6 +190,11 @@ CREATE TABLE IF NOT EXISTS snapshot_source (sync INTEGER, name TEXT, commit_sha 
 CREATE TABLE IF NOT EXISTS node (id TEXT, first_sync INTEGER, last_sync INTEGER, hash TEXT, json TEXT);
 CREATE TABLE IF NOT EXISTS edge (key TEXT, first_sync INTEGER, last_sync INTEGER, hash TEXT, json TEXT);
 CREATE TABLE IF NOT EXISTS blind_spot (sync INTEGER, kind TEXT, note TEXT, metric TEXT, affects TEXT);
+-- the graph's meta at each sync (round 2026-10-10, compare two syncs): the journeys' personas, groups and
+-- storylines, the test reports and their digests, the stores, the projects — what a sync's nodes alone cannot
+-- say. One row per sync, written with it. A sync recorded before this table has no row, and a read of it says
+-- so (SnapshotRead.metaKept) rather than borrowing today's.
+CREATE TABLE IF NOT EXISTS snapshot_meta (sync INTEGER PRIMARY KEY, json TEXT);
 CREATE INDEX IF NOT EXISTS node_alive ON node(id, first_sync, last_sync);
 CREATE INDEX IF NOT EXISTS edge_alive ON edge(key, first_sync, last_sync);
 
@@ -292,6 +305,10 @@ export class SnapshotDb {
       this.db
         .prepare('INSERT INTO snapshot (sync, at, tz, commit_sha, digest, files, nodes, edges, pinned) VALUES (?,?,?,?,?,?,?,?,0)')
         .run(sync, at, tz, ctx.commit ?? null, digest, store.meta.files ?? 0, g.nodes.length, g.edges.length);
+      // what the nodes cannot carry: the identity fields come from the snapshot row on a read, never from here
+      const kept: Partial<GraphMeta> = { ...store.meta };
+      for (const k of ['sync', 'digest', 'tz', 'commit', 'generatedAt', 'graphPath'] as const) delete kept[k];
+      this.db.prepare('INSERT OR REPLACE INTO snapshot_meta (sync, json) VALUES (?, ?)').run(sync, JSON.stringify(kept));
       const srcStmt = this.db.prepare(
         'INSERT INTO snapshot_source (sync, name, commit_sha, files, status, source_digest) VALUES (?,?,?,?,?,?)',
       );
@@ -346,7 +363,7 @@ export class SnapshotDb {
    * Note: `roots` (per-machine checkout paths) are not persisted in history;
    * the returned store has none.
    */
-  read(ref: 'latest' | number): { store: GraphStore; ref: SnapshotRef } {
+  read(ref: 'latest' | number): SnapshotRead {
     const snap = this.snapshotRow(ref);
     const nodes = (
       this.db
@@ -361,7 +378,11 @@ export class SnapshotDb {
 
     const store = new GraphStore();
     store.addFragment({ repo: '', nodes, edges });
+    const metaRow = this.db.prepare('SELECT json FROM snapshot_meta WHERE sync = ?').get(snap.sync) as { json: string } | undefined;
+    let kept: Partial<GraphMeta> = {};
+    if (metaRow) { try { kept = JSON.parse(metaRow.json) as Partial<GraphMeta>; } catch { kept = {}; } }
     store.meta = {
+      ...kept,
       generatedAt: snap.at,
       files: snap.files,
       sync: snap.sync,
@@ -376,7 +397,36 @@ export class SnapshotDb {
       ...(snap.commit ? { commit: snap.commit } : {}),
       digest: snap.digest,
     };
-    return { store, ref: ref2 };
+    return { store, ref: ref2, metaKept: !!metaRow };
+  }
+
+  /** Whether this history holds a sync (a pruned or never-written one does not) — `/graph?asof=` answers from it. */
+  has(sync: number): boolean {
+    return !!this.db.prepare('SELECT 1 AS x FROM snapshot WHERE sync = ?').get(sync);
+  }
+
+  /**
+   * The newest sync recorded at or before a moment (an ISO date or timestamp; a bare day means the end of
+   * that day, UTC) — *since 2026-10-03* reads the state the graph was in on that day. `undefined` when the
+   * history begins after it.
+   */
+  syncAtOrBefore(when: string): number | undefined {
+    const end = /^\d{4}-\d{2}-\d{2}$/.test(when) ? `${when}T23:59:59.999Z` : when;
+    const row = this.db.prepare('SELECT MAX(sync) AS s FROM snapshot WHERE at <= ?').get(end) as { s: number | null };
+    return row?.s ?? undefined;
+  }
+
+  /**
+   * The sync a release tag stands for: the newest sync that ingested the tag's commit (`commit_sync`), else
+   * the newest sync recorded at or before the tag's date. `undefined` when this history holds no release of
+   * that name for the repository or no sync before it.
+   */
+  syncOfRelease(repo: string, name: string): { sync: number; sha: string; at: string } | undefined {
+    const rel = this.db.prepare('SELECT sha, at FROM "release" WHERE repo = ? AND name = ?').get(repo, name) as { sha: string; at: string } | undefined;
+    if (!rel) return undefined;
+    const linked = this.db.prepare('SELECT MAX(sync) AS s FROM commit_sync WHERE repo = ? AND sha = ?').get(repo, rel.sha) as { s: number | null };
+    const sync = linked?.s ?? this.syncAtOrBefore(rel.at);
+    return sync == null ? undefined : { sync, sha: rel.sha, at: rel.at };
   }
 
   /** Newest first. */
