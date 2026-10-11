@@ -155,6 +155,8 @@ test('binding parsing rejects ambiguity, unknown fields, invalid UTF-8 and overs
     }
     const quoted = { ...binding, configPath: join(root, 'a "profileId":,{}[x]', 'settings.json') };
     await writeFile(connectionPath(root), JSON.stringify(quoted));
+    assert.throws(() => readConnection(root), /not trusted/);
+    await writeConnection(root, quoted);
     assert.deepEqual(readConnection(root), quoted);
   });
 });

@@ -40,7 +40,7 @@ try {
   mkdirSync(prefix);
   await run('npm', ['install', '--prefix', prefix, '--omit=optional', '--no-audit', '--no-fund', artifact], { timeout: 180_000, maxBuffer: 4_000_000 });
   const entry = join(prefix, 'node_modules', 'farsight-echo', 'dist', 'echo.mjs');
-  const environment = { ...process.env, XDG_CONFIG_HOME: join(scratch, 'user-config') };
+  const environment = { ...process.env, XDG_CONFIG_HOME: join(scratch, 'user-config'), XDG_STATE_HOME: join(scratch, 'user-state') };
   const config = join(environment.XDG_CONFIG_HOME, 'farsight-echo', 'settings.json');
   const workspaceCli = (cwd, args) => run(process.execPath, [entry, ...args], { cwd, env: environment, timeout: 180_000, maxBuffer: 4_000_000 });
   const cli = args => workspaceCli(scratch, [...args, '--scope', 'global']);
@@ -62,6 +62,7 @@ try {
   settings.profiles.personal.backend.url = `http://127.0.0.1:${base}`;
   settings.profiles.personal.web.port = base + 50;
   writeFileSync(config, JSON.stringify(settings, null, 2) + '\n');
+  await cli(['trust', '--confirm']);
   const duplicate = await cli(['init']).then(() => false, () => true);
   assert.ok(duplicate, 'init must preserve existing settings');
   await cli(['install-runtime']);

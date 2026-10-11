@@ -4,6 +4,7 @@ import { mkdtemp, readFile, realpath, rm, stat, symlink } from 'node:fs/promises
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { defaultConfig, initConfig, loadContext, saveConfig, updateConfig, validateConfig } from '../dist/config.js';
+import { pinCredentialOrigin } from '../dist/trust.js';
 import { parseKeychainRef, resolveSecret } from '../dist/secrets.js';
 
 test('exact embedding origins and TLS hostnames survive canonical isolation checks', () => {
@@ -42,7 +43,7 @@ test('unknown fields, credential values, wildcard identities and unsafe profile 
   const changes: ((value: any) => void)[] = [
     value => { value.profiles.personal.backend.apiKey = 'literal-private-value'; },
     value => { value.profiles.personal.backend.secretRef = 'literal-private-value'; },
-    value => { value.profiles.personal.backend.secretRef = 'keychain:echo/managed'; },
+    value => { value.profiles.personal.backend.secretRef = 'keychain:farsight-echo/managed'; },
     value => { value.profiles.personal.model.secretRef = 'env:OPENAI_API_KEY'; },
     value => { value.profiles.personal.identity.individual = '*'; },
     value => { value.profiles.personal.identity.team = 'team*'; },
@@ -85,11 +86,11 @@ test('service origins reject embedded credentials and unsafe transport, while re
     assert.throws(() => validateConfig(config), error => error instanceof Error && !error.message.includes('literal-private-value'));
   }
   const config = defaultConfig();
-  config.profiles.work!.backend = { mode: 'external', url: 'https://memory.example.com/', secretRef: 'keychain:echo/work-example' };
-  config.profiles.work!.model = { provider: 'openai-compatible', baseUrl: 'https://models.example.com', model: 'configured-model', secretRef: 'keychain:echo/model-example' };
+  config.profiles.work!.backend = { mode: 'external', url: 'https://memory.example.com/', secretRef: 'keychain:farsight-echo/work-example' };
+  config.profiles.work!.model = { provider: 'openai-compatible', baseUrl: 'https://models.example.com', model: 'configured-model', secretRef: 'keychain:farsight-echo/model-example' };
   const validated = validateConfig(config);
   assert.equal(validated.profiles.work!.backend.url, 'https://memory.example.com');
-  assert.equal(validated.profiles.work!.model.secretRef, 'keychain:echo/model-example');
+  assert.equal(validated.profiles.work!.model.secretRef, 'keychain:farsight-echo/model-example');
 });
 
 test('configuration writes are private and atomic; initialization cannot overwrite under concurrency', async () => {
@@ -112,22 +113,24 @@ test('configuration writes are private and atomic; initialization cannot overwri
     assert.equal(await readFile(path, 'utf8'), original);
     await assert.rejects(initConfig(path), /already exist/);
     await symlink(path, join(directory, 'settings-alias.json'));
-    assert.equal(loadContext(join(directory, 'settings-alias.json')).configPath, loadContext(path).configPath);
+    assert.throws(() => loadContext(join(directory, 'settings-alias.json')), /could not be read/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 test('keychain access never inherits credentials or returns command diagnostics in an error', async () => {
   assert.equal(await resolveSecret(), '');
-  assert.equal(parseKeychainRef('keychain:echo/provider/account')!.service, 'echo/provider');
+  assert.equal(parseKeychainRef('keychain:farsight-echo/provider/account'), null);
+  assert.equal(parseKeychainRef('keychain:farsight/jira-example'), null);
+  pinCredentialOrigin('keychain:farsight-echo/test', 'https://models.example.com');
   const calls: [string, string[]][] = [];
   const runner = async (command: string, args: string[]) => { calls.push([command, args]); return 'test-secret'; };
-  assert.equal(await resolveSecret('keychain:echo/test', { platform: 'darwin', runner }), 'test-secret');
-  assert.deepEqual(calls[0], ['security', ['find-generic-password', '-s', 'echo', '-a', 'test', '-w']]);
-  await resolveSecret('keychain:echo/test', { platform: 'linux', runner });
+  assert.equal(await resolveSecret('keychain:farsight-echo/test', { platform: 'darwin', runner, origin: 'https://models.example.com' }), 'test-secret');
+  assert.deepEqual(calls[0], ['security', ['find-generic-password', '-s', 'farsight-echo', '-a', 'test', '-w']]);
+  await resolveSecret('keychain:farsight-echo/test', { platform: 'linux', runner, origin: 'https://models.example.com' });
   assert.equal(calls[1]![0], 'secret-tool');
-  await assert.rejects(resolveSecret('keychain:echo/test', { platform: 'darwin', runner: async () => { throw new Error('secret-output-value'); } }), error => error instanceof Error && !error.message.includes('secret-output-value'));
+  await assert.rejects(resolveSecret('keychain:farsight-echo/test', { platform: 'darwin', origin: 'https://models.example.com', runner: async () => { throw new Error('secret-output-value'); } }), error => error instanceof Error && !error.message.includes('secret-output-value'));
   await assert.rejects(resolveSecret('literal-private-value'), error => error instanceof Error && !error.message.includes('literal-private-value'));
-  await assert.rejects(resolveSecret('keychain:echo/test', { platform: 'win32', runner }), /does not yet/);
+  await assert.rejects(resolveSecret('keychain:farsight-echo/test', { platform: 'win32', runner, origin: 'https://models.example.com' }), /does not yet/);
 });
 
 test('concurrent shared settings updates merge fresh values and failed edits release the writer lock', async () => {

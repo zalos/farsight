@@ -12,7 +12,7 @@ function object(value: unknown): Record<string, unknown> {
 }
 
 async function request(profile: EchoProfile, path: string, body?: unknown): Promise<unknown> {
-  const secret = await resolveSecret(profile.model.secretRef);
+  const secret = await resolveSecret(profile.model.secretRef, { origin: profile.model.baseUrl });
   let response: Response;
   try {
     response = await fetch(new URL(path, profile.model.baseUrl), {

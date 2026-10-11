@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { ECHO_UI_STRINGS } from '@farsight/core/dist/strings-echo-ui.js';
 import { updateConfig, validateConfig } from './config.js';
+import { requireFileTrust } from './trust.js';
 import type { CheckResult, EchoConfig, EchoContext } from './types.js';
 
 const BODY_LIMIT = 64 * 1024;
@@ -38,6 +39,7 @@ function publicConfig(config: EchoConfig): EchoConfig {
 
 async function snapshot(path: string): Promise<{ config: EchoConfig; revision: string }> {
   const source = await readFile(path, 'utf8');
+  requireFileTrust('configs', path, source);
   const config = publicConfig(validateConfig(JSON.parse(source)));
   return { config, revision: `"${createHash('sha256').update(source).digest('hex')}"` };
 }

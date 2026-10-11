@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { echoInstallationWord } from '@farsight/core/dist/strings-echo-installation.js';
+import { forgetFileTrust, recordFileTrust, requireFileTrust } from './trust.js';
 
 export type InstallScope = 'workspace' | 'global';
 export interface WorkspaceConnection { version: 1; configPath: string; profileId: string }
@@ -123,10 +124,23 @@ function connectionContents(workspace: string): string | undefined {
 }
 
 export function readConnection(workspace: string): WorkspaceConnection | undefined {
+  let text: string | undefined;
+  let binding: WorkspaceConnection;
   try {
-    const text = connectionContents(workspace);
-    return text === undefined ? undefined : parseConnection(text);
+    text = connectionContents(workspace);
+    if (text === undefined) return undefined;
+    binding = parseConnection(text);
   } catch { fail(); }
+  requireFileTrust('connections', connectionPath(workspace), text);
+  return binding;
+}
+
+/** Remove only a connection this user explicitly selected; never remove memory stores. */
+export async function removeConnection(workspace: string): Promise<void> {
+  if (!readConnection(workspace)) return;
+  const path = connectionPath(workspace);
+  forgetFileTrust('connections', path);
+  await unlink(path);
 }
 
 /** No settings are loaded here: the caller must validate the exact selected file and profile. */
@@ -208,7 +222,10 @@ export async function writeConnection(
   const before = connectionContents(workspace);
   if (before !== undefined) {
     const old = parseConnection(before);
-    if (old.configPath === selected.configPath && old.profileId === selected.profileId) return { path, changed: false };
+    if (old.configPath === selected.configPath && old.profileId === selected.profileId) {
+      recordFileTrust('connections', path, before);
+      return { path, changed: false };
+    }
   }
   const temporary = join(directory, `.echo-connection-${randomUUID()}.tmp`);
   let backupPath: string | undefined;
@@ -225,11 +242,13 @@ export async function writeConnection(
       await writeFile(backupPath, before, { flag: 'wx', mode: 0o600 });
     }
     const file = await open(temporary, 'wx', 0o600);
-    try { await file.writeFile(`${JSON.stringify(selected, null, 2)}\n`); await file.sync(); }
+    const contents = `${JSON.stringify(selected, null, 2)}\n`;
+    try { await file.writeFile(contents); await file.sync(); }
     finally { await file.close(); }
     if (connectionContents(workspace) !== before) fail('echo.installation.changed');
     if (before === undefined) await link(temporary, path);
     else await rename(temporary, path);
+    recordFileTrust('connections', path, contents);
     return { path, changed: true, ...(backupPath ? { backupPath } : {}) };
   } catch (error) {
     if (error instanceof Error && error.message === echoInstallationWord('echo.installation.changed')) throw error;

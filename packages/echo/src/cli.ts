@@ -4,8 +4,8 @@ import { isAbsolute, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { defaultConfig, loadContext, initConfig, updateConfig, validateConfig } from './config.js';
-import { resolveInstallation, describeInstallation, readConnection, preflightConnection, writeConnection } from './installation.js';
+import { defaultConfig, loadContext, initConfig, trustConfig, updateConfig, validateConfig } from './config.js';
+import { resolveInstallation, describeInstallation, readConnection, preflightConnection, writeConnection, removeConnection } from './installation.js';
 import { listModels } from './models.js';
 import { bindSession, contextFingerprint } from './sessions.js';
 import { prepareHooks, type HookHost, HOOK_EVENTS } from './hooks.js';
@@ -24,6 +24,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   install: { type: 'boolean' }, workspace: { type: 'string' }, content: { type: 'string' },
   query: { type: 'string' }, topic: { type: 'string', multiple: true }, limit: { type: 'string' },
   scope: { type: 'string' }, port: { type: 'string' }, 'backend-port': { type: 'string' },
+  confirm: { type: 'boolean' },
 } });
 const command = values.help ? 'help' : positionals[0] ?? 'help';
 const print = (data: unknown) => process.stdout.write(`${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}\n`);
@@ -31,6 +32,7 @@ const workspace = () => resolve(values.workspace ?? process.cwd());
 const target = () => resolveInstallation({
   cwd: command === 'connect' || command === 'hooks' && values.install || command === 'setup' ? workspace() : process.cwd(),
   configPath: values.config === undefined ? undefined : resolve(values.config), scope: values.scope, profileId: values.profile,
+  ignoreConnection: command === 'trust',
 });
 
 async function connectWorkspace(ctx: EchoContext, host: HookHost | 'all', root: string): Promise<void> {
@@ -181,6 +183,12 @@ async function main(): Promise<void> {
   if (command === 'help') { print(word('help')); return; }
   if (command === 'hook') { await hook(); return; }
   if (positionals.length > 1) throw new Error(word('unknownCommand'));
+  if (command === 'trust') {
+    if (!values.confirm) throw new Error(word('trustConfirm'));
+    const selection = target();
+    await trustConfig(selection.configPath);
+    print({ configPath: selection.configPath, trusted: true }); return;
+  }
   if (command === 'init' || command === 'setup') { await setup(); return; }
   if (values.port !== undefined || values['backend-port'] !== undefined) throw new Error(word('setupOptions'));
   const installation = target();

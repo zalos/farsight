@@ -1,6 +1,7 @@
 import type { StringEntry } from './strings.js';
 const same = (word: string, define: string): StringEntry => ({ hud: word, professional: word, define });
 export const ECHO_RUNTIME_STRINGS: Record<string, StringEntry> = {
+  'echo.runtime.trustConfirm': same('Review the exact settings file, then repeat trust with --confirm. This approves its service addresses and credential references for this user.', 'Trust is explicit and never granted by automatic workspace discovery or a hook.'),
   'echo.runtime.askScope': same('Where should Echo keep memories? workspace (this project) or global (share through selected workspace connections) [{scope}]: ', 'Setup chooses the location for this configuration and its memory stores.'),
   'echo.runtime.profileRequired': same('Choose a profile that exists in these settings.', 'The selected profile must already be defined in the chosen configuration.'),
   'echo.runtime.managedPort': same('Use --backend-port with a managed profile and a whole-number port.', 'External service addresses are configured through settings.'),

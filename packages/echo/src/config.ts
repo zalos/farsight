@@ -1,10 +1,11 @@
 import { chmod, link, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
-import { readFileSync, realpathSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { parseKeychainRef } from './secrets.js';
 import { withSettingsLock } from './settings-lock.js';
+import { pinConfigCredentials, recordFileTrust, requireFileTrust } from './trust.js';
 import type { EchoConfig, EchoContext, EchoProfile } from './types.js';
 
 function fail(key = 'echo.config.shape'): never { throw new Error(echoConfigWord(key)); }
@@ -68,7 +69,7 @@ export function defaultConfig(): EchoConfig {
   return { version: 1, defaultProfile: 'personal', profiles: { personal: defaultProfile(0), work: defaultProfile(1) } };
 }
 
-/** Returns a new normalized object, stripping no unknown settings and never echoing values in errors. */
+/** Returns a normalized object, refusing unknown fields and never echoing values in errors. */
 export function validateConfig(value: unknown): EchoConfig {
   const input = record(value, ['version', 'defaultProfile', 'profiles']);
   if (input.version !== 1) fail();
@@ -134,10 +135,15 @@ export function validateConfig(value: unknown): EchoConfig {
 export function loadContext(configPath: string, profileId?: string): EchoContext {
   let path: string;
   let raw: unknown;
+  let contents: string;
   try {
+    const info = lstatSync(resolve(configPath));
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 65_536) fail('echo.config.read');
     path = realpathSync(resolve(configPath));
-    raw = JSON.parse(readFileSync(path, 'utf8'));
+    contents = readFileSync(path, 'utf8');
+    raw = JSON.parse(contents);
   } catch { fail('echo.config.read'); }
+  requireFileTrust('configs', path, contents);
   const config = validateConfig(raw);
   const selected = profileName(profileId ?? config.defaultProfile);
   if (!Object.hasOwn(config.profiles, selected)) fail('echo.config.profile');
@@ -149,6 +155,7 @@ export function loadContext(configPath: string, profileId?: string): EchoContext
 
 async function writeConfig(configPath: string, value: unknown, exclusive: boolean): Promise<EchoConfig> {
   const config = validateConfig(value);
+  pinConfigCredentials(config);
   const destination = resolve(configPath);
   const directory = dirname(destination);
   const temporary = join(directory, `.echo-settings-${randomUUID()}.tmp`);
@@ -161,14 +168,30 @@ async function writeConfig(configPath: string, value: unknown, exclusive: boolea
     });
     if (current?.isSymbolicLink() || current && !current.isFile()) fail('echo.config.write');
     const file = await open(temporary, 'wx', 0o600);
-    try { await file.writeFile(`${JSON.stringify(config, null, 2)}\n`); await file.sync(); } finally { await file.close(); }
+    const contents = `${JSON.stringify(config, null, 2)}\n`;
+    try { await file.writeFile(contents); await file.sync(); } finally { await file.close(); }
     if (exclusive) await link(temporary, destination);
     else await rename(temporary, destination);
+    recordFileTrust('configs', destination, contents);
     return config;
   } catch (error) {
     if (exclusive && (error as NodeJS.ErrnoException).code === 'EEXIST') fail('echo.config.exists');
     fail('echo.config.write');
   } finally { await unlink(temporary).catch(() => {}); }
+}
+
+/** Explicit adoption only; callers must obtain confirmation before trusting existing settings. */
+export async function trustConfig(configPath: string): Promise<EchoConfig> {
+  return withSettingsLock(configPath, async () => {
+    const info = lstatSync(resolve(configPath));
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 65_536) fail('echo.config.read');
+    const path = realpathSync(resolve(configPath));
+    const contents = readFileSync(path, 'utf8');
+    const config = validateConfig(JSON.parse(contents));
+    pinConfigCredentials(config);
+    recordFileTrust('configs', path, contents);
+    return config;
+  });
 }
 
 export async function saveConfig(configPath: string, config: EchoConfig): Promise<void> {

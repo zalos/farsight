@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
 import { startWeb } from '../dist/web.js';
+import { saveConfig } from '../dist/config.js';
 import type { EchoConfig, EchoContext } from '../src/types.js';
 
 async function rawRequest(url: string, headers: Record<string, string>) {
@@ -38,7 +39,7 @@ async function setup(t: TestContext, checks?: Parameters<typeof startWeb>[1]) {
   const directory = await mkdtemp(join(tmpdir(), 'echo-web-'));
   const configPath = join(directory, 'config.json');
   const config = fixture();
-  await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
+  await saveConfig(configPath, config);
   const ctx: EchoContext = { configPath, config, profileId: 'personal', profile: structuredClone(config.profiles.personal!), directory, dataDirectory: join(directory, 'personal') };
   ctx.profile.web.port = 0;
   const view = await startWeb(ctx, checks);

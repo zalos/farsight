@@ -1,6 +1,6 @@
 {
   "name": "@farsight/echo",
-  "version": "0.0.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test test/*.test.ts"
+    "test": "node test/run.mjs"
   },
   "dependencies": {
     "@farsight/core": "workspace:*",
