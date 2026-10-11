@@ -3359,6 +3359,124 @@
 .les-list{list-style:none;margin:6px 0;padding:0}.les-row{display:flex;gap:10px;align-items:baseline;padding:4px 0;border-bottom:1px solid var(--line)}.les-text{flex:1}
 .dd-copy{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center}.dd-copy .dd-door.copy{cursor:pointer;font:inherit}.dd-copy.compact .dd-door.copy{font-size:10px;padding:0 4px}.dd-copy-l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.7}.dd-copied{font-family:var(--mono);font-size:11px;color:var(--ok, #6FCF8E);border:1px solid currentColor;border-radius:3px;padding:0 5px;max-width:100%;overflow-wrap:anywhere}
 .ch-agent{font-size:11px;opacity:.85;border:1px solid var(--line);border-radius:3px;padding:0 4px;margin-left:4px}
+  /* ── the Map's chrome holds still (cleanup pass 2026-10-11, lane P1) ─────────────────────────────────────────
+     Two toolbar rows that keep their places at every stop; the journey's head as a bar under them (never in the
+     world); one dock that takes its own column. Every layer of the stage starts under the chrome and the head
+     (--map-top) and stops at the dock (--map-dock-r on the right, --map-dock-b along the bottom). */
+  .map-stage{--map-top:calc(var(--map-chrome-h,84px) + var(--map-head-h,0px));--map-dock-w:360px;--map-dock-r:0px;--map-dock-b:0px}
+  @media (max-width:1399px){ .map-stage{--map-dock-w:320px} }
+  .map-stage.dock-r{--map-dock-r:var(--map-dock-w)}
+  .map-stage.dock-b{--map-dock-b:min(42%,380px)}
+  .map-board,.map-table-host,.map-act-host,.map-prop-host,.map-jlanes-host{position:absolute;top:var(--map-top);left:0;right:var(--map-dock-r);bottom:var(--map-dock-b);inset:var(--map-top) var(--map-dock-r) var(--map-dock-b) 0}
+  .map-note{inset:var(--map-top) var(--map-dock-r) var(--map-dock-b) 0}
+  .map-risk{top:calc(var(--map-top) + 8px)}
+  .map-legend,.map-afflist,.map-toast{top:calc(var(--map-top) + 8px);right:calc(var(--map-dock-r) + 12px);max-height:calc(100% - var(--map-top) - var(--map-dock-b) - 56px)}
+  .map-hint,.map-backto{bottom:calc(var(--map-dock-b) + 10px)}
+  .map-zoomro{bottom:calc(var(--map-dock-b) + 10px);right:calc(var(--map-dock-r) + 12px)}
+  .map-edgecue.r{right:calc(var(--map-dock-r) + 10px)}
+  .map-jlanes-host[hidden]{display:none}
+  .map-jlanes-host{z-index:7;background:var(--ground);overflow:auto;padding:16px}
+  .map-jlanes{position:relative;margin:0 auto}
+  /* the two rows */
+  .map-chrome,.map-chrome.f-wrap{z-index:9;flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:6px;padding:8px 12px}
+  .map-row1{display:flex;align-items:center;gap:10px;min-width:0}
+  .map-row1 .map-tools{margin-left:auto;flex:none}
+  .map-chrome.f-wrap .map-row1{flex-wrap:wrap}
+  .map-lvls .lv-full,.map-lvls .lv-short .sym{display:none}
+  .map-lvls button{white-space:nowrap}
+  .map-layout-slot{flex:none;min-width:0}
+  .map-layout.one .map-seg{opacity:.55;cursor:default}
+  .map-crumbs{display:flex;align-items:center;gap:10px;min-width:0;flex-basis:auto;order:0}
+  .map-crumbs .map-crumb{flex:0 1 auto;min-width:0;max-width:none}
+  .map-row2-r{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none;min-width:0}
+  .map-row2-r .map-pickers{display:flex;align-items:center;gap:8px;min-width:0}
+  .map-crumbs .map-tb-walk{margin-left:0;flex:none}
+  .map-chrome.below .map-pickers .map-story-pick,.map-chrome.below .map-pickers .map-band-pick{display:inline-flex}
+  .map-pickers > .map-story-pick,.map-pickers > .map-band-pick,.map-pickers > .map-cmp-pick{margin-right:0}
+  /* the VIEW menu: below the board, the board's pickers in one place */
+  .map-view-pick{position:relative;display:inline-flex}
+  .map-view-menu{display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:9;flex-direction:column;gap:10px;min-width:240px;max-height:60vh;overflow:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+  .map-view-pick.open .map-view-menu{display:flex}
+  .map-view-menu .map-story-pick,.map-view-menu .map-band-pick,.map-view-menu .map-cmp-pick{display:flex !important;flex-direction:column;align-items:stretch;gap:4px;margin:0}
+  .map-view-menu .map-story-cur,.map-view-menu .map-band-cur{display:none !important}
+  .map-view-menu .map-segs{display:flex !important;position:static !important;flex-direction:column;box-shadow:none !important;max-height:none}
+  .map-view-menu .map-seg{text-align:left}
+  .map-view-menu .map-seg + .map-seg{border-left:0;border-top:1px solid var(--line)}
+  .map-view-menu .map-cmp-menu{position:static}
+  /* the journey's head: a bar of the chrome, under the toolbar */
+  .map-jhead[hidden]{display:none}
+  .map-jhead{position:absolute;left:0;right:0;top:var(--map-chrome-h,84px);z-index:6;background:var(--panel);border-bottom:1px solid var(--line);
+    padding:7px 14px 8px;display:flex;flex-direction:column;gap:5px;min-width:0;font-size:12px}
+  .map-jhead .jh-l1{display:flex;align-items:baseline;gap:14px;min-width:0;white-space:nowrap}
+  .map-jhead .jh-l1 .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:16px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+  .map-jhead .jh-l1 .for,.map-jhead .jh-l1 .story{flex:none;font-size:11.5px;color:var(--muted)}
+  .map-jhead .jh-l1 .for a{color:var(--accent)}
+  .map-jhead .jh-l2{display:flex;align-items:center;min-width:0;overflow:hidden;white-space:nowrap}
+  .map-jhead .jh-l2 .agg{display:flex;flex-wrap:nowrap;gap:6px;align-items:center;min-width:0}
+  .map-jhead .jh-l2 .agg > .jrn-count{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:0;white-space:nowrap}
+  .map-jhead .jh-l2 [hidden]{display:none !important}
+  .map-jhead .jh-l2 .agg > *{flex:none}
+  .map-jhead .jh-l2 .agg *{white-space:nowrap;flex-wrap:nowrap}
+  .map-jhead .jh-l2 .jrn-hg{display:inline-flex;align-items:center;gap:4px}
+  .map-jhead .jh-more{cursor:help;flex:none}
+  .map-jhead .jh-lc{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .map-jhead .jh-lc .lc-strip{flex-wrap:nowrap;white-space:nowrap;overflow:hidden;min-width:0;gap:4px 8px}
+  .map-jhead .jh-lc .lc-statuses{flex-wrap:nowrap;min-width:0;overflow:hidden}
+  .map-jhead .jh-lc .lc-status{border:0;padding:0 2px;flex:none}
+  .map-jhead .jh-lc .lc-status .lc-yet,.map-jhead .jh-lc .lc-status .lc-c,.map-jhead .jh-lc .lc-tblbox{display:none !important}
+  .map-jhead .jh-lc .lc-status.unwritten .lc-w{color:var(--dim);font-style:italic}
+  .map-jhead .jh-lc .lc-toggle{flex:none;order:-1}
+  .map-jhead .jh-lc .lc-head{flex:none}
+  .map-jhead .jh-desc{display:flex;align-items:baseline;gap:8px;min-width:0;color:var(--muted)}
+  .map-jhead .jh-desc .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .map-more{flex:none;background:none;border:0;color:var(--accent);font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;cursor:pointer;padding:0 2px}
+  .map-more:hover{color:var(--ink)}
+  /* the street keeps one line in the world: its name */
+  .map-dhead{min-height:0;padding:12px 22px 6px;border-bottom:0}
+  .map-dhead .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .map-dhead .agg:empty{display:none}
+  /* the dock: its own column (or row); its header pinned, each panel lays out its own body */
+  .map-dock[hidden]{display:none}
+  .map-dock{position:absolute;z-index:7;background:var(--panel);display:flex;flex-direction:column;min-height:0;min-width:0}
+  .map-dock[data-place="right"]{top:var(--map-top);right:0;bottom:0;width:var(--map-dock-w);border-left:1px solid var(--line)}
+  .map-dock[data-place="bottom"]{left:0;right:0;bottom:0;height:var(--map-dock-b);border-top:1px solid var(--accent)}
+  .md-head{display:flex;align-items:center;gap:6px;padding:5px 8px;border-bottom:1px solid var(--line);flex:none;min-width:0}
+  .md-tabs{display:flex;gap:2px;min-width:0;overflow:hidden;flex:1}
+  .md-tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;padding:5px 7px;cursor:pointer;white-space:nowrap}
+  .md-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+  .md-tab:hover{color:var(--ink)}
+  .md-place{flex:none}
+  .md-place .map-seg{font-size:8.5px;padding:3px 6px;letter-spacing:.06em}
+  .md-x{flex:none;background:none;border:0;color:var(--muted);font-size:13px;cursor:pointer;padding:2px 4px}
+  .md-x:hover{color:var(--ink)}
+  .md-panels{flex:1;min-height:0;position:relative}
+  .md-panel{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0;min-width:0}
+  .md-panel[hidden]{display:none}
+  .md-scroll{flex:1;min-height:0;overflow:auto;padding:10px 12px;overscroll-behavior:contain}
+  .md-lc-head{margin-bottom:8px;font-size:11.5px;color:var(--muted)}
+  .md-lc-tbl .lc-table{width:100%}
+  .md-about-nm{margin:0 0 8px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:14px;color:var(--ink);font-weight:500}
+  .md-about-desc{margin:0;color:var(--ink);font-size:13px;line-height:1.5;user-select:text}
+  .map-dock .jrn-insp,.map-dock #jrn-insp,.map-dock #jrn-insp.empty{width:auto;max-width:none;border-left:0;flex:1;min-height:0;display:flex;flex-direction:column}
+  .map-dock .jrn-insp .body{overscroll-behavior:contain}
+  .map-dock .jrn-dock{width:auto !important;height:auto !important;max-width:none;max-height:none;flex:1;min-height:0;border:0}
+  .map-dock .jrn-dock-grip{display:none}
+  .md-compare .map-cmp{position:static;inset:auto;width:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;flex:1;min-height:0;overflow:auto}
+  /* the walk, as the dock's panel: the stop line pinned on top, the sentences scrolling, ASK pinned at the foot */
+  .map-dock .map-tour{position:absolute;inset:0;top:0;right:0;left:0;bottom:0;width:auto;max-width:none;max-height:none;border:0;border-radius:0;box-shadow:none;padding:0;gap:0;overflow:hidden;display:flex;flex-direction:column}
+  .map-dock .map-tour[hidden]{display:none}
+  .map-tour .tw-pin{flex:none;display:flex;flex-direction:column;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);position:relative}
+  .map-tour .tw-pin .tw-x{top:6px}
+  .map-tour .tw-body{flex:1;min-height:0;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px;overscroll-behavior:contain}
+  .map-tour > .tw-ask{flex:none;border-top:1px solid var(--line);padding:8px 12px;max-height:45%;overflow:auto}
+  .map-tour > .tw-wait,.map-tour > .tw-err,.map-tour > .tw-empty{padding:10px 12px;margin:0}
+  .map-tour .tw-more-btn{background:none;border:0;color:var(--accent);font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;cursor:pointer;padding:0 2px}
+  /* the drill: the journey's action rail over the beats */
+  .map-act-top.rail{padding:0;display:block}
+  .map-act-top.rail .jrn-rail-wrap{border-bottom:0}
+  .map-rail .jrn-rscr,.map-rail .jrn-stop{font:inherit;color:var(--ink);text-align:left}
+  .map-rail .jrn-stop .t{white-space:nowrap;overflow:hidden}
 </style>
 </head>
 <body class="lens-hybrid">

@@ -90,6 +90,25 @@ function lcToggle(btn) {
 expose({ lcToggle });
 
 /**
+ * Draw one strip's table into `box` — the Map's dock, where the journey head's *what each one means* opens (cleanup
+ * pass 2026-10-11): the same table, the writers placed on their journey screens once `/api/lifecycle` answers.
+ */
+export function lifecycleTableInto(id, box) {
+  const st = DRAWN.get(id);
+  if (!st || !box) return;
+  box.innerHTML = tableHtml(st.view, currentLens());
+  const fill = () => { if (box.isConnected) box.innerHTML = tableHtml(st.view, currentLens()); };
+  if (st.asked) return;
+  st.asked = true;
+  const q = 'node=' + encodeURIComponent(st.nodeId) + (st.flow ? '&flow=' + encodeURIComponent(st.flow) : '');
+  fetch('/api/lifecycle?' + q).then((r) => (r.ok ? r.json() : null)).then((answer) => {
+    if (!answer) return;
+    st.view = placedView(st.view, answer);
+    fill();
+  }).catch(() => {});
+}
+
+/**
  * The strip for one record: *status lifecycle · Invoices* — the counts — the statuses in the persona's
  * words (a status no code moves to is dashed and says so) — the *what each one means* toggle and its
  * table (closed).

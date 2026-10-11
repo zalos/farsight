@@ -19,7 +19,7 @@ test('an old journey link is the same place on the Map: step â†’ screen, node â†
   assert.equal(overlayToMap(FLOW + '?view=sheet&step=2&node=a%3A%3Ab'), MAPF + '?screen=2&part=a%3A%3Ab&layout=table');
   assert.equal(overlayToMap(FLOW + '?view=storyboard'), MAPF + '?layout=screens');
   assert.equal(overlayToMap(FLOW + '?view=timeline&step=3'), MAPF + '?screen=3&layout=table');
-  assert.equal(overlayToMap(FLOW + '?view=drill&step=1'), MAPF + '?screen=1&layout=beats');
+  assert.equal(overlayToMap(FLOW + '?view=drill&step=1'), MAPF + '?screen=1&layout=drill', 'the old drill opens the drill: its rail over the beats');
   assert.equal(overlayToMap(FLOW + '?view=drill&band=ladder'), MAPF + '?layout=ladder', 'the ladder band on the drill is the action\'s ladder');
   assert.equal(overlayToMap(FLOW + '?view=timeline&band=ladder'), MAPF + '?layout=table', 'a band alone does not move the stop');
   assert.equal(overlayToMap(FLOW), MAPF, 'a link that named no view names no layout: the register decides');
