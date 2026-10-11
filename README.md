@@ -56,6 +56,10 @@ Click any node for docs, tags, rules, and connections; toggle **Business / Hybri
 
 ## Repository layout
 
+[Farsight Echo](docs/ECHO.md) is an optional memory companion with its own package, local settings view,
+and isolated personal/work profiles. Its current foundation prepares agentmemory and model connections;
+automatic memory capture and briefing come later. Build its separate artifact with `pnpm pack:echo`.
+
 ```
 docs/            Vision, architecture, roadmap, getting started, contracts, proposals
 prototypes/      Self-contained HTML UX prototypes (the design-language reference)
@@ -69,6 +73,7 @@ packages/
   server/        App server: the HUD viewer + graph + settings/sources/sync API
   mcp/           MCP server — the graph as agent context (trace_flow, journey, impact_of, test_coverage…)
   cli/           The `farsight` binary: ingest / serve / mcp / status / api / tests / impact / stories / work
+  echo/          Optional memory companion: setup CLI, local settings, isolated agentmemory runtime
   work/          Work items (Jira / Azure DevOps) as a source: the common record, cache and policy
   work-jira/     Jira Cloud provider
   work-azdo/     Azure DevOps provider

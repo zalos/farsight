@@ -85,7 +85,42 @@ jobs:
       - name: pnpm typecheck (every package, then e2e/)
         run: pnpm typecheck
       - run: pnpm -r test
+      - run: pnpm test:scripts
       - run: pnpm lint:strings
+
+  # Optional integration evidence, outside the four required checks. Its network
+  # downloads run only when Echo or its packaging inputs change.
+  echo-package:
+    name: echo-package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect Echo changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/echo packages/core/src/strings-echo-\* packages/core/src/credential-shapes.ts packages/core/src/keychain.ts scripts/pack-echo.mjs scripts/test-echo-package.mjs .echo/settings.example.json .echo/connection.example.json docs/ECHO.md package.json pnpm-lock.yaml .github/workflows/ci.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: pnpm/action-setup@v6
+        if: steps.changes.outputs.changed == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.changes.outputs.changed == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        if: steps.changes.outputs.changed == 'true'
+      - name: Install and verify the separate Echo package with synthetic memory
+        if: steps.changes.outputs.changed == 'true'
+        run: pnpm test:echo:package
 
   e2e:
     name: e2e
