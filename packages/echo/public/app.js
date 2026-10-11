@@ -12,7 +12,7 @@ const word = (tag, key, className = '') => {
   node.title = strings[`echo.ui.${key}`].define;
   return node;
 };
-let config, revision, running, selected, baseline;
+let config, revision, running, installation, selected, baseline;
 let form, profileList, saveButton, editState, notice;
 let busy = false;
 
@@ -136,7 +136,7 @@ function renderForm() {
   // Disabled controls are not included in FormData; the current default stays
   // unchanged unless the reader explicitly chooses a different profile.
   context.append(contextText, defaultToggle);
-  form.append(context);
+  form.append(context, word('p', 'editingNote', 'editing-note'));
 
   const identity = section('identity', 'identityNote');
   identity.grid.append(field('individual', 'individual', p.identity.individual, { required: true }), field('team', 'team', p.identity.team, { hint: 'optional' }), field('project', 'project', p.identity.project, { required: true, wide: true }));
@@ -176,6 +176,7 @@ async function load() {
   config = data.config;
   revision = data.revision;
   running = data.running;
+  installation = data.installation;
   baseline = JSON.stringify(config);
   if (!selected || !config.profiles[selected]) selected = config.profiles[running.profileId] ? running.profileId : config.defaultProfile;
 }
@@ -192,6 +193,18 @@ function render() {
   hero.append(word('span', 'foundation', 'badge'), word('h2', 'headline'), word('p', 'intro'));
   const boundary = el('div', 'boundary');
   boundary.append(word('strong', 'restart'), word('span', 'notBuilt'));
+  const location = el('section', 'card installation');
+  const locationHeading = el('div', 'installation-heading');
+  locationHeading.append(word('h2', 'installation'), word('span', `scope${installation.scope[0].toUpperCase()}${installation.scope.slice(1)}`, 'badge'));
+  const locations = el('dl', 'installation-paths');
+  function pathRow(key, value) {
+    if (!value) return;
+    locations.append(word('dt', key), el('dd', '', value));
+  }
+  pathRow('configLocation', installation.configPath);
+  pathRow('runningLocation', running.dataDirectory);
+  pathRow('workspaceLocation', installation.workspaceRoot);
+  location.append(locationHeading, word('p', `${installation.scope}ScopeNote`, 'section-note'), locations, word('p', 'installationNote', 'section-note installation-note'));
   const layout = el('div', 'layout');
   const sidebar = el('aside', 'sidebar');
   sidebar.append(word('h2', 'profiles', 'eyebrow'));
@@ -267,7 +280,7 @@ function render() {
   const saveMessage = el('div', 'save-message');
   saveMessage.append(editState, notice);
   footer.append(saveMessage, actions);
-  root.append(header, hero, boundary, layout, footer);
+  root.append(header, hero, boundary, location, layout, footer);
   renderProfiles();
   renderForm();
   markDirty();

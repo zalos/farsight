@@ -9,6 +9,12 @@ const BODY_LIMIT = 64 * 1024;
 const text = (key: string): string => ECHO_UI_STRINGS[`echo.ui.${key}`]!.professional;
 const html = (value: string): string => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+export interface WebInstallation {
+  scope: 'workspace' | 'global' | 'custom';
+  configPath: string;
+  workspaceRoot?: string;
+}
+
 class RequestError extends Error {
   constructor(readonly status: number, readonly key: string) { super(key); }
 }
@@ -85,10 +91,18 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 /** Settings only: every running dependency and session keeps its startup configuration. */
-export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Promise<CheckResult[]> } = {}): Promise<{ url: string; close(): Promise<void> }> {
+export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Promise<CheckResult[]>; installation?: WebInstallation } = {}): Promise<{ url: string; close(): Promise<void> }> {
   const frameOrigin = permittedFrameOrigin(ctx.profile.web.farsightOrigin);
   const activeProfile = ctx.profileId;
   const activeIdentity = structuredClone(ctx.profile.identity);
+  const activeDataDirectory = ctx.dataDirectory;
+  // Installation describes this process, never a value an editor may save or move.
+  // Keep the actual opened path authoritative and copy only the public fields.
+  const installation: WebInstallation = {
+    scope: callbacks.installation?.scope ?? 'custom',
+    configPath: ctx.configPath,
+    ...(callbacks.installation?.workspaceRoot ? { workspaceRoot: callbacks.installation.workspaceRoot } : {}),
+  };
   let port = ctx.profile.web.port;
   let writes: Promise<void> = Promise.resolve();
   const server = createServer((req, res) => { void handle(req, res); });
@@ -112,7 +126,7 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
       if (req.method === 'GET' && path === '/api/settings') {
         try {
           const current = await snapshot(ctx.configPath);
-          json(res, 200, { ...current, running: { profileId: activeProfile, identity: activeIdentity } }, current.revision);
+          json(res, 200, { ...current, installation, running: { profileId: activeProfile, identity: activeIdentity, dataDirectory: activeDataDirectory } }, current.revision);
         } catch { fail(res, 503, 'unavailable'); }
         return;
       }

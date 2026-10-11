@@ -92,6 +92,7 @@ test('saving preserves other profiles and keeps the running context unchanged', 
   assert.equal(state.revision, get.headers.get('etag'));
   state.config.profiles.personal.identity.project = 'next-project';
   state.config.profiles.personal.hooks.claude = true;
+  state.config.defaultProfile = 'work';
   const saved = await fetch(`${view.url}/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'If-Match': state.revision }, body: JSON.stringify(state.config) });
   assert.equal(saved.status, 200);
   const result = await saved.json();
@@ -104,7 +105,41 @@ test('saving preserves other profiles and keeps the running context unchanged', 
   assert.equal(view.ctx.profile.hooks.claude, false);
   const again = await (await fetch(`${view.url}/api/settings`)).json();
   assert.equal(again.running.identity.project, 'project-example');
+  assert.equal(again.running.profileId, 'personal');
+  assert.equal(again.running.dataDirectory, view.ctx.dataDirectory);
+  assert.equal(again.config.defaultProfile, 'work');
   assert.equal(again.config.profiles.personal.identity.project, 'next-project');
+});
+
+test('installation metadata is read-only, reports the opened path, and remains separate from edited profiles', async t => {
+  const installation = { scope: 'global' as const, configPath: '/unused/settings.json' };
+  const view = await setup(t, { installation });
+  installation.configPath = '/changed-after-start/settings.json';
+  const state = await (await fetch(`${view.url}/api/settings`)).json();
+  assert.deepEqual(state.installation, { scope: 'global', configPath: view.configPath });
+  assert.equal(state.config.installation, undefined);
+  const result = await fetch(`${view.url}/api/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'If-Match': state.revision },
+    body: JSON.stringify({ ...state.config, installation: { scope: 'workspace', configPath: '/other/settings.json' } }),
+  });
+  assert.equal(result.status, 400);
+  assert.deepEqual(JSON.parse(await readFile(view.configPath, 'utf8')), view.config);
+  const next = await (await fetch(`${view.url}/api/settings`)).json();
+  assert.deepEqual(next.installation, state.installation);
+  assert.equal(next.running.profileId, 'personal');
+});
+
+test('installation defaults to an explicit custom location and copies only supported metadata', async t => {
+  const fallback = await setup(t);
+  const state = await (await fetch(`${fallback.url}/api/settings`)).json();
+  assert.deepEqual(state.installation, { scope: 'custom', configPath: fallback.configPath });
+  const installation = { scope: 'workspace' as const, configPath: '/unused/settings.json', workspaceRoot: '/workspace/example', privateValue: 'not-public' };
+  const local = await setup(t, { installation });
+  installation.workspaceRoot = '/changed-after-start';
+  const response = await (await fetch(`${local.url}/api/settings`)).text();
+  assert.doesNotMatch(response, /not-public|changed-after-start/);
+  assert.deepEqual(JSON.parse(response).installation, { scope: 'workspace', configPath: local.configPath, workspaceRoot: '/workspace/example' });
 });
 
 test('concurrent editors cannot overwrite a newer revision', async t => {
