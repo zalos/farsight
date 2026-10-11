@@ -3065,10 +3065,10 @@
   .ln-lane.store .ln-headbox{border-left-color:var(--tbl);background:color-mix(in srgb,var(--tbl) 8%,transparent)}
   /* a lane's head at the HUD label's size: the word and its count on one line, its second line clamped to one */
   .ln-head{padding:5px 8px;display:flex;flex-direction:column;gap:2px}
-  .ln-head .nm{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px;line-height:1.25;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--amber)}
+  .ln-head .ln-hrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px}
+  .ln-head .nm{display:flex;align-items:baseline;gap:4px;line-height:1.25;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--amber);min-width:0}
   .ln-head .nm .w{overflow-wrap:break-word;min-width:0}
-  .ln-head .nm .n{font-family:var(--body);text-transform:none;letter-spacing:0;font-size:9.5px;color:var(--dim);white-space:nowrap}
-  .ln-head .nm .n .sc{display:none}
+  .ln-head .ln-hrow .n{font-size:9.5px;color:var(--dim);white-space:nowrap}
   .ln-lane.store .ln-head .nm{color:var(--tbl)}
   .ln-head .nm .sym{width:10px;height:10px;flex:none;align-self:center}
   .ln-head .surf{font-size:9.5px;color:var(--ink)}
@@ -3145,7 +3145,7 @@
   .ln-bottom{position:absolute;display:flex;flex-direction:column;gap:6px}
   .ln-life{border:1px solid var(--line-soft);border-radius:6px;padding:4px 8px;background:var(--panel);min-width:0}
   .ln-life .lc-strip{flex-wrap:nowrap;white-space:nowrap;overflow:hidden;gap:0 8px;font-size:11px}
-  .ln-life .lc-statuses{flex-wrap:nowrap;min-width:0;overflow:hidden}
+  .ln-life .lc-statuses{flex-wrap:nowrap;min-width:5em;flex:1 1 auto;overflow:hidden}
   .ln-life .lc-status{border:0;padding:0 2px;flex:none}
   .ln-life .lc-status .lc-yet,.ln-life .lc-status .lc-c{display:none !important}
   .ln-life .lc-status.unwritten .lc-w{color:var(--dim);font-style:italic}
@@ -3303,7 +3303,7 @@
   .map-jhead .jh-more{cursor:pointer;flex:none;font:inherit;font-size:11px}
   .map-jhead .jh-lc{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap}
   .map-jhead .jh-lc .lc-strip{flex:1 1 auto;flex-wrap:nowrap;white-space:nowrap;overflow:hidden;min-width:0;gap:0 8px;font-size:11px}
-  .map-jhead .jh-lc .lc-statuses{flex-wrap:nowrap;min-width:0;overflow:hidden}
+  .map-jhead .jh-lc .lc-statuses{flex-wrap:nowrap;min-width:5em;flex:1 1 auto;overflow:hidden}
   .map-jhead .jh-lc .lc-status{border:0;padding:0 2px;flex:none}
   .map-jhead .jh-lc .lc-status .lc-yet,.map-jhead .jh-lc .lc-status .lc-c,.map-jhead .jh-lc .lc-tblbox{display:none !important}
   .map-jhead .jh-lc .lc-status.unwritten .lc-w{color:var(--dim);font-style:italic}

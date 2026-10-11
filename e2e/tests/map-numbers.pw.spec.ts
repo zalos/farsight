@@ -40,7 +40,19 @@ async function go(page: Page, hash: string) {
 async function openStreet(page: Page) {
   await go(page, STREET + '?layout=screens');
   await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`)).toHaveCount(3);
-  await expect(page.locator(HEAD + ' .map-chip').first()).toBeVisible();
+  await expect(page.locator(HEAD + ' .map-chip.k-built')).toBeVisible();
+}
+/**
+ * The head's whole chip row: line 1 keeps the status and the test chip and folds the rest into `+n` (lane S, the head
+ * in two lines), whose click opens the row in the dock's *about* tab — read it there when anything folded.
+ */
+async function fullRow(page: Page) {
+  const more = page.locator('.map-jhead .jh-more');
+  if (!(await more.count())) return page.locator(HEAD);
+  await more.click();
+  const row = page.locator('.map-dock .md-about-chips');
+  await expect(row).toBeVisible();
+  return row;
 }
 
 /**
@@ -105,11 +117,12 @@ test.describe('map — one number, one word', () => {
     expect(word).not.toBe('');
     await openStreet(page);
     const head = page.locator(HEAD);
+    const row = await fullRow(page);
     // all three named screens are reached: one screens chip, no second number to reconcile
-    await expect(head.locator('.map-chip').first()).toHaveText('3 screens');
-    await expect(head.locator('.map-chip', { hasText: /reached$/ })).toHaveCount(0);
+    await expect(row.locator('.map-chip').first()).toHaveText('3 screens');
+    await expect(row.locator('.map-chip', { hasText: /reached$/ })).toHaveCount(0);
     // the journey opens with its head at the top of the board (lane Z); a map tip opens on hover
-    await head.locator('.map-chip').first().hover();
+    await row.locator('.map-chip').first().hover();
     await expect(page.locator('#fs-tip')).toContainText(/reached by the walk through the code/i);
     await expect(page.locator('#fs-tip')).toContainText(/across this journey/i);
     // the evidence chip is the Portfolio's word, inside the tests count's own chip with its scope (round 2026-10-10)
@@ -135,7 +148,7 @@ test.describe('map — one number, one word', () => {
     await stubFewerReached(page);
     await mapOn(page);
     await openStreet(page);
-    const head = page.locator(HEAD);
+    const head = await fullRow(page);
     await expect(head.locator('.map-chip').nth(0)).toHaveText('4 screens');
     await expect(head.locator('.map-chip').nth(1)).toHaveText('3 reached');
     await expect(head.locator('.map-chip.k-erp')).toHaveText('reaches the ERP · Example ERP');
@@ -205,7 +218,7 @@ test.describe('map — one number, one word', () => {
     await stubFewerReached(page);
     await mapOn(page, 'business');
     await openStreet(page);
-    const text = await page.locator(`.map-jhead[data-flow="${FLOW}"]`).innerText();
+    const text = (await page.locator(`.map-jhead[data-flow="${FLOW}"]`).innerText()) + ' ' + (await (await fullRow(page)).innerText());
     expect(text).toContain('owner · Billing team');
     expect([...new Set(text.match(IDENTIFIER) || [])], 'identifier-shaped words on the business head').toEqual([]);
   });

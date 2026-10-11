@@ -138,7 +138,7 @@ function laneHeadHtml(l, single) {
     ? fill(single ? 'lanes.store.subJourney' : 'lanes.store.sub', { kind: t('map.store.kind.' + storeKindOf(l)) })
     : l.description;
   const word = l.kind === 'store' ? (l.declaredName || storeShownName(l.store, biz()) || t('map.store.kind.' + storeKindOf(l))) : l.name || t('lanes.persona.none');
-  return '<div class="ln-head"><div class="nm">' + glyph + '<span class="w">' + esc(word) + '</span>'
+  return '<div class="ln-head"><div class="ln-hrow"><div class="nm">' + glyph + '<span class="w">' + esc(word) + '</span></div>'
     + '<span class="n">' + countedHtml(l.count, API, { cls: 'ln-n' }) + ' <span class="sc">· ' + esc(t(l.count.scope)) + '</span></span></div>'
     + (l.surface ? '<div class="surf">' + esc(l.surface) + '</div>' : '')
     + (sub ? '<div class="d"' + tipAttrs({ text: sub, noFocus: true }) + '>' + esc(sub) + '</div>' : '')
