@@ -6,7 +6,7 @@
 import { test, expect, openBillingCycle } from './support';
 
 // the journey's count line is the table's head on the Map (the hybrid register opens a journey on its table)
-const HEAD = '.map-table-head';
+const HEAD = '.map-jhead';
 
 const RAN = 'ffe27594072f52c91af36314d4f0302d3b52c0b0';
 const NOW = '4632734fc9ac27c228eabdf63b92863283fad0a2';

@@ -112,8 +112,8 @@ test.describe('map — neighbourhood and street', () => {
       await expect(cv.locator(':scope > .map-chip.k-status')).toHaveCount(1);
       expect(await cv.locator(':scope > :visible').count()).toBeLessThanOrEqual(3);
     }
-    // the journey's numbers are all in its header, from the journey-fitted stop up
-    await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-dhead .agg .map-chip`).first()).toBeAttached();
+    // the journey's numbers are all in its head — a bar above the stage from the journey stop down, none at the board
+    await expect(page.locator('.map-jhead')).toBeHidden();
     const fit = await page.evaluate(() => {
       const ds = [...document.querySelectorAll('.map-district')].map((d) => d.getBoundingClientRect());
       let overlaps = 0;
@@ -145,6 +145,7 @@ test.describe('map — neighbourhood and street', () => {
     await expect(screens.locator('.nm')).toHaveText(['New invoice', 'Invoice list', 'Discard draft']);
     await expect(screens.nth(2)).toHaveClass(/planned/);
     await expect(page.locator('.map-crumb')).toContainText('Billing cycle');
+    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .agg .map-chip`).first()).toBeVisible();
   });
 
   /**
@@ -439,7 +440,7 @@ test.describe('map — data stores on the street', () => {
     await expect(leg).toContainText('reached');
     // the head's stores chip is the summary's own Counted (one store from the fixture's config; the stub's ERP is not
     // in the server's count), with its tip
-    const chip = page.locator(`.map-district[data-flow="${FLOW}"] .map-dhead .map-chip.k-store`);
+    const chip = page.locator(`.map-jhead[data-flow="${FLOW}"] .map-chip.k-store`);
     await expect(chip).toHaveText(/1 data store/);
     await expect(chip).toHaveAttribute('data-tip-id', 'number');
   });

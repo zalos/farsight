@@ -452,6 +452,13 @@ export function stopsDockMoved() {
   if (ST.act) { const bi = ST.act.beat; drawAct(); selectBeat(bi); if (ST.act.code) openCodeTab(); }
   if (ST.table) { placePartPane(); jrnApplyDock(); }
 }
+/** The dock's three places, the journey's own words (`journey.dock.*`) — at the action's top while it is docked in place. */
+function dockSwitchHtml() {
+  const v = jrnDock();
+  const b = (k, key) => '<button type="button" class="map-seg' + (v === k ? ' on' : '') + '" data-dock="' + k + '" aria-pressed="' + (v === k ? 'true' : 'false') + '"'
+    + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</button>';
+  return '<span class="map-segs" role="group" aria-label="' + esc(t('map.dock')) + '">' + b('inline', 'journey.dock.inline') + b('bottom', 'journey.dock.bottom') + b('right', 'journey.dock.right') + '</span>';
+}
 /** The journey's screens as a slim strip, the one the action is on lit with *action n of m*. */
 function stripHtml() {
   const a = ST.act, model = a.model, cols = S.JRN_DRILL ? S.JRN_DRILL.cols : [];
@@ -480,7 +487,9 @@ function drawAct() {
   // the drill: the journey's action rail across the top in place of the street's strip (the owner's older drill view)
   const top = layout === 'drill' ? jrnDrillRailHtml(S.JOURNEY.summary, S.JRN_DRILL.cols, S.jrnAction) : stripHtml();
   a.host.innerHTML = '<div class="map-act' + (a.code ? ' code' : '') + '" data-dock="' + esc(jrnDock()) + '" data-layout="' + esc(layout) + '" data-map-wheel="own">'
-    + '<div class="map-act-top' + (layout === 'drill' ? ' rail' : '') + '">' + top + '</div>'
+    + '<div class="map-act-top' + (layout === 'drill' ? ' rail' : '') + '">' + top
+    // docked in place there is no dock to hold the switch: it rides at the stop's top, as it did before the dock
+    + (inPlace ? '<span class="map-act-dock">' + dockSwitchHtml() + '</span>' : '') + '</div>'
     + jrnDrillStageHtml({ insp: inPlace })
     + '<div class="map-act-foot"><span class="map-hintline"' + tipAttrs({ key: a.code ? 'map.code.hint' : 'map.act.hint', noFocus: true }) + '>' + esc(t(a.code ? 'map.code.hint' : 'map.act.hint')) + '</span></div></div>';
   jrnDrillMount();
@@ -512,6 +521,8 @@ function onActClick(e) {
     if (col) openAction(ST.act.flow, col.index, { code: ST.act.code });
     return;
   }
+  const dk = e.target.closest('.map-act-dock [data-dock]');
+  if (dk) { setActDock(dk.dataset.dock); return; }
   const scr = e.target.closest('.map-act-scr');
   if (scr) { const flow = ST.act.flow, si = +scr.dataset.si; closeAction({ quiet: true }); ST.api.openProperty(flow, si); return; }
   // a box, a fold or the still-open screen moved the selection (or the action): the place follows

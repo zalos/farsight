@@ -47,16 +47,23 @@ test('one zoom from the storyline board to a beat\'s code, with no change of sur
   await page.keyboard.press('ArrowRight');
   await expect.poll(() => hash(page)).toContain('beat=3');
   await expect(page.locator('.map-act .jrn-dbh.on')).toHaveAttribute('data-beat', '2');
-  // + opens the code: the drill's inspector as the dock, on its CODE tab
+  // + opens the code: the drill's inspector in the Map's one dock, on its CODE tab
   await page.keyboard.press('+');
-  await expect(page.locator('.map-act.code #jrn-insp')).toBeVisible();
+  await expect(page.locator('.map-act.code')).toBeVisible();
+  await expect(page.locator('.map-dock #jrn-insp')).toBeVisible();
   await expect(pressed(page, 'code')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#jrn-insp .tabs button.on')).toHaveText('Code');
   await expect.poll(() => hash(page)).toMatch(/dock=(inline|bottom|right)/);
-  // the dock's place is one switch, remembered as the journey's
-  await page.locator('.map-act-dock [data-dock="right"]').click();
-  await expect(page.locator('.map-act')).toHaveAttribute('data-dock', 'right');
-  expect(await page.evaluate(() => localStorage.getItem('fs-jrn-dock'))).toBe('right');
+  // the dock's place is one switch in its pinned header, remembered as the journey's
+  await page.locator('.map-dock .md-place [data-dock="bottom"]').click();
+  await expect(page.locator('.map-act')).toHaveAttribute('data-dock', 'bottom');
+  await expect(page.locator('.map-dock')).toHaveAttribute('data-place', 'bottom');
+  expect(await page.evaluate(() => localStorage.getItem('fs-jrn-dock'))).toBe('bottom');
+  // in place: the inspector goes back under the beats, the dock (holding nothing else) closes
+  await page.locator('.map-dock .md-place [data-dock="inline"]').click();
+  await expect(page.locator('.map-act #jrn-insp')).toBeVisible();
+  await expect(page.locator('.map-dock')).toBeHidden();
+  await page.evaluate(() => localStorage.setItem('fs-jrn-dock', 'right'));
   // − closes the code, − again goes back to the screen
   await page.keyboard.press('-');
   await expect(page.locator('.map-act')).not.toHaveClass(/code/);
@@ -106,8 +113,9 @@ test('the table layout draws the Sheet in place of the street, and a column open
   await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
   await expect(page.locator('.map-table .jrn-sbh[data-col]')).toHaveCount(8);
   // the street head's facts come with it: the counts, the storyline position, the lifecycle, Save
-  await expect(page.locator('.map-table-head .agg')).toContainText('3 screens');
-  await expect(page.locator('.map-table-head .facts [data-export="street"]')).toBeVisible();
+  await expect(page.locator('.map-jhead .agg')).toContainText('3 screens');
+  // Save is the toolbar's at every stop; below the board it saves the stop on screen
+  await expect(page.locator('.map-chrome [data-export="street"]')).toBeVisible();
   await expect.poll(() => hash(page)).toContain('layout=table');
   // a reload of the link draws the table again
   await mapOn(page);

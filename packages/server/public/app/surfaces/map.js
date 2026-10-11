@@ -51,7 +51,7 @@ import { sheetModel, actionAtSegment } from '../lib/journey-model.js';
 import {
   bindStops, stopNow, drawLayoutTool, setLayout, cycleLayout, layoutAt, registerMapLayout, MAP_LAYOUTS, openAction, openActionAt, openScreenAction, closeAction, actionOpen,
   actionParams, actionKey, stopZoom, openCode, closeCode, crumbHtml, syncTable, tableOpen, redrawStops, closeStops, storyNavLineHtml, forgetWalks,
-  registerView, tableAtPart, tableAtScreen, tableParams, tableKey, tableEscape, forLineHtml, tableCountHtml, stopsDockMoved, stopPicture,
+  registerView, tableAtPart, tableAtScreen, tableParams, tableKey, tableEscape, forLineHtml, tableCountHtml, stopsDockMoved,
 } from './map-stops.js';
 import { jrnFirstSentence, jrnLifecycleHtml } from '../lib/journey-draw.js';
 import { walkToolHtml, bindWalk, openWalk, closeWalk, toggleWalk, walkOpen, drawWalk } from '../lib/tour.js';
@@ -1038,9 +1038,12 @@ async function applyRouteTarget(route, animate) {
   if (!node) {
     if (MAP.prop) closeProperty({ keepHash: true });
     if (view) {
-      // the link names the picture: put the board there, and never refit it when the walk lands
+      // the link names the picture: put the board there, and never refit it when the walk lands — once the journey has
+      // landed, so its head above the stage has the height it had when the link was copied (the picture is the same)
       MAP.autoFit = null;
       openedJourney(flow);
+      await ensureJourney(flow);
+      if (gen !== MAP.gen) return;
       applyView(view, flow, animate && MAP.fitted);
     } else {
       MAP.autoFit = MAP.journeys.has(flow) ? null : flow;
@@ -1147,6 +1150,11 @@ function applyView(v, flow, anim) {
   holdingAlt(() => viewAt(v, flow, anim));
 }
 function viewAt(v, flow, anim) {
+  // the head above the stage first: the board's size it leaves is what the view is measured on
+  if (flow) { MAP.headHold = flow; drawHead(flow); }
+  try { viewAtNow(v, flow, anim); } finally { MAP.headHold = null; }
+}
+function viewAtNow(v, flow, anim) {
   // the link's point is in the layout of the altitude it names
   ensureAlt(levelOf(v.z), flow || MAP.journey || MAP.focus);
   const g = flow && MAP.geom.get(flow);
@@ -1596,11 +1604,13 @@ function enterJourney(id, anim) {
     if (!g) return;
     openedJourney(id);
     // the head bar takes its height before the frame is measured, so the journey lands under it
+    MAP.headHold = id;
     drawHead(id);
     const s = journeyScale(id);
     const b = boardSize();
     const tx = g.w * s <= b.w - FRAME_PAD * 2 ? (b.w - g.w * s) / 2 - g.x * s : FRAME_PAD - g.x * s;
     MAP.cv.set(tx, FRAME_PAD - g.y * s, s, anim);
+    MAP.headHold = null;
   });
   writeHash(id, null);
 }
@@ -1657,8 +1667,10 @@ function centreScreen(flow, index, scale, anim) {
     const p = screenPos(flow, index);
     if (!p) return;
     openedJourney(flow);
+    MAP.headHold = flow;
     drawHead(flow);
     MAP.cv.centerOn(p.x, p.y + (MAP.plumb ? 200 : 0), scale, anim);
+    MAP.headHold = null;
   });
 }
 
@@ -1731,6 +1743,10 @@ function onCanvasChange(st) {
   if (risk) risk.classList.toggle('off', st.level !== 'nb' || !!MAP.prop);
   // the stops below the street: the LAYOUT control's choices, and the table (or the journey's lanes) in place of the street
   if (drawLayoutTool()) { drawPickers(); fitChrome(); }
+  // Save is one control in the toolbar at every stop (cleanup pass 2026-10-11): below the board it saves the stop on
+  // screen — the street, the table or the action's beats (surfaces/map-stops.js stopPicture, the `street` export)
+  const save = MAP.stage.querySelector('.map-tools [data-export]');
+  if (save) save.dataset.export = lvl !== 'nb' && !lanesShown() ? 'street' : 'map';
   syncTable();
   syncJourneyLanes();
   drawHead();
@@ -2024,7 +2040,8 @@ function headFlow() {
 function drawHead(want) {
   const el = MAP.stage && MAP.stage.querySelector('.map-jhead');
   if (!el) return;
-  const flow = want || headFlow();
+  // a programmatic move to a journey holds its head while the canvas passes the board's level on the way
+  const flow = want || MAP.headHold || headFlow();
   const d = flow && (MAP.nb.districts.find((x) => x.id === flow) || (MAP.nbAll.districts || []).find((x) => x.id === flow));
   // a zoom between the board and a street keeps the head as it is until it lands (the stage would resize mid-move)
   if (!d && !want && MAP.world && MAP.world.classList.contains('anim')) return;
@@ -2076,10 +2093,12 @@ function foldHead(el) {
   const kids = [...box.children].filter((k) => !k.classList.contains('jrn-hsep'));
   kids.forEach((k) => { k.hidden = false; const p = k.previousElementSibling; if (p && p.classList.contains('jrn-hsep')) p.hidden = false; });
   const line = el.querySelector('.jh-l2');
+  // the test chip — the one verdict with its scope and skips — never folds: it gives way by ellipsis at its tail (its
+  // word stays), down to its own first 240 px; the other numbers fold before it does
+  const keep = (k) => k.matches('.k-test,.k-ev,.jrn-htests,.jrn-e2e,.map-work') || !!k.querySelector('.jrn-htests,.jrn-e2e,.k-test,.k-ev');
+  kids.filter(keep).forEach((k) => { k.classList.remove('jh-keep'); k.style.minWidth = ''; const w = k.offsetWidth; k.classList.add('jh-keep'); k.style.minWidth = Math.min(w, 240) + 'px'; });
   const over = () => line.scrollWidth > line.clientWidth + 1;
   if (!over()) return;
-  // the test chip — the one verdict with its scope and skips — never folds: past everything else it is clipped at the edge
-  const keep = (k) => k.matches('.k-test,.k-ev,.jrn-htests,.jrn-e2e,.map-work,.tc,.test-chip') || !!k.querySelector('.jrn-htests,.jrn-e2e,.k-test,.k-ev');
   const order = kids.filter((k) => !keep(k)).reverse();
   const hidden = [];
   let more = null;
@@ -2118,6 +2137,7 @@ function openLifecycleTable(btn) {
   const strip = btn.closest('.lc-strip');
   panel.innerHTML = '<div class="md-scroll"><div class="md-lc-head">' + (strip ? strip.querySelector('.lc-head').outerHTML : '') + '</div><div class="md-lc-tbl"></div></div>';
   lifecycleTableInto(id, panel.querySelector('.md-lc-tbl'));
+  btn.setAttribute('aria-expanded', 'true');
   openPanel('lifecycle');
 }
 function openAbout() {
@@ -3776,9 +3796,6 @@ export function mapSelected() {
  */
 async function mapPicture() {
   if (!MAP.world || !MAP.cv || !MAP.size.w) return null;
-  // Save is one control in the toolbar at every stop (cleanup pass 2026-10-11): below the board it saves the stop on
-  // screen — the street, the table or the action's beats — as surfaces/map-stops.js draws it
-  if (stopNow() !== 'nb' && !lanesShown()) { const p = await stopPicture(); if (p) return p; }
   if (MAP.prop) closeProperty();
   fitAll(false);
   await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));

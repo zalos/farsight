@@ -59,9 +59,10 @@ test('the Map saves its storyline board whole, as a picture and as a PDF, with t
   await mapOn(page);
   await page.evaluate((id) => { location.hash = '#/map?storyline=' + id; }, STORY.id);
   await expect(page.locator('.map-band.story .w')).toHaveText([STORY.name]);
-  // zoomed in on one corner: the picture is still the whole band, not the part on screen
-  await page.locator('[data-act="in"]').click();
-  await page.locator('[data-act="in"]').click();
+  // panned off to one corner: the picture is still the whole band, not the part on screen (+ from the board is a
+  // journey's stop since the chrome holds still, and Save there saves that stop — the next test)
+  await page.locator('.map-board').focus();
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowRight');
 
   const { d, bytes } = await save(page, 'map', 'png');
   expect(d.suggestedFilename()).toMatch(new RegExp(`^farsight-map-[a-z0-9-]+-${STORY.id}(-sync\\d+)?(-\\d{4}-\\d{2}-\\d{2})?\\.png$`));
@@ -117,9 +118,10 @@ test('a journey saves from its stop on the Map: the business street with every s
   await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens&lens=business');
   const head = '.map-district[data-flow="' + FLOW + '"]';
   await expect(page.locator(head + ' .map-scr')).toHaveCount(3);
-  const btn = page.locator(head + ' [data-export="street"]').first();
+  // Save is the toolbar's, at every stop: below the board it saves the stop on screen
+  const btn = page.locator('.map-chrome [data-export="street"]').first();
   await expect(btn).toHaveText('Save');
-  const { d, bytes } = await saveAt(page, head, 'png');
+  const { d, bytes } = await saveAt(page, '.map-chrome', 'png');
   expect(d.suggestedFilename()).toMatch(/^farsight-street-.*billing-cycle.*\.png$/);
   const { width, height } = pngSize(bytes);
   const district = await page.locator(head).boundingBox();
@@ -128,12 +130,12 @@ test('a journey saves from its stop on the Map: the business street with every s
   expect(height).toBeGreaterThan(400);
   const f = (await btn.getAttribute('data-export-footer')) || '';
   expect(f).toMatch(/business words/);
-  const pdf = await saveAt(page, head, 'pdf');
+  const pdf = await saveAt(page, '.map-chrome', 'pdf');
   expect(pdf.bytes.subarray(0, 8).toString('latin1')).toBe('%PDF-1.4');
   // the table saves itself
   await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
   await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
-  const tbl = await saveAt(page, '.map-table-head', 'png');
+  const tbl = await saveAt(page, '.map-chrome', 'png');
   expect(pngSize(tbl.bytes).width).toBeGreaterThan(1000);
 });
 

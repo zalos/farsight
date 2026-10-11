@@ -9,7 +9,7 @@ import type { Page } from '@playwright/test';
 import { test, expect, openJourneyAt } from './support';
 
 const RECORD = 'invoice-app::table::invoices';
-const strip = (page: Page) => page.locator(`.map-table-head .lc-strip[data-record="${RECORD}"]`);
+const strip = (page: Page) => page.locator(`.map-jhead .lc-strip[data-record="${RECORD}"]`);
 
 // identifier-shaped tokens (the journey-numbers spec's list): a business reader never sees one on the strip
 const IDENTIFIER = /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+_[a-z0-9_]+\b|\b[A-Z0-9]+_[A-Z0-9_]+\b|\.(?:tsx?|jsx?|mjs|json)\b/g;
@@ -69,7 +69,10 @@ test.describe('journey status lifecycle', () => {
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const table = s.locator('.lc-table');
+    // the table opens in the Map's dock, beside the stage — never under the strip, in the head (cleanup pass 2026-10-11)
+    const dock = page.locator('.map-dock .md-lifecycle');
+    await expect(dock).toBeVisible();
+    const table = dock.locator('.lc-table');
     await expect(table.locator('th')).toHaveText([/what Billing sees/i, /in the code/i, /what moves it/i]);
     // the rows are the lifecycle's statuses and then its overlays, nothing else
     await expect(table.locator('tbody tr')).toHaveCount(view.rows.length + view.overlays.length);
@@ -81,7 +84,7 @@ test.describe('journey status lifecycle', () => {
     const send = table.locator('tbody tr.status', { hasText: 'Sent' }).locator('a.lc-door');
     await expect(send).toHaveText('Finalize invoice');
     await expect(send).toHaveAttribute('href', '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle?screen=2&part=invoice-app%3A%3Asrc%2Fserver%2FinvoiceService.ts%3A%3AfinalizeInvoice');
-    await expect(s.locator('.lc-foot')).toContainText('statuses and moves read from the code');
+    await expect(dock.locator('.lc-foot')).toContainText('statuses and moves read from the code');
     await send.click();
     await expect(page.locator('.map-act')).toBeVisible();
     await expect(page).toHaveURL(/screen=2&action=\d+/);
