@@ -228,6 +228,14 @@ test.describe('the window', () => {
     const lines = await when.evaluate((e) => { const r = document.createRange(); r.selectNodeContents(e); return new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size; });
     expect(lines).toBe(1);
   });
+
+  /** @covers packages/server/public/app/surfaces/changes.js::draw */
+  test('Changes says it is empty only when its history is', async ({ page }) => {
+    await gotoReady(page, '#/changes');
+    await expect(page.locator('.ch-table').first()).toBeVisible();
+    // the empty sentence sat above a full sync table (swarm round 3): a spine with rows draws none
+    await expect(page.locator('[data-empty="changes"]')).toHaveCount(0);
+  });
 });
 
 test.describe('chrome', () => {

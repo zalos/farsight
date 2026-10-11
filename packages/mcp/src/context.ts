@@ -104,6 +104,8 @@ export function contextBlock(c: ContextInput): string[] {
   const out = [`<farsight-context ${attrs}>`];
   out.push(`built: ${[w(s.built.journeys), w(s.built.screens), w(s.built.operations), w(s.built.storylines)].join(' · ')}`);
   const verdicts = s.validated.byVerdict.filter((v) => v.word.cls !== 'none').map((v) => `${w(v.journeys)} ${t(v.word.key, 'professional')}`);
+  // build state wins: the journeys not fully built are counted apart, never under a word (swarm round 3)
+  if (s.validated.notFullyBuilt?.n) verdicts.push(w(s.validated.notFullyBuilt));
   const lastRun = s.validated.lastE2e
     ? `${t('state.lastE2e', 'professional').replace('{date}', s.validated.lastE2e.at.slice(0, 10))}${s.validated.lastE2e.fresh ? ` (${fillFreshness(t(s.validated.lastE2e.fresh.key, 'professional'), freshnessVars(s.validated.lastE2e.fresh))})` : ''}`
     : t('state.noE2e', 'professional');

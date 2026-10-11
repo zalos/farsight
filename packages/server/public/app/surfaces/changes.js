@@ -278,8 +278,10 @@ function draw() {
     return;
   }
   if (!ST.history) { body.innerHTML = '<p class="set-note">' + esc(t('portfolio.loading')) + '</p>'; return; }
-  // no sync on this source's spine: say what the page is for, why it is empty and what fills it (proposal 9)
-  const empty = !((ST.history.rows || []).length) ? emptyHtml('changes') : '';
+  // no sync on this source's spine: say what the page is for, why it is empty and what fills it (proposal 9).
+  // The answer's rows are `spine` — reading a field it never has drew the empty sentence above a full history
+  // (swarm round 3, 8 of 8 roles)
+  const empty = !((ST.history.spine || []).length) ? emptyHtml('changes') : '';
   body.innerHTML = empty + rangeHtml() + storylineRowsHtml() + spineHtml() + measuredHtml() + narrativeHtml()
     + '<p class="set-note"><a href="#/grammar">' + esc(t('journeys.startGrammar')) + '</a></p>';
 }

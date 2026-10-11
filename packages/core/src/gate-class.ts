@@ -26,10 +26,16 @@ export const GATE_CLASS_ORDER: readonly GateClass[] = [
 ];
 export const GATE_TIERS: readonly GateTier[] = ['business', 'policy', 'technical'];
 
-/** The tier a class gives when nobody overrode it. */
+/**
+ * The tier a class gives when nobody overrode it. Swarm round 3 (2026-10-11, the business analyst as auditor):
+ * *is the person signed in* is plumbing every action meets — a **policy** the platform enforces, not a business
+ * control — while four-eyes, a duplicate check and two names that must agree are the controls an auditor asks
+ * about, so integrity is **business**. The business register still groups identity under *who may*: that is a
+ * grouping of the list, not a tier.
+ */
 export const TIER_OF_CLASS: Record<GateClass, GateTier> = {
-  identity: 'business', authorisation: 'business', 'record-state': 'business', completeness: 'business',
-  integrity: 'policy', 'data-protection': 'policy',
+  identity: 'policy', authorisation: 'business', 'record-state': 'business', completeness: 'business',
+  integrity: 'business', 'data-protection': 'policy',
   input: 'technical', platform: 'technical', configuration: 'technical',
   // an action marked as a gate is the action: never folded, never counted as a gate
   'action-gate': 'business',
@@ -77,7 +83,8 @@ export type TierFrom = 'class' | 'config' | 'annotation';
 export function gateTierOf(node: Parameters<typeof gateClass>[0]): { tier: GateTier; class: GateClass; tierFrom: TierFrom } {
   const cls = gateClass(node);
   if (node.gateTier) return { tier: node.gateTier.tier, class: cls, tierFrom: node.gateTier.from };
-  if (node.precondition?.tier) return { tier: node.precondition.tier, class: cls, tierFrom: 'class' };
+  // a precondition's own `tier` was the parser's copy of the class mapping, never an override: the class decides,
+  // so a graph ingested before the mapping moved reads the same tiers as a fresh one
   return { tier: TIER_OF_CLASS[cls], class: cls, tierFrom: 'class' };
 }
 export function gateTier(node: Parameters<typeof gateClass>[0]): GateTier {

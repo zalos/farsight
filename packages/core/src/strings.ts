@@ -38,6 +38,7 @@ import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
 import { ASK_STRINGS } from './strings-ask.js';
+import { VERDICT_STRINGS } from './strings-verdict.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -115,6 +116,7 @@ export const STRINGS: Record<string, StringEntry> = {
   ...JOURNEYS_STRINGS,
   // the doors' words live in strings-doors.ts (door.*, the Map's stale and not-built marks, the board's reading floor)
   ...DOOR_STRINGS,
+  ...VERDICT_STRINGS,
   // the storyline as swimlanes (round 2026-10-10 §2) live in strings-lanes.ts (map.layout.*, lanes.*)
   ...LANES_STRINGS,
   // the fold's words: a row of chips folded to +n, a path that keeps its two ends, a rail's tabs folded to a menu
@@ -2239,9 +2241,9 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.obs.cases': same('{n} of them ran',
     'The run behind the evidence word: test cases a results report named running over this code. The only kind of evidence that names a test.'),
   'journey.obs.casesOne': one('1 of them ran', 'journey.obs.cases'),
-  'journey.obs.passed': same('{n} of them passed',
-    'The run behind the evidence word: end-to-end cases a results report says passed, each declaring that it covers this code.'),
-  'journey.obs.passedOne': one('1 of them passed', 'journey.obs.passed'),
+  'journey.obs.passed': same('{n} end-to-end cases that declare it, each passed',
+    'The run behind the evidence word: end-to-end cases a results report says passed, each declaring that it covers this code. Not the cases by their own runs, which are counted beside it.'),
+  'journey.obs.passedOne': one('1 end-to-end case that declares it, passed', 'journey.obs.passed'),
   'journey.obs.none': same('nothing observed',
     'No run of any kind reached this code: the evidence word beside it is a claim or a reading of the test bodies, and no run stands behind it.'),
   'journey.tests.theirRun': same('their own last run',

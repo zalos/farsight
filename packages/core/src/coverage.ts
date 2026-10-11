@@ -21,6 +21,7 @@ import type { GraphIndex, Journey, JourneySummary } from './query.js';
 import { flowScreenIds, isDeclaredOnly, journey } from './query.js';
 import { computeMetric, testsCovering, EVIDENCE_RANK, type MetricValue, type MetricScope, type CoveringTest } from './metrics.js';
 import { counted, scopeWord, type Counted, type CountScope } from './counts.js';
+import { t, type Register } from './strings.js';
 import { freshnessFact, codeAtOfIndex, type CodeAt, type FreshnessFact } from './freshness.js';
 
 /**
@@ -240,6 +241,29 @@ export interface EvidenceWord {
   cls: 'none' | 'declared' | 'reached' | 'observed' | 'stale';
   key: string;
   biz?: string;
+  /**
+   * Flow scopes only: the journey is **partly built** — `built` of its `of`
+   * declared screens have code — so the word is a verdict over the built
+   * screens alone, and build state wins (swarm round 3, finding 3: *passed, by
+   * its own declaration* beside *partly built · 3 of 4*). Every surface that
+   * prints a journey's word prints *partly built · n of m* first and *over the
+   * n built screens* after it (`builtOnlyWords()`). The class is unchanged: the
+   * evidence is real, its scope is narrower.
+   */
+  builtOnly?: { built: number; of: number };
+}
+
+/**
+ * The words a journey's verdict carries when it is partly built, as text — the
+ * build state before the word and the scope after it. `undefined` for a word
+ * with no build qualifier. Read by MCP, the CLI and the readiness CSV so a
+ * journey's word reads the same everywhere it is printed.
+ */
+export function builtOnlyWords(word: EvidenceWord | undefined, register: Register = 'professional'): { before: string; after: string } | undefined {
+  const b = word?.builtOnly;
+  if (!b) return undefined;
+  const fill = (k: string) => t(k, register).replace('{n}', String(b.built)).replace('{m}', String(b.of));
+  return { before: fill('tests.builtOnly.before'), after: fill(b.built === 1 ? 'tests.builtOnly.afterOne' : 'tests.builtOnly.after') };
 }
 
 /**
@@ -729,10 +753,17 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
   // reached code it shares with others. `built` is counted by the same rule the
   // matrix row counts it (`loc` on the screen node), so the two cannot disagree.
   let sharedEvidence: CoverageFacts['sharedEvidence'];
+  let builtOnly: EvidenceWord['builtOnly'];
   if (scope.kind === 'flow' && scope.flowId && chip !== 'none') {
     const screenIds = flowScreenIds(index, scope.flowId);
     const built = screenIds.filter((id) => index.byId.get(id)?.loc).length;
     if (screenIds.length && !built) sharedEvidence = { screens: screenIds.length };
+    // partly built: the word is a verdict over the built screens only, and says so (swarm round 3, finding 3)
+    else if (built < screenIds.length) builtOnly = { built, of: screenIds.length };
+  }
+  if (builtOnly) {
+    facts.evidenceWord = { ...facts.evidenceWord, builtOnly };
+    facts.verdict = { ...facts.verdict, word: facts.evidenceWord };
   }
 
   // ── the run: the weakest verdict across the covering tests' runs ──

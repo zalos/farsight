@@ -14,7 +14,7 @@ import { t, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { tipAttrs } from './tooltip.js';
-import { testChipHtml } from './test-chip.js';
+import { testChipHtml, builtOnlyHtml } from './test-chip.js';
 import { foldRow } from './fold-row.js';
 
 const API = '/api/journey';
@@ -39,9 +39,10 @@ export function mapEvidenceChip(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (!cls || cls === 'none') return '';
-  return '<span class="map-chip k-ev ev-' + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
+  const pb = builtOnlyHtml(ev);
+  return pb.before + '<span class="map-chip k-ev ev-' + esc(cls) + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-    + esc(t(ev.key)) + '</span>';
+    + esc(t(ev.key)) + '</span>' + pb.after;
 }
 
 /**

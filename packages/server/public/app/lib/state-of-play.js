@@ -98,6 +98,8 @@ export function stateOfPlayHtml(s) {
   const parts = (v.cases && v.cases.breakdown || []).filter((p) => p.n && p.key !== 'count.part.passed');
   const casesLine = v.cases ? lineHtml(v.cases, parts.length ? ' · ' + parts.map((p) => '<span' + defAttrs(p.key) + '>' + esc(t(p.key).replace('{n}', p.n)) + '</span>').join(' · ') : '') : '';
   const validated = words.map((x, i) => lineHtml(x.journeys, ' <span class="sop-word ev-' + esc(x.word.cls) + '"' + defAttrs(x.word.key) + '>' + esc(t(x.word.key)) + '</span>', i === 0)).join('')
+    // build state wins: journeys with a screen not built are counted apart, never under *passed* (swarm round 3)
+    + (v.notFullyBuilt && v.notFullyBuilt.n ? lineHtml(v.notFullyBuilt) : '')
     + runLine + casesLine;
   const names = (o.notBuiltNames || []).length ? ' <span class="sop-names">(' + esc(o.notBuiltNames.join(', ')) + ')</span>' : '';
   const stillOpen = [

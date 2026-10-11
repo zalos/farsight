@@ -30,7 +30,7 @@ import { jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnInspPanelHtm
 import { lifecycleStripHtml, headerLifecycles } from './lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from './freshness.js';
 import { momOrdinal, buildTree, cellTree, sheetModel, stopOf, ladderModel, LADDER } from './journey-model.js';
-import { testChipHtml, distinctArgs } from './test-chip.js';
+import { testChipHtml, distinctArgs, builtOnlyHtml } from './test-chip.js';
 
 const JRN_REPO_COLORS = ['var(--cyan)', 'var(--ok)', 'var(--fn)', 'var(--tbl)', 'var(--auth)', 'var(--amber)'];
 const JRN_CATS = ['access', 'guard', 'state', 'error', 'flag', 'branch'];
@@ -747,7 +747,7 @@ function jrnGateRowHtml(g, qualifier) {
     + sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock')
     + '<span class="jrn-gl-w">' + esc(words) + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
     // the tier beside the name outside the business register, which groups by it instead
-    + (g.tier && currentLens() !== 'business' && !g.config ? ' <span class="gate-tier ' + esc(g.tier) + '"' + tipAttrs({ key: 'gate.tier.' + g.tier }) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
+    + (g.tier && !g.config ? ' <span class="gate-tier ' + esc(g.tier) + '"' + tipAttrs({ key: 'gate.tier.' + g.tier }) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
     // a real space, not only the margin: this row is read in a screenshot and
     // pasted into a ticket as often as it is clicked
     + (qualifier ? ' <i class="jrn-gl-same" title="' + esc(def('journey.sameWords') || '') + '">' + esc(qualifier) + '</i>' : '') + '</span>'
@@ -849,8 +849,10 @@ export function jrnGateTiersHtml(gates, scopeKey, cfg, o) {
       + jrnGateGroupHtml(technical, 'gate.tier.technical', scopeKey, 'technical') + '</details>'
     : '';
   // the tier counts and where a tier comes from, once per screen's list — not in every action's cell
+  // counted by each check's own tier, never by the group it reads under (a sign-in check is *policy* under *who may*)
+  const byTier = (k) => (gates || []).filter((g) => (g.tier || 'business') === k).length;
   const legend = !opt.legend ? '' : '<div class="jrn-gl-legend">' + ['business', 'policy', 'technical'].map((k) => {
-    const n = { business: who.length + record.length, policy: policy.length, technical: technical.length }[k];
+    const n = byTier(k);
     return '<span class="gate-tier ' + k + '"' + tipAttrs({ key: 'gate.tier.' + k }) + '>' + esc(t('gate.tier.' + k)) + ' ' + n + '</span>';
   }).join('') + '<span class="jrn-gl-legend-w"' + tipAttrs({ key: 'gate.tierFrom.class' }) + '>' + esc(t('gate.tierFrom.class')) + '</span></div>';
   return '<div class="jrn-gatelist tiers">'
@@ -870,10 +872,14 @@ export function jrnGateTiersHtml(gates, scopeKey, cfg, o) {
 export function jrnGateTiers(gates) {
   const rows = (gates || []).slice().sort((a, b) => a.stepOrder - b.stepOrder);
   const technical = rows.filter((g) => g.tier === 'technical');
-  const policy = rows.filter((g) => g.tier === 'policy');
-  const biz = rows.filter((g) => g.tier !== 'technical' && g.tier !== 'policy');
-  const record = biz.filter((g) => g.class === 'record-state' || g.class === 'completeness');
-  const whoAll = biz.filter((g) => !record.includes(g));
+  const kept = rows.filter((g) => g.tier !== 'technical');
+  // the groups are by what a check is about; the tier stays the check's own and rides on its row (swarm round 3:
+  // a sign-in check is tier *policy* and still reads under *who may*; four-eyes is tier *business* and reads
+  // under *the record must be*)
+  const record = kept.filter((g) => g.class === 'record-state' || g.class === 'completeness' || g.class === 'integrity');
+  const isWho = (g) => g.class === 'identity' || g.class === 'authorisation' || (!g.class && g.tier !== 'policy');
+  const whoAll = kept.filter((g) => !record.includes(g) && (isWho(g) || (g.tier !== 'policy' && g.tier !== 'technical')));
+  const policy = kept.filter((g) => !record.includes(g) && !whoAll.includes(g));
   // sign-in checks say the same thing to a business reader: one row per wording, the times summed
   const who = [];
   const byWords = new Map();
@@ -2270,10 +2276,12 @@ export function jrnCasesHref(scope) {
  * no run earned says *nothing observed*.
  * @group Journey view
  */
-export function jrnObsText(facts) {
+export function jrnObsText(facts, opts = {}) {
   const o = facts && facts.observation;
   if (!o) return facts && facts.evidenceWord && facts.evidenceWord.cls !== 'none' ? t('journey.obs.none') : '';
-  return [jrnObsWho(o), (o.at || '').slice(0, 10)].filter(Boolean).join(' · ');
+  // a chip that already names the declaring cases beside its word (`testBasisHtml`) keeps only the day here
+  const who = opts.chipNamesCases && o.by === 'declaration' ? '' : jrnObsWho(o);
+  return [who, (o.at || '').slice(0, 10)].filter(Boolean).join(' · ');
 }
 /** Who observed a run: the cases a results report named, and the coverage reports that name none.
  * @group Journey view */
@@ -2292,7 +2300,8 @@ function jrnEvidenceTip(el, a) {
   if (!ev.key) return '';
   const o = a.obs;
   const rows = o ? [
-    ['tip.journey.obs.by', jrnObsWho(o)],
+    // a declaration's cases earned the word; *observed by* would word a pass as a run seen reaching the code
+    [o.by === 'declaration' ? 'tip.journey.obs.byDecl' : 'tip.journey.obs.by', jrnObsWho(o)],
     ['tip.journey.obs.when', (o.at || '').slice(0, 10)],
     // the cell's verdict (core `testVerdict().status`): none when a coverage report alone earned the word
     ['tip.journey.obs.verdict', a.verdict ? (a.verdict.status ? 'tests.run.' + a.verdict.status : '') : o.by === 'runs' ? '' : 'tests.run.' + (o.status || 'unknown')],
@@ -2313,9 +2322,10 @@ export function jrnEvChipHtml(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (cls === 'none') return '';
-  return JRN_FOOT_EV + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
+  const pb = builtOnlyHtml(ev);
+  return pb.before + JRN_FOOT_EV + esc(cls) + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-    + esc(t(ev.key)) + '</span>';
+    + esc(t(ev.key)) + '</span>' + pb.after;
 }
 // written out whole: an attribute assembled from pieces reads as prose to the lint
 const JRN_IMPDOOR = '<div class="line imp-door"><a href="#" onclick="return impactGo(this)" data-node="';
@@ -2623,8 +2633,9 @@ export function jrnHeaderHtml(data, sum, cnt, lens) {
   // built, so no word about it is a claim this flow can earn (blocker 2)
   const evHtml = cov && cov.sharedEvidence
     ? '<span class="jrn-e2e shared"' + tipAttrs({ key: 'journey.evidenceShared' }) + '>' + esc(t('journey.evidenceShared')) + '</span>'
-    : chipCls ? '<span class="jrn-e2e ' + esc(chipCls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' : '';
-  const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts) : '';
+    : chipCls ? builtOnlyHtml(ev).before + '<span class="jrn-e2e ' + esc(chipCls) + builtOnlyHtml(ev).cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: (cov && cov.observation) || null, verdict: cov && cov.verdict ? { status: cov.verdict.status } : null, fresh: (cov && cov.freshness) || null } }) + '>' + esc(t(ev.key)) + '</span>' + builtOnlyHtml(ev).after : '';
+  const chipped = !!(cov && cov.counted && cov.counted.tests && cov.counted.tests.n);
+  const obs = !business && facts && !(cov && cov.sharedEvidence) ? jrnObsText(facts, { chipNamesCases: chipped }) : '';
   g('g-tests', [
     // one chip: the cases, *over this journey*, *distinct* beside per-screen counts (its tip is the per-screen
     // table), the one word and the skips — the shared-evidence case keeps its sentence instead of the word

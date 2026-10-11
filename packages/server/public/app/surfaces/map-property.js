@@ -322,7 +322,9 @@ function gateKindKey(g) {
 function gateRow(g) {
   const label = gateWords(g);
   const kindKey = gateKindKey(g);
+  // the tier on every gate row, every lens: the business register groups by what a check is about, so the tier is the row's
   const sub = '<span' + defAttrs(kindKey) + '>' + esc(t(kindKey)) + '</span>'
+    + (g.tier && !g.config ? ' · <span class="gate-tier ' + esc(g.tier) + '"' + defAttrs('gate.tier.' + g.tier) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
     + (g.planned ? ' · <span' + defAttrs('map.prop.planned') + '>' + esc(t('map.prop.planned')) + '</span>' : '');
   const timesKey = g.merged > 1 ? 'map.prop.timesSame' : 'map.prop.times';
   const times = g.count > 1 ? '<span class="mp-dim"' + plainTip(g.count, timesKey, 'journey.scopeHere', '/api/journey', g.parts) + '>' + esc(t(timesKey).replace('{n}', g.count)) + '</span>' : '';
