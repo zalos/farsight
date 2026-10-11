@@ -1,7 +1,6 @@
-// The journey's pure folds (lanes round 2026-10-10, proposal 1 step 1): `public/app/lib/journey-model.js`, the module
-// the journey overlay, the drill and the Map's journey / screen / action stops all draw from, held against a real
-// `/api/journey` answer captured from the invoice-app fixture (Billing cycle, with its walk). The surfaces re-export
-// these under their old names, so what is held here is what every one of them draws.
+// The journey's pure folds (lanes round 2026-10-10, proposal 1): `public/app/lib/journey-model.js`, the module the
+// Map's journey / screen / action stops draw from (the journey page that also drew from it retired into the Map),
+// held against a real `/api/journey` answer captured from the invoice-app fixture (Billing cycle, with its walk).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
@@ -111,4 +110,37 @@ test('the ladder: a column per system used, the call crossing the seam, an actio
   const al = M.actionLadderModel(sum, fin, { steps });
   assert.equal(al.lines.length, fin.sg.markers.filter((m: any) => m.moment === fin.mo.index).length);
   assert.ok(al.lines[0].time.mo, 'the action starts on its first line');
+});
+
+test('one address: an action is named by its segment and its place in it — the Tests page\'s seg + action, 1-based', () => {
+  const cols = M.sheetModel(sum).cols;
+  // every column round-trips through the address
+  for (const c of cols) {
+    const at = M.segmentActionOf(cols, c.index);
+    assert.ok(at, 'column ' + c.index + ' has an address');
+    assert.equal(at.screen, c.sg.index + 1);
+    assert.equal(M.actionAtSegment(cols, at.screen, at.action), c, 'screen ' + at.screen + ' action ' + at.action);
+  }
+  // the places within one segment are 1, 2, … in column order, the Tests page's 0-based `action` plus one
+  const of2 = cols.filter((c: any) => c.sg.index === 1);
+  assert.deepEqual(of2.map((c: any) => M.segmentActionOf(cols, c.index).action), of2.map((_: any, i: number) => i + 1));
+  assert.equal(M.actionAtSegment(cols, 2, of2.length + 1), null, 'past the last action of a segment: none');
+  assert.equal(M.actionAtSegment(cols, 99, 1), null);
+  assert.equal(M.segmentActionOf(cols, 999), null);
+});
+
+test('the journey page retired: the front door is all surfaces/journeys.js draws, and no overlay is left to open', () => {
+  const app = join(here, '..', 'public', 'app');
+  const front = readFileSync(join(app, 'surfaces', 'journeys.js'), 'utf8');
+  for (const gone of ['renderJourney', 'closeJourney', 'jrnTimelineHtml', 'jrnStoryboardHtml', 'jrnSetLayout', "getElementById('journey')"]) {
+    assert.ok(!front.includes(gone), 'surfaces/journeys.js still holds ' + gone);
+  }
+  assert.match(front, /location\.hash = '#\/map\/' \+ encodeURIComponent\(id\)/, 'a journey opens on the Map');
+  const draw = readFileSync(join(app, 'lib', 'journey-draw.js'), 'utf8');
+  for (const gone of ['renderJourney', 'jrnTimelineHtml', 'jrnStoryRender', "getElementById('journey')", 'journeyDrill']) {
+    assert.ok(!draw.includes(gone), 'lib/journey-draw.js still holds ' + gone);
+  }
+  const html = readFileSync(join(here, '..', 'public', 'viewer.html'), 'utf8');
+  assert.ok(!html.includes('id="journey"'), 'the overlay\'s markup is gone');
+  assert.ok(!html.includes('set-flag-drill') && !html.includes('set-flag-map'), 'the two retired flags are gone from Settings');
 });

@@ -43,7 +43,8 @@ async function stubWide(page: Page) {
   });
 }
 async function openStreet(page: Page, screens: number, plumb = true) {
-  await go(page, STREET + (plumb ? '?plumb=1' : ''));
+  // the street itself (the hybrid register's own view of a journey is its table)
+  await go(page, STREET + (plumb ? '?plumb=1' : '?layout=screens'));
   await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`)).toHaveCount(screens);
   await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
   // the open frame lands (it is refitted once the journey's walk arrives)

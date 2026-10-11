@@ -16,14 +16,15 @@ import { sym } from '../sym.js';
 import { tipAttrs } from './tooltip.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { lifecycleStripModel, pickView, stripItems, stripCounts, tableRows, placedView } from './lifecycle-model.js';
-import { journeyStepHash } from './route-url.js';
+import { mapStopHash } from './route-url.js';
 
 export { lifecyclesFor, headerLifecycles, screenLifecycles } from './lifecycle-model.js';
 
 /** The table for one view; `flow` is the journey the reader has open (its screens are *here*). */
 function tableHtml(view, lens) {
   const persona = view && view.persona ? view.persona.name : '';
-  const doorOf = (m) => journeyStepHash(m.at.flowId, m.at.screen, { node: m.by });
+  // the writer's own part on the Map: the action that holds it, on the screen it is on
+  const doorOf = (m) => mapStopHash(m.at.flowId, { screen: m.at.screen, part: m.by });
   const rows = tableRows(view, doorOf);
   const mover = (m) => {
     const label = lens === 'code' ? m.name : lens === 'hybrid' ? m.words + ' · ' + m.name : m.words;

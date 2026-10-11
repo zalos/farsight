@@ -96,27 +96,45 @@ test('the Map saves its storyline board whole, as a picture and as a PDF, with t
   expect(inPage.footer).toBe(f);
 });
 
+/** Save one stop's picture from the Save control at `within` (the street head or the table head). */
+async function saveAt(page: Page, within: string, fmt: 'png' | 'pdf'): Promise<{ d: Download; bytes: Buffer }> {
+  await page.locator(within + ' [data-export="street"]').first().click();
+  const menu = page.getByRole('menu', { name: 'Save this view' });
+  await expect(menu).toBeVisible();
+  const [d] = await Promise.all([page.waitForEvent('download'), menu.locator(`[data-fx-fmt="${fmt}"]`).click()]);
+  const bytes = readFileSync((await d.path())!);
+  expect(bytes.length, 'the file is not empty').toBeGreaterThan(0);
+  return { d, bytes };
+}
+
 /**
- * @covers packages/server/public/app/surfaces/journeys.js::jrnStoryPicture
+ * The journey page's storyboard export retired with it: the business register saves the street — every screen of the
+ * journey, in its words — and the table saves itself.
+ * @covers packages/server/public/app/surfaces/map-stops.js::stopPicture
  * @covers packages/server/public/app/lib/export.js::exportToolHtml
  */
-test('a journey saves as its storyboard — switching to it first — with every screen in the picture', async ({ page }) => {
-  await gotoReady(page, '#/journeys/' + encodeURIComponent(FLOW) + '?view=timeline&lens=business');
-  const btn = page.locator('#jrn-export [data-export="storyboard"]');
+test('a journey saves from its stop on the Map: the business street with every screen, and the table', async ({ page }) => {
+  await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens&lens=business');
+  const head = '.map-district[data-flow="' + FLOW + '"]';
+  await expect(page.locator(head + ' .map-scr')).toHaveCount(3);
+  const btn = page.locator(head + ' [data-export="street"]').first();
   await expect(btn).toHaveText('Save');
-  const { d, bytes } = await save(page, 'storyboard', 'png');
-  expect(d.suggestedFilename()).toMatch(/^farsight-storyboard-.*billing-cycle.*\.png$/);
-  await expect(page.locator('.jrn-layoutsw .jrn-viewbtn.on')).toHaveText(/storyboard/i);
+  const { d, bytes } = await saveAt(page, head, 'png');
+  expect(d.suggestedFilename()).toMatch(/^farsight-street-.*billing-cycle.*\.png$/);
   const { width, height } = pngSize(bytes);
-  const story = await page.locator('#jrn-tl .jrn-story').boundingBox();
-  // drawn at 2× or more: the picture is at least twice the storyboard's width
-  expect(width).toBeGreaterThanOrEqual(Math.floor(story!.width * 2) - 2);
+  const district = await page.locator(head).boundingBox();
+  // the whole district at 2× or more, whatever the zoom on screen
+  expect(width).toBeGreaterThanOrEqual(Math.floor(district!.width * 2) - 2);
   expect(height).toBeGreaterThan(400);
-  const f = await footer(page, 'storyboard');
-  expect(f).toMatch(/^Storyboard · /);
+  const f = (await btn.getAttribute('data-export-footer')) || '';
   expect(f).toMatch(/business words/);
-  const pdf = await save(page, 'storyboard', 'pdf');
+  const pdf = await saveAt(page, head, 'pdf');
   expect(pdf.bytes.subarray(0, 8).toString('latin1')).toBe('%PDF-1.4');
+  // the table saves itself
+  await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
+  await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
+  const tbl = await saveAt(page, '.map-table-head', 'png');
+  expect(pngSize(tbl.bytes).width).toBeGreaterThan(1000);
 });
 
 /**

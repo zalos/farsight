@@ -138,24 +138,6 @@ export function flowWork(flowId) {
 export function forgetFlowWork() { FLOW_CACHE.clear(); }
 
 /**
- * Fill the journey header's work chip for the journey on screen. A journey that
- * is not a flow, or a flow nothing tracks, leaves the slot empty.
- * @group Work
- */
-export function fillJourneyWork(entry) {
-  const el = document.getElementById('jrn-work');
-  if (!el) return;
-  el.innerHTML = '';
-  if (!entry || entry.kind !== 'flow' || !entry.id) return;
-  const id = entry.id;
-  el.dataset.flow = id;
-  flowWork(id).then((resp) => {
-    if (el.dataset.flow !== id) return;
-    el.innerHTML = flowChipHtml(resp);
-  });
-}
-
-/**
  * The inspector's *Tracked work* section for a node: an empty placeholder now,
  * filled once `/api/work/links?node=` answers — and left empty when no item is
  * linked. Each row reads *tracked by KAN-3 (in progress, Farsight Test)*; the

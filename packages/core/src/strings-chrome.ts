@@ -22,5 +22,4 @@ export const CHROME_STRINGS: Record<string, StringEntry> = {
   // keys
   'key.mapLegend': same('The board’s legend: what each line, colour and mark means'),
   // Esc on an open journey with nothing inside it open: one press says, a second closes
-  'journey.escAgain': same('Esc again closes this journey', 'Nothing inside the journey was open, so the first Esc only says what a second one would do: close the journey and go back to the list.'),
 };

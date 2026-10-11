@@ -19,19 +19,22 @@
 // through `S.JRN_HOST` while the overlay is closed. map.js binds this module once (`bindStops`) and calls it from a
 // handful of small call sites, so the other lanes on the Map (lanes L, V, W, G) merge around it.
 
-import { S, esc, currentLens } from '../store.js';
+import { S, esc, currentLens, expose } from '../store.js';
 import { t } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { designThumbHtml } from '../lib/graph-render.js';
-import { storylineOf } from '../lib/journeys-model.js';
-import { sheetModel, screenActions, screenOfAction, actionOfMarker, beatOrder } from '../lib/journey-model.js';
+import { storylineOf, placesOf } from '../lib/journeys-model.js';
+import { jrnPersonaName, jrnGroupName } from '../lib/journeys-tree.js';
+import { sheetModel, screenActions, screenOfAction, actionOfMarker, beatOrder, segmentActionOf } from '../lib/journey-model.js';
 import { storylineLineHtml } from '../lib/detail-doors.js';
 import { exportToolHtml, registerExport } from '../lib/export.js';
 import {
   jrnBuildTree, jrnSheetIndex, jrnSheetHtml, jrnResetFolds, jrnSelect, jrnLadderCellHtml, jrnDock, jrnSetDock,
-  jrnLifecycleHtml, jrnMoLabel, journeyOpen,
-} from './journeys.js';
+  jrnLifecycleHtml, jrnMoLabel, jrnMarkerAt, jrnNav, jrnApplyDock, jrnCollectForks, jrnForksPanelHtml, jrnToggleForks,
+  jrnForksBtnHtml, jrnImpactRings, jrnCutChip, jrnHeaderHtml, jrnToggleCuts, cutsOpen, forksOpen, expandedOpen, closeExpanded, jrnScrollTo,
+} from '../lib/journey-draw.js';
+import { partOrder } from '../lib/route-url.js';
 import { jrnDrillIndex, jrnDrillStageHtml, jrnDrillMount } from './journey-drill.js';
 
 // ── the layout control's registration point ─────────────────────────────────
@@ -55,6 +58,26 @@ export function registerMapLayout(choice) {
   if (i >= 0) MAP_LAYOUTS[i] = choice; else MAP_LAYOUTS.push(choice);
 }
 const LAYOUT = {};
+
+// ── the register's own view of a journey (lanes round 2026-10-10, one address) ──────────────────────────────
+// A journey opened by a door that names no place lands where its register reads best: the business register on the
+// screens (the street, big pictures and the screen's own sentence — the storyboard's look), the hybrid register on the
+// table, the code register on the first action's beats with the code open. What a reader picks with the LAYOUT
+// control (or `v`) at the journey or the action stop is remembered for their register (`fs-map-view.<lens>`, which
+// replaces the journey page's `fs-jrn-layout.<lens>`); a link that names a layout wins for the visit it opened.
+const VIEWS = ['screens', 'table', 'beats', 'ladder'];
+const VIEW_DEFAULT = { business: 'screens', hybrid: 'table', code: 'beats' };
+/** The view a journey opens at in this register: what the reader last picked here, else the register's default. @group Map */
+export function registerView(lens = currentLens()) {
+  let v = null;
+  try { v = localStorage.getItem('fs-map-view.' + lens); } catch (e) { v = null; }
+  return VIEWS.includes(v) ? v : (VIEW_DEFAULT[lens] || 'screens');
+}
+/** Remember the view the reader picked, for their register. */
+function rememberView(v) {
+  if (!VIEWS.includes(v)) return;
+  try { localStorage.setItem('fs-map-view.' + currentLens(), v); } catch (e) { /* private mode: the default stays */ }
+}
 /** The layout on screen at a stop: the one picked, else the stop's first choice. @group Map */
 export function layoutAt(when) {
   const list = MAP_LAYOUTS.filter((x) => x.when === when);
@@ -109,11 +132,16 @@ export function drawLayoutTool() {
   slot.innerHTML = html;
   return true;
 }
-/** Pick a layout at a stop: a registered choice's own hook, else the stop redraws. @group Map */
-export function setLayout(when, id) {
+/**
+ * Pick a layout at a stop: a registered choice's own hook, else the stop redraws. `o.remember` (the reader's own pick —
+ * the control or `v`) keeps it as the register's view of a journey.
+ * @group Map
+ */
+export function setLayout(when, id, o = {}) {
   const c = MAP_LAYOUTS.find((x) => x.when === when && x.id === id);
   if (!c) return;
   LAYOUT[when] = id;
+  if (o.remember && (when === 'st' || when === 'act')) rememberView(id);
   if (c.onPick) c.onPick(id);
   else if (when === 'st') { syncTable(); ST.api.writeHash(); }
   else if (when === 'act' && ST.act) { drawAct(); selectBeat(ST.act.beat || 0); ST.api.writeHash(); }
@@ -126,7 +154,7 @@ export function cycleLayout() {
   const list = MAP_LAYOUTS.filter((x) => x.when === when);
   if (list.length < 2) return false;
   const i = list.findIndex((x) => x.id === layoutAt(when));
-  setLayout(when, list[(i + 1) % list.length].id);
+  setLayout(when, list[(i + 1) % list.length].id, { remember: true });
   return true;
 }
 
@@ -142,19 +170,23 @@ function fetchFull(flow) {
 }
 /** Forget the walks (a new sync). @group Map */
 export function forgetWalks() { ST.full.clear(); }
+/** A part was selected on the stop (a click, j / k, a door): the address follows it. */
+function onSelect() {
+  if (ST.api && (ST.table || ST.act)) ST.api.writeHash();
+}
+/** The drawing asked for the stop to be drawn again (a business tab of the checks lane moved). */
+function onRedraw() { redrawStops(); }
 /** Make this answer the journey the shared drawing code reads, and give it this host. */
 function useJourney(data, host) {
   if (S.JOURNEY !== data) {
     S.JOURNEY = data;
     S.JRN_TREE = jrnBuildTree(data.steps || []);
     S.journeyActive = -1;
-    S.jrnStep = null;
   }
-  // one drawing of a journey on the page at a time: the closed overlay's ids must not answer for the Map's
-  const tl = document.getElementById('jrn-tl');
-  if (tl && !journeyOpen()) tl.innerHTML = '';
   S.JRN_HOST = host;
-  S.JRN_STORY = null;
+  // a part selected on the stop moves the address with it (the table's `part=`, the action's `beat=`)
+  S.JRN_ON_SELECT = onSelect;
+  S.JRN_REDRAW = onRedraw;
 }
 
 // ── the action stop ─────────────────────────────────────────────────────────
@@ -212,12 +244,12 @@ export async function openAction(flow, ci, o = {}) {
   api.writeHash();
   api.refresh();
 }
-/** Open the action a part of the walk belongs to (a call card's door, a property row). @group Map */
-export async function openActionAt(flow, order) {
+/** Open the action a part of the walk belongs to (a call card's door, a property row, a link's `part=`). @group Map */
+export async function openActionAt(flow, order, o = {}) {
   const j = await ST.api.ensureJourney(flow);
   if (!j || !j.data) return;
   const ci = actionOfMarker(sheetModel(j.data.summary).cols, order);
-  if (ci >= 0) openAction(flow, ci, { order });
+  if (ci >= 0) await openAction(flow, ci, { ...o, order });
 }
 /** Open the first action of a street screen (`+` past the screen, the ACTION button). @group Map */
 export async function openScreenAction(flow, si, o = {}) {
@@ -435,12 +467,11 @@ function onActClick(e) {
 export function actionParams() {
   const a = actionState();
   if (!a) return null;
-  const sc = a.model.screens[a.si];
-  const acts = screenActions(S.JRN_DRILL ? S.JRN_DRILL.cols : [], a.model.screens, a.si);
-  const k = acts.findIndex((c) => c.index === a.ci);
+  // the action's own segment and its place among that segment's actions — the unit the Tests page scopes by
+  const at = segmentActionOf(S.JRN_DRILL ? S.JRN_DRILL.cols : [], a.ci);
   return {
-    screen: sc && sc.segment ? String(sc.segment.index + 1) : null,
-    action: k >= 0 ? String(k + 1) : null,
+    screen: at ? String(at.screen) : null,
+    action: at ? String(at.action) : null,
     beat: a.beat ? String(a.beat + 1) : null,
     layout: layoutAt('act') !== 'beats' ? layoutAt('act') : null,
     dock: a.code ? jrnDock() : null,
@@ -506,13 +537,17 @@ function closeTable() {
   host.innerHTML = '';
   if (S.JRN_HOST === host) S.JRN_HOST = null;
   S.JRN_SHEET = null;
+  S.journeyActive = -1;
+  S.jrnForksOpen = false;
+  S.jrnCutsOpen = false;
   const M = ST.api.MAP;
   if (M.stage) M.stage.classList.remove('in-table');
 }
 async function drawTable(flow) {
   const M = ST.api.MAP;
   const host = M.stage.querySelector('.map-table-host');
-  ST.table = { flow, host };
+  ST.table = { flow, host, part: ST.tablePart && ST.tablePart.flow === flow ? ST.tablePart : null };
+  ST.tablePart = null;
   host.hidden = false;
   M.stage.classList.add('in-table');
   host.innerHTML = '<div class="map-act-wait">' + esc(t('map.act.loading')) + '</div>';
@@ -523,22 +558,82 @@ async function drawTable(flow) {
 }
 function drawTableNow(j, data) {
   const { flow, host } = ST.table;
+  const keep = S.JOURNEY === data && S.journeyActive >= 0 ? S.journeyActive : -1;
   useJourney(data, host);
   S.JRN_DRILL = null;
   jrnSheetIndex(data.summary);
   jrnResetFolds();
+  const forks = jrnCollectForks();
   // the head scrolls with the table: it is the journey header's facts, and a header that stays put is the one the
-  // reviewers lost the first card under at 1280
-  host.innerHTML = '<div class="map-table" data-map-wheel="own"><div class="map-table-scroll">'
-    + '<div class="map-table-head" data-flow="' + esc(flow) + '">' + ST.api.headHtml(flow) + '</div>'
+  // reviewers lost the first card under at 1280. Beside it, what the journey page's header carried that only the
+  // table has: the forks the walk met (the code register) and the places the walk stopped short, each opening its
+  // drawer. The table, its dock (a part's code: `j` / `k` walk the parts, `d` moves the dock) and the two drawers
+  // share one body, the way the journey page laid them out.
+  host.innerHTML = '<div class="map-table" data-map-wheel="own"><div class="jrn-body map-table-body" id="jrn-body"><div class="map-table-scroll">'
+    // the table's head prints the journey's own count line — screens, actions, gates, what is not in words, the tests
+    // with their one word and freshness, the walk in the code register — where the street prints its chips
+    + '<div class="map-table-head" data-flow="' + esc(flow) + '">'
+    + ST.api.headHtml(flow, '<span class="jrn-count map-table-count">' + jrnHeaderHtml(data, data.summary, (data.summary && data.summary.counts) || {}, currentLens()) + '</span>')
+    + '<div class="map-table-tools">' + jrnForksBtnHtml(data, forks)
+    + (data.truncated ? '<span class="jrn-trunc"' + tipAttrs({ key: 'journey.truncated', noFocus: true }) + '>' + sym('warning') + esc(t('journey.truncated').replace('{cap}', String((data.steps || []).length))) + '</span>' : '')
+    + '<button type="button" class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button></div></div>'
     + '<div class="map-table-wrap">' + jrnSheetHtml(data.summary) + '</div></div>'
+    + '<div class="jrn-dock" id="jrn-dock" style="display:none" role="region" aria-label="' + esc(t('map.dock')) + '"></div>'
+    + '<div class="jrn-forks" id="jrn-forks" role="dialog" aria-label="' + esc(t('journey.forks.title')) + '" inert>' + jrnForksPanelHtml(forks) + '</div>'
+    + '<div class="jrn-cutlist" id="jrn-cutlist" role="dialog" inert></div></div>'
     + '<div class="map-act-foot"><span class="map-hintline"' + tipAttrs({ key: 'map.table.hint', noFocus: true }) + '>' + esc(t('map.table.hint')) + '</span></div></div>';
+  jrnCutChip(data, (data.summary && data.summary.counts) || {});
+  jrnToggleForks(false);
+  jrnApplyDock();
   if (!ST.table.wired) { ST.table.wired = true; host.addEventListener('click', onTableClick, true); }
+  // the part a link names (`part=`), else the one selected before a redraw, opens with its code in the dock
+  const want = ST.table.part;
+  ST.table.part = null;
+  const order = want ? partOrder(data.summary.segments, want.screen, want.node) : keep;
+  if (order != null && order >= 0 && S.JRN_MARK[order]) jrnSelect(order);
+  else jrnImpactRings();
+}
+/**
+ * Open the table for a journey with one part of its walk selected (`part=` — an old link's `node=`, a lifecycle
+ * writer's door): the table draws, the part's column scrolls into view and its code opens in the dock.
+ * @group Map
+ */
+export function tableAtPart(flow, node, screen) {
+  ST.tablePart = node ? { flow, node, screen } : null;
+  if (ST.table && ST.table.flow === flow && S.JOURNEY && ST.tablePart) {
+    const order = partOrder(S.JOURNEY.summary.segments, screen, node);
+    ST.tablePart = null;
+    if (order != null && S.JRN_MARK[order]) jrnSelect(order);
+  }
+}
+/** The table's part of the address: the part selected and where its code opens. @group Map */
+export function tableParams() {
+  if (!ST.table || !S.JOURNEY || S.JRN_DRILL || !(S.journeyActive >= 0)) return null;
+  const mk = jrnMarkerAt(S.journeyActive);
+  if (!mk || !mk.nodeId) return null;
+  const sg = (S.JOURNEY.summary.segments || []).find((x) => S.journeyActive >= x.from && S.journeyActive <= x.to);
+  return { part: mk.nodeId, screen: sg ? String(sg.index + 1) : null, dock: jrnDock() };
+}
+/** The keys at the table: j / k walk its parts (each opening its code), d moves the dock. True when used. @group Map */
+export function tableKey(e) {
+  if (!ST.table || !S.JOURNEY || S.JRN_DRILL) return false;
+  const k = e.key;
+  if (k === 'j' || k === 'k') { jrnNav(k === 'j' ? 1 : -1); return true; }
+  if (k === 'd' || k === 'D') { const order = ['inline', 'bottom', 'right']; jrnSetDock(order[(order.indexOf(jrnDock()) + 1) % order.length]); onSelect(); return true; }
+  return false;
+}
+/** Esc at the table closes what is on top of it first — the cut list, the forks, a part's code. True when it did. @group Map */
+export function tableEscape() {
+  if (!ST.table) return false;
+  if (cutsOpen()) { jrnToggleCuts(false); return true; }
+  if (forksOpen()) { jrnToggleForks(false); return true; }
+  if (expandedOpen()) { closeExpanded(); onSelect(); return true; }
+  return false;
 }
 /** On the table a column — its head, or a part in one of its cells — opens that action's beats. */
 function onTableClick(e) {
   if (!ST.table) return;
-  if (e.target.closest('a[href], .jrn-smore, .jrn-foldbtn, .map-table-head, [data-export]')) return;
+  if (e.target.closest('a[href], .jrn-smore, .jrn-foldbtn, .map-table-head, [data-export], .jrn-dock, .jrn-forks, .jrn-cutlist, .jrn-sexp')) return;
   const head = e.target.closest('.jrn-sbh[data-col]');
   const cell = e.target.closest('.jrn-scell[data-col]');
   const part = e.target.closest('[data-order]');
@@ -549,6 +644,22 @@ function onTableClick(e) {
   openAction(ST.table.flow, ci, part && cell ? { order: +part.dataset.order } : {});
 }
 
+/**
+ * Show one part of the journey's walk (its step order) where the reader is: selected in place on the table or at the
+ * action, else the action that holds it opened from the street or the screen. False when no journey is on the Map
+ * (the caller does what it does elsewhere). The gate card's *show it in the journey* and the impact list's rows.
+ * @group Map
+ */
+export function mapShowPart(order) {
+  const M = ST.api && ST.api.MAP;
+  if (!M || !M.stage || !S.JOURNEY || !(order >= 0)) return false;
+  if ((ST.table || ST.act) && S.JRN_HOST && S.JRN_HOST.isConnected) { jrnScrollTo(order); return true; }
+  const flow = M.prop ? M.prop.flow : M.focus;
+  const id = S.JOURNEY.entry && S.JOURNEY.entry.id;
+  if (!flow || flow !== id) return false;
+  openActionAt(flow, order);
+  return true;
+}
 /** Redraw the stop on screen in the lens or register now on (words only). @group Map */
 export function redrawStops() {
   if (ST.act) { const bi = ST.act.beat; drawAct(); selectBeat(bi); if (ST.act.code) openCodeTab(); }
@@ -574,9 +685,38 @@ export function streetFactsHtml(flow, j, tree) {
   if (!j || !j.data) return '';
   const story = storylineLineHtml(tree, flow);
   const lc = jrnLifecycleHtml(j.data);
-  return '<div class="facts">' + (story ? '<span class="story">' + story + '</span>' : '')
+  return '<div class="facts">'
+    + (story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + story + storyNavHtml(tree, flow, 'next') + '</span>' : '')
     + (lc ? '<span class="lc"' + tipAttrs({ key: 'map.head.lifecycle', noFocus: true }) + '>' + lc + '</span>' : '')
     + exportToolHtml('street', 'map-tb map-tb-save') + '</div>';
+}
+
+/**
+ * Who the journey is for and its group, from the organised tree (the journey page's header said it):
+ * *For <persona> · <group>*, a journey for two people naming the rest. '' when the tree does not place it. Drawn at
+ * the end of the head's chip row, so the head grows by no line.
+ * @group Map
+ */
+export function forLineHtml(tree, flow) {
+  const places = placesOf(tree, flow);
+  if (!places.length) return '';
+  const p = places[0];
+  const others = [...new Set(places.slice(1).map((x) => x.persona))].filter((x) => x !== p.persona);
+  return '<span class="for g-org"><span' + tipAttrs({ key: 'journeys.persona.for', noFocus: true }) + '>' + esc(t('journeys.persona.for')) + '</span> '
+    + '<a href="' + esc('#/journeys?persona=' + encodeURIComponent(p.persona.id)) + '">' + esc(jrnPersonaName(p.persona)) + '</a>'
+    + ' · <span>' + esc(jrnGroupName(p.group)) + '</span>'
+    + (others.length ? ' <span' + tipAttrs({ key: 'journeys.persona.alsoUnder', noFocus: true }) + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
+    + '</span>';
+}
+/** ‹ or › beside the storyline: the journey before or after this one in it, on the Map. '' at an end or in none. */
+function storyNavHtml(tree, flow, dir) {
+  const a = storylineOf(tree, flow)[0];
+  const j = a && (dir === 'prev' ? a.prev : a.next);
+  const key = dir === 'prev' ? 'journeys.storyline.prev' : 'journeys.storyline.next';
+  const glyph = dir === 'prev' ? '‹' : '›';
+  if (!j) return '';
+  return '<a class="map-story-nav ' + dir + '" href="' + esc('#/map/' + encodeURIComponent(j.nodeId)) + '" aria-label="' + esc(t(key) + ' · ' + (j.name || j.id)) + '"'
+    + tipAttrs({ text: t(key) + ' · ' + (j.name || j.id), noFocus: true }) + '>' + glyph + '</a>';
 }
 
 /**
@@ -595,3 +735,5 @@ async function stopPicture() {
   return el ? { el, title: t('map.level.st'), subject: subject(M.focus) } : null;
 }
 registerExport('street', stopPicture);
+
+expose({ mapShowPart });

@@ -107,7 +107,7 @@ function rowHtml(row) {
       + row.hold.map((h) => word('readiness.hold.' + h)).join(' · ') + '</span>';
   return '<tr class="rd-row' + (row.kind === 'branch' ? ' rd-branch' : '') + '" data-step="' + esc(row.label) + '" data-decision="' + (row.ship ? 'ship' : 'hold') + '">'
     + '<td class="rd-step">' + esc(row.label) + '</td>'
-    + '<td><a class="rd-name" href="#/journeys/' + esc(encodeURIComponent(row.flowId)) + '">' + esc(row.name) + '</a>'
+    + '<td><a class="rd-name" href="#/map/' + esc(encodeURIComponent(row.flowId)) + '">' + esc(row.name) + '</a>'
     + (row.branchOf ? '<span class="rd-sub"' + tipAttrs({ text: row.branchOf.when }) + '>' + esc(fill('readiness.branch', { name: row.branchOf.name })) + '</span>' : '')
     + (screens ? '<span class="rd-sub">' + esc(screens) + '</span>' : '') + '</td>'
     + '<td>' + built + '<span class="rd-sub"' + defAttrs('readiness.builtN') + '>' + esc(fill('readiness.builtN', { n: row.built.n, m: row.built.of })) + '</span></td>'

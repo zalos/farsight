@@ -38,7 +38,7 @@ async function go(page: Page, hash: string) {
   await page.evaluate((h) => { location.hash = h; }, hash);
 }
 async function openStreet(page: Page) {
-  await go(page, STREET);
+  await go(page, STREET + '?layout=screens');
   await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`)).toHaveCount(3);
   await expect(page.locator(HEAD + ' .map-chip').first()).toBeVisible();
 }

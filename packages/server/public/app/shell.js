@@ -8,7 +8,8 @@ import { startSearchIndex, continueSearchIndex, searchIndex, storylineTravelItem
 import { t, def, initRegister, onRegisterChange, toggleRegister } from './strings.js';
 import { sym, grammarHtml } from './sym.js';
 import { render, select, scopeLabel, closeCtx, refreshStats, cardOf, revealCard } from './lib/graph-render.js';
-import { mountJourneys, hideJourneyOverlay, journeysRefresh } from './surfaces/journeys.js';
+import { mountJourneys, journeysRefresh } from './surfaces/journeys.js';
+import { isOverlayAddress, overlayToMap } from './lib/route-url.js';
 import { cmapScopeHtml, projectTravelItems } from './surfaces/codemap-projects.js';
 import { pickerHasQuery } from './lib/multi-pick.js';
 import { mountCodemap, unmountCodemap, codemapRefresh } from './surfaces/codemap.js';
@@ -18,7 +19,7 @@ import { mountStewardship } from './surfaces/stewardship.js';
 import { mountApis, apisRefresh } from './surfaces/apis.js';
 import { mountTests, testsRefresh } from './surfaces/tests.js';
 import { mountWork, workRefresh } from './surfaces/work.js';
-import { mountMap, mapRefresh, mapUpdate, unmountMap, mapEnabled, mapOpen, mapTravel } from './surfaces/map.js';
+import { mountMap, mapRefresh, mapUpdate, unmountMap, mapOpen, mapTravel } from './surfaces/map.js';
 import { renderConfigFiles } from './surfaces/settings-config.js';
 import { renderLessons } from './surfaces/settings-lessons.js';
 import { mountReadiness, unmountReadiness, readinessRefresh } from './surfaces/readiness.js';
@@ -31,10 +32,10 @@ import { plainTip } from './lib/counted.js';
 import { readOnlyWhy, applyReadOnly } from './lib/read-only.js';
 
 // ── router ──────────────────────────────────────────────────────
-// `map` is behind the workspace's `flags.map` (Settings → Experiments): `navTabs()` leaves it out when off
+// the Map is the one place a journey is read (lanes round 2026-10-10, proposal 1): no longer an experiment behind a flag
 const NAV = ['portfolio', 'journeys', 'map', 'codemap', 'apis', 'tests', 'changes', 'work'];
-/** The tabs the bar draws: NAV without the surfaces a workspace flag keeps off. @group Shell */
-export function navTabs() { return NAV.filter((s) => s !== 'map' || mapEnabled()); }
+/** The tabs the bar draws. @group Shell */
+export function navTabs() { return NAV; }
 /**
  * The surfaces, each with how it is mounted, unmounted, and — the contract the
  * filters run on — how it is **refreshed in place**.
@@ -55,7 +56,8 @@ export function navTabs() { return NAV.filter((s) => s !== 'map' || mapEnabled()
  */
 const SURFACES = {
   portfolio: { mount: mountPortfolio, refresh: portfolioRefresh },
-  journeys: { mount: mountJourneys, unmount: hideJourneyOverlay, refresh: journeysRefresh },
+  // the front door: the journeys organised, the storylines and the state of play (`#/journeys`); one journey is read on the Map
+  journeys: { mount: mountJourneys, refresh: journeysRefresh },
   codemap: { mount: mountCodemap, unmount: unmountCodemap, refresh: codemapRefresh },
   apis: { mount: mountApis, refresh: apisRefresh },
   tests: { mount: mountTests, refresh: testsRefresh },
@@ -209,18 +211,15 @@ export function parseRoute() {
     card: q.get('card'),
     // the Map's Affected mode (lane I): the seed the board is dimmed around and how far out it asks
     affected: q.get('affected'),
-    // the Map and the journey open each other at the same step (round 2026-10-05 §3.1): the journey's `step` and the
-    // street's `screen` are one 1-based screen ordinal; `j` names the Map's journey for a link written without the path
-    step: q.get('step'),
-    screen: q.get('screen'),
+    // the Map's screen (`screen=`, a 1-based screen ordinal; an old `step=` reads the same — `step` is the storyline
+    // position only, and the Map rewrites the address); `j` names the Map's journey for a link written without the path
+    screen: q.get('screen') || q.get('step'),
     j: q.get('j'),
     ahops: q.get('ahops') ? +q.get('ahops') : null,
     raw: location.hash,
   };
 }
 
-/** Whether the hash itself named a view (parseRoute defaults `view` to `map`). @group Shell */
-function q0view(r) { return /[?&]view=/.test(String(r.raw || '')); }
 /**
  * Apply the current hash: unmount the previous surface, set the body's
  * surface class, mount the new surface into #surface (or the graph frame),
@@ -229,6 +228,9 @@ function q0view(r) { return /[?&]view=/.test(String(r.raw || '')); }
  * @group Shell
  */
 export function applyRoute() {
+  // the journey page retired (lanes round 2026-10-10, proposal 1): an old journey link is the same place on the Map,
+  // rewritten in place — one replace, no history entry, so Back still leaves the way the reader came
+  if (isOverlayAddress(location.hash)) history.replaceState(null, '', overlayToMap(location.hash));
   let r = parseRoute();
   if (r && r.surface && (!SURFACES[r.surface] || r.surface === 'nowhere')) r = Object.assign({}, r, { asked: r.surface, surface: 'nowhere' });
   if (!r || !SURFACES[r.surface]) {
@@ -236,25 +238,17 @@ export function applyRoute() {
     history.replaceState(null, '', '#/' + dflt);
     r = parseRoute();
   }
-  // the map is a workspace experiment: with its flag off a #/map link reads as the Portfolio
-  if (r.surface === 'map' && !mapEnabled()) {
-    history.replaceState(null, '', '#/portfolio');
-    r = parseRoute();
-  }
   S.route = r;
   // a shared link may name the register and the journey band's shape it was written in
-  if (r.lens && /^(business|hybrid|code)$/.test(r.lens) && currentLens() !== r.lens) setLens(r.lens, true);
-  if (r.band === 'ladder' || r.band === 'rows') S.jrnView = r.band;
-  // …and which journey visual it was written in (the view axis; deep link wins over persistence)
-  // (S.jrnLayoutLens cleared: the link's view holds for the register it opens in — journeys.js jrnLayout)
-  if (r.surface === 'journeys' && /^(storyboard|timeline|sheet|drill)$/.test(r.view || '')) { S.jrnLayout = r.view; S.jrnLayoutLens = null; }
-  // a link to one step opens the blueprint timeline when it names no view of its own
-  else if (r.surface === 'journeys' && r.step && !q0view(r)) { S.jrnLayout = 'timeline'; S.jrnLayoutLens = null; }
-  if (r.surface === 'journeys' && /^(inline|bottom|right)$/.test(r.dock || '')) S.jrnDock = r.dock;
-  if (r.surface === 'journeys' && /^(words|gates|decisions)$/.test(r.biz || '')) S.jrnBiz = r.biz;
+  const lensMoved = !!(r.lens && /^(business|hybrid|code)$/.test(r.lens) && currentLens() !== r.lens);
+  if (lensMoved) setLens(r.lens, true);
+  // the dock a Map link names (the code stop's, or the table's beside a part) is where the code opens
+  if (r.surface === 'map' && /^(inline|bottom|right)$/.test(r.dock || '')) S.jrnDock = r.dock;
   // the same surface, a new place inside it: a surface that can follow its own route keeps its state
   if (currentSurface === r.surface && SURFACES[r.surface].update && document.getElementById('surface').childElementCount) {
     SURFACES[r.surface].update(r);
+    // a link that named another register redraws the words of the surface it stayed on (a mount draws them itself)
+    if (lensMoved && SURFACES[r.surface].refresh) SURFACES[r.surface].refresh('lens', r);
     renderChrome();
     impactFromRoute(r);
     return;
@@ -912,11 +906,10 @@ export function searchNodes(q) {
     if (score > 0) score += p.type === 'application' ? 2 : p.type === 'library' ? 1 : 0;
     return { n: p, score };
   }).filter((r) => r.score > 0);
-  // the storylines the graph declares (a chain of journeys, not a node), folded once per graph, scope and Map flag
-  const mapOn = !!(S.SETTINGS && S.SETTINGS.flags && S.SETTINGS.flags.map);
-  const storyKey = scopeKey + '|' + mapOn;
+  // the storylines the graph declares (a chain of journeys, not a node), folded once per graph and scope
+  const storyKey = scopeKey;
   if (SEARCH.storyGraph !== S.GRAPH || SEARCH.storyKey !== storyKey) {
-    SEARCH.stories = storylineTravelItems(S.GRAPH.meta && S.GRAPH.meta.journeys, SEARCH.repos, mapOn);
+    SEARCH.stories = storylineTravelItems(S.GRAPH.meta && S.GRAPH.meta.journeys, SEARCH.repos);
     Object.assign(SEARCH, { storyGraph: S.GRAPH, storyKey });
   }
   const storyHits = SEARCH.stories.map((p) => ({ n: p, score: scoreStoryline(p, raw, terms) })).filter((r) => r.score > 0);
@@ -1123,7 +1116,7 @@ export function pick(id) {
   const proj = (S.palResults || []).find((x) => x.id === id && (x.kind === 'project' || x.kind === 'storyline'));
   if (proj && proj.kind === 'storyline') {
     // already there: the hash would not change, so it is set to where the reader is first and back
-    if (location.hash === proj.hash) history.replaceState(null, '', proj.hash.startsWith('#/map') ? '#/map' : '#/journeys');
+    if (location.hash === proj.hash) history.replaceState(null, '', '#/map');
     location.hash = proj.hash;
     return;
   }
@@ -1187,12 +1180,15 @@ export function travelTarget(n) {
     }
   }
   const id = encodeURIComponent(n.id);
-  if (n.kind === 'flow') return { surface: 'journeys', hash: '#/journeys/' + id, id: n.id };
+  // a journey is read on the Map (its street, at the register's own layout)
+  if (n.kind === 'flow') return { surface: 'map', hash: '#/map/' + id, id: n.id };
   if (n.kind === 'api') return { surface: 'apis', hash: '#/apis/' + id, id: n.id };
   if (n.kind === 'test') return { surface: 'tests', hash: '#/tests/' + id, id: n.id };
   // a work item is its pane on the WORK surface, in every register
   if (n.kind === 'work' || String(n.id).startsWith('work::')) return { surface: 'work', hash: '#/work/' + id, id: n.id };
-  if ((n.kind === 'route' || n.kind === 'page') && currentLens() === 'business') return { surface: 'journeys', hash: '#/journeys/' + id, id: n.id };
+  // a route or a page, in the business register, as the journey it is part of (or the walk from it): the Map arrives
+  // on the screen that shows it, else walks from it (surfaces/map.js resolves an address that names no journey)
+  if ((n.kind === 'route' || n.kind === 'page') && currentLens() === 'business') return { surface: 'map', hash: '#/map/' + id, id: n.id };
   return { surface: 'codemap', hash: '#/codemap?node=' + id, id: n.id };
 }
 /**
@@ -1286,15 +1282,8 @@ export function renderSettings() {
     if (eff) eff.textContent = S.SETTINGS.defaultSurface ? '' : t('set.surfaceByRegister').replace('{s}', t('nav.' + defaultSurface()));
   }
   // experiments: workspace flags, off unless the settings file says so
-  const fd = document.getElementById('set-flag-drill');
-  if (fd) fd.checked = !!(S.SETTINGS.flags && S.SETTINGS.flags.journeyDrill);
-  const fm = document.getElementById('set-flag-map');
-  if (fm) fm.checked = mapEnabled();
-  const fmn = document.getElementById('set-flag-map-name'); if (fmn) fmn.textContent = t('set.flagMap');
-  const fms = document.getElementById('set-flag-map-sub'); if (fms) fms.textContent = t('set.flagMapSub');
+  // (the Map and the action drill were experiments until the journey page retired into the Map: neither is a flag now)
   const fl = document.getElementById('set-flags-label'); if (fl) fl.textContent = t('set.flags');
-  const fn = document.getElementById('set-flag-drill-name'); if (fn) fn.textContent = t('set.flagDrill');
-  const fs = document.getElementById('set-flag-drill-sub'); if (fs) fs.textContent = t('set.flagDrillSub');
   const fh = document.getElementById('set-flag-shots');
   if (fh) fh.checked = !!(S.SETTINGS.flags && S.SETTINGS.flags.designShots);
   const fhn = document.getElementById('set-flag-shots-name'); if (fhn) fhn.textContent = t('set.flagShots');
@@ -1344,10 +1333,6 @@ export async function saveSettings() {
   S.SETTINGS.defaultLens = document.getElementById('set-lens').value;
   const surf = document.getElementById('set-surface');
   if (surf) { if (surf.value) S.SETTINGS.defaultSurface = surf.value; else delete S.SETTINGS.defaultSurface; }
-  const fd = document.getElementById('set-flag-drill');
-  if (fd) { S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { journeyDrill: fd.checked }); }
-  const fm = document.getElementById('set-flag-map');
-  if (fm) { S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { map: fm.checked }); }
   const fh = document.getElementById('set-flag-shots');
   if (fh) { S.SETTINGS.flags = Object.assign({}, S.SETTINGS.flags, { designShots: fh.checked }); }
   applyTheme(S.SETTINGS.theme);

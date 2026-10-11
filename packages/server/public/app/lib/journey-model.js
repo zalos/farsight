@@ -147,6 +147,25 @@ export function screenActions(cols, screens, si) {
   return (cols || []).filter((c) => segs.has(c.sg.index));
 }
 
+/**
+ * The action an address names (lanes round 2026-10-10, one address): `screen` is the 1-based segment ordinal and
+ * `action` the 1-based place among that segment's actions — the same unit the Tests page scopes a cell by
+ * (`seg` + `action`, 0-based), so a door from either side lands on the same column. Null when the journey has no such
+ * action.
+ */
+export function actionAtSegment(cols, screen, action) {
+  const of = (cols || []).filter((c) => c.sg.index === screen - 1);
+  return of[action - 1] || null;
+}
+
+/** Where an action stands in the address: `{ screen, action }`, both 1-based (its segment and its place in it), or null. */
+export function segmentActionOf(cols, ci) {
+  const c = (cols || [])[ci];
+  if (!c) return null;
+  const of = cols.filter((x) => x.sg.index === c.sg.index);
+  return { screen: c.sg.index + 1, action: of.indexOf(c) + 1 };
+}
+
 /** The street screen (0-based) an action stop sits on, or -1. */
 export function screenOfAction(cols, screens, ci) {
   const c = (cols || [])[ci];

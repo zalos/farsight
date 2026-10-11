@@ -36,7 +36,7 @@ export const STOP_STRINGS: Record<string, StringEntry> = {
   'map.act.none': same('nothing to walk on this screen', 'The walk met no action on this screen: no call is made from it and nothing it does was found in the code.'),
   'map.act.loading': same('reading the walk…', 'The journey’s walk, part by part, is being read from the server.'),
   'map.dock': same('Where the code opens', 'Where the dock with the code sits: in place under the beats, pinned to the bottom, or on the right. Remembered for this browser, the same as the journey’s.'),
-  'map.table.hint': same('Layout · screens draws the street again · click a stop to walk its beats · + opens a screen', 'The journey as a table. Switch the layout back to screens for the street; click a column to open that action’s beats.'),
+  'map.table.hint': same('j k walk the parts · d moves the code · click a stop to walk its beats · Layout · screens draws the street again', 'The journey as a table. j and k select the next or previous part, with its code in the dock; d moves the dock; a click on a column opens that action’s beats; switching the layout back to screens draws the street.'),
   'map.head.lifecycle': same('status lifecycle', 'The statuses a record this journey moves goes through, read from the code, with the part of the system that moves it to each.'),
   'export.surface.street': same('Map stop', 'The Map at the stop on screen: one journey’s street, its table, or one action’s beats.'),
   'key.mapBeats': same('Map, at an action: walk its beats; − back to the screen, + opens the code'),

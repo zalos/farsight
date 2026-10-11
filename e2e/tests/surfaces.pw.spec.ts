@@ -182,8 +182,10 @@ test.describe('the business register', () => {
     await expect(first).not.toContainText('approveInvoice');
     await page.keyboard.press('Enter');
     await expect(palette).toBeHidden();
-    // the gate is a badge on the route it guards, which the business register reads as a journey
-    await expect(page).toHaveURL(/#\/journeys\/invoice-app%3A%3Aroute%3A%3APOST/);
+    // the gate is a badge on the route it guards, which the business register reads as a journey: on the Map, the
+    // walk from that route drawn as a journey of its own
+    await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aroute%3A%3APOST/);
+    await expect(page.locator('.map-district[data-flow^="invoice-app::route::POST"]')).toBeVisible();
     await expect(page.getByRole('button', { name: /exit focus/ })).toBeHidden();
   });
 
@@ -235,28 +237,30 @@ test.describe('chrome', () => {
    */
   test('Esc with the scope menu open closes the menu, and only the menu', async ({ page }) => {
     await openBillingCycle(page);
-    const journey = page.getByRole('dialog', { name: 'Journey', exact: true });
+    const journey = page.locator('.map-table .jrn-sheet');
     await page.locator('#scopebtn').click();
     await expect(page.locator('#scopemenu')).toHaveClass(/open/);
     await page.keyboard.press('Escape');
     await expect(page.locator('#scopemenu')).not.toHaveClass(/open/);
     await expect(journey).toBeVisible();
     await expect(page.locator('#scopebtn')).toHaveAttribute('aria-expanded', 'false');
-    // the next Esc is the journey's again (it asks once, then closes)
+    // the next Esc is the Map's again: up one stop, from the journey to the board
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    await expect(journey).toBeHidden();
+    await expect(journey).toHaveCount(0);
   });
 
   /**
    * @covers packages/server/public/app/shell.js::applyRoute
    * @covers packages/server/public/app/shell.js::dropFocus
    */
-  test('closing a journey leaves no focus behind on the surface it returns to', async ({ page }) => {
+  test('leaving a journey leaves no focus behind on the surface it returns to', async ({ page }) => {
     await openBillingCycle(page);
+    await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
+    await expect(page).toHaveURL(/layout=table/);
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Journey', exact: true })).toBeHidden();
+    await expect(page.locator('.map-table')).toHaveCount(0);
+    await expect(page).toHaveURL(/#\/map(\?|$)/);
+    await page.getByRole('navigation', { name: 'Surfaces' }).getByRole('button', { name: 'Journeys', exact: true }).click();
     await expect(page).toHaveURL(/#\/journeys$/);
     // it used to read `focus: …` in the search box, wear an *exit focus* chip and cut the status bar
     await expect(page.getByRole('button', { name: /exit focus/ })).toBeHidden();
