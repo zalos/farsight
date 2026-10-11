@@ -2402,11 +2402,19 @@
      screen — the counter-scale is --map-inv — and the rest waits one zoom in */
   .map-world.st-floor .map-scr .route,.map-world.st-floor .map-scr .say,.map-world.st-floor .map-scr .map-scope,
   .map-world.st-floor .map-scr .map-chips>:not(.tchip):not(.k-ev),.map-world.st-floor .map-scr .tchip>:not(.tc-ev):not(.tc-nb){display:none}
-  .map-world.st-floor .map-thumbwrap{height:84px}
+  /* the floor keeps a whole card (lane S, the owner's ×0.52 shot): the picture takes what the name and the verdict
+     leave, the name is one line, the verdict one chip at the chip size that ends in an ellipsis, never a word broken */
+  .map-world.st-floor .map-scr .body{flex:none;gap:3px;padding-top:5px;padding-bottom:5px}
+  .map-world.st-floor .map-thumbwrap,body.lens-business .map-world.st-floor .map-scr .map-thumbwrap{height:auto;flex:1 1 auto;min-height:0}
+  .map-world.st-floor .map-scr .ttl{flex-wrap:nowrap}
+  .map-world.st-floor .map-scr .nm{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .map-world.st-floor .map-scr .map-chips{flex-wrap:nowrap;min-width:0}
+  .map-world.st-floor .map-scr .tchip{display:flex;flex-wrap:nowrap;max-width:100%;min-width:0;border:0;padding:0;background:none}
+  .map-world.st-floor .map-scr .tchip>.tc-ev,.map-world.st-floor .map-scr .tchip>.tc-nb,.map-world.st-floor .map-scr .map-chips>.k-ev{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;padding:calc(1px * var(--map-inv, 1)) calc(6px * var(--map-inv, 1));line-height:1.3}
+  .map-world.st-floor .map-scr .tc-ev .sym,.map-world.st-floor .map-scr .tc-nb .sym{width:1em;height:1em;vertical-align:-.12em;margin-right:.25em}
   .map-world.st-floor .map-scr:has(.tchip.nb) .state,.map-world.st-floor .map-thumb.ph span,.map-world.st-floor .map-thumbwrap .dsg-thumb.none>*:not(.sym),.map-world.st-floor .map-scr .map-tojrn{display:none}
-  .map-world.st-floor .map-scr .tc-nb{white-space:normal}
-  .map-world.st-floor .map-scr .ord,.map-world.st-floor .map-scr .nm{font-size:calc(9.5px * var(--map-inv, 1))}
-  .map-world.st-floor .map-scr .tchip,.map-world.st-floor .map-scr .tc-ev,.map-world.st-floor .map-scr .tc-nb,.map-world.st-floor .map-scr .state .map-chip{font-size:calc(9.5px * var(--map-inv, 1))}
+  .map-world.st-floor .map-scr .ord,.map-world.st-floor .map-scr .nm{font-size:calc(10px * var(--map-inv, 1))}
+  .map-world.st-floor .map-scr .tchip,.map-world.st-floor .map-scr .tc-ev,.map-world.st-floor .map-scr .tc-nb,.map-world.st-floor .map-scr .state .map-chip,.map-world.st-floor .map-scr .map-chips>.k-ev{font-size:calc(10px * var(--map-inv, 1))}
   .map-scr .map-chips .map-chip,.map-scr .state .map-chip{font-size:10px;padding:1px 7px}
   /* plumbing: the legend lane, call nodes with the service bar, data nodes with read/write */
   .map-lane{position:absolute;left:22px;right:22px;border-top:1px dashed var(--line);padding-top:6px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -3280,7 +3288,7 @@
   .map-jhead .jh-l1 .agg .tchip.map-chip,.map-jhead .jh-l1 .agg .tchip.map-chip>.tc-ev{white-space:nowrap;flex-wrap:nowrap}
   /* no room for the kept chips: the storyline's words give way first (whole in the crumb and the tip), then the test chip's tail */
   .map-jhead .jh-l1.tight .agg{flex:none}
-  .map-jhead .jh-l1.tight .nm{flex-shrink:.3}
+  .map-jhead .jh-l1.tight .nm{flex-shrink:.3;min-width:min(10em,28%)}
   .map-jhead .jh-l1.tight .story{flex:0 2 auto;min-width:5em;overflow:hidden;text-overflow:ellipsis}
   .map-jhead .jh-l1.tight .for{flex:0 1 auto;min-width:4em;overflow:hidden;text-overflow:ellipsis}
   .map-jhead .jh-l1.tight2 .agg{flex:0 1 auto}
