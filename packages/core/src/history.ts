@@ -978,7 +978,7 @@ export function agentsCounted(n: number, of: number, byAgent?: Record<string, nu
   const named = names.reduce((s, [, k]) => s + k, 0);
   return counted(n, 'history.fact.agents', 'count.scope.workspace', 'core history.ts agentsCounted ← commit.agent (Co-Authored-By trailers)', {
     of, bizUnit: 'history.fact.agents',
-    recheck: { cli: 'farsight history --agents', mcp: 'graph_changes' },
+    recheck: { cli: 'farsight history --agents', mcp: 'graph_overview' },
     ...(names.length && named === n ? { breakdown: names.map(([name, k]) => ({ key: 'history.fact.agentNamed', n: k, label: name })) } : {}),
   });
 }
