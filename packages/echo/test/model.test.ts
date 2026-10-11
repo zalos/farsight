@@ -40,7 +40,7 @@ test('summary calls are stateless with bounded input, generation and final outpu
     request.on('data', chunk => { raw += chunk; });
     request.on('end', () => {
       calls.push(JSON.parse(raw));
-      response.end(JSON.stringify({ message: { content: 'x'.repeat(5000) }, thinking: 'not part of the brief' }));
+      response.end(JSON.stringify({ message: { content: JSON.stringify({ summary: 'x'.repeat(5000) }), thinking: 'not part of the brief' }, done: true, done_reason: 'stop' }));
     });
   }, async profile => {
     profile.budget.briefMaxChars = 150;
@@ -52,6 +52,8 @@ test('summary calls are stateless with bounded input, generation and final outpu
   assert.equal(calls[0].think, false);
   assert.equal(calls[0].stream, false);
   assert.equal(calls[0].options.num_predict, 100);
+  assert.deepEqual(calls[0].format.required, ['summary']);
+  assert.equal(calls[0].format.additionalProperties, false);
   assert.equal(calls[1].messages.length, 2);
   assert.equal(calls[1].messages[1].content, 'second request');
 });
@@ -108,5 +110,28 @@ test('missing selection, redirects and malformed model output are refused', asyn
   });
   await fixture((_request, response) => response.end('{"message":{"content":null}}'), async profile => {
     await assert.rejects(summarize(profile, 'source'), /unusable response/);
+  });
+});
+
+test('only structured Ollama summary text is returned; reasoning, extra fields and incomplete generations are refused', async () => {
+  await fixture((_request, response) => response.end(JSON.stringify({
+    message: { content: JSON.stringify({ summary: 'The shipment arrived on time.' }), thinking: 'hidden reasoning' },
+    done: true, done_reason: 'stop',
+  })), async profile => {
+    assert.equal(await summarize(profile, 'The shipment arrived on time.'), 'The shipment arrived on time.');
+  });
+  for (const payload of [
+    { message: { content: 'First I need to think about this request.' }, done: true },
+    { message: { content: JSON.stringify({ summary: 'A brief.', reasoning: 'extra content' }) }, done: true },
+    { message: { content: JSON.stringify({ summary: 'A brief.' }) }, done: true, done_reason: 'length' },
+    { message: { content: JSON.stringify({ summary: 'A brief.' }) }, done: false },
+  ]) await fixture((_request, response) => response.end(JSON.stringify(payload)), async profile => {
+    await assert.rejects(summarize(profile, 'source'));
+  });
+  await fixture((_request, response) => response.end(JSON.stringify({
+    choices: [{ message: { content: 'A cut-off brief' }, finish_reason: 'length' }],
+  })), async profile => {
+    profile.model.provider = 'openai-compatible';
+    await assert.rejects(summarize(profile, 'source'), /stopped before completing/);
   });
 });

@@ -56,23 +56,35 @@ export async function summarize(profile: EchoProfile, text: string): Promise<str
   if (!profile.model.model) fail('echo.model.choose');
   if (typeof text !== 'string') fail('echo.model.response');
   const messages = [
-    { role: 'system', content: echoConfigWord('echo.model.prompt') },
+    { role: 'system', content: echoConfigWord(profile.model.provider === 'ollama' ? 'echo.model.structuredPrompt' : 'echo.model.prompt') },
     { role: 'user', content: text.slice(0, MAX_INPUT_CHARS) },
   ];
   let content: unknown;
   if (profile.model.provider === 'ollama') {
     const response = object(await request(profile, '/api/chat', {
       model: profile.model.model, messages, stream: false, think: false,
+      format: {
+        type: 'object', properties: { summary: { type: 'string', minLength: 1, maxLength: profile.budget.briefMaxChars } },
+        required: ['summary'], additionalProperties: false,
+      },
       options: { num_predict: profile.budget.modelMaxTokens, temperature: 0 },
     }));
-    content = object(response.message).content;
+    if (response.done_reason === 'length' || response.done === false) fail('echo.model.incomplete');
+    const raw = object(response.message).content;
+    if (typeof raw !== 'string') fail('echo.model.response');
+    let summary: Record<string, unknown>;
+    try { summary = object(JSON.parse(raw)); } catch { fail('echo.model.response'); }
+    if (Object.keys(summary).length !== 1 || !Object.hasOwn(summary, 'summary')) fail('echo.model.response');
+    content = summary.summary;
   } else if (profile.model.provider === 'openai-compatible') {
     const response = object(await request(profile, '/v1/chat/completions', {
       model: profile.model.model, messages, stream: false,
       max_tokens: profile.budget.modelMaxTokens, temperature: 0,
     }));
     if (!Array.isArray(response.choices) || !response.choices.length) fail('echo.model.response');
-    content = object(object(response.choices[0]).message).content;
+    const choice = object(response.choices[0]);
+    if (choice.finish_reason === 'length') fail('echo.model.incomplete');
+    content = object(choice.message).content;
   } else fail('echo.model.request');
   if (typeof content !== 'string' || !content.trim()) fail('echo.model.response');
   // Cap the final text even when a provider ignores its generation limit.
