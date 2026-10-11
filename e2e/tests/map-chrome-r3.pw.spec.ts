@@ -143,16 +143,27 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
 
     /** @covers packages/server/public/app/lib/tooltip.js::initTips */
     test('a click closes the tip it rests on, and it does not open again under a still pointer', async ({ page }) => {
-      await mapOn(page);
-      await go(page, STREET);
+      await gotoReady(page, STREET + '?layout=screens');
       await expect(page.locator('.map-scr').first()).toBeVisible();
-      const lanes = page.locator('.map-layout-slot .map-seg[data-layout="table"]');
+      // the layout control (its redraw put the control back under the pointer, and its tip opened over the board)
+      const lanes = page.locator('.map-layout-slot .map-seg[data-layout="lanes"]');
       await lanes.hover();
       await expect(page.locator('#fs-tip')).toBeVisible();
       await lanes.click();
-      await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
-      await page.waitForTimeout(1200);
-      await expect(page.locator('#fs-tip')).toBeHidden();
+      const seen: boolean[] = [];
+      for (let i = 0; i < 6; i++) { await page.waitForTimeout(400); seen.push(await page.locator('#fs-tip').isVisible()); }
+      expect(seen).toEqual([false, false, false, false, false, false]);
+      // the walk's *next ›*: its tip used to cover the stop's title after every click
+      await gotoReady(page, STREET + '?layout=table');
+      await page.keyboard.press('a');
+      const next = page.locator('.map-tour .tw-next');
+      await expect(next).toBeVisible();
+      await next.hover();
+      await page.waitForTimeout(900);
+      await next.click();
+      const after: boolean[] = [];
+      for (let i = 0; i < 6; i++) { await page.waitForTimeout(400); after.push(await page.locator('#fs-tip').isVisible()); }
+      expect(after).toEqual([false, false, false, false, false, false]);
     });
 
     /** @covers packages/server/public/app/surfaces/map.js::chromeHtml */
@@ -170,7 +181,10 @@ for (const [W, H] of [[1440, 900], [1280, 800]]) {
      * @covers packages/server/public/app/lib/tooltip.js::repositionTip
      */
     test('the gate card scrolls inside itself to its tests, never past the window', async ({ page }) => {
-      await page.setViewportSize({ width: W, height: 520 });
+      // the card opens before its code arrives and grows when it does: placed for the short card, it ran off the bottom
+      // of a window it no longer fit (measured on the fixture: 32 → 597 px open, 32 → 799 px with its code)
+      await page.setViewportSize({ width: W, height: 790 });
+      await page.route('**/api/source*', async (r) => { await new Promise((x) => setTimeout(x, 700)); await r.continue(); });
       await gotoReady(page, STREET + '?layout=table&lens=hybrid');
       const row = page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first();
       await row.locator('.jrn-gl-w').click();
