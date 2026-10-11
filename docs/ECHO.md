@@ -9,6 +9,7 @@ The intended workflow is a small brief before each agent request, with source li
 | Ready to configure and verify | Deferred |
 |---|---|
 | Separate personal and work profiles | Shared service authentication and team permissions |
+| Workspace stores or one current-user global store connected to selected workspaces | Memory migration and combined local/global retrieval |
 | Managed local or explicitly configured external agentmemory | Shared hosted deployment and synchronization |
 | Ollama and OpenAI-compatible model adapters; Ollama verified locally | Additional native provider adapters and provider selection policy |
 | Standalone local settings view with an allowed Farsight embedding origin | A Farsight navigation entry and integrated memory viewer |
@@ -24,38 +25,103 @@ Use Node 24 or newer. For source development, use pnpm 9:
 ```sh
 pnpm install
 pnpm build
-node packages/echo/dist/cli.js setup
+node packages/echo/dist/cli.js setup --scope workspace
 ```
 
-For a standalone install, `pnpm pack:echo` creates `build/echo/farsight-echo-<version>.tgz`. Install that file with npm, then run `farsight-echo setup`. Echo is packaged separately; this command does not publish it.
+For a standalone install, `pnpm pack:echo` creates `build/echo/farsight-echo-<version>.tgz`. Install that file with
+`npm install --global` for one executable available across workspaces, or `npm install --save-dev` in one workspace
+and invoke it with `npx --no-install farsight-echo`. Echo is packaged separately; these commands do not publish it.
+Package location and memory scope are independent: a global executable can use workspace-only settings.
 
-Interactive setup creates `.echo/settings.json` if needed, offers installed Ollama models, asks separately whether to prepare each host's hooks, and offers installation of the pinned local engine. Answers default to no for hooks and engine installation. If no model is installed, setup explains how to download one explicitly. Echo does not choose and download a model silently.
+Interactive setup asks where memories live unless given `--scope` or `--config`. Workspace scope uses
+`.echo/settings.json`; global scope uses `${XDG_CONFIG_HOME:-~/.config}/farsight-echo/settings.json`. Both keep
+runtime state beside that configuration. Setup offers installed Ollama models, asks separately whether to install
+each host's workspace hooks, and offers installation of the pinned local engine. Answers default to no for hooks
+and engine installation. Accepting a hook question installs its workspace definitions and connection, rather than
+only generating a plugin preview. If no model is installed, setup explains how to download one explicitly. Echo
+does not choose and download a model silently.
 
-For the first local test, choose an installed model, leave both host hooks unprepared, and accept the engine
+For the first local test, choose an installed model, decline the host hook questions, and accept the engine
 installation. Setup writes configuration; it does not start the settings view or backend. The `personal` and
 `work` profiles are both created, but setup configures only the profile selected by `--profile` or `defaultProfile`.
 
 For scripted setup:
 
 ```sh
-farsight-echo init --model your-installed-model
-farsight-echo install-runtime
-farsight-echo doctor
-farsight-echo serve
+farsight-echo init --scope workspace --model your-installed-model
+farsight-echo install-runtime --scope workspace
+farsight-echo doctor --scope workspace
+farsight-echo serve --scope workspace
 ```
 
-Every command accepts `--config <path>` and `--profile <name>`. `init` refuses to overwrite an existing configuration. Use the scrubbed example configuration as a reference; local settings and runtime state must stay outside version control.
+Commands accept `--scope workspace|global` or `--config <path>`, plus `--profile <name>`. Scope and an explicit
+configuration are mutually exclusive. With neither, Echo discovers the nearest workspace connection or local
+settings within the nearest Git boundary, including when called from a nested folder. A connection's profile is
+used unless explicitly overridden; otherwise the configuration's `defaultProfile` applies. If there is no
+connection or configuration, the expected local file is `.echo/settings.json` at the Git root, or at the current
+directory outside Git. Global settings are never an implicit fallback. Explicit scope/configuration bypasses a
+workspace connection. `init` refuses to overwrite an existing configuration. Use scrubbed examples as a reference;
+local settings, connection pointers, and runtime state must stay outside version control.
 
 `serve` runs in the foreground and prints the settings URL. The view remains available if the model or memory service needs fixing. Stop with Ctrl-C; Echo shuts down only its own child processes. Externally managed memory services remain running. Restart `serve` after changing runtime settings so its active services use the saved configuration.
 
-The default personal settings URL is `http://127.0.0.1:4480`; work uses port `4481`. Selecting work in the settings
+The default workspace personal settings URL is `http://127.0.0.1:4480`; work uses port `4481`. Selecting work in the settings
 view edits that profile and does not switch the running service. Start `serve --profile work` in another terminal
-to run its distinct store. The default backend base ports are `4611` and `4711`; each managed instance also uses
-base plus 1, plus 2, and plus 46023. Echo rejects configuration collisions and occupied runtime ports.
+to run its distinct store. Workspace backend base ports default to `4611` and `4711`. New global configurations
+use web ports `4490`/`4491` and backend base ports `5211`/`5311`, allowing a global service to run alongside one
+workspace service. Each managed instance also uses base plus 1, plus 2, and plus 46023. Use `init` or `setup` with
+`--port` and `--backend-port` to set the selected profile's ports; additional independent stores need their own
+available ports. Echo rejects configuration collisions and occupied runtime ports.
+
+## One profile across selected workspaces
+
+Global scope is a current-user configuration and store, not a hosted team service or automatic hooks in every
+project. Install the executable once and configure the shared profile:
+
+```sh
+farsight-echo setup --scope global --profile personal
+farsight-echo serve --scope global --profile personal
+```
+
+Install the managed runtime during setup, decline its hook questions for this walkthrough, and keep `serve`
+running. In another terminal, select which workspaces use it:
+
+```sh
+farsight-echo connect --scope global --profile personal --host all --workspace /absolute/path/to/workspace-a
+farsight-echo connect --scope global --profile personal --host all --workspace /absolute/path/to/workspace-b
+```
+
+`connect` installs hooks and a local `.echo/connection.json` pointer containing the selected configuration and
+profile. It defaults to all hosts and the current workspace. The hooks pin the executable, configuration, and
+profile with absolute paths. A connected workspace needs no package, backend, or store copy. Ordinary CLI calls
+from that workspace follow the same pointer. One running profile serves both workspaces:
+
+```sh
+cd /absolute/path/to/workspace-a
+farsight-echo remember --topic echo-sharing-test --content "The synthetic echosharedtest verification phrase is copper lantern."
+cd /absolute/path/to/workspace-b
+farsight-echo recall --query echosharedtest
+```
+
+The returned fact should contain **copper lantern**. After host trust and a fresh chat in workspace B, ask what
+Echo remembers about `echosharedtest`, using only the hook context. This tests actual host delivery separately
+from CLI recall. See the [README walkthrough](../packages/echo/README.md#share-memories-between-two-workspaces).
+
+Each workspace chooses one profile. Reconnecting moves all already installed Echo host definitions to the same
+target, including when `--host` selects only one new host. It does not merge retrieval scopes or migrate memory.
+An existing local configuration and store stay in place; use `--scope workspace` to select them, or reconnect with
+`connect --scope workspace` from that workspace to make them its default again. Start a new host session after
+reconnecting. Separately loaded Echo plugins must be removed or updated so they do not keep using the old target.
 
 ## Profiles and identity
 
 A profile selects one individual, optional team, project, memory connection, model connection, web port, and hook preference. Personal and work profiles use distinct local stores. Within one configuration directory, a host session is bound to its selected profile and its identity/store/model configuration. Changing that boundary requires a new host session; an existing session cannot silently switch to another profile. Keep personal and work profiles in the same configuration file so their bindings use the same registry.
+
+Workspaces share memory only when they select the same configuration and profile. Matching profile names in
+separate configurations do not share data. `identity.project` is a memory namespace; it is not inferred from the
+calling workspace's path. New global configurations use `shared` for that label, and all connected workspaces use
+the profile's configured identity. Changing the identity changes the lookup namespace rather than relabeling or
+migrating old memories.
 
 These identity fields are local routing metadata. They are not login, membership verification, or authorization. Run separate local instances in this phase. Do not treat an agentmemory project filter as a security boundary between teams, and do not expose the local settings service as a shared team service.
 
@@ -139,14 +205,15 @@ results, or responses.
 
 ## Optional host hooks
 
-Package installation does not prompt or install hooks. `setup` asks about preparation, or use an explicit command:
+Package installation does not prompt or install hooks. `setup` asks about workspace installation. To generate
+reviewable plugin files without installing workspace definitions, use:
 
 ```sh
 farsight-echo hooks --host claude --profile personal
 farsight-echo hooks --host codex --profile personal
 ```
 
-Each command creates reviewable files under `.echo/plugins/<profile>/<host>/` and prints loading instructions. The runner forwards event input to Echo with a fixed configuration and profile. Preparing files does not install them in a host.
+Each command creates reviewable files under `plugins/<profile>/<host>/` beside the selected configuration and prints loading instructions. The runner forwards event input to Echo with a fixed configuration and profile. Preparing files does not install them in a host.
 
 The prepared events are `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PreCompact`, and `Stop`. Hook commands have short time limits. Hooks currently target macOS and Linux. Keep the installed Echo executable and configuration at their generated locations, or prepare the plugin again after moving them.
 
@@ -154,7 +221,7 @@ For Claude Code, review the generated files and start a new session with `claude
 
 For Codex, review the generated files and register their local marketplace with `codex plugin marketplace add <generated-directory>`. Restart the desktop app, install the plugin from that marketplace, and review and trust its hooks. Marketplace registration, plugin installation, and hook trust are separate steps. Admin policy may prevent non-managed hooks. See [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins) and [Codex hooks](https://learn.chatgpt.com/docs/hooks).
 
-For direct workspace installation instead of plugin preparation:
+For direct workspace installation instead of plugin preparation, use `connect` as above or:
 
 ```sh
 farsight-echo hooks --host all --install --workspace /absolute/path/to/workspace --profile personal
@@ -164,8 +231,9 @@ The installer merges Echo-owned definitions into Claude's `.claude/settings.loca
 and VS Code Local's `.github/hooks/echo.json`. It preserves unrelated settings, backs up changed files next to Echo's
 configuration under `backups/`, and refuses malformed existing files before writing. Individual host selection is
 available with `claude`, `codex`, or `vscode`. Without `--install`, `all` prepares all three hosts' files only.
-Workspace installation requires `--workspace`. The generated definitions contain machine-local absolute paths;
-keep them untracked rather than treating them as portable team settings.
+`hooks --install` requires `--workspace` and records the same workspace connection as `connect`. The generated
+definitions and connection contain machine-local absolute paths; keep them untracked rather than treating them
+as portable team settings. Installing global Echo settings does not install host-global hooks.
 
 Claude's workspace settings apply to its CLI and VS Code extension. Codex still needs the project and exact hook
 definition trusted; enable hooks and use `/hooks` in its CLI for review. VS Code support targets Local chat, with
@@ -182,7 +250,7 @@ This is stricter than CLI recall's title/content cap and is still a character bu
 Enable one Echo profile per host session and choose one integration route per host. A prepared or installed
 definition is not evidence that the host loaded it. Start `serve`, explicitly save the synthetic fact above, confirm
 CLI recall, and ask a fresh trusted host chat what Echo remembers about `echocoldtest`. The expected stored fact is
-the blue insulated test container. A file under `.echo/sessions/` proves a binding callback only; it does not prove
+the blue insulated test container. A file under the selected configuration's `sessions/` proves a binding callback only; it does not prove
 that prompt recall succeeded. The settings view's hook preferences do not install definitions or grant host trust.
 
 ## Verify the setup
