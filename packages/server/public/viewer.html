@@ -2606,7 +2606,7 @@
   .map-chip.go:hover{border-color:var(--accent);color:var(--ink)}
   .map-work:empty{display:none}
   /* a screen on the street */
-  .map-scr{position:absolute;width:260px;height:236px;border:1.5px solid var(--line);border-radius:8px;background:var(--raised);box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
+  .map-scr{position:absolute;width:260px;height:264px;border:1.5px solid var(--line);border-radius:8px;background:var(--raised);box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;transition:border-color .15s,transform .15s}
   .map-scr:hover,.map-scr.near{border-color:var(--accent);transform:translateY(-2px)}
   .map-scr:focus-visible,.map-pl:focus-visible,.map-pd:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   /* §K: the board's focus ring keeps a steady width on screen at any zoom (--map-inv), with a glow in the lens accent */
@@ -2627,7 +2627,7 @@
   .map-scr .ord{font-family:var(--hud);font-size:12px;letter-spacing:.12em;color:var(--accent)}
   /* a screen's name wraps (three lines hold the longest measured) and its route shows whole */
   .map-scr .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:13px;line-height:1.2;color:var(--ink);min-width:0;overflow-wrap:anywhere;
-    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .map-scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim);overflow-wrap:anywhere;line-height:1.25}
   .map-scr .route:empty{display:none}
   /* the business street reads as the storyboard did: the picture and the screen's own sentence (one address) */
@@ -2635,6 +2635,22 @@
   /* the picture gives the sentence its line, so the screen's chips and its test word keep theirs (the whole sentence is the tip) */
   body.lens-business .map-scr .map-thumbwrap{height:96px}
   .map-scr .map-chips{display:flex;gap:5px;flex-wrap:wrap}
+  /* nothing clips (cleanup pass 2026-10-11): a test chip wraps inside its row and its verdict wraps inside its own
+     border — it is the one chip that is always whole; the others fold to +n by measurement (lib/map-chips.js) */
+  .tchip.map-chip{white-space:normal;max-width:100%}
+  .tchip.map-chip>*{white-space:nowrap}
+  .tchip.map-chip>.tc-ev{white-space:normal;max-width:100%;text-align:left;overflow-wrap:break-word}
+  .fold-more{display:inline-flex;align-items:center;font-size:inherit;white-space:nowrap;cursor:help}
+  .map-chip.map-more{border-style:dashed;color:var(--ink)}
+  /* the street under ×0.6 (.st-floor, map.js): its cards keep the name and the verdict, drawn at least 9.5 px on the
+     screen — the counter-scale is --map-inv — and the rest waits one zoom in */
+  .map-world.st-floor .map-scr .route,.map-world.st-floor .map-scr .say,.map-world.st-floor .map-scr .map-scope,
+  .map-world.st-floor .map-scr .map-chips>:not(.tchip):not(.k-ev),.map-world.st-floor .map-scr .tchip>:not(.tc-ev):not(.tc-nb){display:none}
+  .map-world.st-floor .map-thumbwrap{height:84px}
+  .map-world.st-floor .map-scr:has(.tchip.nb) .state,.map-world.st-floor .map-thumb.ph span,.map-world.st-floor .map-thumbwrap .dsg-thumb.none>*:not(.sym),.map-world.st-floor .map-scr .map-tojrn{display:none}
+  .map-world.st-floor .map-scr .tc-nb{white-space:normal}
+  .map-world.st-floor .map-scr .ord,.map-world.st-floor .map-scr .nm{font-size:calc(9.5px * var(--map-inv, 1))}
+  .map-world.st-floor .map-scr .tchip,.map-world.st-floor .map-scr .tc-ev,.map-world.st-floor .map-scr .tc-nb,.map-world.st-floor .map-scr .state .map-chip{font-size:calc(9.5px * var(--map-inv, 1))}
   .map-scr .map-chips .map-chip,.map-scr .state .map-chip{font-size:10px;padding:1px 7px}
   /* plumbing: the legend lane, call nodes with the service bar, data nodes with read/write */
   .map-lane{position:absolute;left:22px;right:22px;border-top:1px dashed var(--line);padding-top:6px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -3262,9 +3278,10 @@
   .map-lanes{position:absolute;left:0;top:0;transform-origin:0 0}
   .ln-top{position:absolute;display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden;font-size:11px;color:var(--muted)}
   .ln-top .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.14em;font-size:18px;color:var(--ink)}
-  .ln-top .tag{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9px;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 5px}
+  .ln-top .tag{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9.5px;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 5px}
   .ln-top > *{flex:none}
   .ln-top .d{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .ln-top .ev{font-size:10px}
   .ln-top .ev *{font-family:var(--body);font-size:inherit;text-transform:none;letter-spacing:normal;border:none;padding:0}
   .ln-n{text-decoration:underline dotted;text-underline-offset:2px;cursor:help;color:var(--muted)}
   .ln-lane{position:absolute;border:1px solid var(--line-soft);border-radius:6px;background:color-mix(in srgb,var(--panel) 55%,transparent)}
@@ -3295,16 +3312,19 @@
   .ln-stage:hover,.ln-stage:focus-visible,.ln-stage.near{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-dim)}
   .ln-stage.planned{border-style:dashed;border-color:var(--warn);background:color-mix(in srgb,var(--panel) 60%,transparent)}
   .ln-stage.branch{border-color:color-mix(in srgb,var(--warn) 60%,var(--line))}
+  /* nothing in a stage card gives up its line to the next: the chips' row folds to +n instead (lib/map-chips.js) */
+  .ln-stage>*{flex:none}
   .ln-stage .ttl{display:flex;align-items:flex-start;gap:0}
-  .ln-stage .ttl .map-step{font-size:9px;flex:none;margin-right:5px}
+  .ln-stage .ttl .map-step{font-size:9.5px;flex:none;margin-right:5px}
   .ln-stage .nm{font-family:var(--hud);text-transform:uppercase;letter-spacing:.03em;font-size:16.5px;line-height:1.05;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:break-word}
   .ln-stage .sub{font-size:10.5px;line-height:1.2;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ln-stage .ln-chips{display:flex;flex-wrap:wrap;gap:2px 3px;overflow:hidden;max-height:46px}
+  .ln-stage .ln-chips{display:flex;flex-wrap:wrap;gap:2px 3px;min-height:0}
   .ln-stage .ln-chips{align-items:center;font-size:10px;line-height:1.4}
-  .ln-stage .ln-chips .tchip{display:contents}
-  .ln-stage .ln-chips .tchip > *{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-  .ln-stage .ln-chips .tchip.nb .tc-nb{font-size:8.5px}
-  .ln-stage .ln-chips .map-chip{font-size:10px;padding:0 5px;line-height:14px;gap:3px;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .ln-stage .ln-chips .tchip{display:inline-flex;flex-wrap:wrap;gap:0 3px;max-width:100%;font-size:inherit;line-height:inherit}
+  .ln-stage .ln-chips .tchip.nb .tc-nb{font-size:9.5px}
+  .ln-stage .ln-chips .tchip .tc-ev{letter-spacing:.03em;padding:1px 4px;line-height:12px;gap:2px}
+  .ln-stage .ln-chips .tchip .tc-ev .sym{width:8px;height:8px}
+  .ln-stage .ln-chips .map-chip{font-size:10px;padding:0 5px;line-height:14px;gap:3px;max-width:100%;min-width:0}
   .ln-stage .ln-chips .map-chip .sym{width:9px;height:9px}
   .ln-stage .dec{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--amber);white-space:nowrap;overflow:hidden;margin-top:auto}
   .ln-stage .dec .sym{width:9px;height:9px;flex:none}
@@ -3314,7 +3334,9 @@
   .ln-pill .mv{display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--ink);white-space:nowrap;overflow:hidden}
   .ln-pill .mv .sym{width:9px;height:9px;color:var(--tbl);flex:none}
   .ln-pill .rec{color:var(--tbl)} .ln-pill .sep{color:var(--dim)}
-  .ln-pill .w{overflow:hidden;text-overflow:ellipsis}
+  /* the record and its move ellipsise inside the pill (its tip says both whole); the sentence gives way first */
+  .ln-pill .w,.ln-pill .rec{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .ln-pill .rec{flex:0 1 auto} .ln-pill .w{flex:0 4 auto}
   .ln-pill .by{font-size:10px;color:var(--fn);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ln-pill.written{border-style:dashed}
   .ln-pill .nd{display:flex;align-items:center;gap:4px;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
@@ -3325,11 +3347,11 @@
   .ln-bottom{position:absolute;display:flex;gap:14px;align-items:flex-start}
   .ln-lifes{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:6px}
   .ln-life{border:1px solid var(--line-soft);border-radius:6px;padding:6px 8px;background:var(--panel)}
-  .ln-foot{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9px;color:var(--muted)}
+  .ln-foot{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;color:var(--muted)}
   .ln-foot .ln-n{color:var(--ink)} .ln-foot .sep{color:var(--dim)} .ln-foot .rd{color:var(--warn)} .ln-foot .nt{color:var(--warn);text-decoration:underline dotted;cursor:help}
   .ln-legend{flex:none;border:1px solid var(--line-soft);border-radius:6px;padding:6px 9px;background:var(--panel);display:flex;flex-direction:column;gap:3px}
-  .ln-legend .hud-label{font-size:8.5px;margin-bottom:2px}
-  .ln-legend .lg{display:flex;align-items:center;gap:7px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:8.5px;color:var(--ink)}
+  .ln-legend .hud-label{font-size:9.5px;margin-bottom:2px}
+  .ln-legend .lg{display:flex;align-items:center;gap:7px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9.5px;color:var(--ink)}
   .ln-legend .sw{display:inline-block;width:26px;height:0;border-top:1.5px solid var(--tbl)}
   .ln-legend .sw.seen{border-top-style:dashed}
   .ln-legend .sw.planned{height:9px;border:1px dashed var(--warn);border-radius:2px}

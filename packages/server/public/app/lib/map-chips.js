@@ -15,6 +15,7 @@ import { sym } from '../sym.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { tipAttrs } from './tooltip.js';
 import { testChipHtml } from './test-chip.js';
+import { foldRow } from './fold-row.js';
 
 const API = '/api/journey';
 
@@ -103,4 +104,47 @@ export function mapScreensChips(k) {
   if (!k || !k.screens) return '';
   const r = k.screensReached;
   return mapCountChip(k.screens, '') + (r && r.n < k.screens.n ? mapCountChip(r, 'k-warn') : '');
+}
+
+// ── nothing clips: a card's chip row folds to `+n` by measurement (cleanup pass 2026-10-11) ─────────────────────
+// The test verdict is the one chip that is always whole (`.tchip`, `.k-ev`): the others fold first, from the last.
+// A cover keeps two rows; a screen card and a lane's stage card keep what their box has left under the chips' row.
+const KEEP = '.tchip,.k-ev';
+
+/** The bottom a chip row must end above: its card's content box, less what the card draws under the row. */
+function bottomFor(row, card) {
+  const cs = getComputedStyle(card);
+  let bottom = card.clientHeight - (parseFloat(cs.paddingBottom) || 0);
+  const gap = parseFloat(getComputedStyle(row.parentElement).rowGap) || 0;
+  for (let e = row.nextElementSibling; e; e = e.nextElementSibling) if (e.offsetHeight) bottom -= e.offsetHeight + gap;
+  return bottom;
+}
+/** The rows a chip row has left before the bottom of its card, at its own line height. */
+function rowsLeft(row, card, lineH) {
+  if (!card) return 2;
+  const gap = parseFloat(getComputedStyle(row).rowGap) || 0;
+  return Math.floor((bottomFor(row, card) - offsetIn(row, card) + gap) / (lineH + gap));
+}
+/** `el`'s top inside `card`, in layout px (offsets ignore the zoom's transforms). */
+function offsetIn(el, card) {
+  let y = 0;
+  for (let e = el; e && e !== card; e = e.offsetParent) y += e.offsetTop;
+  return y;
+}
+/** The row ends inside its card. */
+const endsIn = (card) => (row) => offsetIn(row, card) + row.offsetHeight <= bottomFor(row, card) + 0.5;
+
+/**
+ * Fold every chip row of the Map's cards under `scope` (a district, the lanes layer, the world): covers, the street's
+ * screen cards and the lanes' stage cards. Safe to call again — after a zoom, a lens change or a journey landing.
+ */
+export function foldMapChips(scope) {
+  if (!scope) return;
+  scope.querySelectorAll('.map-dcover .agg').forEach((agg) => foldRow(agg, {
+    maxRows: 2, keep: KEEP, moreCls: 'map-chip map-more', moreKey: 'map.cover.more', of: 'map.cover.moreOf', scope: 'map.fold.scopeJourney',
+  }));
+  scope.querySelectorAll('.map-scr .map-chips, .ln-stage .ln-chips').forEach((row) => {
+    const card = row.closest('.map-scr, .ln-stage');
+    foldRow(row, { maxRows: (lineH) => rowsLeft(row, card, lineH), keep: KEEP, moreCls: 'map-chip map-more', fits: endsIn(card) });
+  });
 }

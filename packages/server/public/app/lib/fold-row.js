@@ -6,59 +6,16 @@
 // whole; the others fold first). A path too long for its line keeps its two ends, breaks at `/`, and carries itself
 // whole in its tip.
 //
-// `foldPlan()` and `midPath()` are pure and unit-tested (packages/server/test/fold-row.test.ts); `foldRow()` measures
-// the row, applies the plan and checks it once against the page.
+// `foldPlan()` and `midPath()` are pure (lib/fold-model.js, unit-tested in packages/server/test/fold-row.test.ts);
+// `foldRow()` measures the row, applies the plan and checks it against the page.
 
 import { esc } from '../store.js';
 import { t } from '../strings.js';
 import { plainTip } from './counted.js';
 import { tipAttrs } from './tooltip.js';
+import { foldPlan, midPath } from './fold-model.js';
 
-/**
- * Which items of a wrapping row to fold so it takes at most `maxRows` rows. `items` are `{ w, rows?, keep? }` in the
- * row's order (`rows`: how many line heights the item stands, for one that wraps inside itself); `rowW` the row's
- * width, `gap` the gap between items, `moreW(n)` the width of the `+n` chip. The last items that are not `keep` fold
- * first. Returns `{ hide: number[], rows }` — the indices folded and the rows the row then takes.
- */
-export function foldPlan(items, { rowW, gap = 0, maxRows = 2, moreW = () => 24 } = {}) {
-  const lay = (hidden) => {
-    const shown = items.map((it, i) => ({ ...it, i })).filter((it) => !hidden.has(it.i));
-    if (hidden.size) shown.push({ w: moreW(hidden.size), rows: 1 });
-    let rows = 0, x = 0, tall = 0;
-    for (const it of shown) {
-      const w = Math.min(it.w, rowW);
-      if (x > 0 && x + gap + w > rowW + 0.5) { rows += tall; x = 0; tall = 0; }
-      x += (x > 0 ? gap : 0) + w;
-      tall = Math.max(tall, it.rows || 1);
-    }
-    return rows + tall;
-  };
-  const hidden = new Set();
-  const order = items.map((it, i) => i).filter((i) => !items[i].keep).reverse();
-  let rows = lay(hidden);
-  for (const i of order) {
-    if (rows <= maxRows) break;
-    hidden.add(i);
-    rows = lay(hidden);
-  }
-  return { hide: [...hidden].sort((a, b) => a - b), rows };
-}
-
-/**
- * A path shortened in the middle: its first segment and its last `keep` segments, `…` between, so the two ends a
- * reader looks for stay (`apps/…/lib/api/ops-invoices.ts:18`). A path that is short enough comes back whole.
- */
-export function midPath(path, max = 40, keep = 2) {
-  const p = String(path || '');
-  if (p.length <= max) return p;
-  const parts = p.split('/');
-  if (parts.length <= keep + 1) return p;
-  for (let k = keep; k >= 1; k--) {
-    const out = parts[0] + '/…/' + parts.slice(-k).join('/');
-    if (out.length <= max || k === 1) return out;
-  }
-  return p;
-}
+export { foldPlan, midPath };
 
 /**
  * A path as HTML: shortened in the middle when long, a break opportunity after every `/`, the whole path in its tip.
@@ -72,16 +29,19 @@ export function pathHtml(path, opts = {}) {
 }
 
 /** The `+n` chip of a folded row: its tip lists what it folds, each by its own words. */
-function moreChipHtml(n, hidden, cls, scope) {
+function moreChipHtml(n, hidden, o) {
   const rows = hidden.map((h) => [h.textContent.replace(/\s+/g, ' ').trim(), 1]).filter((r) => r[0]);
-  return '<span class="fold-more ' + esc(cls || '') + '" data-fold-more="1"' + plainTip(n, 'fold.moreOf', scope || 'fold.scopeCard', '/api/journey', rows).replace(' tabindex="0"', '') + '>'
-    + esc(t('fold.more').replace('{n}', String(n))) + '</span>';
+  return '<span class="fold-more ' + esc(o.moreCls || '') + '" data-fold-more="1"'
+    + plainTip(n, o.of || 'fold.moreOf', o.scope || 'fold.scopeCard', '/api/journey', rows).replace(' tabindex="0"', '') + '>'
+    + esc(t(o.moreKey || 'fold.more').replace('{n}', String(n))) + '</span>';
 }
 
 /**
  * Fold one wrapping row of chips to at most `opts.maxRows` rows (a number, or a function of the row's line height
  * for a row whose room is what its card has left). `opts.keep` is a selector for the chips that never fold,
- * `opts.moreCls` the `+n` chip's extra class, `opts.scope` the catalog key of what the row is (a card's, by default). Measured in layout px (offset sizes), so a counter-scaled or zoomed
+ * `opts.moreCls` the `+n` chip's extra class; `opts.moreKey`, `opts.of` and `opts.scope` the catalog keys of its word,
+ * of what it counts and of the scope it counts over (a card's chips, by default); `opts.fits(row)` the page's own check
+ * after the plan (the row ends inside its card). Measured in layout px (offset sizes), so a counter-scaled or zoomed
  * card folds the same way at every zoom. Safe to call again: it unfolds first.
  */
 export function foldRow(row, opts = {}) {
@@ -98,14 +58,38 @@ export function foldRow(row, opts = {}) {
   const lineH = Math.min(...vis.map((k) => k.offsetHeight).filter((h) => h > 0)) || 16;
   const maxRows = Math.max(1, typeof opts.maxRows === 'function' ? opts.maxRows(lineH) : (opts.maxRows || 2));
   // the `+n` chip's width, measured once with the widest count it could print
-  row.insertAdjacentHTML('beforeend', moreChipHtml(vis.length, [], opts.moreCls, opts.scope));
+  row.insertAdjacentHTML('beforeend', moreChipHtml(vis.length, [], opts));
   const probe = row.lastElementChild;
   const moreW = probe.offsetWidth;
   probe.remove();
   const items = vis.map((k) => ({ w: k.offsetWidth, rows: Math.max(1, Math.round(k.offsetHeight / lineH)), keep: !!(opts.keep && k.matches(opts.keep)) }));
   const plan = foldPlan(items, { rowW, gap, maxRows, moreW: () => moreW });
-  if (!plan.hide.length) return;
+  if (!plan.hide.length && (!opts.fits || opts.fits(row))) return;
   const hidden = plan.hide.map((i) => vis[i]);
-  hidden.forEach((h) => { h.hidden = true; h.dataset.folded = '1'; });
-  row.insertAdjacentHTML('beforeend', moreChipHtml(hidden.length, hidden, opts.moreCls, opts.scope));
+  const apply = () => {
+    row.querySelectorAll(':scope > [data-fold-more]').forEach((x) => x.remove());
+    hidden.forEach((h) => { h.hidden = true; h.dataset.folded = '1'; });
+    if (hidden.length) hidden[0].insertAdjacentHTML('beforebegin', moreChipHtml(hidden.length, hidden, opts));
+  };
+  apply();
+  // the plan is a measurement of widths; the page has the last word — a row that still does not fit (an item that
+  // wrapped inside itself taller than its estimate) folds one more, never a kept one
+  if (opts.fits) {
+    const rest = items.map((it, i) => i).filter((i) => !items[i].keep && !plan.hide.includes(i)).reverse();
+    for (const i of rest) {
+      if (opts.fits(row)) break;
+      hidden.push(vis[i]);
+      hidden.sort((a, b) => vis.indexOf(a) - vis.indexOf(b));
+      apply();
+    }
+    // …and the other way: an estimate that folded more than the page needed gives back, the row's first item first
+    while (hidden.length && opts.fits(row)) {
+      const back = hidden[0];
+      hidden.shift();
+      back.hidden = false;
+      delete back.dataset.folded;
+      apply();
+      if (!opts.fits(row)) { hidden.unshift(back); apply(); break; }
+    }
+  }
 }
