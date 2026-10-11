@@ -38,7 +38,8 @@ async function go(page: Page, hash: string) {
 }
 /** Open Billing cycle's street (plumbing on or off) and wait until its screens are drawn. */
 async function openStreet(page: Page, plumb = false) {
-  await go(page, STREET + (plumb ? '?plumb=1' : ''));
+  // the street itself (the hybrid register's own view of a journey is its table)
+  await go(page, STREET + (plumb ? '?plumb=1' : '?layout=screens'));
   await expect(page.locator(`.map-district[data-flow="${FLOW}"] .map-scr`)).toHaveCount(3);
   await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
 }
@@ -61,13 +62,13 @@ test.describe('map — neighbourhood and street', () => {
   /**
    * @covers packages/server/public/app/shell.js::applyRoute
    * @covers packages/server/public/app/shell.js::navTabs
-   * @covers packages/server/public/app/surfaces/map.js::mapEnabled
    */
-  test('with the flag off there is no Map tab and a map link reads as the Portfolio', async ({ page }) => {
+  test('the Map is no experiment: with no flag set it has its tab, a map link stays, and the Portfolio offers it', async ({ page }) => {
     await gotoReady(page, '#/map');
-    await expect(page).toHaveURL(/#\/portfolio$/);
-    await expect(page.locator('#nav .navtab')).not.toContainText(['Map']);
-    await expect(page.locator('.pf-viewsw')).toHaveCount(0);
+    await expect(page).toHaveURL(/#\/map$/);
+    await expect(page.locator('#nav .navtab', { hasText: /^Map$/i })).toHaveCount(1);
+    await gotoReady(page, '#/portfolio');
+    await expect(page.locator('.pf-viewsw')).toHaveCount(1);
   });
 
   /**

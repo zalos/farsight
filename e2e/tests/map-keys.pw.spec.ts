@@ -222,14 +222,15 @@ test.describe('map — keyboard, fast travel and links', () => {
   });
 
   /** @covers packages/server/public/app/shell.js::travelTarget */
-  test('⌘K away from the Map keeps its old arrival: a journey opens on Journeys', async ({ page }) => {
+  test('⌘K away from the Map arrives on the Map too: a journey opens at the register\'s own view (hybrid: its table)', async ({ page }) => {
     await mapOn(page);
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Search' });
     await page.keyboard.type('Draft and send');
     await expect(palette.locator('.presult').first()).toContainText('Draft and send');
     await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/#\/journeys\//);
+    await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Adraft-and-send\?(.*&)?layout=table/);
+    await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
   });
 
   /**

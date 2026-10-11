@@ -1,16 +1,13 @@
-// The ladder draws the systems a screen uses. The fixture's Billing cycle has
-// three screens: *New invoice* reaches everything but the messages, *Invoice
-// list* reaches every system, and *Discard draft* (0 actions — one planned
-// call) reaches only the API. A screen's columns after the last one it uses
+// The ladder draws the systems an action uses — the action stop's `ladder` layout on the Map (lanes round 2026-10-10:
+// the journey page's ladder band retired into it, one action at a time). The fixture's Billing cycle: *Invoice list*'s
+// sixth action (change the line items again) reaches every system, and *Discard draft*'s one planned call reaches only
+// the API. A screen's columns after the last one it uses
 // fold into one end column that names each system with its absence word; a
 // column it skips before or between the ones it uses stays in place, narrow.
 import type { Page } from '@playwright/test';
 import { test, expect, gotoReady } from './support';
 
-const LADDER = '#/journeys/invoice-app::flow::billing-cycle?view=timeline&band=ladder&lens=hybrid';
-
-/** The old ladder gave every system an equal share: 150 + 172 per system, minus the 32 px padding and the time column. */
-const oldShare = (systems: number) => (150 + systems * 172 - 32 - 150) / systems;
+const AT = (screen: number, action: number) => '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?screen=' + screen + '&action=' + action + '&layout=ladder&lens=hybrid';
 
 async function headWidths(page: Page, seg: number) {
   return page.locator(`.jrn-laddercell[data-seg="${seg}"] .jrn-lhead > .lc`).evaluateAll((els) =>
@@ -19,18 +16,14 @@ async function headWidths(page: Page, seg: number) {
 
 test.describe('journey ladder', () => {
   /**
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnLadderModel
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnLadderCellHtml
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnLadderColTip
+   * @covers packages/server/public/app/lib/journey-model.js::ladderModel
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnLadderCellHtml
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnLadderColTip
    */
-  test('a screen with no actions folds the systems it never reaches into one end column', async ({ page }) => {
-    await gotoReady(page, LADDER);
-    const full = page.locator('.jrn-laddercell[data-seg="1"]');
-    await expect(full).toBeVisible();
-    const systems = (await headWidths(page, 1)).length;
-    expect(systems).toBe(5);
-
+  test('an action that reaches one system folds the systems it never reaches into one end column', async ({ page }) => {
+    await gotoReady(page, AT(3, 1));
     const discard = page.locator('.jrn-laddercell[data-seg="2"]');
+    await expect(discard.locator('.jrn-lhead .lend')).toBeVisible();
     const heads = await headWidths(page, 2);
     // the API column it uses, the browser column before it kept narrow, then one end column
     const used = heads.filter((h) => !/\b(skip|lend)\b/.test(h.cls));
@@ -39,7 +32,7 @@ test.describe('journey ladder', () => {
     expect(heads.filter((h) => /\blend\b/.test(h.cls))).toHaveLength(1);
     await expect(discard.locator('.jrn-lhead .lend')).toHaveText(/stops here/i);
     // the used column gets the room the empty lanes had
-    expect(used[0].w).toBeGreaterThanOrEqual(2 * oldShare(systems));
+    expect(used[0].w).toBeGreaterThan(2 * heads.find((h) => /\blend\b/.test(h.cls))!.w);
     // the end column names each system it folds, with the absence word
     const list = discard.locator('.lend-list .le');
     await expect(list).toHaveCount(3);
@@ -51,15 +44,16 @@ test.describe('journey ladder', () => {
     const end = discard.locator('.jrn-lhead .lend');
     await end.scrollIntoViewIfNeeded();
     await expect(end).toBeInViewport();
-    await end.click();
+    // on the Map a tip opens on hover (lib/tooltip.js, the Map's quick tips)
+    await end.hover();
     await expect(page.locator('#fs-tip')).toContainText('Folded into this column');
     await expect(page.locator('#fs-tip')).toContainText('Messages');
   });
 
-  /** @covers packages/server/public/app/surfaces/journeys.js::jrnLadderCellHtml */
-  test('a screen that reaches every system draws every column as before', async ({ page }) => {
-    await gotoReady(page, LADDER);
-    // the ladder draws after the journey: read its columns once they are there (the handoff's known race)
+  /** @covers packages/server/public/app/lib/journey-draw.js::jrnLadderCellHtml */
+  test('an action that reaches every system draws every column, equal, with nothing folded', async ({ page }) => {
+    await gotoReady(page, AT(2, 6));
+    // the ladder draws after the walk: read its columns once they are there
     await expect(page.locator('.jrn-laddercell[data-seg="1"] .jrn-lhead > .lc').first()).toBeVisible();
     const heads = await headWidths(page, 1);
     expect(heads.map((h) => h.text)).toEqual([
@@ -67,11 +61,10 @@ test.describe('journey ladder', () => {
       expect.stringMatching(/records/i), expect.stringMatching(/messages/i),
     ]);
     expect(heads.some((h) => /\b(skip|lend)\b/.test(h.cls))).toBe(false);
-    for (const h of heads) expect(Math.abs(h.w - oldShare(heads.length))).toBeLessThan(2);
-    // the rows band is untouched by the ladder's columns
-    await page.locator('#jrn-title').click();
-    await page.keyboard.press('l');
-    await expect(page.locator('#jrn-tl .jrn-ladder')).toHaveCount(0);
-    await expect(page.locator('#jrn-tl .jrn-momrow').first()).toBeVisible();
+    for (const h of heads) expect(Math.abs(h.w - heads[0].w)).toBeLessThan(2);
+    // the beats are the stop's other layout, and the ladder leaves with them
+    await page.keyboard.press('v');
+    await expect(page.locator('.map-act .map-ladder')).toHaveCount(0);
+    await expect(page.locator('.map-act #jrn-dlanes .jrn-bx').first()).toBeVisible();
   });
 });

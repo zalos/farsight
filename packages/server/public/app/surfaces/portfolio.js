@@ -18,7 +18,6 @@ import { storiesCatalogueHtml } from '../stories.js';
 import { countedHtml, countWords, defAttrs, plainTip, unCode } from '../lib/counted.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { flowWork, flowChipHtml } from '../work-chips.js';
-import { mapEnabled } from './map.js';
 import { loadJourneyTree } from '../lib/journeys-tree.js';
 import { treeFrom, journeysInOrder } from '../lib/journeys-model.js';
 import { jrnPersonaName, jrnGroupName, jrnOrgCountsHtml } from '../lib/journeys-tree.js';
@@ -62,13 +61,12 @@ function shellHtml() {
 }
 
 /**
- * The door to the map beside the heading — only when the workspace turned the
- * map on: the same journeys as this table, or drawn on one board. The table is
+ * The door to the map beside the heading: the same journeys as this table, or
+ * drawn on one board. The table is
  * the view on screen; *Map* goes to `#/map`. One catalog key names each button.
  * @group Portfolio
  */
 function mapSwitchHtml() {
-  if (!mapEnabled()) return '';
   return '<span class="hud-label" id="pf-viewsw-label"' + tipOf('map.portfolio.view') + '>' + esc(t('map.portfolio.view')) + '</span>'
     + '<span class="jrn-viewsw pf-viewsw" role="group" aria-labelledby="pf-viewsw-label">'
     + '<button type="button" class="jrn-viewbtn on" aria-pressed="true"' + tipOf('map.portfolio.table') + '>' + esc(t('map.portfolio.table')) + '</button>'
@@ -231,7 +229,7 @@ function rowHtml(f, pinned) {
     : built > 0 ? 'journey.status.partly' : 'journey.status.designedNotBuilt';
   const status = t(key).replace('{n}', built).replace('{m}', total);
   return '<tr' + (pinned ? ' class="pinned"' : '') + '>'
-    + '<td><a href="#/journeys/' + encodeURIComponent(f.nodeId) + '">' + esc(f.name) + '</a>'
+    + '<td><a href="#/map/' + encodeURIComponent(f.nodeId) + '">' + esc(f.name) + '</a>'
     + (pinned ? ' <span class="pf-pin">' + esc(t('portfolio.pinned')) + '</span>' : '') + flowChipHtml(row.work) + '</td>'
     + '<td>' + builtHtml(row, status, built, total) + '</td>'
     + '<td>' + opsCell(row) + '</td>'

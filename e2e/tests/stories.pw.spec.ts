@@ -135,8 +135,9 @@ test('the front door lists what can be seen on its own, and a journey screen car
   await cat.getByRole('button', { name: /Create invoice form/ }).click();
   await expect(page.getByRole('dialog', { name: /Stories · Create invoice form/ })).toBeVisible();
   await page.keyboard.press('Escape');
-  await gotoReady(page, '#/journeys/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?lens=business');
-  const chip = page.locator('.jrn-scene .sb-chip').first();
+  // a journey's screen is read on the Map: its stop carries the chip
+  await gotoReady(page, '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?node=' + encodeURIComponent('invoice-app::page::/invoices/new') + '&lens=business');
+  const chip = page.locator('.mp .sb-chip').first();
   await expect(chip).toContainText('Create invoice form · 3 stories');
   await chip.click();
   await expect(page.getByRole('dialog', { name: /Stories · Create invoice form/ })).toBeVisible();

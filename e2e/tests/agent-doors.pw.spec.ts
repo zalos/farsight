@@ -11,8 +11,9 @@ const GATE = 'invoice-app::guard::requireScope(billing:read)';
 const enc = encodeURIComponent;
 
 async function openGate(page: Page, lens: string) {
-  await gotoReady(page, '#/journeys/' + enc(FLOW) + '?step=2&biz=gates&dock=right&lens=' + lens);
-  await page.locator('.jrn-gl-row[data-gate-card="' + GATE + '"]').first().locator('.jrn-gl-w').click();
+  // a journey's gates are read on the Map's table (the journey page retired into it)
+  await gotoReady(page, '#/map/' + enc(FLOW) + '?layout=table&lens=' + lens);
+  await page.locator('.map-table .jrn-gl-row[data-gate-card="' + GATE + '"]').first().locator('.jrn-gl-w').click();
   const c = page.locator('.fs-tip .gc[data-gc="' + GATE + '"]');
   await expect(c).toBeVisible();
   return c;

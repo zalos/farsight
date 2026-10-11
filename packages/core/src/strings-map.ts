@@ -149,13 +149,11 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.portfolio.board': same('Board', 'The same journeys drawn side by side on the map: each journey a block you can zoom into, its screens in order with the calls and data under each.'),
 
   // Settings → Experiments
-  'set.flagMap': same('Map of journeys'),
-  'set.flagMapSub': same('adds a MAP tab and a Board button on the Portfolio — every journey on one zoomable board, its screens in order with the calls and data under each; off by default, per workspace'),
 
   // the keymap panel
   'key.mapPlumb': same('Map: show or hide the calls and data under each screen'),
-  'key.mapZoom': same('Map: zoom in or out to the next stop; fit the journey in view, or every journey from the board'),
-  'key.mapStep': same('Map: previous or next screen of the open screen’s journey'),
+  'key.mapZoom': same('Map: one stop in or out — every journey, one journey, one screen, one action, the code; 0 fits the journey in view, or every journey from the board'),
+  'key.mapStep': same('Map: previous or next screen of the open screen’s journey; at an action, the previous or next action'),
 
   // the street's folds: a call's data beyond its first three, a screen's calls beyond its first four
   'map.fold.data': same('{n} more', 'The rest of what this call reads and writes, folded so the pathway stays short. Writes are drawn first, so what is folded is reads. Open it to draw them all here; the journey’s own counts never change.'),
@@ -357,10 +355,9 @@ export const MAP_STRINGS: Record<string, StringEntry> = {
   'map.link.copied': same('Link copied — it opens this same picture'),
   'map.link.select': same('The link is selected beside the tools — copy it from there'),
   'key.mapTab': same('Map: Tab walks the journeys, then each screen, its calls and its data; Enter opens what has the focus'),
-  'key.mapJk': same('Map: next or previous screen on the street'),
+  'key.mapJk': same('Map: on the street the next or previous screen; on the table the next or previous part, its code in the dock'),
   'key.mapHl': same('Map: previous or next journey'),
   'key.mapArrows': same('Map: move the board; with Shift, further'),
-  'key.mapLink': same('Map: copy the link to this picture'),
   // §I — the Affected mode (lane I, map pass 2, docs/proposals/map-pass-2026-10-03.md §4): pick a thing and
   // the board dims to what reaches it, at every altitude. The numbers are core affectedReach()'s Counteds over
   // one impact answer; the distance words are the impact panel's own, and the business words count no links.

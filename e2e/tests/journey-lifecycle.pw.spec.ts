@@ -1,28 +1,28 @@
-// The record's status lifecycle on the journey header (swarm-fixes round 2026-10-05, finding 7; round
+// The record's status lifecycle on the journey's head on the Map — the table's head (lanes round 2026-10-10: the
+// journey page's header retired into it) (swarm-fixes round 2026-10-05, finding 7; round
 // 2026-10-10 §3, one state machine, two views of it). The invoice-app example declares `InvoiceStatus` on its
 // invoice row, three functions write the status, and its farsight.config.json gives Billing's words for the
 // five statuses and one overlay (a ledger entry). Billing cycle is Billing's, so its header prints the
 // statuses in Billing's words, and *what each one means* opens one table of the word, the constant and what
 // moves it — every status, then the overlay.
 import type { Page } from '@playwright/test';
-import { test, expect, openBillingCycle } from './support';
+import { test, expect, openJourneyAt } from './support';
 
 const RECORD = 'invoice-app::table::invoices';
-const strip = (page: Page) => page.locator(`#jrn-lifecycle .lc-strip[data-record="${RECORD}"]`);
+const strip = (page: Page) => page.locator(`.map-table-head .lc-strip[data-record="${RECORD}"]`);
 
 // identifier-shaped tokens (the journey-numbers spec's list): a business reader never sees one on the strip
 const IDENTIFIER = /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b|\b[a-z0-9]+_[a-z0-9_]+\b|\b[A-Z0-9]+_[A-Z0-9_]+\b|\.(?:tsx?|jsx?|mjs|json)\b/g;
 
 async function openIn(page: Page, lens: 'business' | 'hybrid' | 'code') {
-  await openBillingCycle(page);
-  await page.locator('#lb-' + lens).click();
+  await openJourneyAt(page, 'table', lens);
   await expect(page.locator('body')).toHaveClass(new RegExp('lens-' + lens));
   await expect(strip(page)).toBeVisible();
 }
 
 test.describe('journey status lifecycle', () => {
   /**
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnLifecycleHtml
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnLifecycleHtml
    * @covers packages/server/public/app/lib/lifecycle-strip.js::lifecycleStripHtml
    * @covers GET /api/journey
    */
@@ -50,7 +50,7 @@ test.describe('journey status lifecycle', () => {
     await expect(s.locator('.lc-status.unwritten .lc-yet')).toHaveText(['no code moves it yet', 'no code moves it yet']);
     const text = (await s.locator('.lc-head, .lc-statuses').allInnerTexts()).join(' ');
     expect(text.match(IDENTIFIER) || [], 'identifier-shaped tokens on the business strip').toEqual([]);
-    await s.locator('.lc-status').first().click();
+    await s.locator('.lc-status').first().hover();
     await expect(page.locator('#fs-tip')).toContainText('in the code: draft');
   });
 
@@ -77,12 +77,14 @@ test.describe('journey status lifecycle', () => {
     await expect(table.locator('tbody tr.overlay .lc-tw')).toHaveText(view.overlays.map((o: { name: string }) => o.name));
     await expect(table.locator('tbody tr.status .lc-tc')).toHaveText(view.rows.map((r: { status: string }) => r.status));
     await expect(table.locator('tbody tr.unwritten .lc-tm')).toHaveText(['nothing in the code moves it yet', 'nothing in the code moves it yet']);
-    // Sent is moved by the code the list screen runs: a door to that screen of the journey, that node selected
+    // Sent is moved by the code the list screen runs: a door to that part on the Map — the action that holds it
     const send = table.locator('tbody tr.status', { hasText: 'Sent' }).locator('a.lc-door');
     await expect(send).toHaveText('Finalize invoice');
-    await expect(send).toHaveAttribute('href', /#\/journeys\/invoice-app%3A%3Aflow%3A%3Abilling-cycle\?view=timeline&step=2&node=invoice-app%3A%3Asrc%2Fserver%2FinvoiceService\.ts%3A%3AfinalizeInvoice/);
+    await expect(send).toHaveAttribute('href', '#/map/invoice-app%3A%3Aflow%3A%3Abilling-cycle?screen=2&part=invoice-app%3A%3Asrc%2Fserver%2FinvoiceService.ts%3A%3AfinalizeInvoice');
     await expect(s.locator('.lc-foot')).toContainText('statuses and moves read from the code');
     await send.click();
-    await expect(page).toHaveURL(/view=timeline&step=2/);
+    await expect(page.locator('.map-act')).toBeVisible();
+    await expect(page).toHaveURL(/screen=2&action=\d+/);
+    await expect(page.locator('.map-crumbs')).toContainText(/finali[sz]e/i);
   });
 });

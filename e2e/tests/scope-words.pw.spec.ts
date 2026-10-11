@@ -45,35 +45,39 @@ test.describe('every test number carries its scope', () => {
    * @covers packages/server/public/app/lib/test-chip.js::testChipHtml
    * @covers packages/server/public/app/lib/test-chip.js::notBuiltChipHtml
    * @covers packages/server/public/app/lib/test-chip.js::distinctArgs
-   * @covers packages/server/public/app/surfaces/journeys.js::jrnTestsFootHtml
+   * @covers packages/server/public/app/lib/journey-draw.js::jrnHeaderHtml
    * @covers GET /api/journey
    */
-  test('the journey header and the storyboard: a scope on every chip, the skips shown, the not-built screen never passed', async ({ page }) => {
-    await gotoReady(page, '#/journeys/' + encodeURIComponent(FLOW) + '?view=storyboard&lens=hybrid');
-    await expect(page.locator('#journey .jrn-htests')).toBeVisible();
-    // the header: the journey's cases, *over this journey*, *distinct* beside the per-screen counts below it
-    const head = page.locator('#journey .jrn-htests');
+  test('the journey\'s head and its street: a scope on every chip, the skips shown, the not-built screen never passed', async ({ page }) => {
+    // the head: the table's (the journey page's header retired into it) — the journey's cases, *over this journey*,
+    // *distinct* beside the per-screen counts of the street
+    await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=table&lens=hybrid');
+    const head = page.locator('.map-table-head .jrn-htests');
+    await expect(head).toBeVisible();
     await expect(head.locator('.tc-scope')).toHaveText('over this journey');
     await expect(head.locator('.tc-distinct')).toHaveText('distinct');
-    await head.locator('.tc-distinct').click();
+    await head.locator('.tc-distinct').hover();
     await expect(page.locator('#fs-tip')).toContainText('per screen');
     await expect(page.locator('#fs-tip')).toContainText('test cases');
     await page.keyboard.press('Escape');
-    heldToScope(await chips(page, '#journey .jrn-hg'), 'the header');
-    // the storyboard's cards: each screen's cases over this screen, and the skips wherever its fold counts some
-    const cards = await chips(page, '#journey .jrn-cfoot');
-    heldToScope(cards, 'the storyboard');
-    expect(cards.some((c) => c.scope === 'over this screen')).toBe(true);
+    heldToScope(await chips(page, '.map-table-head .jrn-hg'), 'the head');
     const skips = await skippedBySegment(page);
+    // the street (the storyboard's look): each screen's cases over this screen, and the skips wherever its fold counts some
+    await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens&lens=hybrid');
+    const street = '.map-district[data-flow="' + FLOW + '"]';
+    await expect(page.locator(street + ' .map-scr').first()).toBeVisible();
+    const cards = await chips(page, street + ' .map-scr');
+    heldToScope(cards, 'the street');
+    expect(cards.some((c) => c.scope === 'over this screen')).toBe(true);
     const built = cards.filter((c) => !c.notBuilt);
     skips.filter((n, i) => i < built.length).forEach((n, i) => {
       if (n > 0) expect(built[i]!.skipped, `screen ${i + 1}: ${n} skipped hidden behind its word`).toBe(n + ' skipped');
     });
     // the designed, not-built screen: no verdict, the sentence that says why
-    const nb = page.locator('#journey .jrn-cfoot [data-not-built]');
+    const nb = page.locator(street + ' .map-scr [data-not-built]');
     await expect(nb).toHaveCount(1);
     await expect(nb).toContainText('designed, not built');
-    await expect(nb).toContainText('no test can reach a screen with no code');
+    await expect(nb.locator('xpath=ancestor::div[contains(@class,"map-scr")]')).toContainText('no test can reach a screen with no code');
     await expect(nb).not.toContainText(/passed/i);
   });
 

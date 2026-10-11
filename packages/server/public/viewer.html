@@ -1587,7 +1587,7 @@
   @media (prefers-reduced-motion:reduce){.jrn-cutlist{transition:none!important}}
   .set-flag{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);cursor:pointer}
 
-  /* ── the action drill (the journey-timeline design reference 02-action-drill · behind the journeyDrill flag):
+  /* ── the action drill (the journey-timeline design reference 02-action-drill · the Map's action stop):
      the rail of actions, one action's beats as lanes × columns with elbow wires, the inspector on the right ── */
   .jrn-tl.drill{overflow:hidden;padding:0;display:flex;flex-direction:column}
   .jrn-drill{flex:1;display:flex;flex-direction:column;min-height:0}
@@ -2598,6 +2598,10 @@
     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
   .map-scr .route{font-family:var(--mono);font-size:10.5px;color:var(--dim);overflow-wrap:anywhere;line-height:1.25}
   .map-scr .route:empty{display:none}
+  /* the business street reads as the storyboard did: the picture and the screen's own sentence (one address) */
+  .map-scr .say{flex:none;font-size:11px;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* the picture gives the sentence its line, so the screen's chips and its test word keep theirs (the whole sentence is the tip) */
+  body.lens-business .map-scr .map-thumbwrap{height:96px}
   .map-scr .map-chips{display:flex;gap:5px;flex-wrap:wrap}
   .map-scr .map-chips .map-chip,.map-scr .state .map-chip{font-size:10px;padding:1px 7px}
   /* plumbing: the legend lane, call nodes with the service bar, data nodes with read/write */
@@ -2794,6 +2798,9 @@
   .map-hintline{font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:9.5px;color:var(--muted)}
   .map-dhead .facts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}
   .map-dhead .facts .lc{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:0}
+  .map-story-nav{display:inline-block;padding:0 6px;color:var(--accent);text-decoration:none;font-weight:600}
+  .map-story-nav:hover{color:var(--ink)}
+  .agg .for{font-size:11px;color:var(--muted)} .agg .for a{color:var(--accent)}
   .map-table-head .facts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted)}
   .mp-walk{font-family:var(--hud);text-transform:uppercase;letter-spacing:.1em;font-size:9px;color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:3px;padding:2px 6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-left:6px}
   .mp-walk .sym,.map-walk .sym{width:11px;height:11px}
@@ -3458,12 +3465,8 @@
         <span class="set-note" id="set-landing-sub"></span></div>
       <div class="set-row set-flags-row"><label id="set-flags-label"></label>
         <div class="set-flags">
-          <div class="set-flagitem"><label class="set-flag"><input type="checkbox" id="set-flag-drill" data-write/><span id="set-flag-drill-name"></span></label>
-            <span class="set-note" id="set-flag-drill-sub"></span></div>
           <div class="set-flagitem"><label class="set-flag"><input type="checkbox" id="set-flag-shots" data-write/><span id="set-flag-shots-name"></span></label>
             <span class="set-note" id="set-flag-shots-sub"></span></div>
-          <div class="set-flagitem"><label class="set-flag"><input type="checkbox" id="set-flag-map" data-write/><span id="set-flag-map-name"></span></label>
-            <span class="set-note" id="set-flag-map-sub"></span></div>
         </div></div>
     </div>
 
@@ -3485,44 +3488,6 @@
     </div>
     <p class="sub">Live view of local AI models, tools, chains, and agents. Polls <span class="mono">/api/modelhub/state</span> every 2s while open; nodes pulse while active.</p>
     <div id="mh-body"><div class="mh-empty">loading…</div></div>
-  </div>
-</div>
-
-<div class="journey" id="journey" role="dialog" aria-label="Journey">
-  <!-- two rows: who this journey is and how to look at it, then the facts about
-       it. The count line used to sit on one row with the view switch and refuse
-       to shrink, which starved the flow's name to nothing and pushed the switch
-       off the right edge of the screen. -->
-  <div class="jrn-head">
-    <div class="jrn-head-top">
-      <span class="hud-label">Journey</span>
-      <h2 id="jrn-title">—</h2>
-      <span class="jrn-orgline" id="jrn-orgline"></span>
-      <span class="jrn-orgline jrn-storyline" id="jrn-storyline"></span>
-      <span class="jrn-viewslot" id="jrn-layoutsw"></span>
-      <button class="x" onclick="closeJourney()" aria-label="Close journey" title="Close (Esc)">✕</button>
-    </div>
-    <div class="jrn-head-facts">
-      <span class="jrn-count" id="jrn-count"></span>
-      <span class="jrn-head-chips">
-        <span class="jrn-tomap" id="jrn-tomap"></span>
-        <span class="jrn-export" id="jrn-export"></span>
-        <span class="jrn-partof" id="jrn-partof"></span>
-        <span class="jrn-work" id="jrn-work"></span>
-        <button class="jrn-cuts" id="jrn-cuts" style="display:none" aria-expanded="false" onclick="jrnToggleCuts()"></button>
-        <span class="jrn-trunc" id="jrn-trunc" style="display:none">truncated</span>
-        <button class="jrn-forksbtn" id="jrn-forksbtn" style="display:none" onclick="jrnToggleForks()" title="Forks along this journey">forks</button>
-        <span class="jrn-layoutsw-wrap" id="jrn-docksw"></span>
-      </span>
-    </div>
-    <div class="jrn-lifecycle" id="jrn-lifecycle"></div>
-  </div>
-  <div class="jrn-body" id="jrn-body">
-    <div class="jrn-empty" id="jrn-empty" style="display:none"></div>
-    <div class="jrn-tl" id="jrn-tl"></div>
-    <div class="jrn-dock" id="jrn-dock" style="display:none" role="region" aria-label="Code pane"></div>
-    <div class="jrn-forks" id="jrn-forks" role="dialog" aria-label="Forks along this journey"></div>
-    <div class="jrn-cutlist" id="jrn-cutlist" role="dialog"></div>
   </div>
 </div>
 

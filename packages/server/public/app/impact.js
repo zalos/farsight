@@ -539,9 +539,10 @@ export function impactOpen() {
 export function impactGo(el) {
   const id = el && el.dataset ? el.dataset.node : null;
   if (!id) return false;
-  if (window.jrnStepOf && window.jrnScrollTo) {
+  // on the Map, a dependent on the journey's walk is shown there (surfaces/map-stops.js mapShowPart)
+  if (window.jrnStepOf && window.mapShowPart) {
     const order = window.jrnStepOf(id);
-    if (order != null && order >= 0) { window.jrnScrollTo(order); return false; }
+    if (order != null && order >= 0 && window.mapShowPart(order)) return false;
   }
   openImpact(id);
   return false;

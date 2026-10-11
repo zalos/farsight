@@ -195,14 +195,12 @@ export const STRINGS: Record<string, StringEntry> = {
   // ── system strings (register-invariant: errors, permissions, safety) ────
   'sys.readonly': sys('READ-ONLY'),
   'sys.readonlySub': sys('viewing changes nothing — click freely'),
-  'sys.journeyFailed': sys('Could not run journey.'),
   'sys.httpStatus': sys('HTTP {status}'),
   'chrome.build': same('running build', 'The Farsight build this server process runs — loaded when it started; a later install does not change it until the process restarts.'),
   'chrome.buildInstalled': same('installed build', 'The Farsight build on disk now — what a restarted server would run. When it is a different build from the running one, the chip says RESTART.'),
   'chrome.restartNeeded': same('RESTART', 'A different Farsight build is installed than this server runs — compared build to build (the same code commit with no uncommitted changes, or the same build stamp), never by file dates. Stop the Farsight server and start it again.'),
   'chrome.built': same('built'),
   'chrome.graphIngestedBy': same('graph ingested by'),
-  'sys.journeyOldServer': sys('This graph server predates the blueprint timeline — rebuild and restart it.'),
   'sys.noGraph': sys('no graph yet — sync sources in settings or run farsight ingest'),
   'sys.truncated': sys('truncated'),
   'sys.stringsFailed': sys('string catalog unavailable — showing raw keys'),
@@ -236,19 +234,17 @@ export const STRINGS: Record<string, StringEntry> = {
     professional: 'Change impact — what uses this?',
     define: 'Opens what uses the selected thing, by distance. Inside a journey it opens the answer for the open part. A path is not a claim that a change travels along it, so the question is "what uses this", never "what does this break".',
   },
-  'key.jk': same('Next / previous part of the open journey'),
   'key.f': same('Focus the selected item (again to clear)'),
   'key.cmdk': { hud: 'Fast travel', professional: 'Search' },
   'key.y': same('Copy a link to this view'),
   'key.help': same('Show this keymap'),
   'key.tip': same('Details of a dotted-underlined number or word',
     'Click it, rest the pointer on it, or focus it and press Enter. A number’s details say what it counts, what it counts over and where it came from. Esc closes them first.'),
-  'key.esc': same('Close the top panel'),
+  'key.esc': same('Close the top panel; on the Map, up one stop'),
   'key.l': same('Rows / ladder in the journey band'),
   'key.v': same('Timeline / sheet / drill — the journey view'),
-  'key.brackets': same('Previous / next action in the journey drill'),
-  'key.d': same('Code pane in place / bottom / right'),
-  'key.t': same('Tests — the Tests surface, or the tests list of the open part of a journey', 'Outside a journey it opens the Tests surface; with a journey open it opens the open part’s tests list. One key, one question: what proves this runs?'),
+  'key.d': same('Map, at an action or on the table: where the code opens — in place, bottom, right'),
+  'key.t': same('Tests — the Tests surface, or the tests list of the open part at an action', 'At an action on the Map it opens the open part’s tests list; anywhere else it opens the Tests surface. One key, one question: what proves this runs?'),
   'keymap.title': same('Keymap'),
   'keymap.sub': same('Every shortcut also has a visible button — keys are the fast path, never the only path.'),
 
@@ -516,7 +512,6 @@ export const STRINGS: Record<string, StringEntry> = {
   // The screen band on a journey, the Designs front door on the Journeys
   // surface, and the words a planned call from the design uses.
   'journey.screens': same('Screens'),
-  'journey.screensSub': same('The screens this journey runs through, as they were designed.'),
   'journey.planned.calls': same('calls (planned)'),
   'design.plannedCall': same('planned call · from the design'),
   'design.title': same('Designs'),
@@ -544,10 +539,6 @@ export const STRINGS: Record<string, StringEntry> = {
   // ── the three-band blueprint (journey overlay) ──────────────────────────
   // Band 1 is what a person sees, band 2 what the business promises, band 3
   // what the system actually does — one feature read top to bottom.
-  'journey.bandUser': same('What the user sees'),
-  'journey.lineOfVisibility': same('Line of visibility', 'The line a service blueprint draws between what a person experiences and the work that happens behind it.'),
-  'journey.bandBusiness': same('The business'),
-  'journey.bandSystem': same('What the system does'),
   'journey.bandData': same('Records & messages'),
   'journey.gates': same('Gates'),
   'journey.rules': same('Rules'),
@@ -613,8 +604,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.verb.first': same('the user'),
   'journey.verb.then': same('then'),
   'journey.beforeFirstScreen': same('before the first screen'),
-  'journey.startsAt': same('starts at'),
-  'journey.bizSub': same('Gates, rules and decisions in words, in the order they are met.'),
   // the business lane's three views. One control for the whole lane, and every
   // count is on it whether or not that view is open — a reader must always be
   // able to tell "there are none here" from "they are not shown here".
@@ -656,8 +645,6 @@ export const STRINGS: Record<string, StringEntry> = {
     'Every one of them is a name out of the code and nobody declared words for any of them, so this list has a count and no rows. Said as “none” rather than as a number equal to the count, which reads as though some of them were shown.'),
   'journey.biz.notInWords': same('{n} of these are not written in plain language',
     'This tool prints the words a developer declared for a checkpoint. Where none were declared, or where what was declared is a name out of the code, it says so rather than inventing a sentence. Switch to the hybrid or code lens to read them as the code names them.'),
-  'journey.bizDocs': same('{n} documents',
-    'The product documents this journey points at. Opened here so the lane’s height is set by what it is showing, not by how many documents a flow happens to name.'),
   'journey.rowsSub': same('One row per system this journey touches.'),
   'journey.row.api': same('API'),
   'journey.row.records': same('Records'),
@@ -676,7 +663,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.row.server': same('The service does'),
   'journey.rowSub.ux': same('browser'),
   'journey.rowSub.server': same('server'),
-  'journey.actionsSub': same('One row per system · one column per action of the screen.'),
   'journey.stillOpen': same('still open'),
   'journey.seam.from': same('from'),
   'journey.seam.handled': same('handled'),
@@ -697,8 +683,6 @@ export const STRINGS: Record<string, StringEntry> = {
     'Decisions on this screen that could not be drawn as a diagram — named as chips instead, so what this view draws is what its count claims.'),
   'journey.decisionsFoldedOne': one('1 decision', 'journey.decisionsFolded'),
   'journey.decisionChip': same('the flow can branch here'),
-  'journey.view.rows': same('Rows'),
-  'journey.view.ladder': same('Ladder', 'One screen turned on its side: systems as columns, time running down, one line per part the walk visited — the sequence diagram behind the same walk.'),
   'journey.moreSteps': same('{n} more', 'More parts the walk visited on this screen, below the ones shown. Open them to read the rest of the ladder.'),
   'journey.ladder.time': same('time'),
   // A screen's ladder draws the systems it uses; the ones after the last it uses
@@ -709,7 +693,6 @@ export const STRINGS: Record<string, StringEntry> = {
     'A system this screen did not use, lying before or between systems it did. It keeps its place, drawn narrow, so the columns still read left to right in the order a request travels.'),
   'journey.ladder.folded': same('Folded into this column',
     'The systems this screen never reaches, each with its absence word. Their lanes are not drawn for this screen.'),
-  'journey.noRowsYet': same('No records, messages or third parties known yet — they appear when handlers are built.'),
   'journey.expandHint': same('click a marker for its contract or code'),
   'journey.closeExpanded': same('Close'),
   'journey.requires': same('requires'),
@@ -719,17 +702,11 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.linkHow.derived': same('derived from a longer flow'),
 
   // ── the view axis: lens × view × band (journey-views-pass-2026-09 §2.1) ──
-  'journey.layout.storyboard': same('Storyboard', 'The journey as its screens in order, the actions a person can take on each, and — for the selected action — what the system checks, records, sends and hands off, in plain words.'),
-  'journey.layout.timeline': same('Timeline', 'The journey read left to right: one column per screen, the business above the line of visibility, one row per system below it.'),
-  'journey.layout.sheet': same('Sheet', 'The whole journey on one grid: one column per action in journey order, one row per layer of the system in request order.'),
   // the visible label of the segmented control, and its accessible name: one
   // key, so the group cannot announce itself one way and read another
-  'journey.layoutSwitch': same('View', 'Which drawing of the journey you are reading. The same walk and the same numbers — only the shape changes, and the view travels in a shared link.'),
   // a quiet mark on the button the current register opens in, so a reader who
   // lands somewhere unfamiliar can tell a default from a disappearance
-  'journey.layoutDefault': same('Opens here in this register', 'Where a journey opens for the way you are reading: the storyboard for plain words, the sheet for both names, the timeline for code. Your own last choice is remembered and wins over that, and a shared link wins over both — every view stays one click away.'),
-  'journey.layout.drill': same('Drill', 'One action opened into its beats: the layers of the system down the side, an arrow from each beat to the next, and a panel that explains the selected part. An experiment — switched on per workspace in Settings.'),
-  // ── the action drill (the journey-timeline design reference 02-action-drill · behind the journeyDrill flag) ──
+  // ── the action drill (the journey-timeline design reference 02-action-drill · the Map's action stop since 2026-10-10) ──
   'journey.beat.screen': same('the screen'),
   'journey.beat.browser': same('the browser'),
   'journey.beat.seam': same('the seam'),
@@ -828,7 +805,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.sheetCorner': same('layer ↓ · stop →', 'Each column is one stop: one time the journey does something, in order — the same stops the drill walks and numbers. The header counts actions, each thing a person can do once, so a second visit or a call only the design declares is a stop and not another action.'),
   'journey.biz.sheetCorner': same('part of the system ↓ · stop →', 'Each column is one stop: one time the journey does something, in order. Down the side, the parts of the system that take part in it.'),
   // ── the code pane's dock: in place · bottom · right ──
-  'journey.dockSwitch': same('Code pane'),
   'journey.dock.inline': same('In place', 'The contract or code opens under the row that owns the marker, inside the timeline.'),
   'journey.dock.bottom': same('Bottom', 'The contract or code opens in a pane pinned along the bottom of the journey — always in view while the timeline scrolls.'),
   'journey.dock.right': same('Right', 'The contract or code opens in a pane pinned to the right of the journey — the timeline on the left, the code beside it.'),
@@ -893,14 +869,12 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.absentWhy.queueNoProducer': same('the portal never enqueues {queue}; the worker\'s only producer is {producer}'),
   'journey.absentWhy.deferred': same('runs later, on its own — registered here, run by something else'),
   'journey.absentWhy.interface': same('reached through {param} — an interface-typed call this build cannot follow'),
-  'journey.absentWhy.noExternal': same('no external node in this build — proposed from the SDK/host table'),
   'journey.absentSub.noneIndexed': same('nothing of this kind was found anywhere this journey reaches'),
   'journey.absentSub.notBuilt': same('declared somewhere — no code behind it yet'),
   'journey.absentSub.notInvolved': same('this layer takes no part in this action'),
   'journey.noTestsSub': same('No tests are indexed yet — this says nothing about whether the action is tested.'),
 
   // ── what the overlay says while it has nothing to draw (R32) ──────────
-  'journey.loading': same('walking the journey…'),
   'journey.retry': same('Try again'),
 
   // ── honest chrome (journey-views-pass-2026-09 §2.2) ────────────────────
@@ -1032,7 +1006,6 @@ export const STRINGS: Record<string, StringEntry> = {
   ),
   'journey.tests.open': same('open the list', 'Opens the Tests surface on the cases this cell counts — the same scope, the same evidence word — each case with its own last run.'),
   'journey.tests.listHint': same('↑↓ walk · ↵ opens the test'),
-  'journey.tests.noneScreen': same('no test is known to reach this screen', 'No indexed test reaches this screen. A floor: a test this build could not read is not counted.'),
   // One step, two scopes (story swarm 2026-09-25, finding 4): the action's Verified-by
   // number counts every test reaching any part of the action; a step's own foot counts
   // the tests reaching that part alone. Printed together, each with its scope.
@@ -1068,7 +1041,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'journey.status.designedNotBuilt': same('designed, not built · 0 of {m}', 'The design names screens for this flow and none of them exists in code yet.'),
   'journey.drift.byKind': same('what differs · {n}', 'Every difference between the spec, the design and the code, one sentence per kind. Never a defect count.'),
   'journey.header.business': same('{screens} screens · {built} built · {actions} things the user can do · touches {systems}'),
-  'journey.rail.declaredOnly': same('declared for this screen — no call found in its code'),
   'journey.identity': same('source {commit} · farsight {build} · sync {n}',
     'Which reading of the product every number on this screen comes from: the commit of the source, the build of Farsight that read it, and the sync that wrote the graph. Two numbers can only be compared when these agree.'),
   'journey.external.kind.erp': same('the ERP'),
@@ -1084,29 +1056,9 @@ export const STRINGS: Record<string, StringEntry> = {
   // selected action — the seven ledger rows in request order. Every word here
   // is printed in all three registers, so none of them may carry a
   // developer's unit (the lint's RULE 5 list) even though the key is shared.
-  'journey.story.ownWords': same('the flow\'s own words'),
-  'journey.story.screens': same('The screens in order'),
-  'journey.linked': same('Linked journeys'),
   'journey.scene.actions': same('stops {from}–{to}', 'The stops on this screen, numbered from the first: one each time the journey does something here. The same stops the Sheet draws as columns.'),
-  'journey.scene.again': same('stops {from}–{to} again', 'Every action on this screen was already run on an earlier one — the same calls, the same work, reached a second time.'),
-  'journey.scene.newHere': same('new on this screen'),
-  'journey.rail.screenOf': same('screen {n} of {t} · {name}'),
-  'journey.rail.prevScreen': same('previous screen'),
-  'journey.rail.nextScreen': same('next screen'),
-  'journey.rail.unlisted': same('called by the screen — not in the design\'s list'),
   'journey.ledger.actionOf': same('stop {n} of {t} on this screen · {name}',
     'Where the open stop sits among the stops of THIS screen. The drill and the Sheet number the stops of the whole journey instead, and say so.'),
-  'journey.ledger.checks': same('The checks'),
-  'journey.ledgerSub.checks': same('what has to be true · what stops the action'),
-  'journey.ledger.recorded': same('What is recorded'),
-  'journey.ledgerSub.recorded': same('one transaction · then the hand-offs'),
-  'journey.ledgerSub.messages': same('email · queues'),
-  'journey.ledgerSub.external': same('outside the code'),
-  'journey.sees.does': same('{action} on {screen}'),
-  'journey.sees.answers': same('the screen answers'),
-  'journey.sees.thenShows': same('then shows {screen}'),
-  'journey.record.by': same('{op} by {accessor}'),
-  'journey.external.via': same('through {via}'),
 
   // ── the business register's own words (lint RULE 5 polices these) ──────
   // Every string the business lens prints lives here, and none of them may
@@ -1289,8 +1241,6 @@ export const STRINGS: Record<string, StringEntry> = {
   'set.groupPrompt': same('Group name (saved as a collection):'),
   'set.landing': same('Landing surface'),
   'set.flags': same('Experiments'),
-  'set.flagDrill': same('Journey drill view'),
-  'set.flagDrillSub': same('adds DRILL to the journey view switch — one action opened into its beats with an inspector; off by default, per workspace'),
   'set.flagShots': same('Keep a design shot per sync'),
   'set.flagShotsSub': same('copies each screen\u2019s design image into .farsight/cache/shots at every sync, so a past sync can be looked at rather than described \u2014 one file per distinct image, whatever the number of syncs. It keeps designs, never a picture of the running app. Off by default, per workspace, because it writes files.'),
   'set.landingSub': same('where this browser lands on open — a default, never a cage: deep links always win'),
@@ -2275,8 +2225,6 @@ export const STRINGS: Record<string, StringEntry> = {
   // behind an evidence word, the related numbers a tip names beside the one it
   // explains, the business lens's words for the drill and the folds, and the
   // way from an open journey back to the top bar.
-  'journey.skipToChrome': same('Skip to the top bar',
-    'The journey is a panel over the page, not a wall. This link is its first stop: it takes the keyboard to the top bar — the surfaces, search, the register and the lens — which Tab otherwise reaches only by walking backwards out of the journey.'),
   'journey.obs.reports': same('{n} coverage reports, no test named',
     'The run behind the evidence word is known only from coverage reports: each says which code a run reached and none says which test reached it. Counted once each.'),
   'journey.obs.reportsOne': one('1 coverage report, no test named', 'journey.obs.reports'),

@@ -242,7 +242,7 @@ function opsTableHtml(a) {
         + '<td>' + statusChips(op) + '</td>'
         + '<td class="api-acts">'
         + '<a href="' + apiHref(a.id, { op: op.routeId }) + '">' + esc(t('apis.contractLink')) + '</a>'
-        + (op.loc ? '<a href="#/journeys/' + encodeURIComponent(op.routeId) + '">' + esc(t('apis.op.journey')) + '</a>' : '')
+        + (op.loc ? '<a href="#/map/' + encodeURIComponent(op.routeId) + '">' + esc(t('apis.op.journey')) + '</a>' : '')
         + '<a href="#/codemap?node=' + encodeURIComponent(op.routeId) + '">' + esc(t('apis.op.codemap')) + '</a>'
         + (op.loc && lens !== 'business' ? vsl(op.loc.repo, op.loc.path, op.loc.line) : '')
         + '</td></tr>';

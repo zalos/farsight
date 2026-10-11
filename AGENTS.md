@@ -97,7 +97,7 @@ moved out; open a map when you need it, not to orient.
 | open this | when |
 |---|---|
 | [docs/MAP-PACKAGES.md](docs/MAP-PACKAGES.md) | finding where something lives — every package, file by file, with what each module owns |
-| [docs/MAP-VIEWER.md](docs/MAP-VIEWER.md) | before editing `packages/server/public/*` — the ES-module split, the journey's four views, the band and drill mechanics, the surfaces |
+| [docs/MAP-VIEWER.md](docs/MAP-VIEWER.md) | before editing `packages/server/public/*` — the ES-module split, the five stops a journey is read at on the Map, the band and drill mechanics, the surfaces |
 | [docs/SECURITY.md](docs/SECURITY.md) | touching the server's routes, secrets, tracker writes or recorded fixtures — the threat model, the request guard, the CI secret scan |
 | [docs/CI.md](docs/CI.md) | changing the GitHub Actions workflow, reading a red check, or running exactly what CI runs |
 | [docs/COUNTS.md](docs/COUNTS.md) | before printing, changing or defending a number — every count the product prints, its source field, what it counts, the scope it counts over, and the `Counted` shape a surface wires |
@@ -127,7 +127,9 @@ a `strings-<area>.ts` registered the way `strings-doors.ts` is, so lanes do not 
 **One surface, five stops; scope on the chip; a tier on every gate** (2026-10-10): the Map is the one place a journey
 is read — ALL · JOURNEY · SCREEN · ACTION · CODE on one zoom (`surfaces/map-stops.js`), with one LAYOUT control whose
 choices change per stop (`registerMapLayout`); the journey's pure folds live in `lib/journey-model.js`, never in a
-surface. Every test number prints through `lib/test-chip.js` with the scope it counts over (`TestVerdict.scopeWord`),
+surface, and its drawing in `lib/journey-draw.js`. There is no second journey page: a door to a journey writes
+`#/map/<flow>` (an old `#/journeys/<entry>…` link is rewritten by `route-url.js overlayToMap`), *step* is the storyline
+position and a Map address names a `screen`. Every test number prints through `lib/test-chip.js` with the scope it counts over (`TestVerdict.scopeWord`),
 a designed, not-built screen has no verdict, and the absence word is *no test is known to reach*. Every gate carries a
 class and a tier (core `gate-class.ts`: business · policy · technical; `gateTiers` in config or `@guard[tier]` to
 override), the business register lists business and policy and folds the rest, and a `@guard` that writes a status is

@@ -1,6 +1,8 @@
-// keymap.js — every keyboard binding in one place (b · j/k · l · v · d · [ ] · f · t · ⌘K · y · ?;
-// on the Map also h/l · arrows · p · + − 0 · g the legend · v the stop's layout · ← → an action's beats, asked of
-// surfaces/map.js mapKey first).
+// keymap.js — every keyboard binding in one place, one keymap for the one surface a journey is read on (lanes round
+// 2026-10-10: the journey page's own keys retired with it). ⌘K · ? · y · t · b · f everywhere; on the Map, asked of
+// surfaces/map.js mapKey first: + / − move a stop (every journey · one journey · one screen · one action · the code),
+// v cycles the layout at the stop, d the dock, j / k the parts at the stop, [ ] the screens or the actions, ← → an
+// action's beats, h / l the journeys, p · w · g · 0 · arrows; Esc goes up one stop.
 // `?` has one job everywhere — this keymap (swarm 2026-10-05: it had four)
 // plus the published keymap panel. Keys are the fast path, never the only
 // path: each action here also has a visible button somewhere in the chrome.
@@ -8,8 +10,8 @@
 import { S, expose, esc } from './store.js';
 import { t } from './strings.js';
 import { openPalette, closePalette, paletteNav, clearFocus, focusOn, closeSettings, settingsOpen, closeModelHub, modelHubOpen, closeMore, moreOpen, closeScopeMenu } from './shell.js';
-import { journeyOpen, forksOpen, closeForks, cutsOpen, closeCuts, closeJourney, jrnNav, jrnToggleView, jrnCycleLayout, jrnCycleDock, expandedOpen, closeExpanded, jrnActionStep } from './surfaces/journeys.js';
 import { jrnOpenTests, jrnOpenImpact } from './surfaces/journey-drill.js';
+import { actionOpen, tableOpen } from './surfaces/map-stops.js';
 import { openImpact, closeImpact, impactOpen } from './impact.js';
 import { mapOpen, mapEscape, mapKey, mapSelected, mapCopyLink } from './surfaces/map.js';
 import { copyLiveLink, closeShare } from './share.js';
@@ -21,25 +23,20 @@ import { gateKeydown } from './lib/gate-card.js';
 /** The published keymap — the panel renders from this table, nothing else. */
 const KEYS = [
   { keys: '⌘K', desc: 'key.cmdk' },
-  { keys: 'j / k', desc: 'key.jk' },
-  { keys: 'l', desc: 'key.l' },
-  { keys: 'v', desc: 'key.v' },
-  { keys: 'd', desc: 'key.d' },
-  { keys: 't', desc: 'key.t' },
-  { keys: '[ / ]', desc: 'key.brackets' },
-  { keys: 'b', desc: 'key.b' },
-  { keys: 'tab · enter', desc: 'key.mapTab' },
-  { keys: 'j / k', desc: 'key.mapJk' },
-  { keys: 'h / l', desc: 'key.mapHl' },
-  { keys: '← ↑ → ↓', desc: 'key.mapArrows' },
-  { keys: 'p', desc: 'key.mapPlumb' },
-  { keys: 'w', desc: 'key.mapLanes' },
   { keys: '+ / − / 0', desc: 'key.mapZoom' },
+  { keys: 'v', desc: 'key.mapLayout' },
+  { keys: 'd', desc: 'key.d' },
+  { keys: 'j / k', desc: 'key.mapJk' },
   { keys: '[ / ]', desc: 'key.mapStep' },
   { keys: '← / →', desc: 'key.mapBeats' },
-  { keys: 'v', desc: 'key.mapLayout' },
-  { keys: 'y', desc: 'key.mapLink' },
+  { keys: 'h / l', desc: 'key.mapHl' },
+  { keys: '← ↑ → ↓', desc: 'key.mapArrows' },
+  { keys: 'tab · enter', desc: 'key.mapTab' },
+  { keys: 'p', desc: 'key.mapPlumb' },
+  { keys: 'w', desc: 'key.mapLanes' },
   { keys: 'g', desc: 'key.mapLegend' },
+  { keys: 't', desc: 'key.t' },
+  { keys: 'b', desc: 'key.b' },
   { keys: 'enter · o', desc: 'key.doors' },
   { keys: 'f', desc: 'key.f' },
   { keys: 'y', desc: 'key.y' },
@@ -78,9 +75,9 @@ export function toggleKeymapPanel(force) {
 }
 
 /**
- * The one keydown listener: ⌘K fast travel, the Escape cascade, palette
- * list-nav, journey j/k, l (rows ↔ ladder), v (timeline ↔ sheet) and d (the code pane's dock), t (the
- * open step's tests list inside a journey, the Tests surface outside one), and the b / f / y / ? bindings. Never fires plain letters while the user is typing in a field.
+ * The one keydown listener: ⌘K fast travel, the Escape cascade (the top panel, then on the Map up one stop), palette
+ * list-nav, the Map's keys (surfaces/map.js mapKey), t (the open part's tests at an action, the Tests surface
+ * elsewhere), and the b / f / y / ? bindings. Never fires plain letters while the user is typing in a field.
  * @group Keymap
  */
 function onKeydown(e) {
@@ -93,7 +90,6 @@ function onKeydown(e) {
   // puts back into the dialog the focus a redraw dropped. The chrome stays live.
   if (e.key === 'Tab' && trapTab(e)) return;
   const palOpen = document.getElementById('palette').classList.contains('open');
-  const jOpen = journeyOpen();
   if (e.key === 'Escape') {
     if (palOpen) closePalette();
     else if (keymapPanelOpen()) toggleKeymapPanel(false);
@@ -104,19 +100,15 @@ function onKeydown(e) {
     // hanging open over the Journeys list (pass swarm 2026-09-25, onboarding blocker)
     else if (scopeMenuOpen()) { closeScopeMenu(); const b = document.getElementById('scopebtn'); if (b) b.focus({ preventScroll: true }); }
     else if (impactOpen()) closeImpact();
-    // Settings and the Model Hub open over a journey (the gear and the hub
-    // button stay live beside it), so they are on top and leave first
+    // Settings and the Model Hub are on top of the surface, so they leave first
     else if (modelHubOpen()) closeModelHub();
     else if (settingsOpen()) closeSettings();
-    // the cut list sits above the forks drawer, so it leaves first — Esc unwinds
-    // what is on top, never the overlay while something is still covering it
-    else if (jOpen) { if (cutsOpen()) closeCuts(); else if (forksOpen()) closeForks(); else if (expandedOpen()) closeExpanded(); else escCloseJourney(); }
-    // on the map Esc backs out one level: the explore card, the screen, the street
+    // on the map Esc backs out one level: a drawer or the open part's code, the explore card, the action, the screen,
+    // the journey
     else if (mapOpen() && mapEscape()) { /* used */ }
     else if (S.focusSet) clearFocus();
     return;
   }
-  if (escArmed && e.key !== 'Shift') { escArmed = 0; escToast(false); }
   if (palOpen) { paletteNav(e); return; }
   const tag = (e.target && e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
@@ -125,59 +117,24 @@ function onKeydown(e) {
   // a gate answers its key the way it answers its click: Enter or Space opens the gate card (swarm-fixes 2026-10-05)
   if (gateKeydown(e)) return;
   if (doorKeydown(e)) { e.preventDefault(); return; }
-  // the map's own keys — p plumbing, + − 0 zoom, [ ] the screens of an open screen's journey
+  // the map's own keys — the stops, the layout, the dock, the parts, the beats, plumbing, the legend
   if (mapOpen() && mapKey(e)) { e.preventDefault(); return; }
-  if (jOpen && S.JOURNEY && (e.key === 'j' || e.key === 'k')) { e.preventDefault(); jrnNav(e.key === 'j' ? 1 : -1); return; }
-  if (jOpen && S.JOURNEY && e.key === 'l') { e.preventDefault(); jrnToggleView(); return; }
-  if (jOpen && S.JOURNEY && e.key === 'v') { e.preventDefault(); jrnCycleLayout(); return; }
-  if (jOpen && S.JOURNEY && e.key === 'd') { e.preventDefault(); jrnCycleDock(); return; }
-  if (jOpen && S.JOURNEY && (e.key === '[' || e.key === ']')) { e.preventDefault(); jrnActionStep(e.key === ']' ? 1 : -1); return; }
-  // t asks one question — what proves this runs? Inside a journey that is the
-  // open step's tests list (pass B4 binds it there); everywhere else it is the
-  // Tests surface. One key, two contexts, never two keys for one question.
-  if (jOpen && S.JOURNEY && e.key === 't') { e.preventDefault(); jrnOpenTests(); return; }
-  if (e.key === 't' && !jOpen) { e.preventDefault(); location.hash = '#/tests'; return; }
+  // t asks one question — what proves this runs? At an action, or on the table
+  // with a part open, that is the open part's tests list; everywhere else it is
+  // the Tests surface. One key, two contexts, never two keys for one question.
+  const atAction = mapOpen() && S.JOURNEY && (actionOpen() || (tableOpen() && S.journeyActive >= 0));
+  if (e.key === 't') { e.preventDefault(); if (atAction) jrnOpenTests(); else location.hash = '#/tests'; return; }
   if (e.key === '?') { e.preventDefault(); toggleKeymapPanel(); return; }
   // on the map the link is brought up to date with the picture first (§K)
   if (e.key === 'y') { if (mapOpen()) mapCopyLink(); else copyLiveLink(); return; }
-  // b asks one question — what else uses this? Inside a journey that is the open
-  // step's impact answer, everywhere else the drawer on the selected card. One
+  // b asks one question — what else uses this? At an action (or the table's open
+  // part) that is the open part's impact answer, everywhere else the drawer on the selected card. One
   // key, two contexts: the proposal's key `i` is declined (§10.1), because two
   // names for one question is the fault an earlier review told us to stop.
-  if (jOpen && S.JOURNEY && e.key === 'b') { e.preventDefault(); jrnOpenImpact(); return; }
+  if (atAction && e.key === 'b') { e.preventDefault(); jrnOpenImpact(); return; }
   // on the map, the thing whose explore card is open is the one asked about
   if (e.key === 'b') { openImpact((mapOpen() && mapSelected()) || S.selected); return; }
   if (e.key === 'f') { if (S.focusSet) clearFocus(); else if (S.selected) focusOn(S.selected); return; }
-}
-
-/** How long the first Esc on an open journey waits for the second. */
-const ESC_AGAIN_MS = 2500;
-let escArmed = 0, escToastT = null;
-/**
- * Esc on a journey with nothing inside it open: the first press says what a
- * second would do, the second (within 2.5 s) closes the journey. One Esc used
- * to drop a reader who had only meant to dismiss something onto the Journeys
- * list, their place lost (swarm 2026-10-05, the onboarding developer).
- * @group Keymap
- */
-function escCloseJourney() {
-  const now = Date.now();
-  if (escArmed && now - escArmed < ESC_AGAIN_MS) { escArmed = 0; escToast(false); closeJourney(); return; }
-  escArmed = now;
-  escToast(true);
-}
-/** The quiet note the first Esc shows, in the page's live region. */
-function escToast(on) {
-  let el = document.getElementById('esc-toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'esc-toast'; el.className = 'esc-toast'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
-    document.body.appendChild(el);
-  }
-  clearTimeout(escToastT);
-  el.textContent = on ? t('journey.escAgain') : '';
-  el.classList.toggle('on', on);
-  if (on) escToastT = setTimeout(() => { el.classList.remove('on'); el.textContent = ''; escArmed = 0; }, ESC_AGAIN_MS);
 }
 
 /** Attach the central listener (called once from the shell's boot).

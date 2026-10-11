@@ -60,11 +60,22 @@ export async function gotoReady(page: Page, hash = '#/journeys'): Promise<void> 
   await expect(page.locator('#stats')).not.toHaveText('loading…');
 }
 
-/** Open the journey marked start here on the picker (the fixture's `Billing cycle`) and wait for its header. */
+/**
+ * Open the journey marked start here on the front door (the fixture's `Billing cycle`): its card's door lands on the
+ * Map — the one place a journey is read — at the register's own view (business: the street, hybrid: the table, code:
+ * the first action's beats with the code open). Waits until the crumb names the journey.
+ */
 export async function openBillingCycle(page: Page): Promise<void> {
   await gotoReady(page, '#/journeys');
   // the organised front door lists journeys in the manifest's order, the pinned way in where the manifest put it
   await page.locator('.dsg-flow.pinned').first().getByRole('button', { name: 'Open journey' }).click();
-  await expect(page.getByRole('dialog', { name: 'Journey', exact: true })).toBeVisible();
-  await expect(page.locator('#jrn-title')).toHaveText('Billing cycle');
+  await expect(page).toHaveURL(/#\/map\/invoice-app%3A%3Aflow%3A%3Abilling-cycle/);
+  await expect(page.locator('.map-crumbs')).toContainText(/billing cycle/i);
+}
+
+/** The fixture's Billing cycle on the Map at one layout of the journey stop (`screens` · `table`), in a register. */
+export async function openJourneyAt(page: Page, layout: 'screens' | 'table', lens = 'hybrid'): Promise<void> {
+  await gotoReady(page, '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=' + layout + '&lens=' + lens);
+  if (layout === 'table') await expect(page.locator('.map-table .jrn-sheet')).toBeVisible();
+  else await expect(page.locator('.map-scr').first()).toBeVisible();
 }

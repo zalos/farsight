@@ -132,7 +132,7 @@ test.describe('map round 2 — the journey the reader opened', () => {
     await mapOn(page);
     await go(page, '#/map');
     await boardReady(page);
-    await go(page, '#/map/' + encodeURIComponent(WIDE_ID));
+    await go(page, '#/map/' + encodeURIComponent(WIDE_ID) + '?layout=screens');
     await expect(page.locator('.map-world')).toHaveClass(/lvl-st/);
     await page.waitForTimeout(700);
     await expectCurrent(page, WIDE_ID, NAMES[0]);

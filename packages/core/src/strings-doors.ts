@@ -26,8 +26,6 @@ export const DOOR_STRINGS: Record<string, StringEntry> = {
   'door.design': same('open the design file in the editor', 'Opens the design file that declares this screen, in your code editor.'),
   'door.figma': same('open in Figma', 'Opens the frame this screen was designed in, in a new tab.'),
   'door.included': same('see where it is included', 'Opens the code map on the projects and files that bring this package in.'),
-  'door.journey': same('open the journey here', 'Opens this journey as its timeline, at this screen, with this part selected when there is one. The same place, the other picture.'),
-  'door.map': same('see it on the Map', 'Opens this journey on the Map, its screens in order, with the screen you are on framed. The same place, the other picture.'),
   'key.doors': same('On a detail: open where it is read in full; o opens it in the editor'),
   'door.expand': same('more', 'Opens this detail in place: its code where the reader may read code, and where to read it in full.'),
   'door.codeLoading': same('reading the lines…', 'The code is being read from the file on this machine.'),
