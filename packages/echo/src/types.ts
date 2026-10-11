@@ -20,7 +20,7 @@ export interface EchoContext {
   config: EchoConfig;
   profileId: string;
   profile: EchoProfile;
-  /** All state lives next to this local, ignored configuration file. */
+  /** Memory stores live here; trust receipts and the executable cache are user-owned elsewhere. */
   directory: string;
   dataDirectory: string;
 }

@@ -41,7 +41,8 @@ test('global setup connects two workspaces without local packages and can switch
   const env = { ...process.env, XDG_CONFIG_HOME: xdg };
   const a = join(root, 'workspace-a'), b = join(root, 'workspace-b');
   for (const workspace of [a, b]) {
-    mkdirSync(join(workspace, '.git'), { recursive: true });
+    mkdirSync(workspace, { recursive: true });
+    await run('git', ['init', '--quiet', workspace]);
     mkdirSync(join(workspace, '.vscode'));
     writeFileSync(join(workspace, '.vscode', 'settings.json'), '{"chat.useClaudeHooks":false}');
   }
@@ -91,6 +92,11 @@ test('global setup connects two workspaces without local packages and can switch
     await assert.rejects(cli(b, ['init', '--scope', 'global', '--config', 'conflict.json']));
     await assert.rejects(cli(b, ['setup', '--scope', 'workspace']));
     assert.equal(existsSync(join(b, '.echo', 'settings.json')), false, 'unattended setup never writes before refusing');
+    const disconnected = JSON.parse((await cli(b, ['disconnect'])).stdout);
+    assert.equal(disconnected.disconnected, true);
+    assert.equal(existsSync(join(b, '.echo', 'connection.json')), false);
+    assert.equal(existsSync(join(b, '.codex', 'hooks.json')), false);
+    assert.equal(existsSync(globalPath), true, 'disconnect preserves shared configuration and memory');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -98,7 +104,8 @@ test('prepared hooks share the workspace session boundary and reject stale pinne
   const root = mkdtempSync(join(tmpdir(), 'echo-hook-boundary-'));
   const { mkdirSync } = await import('node:fs');
   const workspace = join(root, 'workspace');
-  mkdirSync(join(workspace, '.git'), { recursive: true });
+  mkdirSync(workspace, { recursive: true });
+    await run('git', ['init', '--quiet', workspace]);
   const localPath = join(workspace, '.echo', 'settings.json');
   const globalPath = join(root, 'global', 'settings.json');
   const { initConfig } = await import('../dist/config.js');
@@ -133,7 +140,8 @@ test('installed hooks require a completed workspace connection without disabling
   const { initConfig } = await import('../dist/config.js');
   const { writeConnection } = await import('../dist/installation.js');
   const workspace = join(root, 'workspace');
-  mkdirSync(join(workspace, '.git'), { recursive: true });
+  mkdirSync(workspace, { recursive: true });
+    await run('git', ['init', '--quiet', workspace]);
   const globalPath = join(root, 'global', 'settings.json');
   try {
     await initConfig(join(workspace, '.echo', 'settings.json'));
@@ -154,5 +162,22 @@ test('installed hooks require a completed workspace connection without disabling
     assert.ok((await invoke(false, 'prepared-without-connection')).stdout.includes('additionalContext'));
     await writeConnection(workspace, { configPath: ctx.configPath, profileId: ctx.profileId });
     assert.ok((await invoke(true, 'incomplete-connection')).stdout.includes('additionalContext'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('existing settings need explicit trust and edited bytes invalidate approval', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const { defaultConfig } = await import('../dist/config.js');
+  const root = mkdtempSync(join(tmpdir(), 'echo-cli-trust-'));
+  const path = join(root, 'settings.json');
+  const cli = (args: string[]) => run(process.execPath, [entry, ...args, '--config', path]);
+  try {
+    writeFileSync(path, JSON.stringify(defaultConfig()));
+    await assert.rejects(cli(['trust']));
+    assert.throws(() => loadContext(path));
+    assert.equal(JSON.parse((await cli(['trust', '--confirm'])).stdout).trusted, true);
+    assert.equal(loadContext(path).profileId, 'personal');
+    writeFileSync(path, readFileSync(path, 'utf8') + '\n');
+    assert.throws(() => loadContext(path));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

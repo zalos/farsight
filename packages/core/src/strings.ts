@@ -124,11 +124,17 @@ export const STRINGS: Record<string, StringEntry> = {
   ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts
   ...AFFECTED_STRINGS,
+  // Echo's runtime and CLI words.
   ...ECHO_RUNTIME_STRINGS,
+  // Echo's configuration validation words.
   ...ECHO_CONFIG_STRINGS,
+  // Echo's host hooks and session boundaries words.
   ...ECHO_HOOK_STRINGS,
+  // Echo's settings view words.
   ...ECHO_UI_STRINGS,
+  // Echo's memory bridge words.
   ...ECHO_MEMORY_STRINGS,
+  // Echo's installation scope and workspace connections words.
   ...ECHO_INSTALLATION_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,

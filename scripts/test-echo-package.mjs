@@ -85,6 +85,9 @@ try {
   const otherWorkspace = join(scratch, 'workspace-b');
   mkdirSync(join(workspace, '.vscode'), { recursive: true });
   writeFileSync(join(workspace, '.vscode', 'settings.json'), '{"chat.useClaudeHooks":false}\n');
+  await run('git', ['init', '--quiet', workspace]);
+  await run('git', ['-C', workspace, '-c', 'user.name=Echo Test', '-c', 'user.email=dev@example.com', 'commit', '--quiet', '--allow-empty', '-m', 'test: synthetic memory origin']);
+  const savedCommit = (await run('git', ['-C', workspace, 'rev-parse', 'HEAD'])).stdout.trim();
   const installed = JSON.parse((await cli(['hooks', '--host', 'all', '--install', '--workspace', workspace])).stdout);
   assert.equal(installed.changedPaths.length, 3);
   assert.deepEqual(JSON.parse((await cli(['hooks', '--host', 'all', '--install', '--workspace', workspace])).stdout).changedPaths, []);
@@ -115,6 +118,9 @@ try {
   mkdirSync(join(otherWorkspace, 'src'));
   const recalled = JSON.parse((await workspaceCli(join(otherWorkspace, 'src'), ['recall', '--query', 'What is my Echo verification phrase?'])).stdout);
   assert.equal(recalled.memories[0].id, remembered.id);
+  assert.equal(recalled.memories[0].provenance.commit, savedCommit);
+  assert.ok(recalled.memories[0].provenance.workspace.endsWith('/workspace-a'));
+  assert.ok(recalled.memories[0].provenance.savedAt);
   for (const [host, file] of [['claude', '.claude/settings.local.json'], ['codex', '.codex/hooks.json'], ['vscode', '.github/hooks/echo.json']]) {
     const hooks = JSON.parse(readFileSync(join(otherWorkspace, file), 'utf8')).hooks;
     const command = host === 'vscode' ? hooks.UserPromptSubmit[0].command : hooks.UserPromptSubmit[0].hooks[0].command;
@@ -123,15 +129,23 @@ try {
     const output = JSON.parse((await pending).stdout).hookSpecificOutput;
     assert.equal(output.hookEventName, 'UserPromptSubmit');
     assert.ok(output.additionalContext.includes('amber lighthouse'), `${host} receives the saved memory`);
+    assert.ok(output.additionalContext.includes('not read from the code'));
+    assert.ok(output.additionalContext.includes(savedCommit));
+    assert.deepEqual(Object.keys(hooks).sort(), ['SessionStart', 'UserPromptSubmit']);
     assert.ok(output.additionalContext.length <= settings.profiles.personal.budget.briefMaxChars);
   }
   await workspaceCli(otherWorkspace, ['init', '--scope', 'workspace']);
   await workspaceCli(otherWorkspace, ['connect', '--scope', 'workspace']);
   await assert.rejects(workspaceCli(otherWorkspace, ['recall', '--query', 'Echo verification phrase']), 'an unavailable local service never falls back to global memory');
   assert.equal(JSON.parse((await workspaceCli(workspace, ['recall', '--query', 'Echo verification phrase'])).stdout).memories[0].id, remembered.id, 'the other workspace remains connected to shared memory');
+  await workspaceCli(otherWorkspace, ['disconnect']);
+  assert.equal(existsSync(join(otherWorkspace, '.echo', 'connection.json')), false);
+  assert.equal(existsSync(join(otherWorkspace, '.codex', 'hooks.json')), false);
+  assert.ok(existsSync(join(otherWorkspace, '.echo', 'settings.json')), 'disconnect preserves local settings');
+  assert.equal(JSON.parse((await workspaceCli(workspace, ['recall', '--query', 'Echo verification phrase'])).stdout).memories[0].id, remembered.id, 'disconnect preserves shared memory');
   await stopServe();
   for (const port of [base, base + 1, base + 2, base + 46023, base + 50]) assert.ok(await free(port), 'serve releases owned ports');
-  console.log('Echo tarball: clean install, isolated smoke, shared memory across two hook-only workspaces, local switch-back, all three prompt hooks and shutdown passed.');
+  console.log('Echo tarball: clean install, isolated smoke, shared memory across two hook-only workspaces, local switch-back, historical provenance, all three prompt hooks, safe disconnect and shutdown passed.');
 } finally {
   await stopServe();
   if (occupiedProfile.listening) await new Promise(resolve => occupiedProfile.close(resolve));

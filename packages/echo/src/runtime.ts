@@ -246,7 +246,7 @@ function acquireOwnerLock(path: string): () => void {
 /** Own both child processes in the foreground. Never attach to or stop an unrelated daemon. */
 export async function startBackend(ctx: EchoContext, options: RuntimeOptions = {}): Promise<BackendConnection> {
   if (ctx.profile.backend.mode === 'external') {
-    const secret = await resolveSecret(ctx.profile.backend.secretRef);
+    const secret = await resolveSecret(ctx.profile.backend.secretRef, { origin: ctx.profile.backend.url });
     const connection = { url: ctx.profile.backend.url, secret, close: async () => {} };
     await backendHealth(connection);
     return connection;

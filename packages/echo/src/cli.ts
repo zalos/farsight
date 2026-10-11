@@ -9,7 +9,7 @@ import { resolveInstallation, describeInstallation, readConnection, preflightCon
 import { listModels } from './models.js';
 import { bindSession, contextFingerprint } from './sessions.js';
 import { prepareHooks, type HookHost, HOOK_EVENTS } from './hooks.js';
-import { installWorkspaceHooks } from './workspace-hooks.js';
+import { disconnectWorkspaceHooks, installWorkspaceHooks } from './workspace-hooks.js';
 import { startWeb } from './web.js';
 import { startMemoryBridge, memoryRequest } from './memory.js';
 import { hookContext } from './hook-context.js';
@@ -188,6 +188,14 @@ async function main(): Promise<void> {
     const selection = target();
     await trustConfig(selection.configPath);
     print({ configPath: selection.configPath, trusted: true }); return;
+  }
+  if (command === 'disconnect') {
+    const root = resolveInstallation({ cwd: workspace(), scope: 'workspace' }).workspaceRoot!;
+    // Validate the pointer before removing any owned host configuration.
+    readConnection(root);
+    const result = await disconnectWorkspaceHooks(root);
+    await removeConnection(root);
+    print({ ...result, workspace: root, disconnected: true }); return;
   }
   if (command === 'init' || command === 'setup') { await setup(); return; }
   if (values.port !== undefined || values['backend-port'] !== undefined) throw new Error(word('setupOptions'));

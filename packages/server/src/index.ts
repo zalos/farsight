@@ -1,3 +1,4 @@
+import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.js';
 import { readinessOf } from './readiness.js';
 import { syncGraph, syncGraphJson, syncParam, compareAnswer, type SyncGraph } from './compare.js';
 import { createServer } from 'node:http';
@@ -152,9 +153,6 @@ export function settingsProblem(body: unknown): string | null {
 
 /** A lesson's longest text, in characters (the MCP context clips to the same). */
 export const LESSON_MAX = 400;
-/** Text that looks like a credential: a keychain or env reference, a bearer/basic header, or a long unbroken token. */
-const SECRET_SHAPE = /keychain:|\benv:[A-Z_]|\b(?:bearer|basic)\s+[A-Za-z0-9+/=._-]{12,}|[A-Za-z0-9+_=-]{32,}/i;
-
 /**
  * Lessons are read by every agent session, so one may never carry a credential: each is `{ text, pinned?, date? }`,
  * text at most LESSON_MAX characters and not shaped like a token, a key or a keychain reference. Null when sound.
@@ -168,7 +166,7 @@ export function lessonsProblem(v: unknown): string | null {
     if (typeof x.text !== 'string' || !x.text.trim()) return `lessons[${i}].text must be a non-empty string`;
     if (x.text.length > LESSON_MAX) return `lessons[${i}].text is longer than ${LESSON_MAX} characters`;
     // never echo it: it may be a pasted token
-    if (SECRET_SHAPE.test(x.text)) return `lessons[${i}].text looks like a credential — a lesson is read by every agent, and a secret belongs in the keychain`;
+    if (containsCredentialShape(x.text)) return `lessons[${i}].text looks like a credential — a lesson is read by every agent, and a secret belongs in the keychain`;
     if (x.pinned !== undefined && typeof x.pinned !== 'boolean') return `lessons[${i}].pinned must be true or false`;
     if (x.date !== undefined && typeof x.date !== 'string') return `lessons[${i}].date must be a date string`;
   }

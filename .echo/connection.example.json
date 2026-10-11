@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "configPath": "/absolute/path/to/user-config/farsight-echo/settings.json",
+  "profileId": "personal"
+}

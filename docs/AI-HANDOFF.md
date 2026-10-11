@@ -43,55 +43,6 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Current state — 2026-10-10
 
-### Echo foundation branch
-
-`codex/echo-setup` adds the optional `packages/echo` companion; see [ECHO.md](ECHO.md).
-It prepares isolated profiles, a CLI and local settings view, opt-in Claude/Codex hook packages,
-agentmemory 0.9.30 with checksum-pinned iii 0.22.1, and bounded model connections. Automatic memory
-capture, relevant briefs, skill discovery, and shared-team authorization are still future work.
-The normal `farsight-cli` artifact retains its existing dependency list; Echo has its own tarball.
-
-Verified on this branch: full build, typecheck and package tests; script tests; catalog lint; all
-267 browser/MCP regressions; 34 Echo tests; clean standalone tarball install; synthetic save/recall,
-persistence after restart on changed ports, separate-store isolation, and a structured local Ollama
-summary. Standalone and embedded settings views were checked in a browser, including mobile layout.
-Real `serve` and interrupted `smoke` shutdowns released all owned ports. No real host hooks were enabled.
-The Git hook installer now handles linked worktrees' absolute common hooks path.
-
-Setup follow-up: the package README includes a source and standalone-tarball walkthrough. `smoke`
-selects temporary free connections independently of configured profiles, so it can run beside `serve`
-without changing saved settings or using the active memory store. The package regression keeps a
-configured listener occupied while checking save/recall, restart and isolation. A real local model
-smoke also passed beside the running settings view; automatic capture and brief injection remain deferred.
-
-Memory-access follow-up: explicit managed `remember` and scoped `recall` now use a filesystem-private local
-bridge owned by `serve`. Workspace hook installation preserves existing Claude, Codex and VS Code Local settings;
-prompt hooks inject bounded retrieved excerpts and session-start hooks explain the explicit commands. Automatic
-capture and model-generated briefs remain deferred. External writes are refused because the pinned backend's
-supersession logic can touch unscoped legacy records. Codex hook trust remains a host review step.
-The standalone package regression now saves a synthetic fact and retrieves it through all three installed hook
-commands, then checks shutdown. Fifty Echo tests cover the bridge, session boundaries and installation behavior.
-The standalone package was also installed into an existing workspace without changing its application dependencies;
-all three installed hook runners returned the synthetic fact, all five connection checks passed, and the settings
-view rendered with no browser errors. A real Claude conversation check was blocked by its account session limit;
-editor-level delivery still needs a fresh trusted session. Full package tests, typecheck, script checks and catalog
-lint passed after the memory-access integration.
-
-Shared-installation follow-up: setup/init now choose workspace or current-user global storage; `connect` binds
-one workspace to one profile with a private local pointer and host hooks. Workspaces selecting the same global
-profile share its store without installing local packages or copying memories. Reconnecting retargets all existing
-Echo hosts together; installed callbacks reject a missing or mismatched pointer, and workspace session bindings prevent a local/global
-switch mid-chat, including prepared plugins. Settings edits are serialized across processes and merged from fresh
-values. The settings view identifies its storage location and distinguishes the running profile from editor tabs.
-Seventy-one Echo tests, full package tests, typecheck, script tests and catalog lint passed; the standalone regression
-exercises two connected workspaces and switching one back locally without an implicit global fallback.
-
-Managed startup deliberately refuses the global agentmemory environment file because the published
-backend does not offer an override. External mode needs a dedicated compatible instance. No npm release
-was published by this setup work. The existing Farsight servers and dogfood graph were not refreshed.
-
-### Farsight main
-
 `main` is green. **The lanes round, wave 1, is merged and live** (item 15 below); wave 2 (U2: one address, the journey
 overlay retires) and wave 3 (B: compare two syncs · M: agent tiers) are in flight as lanes; F (walk and ask) follows U2.
 

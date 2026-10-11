@@ -35,7 +35,7 @@ Package location and memory scope are independent: a global executable can use w
 
 Interactive setup asks where memories live unless given `--scope` or `--config`. Workspace scope uses
 `.echo/settings.json`; global scope uses `${XDG_CONFIG_HOME:-~/.config}/farsight-echo/settings.json`. Both keep
-runtime state beside that configuration. Setup offers installed Ollama models, asks separately whether to install
+profile state beside that configuration; the executable is kept separately in a private user cache. Setup offers installed Ollama models, asks separately whether to install
 each host's workspace hooks, and offers installation of the pinned local engine. Answers default to no for hooks
 and engine installation. Accepting a hook question installs its workspace definitions and connection, rather than
 only generating a plugin preview. If no model is installed, setup explains how to download one explicitly. Echo
@@ -62,6 +62,13 @@ connection or configuration, the expected local file is `.echo/settings.json` at
 directory outside Git. Global settings are never an implicit fallback. Explicit scope/configuration bypasses a
 workspace connection. `init` refuses to overwrite an existing configuration. Use scrubbed examples as a reference;
 local settings, connection pointers, and runtime state must stay outside version control.
+
+Settings created by `init` or saved through setup/the web view are approved for the current user. Repository-supplied,
+copied, moved, or manually edited settings require an explicit review followed by
+`farsight-echo trust --config /absolute/path/settings.json --confirm`. No credential lookup, model request, or runtime
+startup occurs before that approval. Trust receipts bind the canonical path and exact bytes in private user state
+under `${XDG_STATE_HOME:-~/.local/state}/farsight-echo/`; a repository cannot supply its own receipt. Reconnect copied
+or older-preview connections with `connect`. After upgrading, run `install-runtime` for the new private cache.
 
 `serve` runs in the foreground and prints the settings URL. The view remains available if the model or memory service needs fixing. Stop with Ctrl-C; Echo shuts down only its own child processes. Externally managed memory services remain running. Restart `serve` after changing runtime settings so its active services use the saved configuration.
 
@@ -137,11 +144,14 @@ These identity fields are local routing metadata. They are not login, membership
 
 Credentials are references to local secret storage, never literal keys in settings. The settings view must not return credential values. A Farsight embedding origin permits framing the view; it does not grant access to memory or connect the two graphs.
 
-External backend setup uses a service origin and an optional `keychain:<service>/<account>` reference. For example,
-`keychain:farsight/echo-example` reads service `farsight`, account `echo-example`, from macOS Keychain or Linux Secret
+External backend setup uses a service origin and an optional `keychain:farsight-echo/<account>` reference. For example,
+`keychain:farsight-echo/example` reads service `farsight-echo`, account `example`, from macOS Keychain or Linux Secret
 Service. Provision the secret through that local store, select external mode, save, restart Echo, and run `doctor`
 for the selected profile. The connection must report agentmemory 0.9.30. No general external-backend write test is
-provided; smoke intentionally requires managed mode.
+provided; smoke intentionally requires managed mode. Each credential reference is pinned in private user state to
+its first approved origin; another origin requires another account. Other keychain services and environment
+credential references are refused before reading any secret. Echo and the work adapters share the bounded OS
+keychain transport, while retaining their separate reference and origin policies.
 
 The memory bridge permits explicit writes only to managed profiles. In this published backend, remember's
 supersession behavior can reach legacy unscoped records, so Echo refuses external writes. External recall is kept
@@ -154,16 +164,21 @@ The final summary is capped by characters; this is not a claim about the main ag
 
 ## Memory runtime and storage
 
-The dependency is pinned to published `@agentmemory/agentmemory` **0.9.30**, with native **iii engine 0.22.1**. Managed mode installs the engine under Echo's own state directory and launches the released worker with an explicit environment and profile-specific storage. It does not use upstream's interactive onboarding or modify upstream's global hook settings. Native managed mode supports macOS and Linux on arm64 and x64. An external backend may be hosted elsewhere, but Echo's local memory bridge and hook integration currently target macOS/Linux.
+The dependency is pinned to published `@agentmemory/agentmemory` **0.9.30**, with native **iii engine 0.22.1**. Managed mode installs the engine under `~/.cache/farsight-echo/runtime/0.22.1/<platform-architecture>/` after verifying the pinned archive checksum, records the binary hash, verifies it before every execution, and launches the released worker with an explicit environment and profile-specific storage. It does not use upstream's interactive onboarding or modify upstream's global hook settings. Native managed mode supports macOS and Linux on arm64 and x64. An external backend may be hosted elsewhere, but Echo's local memory bridge and hook integration currently target macOS/Linux.
 
 Managed mode refuses to start if `~/.agentmemory/.env` exists: this release reads that file globally and provides no override. The refusal prevents unintended inheritance across personal and work contexts. Use a deliberately isolated external instance when that global configuration is needed elsewhere.
 
 Managed backend credentials are generated in memory for each run; a managed profile does not accept a credential
 reference. An external profile may resolve its explicit keychain reference and must report the supported
-agentmemory version. Echo never adopts an existing process on its configured ports. A crash or forced kill may
-leave `profiles/<profile>/echo-owner.json`: inspect its PID and all configured backend ports, stop any remaining
-owned children, and remove that one lock only after confirming no writer remains. Do not delete the memory store.
+agentmemory version. Echo never adopts an existing process on its configured ports. After a crash, a verifiably dead owner lock is recovered; occupied ports still cause refusal. Live, malformed,
+or symlinked owner locks require inspection. Do not delete the memory store.
 Normal termination and interrupted CLI smoke tests close the owned children and remove the lock.
+
+Source workspace installs include agentmemory's dependency tree, with dependency lifecycle scripts permitted only
+for esbuild. The normal Farsight artifact remains independent.
+
+Managed mode disables consolidation, automatic fact supersession, and lesson/insight decay. Upstream still owns
+maintenance; normal restart persistence is tested, but long-term retention is not established.
 
 Agentmemory persists its records through iii's file-backed state store. Echo's memory data is runtime state, not a Git merge format. Commit scrubbed configuration examples and documentation; do not commit live stores. External mode connects to an instance the user manages and does not start or stop it. A future hosted team service will need authentication and enforced tenant boundaries.
 
@@ -194,7 +209,10 @@ farsight-echo recall --profile personal --query "echocoldtest" --limit 3
 ```
 
 Remember returns `{id, createdAt}`. Recall returns `{memories, truncated}`; each memory contains its backend source
-`id`, `title`, `content`, and `timestamp`. `--topic` is repeatable and maps to concepts metadata. There is no date or
+`id`, `title`, `content`, `timestamp`, and historical `provenance`. New saves record the calling workspace, HEAD
+revision when available, and server save time in a content-bound local record; legacy or changed records report
+unknown provenance. Hook output explicitly labels this as memory, not current code evidence. Credential-shaped
+content and topics use the same refusal predicate as pinned lessons, without echoing the value. `--topic` is repeatable and maps to concepts metadata. There is no date or
 topic navigation yet. Recall returns at most five records and caps combined title/content at `budget.briefMaxChars`.
 The released backend supplies ranking; it is keyword-based unless that backend has embeddings. Echo does not call
 Ollama to rerank or summarize these results.
@@ -215,7 +233,7 @@ farsight-echo hooks --host codex --profile personal
 
 Each command creates reviewable files under `plugins/<profile>/<host>/` beside the selected configuration and prints loading instructions. The runner forwards event input to Echo with a fixed configuration and profile. Preparing files does not install them in a host.
 
-The prepared events are `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PreCompact`, and `Stop`. Hook commands have short time limits. Hooks currently target macOS and Linux. Keep the installed Echo executable and configuration at their generated locations, or prepare the plugin again after moving them.
+The prepared events are `SessionStart` and `UserPromptSubmit`; capture events are not registered yet. Hook commands have short time limits. Hooks currently target macOS and Linux. Keep the installed Echo executable and configuration at their generated locations, or prepare the plugin again after moving them.
 
 For Claude Code, review the generated files and start a new session with `claude --plugin-dir <generated-directory>`. Claude discovers `hooks/hooks.json`; the manifest does not register it a second time. See [Claude plugin manifests](https://code.claude.com/docs/en/plugins-reference) and [hook events](https://code.claude.com/docs/en/hooks).
 
@@ -228,8 +246,9 @@ farsight-echo hooks --host all --install --workspace /absolute/path/to/workspace
 ```
 
 The installer merges Echo-owned definitions into Claude's `.claude/settings.local.json`, Codex's `.codex/hooks.json`,
-and VS Code Local's `.github/hooks/echo.json`. It preserves unrelated settings, backs up changed files next to Echo's
-configuration under `backups/`, and refuses malformed existing files before writing. Individual host selection is
+and VS Code Local's `.github/hooks/echo.json`. It preserves unrelated settings, records original bytes in private
+user-state restoration journals, and refuses malformed existing files before writing. Before writing generated
+files it adds local Git exclusions and refuses tracked targets or ignore overrides. Individual host selection is
 available with `claude`, `codex`, or `vscode`. Without `--install`, `all` prepares all three hosts' files only.
 `hooks --install` requires `--workspace` and records the same workspace connection as `connect`. The generated
 definitions and connection contain machine-local absolute paths; keep them untracked rather than treating them
@@ -242,9 +261,10 @@ editor preferences. See [VS Code's hook guide](https://code.visualstudio.com/doc
 
 `SessionStart` establishes the session binding and supplies bounded memory-access instructions. `UserPromptSubmit`
 uses the prompt as a scoped recall query and returns bounded results through additional context. Neither calls the
-configured model. The other events only maintain the session boundary. If the service is unavailable, hooks fail
+configured model. Prompt callbacks reference the session access command without repeating absolute paths. If the service is unavailable, hooks fail
 open and the host continues without memory context. They do not automatically save the prompt or the response.
 The complete injected context, including instructions and record metadata, is capped at `budget.briefMaxChars`.
+Omitted or shortened results print “More matched; not shown.”
 This is stricter than CLI recall's title/content cap and is still a character budget rather than an exact token count.
 
 Enable one Echo profile per host session and choose one integration route per host. A prepared or installed
@@ -252,6 +272,10 @@ definition is not evidence that the host loaded it. Start `serve`, explicitly sa
 CLI recall, and ask a fresh trusted host chat what Echo remembers about `echocoldtest`. The expected stored fact is
 the blue insulated test container. A file under the selected configuration's `sessions/` proves a binding callback only; it does not prove
 that prompt recall succeeded. The settings view's hook preferences do not install definitions or grant host trust.
+
+`farsight-echo disconnect --workspace /absolute/path/to/workspace` removes marker-owned hook entries and the
+connection pointer, preserving memory stores. Unchanged files are restored byte for byte to their pre-install
+state (new files are removed); later unrelated edits remain. Separately loaded plugins must be removed in the host.
 
 ## Verify the setup
 
