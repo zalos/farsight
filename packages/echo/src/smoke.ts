@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { EchoContext, CheckResult, BackendConnection } from './types.js';
-import { startBackend, backendRequest, enginePath, managedPorts } from './runtime.js';
+import { startBackend, backendRequest, managedPorts } from './runtime.js';
 import { summarize } from './models.js';
 import { word } from './words.js';
 
@@ -63,7 +63,7 @@ export async function smoke(ctx: EchoContext, withModel = false): Promise<CheckR
   const checks: CheckResult[] = [];
   let passed = false;
   try {
-    connection = await startBackend(probe, enginePath(ctx));
+    connection = await startBackend(probe);
     const saved = await backendRequest(connection, '/agentmemory/remember', { content, type: 'fact', concepts: ['echo-smoke'], ...scope });
     if (!(saved as { success?: boolean })?.success) throw new Error(word('smokeSave'));
     const recall = async () => backendRequest(connection!, '/agentmemory/search', { query: marker, limit: 5, format: 'full', ...scope });
@@ -78,11 +78,11 @@ export async function smoke(ctx: EchoContext, withModel = false): Promise<CheckR
     changedUrl.port = String(oldPort + 10);
     changedProfile.backend.url = changedUrl.origin;
     probe.profile = changedProfile;
-    connection = await startBackend(probe, enginePath(ctx));
+    connection = await startBackend(probe);
     if (!JSON.stringify(await recall()).includes(marker)) throw new Error(word('smokeRecall'));
     checks.push({ name: 'restart-persistence', ok: true, detail: word('smokePersistence') });
     await connection.close(); connection = undefined;
-    connection = await startBackend({ ...probe, dataDirectory: join(directory, 'other-profile') }, enginePath(ctx));
+    connection = await startBackend({ ...probe, dataDirectory: join(directory, 'other-profile') });
     if (JSON.stringify(await recall()).includes(marker)) throw new Error(word('smokeIsolation'));
     checks.push({ name: 'store-isolation', ok: true, detail: word('smokeSeparate') });
     if (withModel) {

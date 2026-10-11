@@ -1,7 +1,7 @@
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, chmodSync, lstatSync, openSync, closeSync, fstatSync, constants, mkdtempSync, renameSync, type Stats } from 'node:fs';
+import { dirname, join, resolve, parse } from 'node:path';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
@@ -24,21 +24,70 @@ const archives: Record<string, [string, string]> = {
   'linux-arm64': ['iii-aarch64-unknown-linux-gnu.tar.gz', '87efc60210c1580ef2e11b13c679a4dad91917a9d80f737c5ba7e3475b3ca413'],
 };
 
-export const enginePath = (ctx: EchoContext): string => join(ctx.directory, 'runtime', ENGINE_VERSION, 'iii');
+/** Programmatic test seams only; workspace settings and environment cannot redirect executable storage. */
+export interface RuntimeOptions { home?: string; cacheRoot?: string; fetch?: typeof fetch }
+const platform = `${process.platform}-${process.arch}`;
+const cacheRoot = (options: RuntimeOptions): string => resolve(options.cacheRoot ?? join(options.home ?? homedir(), '.cache', 'farsight-echo'));
+export const enginePath = (_ctx: EchoContext, options: RuntimeOptions = {}): string => join(cacheRoot(options), 'runtime', ENGINE_VERSION, platform, 'iii');
+
+function owned(stat: Stats): boolean { return !process.getuid || stat.uid === process.getuid(); }
+function safeDirectory(path: string, privateDirectory: boolean): void {
+  const stat = lstatSync(path);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || !owned(stat) || (privateDirectory && (stat.mode & 0o077) !== 0)) throw new Error(word('engineCache'));
+}
+function checkCache(options: RuntimeOptions, create = false): void {
+  const root = cacheRoot(options);
+  // Reject symlinked ancestors as well as a symlinked cache. /tmp on macOS is
+  // legitimately an alias, so tests use its canonical /private/tmp path.
+  const home = resolve(options.home ?? homedir());
+  if (!options.cacheRoot) {
+    safeDirectory(home, false);
+    const parent = dirname(root);
+    if (create && !existsSync(parent)) mkdirSync(parent, { mode: 0o700 });
+    safeDirectory(parent, false);
+  } else {
+    for (let path = dirname(root); path !== parse(path).root; path = dirname(path)) {
+      const stat = lstatSync(path);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(word('engineCache'));
+    }
+  }
+  for (const path of [root, join(root, 'runtime'), join(root, 'runtime', ENGINE_VERSION), join(root, 'runtime', ENGINE_VERSION, platform)]) {
+    if (create && !existsSync(path)) mkdirSync(path, { mode: 0o700 });
+    safeDirectory(path, true);
+  }
+}
+function privateFile(path: string, maximum: number): Buffer {
+  const file = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = fstatSync(file);
+    if (!stat.isFile() || !owned(stat) || stat.nlink !== 1 || (stat.mode & 0o077) !== 0 || stat.size > maximum) throw new Error(word('engineIntegrity'));
+    return readFileSync(file);
+  } finally { closeSync(file); }
+}
+function verifyIntegrity(ctx: EchoContext, options: RuntimeOptions): string {
+  const binary = enginePath(ctx, options);
+  try {
+    checkCache(options);
+    const receipt = JSON.parse(privateFile(`${binary}.sha256.json`, 1024).toString('utf8')) as { version?: string; platform?: string; sha256?: string };
+    const digest = createHash('sha256').update(privateFile(binary, 100_000_000)).digest('hex');
+    if (receipt.version !== ENGINE_VERSION || receipt.platform !== platform || !/^[a-f0-9]{64}$/.test(receipt.sha256 ?? '') || receipt.sha256 !== digest) throw new Error();
+    return binary;
+  } catch { throw new Error(word('engineIntegrity')); }
+}
 export function installedBackendVersion(): string {
   const require = createRequire(import.meta.url);
   return JSON.parse(readFileSync(require.resolve('@agentmemory/agentmemory/package.json'), 'utf8')).version;
 }
 
 /** Explicit installation, never an npm lifecycle script or an implicit download during serve. */
-export async function installRuntime(ctx: EchoContext): Promise<string> {
-  const binary = enginePath(ctx);
-  if (existsSync(binary)) { verifyEngine(binary); return binary; }
-  const archive = archives[`${process.platform}-${process.arch}`];
+export async function installRuntime(ctx: EchoContext, options: RuntimeOptions = {}): Promise<string> {
+  const binary = enginePath(ctx, options);
+  checkCache(options, true);
+  if (existsSync(binary)) { verifyEngine(ctx, options); return binary; }
+  const archive = archives[platform];
   if (!archive) throw new Error(word('unsupported'));
-  mkdirSync(dirname(binary), { recursive: true, mode: 0o700 });
   const [asset, expected] = archive;
-  const response = await fetch(`https://github.com/iii-hq/iii/releases/download/iii/v${ENGINE_VERSION}/${asset}`, { signal: AbortSignal.timeout(120_000) });
+  const response = await (options.fetch ?? fetch)(`https://github.com/iii-hq/iii/releases/download/iii/v${ENGINE_VERSION}/${asset}`, { signal: AbortSignal.timeout(120_000) });
   if (!response.ok || !response.body) throw new Error(word('download'));
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -49,28 +98,37 @@ export async function installRuntime(ctx: EchoContext): Promise<string> {
   }
   const bytes = Buffer.concat(chunks);
   if (createHash('sha256').update(bytes).digest('hex') !== expected) throw new Error(word('checksum'));
-  const path = join(dirname(binary), `${randomBytes(8).toString('hex')}.tar.gz`);
+  const stage = mkdtempSync(join(dirname(binary), '.install-'));
+  const path = join(stage, 'archive.tar.gz');
   writeFileSync(path, bytes, { mode: 0o600, flag: 'wx' });
   try {
-    const names = execFileSync('tar', ['-tzf', path], { encoding: 'utf8' }).trim().split('\n');
+    const names = execFileSync('/usr/bin/tar', ['-tzf', path], { encoding: 'utf8' }).trim().split('\n');
     if (!names.includes('iii') || names.some(n => n.startsWith('/') || n.split('/').includes('..'))) throw new Error(word('checksum'));
-    execFileSync('tar', ['-xzf', path, '-C', dirname(binary), 'iii']);
-    chmodSync(binary, 0o700);
-    verifyEngine(binary);
-  } finally { rmSync(path, { force: true }); }
+    execFileSync('/usr/bin/tar', ['-xzf', path, '-C', stage, 'iii']);
+    const extracted = join(stage, 'iii');
+    if (!lstatSync(extracted).isFile() || lstatSync(extracted).isSymbolicLink()) throw new Error(word('checksum'));
+    chmodSync(extracted, 0o700);
+    const sha256 = createHash('sha256').update(privateFile(extracted, 100_000_000)).digest('hex');
+    const receipt = join(stage, 'iii.sha256.json');
+    writeFileSync(receipt, JSON.stringify({ version: ENGINE_VERSION, platform, sha256 }), { mode: 0o600, flag: 'wx' });
+    renameSync(extracted, binary);
+    renameSync(receipt, `${binary}.sha256.json`);
+    verifyEngine(ctx, options);
+  } finally { rmSync(stage, { recursive: true, force: true }); }
   return binary;
 }
 
-function verifyEngine(binary: string): void {
+function verifyEngine(ctx: EchoContext, options: RuntimeOptions): void {
+  const binary = verifyIntegrity(ctx, options);
   let version: string;
   try { version = execFileSync(binary, ['--version'], { encoding: 'utf8', timeout: 5000 }).trim(); }
   catch { throw new Error(word('engineMissing')); }
   if (!new RegExp(`\\b${ENGINE_VERSION.replaceAll('.', '\\.')}\\b`).test(version)) throw new Error(word('engineVersion'));
 }
-export function runtimeInstalled(ctx: EchoContext): boolean {
-  try { verifyEngine(enginePath(ctx)); return true; } catch { return false; }
+export function runtimeInstalled(ctx: EchoContext, options: RuntimeOptions = {}): boolean {
+  try { verifyEngine(ctx, options); return true; } catch { return false; }
 }
-export function hasGlobalBackendConfig(): boolean { return existsSync(join(homedir(), '.agentmemory', '.env')); }
+export function hasGlobalBackendConfig(options: RuntimeOptions = {}): boolean { return existsSync(join(options.home ?? homedir(), '.agentmemory', '.env')); }
 
 export async function backendHealth(connection: BackendConnection, timeout = 10_000): Promise<void> {
   const result = await backendRequest(connection, '/agentmemory/health', undefined, timeout) as { service?: string; version?: string };
@@ -100,6 +158,7 @@ export function workerEnvironment(ctx: EchoContext, secret: string): NodeJS.Proc
     AGENTMEMORY_AUTO_COMPRESS: 'false',
     AGENTMEMORY_INJECT_CONTEXT: 'false',
     CONSOLIDATION_ENABLED: 'false',
+    AUTO_FORGET_ENABLED: 'false', LESSON_DECAY_ENABLED: 'false', INSIGHT_DECAY_ENABLED: 'false',
     SNAPSHOT_ENABLED: 'false', CLAUDE_MEMORY_BRIDGE: 'false',
     OTEL_SDK_DISABLED: 'true',
   };
@@ -150,21 +209,54 @@ async function stopChild(child: ChildProcess | undefined): Promise<void> {
   });
 }
 
+function acquireOwnerLock(path: string): () => void {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const file = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      const owned = fstatSync(file);
+      try { writeFileSync(file, JSON.stringify({ pid: process.pid, nonce: randomBytes(16).toString('hex') })); }
+      finally { closeSync(file); }
+      return () => {
+        try {
+          const current = lstatSync(path);
+          if (current.dev === owned.dev && current.ino === owned.ino) rmSync(path);
+        } catch { /* A replaced or removed lock is never ours to delete. */ }
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw new Error(word('locked'));
+      try {
+        const before = lstatSync(path);
+        const owner = JSON.parse(privateFile(path, 256).toString('utf8')) as { pid?: unknown; nonce?: unknown };
+        // The original release wrote only pid. Preserve recovery of that format,
+        // but never remove malformed, foreign, symlinked or still-live locks.
+        if (!Number.isSafeInteger(owner.pid) || Number(owner.pid) <= 0 || (owner.nonce !== undefined && (typeof owner.nonce !== 'string' || !/^[a-f0-9]{32}$/.test(owner.nonce)))) throw new Error();
+        let stopped = false;
+        try { process.kill(Number(owner.pid), 0); }
+        catch (failure) { stopped = (failure as NodeJS.ErrnoException).code === 'ESRCH'; }
+        if (!stopped) throw new Error();
+        const current = lstatSync(path);
+        if (current.ino !== before.ino || current.dev !== before.dev) continue;
+        rmSync(path);
+      } catch { throw new Error(word('locked')); }
+    }
+  }
+  throw new Error(word('locked'));
+}
+
 /** Own both child processes in the foreground. Never attach to or stop an unrelated daemon. */
-export async function startBackend(ctx: EchoContext, binary = enginePath(ctx)): Promise<BackendConnection> {
+export async function startBackend(ctx: EchoContext, options: RuntimeOptions = {}): Promise<BackendConnection> {
   if (ctx.profile.backend.mode === 'external') {
     const secret = await resolveSecret(ctx.profile.backend.secretRef);
     const connection = { url: ctx.profile.backend.url, secret, close: async () => {} };
     await backendHealth(connection);
     return connection;
   }
-  if (hasGlobalBackendConfig()) throw new Error(word('globalConfig'));
+  if (hasGlobalBackendConfig(options)) throw new Error(word('globalConfig'));
   if (installedBackendVersion() !== AGENTMEMORY_VERSION) throw new Error(word('backendVersion'));
-  verifyEngine(binary);
+  verifyEngine(ctx, options);
   mkdirSync(ctx.dataDirectory, { recursive: true, mode: 0o700 });
   const lock = join(ctx.dataDirectory, 'echo-owner.json');
-  try { writeFileSync(lock, JSON.stringify({ pid: process.pid }), { flag: 'wx', mode: 0o600 }); }
-  catch { throw new Error(word('locked')); }
+  const releaseOwner = acquireOwnerLock(lock);
   let engine: ChildProcess | undefined;
   let worker: ChildProcess | undefined;
   let closed = false;
@@ -180,7 +272,7 @@ export async function startBackend(ctx: EchoContext, binary = enginePath(ctx)): 
         // File-backed iii state flushes on a timer. Allow the final worker writes to reach disk.
         if (engine) await delay(1600);
         await stopChild(engine);
-        rmSync(lock, { force: true });
+        releaseOwner();
         activeConnections.delete(connection);
       })();
       return closing;
@@ -193,8 +285,9 @@ export async function startBackend(ctx: EchoContext, binary = enginePath(ctx)): 
     clearEngineConfiguration(ctx);
     writeFileSync(config, renderEngineConfig(ctx), { mode: 0o600 });
     const env = workerEnvironment(ctx, secret);
-    const options = { cwd: ctx.dataDirectory, env, stdio: ['ignore', 'ignore', 'pipe'] as ['ignore', 'ignore', 'pipe'] };
-    engine = spawn(binary, ['--config', config, '--no-update-check'], options);
+    const spawnOptions = { cwd: ctx.dataDirectory, env, stdio: ['ignore', 'ignore', 'pipe'] as ['ignore', 'ignore', 'pipe'] };
+    // Recheck immediately before the actual launch, not only its version probe.
+    engine = spawn(verifyIntegrity(ctx, options), ['--config', config, '--no-update-check'], spawnOptions);
     let failed = false;
     engine.on('error', () => { failed = true; });
     // Keep a bounded diagnostic tail without exposing bearer credentials.
@@ -205,7 +298,7 @@ export async function startBackend(ctx: EchoContext, binary = enginePath(ctx)): 
     if (closed) throw new Error(word('stopped'));
     const require = createRequire(import.meta.url);
     const entry = join(dirname(require.resolve('@agentmemory/agentmemory/package.json')), 'dist', 'index.mjs');
-    worker = spawn(process.execPath, [entry], options);
+    worker = spawn(process.execPath, [entry], spawnOptions);
     worker.on('error', () => { failed = true; });
     worker.stderr?.on('data', collect);
     const deadline = Date.now() + 35_000;
