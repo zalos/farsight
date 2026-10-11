@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -40,11 +40,14 @@ try {
   mkdirSync(prefix);
   await run('npm', ['install', '--prefix', prefix, '--omit=optional', '--no-audit', '--no-fund', artifact], { timeout: 180_000, maxBuffer: 4_000_000 });
   const entry = join(prefix, 'node_modules', 'farsight-echo', 'dist', 'echo.mjs');
-  const config = join(scratch, 'settings', 'settings.json');
-  const cli = args => run(process.execPath, [entry, ...args, '--config', config], { cwd: scratch, timeout: 180_000, maxBuffer: 4_000_000 });
+  const environment = { ...process.env, XDG_CONFIG_HOME: join(scratch, 'user-config') };
+  const config = join(environment.XDG_CONFIG_HOME, 'farsight-echo', 'settings.json');
+  const workspaceCli = (cwd, args) => run(process.execPath, [entry, ...args], { cwd, env: environment, timeout: 180_000, maxBuffer: 4_000_000 });
+  const cli = args => workspaceCli(scratch, [...args, '--scope', 'global']);
   assert.match((await cli(['--help'])).stdout, /Echo/);
   await cli(['init']);
   const settings = JSON.parse(readFileSync(config, 'utf8'));
+  assert.equal(settings.profiles.personal.identity.project, 'shared');
   assert.equal(settings.profiles.personal.hooks.claude, false);
   assert.equal(settings.profiles.personal.hooks.codex, false);
   // Other worktrees may be running the same smoke check. Select a separate block;
@@ -77,13 +80,22 @@ try {
   await new Promise(resolve => occupiedProfile.close(resolve));
   // Exercise the actual installed commands and host-specific files against the
   // pinned engine. No real agent host or conversation is involved.
-  const workspace = join(scratch, 'workspace');
+  const workspace = join(scratch, 'workspace-a');
+  const otherWorkspace = join(scratch, 'workspace-b');
   mkdirSync(join(workspace, '.vscode'), { recursive: true });
   writeFileSync(join(workspace, '.vscode', 'settings.json'), '{"chat.useClaudeHooks":false}\n');
   const installed = JSON.parse((await cli(['hooks', '--host', 'all', '--install', '--workspace', workspace])).stdout);
   assert.equal(installed.changedPaths.length, 3);
   assert.deepEqual(JSON.parse((await cli(['hooks', '--host', 'all', '--install', '--workspace', workspace])).stdout).changedPaths, []);
-  serving = spawn(process.execPath, [entry, 'serve', '--config', config], { cwd: scratch, stdio: 'ignore' });
+  mkdirSync(join(otherWorkspace, '.vscode'), { recursive: true });
+  writeFileSync(join(otherWorkspace, '.vscode', 'settings.json'), '{"chat.useClaudeHooks":false}\n');
+  await cli(['connect', '--workspace', otherWorkspace]);
+  for (const connected of [workspace, otherWorkspace]) {
+    assert.equal(existsSync(join(connected, 'node_modules')), false, 'connecting installs no local package');
+    assert.equal(existsSync(join(connected, '.echo', 'settings.json')), false, 'connecting copies no configuration or store');
+    assert.equal(JSON.parse(readFileSync(join(connected, '.echo', 'connection.json'), 'utf8')).profileId, 'personal');
+  }
+  serving = spawn(process.execPath, [entry, 'serve', '--scope', 'global'], { cwd: scratch, env: environment, stdio: 'ignore' });
   const readyUntil = Date.now() + 45_000;
   let ready = false;
   while (Date.now() < readyUntil) {
@@ -97,23 +109,28 @@ try {
     await delay(250);
   }
   assert.ok(ready, 'installed serve must start its backend and memory bridge');
-  const remembered = JSON.parse((await cli(['remember', '--content', 'Echo verification phrase: amber lighthouse', '--topic', 'synthetic-check'])).stdout);
+  const remembered = JSON.parse((await workspaceCli(workspace, ['remember', '--content', 'Echo verification phrase: amber lighthouse', '--topic', 'synthetic-check'])).stdout);
   assert.ok(remembered.id);
-  const recalled = JSON.parse((await cli(['recall', '--query', 'What is my Echo verification phrase?'])).stdout);
+  mkdirSync(join(otherWorkspace, 'src'));
+  const recalled = JSON.parse((await workspaceCli(join(otherWorkspace, 'src'), ['recall', '--query', 'What is my Echo verification phrase?'])).stdout);
   assert.equal(recalled.memories[0].id, remembered.id);
   for (const [host, file] of [['claude', '.claude/settings.local.json'], ['codex', '.codex/hooks.json'], ['vscode', '.github/hooks/echo.json']]) {
-    const hooks = JSON.parse(readFileSync(join(workspace, file), 'utf8')).hooks;
+    const hooks = JSON.parse(readFileSync(join(otherWorkspace, file), 'utf8')).hooks;
     const command = host === 'vscode' ? hooks.UserPromptSubmit[0].command : hooks.UserPromptSubmit[0].hooks[0].command;
-    const pending = run('/bin/sh', ['-c', command], { cwd: workspace, timeout: 6000 });
+    const pending = run('/bin/sh', ['-c', command], { cwd: otherWorkspace, env: environment, timeout: 6000 });
     pending.child.stdin.end(JSON.stringify({ session_id: `package-${host}`, hook_event_name: 'UserPromptSubmit', prompt: 'What is my Echo verification phrase?' }));
     const output = JSON.parse((await pending).stdout).hookSpecificOutput;
     assert.equal(output.hookEventName, 'UserPromptSubmit');
     assert.ok(output.additionalContext.includes('amber lighthouse'), `${host} receives the saved memory`);
     assert.ok(output.additionalContext.length <= settings.profiles.personal.budget.briefMaxChars);
   }
+  await workspaceCli(otherWorkspace, ['init', '--scope', 'workspace']);
+  await workspaceCli(otherWorkspace, ['connect', '--scope', 'workspace']);
+  await assert.rejects(workspaceCli(otherWorkspace, ['recall', '--query', 'Echo verification phrase']), 'an unavailable local service never falls back to global memory');
+  assert.equal(JSON.parse((await workspaceCli(workspace, ['recall', '--query', 'Echo verification phrase'])).stdout).memories[0].id, remembered.id, 'the other workspace remains connected to shared memory');
   await stopServe();
   for (const port of [base, base + 1, base + 2, base + 46023, base + 50]) assert.ok(await free(port), 'serve releases owned ports');
-  console.log('Echo tarball: clean install, isolated smoke, explicit save/recall, all three installed prompt hooks and shutdown passed.');
+  console.log('Echo tarball: clean install, isolated smoke, shared memory across two hook-only workspaces, local switch-back, all three prompt hooks and shutdown passed.');
 } finally {
   await stopServe();
   if (occupiedProfile.listening) await new Promise(resolve => occupiedProfile.close(resolve));

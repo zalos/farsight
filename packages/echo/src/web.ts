@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { ECHO_UI_STRINGS } from '@farsight/core/dist/strings-echo-ui.js';
-import { saveConfig, validateConfig } from './config.js';
+import { updateConfig, validateConfig } from './config.js';
 import type { CheckResult, EchoConfig, EchoContext } from './types.js';
 
 const BODY_LIMIT = 64 * 1024;
@@ -139,9 +139,11 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
         // Serialize compare-and-save operations within this server. A stale browser
         // tab cannot replace a newer configuration from another request.
         const save = writes.then(async () => {
-          const current = await snapshot(ctx.configPath);
-          if (revision !== current.revision) throw new RequestError(409, 'conflict');
-          await saveConfig(ctx.configPath, config);
+          await updateConfig(ctx.configPath, async () => {
+            const current = await snapshot(ctx.configPath);
+            if (revision !== current.revision) throw new RequestError(409, 'conflict');
+            return config;
+          });
           const saved = await snapshot(ctx.configPath);
           json(res, 200, { ...saved, restartRequired: true }, saved.revision);
         });

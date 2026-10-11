@@ -77,6 +77,15 @@ view rendered with no browser errors. A real Claude conversation check was block
 editor-level delivery still needs a fresh trusted session. Full package tests, typecheck, script checks and catalog
 lint passed after the memory-access integration.
 
+Shared-installation follow-up: setup/init now choose workspace or current-user global storage; `connect` binds
+one workspace to one profile with a private local pointer and host hooks. Workspaces selecting the same global
+profile share its store without installing local packages or copying memories. Reconnecting retargets all existing
+Echo hosts together; installed callbacks reject a missing or mismatched pointer, and workspace session bindings prevent a local/global
+switch mid-chat, including prepared plugins. Settings edits are serialized across processes and merged from fresh
+values. The settings view identifies its storage location and distinguishes the running profile from editor tabs.
+Seventy-one Echo tests, full package tests, typecheck, script tests and catalog lint passed; the standalone regression
+exercises two connected workspaces and switching one back locally without an implicit global fallback.
+
 Managed startup deliberately refuses the global agentmemory environment file because the published
 backend does not offer an override. External mode needs a dedicated compatible instance. No npm release
 was published by this setup work. The existing Farsight servers and dogfood graph were not refreshed.

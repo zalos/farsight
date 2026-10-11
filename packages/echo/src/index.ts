@@ -9,3 +9,4 @@ export * from './web.js';
 export * from './workspace-hooks.js';
 export * from './memory.js';
 export * from './hook-context.js';
+export * from './installation.js';

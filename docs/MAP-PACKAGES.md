@@ -3,7 +3,8 @@
 > Moved out of `AGENTS.md` so it is not read at the start of every session. This is the reference: open it when
 > you need to find something, not to orient. `AGENTS.md` keeps the contract, the commands and the gotchas.
 
-- `packages/echo` — optional standalone memory setup: versioned profiles (`types.ts`, `config.ts`), explicit
+- `packages/echo` — optional standalone memory setup: versioned profiles (`types.ts`, `config.ts`), serialized
+  settings updates (`settings-lock.ts`), local/global selection and workspace pointers (`installation.ts`), explicit
   credential references (`secrets.ts`), immutable host session binding (`sessions.ts`), bounded model adapters
   (`models.ts`), owned agentmemory/iii processes (`runtime.ts`), synthetic persistence checks (`smoke.ts`),
   optional host plugin preparation (`hooks.ts`), workspace hook installation (`workspace-hooks.ts`),

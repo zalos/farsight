@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { loadContext, initConfig, saveConfig } from './config.js';
+import { defaultConfig, loadContext, initConfig, updateConfig, validateConfig } from './config.js';
+import { resolveInstallation, describeInstallation, readConnection, preflightConnection, writeConnection } from './installation.js';
 import { listModels } from './models.js';
-import { bindSession } from './sessions.js';
+import { bindSession, contextFingerprint } from './sessions.js';
 import { prepareHooks, type HookHost, HOOK_EVENTS } from './hooks.js';
 import { installWorkspaceHooks } from './workspace-hooks.js';
 import { startWeb } from './web.js';
@@ -15,17 +16,98 @@ import { hookContext } from './hook-context.js';
 import { installRuntime, startBackend, backendHealth, closeOwnedBackends, installedBackendVersion, runtimeInstalled, hasGlobalBackendConfig, AGENTMEMORY_VERSION, ENGINE_VERSION } from './runtime.js';
 import { smoke } from './smoke.js';
 import { word } from './words.js';
-import type { EchoContext, CheckResult, BackendConnection } from './types.js';
+import type { EchoConfig, EchoContext, CheckResult, BackendConnection } from './types.js';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, profile: { type: 'string' }, host: { type: 'string' }, model: { type: 'string' },
   'with-model': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
   install: { type: 'boolean' }, workspace: { type: 'string' }, content: { type: 'string' },
   query: { type: 'string' }, topic: { type: 'string', multiple: true }, limit: { type: 'string' },
+  scope: { type: 'string' }, port: { type: 'string' }, 'backend-port': { type: 'string' },
 } });
-const configPath = resolve(values.config ?? '.echo/settings.json');
 const command = values.help ? 'help' : positionals[0] ?? 'help';
 const print = (data: unknown) => process.stdout.write(`${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}\n`);
+const workspace = () => resolve(values.workspace ?? process.cwd());
+const target = () => resolveInstallation({
+  cwd: command === 'connect' || command === 'hooks' && values.install || command === 'setup' ? workspace() : process.cwd(),
+  configPath: values.config === undefined ? undefined : resolve(values.config), scope: values.scope, profileId: values.profile,
+});
+
+async function connectWorkspace(ctx: EchoContext, host: HookHost | 'all', root: string): Promise<void> {
+  // Refuse malformed or redirected binding files before changing host settings.
+  preflightConnection(root, { configPath: ctx.configPath, profileId: ctx.profileId });
+  const installed = await installWorkspaceHooks(ctx, host, fileURLToPath(import.meta.url), root);
+  // Another workspace can connect while this process writes hook files. Preserve
+  // the newest settings, and never carry an old identity/model snapshot forward.
+  await updateConfig(ctx.configPath, current => {
+    if (contextFingerprint(loadContext(ctx.configPath, ctx.profileId)) !== contextFingerprint(ctx)) throw new Error(word('connectionChanged'));
+    const hooks = current.profiles[ctx.profileId]!.hooks;
+    if (!installed.hosts.some(selected => !hooks[selected])) return;
+    for (const selected of installed.hosts) hooks[selected] = true;
+    return current;
+  });
+  const connection = await writeConnection(root, { configPath: ctx.configPath, profileId: ctx.profileId });
+  print({ ...installed, connection, installation: describeInstallation(ctx.configPath), profile: ctx.profileId });
+}
+
+function setupValues(config: EchoConfig, selected: string): EchoConfig {
+  const profile = config.profiles[selected];
+  if (!profile) throw new Error(word('profileRequired'));
+  if (values.model !== undefined) profile.model.model = values.model;
+  if (values.port !== undefined) profile.web.port = Number(values.port);
+  if (values['backend-port'] !== undefined) {
+    if (profile.backend.mode !== 'managed' || !/^\d+$/.test(values['backend-port'])) throw new Error(word('managedPort'));
+    profile.backend.url = `http://127.0.0.1:${Number(values['backend-port'])}`;
+  }
+  return validateConfig(config);
+}
+
+async function setup(): Promise<void> {
+  if (command === 'setup' && !process.stdin.isTTY) throw new Error(word('interactive'));
+  const prompt = command === 'setup' ? createInterface({ input: process.stdin, output: process.stdout }) : undefined;
+  try {
+    let installation = target();
+    if (prompt && values.scope === undefined && values.config === undefined) {
+      const current = installation.scope === 'global' ? 'global' : 'workspace';
+      const choice = (await prompt.question(word('askScope', { scope: current }))).trim() || current;
+      installation = resolveInstallation({ cwd: workspace(), scope: choice, profileId: values.profile ?? (choice === current ? installation.profileId : undefined) });
+    }
+    const configPath = installation.configPath;
+    if (!existsSync(configPath)) {
+      const initial = defaultConfig();
+      if (installation.scope === 'global') {
+        for (const [index, profile] of Object.values(initial.profiles).entries()) {
+          profile.web.port = 4490 + index;
+          profile.backend.url = `http://127.0.0.1:${5211 + index * 100}`;
+          profile.identity.project = 'shared';
+        }
+      }
+      await initConfig(configPath, setupValues(initial, installation.profileId ?? initial.defaultProfile));
+    } else if (command === 'init') throw new Error(word('configExists'));
+    let ctx = loadContext(configPath, installation.profileId);
+    if (prompt) {
+      await updateConfig(configPath, config => setupValues(config, ctx.profileId));
+      ctx = loadContext(configPath, ctx.profileId);
+      if (!ctx.profile.model.model) {
+        let models: string[] = [];
+        try { models = await listModels(ctx.profile); } catch { print(word('modelUnavailable')); }
+        if (models.length) {
+          print({ availableModels: models });
+          const selected = (await prompt.question(word('selectModel', { model: models[0]! }))).trim() || models[0]!;
+          if (!models.includes(selected)) throw new Error(word('modelUnavailable'));
+          await updateConfig(configPath, config => { config.profiles[ctx.profileId]!.model.model = selected; return config; });
+          ctx = loadContext(configPath, ctx.profileId);
+        } else print(word('downloadModel'));
+      }
+      print({ installation: describeInstallation(ctx.configPath), profile: ctx.profileId, workspace: workspace() });
+      for (const host of ['claude', 'codex', 'vscode'] as const) {
+        if (/^y(es)?$/i.test((await prompt.question(word('askHooks', { host }))).trim())) await connectWorkspace(ctx, host, workspace());
+      }
+      if (ctx.profile.backend.mode === 'managed' && /^y(es)?$/i.test((await prompt.question(word('askRuntime'))).trim())) print(await installRuntime(ctx));
+    }
+    print({ configPath: ctx.configPath, installation: describeInstallation(ctx.configPath), profile: ctx.profileId, next: word('next') });
+  } finally { prompt?.close(); }
+}
 
 async function checks(ctx: EchoContext, connection?: BackendConnection): Promise<CheckResult[]> {
   const checks: CheckResult[] = [
@@ -48,8 +130,11 @@ async function checks(ctx: EchoContext, connection?: BackendConnection): Promise
 
 async function hooks(ctx: EchoContext, host: HookHost): Promise<void> {
   const result = await prepareHooks(ctx, host, fileURLToPath(import.meta.url));
-  ctx.config.profiles[ctx.profileId]!.hooks[host] = true;
-  await saveConfig(ctx.configPath, ctx.config);
+  await updateConfig(ctx.configPath, config => {
+    if (config.profiles[ctx.profileId]!.hooks[host]) return;
+    config.profiles[ctx.profileId]!.hooks[host] = true;
+    return config;
+  });
   print(result);
 }
 
@@ -65,12 +150,23 @@ async function hook(): Promise<void> {
       input += chunk.toString();
       if (Buffer.byteLength(input) > 1_000_000) return;
     }
-    const payload = JSON.parse(input) as { session_id?: unknown; hook_event_name?: unknown; prompt?: unknown };
+    const payload = JSON.parse(input) as { session_id?: unknown; hook_event_name?: unknown; prompt?: unknown; cwd?: unknown };
     if (typeof payload.session_id !== 'string' || !payload.session_id || payload.session_id.length > 512) return;
     if (!(HOOK_EVENTS as readonly unknown[]).includes(payload.hook_event_name)) return;
-    const ctx = await loadContext(configPath, values.profile);
+    const installation = target();
+    const ctx = loadContext(installation.configPath, installation.profileId);
     if (!ctx.profile.hooks[values.host]) return;
-    await bindSession(ctx, values.host, payload.session_id);
+    const hostCwd = typeof payload.cwd === 'string' && isAbsolute(payload.cwd) ? payload.cwd : process.cwd();
+    const root = values.workspace ?? resolveInstallation({ cwd: hostCwd, scope: 'workspace' }).workspaceRoot!;
+    const connection = readConnection(root);
+    // Installed runners require the completed connection; a failed first install
+    // must not expose a different store while ordinary workspace commands stay local.
+    if (values.workspace !== undefined && !connection) throw new Error(word('connectionChanged'));
+    if (connection) {
+      const connected = loadContext(connection.configPath, connection.profileId);
+      if (connected.configPath !== ctx.configPath || connected.profileId !== ctx.profileId) throw new Error(word('connectionChanged'));
+    }
+    await bindSession(ctx, values.host, payload.session_id, { workspace: root });
     if (payload.hook_event_name === 'SessionStart') {
       print(hookContext(ctx, fileURLToPath(import.meta.url), 'SessionStart'));
     } else if (payload.hook_event_name === 'UserPromptSubmit' && typeof payload.prompt === 'string' && payload.prompt.trim()) {
@@ -85,40 +181,15 @@ async function main(): Promise<void> {
   if (command === 'help') { print(word('help')); return; }
   if (command === 'hook') { await hook(); return; }
   if (positionals.length > 1) throw new Error(word('unknownCommand'));
-  if (command === 'init' || command === 'setup') {
-    if (!existsSync(configPath)) await initConfig(configPath);
-    else if (command === 'init') throw new Error(word('configExists'));
-    const ctx = await loadContext(configPath, values.profile);
-    if (values.model) {
-      ctx.profile.model.model = values.model;
-      ctx.config.profiles[ctx.profileId]!.model.model = values.model;
-      await saveConfig(configPath, ctx.config);
-    }
-    if (command === 'init') { print({ configPath, profile: ctx.profileId, next: word('next') }); return; }
-    if (!process.stdin.isTTY) throw new Error(word('interactive'));
-    const prompt = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-      if (!ctx.profile.model.model) {
-        let models: string[] = [];
-        try { models = await listModels(ctx.profile); } catch { print(word('modelUnavailable')); }
-        if (models.length) {
-          print({ availableModels: models });
-          const selected = (await prompt.question(word('selectModel', { model: models[0]! }))).trim() || models[0]!;
-          if (!models.includes(selected)) throw new Error(word('modelUnavailable'));
-          ctx.profile.model.model = selected;
-          ctx.config.profiles[ctx.profileId]!.model.model = selected;
-        } else print(word('downloadModel'));
-      }
-      for (const host of ['claude', 'codex', 'vscode'] as const) {
-        if (/^y(es)?$/i.test((await prompt.question(word('askHooks', { host }))).trim())) await hooks(ctx, host);
-      }
-      await saveConfig(configPath, ctx.config);
-      if (ctx.profile.backend.mode === 'managed' && /^y(es)?$/i.test((await prompt.question(word('askRuntime'))).trim())) print(await installRuntime(ctx));
-    } finally { prompt.close(); }
-    print({ configPath, profile: ctx.profileId, next: word('next') });
-    return;
+  if (command === 'init' || command === 'setup') { await setup(); return; }
+  if (values.port !== undefined || values['backend-port'] !== undefined) throw new Error(word('setupOptions'));
+  const installation = target();
+  const ctx = loadContext(installation.configPath, installation.profileId);
+  if (command === 'connect') {
+    const host = values.host ?? 'all';
+    if (host !== 'claude' && host !== 'codex' && host !== 'vscode' && host !== 'all') throw new Error(word('hostRequired'));
+    await connectWorkspace(ctx, host, workspace()); return;
   }
-  const ctx = await loadContext(configPath, values.profile);
   if (command === 'install-runtime') { print(await installRuntime(ctx)); return; }
   if (command === 'doctor') {
     let connection: BackendConnection | undefined;
@@ -142,11 +213,7 @@ async function main(): Promise<void> {
     if (values.host !== 'claude' && values.host !== 'codex' && values.host !== 'vscode' && values.host !== 'all') throw new Error(word('hostRequired'));
     if (values.install) {
       if (!values.workspace) throw new Error(word('workspaceRequired'));
-      const result = await installWorkspaceHooks(ctx, values.host, fileURLToPath(import.meta.url), resolve(values.workspace));
-      const installedHosts: readonly HookHost[] = values.host === 'all' ? ['claude', 'codex', 'vscode'] : [values.host];
-      for (const host of installedHosts) ctx.config.profiles[ctx.profileId]!.hooks[host] = true;
-      await saveConfig(ctx.configPath, ctx.config);
-      print(result); return;
+      await connectWorkspace(ctx, values.host, workspace()); return;
     }
     if (values.host === 'all') { for (const host of ['claude', 'codex', 'vscode'] as const) await hooks(ctx, host); return; }
     await hooks(ctx, values.host); return;
@@ -164,7 +231,7 @@ async function main(): Promise<void> {
   let memory: { close(): Promise<void> } | undefined;
   let startup: string | undefined;
   // Settings remain reachable even if a backend or model needs configuration.
-  const web = await startWeb(ctx, { checks: async () => [
+  const web = await startWeb(ctx, { installation: describeInstallation(ctx.configPath), checks: async () => [
     ...await checks(ctx, backend),
     ...(startup ? [{ name: 'backend', ok: false, detail: startup }] : []),
   ] });

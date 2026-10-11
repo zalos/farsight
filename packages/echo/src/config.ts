@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { parseKeychainRef } from './secrets.js';
+import { withSettingsLock } from './settings-lock.js';
 import type { EchoConfig, EchoContext, EchoProfile } from './types.js';
 
 function fail(key = 'echo.config.shape'): never { throw new Error(echoConfigWord(key)); }
@@ -171,9 +172,17 @@ async function writeConfig(configPath: string, value: unknown, exclusive: boolea
 }
 
 export async function saveConfig(configPath: string, config: EchoConfig): Promise<void> {
-  await writeConfig(configPath, config, false);
+  await withSettingsLock(configPath, () => writeConfig(configPath, config, false));
 }
 
-export async function initConfig(configPath: string): Promise<EchoConfig> {
-  return writeConfig(configPath, defaultConfig(), true);
+export async function initConfig(configPath: string, config: EchoConfig = defaultConfig()): Promise<EchoConfig> {
+  return withSettingsLock(configPath, () => writeConfig(configPath, config, true));
+}
+
+/** Merge a fresh snapshot while holding the same lock used by every settings writer. */
+export async function updateConfig(configPath: string, update: (config: EchoConfig) => EchoConfig | undefined | Promise<EchoConfig | undefined>): Promise<void> {
+  await withSettingsLock(configPath, async () => {
+    const next = await update(loadContext(configPath).config);
+    if (next !== undefined) await writeConfig(configPath, next, false);
+  });
 }

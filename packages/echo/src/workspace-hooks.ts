@@ -23,8 +23,8 @@ function owned(value: unknown, host: HookHost): boolean {
   const hook = object(value);
   return hook.type === 'command' && typeof hook.command === 'string' && hook.command.endsWith(marker(host));
 }
-function command(ctx: EchoContext, host: HookHost, executable: string): ObjectValue {
-  const args = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host];
+function command(ctx: EchoContext, host: HookHost, executable: string, workspace: string): ObjectValue {
+  const args = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host, '--workspace', workspace];
   return { type: 'command', command: args.map(shellQuote).join(' ') + marker(host), timeout: 5 };
 }
 
@@ -164,21 +164,45 @@ async function ensureLocalPath(workspace: string, destination: string): Promise<
 export async function installWorkspaceHooks(
   ctx: EchoContext, host: HookHost | 'all', executable: string, workspaceRoot: string,
   options: { vscodeUserSettingsPaths?: string[] } = {},
-): Promise<{ changedPaths: string[]; instructions: string }> {
+): Promise<{ changedPaths: string[]; hosts: HookHost[]; instructions: string }> {
   if (process.platform === 'win32') fail('echo.hooks.platform');
   if (host !== 'all' && !HOSTS.includes(host)) fail('echo.hooks.invalidHost');
   if (![ctx.configPath, ctx.directory, executable, workspaceRoot].every(isAbsolute)) fail('echo.hooks.absolutePaths');
   if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(ctx.profileId)) fail('echo.hooks.invalidProfile');
   const workspace = resolve(workspaceRoot);
   if (!(await lstat(workspace).catch(() => undefined))?.isDirectory() || !(await lstat(executable).catch(() => undefined))?.isFile()) fail('echo.hooks.workspaceInvalid');
-  const hosts = host === 'all' ? HOSTS : [host];
+  // A workspace has one Echo connection. Retarget any previously installed Echo
+  // host as well, so a partial host selection cannot silently split its memories.
+  const requested = host === 'all' ? HOSTS : [host];
+  const installed: HookHost[] = [];
+  for (const selected of HOSTS) {
+    const path = join(workspace, ...paths[selected]);
+    await ensureLocalPath(workspace, path);
+    const raw = await contents(path);
+    if (raw === undefined) continue;
+    const document = parseObject(raw);
+    if (document.hooks === undefined) continue;
+    const events = object(document.hooks);
+    for (const event of HOOK_EVENTS) {
+      const definitions = events[event];
+      if (definitions === undefined) continue;
+      if (!Array.isArray(definitions)) fail();
+      const commands = selected === 'vscode' ? definitions : definitions.flatMap(value => {
+        const group = object(value);
+        if (!Array.isArray(group.hooks)) fail();
+        return group.hooks;
+      });
+      if (commands.some(value => owned(value, selected))) { installed.push(selected); break; }
+    }
+  }
+  const hosts = HOSTS.filter(selected => requested.includes(selected) || installed.includes(selected));
   await preventDuplicateHooks(workspace, hosts, options.vscodeUserSettingsPaths);
   const plan: Plan[] = [];
   for (const selected of hosts) {
     const path = join(workspace, ...paths[selected]);
     await ensureLocalPath(workspace, path);
     const before = await contents(path);
-    const after = merge(before, selected, command(ctx, selected, executable));
+    const after = merge(before, selected, command(ctx, selected, executable, workspace));
     if (before !== after) plan.push({ path, before, after });
   }
   const backups = join(ctx.directory, 'backups', `hooks-${Date.now()}-${randomUUID()}`);
@@ -213,6 +237,7 @@ export async function installWorkspaceHooks(
   }
   return {
     changedPaths: plan.map(item => item.path),
+    hosts,
     instructions: [words('echo.hooks.installed'), ...hosts.map(selected => words(`echo.hooks.installed${selected === 'vscode' ? 'Vscode' : selected === 'claude' ? 'Claude' : 'Codex'}`)), words('echo.hooks.singleProfile'), words('echo.hooks.keepPaths')].join('\n\n'),
   };
 }

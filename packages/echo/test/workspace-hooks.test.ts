@@ -86,7 +86,7 @@ test('workspace hooks preserve literal paths, input and additional context for e
     const result = spawnSync('/bin/sh', ['-c', hook.command], { cwd: workspace, input, encoding: 'utf8', env: { ...process.env, ECHO_TEST_OUTPUT: output } });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, 'saved-memory');
-    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { input, args: ['hook', '--config', ctx.configPath, '--profile', 'personal', '--host', host] });
+    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { input, args: ['hook', '--config', ctx.configPath, '--profile', 'personal', '--host', host, '--workspace', workspace] });
     await assert.rejects(access(join(workspace, 'ECHO_MUST_NOT_EXIST')));
   }
 });
@@ -132,4 +132,18 @@ test('VS Code preparation remains review-only and emits its flat native format',
   assert.deepEqual(Object.keys(doc.hooks), [...HOOK_EVENTS]);
   assert.equal(doc.hooks.UserPromptSubmit[0].type, 'command');
   await assert.rejects(access(paths.vscode));
+});
+
+test('reconnecting one host retargets every installed Echo host to one profile', async t => {
+  const { ctx, executable, workspace, paths } = await fixture(t);
+  await installWorkspaceHooks(ctx, 'all', executable, workspace, options);
+  const global = { ...ctx, configPath: join(ctx.directory, 'shared-settings.json'), profileId: 'work', profile: ctx.config.profiles.work! };
+  const changed = await installWorkspaceHooks(global, 'claude', executable, workspace, options);
+  assert.deepEqual(changed.hosts, ['claude', 'codex', 'vscode']);
+  for (const host of changed.hosts) {
+    const events = JSON.parse(await readFile(paths[host], 'utf8')).hooks;
+    const command = host === 'vscode' ? events.UserPromptSubmit[0].command : events.UserPromptSubmit[0].hooks[0].command;
+    assert.ok(command.includes("'--profile' 'work'"));
+    assert.ok(command.includes('shared-settings.json'));
+  }
 });

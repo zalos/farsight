@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, realpath, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { defaultConfig, initConfig, loadContext, saveConfig, validateConfig } from '../dist/config.js';
+import { defaultConfig, initConfig, loadContext, saveConfig, updateConfig, validateConfig } from '../dist/config.js';
 import { parseKeychainRef, resolveSecret } from '../dist/secrets.js';
 
 test('exact embedding origins and TLS hostnames survive canonical isolation checks', () => {
@@ -128,4 +128,22 @@ test('keychain access never inherits credentials or returns command diagnostics 
   await assert.rejects(resolveSecret('keychain:echo/test', { platform: 'darwin', runner: async () => { throw new Error('secret-output-value'); } }), error => error instanceof Error && !error.message.includes('secret-output-value'));
   await assert.rejects(resolveSecret('literal-private-value'), error => error instanceof Error && !error.message.includes('literal-private-value'));
   await assert.rejects(resolveSecret('keychain:echo/test', { platform: 'win32', runner }), /does not yet/);
+});
+
+test('concurrent shared settings updates merge fresh values and failed edits release the writer lock', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'echo-shared-settings-'));
+  const path = join(directory, 'settings.json');
+  try {
+    await initConfig(path);
+    await Promise.all(['claude', 'codex', 'vscode'].map(host => updateConfig(path, async config => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      config.profiles.personal!.hooks[host as 'claude' | 'codex' | 'vscode'] = true;
+      return config;
+    })));
+    assert.deepEqual(loadContext(path).profile.hooks, { claude: true, codex: true, vscode: true });
+    await assert.rejects(updateConfig(path, () => { throw new Error('synthetic edit failure'); }), /synthetic edit failure/);
+    await updateConfig(path, config => { config.profiles.personal!.model.model = 'selected'; return config; });
+    assert.equal(loadContext(path).profile.model.model, 'selected');
+    await assert.rejects(stat(join(directory, '.echo-settings.lock')), { code: 'ENOENT' });
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

@@ -87,3 +87,19 @@ test('VS Code sessions keep an independent immutable binding and use the shared 
   updated.profile.identity.project = 'different';
   assert.notEqual(contextFingerprint(updated), contextFingerprint(context));
 }));
+
+test('a workspace session cannot switch between local and global stores after reconnecting', async () => fixture(async path => {
+  const global = loadContext(path);
+  const workspace = join(global.directory, 'workspace');
+  const localPath = join(workspace, '.echo', 'settings.json');
+  await initConfig(localPath);
+  const local = loadContext(localPath);
+  await bindSession(local, 'codex', 'before-reconnect');
+  await assert.rejects(bindSession(global, 'codex', 'before-reconnect', { workspace }), /already bound/);
+  await bindSession(global, 'codex', 'fresh-global-session', { workspace });
+  await assert.rejects(bindSession(local, 'codex', 'fresh-global-session', { workspace }), /already bound/);
+  const otherWorkspace = join(global.directory, 'other-workspace');
+  await initConfig(join(otherWorkspace, '.echo', 'settings.json'));
+  await bindSession(global, 'codex', 'another-workspace-session', { workspace: otherWorkspace });
+  await bindSession(global, 'codex', 'fresh-global-session', { workspace });
+}));
