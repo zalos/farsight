@@ -2595,15 +2595,20 @@
   .map-act-top{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0;min-width:0}
   .map-act-strip{display:flex;align-items:center;gap:8px;min-width:0;overflow-x:auto;flex:1;scrollbar-width:thin}
   .map-act-strip .hud-label{font-size:9px;color:var(--muted);flex:none}
-  .map-act-scr{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:4px;background:var(--ground);padding:4px 10px 4px 4px;cursor:pointer;color:var(--ink);flex:none;max-width:260px;font:inherit;text-align:left}
+  /* the strip is one line of numbered names (lane S): the current one lit, each picture in its tip */
+  .map-act-scr{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:4px;background:var(--ground);padding:2px 9px;cursor:pointer;color:var(--ink);flex:none;max-width:240px;font:inherit;text-align:left;line-height:16px}
   .map-act-scr:hover{border-color:var(--muted)}
-  .map-act-scr.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .map-act-scr.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--ground))}
   .map-act-scr.planned{border-style:dashed;border-color:var(--amber)}
-  .map-act-scr .dsg-thumb.sheet,body.lens-business .map-act-scr .dsg-thumb.sheet{width:48px;max-width:48px;height:30px}
-  .map-act-scr .ph .sym{width:16px;height:16px;color:var(--dim)}
-  .map-act-scr .t{display:flex;flex-direction:column;font-size:11px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .map-act-scr .t .o{font-family:var(--mono);font-size:9px;color:var(--accent);font-weight:400}
-  .map-act-scr .t .s{font-weight:400;font-size:9.5px;color:var(--muted)}
+  .map-act-scr .t{display:flex;align-items:baseline;gap:5px;font-size:11px;font-weight:600;min-width:0;white-space:nowrap;overflow:hidden}
+  .map-act-scr .t .n{overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .map-act-scr .t .o{font-family:var(--mono);font-size:9.5px;color:var(--accent);font-weight:400;flex:none}
+  .map-act-scr .t .s{font-weight:400;font-size:9.5px;color:var(--muted);flex:none}
+  .map-act-tip{display:flex;flex-direction:column;gap:5px;max-width:260px}
+  .map-act-tip .dsg-thumb.sheet{width:240px;max-width:240px;height:150px}
+  .map-act-tip .ph .sym{width:28px;height:28px;color:var(--dim)}
+  .map-act-tip .nm{font-weight:600}
+  .map-act-tip .st{color:var(--warn);font-size:11px}
   .map-act-dock{display:none;flex:none}
   .map-act.code .map-act-dock{display:inline-flex}
   .map-act .map-drill{flex:1;min-height:0}
