@@ -64,6 +64,19 @@ without changing saved settings or using the active memory store. The package re
 configured listener occupied while checking save/recall, restart and isolation. A real local model
 smoke also passed beside the running settings view; automatic capture and brief injection remain deferred.
 
+Memory-access follow-up: explicit managed `remember` and scoped `recall` now use a filesystem-private local
+bridge owned by `serve`. Workspace hook installation preserves existing Claude, Codex and VS Code Local settings;
+prompt hooks inject bounded retrieved excerpts and session-start hooks explain the explicit commands. Automatic
+capture and model-generated briefs remain deferred. External writes are refused because the pinned backend's
+supersession logic can touch unscoped legacy records. Codex hook trust remains a host review step.
+The standalone package regression now saves a synthetic fact and retrieves it through all three installed hook
+commands, then checks shutdown. Fifty Echo tests cover the bridge, session boundaries and installation behavior.
+The standalone package was also installed into an existing workspace without changing its application dependencies;
+all three installed hook runners returned the synthetic fact, all five connection checks passed, and the settings
+view rendered with no browser errors. A real Claude conversation check was blocked by its account session limit;
+editor-level delivery still needs a fresh trusted session. Full package tests, typecheck, script checks and catalog
+lint passed after the memory-access integration.
+
 Managed startup deliberately refuses the global agentmemory environment file because the published
 backend does not offer an override. External mode needs a dedicated compatible instance. No npm release
 was published by this setup work. The existing Farsight servers and dogfood graph were not refreshed.

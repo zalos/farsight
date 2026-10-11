@@ -21,7 +21,8 @@
       },
       "hooks": {
         "claude": false,
-        "codex": false
+        "codex": false,
+        "vscode": false
       },
       "skills": {
         "directories": []
@@ -52,7 +53,8 @@
       },
       "hooks": {
         "claude": false,
-        "codex": false
+        "codex": false,
+        "vscode": false
       },
       "skills": {
         "directories": []

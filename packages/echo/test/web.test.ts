@@ -24,7 +24,7 @@ function fixture(): EchoConfig {
     backend: { mode: 'managed' as const, url: 'http://127.0.0.1:4611' },
     model: { provider: 'ollama' as const, baseUrl: 'http://127.0.0.1:11434', model: 'fixture-model' },
     web: { port: 4480, farsightOrigin: 'http://127.0.0.1:4477' },
-    hooks: { claude: false, codex: false },
+    hooks: { claude: false, codex: false, vscode: false },
     skills: { directories: [] },
     budget: { briefMaxChars: 1200, modelMaxTokens: 256, timeoutMs: 10000 },
   };

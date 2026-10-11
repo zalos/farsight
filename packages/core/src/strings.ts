@@ -37,6 +37,7 @@ import { ECHO_RUNTIME_STRINGS } from './strings-echo-runtime.js';
 import { ECHO_CONFIG_STRINGS } from './strings-echo-config.js';
 import { ECHO_HOOK_STRINGS } from './strings-echo-hooks.js';
 import { ECHO_UI_STRINGS } from './strings-echo-ui.js';
+import { ECHO_MEMORY_STRINGS } from './strings-echo-memory.js';
 
 export type Register = 'hud' | 'professional';
 
@@ -122,6 +123,7 @@ export const STRINGS: Record<string, StringEntry> = {
   ...ECHO_CONFIG_STRINGS,
   ...ECHO_HOOK_STRINGS,
   ...ECHO_UI_STRINGS,
+  ...ECHO_MEMORY_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)

@@ -6,3 +6,6 @@ export * from './hooks.js';
 export * from './runtime.js';
 export * from './smoke.js';
 export * from './web.js';
+export * from './workspace-hooks.js';
+export * from './memory.js';
+export * from './hook-context.js';

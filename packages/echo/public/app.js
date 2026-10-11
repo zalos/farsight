@@ -91,7 +91,7 @@ function captureForm() {
   p.backend = { mode: value('backendMode'), url: value('backendUrl'), ...(value('backendMode') === 'external' ? { secretRef: optional('backendSecret') } : {}) };
   p.model = { provider: value('provider'), baseUrl: value('modelUrl'), model: value('modelName'), secretRef: optional('modelSecret') };
   p.web = { port: Number(value('port')), farsightOrigin: optional('farsightOrigin') };
-  p.hooks = { claude: values.has('claude'), codex: values.has('codex') };
+  p.hooks = { claude: values.has('claude'), codex: values.has('codex'), vscode: values.has('vscode') };
   p.skills = { directories: value('skillDirectories').split('\n').map(line => line.trim()).filter(Boolean) };
   p.budget = { briefMaxChars: Number(value('briefLimit')), modelMaxTokens: Number(value('tokenLimit')), timeoutMs: Math.round(Number(value('timeout')) * 1000) };
   if (values.has('default')) config.defaultProfile = selected;
@@ -155,7 +155,7 @@ function renderForm() {
   const model = section('model', 'modelNote');
   model.grid.append(field('provider', 'provider', p.model.provider, { options: [['ollama', 'ollama'], ['openai-compatible', 'compatible']], wide: true }), field('modelUrl', 'modelUrl', p.model.baseUrl, { type: 'url', required: true, wide: true }), field('modelName', 'modelName', p.model.model, { wide: true, hint: 'optional' }), field('secretRef', 'modelSecret', p.model.secretRef, { wide: true, hint: 'secretsNote' }));
   const hooks = section('hooks', 'hooksNote');
-  hooks.grid.append(toggle('claude', 'claude', p.hooks.claude), toggle('codex', 'codex', p.hooks.codex));
+  hooks.grid.append(toggle('claude', 'claude', p.hooks.claude), toggle('codex', 'codex', p.hooks.codex), toggle('vscode', 'vscode', p.hooks.vscode));
   const skills = section('skills', 'skillsNote');
   skills.grid.append(field('skillDirectories', 'skillDirectories', p.skills.directories.join('\n'), { wide: true, multiline: true, hint: 'onePerLine' }));
   const limits = section('limits');

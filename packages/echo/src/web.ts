@@ -22,7 +22,7 @@ function publicConfig(config: EchoConfig): EchoConfig {
       backend: { mode: p.backend.mode, url: p.backend.url, secretRef: p.backend.secretRef },
       model: { provider: p.model.provider, baseUrl: p.model.baseUrl, model: p.model.model, secretRef: p.model.secretRef },
       web: { port: p.web.port, farsightOrigin: p.web.farsightOrigin },
-      hooks: { claude: p.hooks.claude, codex: p.hooks.codex },
+      hooks: { claude: p.hooks.claude, codex: p.hooks.codex, vscode: p.hooks.vscode ?? false },
       skills: { directories: [...p.skills.directories] },
       budget: { briefMaxChars: p.budget.briefMaxChars, modelMaxTokens: p.budget.modelMaxTokens, timeoutMs: p.budget.timeoutMs },
     };

@@ -23,7 +23,7 @@ pnpm build
 node packages/echo/dist/cli.js setup
 ```
 
-For a first test, choose an installed Ollama model, answer **no** to both hook questions, and **yes** to installing the managed runtime. Hook preparation can be tested separately later.
+For a first test, choose an installed Ollama model, answer **no** to the hook questions, and **yes** to installing the managed runtime. Hook preparation can be tested separately later.
 
 Setup creates `.echo/settings.json` with `personal` and `work` profiles. Both begin with hooks disabled and separate memory addresses. Setup configures the selected profile; the default is `personal`. It does not start a server.
 

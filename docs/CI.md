@@ -28,7 +28,9 @@ runner.
 
 Echo's package check builds its separate tarball, installs it into a temporary directory without optional embedding dependencies,
 downloads the checksum-pinned iii engine, and verifies synthetic save/recall, restart persistence, and separate stores.
-It makes no model calls and uses no real memories or agent hooks. This check needs npm and GitHub release downloads.
+It also installs all three workspace hook formats into a temporary fixture and invokes their exact commands against
+the running memory bridge. It makes no model calls and uses no real memories or host sessions. This check needs npm
+and GitHub release downloads.
 
 A third job, **secrets**, runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
 how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in-ci).

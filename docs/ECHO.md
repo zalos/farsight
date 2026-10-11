@@ -101,6 +101,10 @@ Normal termination and interrupted CLI smoke tests close the owned children and 
 
 Agentmemory persists its records through iii's file-backed state store. Echo's memory data is runtime state, not a Git merge format. Commit scrubbed configuration examples and documentation; do not commit live stores. External mode connects to an instance the user manages and does not start or stop it. A future hosted team service will need authentication and enforced tenant boundaries.
 
+Search ranking remains an upstream limitation: the pinned backend ranks up to 500 candidates across its store
+before applying the exact identity filters. A crowded shared backend can therefore omit a matching scoped memory.
+Use dedicated instances for this preview; bounded excerpts and exact filtering do not establish exhaustive recall.
+
 Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo's selected model handles the optional synthetic summary check. Prompt-time recall currently makes no model call. Engine/package installation requires downloads. Local model inference does not require a hosted model API, although a model may need an initial download. Future agentic brief generation will consume sidecar compute; the memory context already injected by hooks consumes the main agent's context.
 
 ## Memory access and isolation
