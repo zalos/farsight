@@ -137,6 +137,8 @@ async function load() {
     return draw();
   }
   ST.history = spine;
+  // the storylines, for their rows into the Map's comparison (a failure leaves the page as it was)
+  ST.storylines = await fetch('/api/journeys?scope=all').then((x) => (x.ok ? x.json() : null)).then((j) => (j && j.tree && j.tree.storylines) || []).catch(() => []);
   // a param that is not a range resolves to **nothing**, never to the default:
   // drawing the latest two syncs under a link that named something else is the
   // silent substitution the 2026-09-23 swarm found and this surface must not do
@@ -275,7 +277,7 @@ function draw() {
     return;
   }
   if (!ST.history) { body.innerHTML = '<p class="set-note">' + esc(t('portfolio.loading')) + '</p>'; return; }
-  body.innerHTML = rangeHtml() + spineHtml() + measuredHtml() + narrativeHtml()
+  body.innerHTML = rangeHtml() + storylineRowsHtml() + spineHtml() + measuredHtml() + narrativeHtml()
     + '<p class="set-note"><a href="#/grammar">' + esc(t('journeys.startGrammar')) + '</a></p>';
 }
 
@@ -297,6 +299,21 @@ function rangeHtml() {
     + (r.via ? ' <span class="ch-via">' + esc(r.via) + '</span>' : '')
     + (r.why || []).map((w) => '<span class="ch-why warn">' + esc(w) + '</span>').join('')
     + '</p>';
+}
+
+/**
+ * The storylines, one row each, linking into the Map's comparison of the same two syncs (round 2026-10-10,
+ * proposal 7): the diff in the units a storyline reader reads, beside this page's diff in the contract's.
+ * @group Changes surface
+ */
+function storylineRowsHtml() {
+  const r = ST.resolved;
+  const list = ST.storylines || [];
+  if (!r || !r.baseSync || !r.headSync || !list.length) return '';
+  return '<div class="ch-stories"><span class="hud-label"' + tipAttrs({ key: 'changes.storylines.title', noFocus: true }) + '>' + esc(t('changes.storylines.title')) + '</span> '
+    + list.map((s) => '<a class="rel" href="#/map?storyline=' + encodeURIComponent(s.id) + '&compare=' + r.baseSync + '..' + r.headSync + '"'
+      + tipAttrs({ key: 'changes.storylines.open', noFocus: true }) + '>' + esc(t('changes.storylines.open').replace('{name}', s.name)) + '</a>').join(' · ')
+    + '</div>';
 }
 
 /**

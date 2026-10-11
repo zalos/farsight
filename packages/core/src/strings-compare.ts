@@ -104,6 +104,10 @@ export const COMPARE_STRINGS: Record<string, StringEntry> = {
   'compare.panel.notes': same('{n} notes', 'What the comparison could not say; the tip lists each.'),
   'compare.export.what': same('changes on {storyline} · sync {a} → sync {b}', 'What the saved picture shows: one storyline, the later sync drawn, with what changed since the earlier one.'),
 
+  // the Changes page's storyline rows: each storyline, the same range, on the Map
+  'changes.storylines.title': same('on the storylines', 'The same two syncs, one storyline at a time, on the Map: what changed in screens built, gates, writers, the contract and the verdicts, each change with where to read it.'),
+  'changes.storylines.open': same('see what changed on {name}', 'Opens this storyline on the Map comparing the same two syncs, with the change marks on its cards and the list beside the board.'),
+
   // the chips on the cards
   'compare.chip.gate.added': same('+{n} gates', 'Gates added in front of this journey’s calls or actions since the earlier sync.'),
   'compare.chip.gate.addedOne': one('+1 gate', 'compare.chip.gate.added'),
