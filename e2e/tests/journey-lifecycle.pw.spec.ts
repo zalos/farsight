@@ -47,7 +47,7 @@ test.describe('journey status lifecycle', () => {
     await expect(s.locator('.lc-status .lc-w')).toHaveText(['Being drafted', 'Sent', 'Approved', 'Paid', 'Void (ended)']);
     await expect(s.locator('.lc-status .lc-c')).toHaveCount(0);
     await expect(s.locator('.lc-counts')).toHaveText('5 statuses · 3 that the app moves · 2 nothing moves yet');
-    await expect(s.locator('.lc-status.unwritten .lc-yet')).toHaveText(['no code moves it yet', 'no code moves it yet']);
+    await expect(s.locator('.lc-status.unwritten .lc-yet')).toHaveText(['nothing moves into it', 'nothing moves into it']);
     const text = (await s.locator('.lc-head, .lc-statuses').allInnerTexts()).join(' ');
     expect(text.match(IDENTIFIER) || [], 'identifier-shaped tokens on the business strip').toEqual([]);
     await s.locator('.lc-status').first().hover();

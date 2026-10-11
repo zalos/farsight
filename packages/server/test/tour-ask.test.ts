@@ -13,7 +13,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { GraphStore, stitchHttp, buildIndex, countedProblems, tourOf, tourLines, ask, askLines, askShapeOf, pathBetween, ASK_SHAPES, COUNT_SCOPES, STRINGS, type GraphIndex, type GraphMeta, type TourClause } from '@farsight/core';
+import { GraphStore, stitchHttp, buildIndex, countedProblems, tourOf, tourLines, ask, askLines, askShapeOf, askExample, suggestQuestions, pathBetween, ASK_SHAPES, COUNT_SCOPES, STRINGS, type GraphIndex, type GraphMeta, type TourClause } from '@farsight/core';
 import { ingestRepo } from '@farsight/parsers';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
@@ -242,6 +242,30 @@ test('ask: the four shapes, from the graph, every line cited — and the shapes 
   assert.match(askLines(phrased).join('\n'), /phrased by a model/);
 });
 
+test('ask, swarm round 3: did you mean from the question’s nouns, the part it picked named beside the others, the example from this graph', () => {
+  // a plain question in no shape: the nearest shape filled with its nouns, a status this graph declares
+  const who = ask(index, 'who opens an invoice', { metas: meta.journeys });
+  assert.equal(who.shape, 'unknown');
+  assert.equal(who.suggest![0], 'where is invoice set to open, and what must be true first?');
+  assert.match(askLines(who).join('\n'), /Did you mean/);
+  // every suggestion is a question Ask answers
+  for (const q of who.suggest!) assert.notEqual(ask(index, q, { metas: meta.journeys }).shape, 'unknown', q);
+  // the record-and-status question in the guards shape is the set shape's question, never an action's checks
+  const must = ask(index, 'what must be true before an invoice is open', { metas: meta.journeys });
+  assert.equal(must.shape, 'set');
+  // words that name two parts: the answer says which it read them as, and lists the other
+  const twin = ask(index, 'which tests reach finalizeInvoice', { metas: meta.journeys });
+  const picked = twin.lead.find((c) => c.key === 'ask.picked');
+  assert.ok(picked, 'two finalizeInvoice functions: the answer names its pick');
+  assert.equal(picked!.counted!.scope, 'count.scope.question');
+  assert.ok(picked!.cites.length >= 2);
+  // the example names a status the graph declares, and Ask answers it
+  const ex = askExample(index)!;
+  assert.match(ex, /^where is .+ set to .+, and what must be true first\?$/);
+  assert.equal(ask(index, ex, { metas: meta.journeys }).shape, 'set');
+  assert.deepEqual(suggestQuestions(index, 'zzz qqq'), []);
+});
+
 test('GET /api/tour and GET /api/ask serve the same folds', async () => {
   const t = await get('/api/tour?storyline=invoice');
   assert.equal(t.status, 200);
@@ -255,4 +279,5 @@ test('GET /api/tour and GET /api/ask serve the same folds', async () => {
   assert.equal(a.body.answer.shape, 'set');
   assert.equal(a.body.answer.derived, true);
   assert.equal((await get('/api/ask')).status, 400);
+  assert.equal((await get('/api/ask?example=1')).body.example, askExample(index));
 });

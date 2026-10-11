@@ -143,6 +143,9 @@ export { editorDoor };
  * CLI) for a line that already carries a number. `''` when the record has nothing to copy.
  */
 export function copyDoorsHtml(kind, node, opts = {}) {
+  // the business register draws none: *copy as MCP call · curl · CLI* is a developer's door, and the swarm counted it
+  // among the code a business reader met (round 3, the executive, the champion, the product owner) — hybrid and code keep them
+  if (currentLens() === 'business') return '';
   const doors = copyDoors(kind, node, { origin: (typeof location !== 'undefined' && location.origin) || '' });
   if (!doors.length) return '';
   const btn = (d) => '<button type="button" class="dd-door copy" data-copy="' + esc(d.text) + '" data-via="' + d.via + '"'

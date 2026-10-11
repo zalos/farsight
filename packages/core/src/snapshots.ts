@@ -465,6 +465,17 @@ export class SnapshotDb {
     return row?.prev ?? undefined;
   }
 
+  /**
+   * The newest sync before `sync` that read different code — another commit, or the same commit with a different
+   * digest — or `undefined` when every earlier sync read the same code. What Compare's *the sync before* means
+   * (swarm round 3: nine syncs in a row re-read one commit, so *the sync before* always compared to nothing).
+   */
+  previousChanged(sync: number): number | undefined {
+    const row = this.db.prepare(`SELECT MAX(s.sync) AS prev FROM snapshot s, snapshot h WHERE h.sync = ? AND s.sync < h.sync
+      AND (s.commit_sha IS NOT h.commit_sha OR s.digest IS NOT h.digest)`).get(sync) as { prev: number | null } | undefined;
+    return row?.prev ?? undefined;
+  }
+
   /** Mark a sync as pinned — retention keeps it (set when a pinned link is generated). */
   pin(sync: number): void {
     const result = this.db.prepare('UPDATE snapshot SET pinned = 1 WHERE sync = ?').run(sync);

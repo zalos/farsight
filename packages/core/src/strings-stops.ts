@@ -31,6 +31,7 @@ export const STOP_STRINGS: Record<string, StringEntry> = {
   'map.layout.ladder': same('ladder', 'One action as a sequence, time running down: the systems it uses as columns, one line per thing it did.'),
   'map.crumb.screen': same('screen {n} of {m}', 'Where this screen stands among the journey’s screens, in the order a person meets them.'),
   'map.crumb.action': same('action {n} of {m}', 'Where this action stands among the things a person does on this screen, in the order the screen’s design lists them.'),
+  'map.act.onScreen': same('action {n} of {m} on this screen', 'Where this action stands among the things a person does on this screen — the same count the breadcrumb and the screen strip print. The journey’s stops, which also count an action done again, are the drill’s rail.'),
   'map.act.strip': same('the street', 'The journey’s screens in order, small, with the one you are on lit. Click one to open it.'),
   'map.act.hint': same('← → walk the beats · − back to the screen · + opens the code', 'The keys at an action: the arrows move from beat to beat, minus goes back to the screen, plus opens the code behind the beat you are on.'),
   'map.code.hint': same('← → walk the beats · − closes the code', 'The keys with the code open: the arrows move from beat to beat and the code follows, minus closes the code.'),

@@ -14,7 +14,7 @@ import { t, evidenceWord } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, defAttrs } from './counted.js';
 import { tipAttrs } from './tooltip.js';
-import { testChipHtml } from './test-chip.js';
+import { testChipHtml, builtOnlyHtml } from './test-chip.js';
 import { foldRow } from './fold-row.js';
 
 const API = '/api/journey';
@@ -39,9 +39,10 @@ export function mapEvidenceChip(facts) {
   const ev = evidenceWord(facts);
   const cls = ev.cls;
   if (!cls || cls === 'none') return '';
-  return '<span class="map-chip k-ev ev-' + esc(cls) + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
+  const pb = builtOnlyHtml(ev);
+  return pb.before + '<span class="map-chip k-ev ev-' + esc(cls) + pb.cls + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: facts.observation || null, verdict: facts.verdict ? { status: facts.verdict.status } : null, fresh: facts.freshness || null } }) + '>'
     + (cls === 'observed' ? sym('live') : cls === 'stale' ? sym('stale') : cls === 'reached' ? sym('step') : '')
-    + esc(t(ev.key)) + '</span>';
+    + esc(t(ev.key)) + '</span>' + pb.after;
 }
 
 /**
@@ -54,8 +55,10 @@ export function mapTestsChips(tests, facts, opts = {}) {
   if (opts.hideZero && !tests.n && !(facts && facts.notBuilt)) return '';
   // one chip with the count, the scope it counts over, the word and the skips (lib/test-chip.js, round 2026-10-10)
   if (facts && facts.counted && facts.counted.tests) {
-    if (facts.sharedEvidence) return testChipHtml(facts, { cls: 'map-chip k-test', api: API, word: false, zero: true }) + mapEvidenceChip(facts);
-    return testChipHtml(facts, { cls: 'map-chip k-test', api: API, zero: true, evCls: 'map-chip k-ev' });
+    if (facts.sharedEvidence) return testChipHtml(facts, { cls: 'map-chip k-test', api: API, word: false, zero: true, basis: false }) + mapEvidenceChip(facts);
+    // `builtShown`: the caller printed *n of m screens built* beside it, so the word keeps only its scope after it;
+    // `runs: false`: a one-row head prints only the parts that are not *passed* (the full sentence is the count's tip)
+    return testChipHtml(facts, { cls: 'map-chip k-test', api: API, zero: true, evCls: 'map-chip k-ev', basis: false, builtShown: !!opts.builtShown, ...(opts.runs === false ? { runs: false } : {}) });
   }
   const n = mapCountChip(tests, 'k-test');
   if (!n) return '';

@@ -72,6 +72,8 @@ export function loadCompare(storyline, repo, done) {
     CMP.loading = false;
     if (body && Array.isArray(body.syncs)) CMP.syncs = body.syncs;
     if (!ok) { CMP.data = null; CMP.error = (body && body.error) || t('compare.panel.unheld').replace('{sync}', '?'); done(null); return; }
+    // no green run to compare from: the absence word and why, in the panel (the server answers it, never a 404)
+    if (body && body.noGreen) { CMP.data = null; CMP.error = t('journey.absent.notIndexed') + ' · ' + (body.sentence || ''); done(null); return; }
     CMP.data = body;
     done(body);
   }).catch((err) => {

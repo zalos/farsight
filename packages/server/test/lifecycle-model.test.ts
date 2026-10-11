@@ -84,3 +84,19 @@ test('the table is every status then every overlay; a mover placed on a screen g
   assert.equal(placedView(view, { views: [{ persona: { id: 'ops' } }, { persona: { id: 'billing' }, x: 1 }] }).x, 1);
   assert.equal(placedView(view, null), view);
 });
+
+test('swarm round 3: an arrow leaves any status a move’s table lets it leave, and the table says where it comes from', () => {
+  const v = {
+    persona: null, declared: false, overlays: [], counts: {},
+    rows: [
+      { kind: 'status', status: 'VERIFIED', word: 'Verified', declared: false, written: true, movers: [mover('verify', { from: 'SUBMITTED' })] },
+      { kind: 'status', status: 'PENDING', word: 'Pending', declared: false, written: false, movers: [] },
+      { kind: 'status', status: 'APPROVED', word: 'Approved', declared: false, written: true, movers: [mover('approve', { fromAny: ['VERIFIED', 'PENDING'] })] },
+    ],
+  };
+  assert.deepEqual(stripItems(v, 'code').map((x: { sep: string }) => x.sep), ['', '·', '→'], 'pending → approved: the table of moves lets the record leave pending');
+  const rows = tableRows(v, () => null);
+  assert.deepEqual(rows[2].movers[0].from, ['VERIFIED', 'PENDING']);
+  assert.deepEqual(rows[0].movers[0].from, ['SUBMITTED']);
+  assert.deepEqual(rows[1].movers, []);
+});

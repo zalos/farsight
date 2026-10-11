@@ -531,7 +531,8 @@ export function linkPreconditions(repo: string, nodes: Map<string, GraphNode>, e
     const pre: Precondition = {
       record: p.record, ...(p.table ? { table: p.table } : {}), field: p.field, requires: p.requires, ...(p.excludes?.length ? { excludes: p.excludes } : {}),
       kind: p.kind, else: p.else, via: p.via, path: p.path, line: p.line, class: p.class,
-      tier: p.class === 'integrity' ? 'policy' : 'business',
+      // every precondition class (record state, completeness, integrity) is a business control (core TIER_OF_CLASS)
+      tier: 'business',
       words: p.words || humanizePrecondition(p), wordsFrom: p.words ? p.wordsFrom : 'humanize', action: p.action, relation: p.relation,
     };
     const id = `${repo}::precondition::${action.loc.path}::${action.name.split(': ')[0]}::${p.record}.${p.field}${p.kind === 'present' ? '#present' : ''}`;

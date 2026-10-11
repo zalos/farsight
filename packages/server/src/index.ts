@@ -16,7 +16,7 @@ import {
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
   counted, journeyTree, configCounts, gateCard, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
-  tourOf, ask,
+  tourOf, ask, askExample,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
 import { refuseRequest, refuseWrite } from './guard.js';
@@ -1008,9 +1008,15 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const q = new URL(url, 'http://localhost').searchParams;
       const question = (q.get('q') ?? '').trim().slice(0, 500);
+      const repo = q.get('repo') || undefined;
+      // ?example=1 — the box's example question, built from this graph's own statuses (swarm round 3: the fixed
+      // placeholder asked about an *open* invoice the reference app has no status for)
+      if (!question && q.get('example')) {
+        const g = loadJourneyGraph(graphPath);
+        return send(200, JSON.stringify({ example: folded(g.index, 'ask-example', repo ?? '', () => askExample(g.index, repo) ?? null, 4) }));
+      }
       if (!question) return send(400, JSON.stringify({ error: 'missing ?q=<question>' }));
       const g = loadJourneyGraph(graphPath);
-      const repo = q.get('repo') || undefined;
       const answer = folded(g.index, 'ask', `${question.toLowerCase()}\u0000${repo ?? ''}`, () => ask(g.index, question, { metas: g.meta.journeys, ...(repo ? { repo } : {}) }), 32);
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, sync: g.meta.sync ?? null, answer }));
     }

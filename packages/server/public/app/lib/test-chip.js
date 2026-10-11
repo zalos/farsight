@@ -49,14 +49,60 @@ export function runPartsHtml(verdict, api) {
     + '<span data-run-part="' + k + '" class="tc-run ' + k + '"' + plainTip(v[k], 'count.part.' + k, scope, api || '/api/journey') + '>' + esc(countWords('count.part.' + k, v[k])) + '</span>').join('');
 }
 
+/**
+ * A partly built journey's word: the build state before it and the scope after it (core `EvidenceWord.builtOnly`,
+ * swarm round 3 finding 3) — *partly built · 3 of 4 · PASSED … · over the 3 built screens*. Build state wins, so it
+ * is printed first and the word loses its pass colour (`.builtonly`). `{ before: '', after: '' }` for any other word.
+ */
+export function builtOnlyHtml(ev) {
+  const b = ev && ev.builtOnly;
+  if (!b) return { before: '', after: '', cls: '' };
+  return {
+    before: '<span class="tc-pb"' + defAttrs('tests.builtOnly.before', null, { n: b.built, m: b.of }) + '>' + sym('warning') + esc(countWords('tests.builtOnly.before', b.built, b.of)) + '</span>' + SEP,
+    after: SEP + '<span class="tc-pba"' + defAttrs('tests.builtOnly.after', null, { n: b.built }) + '>' + esc(countWords('tests.builtOnly.after', b.built)) + '</span>',
+    cls: ' builtonly',
+  };
+}
+
 /** The evidence word as a chip, with the journey's evidence tip (registered by the journey surface). */
 export function testEvidenceHtml(facts, opts = {}) {
   const f = facts || {};
   const ev = f.evidenceWord || (f.verdict && f.verdict.word) || null;
   if (!ev || !ev.key || ev.cls === 'none') return '';
   const glyph = ev.cls === 'observed' ? sym('live') : ev.cls === 'stale' ? sym('stale') : ev.cls === 'reached' ? sym('step') : '';
-  return EV_OPEN + esc(ev.cls) + ' ' + esc(opts.evCls || '') + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: f.observation || null, verdict: f.verdict ? { status: f.verdict.status } : null, fresh: f.freshness || null } }) + '>'
-    + glyph + esc(t(ev.key)) + '</span>';
+  const pb = builtOnlyHtml(ev);
+  // a head that prints *n of m screens built* beside the chip keeps the scope after the word and drops the repeat before it
+  if (opts.builtShown) pb.before = '';
+  return pb.before + EV_OPEN + esc(ev.cls) + pb.cls + ' ' + esc(opts.evCls || '') + '"' + tipAttrs({ id: 'jrnEvidence', args: { ev, obs: f.observation || null, verdict: f.verdict ? { status: f.verdict.status } : null, fresh: f.freshness || null } }) + '>'
+    + glyph + esc(t(ev.key)) + '</span>' + pb.after;
+}
+
+/**
+ * What the word is a verdict over, when a declaration earned it: *by the 29 end-to-end cases that declare it* —
+ * so *PASSED* never sits beside a bare *29 of them passed* that reads as 29 of the 401 (swarm round 3, finding 4).
+ */
+export function testBasisHtml(facts) {
+  const o = facts && facts.observation;
+  if (!o || o.by !== 'declaration' || !o.cases) return '';
+  return SEP + '<span class="tc-basis"' + defAttrs(o.cases === 1 ? 'journey.obs.passedOne' : 'journey.obs.passed', null, { n: o.cases }) + '>' + esc(countWords('journey.obs.passed', o.cases)) + '</span>';
+}
+
+/**
+ * The cases by their own last runs as one sentence after the count they break down: *401 test cases · … · 389 passed ·
+ * 9 skipped · 3 with no run recorded*, the parts of the chip's own number (core `TestVerdict.runs`, a breakdown that sums), each with its tip.
+ * Printed whenever a part is not *passed*, so a word never hides its skips or its unrun cases; '' when every case passed.
+ */
+export function runsSentenceHtml(verdict, api) {
+  const v = verdict || {};
+  const runs = v.runs;
+  const parts = ((runs && runs.breakdown) || []).filter((p) => p.n > 0);
+  if (!parts.length || parts.every((p) => p.key === 'count.part.passed')) return runPartsHtml(verdict, api);
+  const scope = (runs && runs.scope) || '';
+  return SEP + '<span class="tc-runs">'
+    + parts.map((p) => {
+      const k = p.key.replace('count.part.', '');
+      return '<span data-run-part="' + esc(k) + '" class="tc-run ' + esc(k) + '"' + plainTip(p.n, p.key, scope, api || '/api/journey') + '>' + esc(countWords(p.key, p.n)) + '</span>';
+    }).join('<span class="tc-sep"> · </span>') + '</span>';
 }
 
 /**
@@ -66,7 +112,7 @@ export function testEvidenceHtml(facts, opts = {}) {
  * count came from (its tip), `opts.distinct` marks a total printed beside
  * per-screen counts (its tip is `opts.distinct`, the per-screen table args),
  * `opts.word: false` leaves the evidence word out (a caller that prints it
- * itself), `opts.cls` adds a class, `opts.zero` prints a 0 with its scope. `''` when the fold has no cases and no
+ * itself), `opts.basis: false` leaves out the declaring cases beside the word (a card with no room; the word's tip names them), `opts.cls` adds a class, `opts.zero` prints a 0 with its scope. `''` when the fold has no cases and no
  * report — the caller prints its absence words, which carry their own scope.
  */
 export function testChipHtml(facts, opts = {}) {
@@ -90,8 +136,8 @@ export function testChipHtml(facts, opts = {}) {
   const word = opts.word === false ? '' : testEvidenceHtml(f, opts);
   return CHIP_OPEN + esc(opts.cls || '') + '" data-scope="' + esc(k.scope || '') + '">'
     + num + SEP + scopeWordHtml(scope) + distinct
-    + (word ? SEP + word : '')
-    + runPartsHtml(f.verdict, opts.api)
+    + (word ? SEP + word + (opts.basis === false ? '' : testBasisHtml(f)) : '')
+    + (opts.runs === false ? runPartsHtml(f.verdict, opts.api) : runsSentenceHtml(f.verdict, opts.api))
     + '</span>';
 }
 

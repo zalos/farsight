@@ -48,6 +48,11 @@ test('each position has its own word, in both registers', () => {
     assert.match(reg('journey.sheetCorner'), /\bstop\b/);
     assert.match(reg('journey.biz.sheetCorner'), /\bstop\b/);
     assert.match(reg('journey.drill.actionOf'), /^stop \{n\} of \{t\} on this journey$/);
+    // swarm round 3: every position says what it is a position in — the screen's actions (the crumb and the caption
+    // under the strip share it), the journey's stops (the drill's rail), the walk's own stops
+    assert.match(reg('map.crumb.action'), /^action \{n\} of \{m\}$/);
+    assert.match(reg('map.act.onScreen'), /^action \{n\} of \{m\} on this screen$/);
+    assert.match(reg('tour.stopOf'), /^stop \{n\} of \{m\} on this walk$/);
     assert.match(reg('journey.insp.stopOf'), /^stop \{n\} of \{t\}$/);
     assert.match(reg('journey.scene.actions'), /^stops /);
     assert.match(reg('journey.ledger.actionOf'), /^stop \{n\} of \{t\} on this screen/);
