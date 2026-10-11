@@ -791,10 +791,16 @@ function routeFlow(route) { return route && route.param ? decode(route.param) : 
  * from — a route, a function, a page no journey shows, a journey out of scope — is drawn as a journey of its own on
  * the board, walked from that entry (`entryDistrict`). Null when the graph has no such node.
  */
-function entryTarget(id) {
+async function entryTarget(id) {
   if (MAP.geom.has(id)) return { flow: id };
   const n = S.BYID && S.BYID[id];
-  if (!n) return null;
+  if (!n) {
+    // a name, not an id — `#/map/new-invoice`, as a person types it or an old journey link carried it: the journey
+    // the server resolves that name to (the walk's own `resolvedFrom`, the rule the journey page used), else the one
+    // journey on the board whose manifest id or node id ends in it; the address is rewritten to the full id
+    const named = await resolveEntryName(id);
+    return named && named !== id && (MAP.geom.has(named) || (S.BYID && S.BYID[named])) ? entryTarget(named) : null;
+  }
   if (n.kind === 'page') {
     const order = MAP.nb.districts.map((d) => d.id);
     for (const fid of order) {
@@ -806,6 +812,15 @@ function entryTarget(id) {
     if (d) return { flow: d.id, node: n.id };
   }
   return entryDistrict(n) ? { flow: id } : null;
+}
+/** The full node id a name resolves to: the server's answer (`/api/journey` resolves a pasted name), else a journey on the board whose manifest id or id ends in it. */
+async function resolveEntryName(name) {
+  const data = await fetchJourney(name);
+  const got = data && data.entry && data.entry.id;
+  if (got) return got;
+  const ds = (MAP.nbAll && MAP.nbAll.districts) || [];
+  const hit = ds.find((d) => d.flowId === name) || ds.find((d) => String(d.id).endsWith('::' + name));
+  return hit ? hit.id : null;
 }
 /**
  * Draw an entry as a journey of its own: a district in its source's band, named as the node is, walked from it by the
@@ -852,7 +867,9 @@ async function applyRouteTarget(route, animate) {
   }
   // an address that names no journey on the board: a screen is that screen on the journey that shows it; anything
   // else a journey can start from is walked from where it starts (*Run journey*, the front door's entry points)
-  const ent = entryTarget(flow);
+  const gen0 = MAP.gen;
+  const ent = await entryTarget(flow);
+  if (gen0 !== MAP.gen) return;
   if (!ent) { fitAll(false); MAP.fitted = true; return; }
   if (ent.flow !== flow || ent.node) {
     history.replaceState(null, '', withParams(location.hash.replace(/^#\/map\/[^?@]*/, '#/map/' + encodeURIComponent(ent.flow)), { node: ent.node || null }));
