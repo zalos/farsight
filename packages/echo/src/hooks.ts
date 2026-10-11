@@ -6,8 +6,8 @@ import type { EchoContext } from './types.js';
 
 export type HookHost = 'claude' | 'codex' | 'vscode';
 
-/** Events shared by the verified command-hook formats of both hosts. */
-export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'PreCompact', 'Stop'] as const;
+/** Only events that currently contribute memory context. Capture events are deferred. */
+export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit'] as const;
 
 function words(key: string, values: Record<string, string> = {}): string {
   return ECHO_HOOK_STRINGS[key]!.professional.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match);

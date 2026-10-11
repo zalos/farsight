@@ -15,6 +15,10 @@ const profile: EchoProfile = {
   budget: { briefMaxChars: 1500, modelMaxTokens: 256, timeoutMs: 5000 },
 };
 
+test('only events with current memory behavior are registered', () => {
+  assert.deepEqual(HOOK_EVENTS, ['SessionStart', 'UserPromptSubmit']);
+});
+
 async function fixture(): Promise<{ root: string; ctx: EchoContext; executable: string }> {
   const root = await mkdtemp(join(tmpdir(), 'echo-hooks-'));
   // Shell-sensitive characters must remain literal throughout the runner chain.

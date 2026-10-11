@@ -27,7 +27,10 @@ packages/work-fixture/fixtures/**/applied.jsonl
 .farsight/settings.json
 .echo/*
 !.echo/settings.example.json
+!.echo/connection.example.json
 .claude/settings.local.json
+.codex/hooks.json
+.github/hooks/echo.json
 
 # local, never committed: the commit → session map and other owner-only notes
 .private/
