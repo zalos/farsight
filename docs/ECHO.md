@@ -11,9 +11,9 @@ The intended workflow is a small brief before each agent request, with source li
 | Separate personal and work profiles | Shared service authentication and team permissions |
 | Workspace stores or one current-user global store connected to selected workspaces | Memory migration and combined local/global retrieval |
 | Managed local or explicitly configured external agentmemory | Shared hosted deployment and synchronization |
-| Ollama and OpenAI-compatible model adapters; Ollama verified locally | Additional native provider adapters and provider selection policy |
+| Configurable sub-mind through local/remote Ollama or a hosted compatible API; deterministic mock mode | Additional native providers, endpoint-specific live acceptance checks, and automatic provider selection |
 | Standalone local settings view with an allowed Farsight embedding origin | A Farsight navigation entry and integrated memory viewer |
-| Explicit managed-memory saves, scoped recall, and bounded prompt context | Automatic capture and model-driven memory briefs |
+| Explicit managed-memory saves, scoped recall, bounded prompt context, and explicit sub-mind research with follow-up evidence reads | Automatic capture, proactive hook curation, and memory edits |
 | Workspace hooks for Claude Code, Codex, and VS Code Local; optional Claude/Codex plugin preparation | Copilot Agent Host integration and automatic host trust |
 | Configured skill directories | Skill discovery, installation, and execution |
 | Synthetic save, search, restart, and isolation verification | Production retention, daily/topic rollups, and memory review |
@@ -141,7 +141,8 @@ These identity fields are local routing metadata. They are not login, membership
 | `web` | Local port and optional exact Farsight origin allowed to embed the view |
 | `hooks` | Whether each host may bind sessions and use prompt recall; installation is separate from host trust |
 | `skills.directories` | Explicit future skill sources; no installation or execution |
-| `budget` | Model timeout, generation limit, and final summary character limit; future briefs will use the same boundary |
+| `budget` | Individual model timeout, per-response generation limit, and final brief character limit |
+| `submind` | Optional off/mock/model mode and per-request research, age, evidence, total input, deadline, and expansion limits; absent means off |
 
 Credentials are references to local secret storage, never literal keys in settings. The settings view must not return credential values. A Farsight embedding origin permits framing the view; it does not grant access to memory or connect the two graphs.
 
@@ -162,6 +163,49 @@ Use a service origin as the model address, without a path: Ollama uses its chat 
 uses `/v1/chat/completions`. Compatibility is tested with a local fixture; each hosted provider still needs its own
 connection check. Ollama summaries use a structured response so thinking text is not mistaken for a brief.
 The final summary is capped by characters; this is not a claim about the main agent's exact token count.
+
+## Sub-mind research and remote inference
+
+The sub-mind is an optional read-only curator invoked by `ask --query TEXT`; installed hooks retain raw recall.
+It defaults to off, so an existing installation does not begin making model requests after upgrade. Mock mode
+searches the selected memory store and produces labeled deterministic excerpts without model calls. Model mode
+uses the profile's configured endpoint to research and summarize evidence. There is no fallback to another endpoint.
+
+The selected question and evidence may leave the machine in model mode. Memory storage and inference locations
+are independent: the memory backend can remain local while a desktop Ollama service or hosted compatible model
+performs inference. This milestone does not host the full Echo service remotely or expose the localhost portal.
+
+The settings view edits mode and limits without inference. It displays the running mode separately from saved
+configuration. Saving and restarting applies the mode; generation occurs only on explicit research or the optional
+`smoke --with-model` check. The latter is a real model call even when research mode is off or mock.
+
+The policy defaults are `mode: off`, `maxSteps: 3`, `maxSearches: 3`, `maxCandidates: 12`,
+`evidenceMaxChars: 12000`, `inputMaxChars: 48000`, `lookbackDays: 90`, `timeoutMs: 30000`, and
+`expandedMaxChars: 12000`. Search history is based on recorded save timestamps, not a claim about when the event
+actually occurred. Research allowances are independent of the initial brief limit; the total serialized input
+allowance counts repeated evidence on subsequent model calls. These are per-request controls, not session/day
+quotas or currency spending guarantees. Proactivity controls, capture, caches, and a memory exploration/editing
+portal are later milestones.
+
+The versioned `echo-memory/v1` result includes problem/fix/why findings, exact content citations, typed follow-up actions, non-exhaustive coverage, and per-request usage. The brief allowance bounds findings plus actions; envelope metadata is additional. `expand --id ID --revision HASH` reads more of the cited
+record without inference while rechecking scope and content revision. Echo constructs the actions; models cannot
+supply arbitrary executable URLs or commands. This is a discoverable-action contract inspired by hypermedia,
+without requiring agentmemory or the tool client to implement HAL.
+
+Configure models using service origins. An HTTPS gateway such as `https://models.example.com` with provider
+`openai-compatible` must implement `/v1/chat/completions`; do not put `/v1` in the origin. For remote Ollama,
+prefer HTTPS or a localhost tunnel such as `ssh -N -L 11435:127.0.0.1:11434 user@desktop.example`, then configure
+`http://127.0.0.1:11435`. Echo does not start Ollama, download models, or manage that remote process.
+
+An existing private-network API can instead use a literal RFC1918 address such as `http://192.168.1.20:11434`
+with the explicit model setting `allowInsecureHttp: true`. Only canonical RFC1918 IPv4 addresses qualify. Remote plaintext credentials are refused, and public
+HTTP addresses and remote DNS names do not qualify. Questions and evidence are unencrypted on that connection;
+HTTPS or SSH provides transport encryption. Backend address rules remain unchanged. Real deployment acceptance
+must be run separately when model compute is available; current protocol and research checks use synthetic fixtures.
+
+For a fully isolated model-free demonstration, run `farsight-echo submind-demo`. It uses an in-memory synthetic
+fixture, needs no configuration or running service, and starts no memory backend or model. See the
+[README](../packages/echo/README.md#configure-the-sub-mind-and-its-remote-model) for setup examples and commands.
 
 ## Memory runtime and storage
 
@@ -187,7 +231,7 @@ Search ranking remains an upstream limitation: the pinned backend ranks up to 50
 before applying the exact identity filters. A crowded shared backend can therefore omit a matching scoped memory.
 Use dedicated instances for this preview; bounded excerpts and exact filtering do not establish exhaustive recall.
 
-Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo's selected model handles the optional synthetic summary check. Prompt-time recall currently makes no model call. Engine/package installation requires downloads. Local model inference does not require a hosted model API, although a model may need an initial download. Future agentic brief generation will consume sidecar compute; the memory context already injected by hooks consumes the main agent's context.
+Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo’s selected model handles explicit sub-mind research in model mode and the optional synthetic summary check. Prompt-time hooks still make no model call. Engine/package installation requires downloads. Local model inference does not require a hosted model API. Research spends sidecar compute, and the brief delivered to the main agent consumes its context. Mock research performs no inference.
 
 ## Memory access and isolation
 
