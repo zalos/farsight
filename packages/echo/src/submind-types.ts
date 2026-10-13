@@ -47,7 +47,14 @@ export interface SubmindModelResponse {
   finishReason: string;
   usage: { inputTokens: number | null; outputTokens: number | null };
 }
-export interface SubmindCitation { id: string; revision: string }
+export interface SubmindCitation {
+  id: string;
+  revision: string;
+  /** Echo attaches source metadata from the inspected record, never from model output. */
+  title?: string;
+  timestamp?: string;
+  provenance?: MemoryProvenance;
+}
 export interface SubmindFinding {
   problem: string;
   fix: string;

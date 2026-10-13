@@ -16,6 +16,8 @@ import { hookContext } from './hook-context.js';
 import { installRuntime, startBackend, backendHealth, closeOwnedBackends, installedBackendVersion, runtimeInstalled, hasGlobalBackendConfig, AGENTMEMORY_VERSION, ENGINE_VERSION } from './runtime.js';
 import { smoke } from './smoke.js';
 import { word } from './words.js';
+import { submindDemo } from './submind-demo.js';
+import { echoSubmindWord } from '@farsight/core/dist/strings-echo-submind.js';
 import type { EchoConfig, EchoContext, CheckResult, BackendConnection } from './types.js';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -24,7 +26,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   install: { type: 'boolean' }, workspace: { type: 'string' }, content: { type: 'string' },
   query: { type: 'string' }, topic: { type: 'string', multiple: true }, limit: { type: 'string' },
   scope: { type: 'string' }, port: { type: 'string' }, 'backend-port': { type: 'string' },
-  confirm: { type: 'boolean' },
+  confirm: { type: 'boolean' }, id: { type: 'string' }, revision: { type: 'string' },
 } });
 const command = values.help ? 'help' : positionals[0] ?? 'help';
 const print = (data: unknown) => process.stdout.write(`${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}\n`);
@@ -182,6 +184,10 @@ async function hook(): Promise<void> {
 async function main(): Promise<void> {
   if (command === 'help') { print(word('help')); return; }
   if (command === 'hook') { await hook(); return; }
+  if (command === 'submind-demo') {
+    if (positionals.length > 1 || Object.keys(values).some(key => key !== 'query')) throw new Error(echoSubmindWord('input'));
+    print(await submindDemo(values.query)); return;
+  }
   if (positionals.length > 1) throw new Error(word('unknownCommand'));
   if (command === 'trust') {
     if (!values.confirm) throw new Error(word('trustConfirm'));
@@ -237,6 +243,14 @@ async function main(): Promise<void> {
   if (command === 'remember') {
     if (!values.content?.trim()) throw new Error(word('contentRequired'));
     print(await memoryRequest(ctx, 'remember', { content: values.content, topics: values.topic })); return;
+  }
+  if (command === 'ask') {
+    if (!values.query?.trim()) throw new Error(word('queryRequired'));
+    print(await memoryRequest(ctx, 'ask', { query: values.query })); return;
+  }
+  if (command === 'expand') {
+    if (!values.id || !values.revision) throw new Error(echoSubmindWord('reference'));
+    print(await memoryRequest(ctx, 'expand', { id: values.id, revision: values.revision })); return;
   }
   if (command === 'recall') {
     if (!values.query?.trim()) throw new Error(word('queryRequired'));

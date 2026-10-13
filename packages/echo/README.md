@@ -205,7 +205,7 @@ A profile's optional `submind` settings are separate from `model`, which selects
 | `maxSearches` | 3 | Maximum backend searches per request. |
 | `maxCandidates` | 12 | Maximum candidate memories considered. |
 | `evidenceMaxChars` | 12000 | Saved evidence allowance, separate from the brief shown to the main agent. |
-| `inputMaxChars` | 48000 | Cumulative serialized model input; evidence sent twice counts twice. |
+| `inputMaxChars` | 48000 | Cumulative serialized provider request content, including the schema and request envelope; evidence sent twice counts twice. |
 | `lookbackDays` | 90 | Eligible memory age by save timestamp; this does not remove older records. |
 | `timeoutMs` | 30000 | Total research deadline. |
 | `expandedMaxChars` | 12000 | Maximum evidence returned by an explicit follow-up read. |
@@ -218,13 +218,13 @@ After saving and restarting, use the same profile as the running service:
 farsight-echo ask --profile personal --query "How did we handle duplicate shipment requests?"
 ```
 
-The result uses `schema: "echo-memory/v1"` and reports `status` (`ready`, `partial`, `empty`, `disabled`, or `unavailable`), execution `mode`, findings with problem/fix/why and citations, typed actions, search coverage, and usage. Coverage explicitly remains non-exhaustive. Usage reports model calls, searches, evidence/input size, duration, and tokens when the provider reports them; unknown token usage is not zero. A `read_more` action names `operation: "memory.expand"` and supplies `arguments: {id, revision}`. Follow those exact values:
+The result uses `schema: "echo-memory/v1"` and reports `status` (`ready`, `partial`, `empty`, `disabled`, or `unavailable`), execution `mode`, findings with problem/fix/why and citations, typed actions, search coverage, and usage. Echo attaches each citation’s title, save timestamp, and known historical provenance from the inspected record. Coverage explicitly remains non-exhaustive. Usage reports model calls, searches, evidence/input size, duration, and tokens when the provider reports them; unknown token usage is not zero. A `read_more` action names `operation: "memory.expand"` and supplies `arguments: {id, revision}`. Follow those exact values:
 
 ```sh
 farsight-echo expand --profile personal --id MEMORY_ID --revision REVISION_HASH
 ```
 
-Expansion reads evidence without model inference and rechecks the selected scope and content revision. Expansion reports `ready`, `changed`, or `missing`. Treat a changed or missing reference as such; do not silently substitute a newer memory for the cited evidence. Actions are data describing supported Echo operations, not model-generated shell commands.
+Expansion reads evidence without model inference and rechecks the selected scope and content revision. Expansion reports `ready`, `changed`, or `missing`. A terminal read returns no further actions; clipped evidence is marked truncated rather than offering a repeating continuation. Treat a changed or missing reference as such; do not silently substitute a newer memory for the cited evidence. Actions are data describing supported Echo operations, not model-generated shell commands.
 
 For a desktop Ollama service reached through SSH, keep Ollama on its desktop loopback interface and forward it from the machine running Echo:
 

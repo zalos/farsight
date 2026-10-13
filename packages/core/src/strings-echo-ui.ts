@@ -64,7 +64,7 @@ export const ECHO_UI_STRINGS: Record<string, StringEntry> = {
   'echo.ui.submindOffNote': word('Research is off. It makes no model requests. Existing memory lookup still works.', 'This mode does not prevent explicit diagnostic model checks. Page loading and settings saves do not run them.'),
   'echo.ui.submindMockNote': word('Mock research returns labeled excerpts. It never calls or loads a model.', 'Mock mode can search the selected memory backend, but produces deterministic excerpts rather than a generated interpretation.'),
   'echo.ui.submindModelNote': word('After restart, explicit research sends the request and selected memory evidence to the configured model address.', 'Model mode may use local compute or a remote provider. It does not silently choose another endpoint, and hooks remain raw recall.'),
-  'echo.ui.maxSteps': word('Research steps', 'The maximum number of model decisions in one research request.'),
+  'echo.ui.maxSteps': word('Model decisions', 'The maximum number of model decisions in one research request.'),
   'echo.ui.maxSearches': word('Memory searches', 'The maximum number of memory searches in one research request.'),
   'echo.ui.maxCandidates': word('Candidate memories', 'The maximum number of candidate memories considered within one research request.'),
   'echo.ui.lookbackDays': word('Look back (days)', 'Only memories saved within this number of days are eligible for research. This does not delete older memories.'),

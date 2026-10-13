@@ -41,6 +41,33 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Echo sub-mind development round — 2026-10-13
+
+Branch `codex/echo-submind`, based on `d6ff0c6`, implements the first bounded, read-only research path. This is
+worktree validation, not a deployed runtime update. Existing live services and global installations were left alone.
+
+- `packages/echo/src/submind.ts` researches the selected profile with off/mock/model modes, bounded searches,
+  evidence, cumulative serialized model input, response size, age window and deadline. The optional configuration
+  defaults to off. `ask` returns `echo-memory/v1` problem/fix/why findings with validated citations and typed
+  `memory.expand` actions; `expand` rechecks scope and content revision without inference.
+- `research-store.ts` reads the pinned agentmemory API and reports non-exhaustive coverage. `models.ts` supports
+  native Ollama and a hosted/custom OpenAI-compatible gateway. HTTPS or an SSH loopback tunnel is preferred;
+  literal RFC1918 HTTP requires explicit opt-in and refuses remote plaintext credentials. Configuration, CLI,
+  private bridge, settings view, catalog strings, package map, security notes and setup docs were updated together.
+- `submind-demo` uses a synthetic in-memory store without configuration, service, network or model. Mock research
+  against a real store still requires that store. No real model, inference endpoint or memory engine was started
+  during this round; model protocol checks used synthetic HTTP fixtures.
+- Checks: `pnpm build`, `pnpm -r typecheck`, `FARSIGHT_LIVE=0 pnpm -r test` (1,395 passed; two live tracker tests
+  skipped; Echo 145 passed), `pnpm test:scripts` (14 passed), `pnpm lint:strings` (3,137 entries), and `pnpm e2e
+  --workers=1` (324 passed, isolated fixture ports). The Echo settings view was also checked at desktop and narrow
+  widths against a synthetic fixture with no page or console errors. `pnpm pack:echo` and the bundled
+  `submind-demo` passed with zero model calls and a successful evidence expansion.
+- Left open: acceptance against a real configured model when compute is available; proactive curated hooks,
+  capture and edits, the memory exploration portal, skills, caching, session/day quotas, team authentication and
+  shared-service hosting. Installed hooks retain raw recall. Remote model support does not expose Echo itself as
+  a remote service. Revisions detect content changes; they are not a durable history ledger. Full package runtime
+  smoke was deliberately not run locally because it starts the memory engine.
+
 ## Current state — 2026-10-10
 
 `main` is green. **The lanes round, its cleanup pass and swarm round 3's fixes are live** (items 15–18 below, PRs
