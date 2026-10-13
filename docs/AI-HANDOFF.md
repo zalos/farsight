@@ -683,6 +683,29 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       duplicates the Affected bar; the gate card can open over the top nav; the *row n* note in an empty lane is words,
       not a link; the sweep's `-screen` shots click a `ONE SCREEN` label that no longer exists.
 
+19. **The outsider demo — can a stranger understand the reference app from Farsight alone?** (2026-10-13; three new
+    personas in `.claude/agents/review-outsider-{consultant,customer,board}.md` and their Codex twins, a demo guide that
+    lives in the reference app's own repository and knows only what Farsight shows; `docs/review-swarm.md` § *The
+    outsiders*; reports, 283 PNGs, the gap log and `_synthesis.md` outside the repo). The guide walked eight stops on
+    4477 (`c5a5c7a`, sync 114, read-only) and put eight seed questions to the screens and to ASK; three outsiders (a new
+    implementation consultant, a prospective customer's head of operations, a non-executive director) said the app back,
+    asked 39 questions, and the guide answered from 120 new PNGs. **Board: PARTLY · PARTLY · MOSTLY, understanding 7/10
+    and confidence 6/10 for all three.** Seed questions from the screens 1 · partly 6 · not at all 1; the 39 follow-ups
+    12 · 23 · 4; **ASK understood 0 of 8 as worded** (10 of 10 once reshaped). All three were correct on the roles, the
+    invoice path, the vendor path, four-eyes and the POC status. All three were **wrong from the business register on
+    the two first-order facts** and corrected only through hybrid, the code map inspector, ⌘K's test names and the
+    Tests page: *who may approve* (the role guard covers the approve action and a passed test refuses a reviewer, but the
+    approve column has no WHO MAY and the gate card reads *a check nobody has put in words*) and *what makes an invoice
+    Paid* (ASK, the lifecycle table and the lanes pill credit the payment intent; the code and the passed e2e say mark
+    paid). Operator screens draw in the Contractor lane; vendor approval is never credited with Pending → Active; the
+    invoice journeys' head shows the outbox lifecycle. What none could learn because Farsight has no slot for it: the
+    client persona (receives, approves, pays the consolidated invoice; two personas in the tree), what is configurable
+    and by whom, the money's counterparties (the payment partner, who verifies bank details), separation of duties,
+    the audit actions, the correction request's lifecycle, the domain glossary. The synthesis sorts the worklist into
+    four bins — Farsight defects (A), Farsight features missing (B), reference-app knowledge to add in its manifest,
+    config and tags (C), and reference-app product findings to pass to its session (D: a self-registered vendor is
+    queued to the ERP before approval, no reject path, no separation of duties, no amount limits).
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -718,7 +741,7 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**Nothing is in flight (2026-10-11 evening).** Echo's PR #84 merged after a second review found its four blocking
+**Nothing is in flight (2026-10-13 evening; the outsider demo, item 19, is synthesised and its bins A–D are the next worklist).** Echo's PR #84 merged after a second review found its four blocking
 items fixed (the reviews stay outside the repo); lane S (#99) closed the cleanup pass. Next, in order: (1) a handoff prompt to
 the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
 `farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
