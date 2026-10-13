@@ -34,7 +34,7 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 - Codex: `.codex/config.toml` configures the workspace CLI over MCP stdio.
 - Claude Code: `.mcp.json` configures the same workspace CLI and graph. `.claude/launch.json` defines the viewer on port 4477.
 - Both launch `node packages/cli/dist/cli.js mcp --graph graph.json` from this repository root. Select the supported Node runtime in the environment launching the client. Existing desktop clients may retain their older PATH until restarted.
-- Both provider configurations have eight corresponding review personas under their respective `agents/` directories (how to run them: `docs/review-swarm.md`).
+- Both provider configurations have eight corresponding review personas and three outsider personas (a comprehension round on the application Farsight displays) under their respective `agents/` directories (how to run them: `docs/review-swarm.md`).
 - After rebuilding, restart running viewer/MCP processes before trusting new behavior. Reload the browser after refreshing the graph.
 - Use `node packages/cli/dist/cli.js status` to inspect build/graph/server currency. Do not assume a successful build updated an existing server.
 - Preserve the multi-source dogfood graph: use the workspace server's `POST /api/sync` after restart. Bare CLI ingest replaces it and ignores workspace source excludes. Smoke-test ingest from a temporary cwd with an explicit output path instead; SQLite history is cwd-relative too.
