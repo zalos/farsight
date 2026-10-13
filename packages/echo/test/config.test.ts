@@ -150,3 +150,54 @@ test('concurrent shared settings updates merge fresh values and failed edits rel
     await assert.rejects(stat(join(directory, '.echo-settings.lock')), { code: 'ENOENT' });
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('sub-mind defaults keep legacy profiles off and normalize bounded partial policies', async () => {
+  const { submindSettings } = await import('../dist/config.js');
+  const config = defaultConfig();
+  const profile = config.profiles.personal!;
+  assert.equal(profile.submind!.mode, 'off');
+  delete profile.submind;
+  const legacy = validateConfig(config).profiles.personal!;
+  assert.equal(legacy.submind, undefined);
+  assert.equal(submindSettings(legacy).mode, 'off');
+  (profile as any).submind = { mode: 'mock', maxSteps: 2 };
+  assert.deepEqual(validateConfig(config).profiles.personal!.submind, {
+    mode: 'mock', maxSteps: 2, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12_000,
+    inputMaxChars: 48_000, lookbackDays: 90, timeoutMs: 30_000, expandedMaxChars: 12_000,
+  });
+  for (const [key, value] of Object.entries({ mode: 'unknown', maxSteps: 9, maxSearches: 0, maxCandidates: 51,
+    evidenceMaxChars: 127, inputMaxChars: 256_001, lookbackDays: 3651, timeoutMs: 99, expandedMaxChars: 64_001 })) {
+    (profile as any).submind = { [key]: value };
+    assert.throws(() => validateConfig(config));
+  }
+  for (const submind of [null, [], { mode: null }, { maxSteps: 1.5 }, { unexpected: true }]) {
+    (profile as any).submind = submind;
+    assert.throws(() => validateConfig(config));
+  }
+});
+
+test('private network model transport requires explicit opt-in, literal private IPv4 and no credential', () => {
+  for (const baseUrl of ['http://10.0.0.2:11434', 'http://172.16.0.2:11434', 'http://172.31.255.254:11434', 'http://192.168.1.25:11434']) {
+    const config = defaultConfig();
+    config.profiles.personal!.model.baseUrl = baseUrl;
+    assert.throws(() => validateConfig(config));
+    config.profiles.personal!.model.allowInsecureHttp = true;
+    assert.equal(validateConfig(config).profiles.personal!.model.baseUrl, baseUrl);
+    config.profiles.personal!.model.secretRef = 'keychain:farsight-echo/example-model';
+    assert.throws(() => validateConfig(config), /encrypted model connection/);
+  }
+  for (const baseUrl of ['http://8.8.8.8', 'http://172.15.0.2', 'http://172.32.0.2', 'http://169.254.169.254',
+    'http://100.64.0.1', 'http://0.0.0.0', 'http://desktop.local:11434', 'http://models.example.com',
+    'http://10.1', 'http://0x0a000001', 'http://167772161', 'http://010.0.0.1', 'http://[fd00::1]:11434']) {
+    const config = defaultConfig();
+    config.profiles.personal!.model = { provider: 'ollama', baseUrl, model: 'example', allowInsecureHttp: true };
+    assert.throws(() => validateConfig(config), /service address/);
+  }
+  const config = defaultConfig();
+  (config.profiles.personal!.model as any).allowInsecureHttp = 'true';
+  assert.throws(() => validateConfig(config));
+  config.profiles.personal!.model = { provider: 'ollama', baseUrl: 'https://desktop.example.com', model: 'example' };
+  assert.equal(validateConfig(config).profiles.personal!.model.baseUrl, 'https://desktop.example.com');
+  config.profiles.personal!.backend = { mode: 'external', url: 'http://192.168.1.25:4611' };
+  assert.throws(() => validateConfig(config), /service address/, 'model exception never changes backend transport');
+});

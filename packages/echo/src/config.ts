@@ -2,6 +2,8 @@ import { chmod, link, lstat, mkdir, open, rename, unlink } from 'node:fs/promise
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
+import type { SubmindSettings } from './submind-types.js';
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { parseKeychainRef } from './secrets.js';
 import { withSettingsLock } from './settings-lock.js';
@@ -40,17 +42,57 @@ function profileName(value: unknown): string {
 }
 
 /** Canonical loopback aliases cannot bypass profile separation or port collisions. */
-function origin(value: unknown, localOnly = false): { url: string; exactUrl: string; local: boolean; port: number } {
+function origin(value: unknown, localOnly = false, allowPrivateHttp = false): { url: string; exactUrl: string; local: boolean; port: number } {
   if (typeof value !== 'string' || value !== value.trim() || /[\x00-\x20\x7f\\]/.test(value) || !/^https?:\/\/[^/?#]+\/?$/i.test(value)) fail('echo.config.url');
   let parsed: URL;
   try { parsed = new URL(value); } catch { fail('echo.config.url'); }
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.pathname !== '/' || parsed.search || parsed.hash || value.includes('?') || value.includes('#')) fail('echo.config.url');
   const hostname = parsed.hostname.toLowerCase().replace(/\.$/, '');
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(hostname);
-  if (localOnly && !local || !local && parsed.protocol !== 'https:') fail('echo.config.url');
+  // The HTTP exception is deliberately literal-only: DNS names and alternate numeric forms cannot qualify.
+  const rawHostname = value.match(/^https?:\/\/([^/:]+)(?::[0-9]+)?\/?$/i)?.[1];
+  const octets = hostname.split('.').map(Number);
+  const privateLiteral = isIP(hostname) === 4 && rawHostname === hostname && (octets[0] === 10 || octets[0] === 172 && octets[1]! >= 16 && octets[1]! <= 31 || octets[0] === 192 && octets[1] === 168);
+  if (localOnly && !local || !local && parsed.protocol !== 'https:' && !(allowPrivateHttp && privateLiteral)) fail('echo.config.url');
   const exactUrl = parsed.origin;
   parsed.hostname = local ? '127.0.0.1' : hostname;
   return { url: parsed.origin, exactUrl, local, port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80)) };
+}
+
+/** Validate at dispatch as well as settings load; exported adapters cannot bypass transport policy. */
+export function validateModelSettings(value: unknown): EchoProfile['model'] {
+  const model = record(value, ['provider', 'baseUrl', 'model', 'secretRef', 'allowInsecureHttp']);
+  if (model.provider !== 'ollama' && model.provider !== 'openai-compatible') fail();
+  const allowInsecureHttp = model.allowInsecureHttp === undefined ? false : bool(model.allowInsecureHttp);
+  const address = origin(model.baseUrl, false, allowInsecureHttp);
+  const modelSecret = secret(model.secretRef);
+  if (!address.local && address.exactUrl.startsWith('http:') && modelSecret !== undefined) fail('echo.config.modelHttpSecret');
+  return {
+    provider: model.provider, baseUrl: address.exactUrl, model: label(model.model, 'echo.config.shape', true),
+    ...(modelSecret === undefined ? {} : { secretRef: modelSecret }),
+    ...(model.allowInsecureHttp === undefined ? {} : { allowInsecureHttp }),
+  };
+}
+
+const SUBMIND_DEFAULTS: Readonly<SubmindSettings> = Object.freeze({
+  mode: 'off', maxSteps: 3, maxSearches: 3, maxCandidates: 12,
+  evidenceMaxChars: 12_000, inputMaxChars: 48_000, lookbackDays: 90,
+  timeoutMs: 30_000, expandedMaxChars: 12_000,
+});
+
+/** Legacy profiles stay off. Partial settings receive the same limits at load, dispatch and fingerprinting. */
+export function submindSettings(profile: Pick<EchoProfile, 'submind'>): SubmindSettings {
+  const settings = profile.submind === undefined ? {} : record(profile.submind, Object.keys(SUBMIND_DEFAULTS));
+  const mode = settings.mode === undefined ? SUBMIND_DEFAULTS.mode : settings.mode;
+  if (mode !== 'off' && mode !== 'mock' && mode !== 'model') fail('echo.config.submind');
+  const limit = (key: Exclude<keyof SubmindSettings, 'mode'>, min: number, max: number) =>
+    integer(settings[key] === undefined ? SUBMIND_DEFAULTS[key] : settings[key], min, max, 'echo.config.submind');
+  return {
+    mode, maxSteps: limit('maxSteps', 1, 8), maxSearches: limit('maxSearches', 1, 8),
+    maxCandidates: limit('maxCandidates', 1, 50), evidenceMaxChars: limit('evidenceMaxChars', 128, 64_000),
+    inputMaxChars: limit('inputMaxChars', 1024, 256_000), lookbackDays: limit('lookbackDays', 1, 3650),
+    timeoutMs: limit('timeoutMs', 100, 300_000), expandedMaxChars: limit('expandedMaxChars', 128, 64_000),
+  };
 }
 
 function defaultProfile(index: number): EchoProfile {
@@ -62,6 +104,7 @@ function defaultProfile(index: number): EchoProfile {
     hooks: { claude: false, codex: false, vscode: false },
     skills: { directories: [] },
     budget: { briefMaxChars: 1200, modelMaxTokens: 384, timeoutMs: 60_000 },
+    submind: submindSettings({}),
   };
 }
 
@@ -86,7 +129,7 @@ export function validateConfig(value: unknown): EchoConfig {
   }
   for (const [name, value] of Object.entries(profiles)) {
     profileName(name);
-    const profile = record(value, ['identity', 'backend', 'model', 'web', 'hooks', 'skills', 'budget']);
+    const profile = record(value, ['identity', 'backend', 'model', 'web', 'hooks', 'skills', 'budget', 'submind']);
     const id = record(profile.identity, ['individual', 'team', 'project']);
     const backend = record(profile.backend, ['mode', 'url', 'secretRef']);
     if (backend.mode !== 'managed' && backend.mode !== 'external') fail();
@@ -99,9 +142,8 @@ export function validateConfig(value: unknown): EchoConfig {
       // agentmemory's REST, stream, viewer and engine ports must all be free.
       for (const port of [address.port, address.port + 1, address.port + 2, address.port + 46023]) reserve(port);
     } else if (address.local) reserve(address.port);
-    const model = record(profile.model, ['provider', 'baseUrl', 'model', 'secretRef']);
-    if (model.provider !== 'ollama' && model.provider !== 'openai-compatible') fail();
-    const modelAddress = origin(model.baseUrl);
+    const model = validateModelSettings(profile.model);
+    const modelAddress = origin(model.baseUrl, false, model.allowInsecureHttp);
     if (modelAddress.local) modelPorts.add(modelAddress.port);
     const web = record(profile.web, ['port', 'farsightOrigin']);
     const webPort = integer(web.port, 1024, 65535, 'echo.config.ports');
@@ -117,11 +159,11 @@ export function validateConfig(value: unknown): EchoConfig {
     const backendSecret = secret(backend.secretRef);
     // Managed instances use runtime-owned ephemeral authentication, never a user credential.
     if (backend.mode === 'managed' && backendSecret !== undefined) fail('echo.config.managedSecret');
-    const modelSecret = secret(model.secretRef);
     result.profiles[name] = {
       identity: { individual: identity(id.individual), project: identity(id.project), ...(id.team === undefined ? {} : { team: identity(id.team) }) },
       backend: { mode: backend.mode, url: backend.mode === 'managed' ? address.url : address.exactUrl, ...(backendSecret === undefined ? {} : { secretRef: backendSecret }) },
-      model: { provider: model.provider, baseUrl: modelAddress.exactUrl, model: label(model.model, 'echo.config.shape', true), ...(modelSecret === undefined ? {} : { secretRef: modelSecret }) },
+      model,
+      ...(profile.submind === undefined ? {} : { submind: submindSettings({ submind: profile.submind as SubmindSettings }) }),
       web: { port: webPort, ...(web.farsightOrigin === undefined ? {} : { farsightOrigin: origin(web.farsightOrigin, true).exactUrl }) },
       hooks: { claude: bool(hooks.claude), codex: bool(hooks.codex), vscode: hooks.vscode === undefined ? false : bool(hooks.vscode) },
       skills: { directories },
