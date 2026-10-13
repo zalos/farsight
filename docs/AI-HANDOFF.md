@@ -705,6 +705,26 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
     four bins — Farsight defects (A), Farsight features missing (B), reference-app knowledge to add in its manifest,
     config and tags (C), and reference-app product findings to pass to its session (D: a self-registered vendor is
     queued to the ERP before approval, no reject path, no separation of duties, no amount limits).
+    **The eight personas then proposed how to address it** (`_proposals/` and `_worklist.md` outside the repo) and found
+    the root causes, which the lead verified in the code: the Paid move is credited to the payment intent because the
+    only PAID writer is called there under a constant the code sets to `false` (the parser reads the dead branch as live,
+    and every surface takes the *first* place a writer appears); WHO MAY is missing on the approve column because
+    `core/query.ts` merges a screen's gates by name onto the first occurrence and unions `requires` (the data is in
+    `meta.requires` already, and the guard carries a `@business` sentence the gate card never falls back to); the
+    readiness brief's *0 of 6 ship* is `foldRuns()` taking the weakest status across browser projects, so a desktop pass
+    plus a viewport-conditioned mobile skip reads as skipped. **The worklist:** Farsight wave 1 = F1 credit a status move
+    to the live path that writes it (constant-false branches inactive; never first-occurrence; positional-literal and
+    ternary writers) · F2 a gate at every action it guards with that site's `requires`, card titled by the app's words,
+    a register-parity test · F3 a skip with its own condition on one project is not a skip of the case, PASSED paired
+    with the brief's reason · F6 business words from what the app wrote; wave 2 = F4 the role × action table with the
+    pinning tests quoted · F5 `screens[].persona` / `personas[].routes` · F7 ASK shapes as worded with the rewording
+    shown; wave 3 = F8 `decisions[]` + off-platform steps (`by`) + party externals · F11 cited ADRs quoted. Recall pack 1
+    (slots exist) = lifecycle views from `displayStep` · `gateTiers` + `@guard`/`@business` on the role tables and the
+    duplicate match · a glossary keyed by table written against the code · `@covers` on the specs that pin controls;
+    pack 2 = the client persona on the existing `client-portal` surface + persona per OPS screen; pack 3 = qualified
+    decisions. Rejected by consensus: a configuration or environment view now, silent noun-mapping in ASK, reading
+    `displayStep` automatically, model-written summaries, counting role holders. Re-run bar: confidence ≥ 8, zero wrong
+    answers on who approves and what makes Paid, the outsiders driving the business register themselves first.
 
 ## Release and CI — 2026-10-01
 
@@ -741,7 +761,7 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**Nothing is in flight (2026-10-13 evening; the outsider demo, item 19, is synthesised and its bins A–D are the next worklist).** Echo's PR #84 merged after a second review found its four blocking
+**Nothing is in flight (2026-10-13 night; the outsider demo, item 19, is synthesised and its worklist — Farsight waves F1–F3+F6 → F4·F5·F7 → F8·F11, Recall packs R1–R4 → R5·R6 → R7 — is the next round; see item 19).** Echo's PR #84 merged after a second review found its four blocking
 items fixed (the reviews stay outside the repo); lane S (#99) closed the cleanup pass. Next, in order: (1) a handoff prompt to
 the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
 `farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
