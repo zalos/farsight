@@ -132,51 +132,59 @@ function tokenCount(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
-/** One structured generation only. Research tools, citation validation and write policy belong to Echo. */
-export async function generateSubmind(profile: EchoProfile, input: SubmindModelRequest): Promise<SubmindModelResponse> {
+/** Construct only data: measurement cannot resolve credentials or contact any service. */
+function submindBody(profile: EchoProfile, input: SubmindModelRequest) {
   const model = validateModelSettings(profile.model);
-  if (!model.model) fail('echo.model.choose');
-  const settings = submindSettings(profile);
   if (!input || !Array.isArray(input.messages) || !input.messages.length || input.messages.length > 64) fail('echo.model.input');
-  let inputChars = 0;
   const messages = input.messages.map(message => {
     if (!message || !['system', 'user', 'assistant'].includes(message.role) || typeof message.content !== 'string') fail('echo.model.input');
-    inputChars += message.content.length;
     return { role: message.role, content: message.content };
   });
-  if (inputChars > settings.inputMaxChars) fail('echo.model.input');
   if (!input.schema || typeof input.schema !== 'object' || Array.isArray(input.schema)) fail('echo.model.input');
   let schemaText: string;
-  try { schemaText = JSON.stringify(input.schema); } catch { fail('echo.model.input'); }
+  let schema: Record<string, unknown>;
+  try {
+    schemaText = JSON.stringify(input.schema);
+    schema = object(JSON.parse(schemaText));
+  } catch { fail('echo.model.input'); }
   if (!schemaText || schemaText.length > 32_768) fail('echo.model.input');
-  const schemaInstruction = `${echoConfigWord('echo.model.jsonPrompt')}\n${schemaText}`;
-  const schemaChars = model.provider === 'ollama' ? schemaText.length : schemaInstruction.length;
-  if (inputChars + schemaChars > settings.inputMaxChars) fail('echo.model.input');
   const budgetTokens = profile.budget.modelMaxTokens;
   const outputTokens = input.maxOutputTokens ?? budgetTokens;
   if (!Number.isSafeInteger(budgetTokens) || budgetTokens < 32 || budgetTokens > 4096 || !Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > budgetTokens) fail('echo.model.input');
-  const timeoutMs = Math.min(settings.timeoutMs, profile.budget.timeoutMs);
-  const options = { signal: input.signal, timeoutMs };
+  const body = model.provider === 'ollama' ? {
+    model: model.model, messages, stream: false, think: false, format: schema,
+    options: { num_predict: outputTokens, temperature: 0 },
+  } : {
+    model: model.model,
+    messages: [{ role: 'system', content: `${echoConfigWord('echo.model.jsonPrompt')}\n${schemaText}` }, ...messages],
+    stream: false, response_format: { type: 'json_object' }, max_tokens: outputTokens, temperature: 0,
+  };
+  return { model, body };
+}
+
+/** Exact serialized request characters, including provider envelopes and JSON escaping. No model call. */
+export function submindInputChars(profile: EchoProfile, input: SubmindModelRequest): number {
+  return JSON.stringify(submindBody(profile, input).body).length;
+}
+
+/** One structured generation only. Research tools, citation validation and write policy belong to Echo. */
+export async function generateSubmind(profile: EchoProfile, input: SubmindModelRequest): Promise<SubmindModelResponse> {
+  const { model, body } = submindBody(profile, input);
+  if (!model.model) fail('echo.model.choose');
+  const settings = submindSettings(profile);
+  if (JSON.stringify(body).length > settings.inputMaxChars) fail('echo.model.input');
+  const options = { signal: input.signal, timeoutMs: Math.min(settings.timeoutMs, profile.budget.timeoutMs) };
+  const path = model.provider === 'ollama' ? '/api/chat' : '/v1/chat/completions';
+  const response = object(await request(profile, path, body, options));
   let raw: unknown;
   let usage: SubmindModelResponse['usage'];
   let finishReason: unknown;
   if (model.provider === 'ollama') {
-    const response = object(await request(profile, '/api/chat', {
-      model: model.model, messages, stream: false, think: false, format: input.schema,
-      options: { num_predict: outputTokens, temperature: 0 },
-    }, options));
     finishReason = response.done_reason;
     if (response.done !== true || finishReason !== 'stop') fail('echo.model.incomplete');
     raw = object(response.message).content;
     usage = { inputTokens: tokenCount(response.prompt_eval_count), outputTokens: tokenCount(response.eval_count) };
   } else {
-    // JSON mode has wider compatible-server support than strict JSON-schema response_format.
-    // The contract is included as a system instruction; Echo validates the returned object separately.
-    const schemaMessage = { role: 'system', content: schemaInstruction };
-    const response = object(await request(profile, '/v1/chat/completions', {
-      model: model.model, messages: [schemaMessage, ...messages], stream: false,
-      response_format: { type: 'json_object' }, max_tokens: outputTokens, temperature: 0,
-    }, options));
     if (!Array.isArray(response.choices) || response.choices.length !== 1) fail('echo.model.response');
     const choice = object(response.choices[0]);
     finishReason = choice.finish_reason;

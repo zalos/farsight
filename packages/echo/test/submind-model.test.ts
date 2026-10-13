@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { defaultConfig } from '../dist/config.js';
-import { generateSubmind, listModels, summarize } from '../dist/models.js';
+import { generateSubmind, submindInputChars, listModels, summarize } from '../dist/models.js';
 import type { EchoProfile } from '../dist/types.js';
 import type { SubmindModelRequest } from '../dist/submind-types.js';
 
@@ -188,4 +188,56 @@ test('sub-mind deadline bounds header and body waits and provider failures never
   await fixture((_req, res) => res.end(JSON.stringify(ollama({ message: { content: 'x'.repeat(1_100_000) } }))), async profile => {
     await assert.rejects(generateSubmind(profile, input()), /unusable response/);
   });
+});
+
+
+test('input measurement exactly matches serialized provider requests including schema and content escaping', async () => {
+  for (const provider of ['ollama', 'openai-compatible'] as const) {
+    const sample = input();
+    sample.messages[1]!.content = 'A line\nwith "quotes", a tab\tand a slash\\.';
+    sample.schema.description = 'Schema "quotes" and\nnewlines\\paths';
+    let serialized = '';
+    await fixture((req, res) => {
+      req.setEncoding('utf8');
+      req.on('data', chunk => { serialized += chunk; });
+      req.on('end', () => res.end(JSON.stringify(provider === 'ollama' ? ollama() : compatible())));
+    }, async profile => {
+      profile.model.provider = provider;
+      const measured = submindInputChars(profile, sample);
+      await generateSubmind(profile, sample);
+      assert.equal(measured, serialized.length);
+      assert.ok(measured > JSON.stringify({ messages: sample.messages, schema: sample.schema }).length);
+      if (provider === 'openai-compatible') {
+        assert.ok(JSON.parse(serialized).messages[0].content.includes(JSON.stringify(sample.schema)));
+      }
+    });
+  }
+});
+
+test('serialized input cap refuses escaped requests before dispatch and accepts the exact boundary', async () => {
+  for (const provider of ['ollama', 'openai-compatible'] as const) {
+    let calls = 0;
+    await fixture((_req, res) => { calls++; res.end(JSON.stringify(provider === 'ollama' ? ollama() : compatible())); }, async profile => {
+      profile.model.provider = provider;
+      const sample = input();
+      sample.messages[1]!.content = '\n'.repeat(1000);
+      const measured = submindInputChars(profile, sample);
+      profile.submind!.inputMaxChars = measured - 1;
+      assert.equal(submindInputChars(profile, sample), measured, 'measurement remains available above the configured allowance');
+      await assert.rejects(generateSubmind(profile, sample), /configured limits/);
+      assert.equal(calls, 0);
+      profile.submind!.inputMaxChars = measured;
+      await generateSubmind(profile, sample);
+      assert.equal(calls, 1);
+    });
+  }
+});
+
+test('input measurement needs neither a selected model nor a resolved credential', () => {
+  const profile = defaultConfig().profiles.personal!;
+  profile.model.baseUrl = 'https://models.example.com';
+  profile.model.secretRef = 'keychain:farsight-echo/not-enrolled';
+  assert.ok(submindInputChars(profile, input()) > 0);
+  profile.model.provider = 'openai-compatible';
+  assert.ok(submindInputChars(profile, input()) > 0);
 });
