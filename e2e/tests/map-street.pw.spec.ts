@@ -92,7 +92,7 @@ test.describe('map — neighbourhood and street', () => {
     await expect(page.locator('#nav .navtab.on')).toHaveText('Map');
 
     const districts = page.locator('.map-district');
-    await expect(districts).toHaveCount(3);
+    await expect(districts).toHaveCount(4); // + Get paid (lane moves)
     await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
     for (const name of ['Billing cycle', 'Start a new invoice', 'Draft and send an invoice']) {
       await expect(page.locator('.map-dcover .nm', { hasText: name })).toBeVisible();
@@ -105,7 +105,7 @@ test.describe('map — neighbourhood and street', () => {
     // at the fit: one band for the one source, no two districts overlap, every cover's name reads at ≥ 12 px
     // and draws inside its district; part-of links wait for a hover
     await expect(page.locator('.map-band .w')).toHaveText(['invoice-app']);
-    await expect(page.locator('.map-band .n')).toHaveText(['3 journeys']);
+    await expect(page.locator('.map-band .n')).toHaveText(['4 journeys']);
     // a cover at the board is a card: the name, one status chip and at most two marks — no sentence, no chip row
     await expect(page.locator('.map-dcover .desc')).toHaveCount(0);
     for (const cv of await page.locator('.map-dcover .agg').all()) {

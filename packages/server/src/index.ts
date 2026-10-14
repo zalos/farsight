@@ -16,7 +16,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts, gateCard, roleTable, rolesCsv, decisionsAnswer, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
+  counted, journeyTree, configCounts, gateCard, roleTable, rolesCsv, decisionsAnswer, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placesOnJourney, flowWalks, type LifecyclePlace, type LifecyclePlaces, type LifecycleSwitchedPlace,
   tourOf, ask, askExample,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
@@ -1071,7 +1071,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const flowName = entryNode.kind === 'flow' ? (entryNode.design?.name ?? entryNode.name) : entryNode.name;
       const lifecycles = journeyLifecycles(g.index, jr, {
         personas: flowPersonas(g.index, g.meta.journeys, entry),
-        ...(entryNode.kind === 'flow' ? { locate: placeOnJourney({ id: entry, name: flowName }, jr, summary) } : {}),
+        // every place a writer runs on this journey, the most direct live one first, the switched-off ones apart
+        ...(entryNode.kind === 'flow' ? { places: placesOnJourney({ id: entry, name: flowName }, jr, summary) } : {}),
       });
       return send(200, JSON.stringify({
         entry: enrichNode(entryNode),
@@ -1109,17 +1110,30 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const answer = folded(g.index, 'lifecycle', `${id}\u0000${flow}`, () => {
         const walks = flowWalks(g.index);
         const order = [...walks.filter((w) => w.id === flow), ...walks.filter((w) => w.id !== flow)];
-        const locate = (writer: string): LifecyclePlace | undefined => {
-          for (const w of order) {
-            const sc = w.screens.find((x) => x.nodes.has(writer));
-            if (sc) {
-              const f = g.index.byId.get(w.id);
-              return { flowId: w.id, flowName: f?.design?.name ?? w.name, screen: sc.segment + 1, screenName: sc.name, here: w.id === flow };
+        // every live place a writer runs (lane moves, 2026-10-13): the open journey first, then the action that calls the
+        // writer most directly — never the first screen the walks met; the places a constant switches off apart
+        const places = (writer: string): LifecyclePlaces => {
+          const live: (LifecyclePlace & { rank: number })[] = [];
+          const off: LifecycleSwitchedPlace[] = [];
+          order.forEach((w, wi) => {
+            const f = g.index.byId.get(w.id);
+            for (const sc of w.screens) {
+              const base = { flowId: w.id, flowName: f?.design?.name ?? w.name, screen: sc.segment + 1, screenName: sc.name, here: w.id === flow };
+              const wr = sc.writers?.get(writer);
+              if (wr) live.push({ ...base, action: wr.action, hops: wr.hops, rank: wi });
+              else if (sc.nodes.has(writer)) live.push({ ...base, rank: wi });
+              const o = sc.off?.get(writer);
+              if (o && (!wr || wr.action !== o.action)) off.push({ ...base, action: o.action, flag: o.flag, value: o.value, at: o.at });
             }
-          }
-          return undefined;
+          });
+          live.sort((a, b) => Number(b.here) - Number(a.here) || (a.hops ?? 99) - (b.hops ?? 99) || a.rank - b.rank || a.screen - b.screen);
+          // one place per screen and action: the same screen on two journeys is one place a person acts from
+          const once = <T extends LifecyclePlace>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((p) => { const k = `${p.screenName}|${p.action ?? ''}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
+          // a switched-off call is one fact per action, however many screens show that action
+          const offOnce = off.filter((p, i) => off.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
+          return { live: once(live.map(({ rank: _r, ...p }) => p)), off: offOnce };
         };
-        return { node: id, name: node.name, views: lifecycleViews(g.index, node, { personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [], locate }) };
+        return { node: id, name: node.name, views: lifecycleViews(g.index, node, { personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [], places }) };
       }, 32);
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
     }

@@ -70,7 +70,13 @@ interface FlowWalk {
   id: string;
   name: string;
   nodes: Set<string>;
-  screens: { segment: number; screenId: string; name: string; nodes: Set<string> }[];
+  screens: {
+    segment: number; screenId: string; name: string; nodes: Set<string>;
+    /** writer id → the fewest calls under one of this screen's actions it runs at, and that action's label (lane moves) */
+    writers?: Map<string, { hops: number; action: string }>;
+    /** writer id → the constant that switches off this screen's call to it, and the action holding that call */
+    off?: Map<string, { flag: string; value: boolean; at: string; action: string }>;
+  }[];
 }
 
 const walkCache = new WeakMap<GraphIndex, FlowWalk[]>();
@@ -93,6 +99,8 @@ export function flowWalks(index: GraphIndex): FlowWalk[] {
       const sum = journeySummary(index, j, designed);
       const nodes = new Set<string>();
       for (const s of j.steps) {
+        // a call a constant switches off runs nothing: it is not part of what the journey reaches
+        if (s.switchedOff) continue;
         nodes.add(s.nodeId);
         for (const g of s.gates) nodes.add(g.id);
       }
@@ -102,7 +110,7 @@ export function flowWalks(index: GraphIndex): FlowWalk[] {
       for (const seg of sum.segments) {
         const own = new Set<string>(lead);
         for (const s of j.steps) {
-          if (s.order < seg.from || s.order > seg.to) continue;
+          if (s.order < seg.from || s.order > seg.to || s.switchedOff) continue;
           own.add(s.nodeId);
           for (const g of s.gates) own.add(g.id);
         }
@@ -115,7 +123,16 @@ export function flowWalks(index: GraphIndex): FlowWalk[] {
         if (!seg.screen) { lead = own; continue; }
         lead = new Set<string>();
         own.add(seg.screen.id);
-        screens.push({ segment: seg.index, screenId: seg.screen.id, name: seg.screen.name, nodes: own });
+        const writers = new Map<string, { hops: number; action: string }>();
+        const off = new Map<string, { flag: string; value: boolean; at: string; action: string }>();
+        for (const mo of seg.moments ?? []) {
+          for (const m of mo.preconditions?.moves ?? []) {
+            const had = writers.get(m.by);
+            if (!had || had.hops > (m.hops ?? 0)) writers.set(m.by, { hops: m.hops ?? 0, action: mo.label });
+          }
+          for (const m of mo.preconditions?.switchedOff ?? []) if (!off.has(m.by)) off.set(m.by, { flag: m.flag, value: m.value, at: m.at, action: mo.label });
+        }
+        screens.push({ segment: seg.index, screenId: seg.screen.id, name: seg.screen.name, nodes: own, ...(writers.size ? { writers } : {}), ...(off.size ? { off } : {}) });
         for (const id of own) nodes.add(id);
       }
       out.push({ id: flow.id, name: flow.name, nodes, screens });

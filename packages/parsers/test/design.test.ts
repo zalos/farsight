@@ -41,7 +41,7 @@ test('discoverManifests: examples/invoice-app/docs/design/screens.json is found 
   assert.equal(manifests.length, 1);
   assert.equal(manifests[0]!.path, 'docs/design/screens.json');
   assert.equal(manifests[0]!.origin, 'file');
-  assert.equal(manifests[0]!.manifest.screens.length, 3);
+  assert.equal(manifests[0]!.manifest.screens.length, 4);
   assert.equal(manifests[0]!.freshness, 'manifest');
   assert.ok(manifests[0]!.lastModified);
 });
@@ -51,9 +51,9 @@ test('ingestRepo post-pass on invoice-app: two screens built, one designed-only 
   const index = buildIndex(f.nodes, f.edges);
   const [d] = designSurface(index);
   assert.equal(d!.id, 'invoice-app::design::docs/design/screens.json');
-  assert.deepEqual(d!.counts, { screens: 4, designed: 3, built: 2, designOnly: 1, codeOnly: 1, drift: 3, flows: 3 });
+  assert.deepEqual(d!.counts, { screens: 5, designed: 4, built: 3, designOnly: 1, codeOnly: 1, drift: 3, flows: 4 });
   assert.deepEqual(d!.flows.map((x) => [x.id, x.built, x.total, x.screens]), [
-    ['billing-cycle', 2, 3, ['INV-02', 'INV-01', 'INV-03']], ['draft-and-send', 1, 2, ['INV-01', 'INV-03']], ['new-invoice', 1, 1, ['INV-02']],
+    ['billing-cycle', 2, 3, ['INV-02', 'INV-01', 'INV-03']], ['draft-and-send', 1, 2, ['INV-01', 'INV-03']], ['get-paid', 1, 1, ['INV-04']], ['new-invoice', 1, 1, ['INV-02']],
   ]);
   const byId = Object.fromEntries(d!.screens.map((s) => [s.designId ?? s.route, s]));
   assert.deepEqual(byId['INV-01']!.drift, [], 'the list page reaches exactly the four operations its design lists');

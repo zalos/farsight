@@ -93,12 +93,12 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     // Operations has one group: no group heading, the card straight under the persona
     const ops = page.locator('.jrn-persona[data-persona="ops"]');
     await expect(ops.locator('.jrn-ghead')).toHaveCount(0);
-    await expect(ops.locator('.dsg-flow-name')).toHaveText(['Draft and send an invoice']);
-    await expect(ops.locator('.dsg-flow')).toContainText('also for Billing');
+    await expect(ops.locator('.dsg-flow-name')).toHaveText(['Draft and send an invoice', 'Get paid']);
+    await expect(ops.locator('.dsg-flow').first()).toContainText('also for Billing');
     // counts: the tree once, each persona its own; every number carries its tip
-    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '3 groups']);
+    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['4 journeys', '2 personas', '3 groups']);
     await expect(billing.locator('.jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
-    await expect(ops.locator('.jrn-pcount .jrn-org-n').first()).toHaveText('1 journey');
+    await expect(ops.locator('.jrn-pcount .jrn-org-n').first()).toHaveText('2 journeys');
     // scrolled there first: a tip closes when what holds its trigger scrolls (the storylines above push it below the fold)
     const count = billing.locator('.jrn-pcount .jrn-org-n').first();
     await count.scrollIntoViewIfNeeded();
@@ -121,7 +121,7 @@ test.describe('journeys organised by persona and group, as the fixture declares 
   /** @covers packages/server/public/app/lib/journeys-tree.js::jrnOrgCountsHtml */
   test('the business lens prints the same counts, in people\'s words, with no endpoint', async ({ page }) => {
     await gotoReady(page, '#/journeys?lens=business');
-    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['3 journeys', '2 personas', '3 groups']);
+    await expect(page.locator('.jrn-org > .set-note .jrn-org-n')).toHaveText(['4 journeys', '2 personas', '3 groups']);
     await expect(page.locator('.jrn-persona[data-persona="billing"] .jrn-pcount')).toHaveText('3 journeys · 1 of 3 journeys built');
     // the count sits below the state of play now: scroll it in first, so the scroll's own event cannot close the tip
     const n = page.locator('.jrn-org > .set-note .jrn-org-n').first();
@@ -199,10 +199,10 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     await expect(page.locator('.map-band-pick')).not.toHaveClass(/open/);
     // each band a panel headed by the person, how many journeys and who they are
     await expect(page.locator('.map-band.per .w')).toHaveText(['Billing', 'Operations']);
-    await expect(page.locator('.map-band.per .n')).toHaveText(['3 journeys', '1 journey']);
+    await expect(page.locator('.map-band.per .n')).toHaveText(['3 journeys', '2 journeys']);
     await expect(page.locator('.map-band.per .d').first()).not.toBeEmpty();
     // one street per journey, counted once; the second band holds a card that leads to it
-    await expect(page.locator('.map-district')).toHaveCount(3);
+    await expect(page.locator('.map-district')).toHaveCount(4);
     const shared = 'invoice-app::flow::draft-and-send';
     const echo = page.locator(`.map-echo[data-echo="${shared}"]`);
     await expect(echo).toHaveCount(1);

@@ -72,10 +72,10 @@ test('ingestRepo(examples/invoice-app): the fixture drift lands on the route nod
   assert.equal(status('invoice-app::route::POST /invoices/:id/finalize'), 'code-only');
   assert.ok(byId.get('invoice-app::route::POST /invoices/:id/finalize')!.tags.includes('undocumented'));
   assert.deepEqual(byId.get('invoice-app::route::POST /invoices')!.contract!.requestBody, { contentType: 'application/json', schema: 'DraftInvoice', required: true, fields: ['customerId', 'lines'] });
-  // freshness folds the spec in (21 source files + src/ui/CreateInvoiceForm.stories.tsx +
+  // freshness folds the spec in (23 source files — payments.ts and PaymentsPage.tsx since lane moves — + src/ui/CreateInvoiceForm.stories.tsx +
   // scripts/make-coverage.mjs + 4 spec files claimed by the tests adapter + openapi.yaml +
   // docs/design/screens.json)
-  assert.equal(f.meta!.files, 29);
+  assert.equal(f.meta!.files, 31);
   // every http edge into a route carries a resolution (the fixture's third-party edges — the
   // SDK and the constant host — are `sdk-import` / `constant-host`, asserted in honest-systems)
   assert.ok(f.edges.filter((e) => e.kind === 'http' && byId.get(e.to)?.kind === 'route')

@@ -312,7 +312,7 @@ describe('describe_node — what to know before changing it', () => {
 
   test('a guard says what it applies to', async () => {
     const out = await call('describe_node', { node_id: ADMIN });
-    assert.match(out, /applies to 2: /);
+    assert.match(out, /applies to 4: /); // finalize, approve, and the payments pair (lane moves)
   });
 
   test('context:false keeps the old shape', async () => {
@@ -436,7 +436,7 @@ describe('journeys', () => {
   test('text: persona, then group, then one line per journey — the core fold, line for line', async () => {
     const out = await call('journeys');
     assert.equal(out, journeyTreeLines(fold(), { openHint: '(open with journey)' }).join('\n'));
-    assert.match(out, /^3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope$/m);
+    assert.match(out, /^4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope$/m);
     assert.match(out, /^## Storylines — 1 storyline$/m);
     assert.match(out, /^1\. Start a new invoice — .*`invoice-app::flow::new-invoice` \(open with journey\)$/m);
     assert.ok(out.indexOf('## Storylines') < out.indexOf('## Billing'), 'the storylines come before the personas');
@@ -447,13 +447,13 @@ describe('journeys', () => {
     // the fixture's config moves draft-and-send into Review and send; it is under both personas
     assert.match(out, /^- Draft and send an invoice — .* · also under Operations · with Operations \(1 of 2 screens\) · placed by farsight\.config\.json · /m);
     // who uses each screen, and what placed it: the screen row, Billing's routes, the journey
-    assert.match(out, /^3 screens across every source in scope \(1 named by its screen row · 1 by its address · 1 by its journey\)$/m);
+    assert.match(out, /^4 screens across every source in scope \(1 named by its screen row · 1 by its address · 2 by their journey\)$/m);
     assert.ok(out.indexOf('## Billing') < out.indexOf('## Operations'), 'declared order, not alphabetical');
   });
 
   test('persona and group filters, and json is the JourneyTree', async () => {
     const ops = await call('journeys', { persona: 'operations' });
-    assert.match(ops, /^1 journey · 1 storyline · 1 persona · 1 group /m);
+    assert.match(ops, /^2 journeys · 1 storyline · 1 persona · 1 group /m);
     assert.ok(!ops.includes('## Billing'));
     const none = await call('journeys', { group: 'nope' });
     assert.match(none, /no journey under group "nope"/);
@@ -472,7 +472,7 @@ describe('journeys', () => {
 
   test('graph_overview has the journeys line and journey names where a flow sits', async () => {
     const overview = await call('graph_overview');
-    assert.match(overview, /^journeys: 3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
+    assert.match(overview, /^journeys: 4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
     const j = await call('journey', { entry: 'draft-and-send' });
     assert.match(j, /^shown under: Billing › Review and send · Operations › Review and send \(start here\)$/m);
     // the fixture declares this journey a branch: what it leaves from, when, and where it comes back

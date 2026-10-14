@@ -868,6 +868,8 @@ export interface LifecycleTransition {
    * (parsers/src/lifecycle.ts `transitionTables`). `from` is set too when the table names exactly one.
    */
   fromAny?: string[];
+  /** one arm of a ternary of two literal statuses (`submitter ? 'ACTIVE' : 'PENDING'`): the condition, in words */
+  when?: string;
 }
 export interface LifecycleSource {
   /** a SQL CHECK on the column, a `const … as const` array, a `z.enum`, a string-literal union, a TS `enum` */
@@ -1004,7 +1006,8 @@ export type ResolutionTechnique =
   | 'name-match' //     LOW    — last-resort symbol name match
   | 'work-key' //        MEDIUM — a work-item key read from a commit subject, a branch name or a tracker URL (core/work-graph.ts)
   | 'callback-prop' //   MEDIUM — a function a parent hands a single-site child component as a prop, credited to the child that runs it (parsers/src/callback-props.ts)
-  | 'precondition'; //   HIGH   — a refusing comparison on a record's status, kind, flag or list, credited to the action it stands in front of (parsers/src/preconditions.ts)
+  | 'precondition' //   HIGH   — a refusing comparison on a record's status, kind, flag or list, credited to the action it stands in front of (parsers/src/preconditions.ts)
+  | 'flag-gate'; //      HIGH   — a call under a module-level `const X = true|false` whose value means it does not run (`meta.inactive`); the technique it resolved by is kept in the note (parsers/src/flag-gates.ts)
 
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -1034,6 +1037,10 @@ export interface GraphEdge {
    *   construction); journeys print the boot once instead of under every request.
    * - `tx: true` — the edge was made inside a withOps/withTenant/withTx callback
    *   (the drill's transaction boundary).
+   * - `whenFlag` / `whenValue` / `whenAt` — the call sits under a branch on a module-level
+   *   `const X = true|false` (the constant, its value, `path:line`); `inactive: true` when that
+   *   value means the call does not run. Journeys name an inactive step *switched off* and never
+   *   descend it; nothing that credits a writer or a reach counts it (parsers/src/flag-gates.ts).
    */
   meta?: Record<string, string | number | boolean>;
   /** absent === legacy/unstamped (adapters stamp every edge from P4 onward) */

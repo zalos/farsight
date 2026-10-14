@@ -32,9 +32,9 @@ test.describe('journey status lifecycle', () => {
     await expect(s.locator('.lc-rec')).toHaveText('invoices · status');
     await expect(s.locator('.lc-status .lc-w')).toHaveText(['Being drafted', 'Sent', 'Approved', 'Paid', 'Void (ended)']);
     await expect(s.locator('.lc-status .lc-c')).toHaveText(['draft', 'open', 'approved', 'paid', 'void']);
-    await expect(s.locator('.lc-status.unwritten .lc-c')).toHaveText(['paid', 'void']);
+    await expect(s.locator('.lc-status.unwritten .lc-c')).toHaveText(['void']); // paid has a writer since the payments shape (lane moves)
     await expect(s.locator('.lc-counts')).toContainText('5 statuses');
-    await expect(s.locator('.lc-counts')).toContainText('3 moves with a writer');
+    await expect(s.locator('.lc-counts')).toContainText('7 moves with a writer');
   });
 
   /**
@@ -46,8 +46,8 @@ test.describe('journey status lifecycle', () => {
     const s = strip(page);
     await expect(s.locator('.lc-status .lc-w')).toHaveText(['Being drafted', 'Sent', 'Approved', 'Paid', 'Void (ended)']);
     await expect(s.locator('.lc-status .lc-c')).toHaveCount(0);
-    await expect(s.locator('.lc-counts')).toHaveText('5 statuses · 3 that the app moves · 2 nothing moves yet');
-    await expect(s.locator('.lc-status.unwritten .lc-yet')).toHaveText(['nothing moves into it', 'nothing moves into it']);
+    await expect(s.locator('.lc-counts')).toHaveText('5 statuses · 4 that the app moves · 1 nothing moves yet');
+    await expect(s.locator('.lc-status.unwritten .lc-yet')).toHaveText(['nothing moves into it']);
     const text = (await s.locator('.lc-head, .lc-statuses').allInnerTexts()).join(' ');
     expect(text.match(IDENTIFIER) || [], 'identifier-shaped tokens on the business strip').toEqual([]);
     await s.locator('.lc-status').first().hover();
@@ -79,7 +79,7 @@ test.describe('journey status lifecycle', () => {
     await expect(table.locator('tbody tr.status .lc-tw')).toHaveText(view.rows.map((r: { word: string }) => r.word));
     await expect(table.locator('tbody tr.overlay .lc-tw')).toHaveText(view.overlays.map((o: { name: string }) => o.name));
     await expect(table.locator('tbody tr.status .lc-tc')).toHaveText(view.rows.map((r: { status: string }) => r.status));
-    await expect(table.locator('tbody tr.unwritten .lc-tm')).toHaveText(['nothing in the code moves it yet', 'nothing in the code moves it yet']);
+    await expect(table.locator('tbody tr.unwritten .lc-tm')).toHaveText(['nothing in the code moves it yet']);
     // Sent is moved by the code the list screen runs: a door to that part on the Map — the action that holds it
     const send = table.locator('tbody tr.status', { hasText: 'Sent' }).locator('a.lc-door');
     await expect(send).toHaveText('Finalize invoice');

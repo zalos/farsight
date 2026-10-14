@@ -587,6 +587,7 @@ function noteFor(tests: CoverageTestRef[], covered: number, nodes: number, what:
 export function journeyScope(index: GraphIndex, j: Journey, screenIds: string[]): string[] {
   const out: string[] = [j.entryId, ...screenIds];
   for (const s of j.steps) {
+    if (s.switchedOff) continue; // a call a constant switches off is not what the journey runs
     out.push(s.nodeId);
     for (const g of s.gates) out.push(g.id);
   }

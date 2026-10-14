@@ -136,7 +136,7 @@ test.describe('map — the legend', () => {
     await stubStores(page);
     await mapOn(page);
     await go(page, '#/map');
-    await boardReady(page, 3);
+    await boardReady(page, 4);
     const legend = page.locator('.map-legend');
     // closed on a first visit: opened by itself it covered a third of the board (swarm 2026-10-05)
     await expect(legend).toBeHidden();
@@ -312,7 +312,7 @@ test.describe('map — the business lens finishes', () => {
     await mapOn(page);
     await lens(page, 'business');
     await go(page, '#/map');
-    await boardReady(page, 3);
+    await boardReady(page, 4);
     await page.locator('.map-tools [data-act="legend"]').click();
     await expect(page.locator('.map-legend')).toBeVisible();
     let text = await visibleWords(page);
