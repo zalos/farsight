@@ -331,6 +331,7 @@ export function tourOf(
   const notes: string[] = [];
   const seenScreen = new Set<string>();
   const seenMove = new Set<string>();
+  const seenOff = new Set<string>();
   /** a record's last writer stop: the screen that wrote it, for a later stop that reads it */
   const wroteAt = new Map<string, { stop: number; screen: string; name: string }>();
   let firstPersona: LifecyclePersona | undefined;
@@ -361,7 +362,8 @@ export function tourOf(
       if (!seenScreen.has(key)) {
         seenScreen.add(key);
         const cl: TourClause[] = [];
-        const before = stops[stops.length - 1];
+        // a stop for work done outside the code is not a move: the screen is still read after the move before it
+        const before = [...stops].reverse().find((x) => x.kind !== 'offPlatform');
         // a screen right after a hand-off is read in its place: after the move
         if (before?.kind === 'handoff' && before.move) {
           const act = before.action;
@@ -435,22 +437,6 @@ export function tourOf(
           { text: fill('tour.screen.sub', { journey: jName, n: String(screenRef.ordinal), m: String(screens.length) }), biz: fill('tour.screen.sub', { journey: jName, n: String(si + 1), m: String(screens.length) }) },
           journeyRef, screenRef, persona, cl, { flowId: leg.row.nodeId, screen: ordinal }));
         for (const id of writes.keys()) wroteAt.set(id, { stop: stops.length, screen: sc.id, name: sc.name });
-        // what the design says somebody does on this screen outside the code: a stop of its own, never a gate or a
-        // verdict — the walk says who does it and that no test can reach it (the 2026-10-13 outsider round, F8)
-        for (const st of sum.segments[sg.index]?.offPlatform ?? []) {
-          const who = st.party?.name ?? st.who ?? t(`offPlatform.by.${st.by}`);
-          const ocl: TourClause[] = [
-            clause('who', st.where ? 'tour.off.whoWhere' : 'tour.off.who', { who, where: st.where ?? '', screen: sc.name }, [sc.id, st.party?.id]),
-            ...(st.party ? [clause('who', st.party.role ? 'tour.off.partyRole' : 'tour.off.party', { party: st.party.name, role: bare(st.party.role ?? '') }, [st.party.id])] : []),
-            clause('verdict', 'tour.off.noTest', {}, [sc.id]),
-          ];
-          const off = makeStop(stops.length + 1, 'offPlatform',
-            { text: st.name, biz: st.name },
-            { text: fill('tour.off.sub', { screen: sc.name }), biz: fill('tour.off.sub', { screen: sc.name }) },
-            journeyRef, screenRef, persona, ocl, { flowId: leg.row.nodeId, screen: ordinal });
-          off.offPlatform = st;
-          stops.push(off);
-        }
       }
 
       // the hand-offs this screen's actions make, each record's moves in the order its lifecycle declares them
@@ -510,6 +496,24 @@ export function tourOf(
           stop.move = { record: table?.name ?? mv.record, table: mv.table, status: mv.to, word, ...(from ? { from } : {}), by: mv.by, checked: mv.checked, ...(mv.creates ? { creates: true as const } : {}) };
           stops.push(stop);
         }
+      }
+      // what the design says somebody does on this screen outside the code: a stop of its own, never a gate or a
+      // verdict — the walk says who does it and that no test can reach it (the 2026-10-13 outsider round, F8)
+      for (const st of sum.segments[sg.index]?.offPlatform ?? []) {
+        if (seenOff.has(`${st.screen}|${st.id}`)) continue;
+        seenOff.add(`${st.screen}|${st.id}`);
+        const who = st.party?.name ?? st.who ?? t(`offPlatform.by.${st.by}`);
+        const ocl: TourClause[] = [
+          clause('who', st.where ? 'tour.off.whoWhere' : 'tour.off.who', { who, where: st.where ?? '', screen: sc.name }, [sc.id, st.party?.id]),
+          ...(st.party ? [clause('who', st.party.role ? 'tour.off.partyRole' : 'tour.off.party', { party: st.party.name, role: bare(st.party.role ?? '') }, [st.party.id])] : []),
+          clause('verdict', 'tour.off.noTest', {}, [sc.id]),
+        ];
+        const off = makeStop(stops.length + 1, 'offPlatform',
+          { text: st.name, biz: st.name },
+          { text: fill('tour.off.sub', { screen: sc.name }), biz: fill('tour.off.sub', { screen: sc.name }) },
+          journeyRef, screenRef, persona, ocl, { flowId: leg.row.nodeId, screen: ordinal });
+        off.offPlatform = st;
+        stops.push(off);
       }
     });
   }

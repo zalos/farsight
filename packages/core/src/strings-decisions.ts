@@ -70,6 +70,7 @@ export const DECISION_STRINGS: Record<string, StringEntry> = {
   'lanes.part.partyLanes': same('{n} for a party', 'Lanes of the counterparties the design says do something here outside the application.'),
 
   // the walk's stop for it (core tour.ts)
+  'tour.kind.offPlatform': same('done outside the code', 'A stop on something the design says a person, a partner or another system does outside the application: who does it and where. It has no gate and no test can reach it.'),
   'tour.off.who': same('{who} does this outside the app.', 'The design says this is done outside the application, by whom it names. The walk prints it as declared; no code was read for it.'),
   'tour.off.whoWhere': same('{who} does this outside the app — {where}.', 'The design says this is done outside the application, by whom and where it names. The walk prints it as declared; no code was read for it.'),
   'tour.off.party': same('{party} is a party the team declared; no code reaches it.', 'A counterparty the team declared in its config file. The application hands work to it outside its code.'),

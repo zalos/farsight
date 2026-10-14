@@ -14,6 +14,8 @@
 
 /** The kinds of marker a store lane reads its writes from. */
 const DATA_KINDS = new Set(['record', 'external']);
+import { offPlatformStages, partyLanes, partyLaneCount, offPlatformCounted } from './parties-model.js';
+
 const SRC = 'laneLayout ← /api/journeys storyline + /api/journey per journey (segments · markers · lifecycles · coverage)'; // str:ok a Counted's source: where the number was read, for the tip's from line
 
 function lookup(byId) {
@@ -168,6 +170,10 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     };
   }
 
+  // work done outside the code (lib/parties.js): a card per declared step, in a party's lane or under its screen
+  const offs = offPlatformStages(stages);
+  stages.push(...offs);
+
   // the facts each stage's segments carry: its tests (the first segment's, the street's chip), its decisions, what it
   // writes and reads, and the code it runs
   for (const st of stages) {
@@ -281,8 +287,10 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   });
   const rank = (l) => (l.declared == null ? 1e6 : l.declared);
   const pl = lanes.filter((l) => l.kind === 'persona').map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l);
+  // a party's lane sits between the people's and the stores'
+  const parties = partyLanes(offs);
   const sl2 = lanes.filter((l) => l.kind === 'store').map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l);
-  const ordered = pl.concat(sl2);
+  const ordered = pl.concat(parties, sl2);
   const laneByRef = new Map(ordered.map((l) => [l.ref, l]));
   for (const st of stages) st.lane = laneByRef.get(st.lane) ? laneByRef.get(st.lane).id : st.lane;
 
@@ -314,7 +322,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     });
     l.rowCount = l.rows.length;
   }
-  for (const l of pl) l.rowCount = Math.max(1, ...stages.filter((s) => s.lane === l.id).map((s) => s.row + 1));
+  for (const l of pl.concat(parties)) l.rowCount = Math.max(1, ...stages.filter((s) => s.lane === l.id).map((s) => s.row + 1));
 
   // ── what each move needs (lane G's `moments[k].preconditions`): read from the first screen that makes the move — the
   // action's checks in tier order, and whether the code checks the status it moves from
@@ -358,7 +366,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   }
   const stageByKey = new Map(stages.map((s) => [s.key, s]));
   // then: a stage to the next one in its lane, on the main path and inside each branch
-  const mainOrder = stages.filter((s) => !s.branch).sort((a, b) => a.col - b.col);
+  const mainOrder = stages.filter((s) => !s.branch && !s.off).sort((a, b) => a.col - b.col);
   for (let i = 1; i < mainOrder.length; i++) {
     if (mainOrder[i].lane === mainOrder[i - 1].lane) arrows.push({ kind: 'then', from: mainOrder[i - 1].key, to: mainOrder[i].key });
   }
@@ -403,8 +411,9 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
 
   // ── the counts: lanes' own, and the footer's — every one with the scope it counts over
   for (const l of ordered) {
+    if (l.kind === 'party') { l.count = partyLaneCount(l, stages, scopeAll); continue; }
     if (l.kind === 'persona') {
-      const mine = stages.filter((s) => s.lane === l.id);
+      const mine = stages.filter((s) => s.lane === l.id && !s.off);
       const branchN = mine.filter((s) => s.branch).length;
       l.count = { n: mine.length, unit: 'lanes.count.screens', bizUnit: 'lanes.count.screens', scope: 'lanes.scope.lane', source: SRC + ' → stages in this lane', // str:ok a Counted's source: where the number was read, for the tip's from line
         breakdown: [{ key: 'lanes.part.mainPath', n: mine.length - branchN }, { key: 'lanes.part.branch', n: branchN }] };
@@ -417,7 +426,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     }
   }
   const distinct = new Map();
-  for (const s of stages) if (!distinct.has(s.designId)) distinct.set(s.designId, s);
+  for (const s of stages) if (!s.off && !distinct.has(s.designId)) distinct.set(s.designId, s);
   const built = [...distinct.values()].filter((s) => s.state === 'built').length;
   const counts = {
     journeys: (!single && story.counts && story.counts.journeys) || { n: steps.length + branches.length, unit: 'map.band.journeys', scope: scopeAll, source: SRC },
@@ -425,6 +434,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
       breakdown: [{ key: 'lanes.part.built', n: built }, { key: 'lanes.part.notBuilt', n: distinct.size - built }] },
     built: { n: built, of: distinct.size, unit: 'lanes.count.built', bizUnit: 'lanes.count.built', scope: scopeAll, source: SRC + ' → stages by screen · state' }, // str:ok a Counted's source: where the number was read, for the tip's from line
     branches: { n: branches.length, unit: 'lanes.count.branches', bizUnit: 'lanes.count.branches', scope: scopeAll, source: 'laneLayout ← /api/journeys storyline.branches' },
+    ...(offs.length ? { offPlatform: offPlatformCounted(offs, scopeAll) } : {}),
   };
   const read = [...steps, ...branches].filter((j) => answerOf(summaries, j.nodeId)).length;
 
