@@ -1123,7 +1123,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
               if (wr) live.push({ ...base, action: wr.action, hops: wr.hops, rank: wi });
               else if (sc.nodes.has(writer)) live.push({ ...base, rank: wi });
               const o = sc.off?.get(writer);
-              if (o && !wr) off.push({ ...base, action: o.action, flag: o.flag, value: o.value, at: o.at });
+              if (o && (!wr || wr.action !== o.action)) off.push({ ...base, action: o.action, flag: o.flag, value: o.value, at: o.at });
             }
           });
           live.sort((a, b) => Number(b.here) - Number(a.here) || (a.hops ?? 99) - (b.hops ?? 99) || a.rank - b.rank || a.screen - b.screen);
