@@ -112,6 +112,12 @@
                       "retry": 0,
                       "status": "skipped"
                     }
+                  ],
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Creating an invoice from the list is a desktop task; the mobile layout only reads the list."
+                    }
                   ]
                 }
               ]
@@ -211,7 +217,7 @@
     }
   ],
   "farsight": {
-    "sourceDigest": "ebbe9cde4fec",
+    "sourceDigest": "d3f3aaaf4bd5",
     "repo": "invoice-app"
   }
 }

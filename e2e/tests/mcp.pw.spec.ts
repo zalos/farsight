@@ -80,12 +80,12 @@ test.describe('MCP data flow', () => {
     try {
       const { tools } = await core.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
-        'ask', 'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'roles', 'search_graph', 'test_coverage', 'tools', 'trace_flow',
+        'ask', 'decisions', 'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'roles', 'search_graph', 'test_coverage', 'tools', 'trace_flow',
       ]);
       const ctx = await core.readResource({ uri: 'farsight://context' });
       const text = (ctx.contents[0] as { text: string }).text;
       expect(text).toMatch(/^<farsight-context sync=1 /);
-      expect(text).toContain('tools: the core tier is on (13 of ');
+      expect(text).toContain('tools: the core tier is on (14 of ');
     } finally {
       await core.close();
     }
@@ -103,7 +103,7 @@ test.describe('MCP data flow', () => {
   /** @covers packages/mcp/src/run.ts::runMcpServer */
   test('graph_overview describes the fixture graph and its freshness', async () => {
     const out = await call('graph_overview');
-    expect(out).toContain('Farsight semantic graph: 110 nodes'); // 87 parts + 3 preconditions + 8 packages + 12 module nodes
+    expect(out).toContain('Farsight semantic graph: 113 nodes'); // 87 parts + 3 preconditions + 8 packages + 12 module nodes + 2 cited documents + 1 party
     expect(out).toContain(`repos: ${REPO}`);
     expect(out).toContain('sync:1');
   });
@@ -155,7 +155,7 @@ test.describe('MCP data flow', () => {
 
     // MCP: refresh_graph re-ingests the recorded root in place and saves graph.json
     const refreshed = await call('refresh_graph');
-    expect(refreshed).toMatch(/re-ingested 1 source root\(s\): 111 nodes, \d+ edges \(was 110\//);
+    expect(refreshed).toMatch(/re-ingested 1 source root\(s\): 114 nodes, \d+ edges \(was 113\//);
     expect(await call('search_graph', { query: PROBE })).toContain(PROBE_ID);
     expect(await call('describe_node', { node_id: PROBE_ID })).toContain('A flat surcharge the e2e suite adds');
     const onDisk = JSON.parse(readFileSync(ws.graph, 'utf8')) as { nodes: { id: string }[] };

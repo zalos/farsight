@@ -183,7 +183,7 @@
       "enum": [
         "repo", "module", "file", "class", "function", "component", "page",
         "route", "table", "queue", "rule", "guard", "flag", "external",
-        "api", "design", "flow", "test", "unknown", "work", "package"
+        "api", "design", "flow", "test", "unknown", "work", "package", "doc"
       ]
     },
     "confidence": {

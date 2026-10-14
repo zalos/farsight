@@ -30,7 +30,7 @@ test.describe('walk me through it', () => {
     await gotoReady(page, '#/map?storyline=invoice&walk=1');
     const p = page.locator(panel);
     await expect(p.locator('.tw-stop-title')).toHaveText('New invoice');
-    await expect(p.locator('.tw-n')).toHaveText(/stop 1 of 5/i);
+    await expect(p.locator('.tw-n')).toHaveText(/stop 1 of 6/i);
     await expect(p.locator('.tw-derived')).toContainText('nothing is inferred by a model');
     // every clause cites what it was read from: a chip or the cases door on each line but the persona's
     const lines = p.locator('.tw-cl');
@@ -75,12 +75,13 @@ test.describe('walk me through it', () => {
     const p = page.locator(panel);
     await expect(p.locator('.tw-stop-title')).toHaveText('New invoice');
     const found: Record<string, string[]> = {};
-    for (let i = 0; i < 5; i++) {
-      await expect(p.locator('.tw-n')).toHaveText(new RegExp(`stop ${i + 1} of 5`, 'i'));
+    // six stops: the fifth is the customer's bank paying, which the design says is done outside the code
+    for (let i = 0; i < 6; i++) {
+      await expect(p.locator('.tw-n')).toHaveText(new RegExp(`stop ${i + 1} of 6`, 'i'));
       const words = (await p.locator('.tw-body').innerText());
       const hits = [...new Set(words.match(IDENTIFIER) || [])];
       if (hits.length) found[`stop ${i + 1}`] = hits;
-      if (i < 4) await p.locator('.tw-next').click();
+      if (i < 5) await p.locator('.tw-next').click();
     }
     expect(found, 'identifier-shaped words in the business walk').toEqual({});
     // a status in the persona's words: the move to open reads Sent
@@ -93,7 +94,7 @@ test.describe('walk me through it', () => {
     await gotoReady(page, '#/map?storyline=invoice');
     await page.locator('.map-tb-walk').click();
     await expect(page.locator(panel)).toBeVisible();
-    await expect(page.locator(panel + ' .tw-n')).toHaveText(/stop 1 of 5/i);
+    await expect(page.locator(panel + ' .tw-n')).toHaveText(/stop 1 of 6/i);
     await page.locator(panel + ' .tw-x').click();
     await expect(page.locator(panel)).toBeHidden();
     await gotoReady(page, '#/journeys');

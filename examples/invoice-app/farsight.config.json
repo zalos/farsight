@@ -16,6 +16,11 @@
       "import": "src/server/erpClient.ts::ErpClient",
       "name": "Example ERP",
       "kind": "erp"
+    },
+    {
+      "name": "Customer bank",
+      "kind": "party",
+      "role": "Moves the customer's payment for a sent invoice, outside the app"
     }
   ],
   "stores": [

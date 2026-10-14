@@ -3,7 +3,7 @@ import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta, ConfigMeta, JourneysMeta } from './graph.js';
+import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta, ConfigMeta, JourneysMeta, DecisionsMeta } from './graph.js';
 
 /** Freshness signals persisted with the snapshot — lets consumers (MCP agents
  * especially) detect a stale graph instead of getting confidently old answers. */
@@ -43,6 +43,8 @@ export interface GraphMeta {
   config?: Record<string, ConfigMeta>;
   /** per-repo journey organisation: declared personas and groups in order, the config's placements, notes (journey-organisation-and-config-files.md §4.3) */
   journeys?: Record<string, JourneysMeta>;
+  /** per-repo decisions: what the manifests and the config declare and where the code names each (core decisions.ts) */
+  decisions?: Record<string, DecisionsMeta>;
 }
 
 /**
@@ -85,6 +87,9 @@ export class GraphStore {
     }
     if (fragment.meta?.journeys) {
       this.meta.journeys = { ...this.meta.journeys, [fragment.repo]: fragment.meta.journeys };
+    }
+    if (fragment.meta?.decisions) {
+      this.meta.decisions = { ...this.meta.decisions, [fragment.repo]: fragment.meta.decisions };
     }
     if (fragment.meta) {
       // a fragment with no content digest but the same sourceHash as the row already

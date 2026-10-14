@@ -101,6 +101,8 @@ export function stateOfPlayHtml(s) {
   const validated = words.map((x, i) => lineHtml(x.journeys, ' <span class="sop-word ev-' + esc(x.word.cls) + '"' + defAttrs(x.word.key) + '>' + esc(t(x.word.key)) + '</span>', i === 0)).join('')
     // build state wins: journeys with a screen not built are counted apart, never under *passed* (swarm round 3)
     + (v.notFullyBuilt && v.notFullyBuilt.n ? lineHtml(v.notFullyBuilt) : '')
+    // the release brief holds them on their own case: counted apart, never under *passed* (outsider demo 2026-10-13)
+    + (v.heldInBrief && v.heldInBrief.n ? lineHtml(v.heldInBrief) : '')
     + runLine + casesLine;
   const names = (o.notBuiltNames || []).length ? ' <span class="sop-names">(' + esc(o.notBuiltNames.join(', ')) + ')</span>' : '';
   const stillOpen = [

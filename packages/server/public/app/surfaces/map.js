@@ -31,6 +31,7 @@ import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip, foldMapChips } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
 import { lanesHtml, fitLaneText } from './map-lanes.js';
+import { loadDecisions } from '../lib/decisions.js';
 import { pathHtml } from '../lib/fold-row.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
@@ -875,6 +876,8 @@ function start() {
   MAP.journeys = new Map();
   MAP.open = new Set();
   MAP.designs = null;
+  // the decisions the team declared, read once per graph so a chip is there when a card or a table opens (lib/decisions.js)
+  loadDecisions();
   MAP.failed = false;
   renderAll();
   const scope = S.scope === 'all' || !S.scope || !S.scope.length ? 'all' : S.scope.join(',');

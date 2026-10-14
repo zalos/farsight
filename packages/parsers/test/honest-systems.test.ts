@@ -673,7 +673,8 @@ test('invoice-app · R2/R3: the container hands work over once, and the boot is 
 
 test('invoice-app · R4/R5: the SDK, the constant host renamed by config, and the typed dispatch', async () => {
   const g = await invoiceApp();
-  const externals = g.nodes.filter((n) => n.kind === 'external');
+  // a party (kind party, no import) is declared beside them and no code reaches it — not a system the code calls
+  const externals = g.nodes.filter((n) => n.kind === 'external' && n.external?.kind !== 'party');
   assert.deepEqual(externals.map((n) => n.name).sort(), ['Azure Document Intelligence', 'Example ERP']);
 
   // R4a — the SDK specifier names the system; the class that used the binding reaches it

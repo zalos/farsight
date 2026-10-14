@@ -458,7 +458,7 @@ document's `counted` block carries them and `docs/contracts/farsight-affected-v1
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
 | `6 journeys` (business and hybrid; the rows) | C:`counted.steps` (unit `count.unit.journeys`; breakdown `count.part.storylineSteps` · `storylineBranches`) | the storyline's steps and branches, one row each | storyline | the summary strip |
-| `2 ship` · `4 hold` | C:`counted.ship` / `counted.hold` (hold's breakdown by first reason: `count.part.holdNotBuilt` · `holdFailed` · `holdSkipped`) | rows with no hold reason / with one; they sum to the rows. **A row holds only on a screen not built or on one of its own declared cases** (an end-to-end case whose `@covers` names the journey) failed or skipped, and names that case (`rows[].holdCases`); any other skipped or failed case in scope is a note on the row (`rows[].notes`, `readiness.note.*`), never a hold (swarm round 3) | storyline | the summary strip |
+| `2 ship` · `4 hold` | C:`counted.ship` / `counted.hold` (hold's breakdown by first reason: `count.part.holdNotBuilt` · `holdFailed` · `holdSkipped`) | rows with no hold reason / with one; they sum to the rows. **A row holds only on a screen not built or on one of its own declared cases** (an end-to-end case whose `@covers` names the journey) failed or skipped, and names that case (`rows[].holdCases`); any other skipped or failed case in scope is a note on the row (`rows[].notes`, `readiness.note.*`), never a hold (swarm round 3). **A case passed on one project and skipped on another by its own written condition passed** (core `foldRuns`, outsider demo 2026-10-13, F3): it is a note (`rows[].notes.projectSkips`, `readiness.note.projectSkip`), and a hold on a case no project passed names each project and its quoted reason (`holdCases[].projects` · `where`) | storyline | the summary strip |
 | `12 distinct skipped cases` · *distinct* | C:`counted.skipped` | distinct cases over the storyline whose own last run skipped them — the rows count a shared case on each journey, so they add up to more (the reference app: 12 here, 46 on the rows); the *distinct* word's tip lists each row's own count, the rows added up and the distinct total (`distinct.skipped`) | storyline | the summary strip |
 | `5 distinct gates no test is known to reach` · *distinct* | C:`counted.unreached` | distinct gates on the storyline's screens whose gate card lists no case; the rows add up to more (8 on the reference app); tip as above (`distinct.unreached`) | storyline | the summary strip |
 | `5 gates and rules` | C:`counted.rules` | distinct gates and rules the storyline's screens meet | storyline | the rules register heading |
@@ -478,7 +478,9 @@ document's `counted` block carries them and `docs/contracts/farsight-affected-v1
 
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
-| `3 lanes` | viewer Counted `lanes.count.lanes` ← `laneLayout().lanes` | the lanes drawn; breakdown `lanes.part.personaLanes` · `lanes.part.storeLanes` partitions them | `count.scope.storyline` | the lanes board's header |
+| `3 lanes` | viewer Counted `lanes.count.lanes` ← `laneLayout().lanes` | the lanes drawn; breakdown `lanes.part.personaLanes` · `lanes.part.partyLanes` (only when a party lane is drawn) · `lanes.part.storeLanes` partitions them | `count.scope.storyline` | the lanes board's header |
+| `1 done here` | viewer Counted `party.lane.count` ← `lib/parties-model.js partyLaneCount()` | the off-platform cards in one party's lane (manifest `steps[].by` whose `who` names a party external) | `count.scope.storyline` · `journey.scopeAll` for one journey | a party lane's head |
+| `2 done outside the code` | viewer Counted `count.unit.offPlatform` ← `lib/parties-model.js offPlatformCounted()` | the off-platform cards the lanes draw, each declared step once | `count.scope.storyline` · `journey.scopeAll` | breakdown `count.part.offPlatformPerson` · `…Partner` · `…External`, summing to `n`; the lanes' footer; never a screen, never in `lanes.count.distinctScreens` |
 | `4 screens · in this lane` | viewer Counted `lanes.count.screens` ← the stages whose lane is this one | stage cards in one persona lane (a screen met again on the main path is one card; a branch's screen is its own card); breakdown `lanes.part.mainPath` · `lanes.part.branch` | `lanes.scope.lane` | a persona lane's head |
 | `3 writes · in this storyline` | viewer Counted `lanes.count.writes` ← the store lane's pills + its folded records | each status the storyline's code moves a record of this store into, once per status, plus each other record it writes; breakdown `lanes.part.statusMoves` · `lanes.part.recordsWritten` · `lanes.part.folded` (records past the two the lane draws) | `count.scope.storyline` | a store lane's head |
 | `13 writes · across this journey` (one journey's lanes, 2026-10-11) | the same Counted over a storyline of one journey (`laneLayout` with `kind: 'journey'`, `m.single`) | the same, over the journey | `journey.scopeAll` — never `count.scope.storyline` (round-3 swarm: *in this storyline* was said of one journey); the footer's journeys · screens · built · branches and the header's lanes count take the same scope | a store lane's head on the journey stop's *lanes* layout |
@@ -740,6 +742,7 @@ none of the re-check commands.
 | `built.storylines` · `built.branches` | `count.unit.storylines` · `count.part.storylineBranches` | storylines, and the branches they declare | `journeyTree().storylines[].branches` | `farsight journeys` · `journeys` |
 | `validated.byVerdict[].journeys` | `count.unit.journeys` + the word (`verdict.word.key`, lane V's words) | the **fully built** journeys by their one test verdict, strongest class first — build state wins (swarm round 3: *10 of 18 journeys built* beside *17 journeys passed*) | `testsSurface().journeys[].coverage.verdict.word` | `farsight tests matrix` · `test_coverage` |
 | `validated.notFullyBuilt` | `state.unit.journeysBuiltOnly` *n journeys not fully built, so no journey verdict* | journeys with a screen designed and not built, whatever their word: counted apart, never under one | breakdown `count.part.partlyBuilt` (`verdict.word.builtOnly`) · `count.part.noScreenBuilt` (`coverage.sharedEvidence`) | `farsight tests matrix` · `test_coverage` |
+| `validated.heldInBrief` | `state.unit.journeysHeld` *n journeys held in the release brief by their own case* | **fully built** journeys whose word is pass-type and whose own declared end-to-end case failed or passed on no project (`EvidenceWord.held`, core `ownCaseHold` — the rule `readiness()` reads): counted apart, never under *passed* (outsider demo 2026-10-13, F3) | `testsSurface().journeys[].coverage.verdict.word.held` | `farsight tests matrix` · `test_coverage` |
 | `validated.lastE2e` | not a count: the newest end-to-end run and its one freshness fact | `freshnessFact()` over every active end-to-end case's run | `testNodes()` → `freshness.ts` | — |
 | `validated.cases` | `count.unit.cases` (business `journey.biz.countTests`) | every case by its own last run: passed · failed · skipped · flaky · no run recorded (sums to the cases) | `testsSurface().sources[].runs` | `farsight tests list` · `test_coverage` |
 | `open.screensNotBuilt` | `state.unit.screensNotBuilt` | screens a design declares that no code builds (first five named in `notBuiltNames`) | `designSurface().counts.designOnly` | `farsight design list` · `design_surface` |
@@ -786,17 +789,20 @@ sentence is a count another fold already types — a screen's or an action's ver
 this screen* / *over this action*), a writer's (`stepCoverage().verdict.runs`, *over this part alone*), a gate's
 (`gateCard().verdict.runs`, *over this gate*) — carried on the clause as `counted` / `evidence` and printed with its
 tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cite*). A position — *stop n of m*, *(stop
-2)*, *screen 2, action 6* — is not a count. One scope is new, **`count.scope.path`** (*on this chain*).
+2)*, *screen 2, action 6* — is not a count. One scope is new, **`count.scope.path`** (*on this chain*). The reading line (*I read that as: …*) prints no number.
 
 | number | field | what it counts | scope | rule |
 |---|---|---|---|---|
-| `5 stops` (*stop n of m*'s m) | `tour.counted.stops` (`count.unit.tourStops`) | the walk's stops: screens each once however many journeys of the storyline show them, then one per move a screen's actions make to a record (each `table · status · writer` once) | `count.scope.storyline` · `journey.scopeAll` for one journey | breakdown `count.part.tourScreens` · `count.part.tourHandoffs`, summing to `n` |
+| `5 stops` (*stop n of m*'s m) | `tour.counted.stops` (`count.unit.tourStops`) | the walk's stops: screens each once however many journeys of the storyline show them, then one per move a screen's actions make to a record (each `table · status · writer` once), then one per step the design says is done outside the code (each `screen · step` once) | `count.scope.storyline` · `journey.scopeAll` for one journey | breakdown `count.part.tourScreens` · `count.part.tourHandoffs` · `count.part.tourOffPlatform` (only when there is one), summing to `n` |
 | `…and 2 technical checks` (a screen stop) | clause `counted` (`count.unit.gatesTechnical`) | distinct preconditions of tier technical on the screen's actions | `journey.scopeHere` | the business and policy ones are listed by their words beside it, never counted twice |
 | `…and 4 technical checks` (a hand-off, an answer's *must be true first*) | clause `counted` (`count.unit.gatesTechnical`) | the same, on the one action that makes the move | `count.scope.action` | the action's `preconditions.counted` technical part |
 | `in 5 hops` / `in 5 links` (business) | `PathResult.counted` (`ask.unit.pathLinks`, biz `ask.biz.pathLinks`) | the links of the shortest chain from one part to another: calls, requests, renders, reads, writes, sends, receives | `count.scope.path` | breadth first over the edge index; `more` (`count.unit.paths`) = other chains of the same length, capped at 9 |
 | `2 others` (*read as X in Y — the words also match …*) | lead `counted` (`ask.unit.alsoMatch`) | the parts the question's words match as well as the one Ask answered for: the same kind, as good a match, another node (swarm round 3: *which tests reach loadDraft* answered one of two unnamed) | `count.scope.question` (new) | listed by name and place, the first five cited |
 | `12 checks` (*what guards …*) | lead `counted` (`count.unit.checks`) | the distinct gates and rules on an action, a call or a screen | `count.scope.action` · `journey.scopeHere` · `count.scope.node` | breakdown `count.part.tierBusiness` · `tierPolicy` · `tierTechnical`, summing to `n` |
 | `2 more places` (*where is … set to …*) | lead `counted` (`count.unit.places`) | other actions on journeys whose walk makes the same move, after the first one named | `count.scope.node` | each action once |
+| `27 actions behind a role check` (*who may do what*) | lead `counted` — `roleTable().counted.actions` (`count.unit.roleActions`, core `roles.ts`) | the actions a role check guards, the role list read from the code | `count.scope.workspace` | the role × action table's own count, reused; a graph whose roles are only literal arguments counts its guarded calls the same way (`allRoleRows`) |
+| `3 places` (*what the code holds whose words meet …*) | lead `counted` (`ask.unit.configures`) | config checks, settings files, set-up screens, record fields and switches whose words meet the question's | `count.scope.question` | each place once; *what can be configured* (no thing named) counts every one |
+| `11 screens reach the correction request` (*what happens …*) | section `counted` (`ask.unit.screensReach`) | the screens whose walk reaches the record, each once | `count.scope.node` | the first six named, the rest `+n` |
 
 ### Swarm round 3 (2026-10-11): build state, the runs sentence, scope words on positions and not-in-words counts
 
@@ -816,6 +822,19 @@ tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cit
 - **Conditions not in plain language** print their scope words beside the number on every panel (`lib/scope-words.js`,
   the viewer's copy of `SCOPE_WORDS`, pinned equal by `server/test/scope-words.test.ts`): *over this journey* · *over
   this screen* · *over this action*.
+
+### Decisions, work done outside the code, parties (the 2026-10-13 outsider round, F8 — core `decisions.ts`; `/api/decisions`, MCP `decisions` + `graph_overview`, CLI `farsight decisions`)
+
+A decision is a declaration the team wrote (manifest `decisions[]`, config `decisions[]`) joined to the code's
+`DECISION(<id>)` comments; it is printed as one, never as evidence. Off-platform steps (`steps[].by`) are a build state
+of their own — never a gate, never a verdict, never a screen.
+
+| number | field | what it counts | scope | rule |
+|---|---|---|---|---|
+| `7 decisions` | `decisionsCounted().decisions` (`count.unit.decisions`) | every decision a source declares, and every id a `DECISION(<id>)` comment names that nothing declares, each once | `count.scope.workspace` | breakdown `count.part.decisionsOpen` · `…Decided` · `…CodeOnly` (by state), summing to `n`; `recheck` `farsight decisions` · MCP `decisions` |
+| (the same 7) | `decisionsCounted().cited` (`count.unit.decisions`) | the same decisions, split by whether a comment in the code names them | `count.scope.workspace` | breakdown `count.part.decisionsCited` · `…Uncited` — a second partition of the same number, printed beside the first, never summed with it |
+| `1 done outside the code` | `summary.counted.offPlatform` / `segment.counted.offPlatform` (`count.unit.offPlatform`) | the steps the design says a person, a partner or another system does on the journey's screens (each `screen · step` once) / on one screen | `journey.scopeAll` / `journey.scopeHere` | breakdown `count.part.offPlatformPerson` · `…Partner` · `…External`; absent when nothing is declared |
+| `1 party` | `count.unit.parties` | party externals a source declares (`externals[]` with `kind: 'party'`, no import) | `count.scope.workspace` | catalog unit for a list of parties; a party is listed in `summary.system.externals` with `party: true` and no ops |
 
 ## 4. Open — found, not changed here
 
@@ -897,3 +916,17 @@ the scope's chip words, the cell's one word (`testVerdict()`), and `· n failed 
 | number | unit | scope | source | what it counts |
 |---|---|---|---|---|
 | returned memories | `echo.portal.countShown` / `echo.portal.countShownOne` (both registers) | `echo.portal.scope` — this response before a browser topic filter | `echo.portal.browse.memories` in `createMemoryPortal()` | Exact returned records in one bounded, identity-scoped response. Each record once. This is neither the whole store size nor a total across accumulated pages. Upstream global facets/totals are not displayed. |
+
+## 5. A case several projects ran (outsider demo 2026-10-13, F3)
+
+A case run under more than one project (Playwright's `desktop-1440` and `mobile-390`) has one `TestRun` per project in
+`runs[]` and one fold in `run` (core `test-runs.ts` `foldRuns`, re-applied by `buildIndex` to a graph an older build
+wrote): **failed or flaky on any project is the case's status; otherwise passed on any project is passed; otherwise the
+weakest.** The fold keeps `projects[]` (each project's status and, for a skip, the `reason` its own condition wrote —
+Playwright's `skip`/`fixme` annotation, JUnit's `<skipped message>`). No count changes shape: such a case is in the
+*passed* part of every `runs` breakdown, and `TestVerdict.projectSplit` (`n` cases, a subset of *passed*) says the
+split beside it — *passed on desktop-1440 · skipped on mobile-390 (…)* (`tests.projectSplit` / `tests.projectSplitMany`,
+business `tests.biz.*`), printed by `lib/test-chip.js projectSplitHtml` and MCP's *their own last runs* line. On the
+reference app's 2026-10-08 report six cases have this shape; before the fold they read *skipped* and held every
+journey of the invoice storyline.
+

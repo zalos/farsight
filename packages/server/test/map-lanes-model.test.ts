@@ -244,3 +244,44 @@ test('a persona per screen (lane persona, 2026-10-13): a screen its row, a route
   assert.ok(plain.stages.every((s: AnyRec) => s.personaFrom === 'journey'));
   assert.deepEqual(plain.stages.filter((s: AnyRec) => s.branch).map((s: AnyRec) => s.lane), ['ops', 'ops']);
 });
+
+// Work done outside the code and the parties that do it (the 2026-10-13 outsider round, F8; lib/parties-model.js): a
+// declared step with `by` on a screen draws a dotted card in the party's own lane at that screen's column — never a
+// screen of the storyline, never a stop of its main path, counted apart.
+test('invoice-app: a step a party does outside the code is a card in the party\'s lane, counted apart from the screens', () => {
+  const f = JSON.parse(JSON.stringify(fx.invoice));
+  const step = { id: 'INV-01.1', name: 'The customer pays the sent invoice by bank transfer', by: 'partner', who: 'Customer bank', screen: 'invoice-app::page::/invoices',
+    party: { id: 'invoice-app::external::Customer bank', name: 'Customer bank', role: 'Moves the customer\'s payment' } };
+  const person = { id: 'INV-02.9', name: 'Phone the customer to confirm the amount', by: 'person', screen: 'invoice-app::page::/invoices/new' };
+  for (const a of Object.values(f.journeys) as AnyRec[]) {
+    const segs = ((a.data || a).summary.segments) as AnyRec[];
+    for (const sg of segs) {
+      if (sg.screen && sg.screen.name === 'Invoice list') sg.offPlatform = [step];
+      if (sg.screen && sg.screen.name === 'New invoice') sg.offPlatform = [person];
+    }
+  }
+  const before = model('invoice');
+  const m = laneLayout(f.storyline, fx.designs, fx.tree, new Map(Object.entries(f.journeys)), {});
+  assert.deepEqual(m.lanes.map((l: AnyRec) => [l.id, l.kind]), [
+    ['billing', 'persona'], ['ops', 'persona'], ['party:Customer bank', 'party'], ['store:Invoice DB', 'store'],
+  ]);
+  const offs = m.stages.filter((s: AnyRec) => s.off);
+  const list = m.stages.find((s: AnyRec) => !s.off && !s.branch && s.name === 'Invoice list');
+  assert.deepEqual(offs.map((s: AnyRec) => [s.lane, s.col, s.state]).sort(), [['billing', 0, 'off'], ['party:Customer bank', list.col, 'off']]);
+  // the person's card sits under its screen in the same lane, a row down
+  const mine = offs.find((s: AnyRec) => s.lane === 'billing');
+  assert.equal(mine.row, 1);
+  // the screens, the steps and the arrows are what they were
+  assert.equal(m.counts.screens.n, before.counts.screens.n);
+  assert.deepEqual(m.arrows.filter((a: AnyRec) => a.kind === 'then').length, before.arrows.filter((a: AnyRec) => a.kind === 'then').length);
+  assert.equal(m.lanes.find((l: AnyRec) => l.kind === 'persona' && l.id === 'billing').count.n, before.lanes[0].count.n);
+  // counted apart, by who does it, and the party lane counts its own
+  assert.equal(m.counts.offPlatform.n, 2);
+  assert.deepEqual(m.counts.offPlatform.breakdown.map((p: AnyRec) => p.n), [1, 1, 0]);
+  sums(m.counts.offPlatform);
+  assert.equal(m.lanes.find((l: AnyRec) => l.kind === 'party').count.n, 1);
+  // and the geometry gives the party lane its row of cards
+  const G = laneGeometry(m, { aspect: 1.6 });
+  assert.ok(G.rects.get(offs[0].key));
+  assert.equal(before.counts.offPlatform, undefined, 'nothing declared, nothing counted');
+});

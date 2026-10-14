@@ -17,8 +17,9 @@
 // A surface makes a gate open the card with `gateAttrs(id, { step, config })` on the element that names it; the
 // click, Enter and Space are answered here.
 
+import { loadDecisions, decisionsOn, decisionChipHtml, decisionCardHtml } from './decisions.js';
 import { S, esc, expose, currentLens } from '../store.js';
-import { t, plainWords } from '../strings.js';
+import { t, plainWords, refusalWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { showTip, hideTip, tipAnchor, tipOpen, repositionTip } from './tooltip.js';
 import { doorsFor, doorsHtml, fetchSource, copyDoorsHtml } from './detail-doors.js';
@@ -122,7 +123,7 @@ function sentenceHtml(m) {
   if (m.precondition) {
     const w = m.precondition.words || '';
     return '<p class="gc-says">' + esc(biz() ? plainWords(w) || w : w) + '</p>'
-      + (m.precondition.else ? '<p class="gc-dim"' + defAttrs('gate.pre.else') + '>' + esc(fill(t('gate.pre.else'), { else: m.precondition.else })) + '</p>' : '')
+      + (m.precondition.else ? '<p class="gc-dim"' + defAttrs('gate.pre.else') + '>' + esc(fill(t('gate.pre.else'), { else: refusalWords(m.precondition.else, currentLens()) })) + '</p>' : '')
       + (m.precondition.via ? '<p class="gc-dim"' + defAttrs('gate.pre.via.' + m.precondition.via) + '>' + esc(t('gate.pre.via.' + m.precondition.via)) + '</p>' : '');
   }
   const says = s.says.source === 'business' ? (biz() ? plainWords(s.says.words) : s.says.words)
@@ -214,6 +215,15 @@ function rolesHtml(m) {
     + '<a class="dd-door" href="#/roles?guard=' + esc(encodeURIComponent(m.id)) + '"' + defAttrs('gate.roles.all') + '>' + esc(t('gate.roles.all')) + ' ›</a></section>';
 }
 
+/**
+ * A decision the team made or left open that bears on this gate (lib/decisions.js): its chip, and — since the gate
+ * card is itself the open card — the decision's own card in place under it. '' when none does.
+ */
+function decisionsSecHtml(m) {
+  const rows = decisionsOn([m.id]);
+  if (!rows.length) return '';
+  return '<section class="gc-sec" data-gc-sec="decisions">' + rows.map((r) => '<div class="gc-dec">' + decisionChipHtml(r, { static: true }) + decisionCardHtml(r, { noHead: true }) + '</div>').join('') + '</section>';
+}
 /** The whole card for one model. `step` (a journey's walk order) adds *show it in the journey*. */
 export function gateCardHtml(m, opts = {}) {
   const n = m.facts.node;
@@ -231,6 +241,7 @@ export function gateCardHtml(m, opts = {}) {
     // copy as MCP call · curl · CLI with the full id (round 2026-10-10, proposal 9) — every register
     + (n && n.id ? '<div class="gc-copy">' + copyDoorsHtml(m.gateKind === 'rule' ? 'rule' : 'gate', n) + '</div>' : '')
     + tierHtml(m)
+    + decisionsSecHtml(m)
     + '<section class="gc-sec">' + secHead('gate.sec.allows') + sentenceHtml(m) + '</section>'
     + rolesHtml(m)
     + '<section class="gc-sec" data-gc-sec="where">' + secHead('gate.sec.where') + whereHtml(m) + '</section>'
@@ -306,7 +317,7 @@ export async function openGateCard(el, e) {
   if (tipOpen() && tipAnchor() === host && host.dataset.gcOpen === '1') { hideTip(); host.dataset.gcOpen = ''; return; }
   const id = host.getAttribute('data-gate-card');
   const via = e && e.type === 'keydown' ? 'key' : 'click';
-  const pending = fetchGate(id);
+  const pending = Promise.all([fetchGate(id), loadDecisions()]).then(([a]) => a);
   const first = await Promise.race([pending, new Promise((r) => setTimeout(() => r(undefined), WAIT_MS))]);
   // the surface may have redrawn while the answer was on its way (the code map's inspector draws again on a select):
   // open on the element that names the same gate now

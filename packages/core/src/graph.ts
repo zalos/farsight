@@ -24,6 +24,7 @@ export type NodeKind =
   | 'test' // one test case (it/test), or a synthetic run-level node for a report with no per-test attribution
   | 'work' // a work item from a tracker (Jira issue, Azure DevOps work item) — id work::<sourceId>::<key>, no loc
   | 'package' // a dependency: a third-party package or a workspace library — id `${repo}::package::${name}`, no loc (see PackageRef)
+  | 'doc' // a markdown document inside the source that something cites — id `${repo}::doc::${path}`, no loc (see DocRef)
   | 'unknown'; // the "?" stub: a call the graph could not resolve to any indexed source
 
 export type EdgeKind =
@@ -39,7 +40,8 @@ export type EdgeKind =
   | 'validates'
   | 'guards'
   | 'covers' // a test -> what it verifies; meta.evidence says declared | static | observed
-  | 'tracks'; // a work item -> what it is about; meta.via says declared | commit | branch | url
+  | 'tracks' // a work item -> what it is about; meta.via says declared | commit | branch | url
+  | 'cites'; // a node -> a `doc` node it cites (a flow's docs, an ADR named in a sentence); meta.via says docs | text
 
 /** Source location — powers IDE deep links (vscode://file/...). */
 export interface Loc {
@@ -178,11 +180,105 @@ export interface DesignRef {
   order?: number;
   /** flow nodes only: where the flow sits in its manifest's `flows[]` (0-based) — the author's order, which ties and absent `order`s fall back to */
   position?: number;
-  /** screen nodes only: the numbered steps its spec and tests name (`SCR-07.2`) */
-  steps?: { id: string; name: string; operation?: string }[];
+  /**
+   * screen nodes only: the numbered steps its spec and tests name (`SCR-07.2`). A step with `by` is done outside
+   * the code — by a person, a partner or another system (`who`, `where` in the team's words) — a declared build
+   * state of its own, never a gate and never a verdict (`offPlatformSteps` in core decisions.ts)
+   */
+  steps?: DesignStep[];
   /** design nodes only: the product surfaces the manifest scopes, drawn or not */
   surfaces?: { id: string; name: string; status?: 'built' | 'partly built' | 'not started'; description?: string }[];
   drift?: { kind: DesignDriftKind; message: string }[];
+}
+
+/** One numbered step of a designed screen (`SCR-07.2`), as the manifest writes it. */
+export interface DesignStep {
+  id: string;
+  name: string;
+  operation?: string;
+  /** done outside the code: by a person, a partner, or another system — absent: the code is meant to do it */
+  by?: 'person' | 'partner' | 'external';
+  /** who does it, in the team's words, or a persona id or a party external's name */
+  who?: string;
+  /** where it happens, in the team's words (*by email*, *in the ERP*) */
+  where?: string;
+}
+
+/**
+ * `doc` nodes only: a markdown document inside the source that a flow, a decision or a sentence cites — read once
+ * at ingest. `quote` is the document's first paragraph **verbatim** (cut at a word near 400 characters, never
+ * reworded); nothing is summarised and nothing is generated.
+ */
+export interface DocRef {
+  /** source-relative path */
+  path: string;
+  /** the first `#` heading, as written */
+  title?: string;
+  /** the first paragraph after the heading, verbatim, at most ~400 characters (`cut` says when it was cut) */
+  quote?: string;
+  cut?: true;
+  /** a `Status:` line, when the document has one (an ADR's *Accepted 2026-07-06*), as written */
+  status?: string;
+}
+
+/**
+ * A decision a source declares (`screens.json → decisions[]`, overridden by `farsight.config.json → decisions[]`
+ * field by field): the team's own words for a choice it made or left open. Joined to the code by `DECISION(<id>)`
+ * comments. A declaration, printed as one — never an evidence class, never an absence word.
+ */
+export interface DecisionDecl {
+  id: string;
+  title: string;
+  state: 'open' | 'decided';
+  /** `YYYY-MM-DD`, when `state` is decided */
+  decided?: string;
+  owner?: string;
+  /** the team's words, quoted as written */
+  summary?: string;
+  /** a source-relative document, optionally `#anchor` */
+  doc?: string;
+  /** node ids or design screen ids the decision bears on */
+  affects?: string[];
+}
+
+/** One place the code names a decision: a `DECISION(<id>)` comment, on or above the node it sits in. */
+export interface DecisionSite {
+  path: string;
+  line: number;
+  /** the node the comment sits on or in; absent for a module-level comment (`symbol` names what is under it) */
+  nodeId?: string;
+  /** the declaration under a comment that is not a node — a module-level flag constant's name */
+  symbol?: string;
+  /** the rest of the comment line after the id, as written */
+  text?: string;
+}
+
+/** One decision of a source as folded at ingest: the declaration (when there is one) and where the code names it. */
+export interface DecisionRow {
+  id: string;
+  title?: string;
+  state?: 'open' | 'decided';
+  decided?: string;
+  owner?: string;
+  summary?: string;
+  doc?: string;
+  affects?: string[];
+  /** declared by a manifest or the config (`from`); false = the code names it and nothing declares it */
+  declared: boolean;
+  from?: string;
+  /** the code's `DECISION(<id>)` comments */
+  sites: DecisionSite[];
+  /** node ids the decision bears on: each site's node, and every `affects` entry that resolved */
+  nodes: string[];
+  /** the `doc` read at ingest: its `doc` node id, title and first paragraph (verbatim) */
+  docRef?: { nodeId: string; path: string; anchor?: string; title?: string; quote?: string; cut?: true };
+}
+
+/** `GraphFragment.meta.decisions`: every decision a source declares or its code names, and the notes. */
+export interface DecisionsMeta {
+  decisions: DecisionRow[];
+  /** one sentence per thing set aside: an id declared twice with different titles, an id in code nothing declares, an affects entry that resolved to nothing */
+  notes: string[];
 }
 
 export type DesignDriftKind =
@@ -248,6 +344,23 @@ export interface TestRun {
   commit?: string;
   /** repo-relative path to the html/json report for the ⧉ link */
   report?: string;
+  /**
+   * A skipped row only: the reason the case's own skip condition wrote (Playwright's `skip` / `fixme` annotation,
+   * a reporter's skip message) — *the ops console is designed for desktop*. Quoted, never paraphrased.
+   */
+  reason?: string;
+  /**
+   * The fold only (`foldRuns`), when more than one project ran the case: each project's own status and, for a skip,
+   * its reason — so *passed* on a case skipped on one project by its own condition still says where it did not run.
+   */
+  projects?: TestRunProject[];
+}
+
+/** One project's run of a case, as the fold keeps it. */
+export interface TestRunProject {
+  project: string;
+  status: TestRun['status'];
+  reason?: string;
 }
 
 /** `test` nodes only: what kind of test this is and where it sits — like `contract` on a route. */
@@ -359,7 +472,7 @@ export interface TestsMeta {
  * an SDK specifier the parser recognises, a non-literal `fetch` behind a constant
  * host, or a `farsight.config.json → externals` declaration.
  */
-export type ExternalKind = 'erp' | 'ocr' | 'files' | 'email' | 'queue' | 'db' | 'http';
+export type ExternalKind = 'erp' | 'ocr' | 'files' | 'email' | 'queue' | 'db' | 'http' | 'party';
 
 export interface ExternalRef {
   kind: ExternalKind;
@@ -375,6 +488,13 @@ export interface ExternalRef {
    * are not; `email` · `queue` are messages), overridden by `farsight.config.json → externals[].store`.
    */
   store?: true;
+  /**
+   * `kind: 'party'` only — a counterparty the app hands work to outside its code (a payment partner, the client):
+   * declared in `farsight.config.json → externals[]` with no `import`, so no code reaches it. `role` is the team's
+   * words for what it does; `persona` a declared persona id it is (the client who also uses a portal).
+   */
+  role?: string;
+  persona?: string;
 }
 
 /** The kinds of data store a record (or a store-like external) lives in. */
@@ -849,6 +969,10 @@ export interface GraphNode {
   package?: PackageRef;
   /** every node under a workspace project's root: which project, its type and its tags — see ProjectRef */
   project?: ProjectRef;
+  /** doc nodes only: the document's path, title and first paragraph, verbatim — see DocRef */
+  doc?: DocRef;
+  /** the decision ids a `DECISION(<id>)` comment or a decision's `affects` puts on this node (details: `meta.decisions`) */
+  decisions?: string[];
   /** Lens-specific presentation data, e.g. business-friendly labels. */
   facets?: {
     /** label overrides the business-lens name (glossary); description is the plain-language summary (@business). */
@@ -956,7 +1080,7 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta; journeys?: JourneysMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta; journeys?: JourneysMeta; decisions?: DecisionsMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json (at the root or nested) was applied by ingestRepo */

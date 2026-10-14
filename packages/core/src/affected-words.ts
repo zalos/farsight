@@ -75,6 +75,10 @@ export function readinessLines(r: Readiness): string[] {
     out.push(`${x.label.padEnd(4)} ${x.name}${x.branchOf ? ` (branch of ${x.branchOf.name} · ${x.branchOf.when})` : ''}`);
     out.push(`     built ${x.built.n} of ${x.built.of} · ${verdict} · last run ${day(x.lastRun)} · ${x.skipped} skipped · ${x.unrun} never run · gates no test is known to reach ${x.gates.unreached.length} of ${x.gates.n} · commits since green ${x.commitsSince ?? '—'}`);
     out.push(`     ${x.ship ? 'SHIP' : 'HOLD — ' + x.hold.map((h) => t(`readiness.hold.${h}`, R)).join(' · ')}`);
+    // the case that holds it, by name — and where more than one project ran it, each project and its written reason
+    for (const c of x.holdCases) out.push(`       ${c.status}: ${c.name}${c.where ? ` (${c.where.text})` : ''}`);
+    // its own case passed on one project and was skipped on another by its own condition: a note, never a hold
+    for (const p of x.notes.projectSkips ?? []) out.push(`     ${p.words.text}`);
   }
   out.push('');
   out.push(countedText(r.counted.rules));

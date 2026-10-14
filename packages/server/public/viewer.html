@@ -708,7 +708,7 @@
   /* the freshness sentence (lib/freshness.js): stale with both sides, current with its sync, no source digest */
   .fresh{color:var(--dim);font-size:10px}
   .fresh.fresh-stale{color:var(--warn,#E8A13C)}
-  .fresh.fresh-current{color:var(--ok,#6FCF8E)}
+  .fresh.fresh-current{color:var(--ok)}
   .tst-card .fresh{display:block;font-size:11px;margin:4px 0}
   .jrn-count .jrn-e2e{margin-left:0}
   .jrn-count .jrn-e2e.stale{color:var(--amber);border-color:rgba(240,180,78,.45)}
@@ -1785,6 +1785,13 @@
   /* a partly built journey: build state first, the word over its built screens without the pass colour (swarm round 3) */
   .tc-pb{color:var(--amber);font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9px;display:inline-flex;align-items:center;gap:4px}
   .tc-pba,.tchip .tc-basis{color:var(--muted)}
+  .tc-held{color:var(--amber);display:inline-flex;align-items:center;gap:4px}
+  .tc-split{color:var(--muted)}
+  /* the Map head's line 1 is a budget: the hold line and the project split clip to a few words, their tips carry all of it */
+  /* the head's line 1 is a budget: the project split is said on the screens, the table and the chip's tip, not here */
+  .map-jhead .tc-split-w{display:none}
+  .tc-held .tc-held-short,.map-jhead .tc-held .tc-held-long{display:none}
+  .map-jhead .tc-held .tc-held-short{display:inline}
   .builtonly,.ev.builtonly,.jrn-e2e.builtonly,.map-chip.k-ev.builtonly,.jrn-mk.cov.builtonly,.rd-ev.builtonly{color:var(--muted)!important;border-color:var(--line,#2a3142)!important;background:none!important;box-shadow:none!important}
   .builtonly .sym{color:var(--muted)!important}
   .tchip.nb .tc-nb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9px;display:inline-flex;align-items:center;gap:4px}
@@ -2759,9 +2766,10 @@
   .ask-box .ask-q:focus{outline:1px solid var(--accent);border-color:var(--accent)}
   .ask-card{border:1px solid var(--line);border-radius:5px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.4;overflow-wrap:anywhere}
   .ask-chips{display:flex;gap:6px}
-  .ask-derived,.ask-phrased{font-family:var(--hud);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--ok,#6FCF8E);color:var(--ok,#6FCF8E);border-radius:3px;padding:0 5px}
+  .ask-derived,.ask-phrased{font-family:var(--hud);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--ok);color:var(--ok);border-radius:3px;padding:0 5px}
   .ask-phrased{border-color:var(--warn,#E8A13C);color:var(--warn,#E8A13C)}
   .ask-lead{margin:0}
+  .ask-lead.ask-read{font-style:italic;color:var(--muted);border-left:2px solid var(--accent);padding-left:8px;margin-bottom:4px}
   .ask-shapes{margin:0;padding-left:18px;color:var(--muted)}
   .ask-suggest{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}.ask-sugg{font:inherit;font-size:12px;color:var(--cyan);background:none;border:1px solid var(--line,#2a3142);border-radius:4px;padding:2px 8px;cursor:pointer;text-align:left}.ask-sugg:hover{border-color:var(--cyan)}
   .ask-sec .hud-label{font-size:9.5px;color:var(--muted)}
@@ -3199,6 +3207,33 @@
   .ln-legend .sw{display:inline-block;width:20px;height:0;border-top:1.5px solid var(--tbl)}
   .ln-legend .sw.seen{border-top-style:dashed}
   .ln-legend .sw.planned{height:9px;border:1px dashed var(--warn);border-radius:2px}
+  /* work done outside the code (lib/parties.js): dotted, never the amber of designed-not-built; a party's lane in the ink of no code */
+  .ln-legend .sw.off{height:9px;border:1px dotted var(--muted);border-radius:2px}
+  .ln-stage.off{border:1.5px dotted var(--muted);background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--line) 18%,transparent) 6px 7px),var(--ground);cursor:default}
+  /* the name keeps the street card's one line (its whole words are in the card's tip); the sub-line may wrap */
+  .ln-stage.off .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ln-stage.off .map-step.off{background:none;border:1px dotted var(--muted)}
+  .map-chip.k-off{border:1px dotted var(--muted);color:var(--muted)}
+  .map-chip.k-none{color:var(--muted);border-color:var(--line-soft)}
+  .ln-lane.party{background:repeating-linear-gradient(135deg,transparent 0 10px,color-mix(in srgb,var(--line) 10%,transparent) 10px 11px)}
+  .ln-lane.party .ln-headbox{border-left:3px dotted var(--muted)}
+  /* a decision the team made or left open (lib/decisions.js): a chip, and its card in a pinned tip */
+  .dec-chips{display:inline-flex;flex-wrap:wrap;gap:4px;margin:2px 0}
+  .dec-chip{display:inline-flex;align-items:center;gap:4px;max-width:100%;font:inherit;font-size:11px;line-height:16px;padding:0 7px;border-radius:9px;cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--ink);white-space:normal;text-align:left}
+  .dec-chip.s-open{border-color:var(--warn);color:var(--warn)}
+  .dec-chip.s-decided{border-color:var(--ok);color:var(--ok)}
+  .dec-chip .sym{width:11px;height:11px;flex:none}
+  .dec-card{display:flex;flex-direction:column;gap:6px;max-width:420px}
+  .dec-head{display:flex;align-items:center;gap:5px}
+  .dec-title{font-size:13px;line-height:1.35}
+  .dec-meta{display:flex;flex-wrap:wrap;gap:8px;font-size:11px}
+  .dec-state.s-open{color:var(--warn)}
+  .dec-state.s-decided{color:var(--ok)}
+  .dec-q{margin:2px 0 0;padding:2px 0 2px 8px;border-left:2px solid var(--line);font-size:12px;line-height:1.4;color:var(--ink)}
+  .dec-from,.dec-cut{font-size:10.5px;color:var(--muted)}
+  .dec-site{font-size:11px;margin-top:3px}
+  .dec-said{color:var(--muted);font-style:italic}
+  .gc .dec-card{max-width:none}
   .ln-legend .sw.branch{border-top:1.5px dashed var(--warn)}
   .ln-legend .sw.needs{height:9px;border:1px solid var(--tbl);border-radius:2px;background:color-mix(in srgb,var(--tbl) 12%,transparent)}
   /* ── the release readiness brief (#/readiness/<storyline>, surfaces/readiness.js) — a light document sheet ── */
@@ -3327,7 +3362,10 @@
   /* no room for the kept chips: the storyline's words give way first (whole in the crumb and the tip), then the test chip's tail */
   .map-jhead .jh-l1.tight .agg{flex:none}
   .map-jhead .jh-l1.tight .nm{flex-shrink:.3;min-width:min(10em,28%)}
-  .map-jhead .jh-l1.tight .story{flex:0 2 auto;min-width:5em;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l1.tight .story{flex:0 2 auto;min-width:5em;display:inline-flex;align-items:center}
+  /* only the words give way: the ‹ › doors stay whole and clickable however tight the line (PR #108 CI) */
+  .map-jhead .jh-l1.tight .story .story-t{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l1.tight .story .map-story-nav{flex:none}
   .map-jhead .jh-l1.tight .for{flex:0 1 auto;min-width:4em;overflow:hidden;text-overflow:ellipsis}
   .map-jhead .jh-l1.tight2 .agg{flex:0 1 auto}
   .map-jhead .jh-l1 .agg.tight > .k-test,.map-jhead .jh-l1 .agg.tight .jrn-count > .jrn-hg:has(.jrn-htests){flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -3380,19 +3418,23 @@
   .md-lc-head{margin-bottom:8px;font-size:11.5px;color:var(--muted)}
   .md-lc-head .lc-head{white-space:normal;flex-wrap:wrap;row-gap:2px}
   .md-scroll{overflow-wrap:break-word}
-  .md-lc-tbl .lc-table{width:100%}
+  .md-lc-tbl .lc-table,.md-panels .lc-table{width:100%;table-layout:auto}
+  /* the third column (what moves a record into it) wraps inside the dock instead of running off it (outsider round, G6) */
+  .md-panels .lc-table td{overflow-wrap:anywhere;min-width:0}
+  .md-panels .lc-tblbox{max-width:100%;min-width:0}
+  .md-panels .lc-head{white-space:normal;flex-wrap:wrap;row-gap:2px}
   /* a narrow dock stacks each status (round-3 swarm: three columns in 360 px): the word, its constant beneath, what
      moves a record into it beneath that — the table's own columns come back when the dock is wide (along the bottom) */
   .md-panels{container-type:inline-size}
   @container (max-width:560px){
-    .md-lc-tbl .lc-table thead{display:none}
-    .md-lc-tbl .lc-table,.md-lc-tbl .lc-table tbody{display:block;width:100%}
-    .md-lc-tbl .lc-table tr{display:flex;flex-direction:column;gap:2px;padding:6px 2px;border-bottom:1px solid var(--line-soft)}
-    .md-lc-tbl .lc-table td{display:block;padding:0;border:0;min-width:0}
-    .md-lc-tbl .lc-table td.lc-tw{font-weight:600;color:var(--ink)}
-    .md-lc-tbl .lc-table td.lc-tc{overflow-wrap:anywhere}
-    .md-lc-tbl .lc-table td.lc-tm{padding-left:10px;font-size:12px}
-    .md-lc-tbl .lc-table td.lc-tm .lc-mover{margin-top:2px}
+    .md-panels .lc-table thead{display:none}
+    .md-panels .lc-table,.md-panels .lc-table tbody{display:block;width:100%}
+    .md-panels .lc-table tr{display:flex;flex-direction:column;gap:2px;padding:6px 2px;border-bottom:1px solid var(--line-soft)}
+    .md-panels .lc-table td{display:block;padding:0;border:0;min-width:0}
+    .md-panels .lc-table td.lc-tw{font-weight:600;color:var(--ink)}
+    .md-panels .lc-table td.lc-tc{overflow-wrap:anywhere}
+    .md-panels .lc-table td.lc-tm{padding-left:10px;font-size:12px}
+    .md-panels .lc-table td.lc-tm .lc-mover{margin-top:2px}
   }
   .md-about-nm{margin:0 0 8px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:14px;color:var(--ink);font-weight:500}
   .md-about-desc{margin:0;color:var(--ink);font-size:13px;line-height:1.5;user-select:text}

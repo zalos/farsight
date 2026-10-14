@@ -473,6 +473,15 @@ The journey reaches it through `jrnWords`, `jrnMoLabel`, `jrnDeclLabel`, `jrnCal
 business lens also drops design ids (`jrnDesignIdHtml`), routes, HTTP verbs, contract chips and code links, folds
 parts the code tags `plumbing` (`jrnHelperTest`), and names the drill's places as *the request* / *the service*.
 `e2e/tests/journey-numbers.pw.spec.ts` holds the business views to zero identifier-shaped tokens.
+**What the app wrote, never a hole** (outsider round 2026-10-13, F6): `plainWords()` first puts a screen's name where its
+design id is used as a place (`screenIdsAsNames()`: *on CON-03 with business info* → *on Create your vendor account with
+…*; an id the graph does not hold → *a page*; an id in brackets or a range of ids is a cross-reference and goes), and
+reads a refusal message's hole (`filledMessage()`: *Vendor account is …, not ACTIVE* → *is (a value), not active*). The
+gate card says an HTTP refusal in words (`refusalWords()`: *Otherwise: the request is refused*, the code only in hybrid
+and code), and the readiness register names a rule nobody wrote words for by its form (`schemaWords()`:
+`invoiceStatusSchema` → *the invoice status form's rules*, `fn: invoices.status = APPROVED` → *invoices status must be
+approved*) — its steps' unreached gates read the register's own words. Words in `strings-plain.ts`; held by
+`server/test/business-words.test.ts`.
 
 **One word per position (2026-10-05).** *Step* is a journey's place in a storyline and nothing else (business:
 *journey n of m*); a **stop** is one time the journey does something — a Sheet column, the drill's rail (which walks the
@@ -1463,9 +1472,39 @@ lanes (`?storyline=&layout=lanes`) and marks the move's pill (`.ln-pill.walk-hot
 **Ask** (`askBoxHtml`, `askCardHtml`, `askNow`): a box in the walk panel and on the front door under the state of play
 (the front door scopes it to the one source picked, if one is). `GET /api/ask` answers; the card prints the
 *derived · no model* chip (a phrased answer would add *phrased by a model*, beside its cited lines), the lead lines, the
-sections — MUST BE TRUE FIRST · PROVEN BY · PATH · CHECKS · CASES — one row per line with its glyph and its chips, the
-four shapes when the question is in none of them, and the doors: the gate card, the Map at the action, the cases, and
-copy as MCP · curl · CLI. An answer is kept per box, so a lens change redraws it without asking again (`redrawAsk`).
+sections — MUST BE TRUE FIRST · PROVEN BY · PATH · CHECKS · CASES · WHO MAY · ALSO CHECKED · WHAT CONFIGURES IT · WHAT
+HAPPENS NEXT · WHERE IT IS SEEN — one row per line with its glyph and its chips, the shapes when the question is in none
+of them, and the doors: the gate card, the Map at the action, the cases, and copy as MCP · curl · CLI. A question Ask
+read as its nearest shape (outsider round 2026-10-13, F7) prints that reading first, set apart (`.ask-read`: *I read
+that as: “who may approve an invoice?”*, with the status a verb was read as). An answer is kept per box, so a lens change
+redraws it without asking again (`redrawAsk`).
 
 e2e: `tour.pw.spec.ts` (the walk on the fixture's storyline moving the Map, Ask's skipped proof, the business register's
 identifier walk over every stop, WALK and the front door's doors).
+
+## Decisions, work done outside the code, parties — `lib/decisions.js`, `lib/parties.js`, `lib/parties-model.js` (outsider round 2026-10-13, F8)
+
+**Decisions.** `lib/decisions.js` reads `GET /api/decisions` once per graph (`loadDecisions()`; the Map calls it when it
+loads its designs, the gate card and the lifecycle table on open) and indexes the rows by every node they bear on
+(`indexDecisions()`, pure). `decisionChipsHtml(ids)` draws a chip — *pending decision D7 · <title>* (amber), *decided
+D5 · …* (green), *decision D3 · named in code* (a comment names it, nothing declares it) — for the decisions on any of
+those nodes. The chip is a tip trigger (`data-tip-id="decision"`); a click opens its card pinned everywhere, the Map
+included (a bubble-phase click listener after the tip primitive's own): the state, the owner, the team's summary
+quoted, the cited document's heading and first paragraph quoted (*quoted from <path>*, a door to it), each code line
+that names it with the comment's own words and a door (not in the business register), what it bears on, and the file
+that declared it. Where the chips are: the gate card (a section with the card in place, `decisionsSecHtml`), the Map
+property's Overview under *what it is* (the page, its components and handlers, its gates and calls —
+`decisionIdsOf()`), each WALK stop (the screen, the stop's cited nodes and a hand-off's writer), and each mover of the
+lifecycle table. Nothing on the card is generated: every word is the team's or the catalog's (`strings-decisions.ts`).
+
+**Work done outside the code and parties.** A screen's `steps[]` entry with `by` reaches the viewer as
+`segment.offPlatform` on `/api/journey`. `lib/parties-model.js` (pure, no DOM) turns them into lanes cards:
+`offPlatformStages()` — one card per declared step at its screen's column, in the party's own lane when `who` names a
+party external, else under the screen in its person's lane (the next row); `partyLanes()` — one lane per party,
+between the people's lanes and the stores'; `partyLaneCount()` and `offPlatformCounted()` the two counts.
+`laneLayout()` calls them; the cards are never screens (not in `lanes.count.distinctScreens`, not in the *then*
+arrows, not in a persona lane's count). `lib/parties.js` draws them: `offPlatformStageHtml()` — a dotted, hatched card
+with the step's name, *done by <who>* and where, *done outside the code* and *no test can reach it* where a test chip
+would be (never a status chip, never a verdict); `partyLaneHeadHtml()` — the party's name, its count and *a party · no
+code reaches it*; `offPlatformListHtml()` — the rows the Map property's Overview lists under *done outside the code*.
+The WALK prints a stop of kind `offPlatform` after the screen's hand-offs (core `tour.ts`).

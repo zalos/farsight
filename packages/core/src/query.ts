@@ -1,6 +1,8 @@
+import { offPlatformSteps, type OffPlatformStep } from './decisions.js';
 import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind, PersonaFrom } from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
 import { isConfigCheck } from './config-check.js';
+import { refoldRuns } from './test-runs.js';
 import { withJourneyPreconditions, type ActionPreconditions } from './gates.js';
 import { gateTierOf, isActionGate, type GateClass, type GateTier, type TierFrom } from './gate-class.js';
 import { withJourneyCounted, type JourneyCounted, type SegmentCounted, type SegmentAbsence, type AbsenceKind, type AbsenceWord } from './journey-counted.js';
@@ -23,6 +25,8 @@ export interface GraphIndex {
 }
 
 export function buildIndex(nodes: GraphNode[], edges: GraphEdge[]): GraphIndex {
+  // a case's `run` is the fold over its projects: read the fold this build makes, not the one the graph was written with
+  refoldRuns(nodes);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const out = new Map<string, GraphEdge[]>();
   const incoming = new Map<string, GraphEdge[]>();
@@ -1191,6 +1195,11 @@ export interface JourneySegment {
   systems: string[];
   /** operations the screen's manifest lists that no action in this segment made: dotted stops (R6) */
   declaredOnly: { op: string; routeId?: string; label: string }[];
+  /**
+   * the screen's designed steps somebody does outside the code (`steps[].by`, core decisions.ts): a person, a partner,
+   * another system — never a gate, never a verdict. Absent when the screen declares none.
+   */
+  offPlatform?: OffPlatformStep[];
   /** this segment's cut points as a list, each named where it happened (R24) */
   cutPoints: { parentStep: number; nodeId: string; name: string; reason: JourneyCutPoint['reason']; moment: number }[];
   /**
@@ -1264,7 +1273,7 @@ export interface JourneySummary {
     records: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore }[];
     messages: { id: string; name: string }[];
     /** `ops` from the HTTP methods of the edges that reached it (`opOfMethod`); `store` when it is used as a data store */
-    externals: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore }[];
+    externals: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore; party?: true }[];
     /**
      * the data stores the journey touches, each once by name, first-seen order: `records` = distinct
      * record nodes that live in it, `externals` = store-like external nodes that are it (an ERP is 1),
@@ -1496,6 +1505,18 @@ export function humanizeName(name: string): string {
  * disagree about what a feature is made of. Screens come from `screens`
  * (screensFor); everything else is derived from the steps.
  */
+/** The parties the journey's steps done outside the code name, each once, after the externals the walk reached. */
+function partiesNamed(segments: JourneySegment[], reached: Map<string, unknown>): JourneySummary['system']['externals'] {
+  const out = new Map<string, JourneySummary['system']['externals'][number]>();
+  for (const sg of segments) {
+    for (const st of sg.offPlatform ?? []) {
+      if (!st.party || reached.has(st.party.id) || out.has(st.party.id)) continue;
+      out.set(st.party.id, { id: st.party.id, name: st.party.name, ops: [], party: true });
+    }
+  }
+  return [...out.values()];
+}
+
 export function journeySummary(index: GraphIndex, j: Journey, screens: GraphNode[]): JourneySummary {
   return withJourneyPreconditions(index, j, withJourneyCoverage(index, j, withJourneyCounted(j, buildJourneySummary(index, j, screens))));
 }
@@ -1885,6 +1906,9 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       const rt = routeFor(op);
       return { op, ...(rt ? { routeId: rt.id } : {}), label: nonEmpty(rt?.contract?.summary) ?? op };
     });
+    // what the design says somebody does on this screen outside the code — a build state of its own, never a stop
+    const off = offPlatformSteps(index, sg.screen ? index.byId.get(sg.screen.id) : undefined);
+    if (off.length) sg.offPlatform = off;
     for (const mk of sg.markers) {
       let at = 0;
       for (let k = moments.length - 1; k >= 0; k--) if (mk.stepOrder >= moments[k]!.from) { at = k; break; }
@@ -1994,7 +2018,12 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
         items: untranslated,
       },
     },
-    system: { timeline, records: [...records.values()], messages: [...messages.values()], externals: [...externals.values()], stores: storesOf(records, externals), afterwards: [...afterwards.values()], repos: [...repos] },
+    system: {
+      timeline, records: [...records.values()], messages: [...messages.values()],
+      // the parties a step done outside the code names come after the systems the code reaches: declared, no code reaches them
+      externals: [...externals.values(), ...partiesNamed(segments, externals)],
+      stores: storesOf(records, externals), afterwards: [...afterwards.values()], repos: [...repos],
+    },
     segments,
     // rank first (the request path read downward), first-seen inside a rank
     systems: withRecordsStore([...systemRows.values()], segments).sort((a, b) => systemRank(a) - systemRank(b)),

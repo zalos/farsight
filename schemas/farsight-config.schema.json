@@ -171,6 +171,13 @@
       "additionalProperties": {
         "$ref": "#/$defs/lifecycleEntry"
       }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Decisions by id, the same shape as a manifest's decisions[]: an entry overrides a manifest's decision field by field (root file first, the nearest nested file last), or declares one no manifest does when it gives a title and a state. A nested file's doc is relative to its folder.",
+      "items": {
+        "$ref": "#/$defs/decisionOverride"
+      }
     }
   },
   "$defs": {
@@ -322,7 +329,67 @@
         }
       }
     },
+    "decisionOverride": {
+      "type": "object",
+      "description": "A decision by id; every other field optional — an override gives only what it changes.",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The decision's id."
+        },
+        "title": {
+          "type": "string",
+          "description": "The decision, in the team's words."
+        },
+        "state": {
+          "enum": [
+            "open",
+            "decided"
+          ],
+          "description": "open = not decided yet; decided = made."
+        },
+        "decided": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "The date it was decided (YYYY-MM-DD)."
+        },
+        "owner": {
+          "type": "string",
+          "description": "Who owns it."
+        },
+        "summary": {
+          "type": "string",
+          "description": "The team's words on it, quoted as written."
+        },
+        "doc": {
+          "type": "string",
+          "description": "A markdown document inside the source, optionally with #anchor."
+        },
+        "affects": {
+          "type": "array",
+          "description": "Node ids, screen ids or flow ids it bears on.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "external": {
+      "description": "One declared external: a third-party system the code calls (an import), or a party — a counterparty the app hands work to outside its code (kind party, no import).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/externalSystem"
+        },
+        {
+          "$ref": "#/$defs/externalParty"
+        }
+      ]
+    },
+    "externalSystem": {
       "type": "object",
       "description": "One declared third-party system: the client the calls go through, what to call it, and what kind of system it is.",
       "required": [
@@ -355,6 +422,33 @@
         "store": {
           "type": "boolean",
           "description": "this external is (true) or is not (false) used as a data store — overrides the default from the kind (erp · db · files are)"
+        }
+      }
+    },
+    "externalParty": {
+      "type": "object",
+      "description": "A counterparty the app hands work to outside its code — a payment partner, the client. No import: no code reaches it. Drawn as a lane when a declared step or hand-off names it.",
+      "required": [
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "What to call the party; a step's who names it."
+        },
+        "kind": {
+          "const": "party",
+          "description": "A party."
+        },
+        "role": {
+          "type": "string",
+          "description": "What it does, in the team's words."
+        },
+        "persona": {
+          "type": "string",
+          "description": "A declared persona id the party also is (the client who uses a portal)."
         }
       }
     },

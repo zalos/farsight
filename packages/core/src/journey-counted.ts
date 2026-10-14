@@ -24,6 +24,7 @@
 import type { Journey, JourneySummary, JourneySegment } from './query.js';
 import { counted, type Counted, type CountScope } from './counts.js';
 import type { GateClass, GateTier } from './graph.js';
+import { offPlatformCounted } from './decisions.js';
 
 /** The journey header's numbers and their siblings, each with its scope. */
 export interface JourneyCounted {
@@ -58,6 +59,8 @@ export interface JourneyCounted {
   repeats: Counted;
   cutPoints: Counted;
   choices: Counted;
+  /** what the design says somebody does outside the code on the journey's screens (core decisions.ts) — absent when nothing is */
+  offPlatform?: Counted;
 }
 
 /** One screen's numbers — the same concepts, scoped to the screen. */
@@ -73,6 +76,8 @@ export interface SegmentCounted {
   decisions: Counted;
   notInWords: Counted;
   inWords: Counted;
+  /** what the design says somebody does outside the code on this screen — absent when nothing is */
+  offPlatform?: Counted;
 }
 
 const SRC = 'journeySummary()';
@@ -383,6 +388,13 @@ export function journeyAbsence(summary: JourneySummary): { segments: SegmentAbse
 export function withJourneyCounted(j: Journey, summary: JourneySummary): JourneySummary {
   summary.counted = journeyCounted(j, summary);
   for (const sg of summary.segments) sg.counted = segmentCounted(j, sg, summary.business.description);
+  // done outside the code: each declared step once over the journey (a screen met twice is one screen), and per screen
+  const seen = new Map<string, NonNullable<JourneySegment['offPlatform']>[number]>();
+  for (const sg of summary.segments) {
+    for (const st of sg.offPlatform ?? []) if (!seen.has(`${st.screen}|${st.id}`)) seen.set(`${st.screen}|${st.id}`, st);
+    if (sg.offPlatform?.length && sg.counted) sg.counted.offPlatform = offPlatformCounted(sg.offPlatform, 'journey.scopeHere', `${SRC}.segments[].offPlatform`);
+  }
+  if (seen.size) summary.counted.offPlatform = offPlatformCounted([...seen.values()], 'journey.scopeAll', `${SRC}.segments[].offPlatform — each declared once`);
   const absent = journeyAbsence(summary);
   summary.absentKinds = absent.kinds;
   summary.segments.forEach((sg, i) => { sg.absent = absent.segments[i]; });
