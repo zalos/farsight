@@ -447,7 +447,7 @@ describe('journeys', () => {
     // the fixture's config moves draft-and-send into Review and send; it is under both personas
     assert.match(out, /^- Draft and send an invoice — .* · also under Operations · with Operations \(1 of 2 screens\) · placed by farsight\.config\.json · /m);
     // who uses each screen, and what placed it: the screen row, Billing's routes, the journey
-    assert.match(out, /^3 screens across every source in scope \(1 named by its screen row · 1 by its address · 1 by its journey\)$/m);
+    assert.match(out, /^4 screens across every source in scope \(1 named by its screen row · 1 by its address · 2 by their journey\)$/m);
     assert.ok(out.indexOf('## Billing') < out.indexOf('## Operations'), 'declared order, not alphabetical');
   });
 
