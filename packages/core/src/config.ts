@@ -90,7 +90,7 @@ export interface JourneysConfig {
   storylines?: JourneysConfigStoryline[];
 }
 export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: (string | JourneyStorylineEntryDecl)[]; lanes?: JourneyStorylineLaneDecl[]; handoffs?: JourneyStorylineHandoffDecl[] }
-export interface JourneysConfigPersona { id: string; name?: string; description?: string }
+export interface JourneysConfigPersona { id: string; name?: string; description?: string; routes?: string[]; signsInWith?: string[] }
 export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
 export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
 
@@ -284,10 +284,17 @@ export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
   const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
   const entries = (v: unknown): Record<string, unknown>[] =>
     (Array.isArray(v) ? v : []).filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && !Array.isArray(e) && !!str((e as Record<string, unknown>).id));
+  // a list of non-empty strings (a lone string is a list of one); absent or empty: undefined
+  const strList = (v: unknown): string[] | undefined => {
+    const list = (typeof v === 'string' ? [v] : Array.isArray(v) ? v : []).map(str).filter((x): x is string => !!x);
+    return list.length ? list : undefined;
+  };
   const out: JourneysConfig = {};
   if (r.personas !== undefined) {
     out.personas = entries(r.personas).map((e) => ({
       id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+      ...(strList(e.routes) ? { routes: strList(e.routes)! } : {}),
+      ...(strList(e.signsInWith) ? { signsInWith: strList(e.signsInWith)! } : {}),
     }));
   }
   if (r.groups !== undefined) {

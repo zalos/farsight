@@ -382,6 +382,26 @@ export function placesOf(tree, nodeId) {
 }
 
 /**
+ * The other people a journey's screens are used by (`JourneyRow.screenPersonas`, core journeys.ts personaOfScreen):
+ * every persona but `leadId` that places at least one of its screens, in the order its screens first meet them, each
+ * with how many of its screens it has. Empty when every screen is the lead's, or the tree carries no screen personas.
+ * @group Journey view
+ */
+export function screenPersonaOthers(tree, nodeId, leadId) {
+  let row = null;
+  for (const p of (tree && tree.personas) || []) for (const g of p.groups || []) for (const j of g.journeys || []) if (!row && j.nodeId === nodeId) row = j;
+  const list = (row && row.screenPersonas) || [];
+  const out = new Map();
+  for (const x of list) {
+    if (!x || x.persona === leadId) continue;
+    const have = out.get(x.persona) || { id: x.persona, name: x.personaName || x.persona, screens: 0, from: x.personaFrom };
+    have.screens++;
+    out.set(x.persona, have);
+  }
+  return [...out.values()].map((x) => ({ ...x, of: list.length }));
+}
+
+/**
  * The journeys in tree order, each once, with every persona and the group it
  * sits in — what the Map's persona band and the Portfolio read.
  * @group Journey view
