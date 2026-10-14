@@ -333,15 +333,28 @@ Use the settings view to save these fields, or edit the local JSON and explicitl
 
 Echo separates three responsibilities: agentmemory stores and searches records; the sub-mind researches those records using the selected model; the main agent receives a small sourced brief with typed follow-up actions. Research evidence stays inside Echo’s bounded request context rather than being added to the main agent’s conversation.
 
-In Settings, select **Configured model** (or **Mock** for a model-free check), then set **Prompt memory research** to **Prepare a brief in the background**. Save, restart Echo, and start a fresh host session. The saved setting is `submind.hookResearch: "background"`; omitted settings default to `"manual"` for compatibility. Loading or saving settings never starts inference.
+In Settings, select **Configured model** (or **Mock** for a model-free check), then choose **Prompt memory research**:
 
-A prompt hook returns immediately with `echo-hook-brief/v1` and an engine-created `memory.brief` action. Follow its `requestId`, `workspace`, `host` and `sessionId` exactly using the pinned Echo command from SessionStart:
+- **Prepare a brief in the background** (`submind.hookResearch: "background"`): the agent starts immediately with a retrieval handle.
+- **Wait for a brief, then continue** (`"wait"`): include a compact sourced brief if it finishes within **Wait limit (seconds)** and fits the context allowance. Otherwise return the same retrieval handle while research continues. The default limit is 20 seconds; configure 0.1–60 seconds with `submind.hookWaitMs`.
+- **Manual research** (`"manual"`): preserve the existing explicit research and raw-recall hook behavior. This remains the default for omitted settings.
+
+Save, restart Echo, and start a fresh host session. Loading or saving settings never starts inference. The CLI can change these settings for just one selected profile:
+
+```sh
+farsight-echo configure --scope global --profile personal --hook-research wait --hook-wait-ms 20000
+farsight-echo configure --scope global --profile personal --hook-research background
+```
+
+Use `--scope workspace` or `--config PATH` for another installation. New hook definitions accommodate the full wait; refresh older definitions once with `connect --host all --workspace /absolute/path/to/workspace` using the same profile selection. Until refreshed, older hooks fall back to a handle within their original short deadline. Subsequent wait-setting changes need a service restart and fresh host session, but no hook rewrite.
+
+A background prompt hook returns immediately with `echo-hook-brief/v1` and an engine-created `memory.brief` action. Follow its `requestId`, `workspace`, `host` and `sessionId` exactly using the pinned Echo command from SessionStart:
 
 ```sh
 farsight-echo brief --request REQUEST_ID --workspace /absolute/path/to/workspace --host claude --session-id SESSION_ID
 ```
 
-A `pending` result means work is still running; continue useful work before checking again. Polling never starts another generation. A `ready` result contains the usual problem/fix/why findings and checked `memory.expand` actions. `cancel-brief` accepts the same arguments. No model-provided shell command or URL is executed.
+A `pending` result means work is still running; continue useful work before checking again. Polling never starts another generation. Add `--wait-ms 20000` to `brief` to wait for completion without repeated polling (maximum 60000). Disconnecting or reaching that wait limit ends only the wait, not the accepted research. A `ready` result contains the usual problem/fix/why findings and checked `memory.expand` actions. `cancel-brief` accepts the same arguments. Waiting hooks include only complete findings, compact citations and checked expansion actions. If even one finding cannot fit, the complete polling handle remains available. No model-provided shell command or URL is executed.
 
 Transient jobs belong to one profile, canonical workspace, host and session. They expire after five minutes and disappear on restart. Identical submissions within that session reuse the retained job. A newer prompt cancels still-running research for that session; while the provider is settling, Echo reports `busy` and does not queue more work. Competing sessions also receive `busy` rather than an unbounded queue. Explicit `ask --query TEXT` remains available for fresh research. Shared saved memories remain accessible across connected workspaces; transient research contexts are not shared.
 

@@ -19,7 +19,7 @@ function result(mode: 'mock' | 'model' = 'mock'): SubmindResult {
     coverage: { exhaustive: false, since: '2026-01-01T00:00:00.000Z', inspected: 1, stopReason: 'complete', truncated: false },
     usage: { modelCalls: mode === 'mock' ? 0 : 1, searches: 1, evidenceChars: 10, inputChars: 10, inputTokens: 0, outputTokens: 0, elapsedMs: 1 } };
 }
-async function fixture(t: TestContext, dependencies: Parameters<typeof createHookResearchRegistry>[1], options: { mode?: 'off' | 'mock' | 'model'; policy?: 'manual' | 'background' } = {}) {
+async function fixture(t: TestContext, dependencies: Parameters<typeof createHookResearchRegistry>[1], options: { mode?: 'off' | 'mock' | 'model'; policy?: 'manual' | 'background' | 'wait' } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'echo-hook-research-'));
   const workspace = join(directory, 'workspace'); await mkdir(workspace);
   const config = defaultConfig();
@@ -226,4 +226,116 @@ test('a repeated cached prompt cancels newer in-flight work before returning its
     assert.equal((await f.registry.brief(second.actions[0]!.arguments)).status, 'cancelled');
     assert.equal(calls, 2);
   } finally { release.resolve(); }
+});
+
+
+test('only brief accepts a bounded wait and generated actions retain their immediate binding contract', async t => {
+  const input = { workspace: '/example', host: 'claude', sessionId: 'session', requestId: 'x'.repeat(32) };
+  for (const waitMs of [0, 1, 20_000, 60_000]) assert.equal(validateHookResearchInput('brief', { ...input, waitMs }).waitMs, waitMs);
+  for (const waitMs of [-1, 60_001, 1.5, '20', null, Infinity, NaN]) assert.throws(() => validateHookResearchInput('brief', { ...input, waitMs }));
+  assert.throws(() => validateHookResearchInput('cancel-brief', { ...input, waitMs: 0 }));
+  assert.throws(() => validateHookResearchInput('prepare', { workspace: input.workspace, host: input.host, sessionId: input.sessionId, query: 'synthetic', waitMs: 0 }));
+  const f = await fixture(t, { research: async () => result() }, { policy: 'wait' });
+  const receipt = await f.registry.prepare({ ...f.binding, query: 'synthetic' });
+  assert.ok(receipt.requestId);
+  for (const action of receipt.actions) assert.equal(Object.hasOwn(action.arguments, 'waitMs'), false);
+  assert.equal((await f.registry.brief({ ...receipt.actions[0]!.arguments, waitMs: 1000 })).status, 'ready');
+});
+
+test('bounded brief waits return completion or a pending handle without starting more research', async t => {
+  const release = deferred(); let calls = 0;
+  const f = await fixture(t, { research: async () => { calls++; await release.promise; return result(); } });
+  const receipt = await f.registry.prepare({ ...f.binding, query: 'synthetic' });
+  const input = receipt.actions[0]!.arguments;
+  let releaseTimer: NodeJS.Timeout | undefined;
+  try {
+    assert.equal((await f.registry.brief(input)).status, 'pending');
+    assert.equal((await f.registry.brief({ ...input, waitMs: 0 })).status, 'pending');
+    const timedOut = await f.registry.brief({ ...input, waitMs: 20 });
+    assert.equal(timedOut.status, 'pending'); assert.equal(timedOut.actions[0]!.arguments.requestId, input.requestId);
+    const waiting = f.registry.brief({ ...input, waitMs: 1000 });
+    releaseTimer = setTimeout(release.resolve, 50);
+    const done = await waiting;
+    assert.equal(done.status, 'ready'); assert.deepEqual(done.result, result()); assert.equal(calls, 1);
+    assert.equal(done.actions.length, 1); assert.equal(done.actions[0]!.operation, 'memory.brief');
+    assert.deepEqual(done.actions[0]!.arguments, input);
+    const retrieved = await f.registry.brief(done.actions[0]!.arguments);
+    assert.deepEqual(retrieved.result, done.result); assert.deepEqual(retrieved.actions, []);
+    assert.deepEqual((await f.registry.brief({ ...input, waitMs: 0 })).actions, []);
+    assert.equal((await f.registry.brief({ ...input, waitMs: 60_000 })).status, 'ready');
+    assert.equal(calls, 1);
+  } finally { clearTimeout(releaseTimer); release.resolve(); }
+});
+
+test('aborting one brief waiter leaves the accepted job and another waiter running', async t => {
+  const release = deferred(); let signal!: AbortSignal, calls = 0;
+  const f = await fixture(t, { research: async (_query, received) => { calls++; signal = received; await release.promise; return result(); } });
+  const receipt = await f.registry.prepare({ ...f.binding, query: 'synthetic' });
+  const input = receipt.actions[0]!.arguments;
+  const controller = new AbortController();
+  let abortTimer: NodeJS.Timeout | undefined;
+  try {
+    const abandoned = f.registry.brief({ ...input, waitMs: 60_000 }, controller.signal);
+    const checked = assert.rejects(abandoned, { name: 'AbortError' });
+    const kept = f.registry.brief({ ...input, waitMs: 1000 });
+    abortTimer = setTimeout(() => controller.abort(), 30);
+    await checked;
+    assert.equal(signal.aborted, false);
+    assert.equal((await f.registry.brief(input)).status, 'pending');
+    release.resolve();
+    assert.equal((await kept).status, 'ready'); assert.equal(calls, 1);
+    await assert.rejects(f.registry.brief({ ...input, waitMs: 1000 }, controller.signal), { name: 'AbortError' });
+  } finally { clearTimeout(abortTimer); release.resolve(); }
+});
+
+test('cancellation, expiry, and shutdown wake waiters without waiting for provider settlement', async t => {
+  for (const change of ['cancel', 'expire', 'close'] as const) {
+    const release = deferred(); let signal!: AbortSignal;
+    const f = await fixture(t, { ...(change === 'expire' ? { ttlMs: 200 } : {}), research: async (_query, received) => { signal = received; await release.promise; return result(); } });
+    const receipt = await f.registry.prepare({ ...f.binding, query: 'synthetic' });
+    const input = receipt.actions[0]!.arguments;
+    let changeTimer: NodeJS.Timeout | undefined;
+    try {
+      const waiting = f.registry.brief({ ...input, waitMs: 1000 });
+      if (change !== 'expire') changeTimer = setTimeout(() => { if (change === 'close') f.registry.close(); else void f.registry.cancel(input); }, 30);
+      const response = await waiting;
+      assert.equal(response.status, change === 'cancel' ? 'cancelled' : change === 'expire' ? 'expired' : 'unavailable');
+      assert.equal(response.result, undefined); assert.equal(signal.aborted, true);
+    } finally { clearTimeout(changeTimer); release.resolve(); }
+  }
+});
+
+test('wait completion rechecks settings and connection trust before exposing a result', async t => {
+  for (const change of ['settings', 'connection'] as const) {
+    const release = deferred(); let signal!: AbortSignal;
+    const f = await fixture(t, { research: async (_query, received) => { signal = received; await release.promise; return result(); } });
+    const receipt = await f.registry.prepare({ ...f.binding, query: 'synthetic' });
+    try {
+      const waiting = f.registry.brief({ ...receipt.actions[0]!.arguments, waitMs: 60 });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      if (change === 'settings') { f.config.profiles.personal!.identity.project = 'changed'; await saveConfig(f.ctx.configPath, f.config); }
+      else await removeConnection(f.workspace);
+      const response = await waiting;
+      assert.equal(response.status, 'unavailable'); assert.equal(response.result, undefined); assert.equal(signal.aborted, true);
+    } finally { release.resolve(); }
+  }
+});
+
+test('brief waiter retention is bounded and aborted waiters release their slots', async t => {
+  const release = deferred(); let signal!: AbortSignal;
+  const f = await fixture(t, { research: async (_query, received) => { signal = received; await release.promise; return result(); } });
+  const receipt = await f.registry.prepare({ ...f.binding, query: 'synthetic' });
+  const input = receipt.actions[0]!.arguments;
+  const controllers = Array.from({ length: 32 }, () => new AbortController());
+  const waits = controllers.map(controller => f.registry.brief({ ...input, waitMs: 60_000 }, controller.signal).catch(() => undefined));
+  let guard: NodeJS.Timeout | undefined;
+  try {
+    const overflow = await Promise.race([...waits, new Promise<never>((_resolve, reject) => { guard = setTimeout(() => reject(new Error('waiter bound not enforced')), 2000); })]);
+    assert.equal(overflow?.status, 'pending');
+    for (const controller of controllers) controller.abort();
+    await Promise.all(waits);
+    assert.equal(signal.aborted, false);
+    const next = f.registry.brief({ ...input, waitMs: 1000 });
+    release.resolve(); assert.equal((await next).status, 'ready');
+  } finally { clearTimeout(guard); for (const controller of controllers) controller.abort(); release.resolve(); await Promise.all(waits); }
 });

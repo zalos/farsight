@@ -30,7 +30,8 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   install: { type: 'boolean' }, workspace: { type: 'string' }, content: { type: 'string' },
   query: { type: 'string' }, topic: { type: 'string', multiple: true }, limit: { type: 'string' },
   scope: { type: 'string' }, port: { type: 'string' }, 'backend-port': { type: 'string' },
-  request: { type: 'string' }, 'session-id': { type: 'string' },
+  request: { type: 'string' }, 'session-id': { type: 'string' }, 'wait-ms': { type: 'string' },
+  'hook-research': { type: 'string' }, 'hook-wait-ms': { type: 'string' }, 'hook-timeout-ms': { type: 'string' },
   confirm: { type: 'boolean' }, id: { type: 'string' }, revision: { type: 'string' },
 } });
 const command = values.help ? 'help' : positionals[0] ?? 'help';
@@ -150,9 +151,11 @@ async function hooks(ctx: EchoContext, host: HookHost): Promise<void> {
 }
 
 async function hook(): Promise<void> {
-  // Hooks remain fast and fail open. Only a prompt query is read; transcripts and
-  // tool output are never captured by this explicit-memory iteration.
-  const deadline = setTimeout(() => process.exit(0), 3500);
+  // Only the trusted wait policy may extend a prompt callback. Legacy runners
+  // keep their original short deadline until their hook definitions are refreshed.
+  const started = Date.now();
+  let expiresAt = started + 3500;
+  let deadline = setTimeout(() => process.exit(0), 3500);
   deadline.unref();
   try {
     if (values.host !== 'claude' && values.host !== 'codex' && values.host !== 'vscode') return;
@@ -181,12 +184,27 @@ async function hook(): Promise<void> {
     if (payload.hook_event_name === 'SessionStart') {
       print(hookContext(ctx, fileURLToPath(import.meta.url), 'SessionStart'));
     } else if (payload.hook_event_name === 'UserPromptSubmit' && typeof payload.prompt === 'string' && payload.prompt.trim()) {
-      if (submindSettings(ctx.profile).hookResearch === 'background') {
+      const policy = submindSettings(ctx.profile);
+      if (policy.hookResearch !== 'manual') {
+        if (policy.hookResearch === 'wait' && values['hook-timeout-ms'] !== undefined) {
+          const capacity = Number(values['hook-timeout-ms']);
+          if (!/^\d+$/.test(values['hook-timeout-ms']) || capacity < 1000 || capacity > 65000) return;
+          expiresAt = started + Math.min(policy.hookWaitMs + 3500, capacity - 500);
+          clearTimeout(deadline);
+          deadline = setTimeout(() => process.exit(0), Math.max(1, expiresAt - Date.now()));
+          deadline.unref();
+        }
         const binding = { workspace: await realpath(root), host: values.host as HookHost, sessionId: payload.session_id };
         if (!canFitHookResearch(ctx, binding)) {
           print({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: word('hookCuratorTooSmall') } }); return;
         }
-        const result = await memoryRequest(ctx, 'prepare', { query: payload.prompt.slice(0, 2000), ...binding }, { timeoutMs: 1800 });
+        let result = await memoryRequest(ctx, 'prepare', { query: payload.prompt.slice(0, 2000), ...binding }, { timeoutMs: 1800 });
+        const waitMs = Math.floor(Math.min(policy.hookWaitMs, expiresAt - Date.now() - 700));
+        if (policy.hookResearch === 'wait' && result.status === 'pending' && result.requestId && waitMs > 0) {
+          try {
+            result = await memoryRequest(ctx, 'brief', { ...binding, requestId: result.requestId, waitMs }, { timeoutMs: waitMs + 400 });
+          } catch { /* Keep the accepted handle if the wait connection fails. */ }
+        }
         print(hookResearchContext(ctx, result)); return;
       }
       const result = await memoryRequest(ctx, 'recall', { query: payload.prompt.slice(0, 2000), limit: 5 }, { timeoutMs: 1800 });
@@ -211,6 +229,8 @@ async function main(): Promise<void> {
     print(await submindDemo(values.query)); return;
   }
   if (positionals.length > 1) throw new Error(word('unknownCommand'));
+  if (values['hook-timeout-ms'] !== undefined || values['wait-ms'] !== undefined && command !== 'brief' ||
+      (values['hook-research'] !== undefined || values['hook-wait-ms'] !== undefined) && command !== 'configure') throw new Error(echoSubmindWord('input'));
   if (command === 'trust') {
     if (!values.confirm) throw new Error(word('trustConfirm'));
     const selection = target();
@@ -229,6 +249,22 @@ async function main(): Promise<void> {
   if (values.port !== undefined || values['backend-port'] !== undefined) throw new Error(word('setupOptions'));
   const installation = target();
   const ctx = loadContext(installation.configPath, installation.profileId);
+  if (command === 'configure') {
+    if (Object.keys(values).some(key => !['config', 'scope', 'profile', 'hook-research', 'hook-wait-ms'].includes(key)) ||
+        values['hook-research'] === undefined && values['hook-wait-ms'] === undefined) throw new Error(word('configureRequired'));
+    await updateConfig(ctx.configPath, current => {
+      const profile = current.profiles[ctx.profileId];
+      if (!profile) throw new Error(word('profileRequired'));
+      const policy = { ...submindSettings(profile),
+        ...(values['hook-research'] === undefined ? {} : { hookResearch: values['hook-research'] }),
+        ...(values['hook-wait-ms'] === undefined ? {} : { hookWaitMs: Number(values['hook-wait-ms']) }),
+      };
+      profile.submind = submindSettings({ submind: policy as EchoContext['profile']['submind'] });
+      return current;
+    });
+    const saved = loadContext(ctx.configPath, ctx.profileId);
+    print({ configPath: saved.configPath, profile: saved.profileId, submind: submindSettings(saved.profile), next: word('configureSaved') }); return;
+  }
   if (command === 'models' || command === 'model-test') {
     if (Object.keys(values).some(key => !['config', 'scope', 'profile'].includes(key))) throw new Error(echoSubmindWord('input'));
     const controller = new AbortController();
@@ -282,7 +318,9 @@ async function main(): Promise<void> {
   }
   if (command === 'brief' || command === 'cancel-brief') {
     if (!values.request || !values.workspace || !values['session-id'] || !['claude', 'codex', 'vscode'].includes(values.host ?? '')) throw new Error(word('briefRequired'));
-    print(await memoryRequest(ctx, command, { requestId: values.request, workspace: workspace(), host: values.host as HookHost, sessionId: values['session-id'] })); return;
+    const input = { requestId: values.request, workspace: workspace(), host: values.host as HookHost, sessionId: values['session-id'] };
+    print(command === 'brief' ? await memoryRequest(ctx, 'brief', { ...input, ...(values['wait-ms'] === undefined ? {} : { waitMs: Number(values['wait-ms']) }) })
+      : await memoryRequest(ctx, 'cancel-brief', input)); return;
   }
   if (command === 'expand') {
     if (!values.id || !values.revision) throw new Error(echoSubmindWord('reference'));

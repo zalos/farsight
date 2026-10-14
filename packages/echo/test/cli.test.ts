@@ -250,3 +250,30 @@ test('interrupting model-test cancels the request and preserves the interrupted 
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+
+test('configure changes only the selected prompt policy and rejects invalid updates atomically', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'echo-configure-'));
+  const configPath = join(directory, 'settings.json');
+  const cli = (...args: string[]) => run(process.execPath, [entry, ...args, '--config', configPath]);
+  try {
+    await cli('init');
+    const before = loadContext(configPath).config;
+    const result = JSON.parse((await cli('configure', '--profile', 'work', '--hook-research', 'wait', '--hook-wait-ms', '45000')).stdout);
+    const after = loadContext(configPath).config;
+    assert.deepEqual(after.profiles.personal, before.profiles.personal);
+    assert.equal(after.profiles.work!.submind!.hookResearch, 'wait');
+    assert.equal(after.profiles.work!.submind!.hookWaitMs, 45000);
+    assert.equal(after.profiles.work!.submind!.mode, 'off');
+    assert.match(result.next, /Restart Echo/);
+    const saved = readFileSync(configPath, 'utf8');
+    for (const args of [[], ['--hook-research', 'invalid'], ['--hook-wait-ms', '60001'], ['--hook-wait-ms', 'NaN'], ['--hook-research', 'wait', '--model', 'unexpected']]) {
+      await assert.rejects(cli('configure', ...args));
+      assert.equal(readFileSync(configPath, 'utf8'), saved);
+    }
+    await cli('configure', '--profile', 'work', '--hook-research', 'background');
+    assert.equal(loadContext(configPath, 'work').profile.submind!.hookWaitMs, 45000);
+    await assert.rejects(cli('cancel-brief', '--wait-ms', '1000'));
+    await assert.rejects(cli('doctor', '--hook-research', 'background'));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

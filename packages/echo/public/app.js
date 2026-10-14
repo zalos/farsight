@@ -160,7 +160,7 @@ function captureForm() {
   const ollamaChanged = ollama.contextTokens !== 4096 || ollama.keepAliveSeconds !== 0;
   p.model = { provider: value('provider'), baseUrl: value('modelUrl'), model: value('modelName'), secretRef: optional('modelSecret'), ...(p.model.allowInsecureHttp !== undefined || values.has('allowInsecureHttp') ? { allowInsecureHttp: values.has('allowInsecureHttp') } : {}), ...(p.model.ollama !== undefined || ollamaChanged ? { ollama } : {}) };
   const submind = {
-    mode: value('submindMode'), hookResearch: value('hookResearch'),
+    mode: value('submindMode'), hookResearch: value('hookResearch'), hookWaitMs: Math.round(Number(value('hookWait')) * 1000),
     maxSteps: Number(value('maxSteps')), maxSearches: Number(value('maxSearches')),
     maxCandidates: Number(value('maxCandidates')), evidenceMaxChars: Number(value('evidenceMaxChars')),
     inputMaxChars: Number(value('inputMaxChars')), lookbackDays: Number(value('lookbackDays')),
@@ -277,8 +277,10 @@ function renderForm() {
     modeNote.title = strings[`echo.ui.${key}`].define;
   });
   submind.grid.append(mode, modeNote,
-    field('hookResearch', 'hookResearch', policy.hookResearch ?? defaults.submind.hookResearch, { options: [['manual', 'hookManual'], ['background', 'hookBackground']], wide: true }),
+    field('hookResearch', 'hookResearch', policy.hookResearch ?? defaults.submind.hookResearch, { options: [['manual', 'hookManual'], ['background', 'hookBackground'], ['wait', 'hookWait']], wide: true }),
     word('p', 'hookResearchNote', 'field-hint wide'),
+    field('hookWaitLimit', 'hookWait', (policy.hookWaitMs ?? defaults.submind.hookWaitMs) / 1000, { type: 'number', min: 0.1, max: 60, step: '0.001', required: true }),
+    word('p', 'hookWaitNote', 'field-hint wide'),
     field('maxSteps', 'maxSteps', policy.maxSteps, { type: 'number', min: 1, max: 8, required: true }),
     field('maxSearches', 'maxSearches', policy.maxSearches, { type: 'number', min: 1, max: 8, required: true }),
     field('maxCandidates', 'maxCandidates', policy.maxCandidates, { type: 'number', min: 1, max: 50, required: true }),

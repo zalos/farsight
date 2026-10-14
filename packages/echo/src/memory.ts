@@ -8,7 +8,7 @@ import { loadContext, submindSettings } from './config.js';
 import { createResearchStore } from './research-store.js';
 import { generateSubmind } from './models.js';
 import { ModelBusyError, withModelOperation } from './model-gate.js';
-import { createHookResearchRegistry, validateHookResearchInput, type HookBriefInput, type HookBriefResult, type HookPrepareInput } from './hook-research.js';
+import { createHookResearchRegistry, validateHookResearchInput, type HookBriefInput, type HookBriefResult, type HookPrepareInput, type HookWaitInput } from './hook-research.js';
 import { research, expandMemory, validateResearchQuery, validateExpansion, type SubmindGenerator } from './submind.js';
 import type { SubmindModelResponse, SubmindResult, ExpandResult, ResearchStore } from './submind-types.js';
 import { backendRequest } from './runtime.js';
@@ -23,7 +23,7 @@ export interface RecalledMemory { id: string; title: string; content: string; ti
 export interface RecallResult { memories: RecalledMemory[]; truncated: boolean }
 export interface MemoryRequestOptions { timeoutMs?: number; signal?: AbortSignal }
 type Operation = 'remember' | 'recall' | 'ask' | 'expand' | 'prepare' | 'brief' | 'cancel-brief';
-type BridgeInput = RememberInput | RecallInput | { id: string; revision: string } | HookPrepareInput | HookBriefInput;
+type BridgeInput = RememberInput | RecallInput | { id: string; revision: string } | HookPrepareInput | HookWaitInput;
 type BridgeResult = RememberResult | RecallResult | SubmindResult | ExpandResult | HookBriefResult;
 type FailureCode = 'unavailable' | 'input' | 'credential' | 'stale' | 'ownership' | 'running' | 'response' | 'timeout' | 'externalReadOnly' | 'busy' | 'aborted';
 const REQUEST_BYTES = 160_000;
@@ -83,7 +83,11 @@ async function recoverStaleSocket(path: string): Promise<void> {
 function inputFor(operation: Operation, input: unknown): BridgeInput {
   if (!object(input)) fail('input');
   if (operation === 'prepare' || operation === 'brief' || operation === 'cancel-brief') {
-    try { return operation === 'prepare' ? validateHookResearchInput(operation, input) : validateHookResearchInput(operation, input); } catch { fail('input'); }
+    try {
+      if (operation === 'prepare') return validateHookResearchInput(operation, input);
+      if (operation === 'brief') return validateHookResearchInput(operation, input);
+      return validateHookResearchInput(operation, input);
+    } catch { fail('input'); }
   }
   if (operation === 'ask') {
     if (!keys(input, ['query'])) fail('input');
@@ -230,7 +234,8 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
           const input = inputFor(operation, request.input);
           const origin = request.operation === 'remember' ? await verifyMemoryOrigin(request.origin) : undefined;
           if (request.operation === 'remember' && !origin || request.operation !== 'remember' && request.origin !== undefined) fail('input');
-          const deadline = timeout(request.timeoutMs, operation === 'ask' || operation === 'expand' ? 301_000 : 30_000);
+          const waiting = operation === 'brief' && Number((input as HookWaitInput).waitMs) > 0;
+          const deadline = timeout(request.timeoutMs, operation === 'ask' || operation === 'expand' ? 301_000 : waiting ? 61_000 : 30_000);
           timer = setTimeout(() => socket.destroy(), deadline);
           let result: BridgeResult;
           if (operation === 'ask') {
@@ -241,7 +246,7 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
           } else if (operation === 'prepare') {
             result = await background.prepare(input as HookPrepareInput);
           } else if (operation === 'brief') {
-            result = await background.brief(input as HookBriefInput);
+            result = await background.brief(input as HookWaitInput, abort.signal);
           } else if (operation === 'cancel-brief') {
             result = await background.cancel(input as HookBriefInput);
           } else if (operation === 'expand') {
@@ -282,13 +287,15 @@ export function memoryRequest(ctx: EchoContext, operation: 'recall', input: Reca
 export function memoryRequest(ctx: EchoContext, operation: 'ask', input: { query: string }, options?: MemoryRequestOptions): Promise<SubmindResult>;
 export function memoryRequest(ctx: EchoContext, operation: 'expand', input: { id: string; revision: string }, options?: MemoryRequestOptions): Promise<ExpandResult>;
 export function memoryRequest(ctx: EchoContext, operation: 'prepare', input: HookPrepareInput, options?: MemoryRequestOptions): Promise<HookBriefResult>;
-export function memoryRequest(ctx: EchoContext, operation: 'brief' | 'cancel-brief', input: HookBriefInput, options?: MemoryRequestOptions): Promise<HookBriefResult>;
+export function memoryRequest(ctx: EchoContext, operation: 'brief', input: HookWaitInput, options?: MemoryRequestOptions): Promise<HookBriefResult>;
+export function memoryRequest(ctx: EchoContext, operation: 'cancel-brief', input: HookBriefInput, options?: MemoryRequestOptions): Promise<HookBriefResult>;
 export async function memoryRequest(ctx: EchoContext, operation: Operation, input: BridgeInput, options: MemoryRequestOptions = {}): Promise<BridgeResult> {
   if (options.signal?.aborted) fail('aborted');
   const validated = inputFor(operation, input);
   const origin = operation === 'remember' ? await captureMemoryOrigin().catch(() => fail('input')) : undefined;
   const extended = operation === 'ask' || operation === 'expand';
-  const deadline = timeout(options.timeoutMs ?? (extended ? submindSettings(ctx.profile).timeoutMs + 1000 : undefined), extended ? 301_000 : 30_000);
+  const waitMs = operation === 'brief' ? (validated as HookWaitInput).waitMs ?? 0 : 0;
+  const deadline = timeout(options.timeoutMs ?? (extended ? submindSettings(ctx.profile).timeoutMs + 1000 : waitMs ? waitMs + 1000 : undefined), extended ? 301_000 : waitMs ? 61_000 : 30_000);
   const path = await checkDirectory(ctx);
   try { await socketStat(path); } catch (error) { if (error instanceof MemoryFailure) throw error; fail('unavailable'); }
   return new Promise((resolve, reject) => {
@@ -328,7 +335,7 @@ export async function memoryRequest(ctx: EchoContext, operation: Operation, inpu
             if (!object(action) || !keys(action, ['rel', 'operation', 'arguments'])
               || !(action.rel === 'poll' && action.operation === 'memory.brief' || action.rel === 'cancel' && action.operation === 'memory.cancel_brief')) fail('response');
             let args: HookBriefInput;
-            try { args = validateHookResearchInput('brief', action.arguments); } catch { fail('response'); }
+            try { args = validateHookResearchInput('cancel-brief', action.arguments); } catch { fail('response'); }
             if (args.requestId !== result.requestId || args.host !== (validated as HookPrepareInput).host || args.sessionId !== (validated as HookPrepareInput).sessionId) fail('response');
           }
           if (result.result !== undefined) {

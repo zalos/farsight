@@ -311,7 +311,7 @@ test('research bridge rejects concurrent inference and aborts work when the call
 
 test('a browser-style abort cancels its private research request and reaches the provider', async () => {
   await fixture(async (ctx, connection) => {
-    ctx.profile.submind = { mode: 'model', hookResearch: 'manual', maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000, inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 10000, expandedMaxChars: 12000 };
+    ctx.profile.submind = { mode: 'model', hookResearch: 'manual', hookWaitMs: 20000, maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000, inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 10000, expandedMaxChars: 12000 };
     ctx.config.profiles[ctx.profileId] = ctx.profile;
     await saveConfig(ctx.configPath, ctx.config);
     let started!: () => void, cancelled!: () => void;
@@ -418,11 +418,61 @@ test('bridge cancels background work on saved selection changes but not a mismat
       await assert.rejects(memoryRequest(mismatch, 'brief', input), /settings changed/);
       assert.equal(signal.aborted, false);
       assert.equal((await memoryRequest(selected, 'brief', input)).status, 'pending');
+      const waiting = assert.rejects(memoryRequest(selected, 'brief', { ...input, waitMs: 60_000 }), /settings changed/);
+      await new Promise(resolve => setTimeout(resolve, 20));
       selected.config.profiles.personal!.model.model = 'saved-change';
       await saveConfig(selected.configPath, selected.config);
       const updated = loadContext(selected.configPath);
       await assert.rejects(memoryRequest(updated, 'brief', input), /settings changed/);
-      assert.equal(signal.aborted, true);
+      await waiting; assert.equal(signal.aborted, true);
     } finally { release(); await bridge.close(); }
+  });
+});
+
+
+test('brief waits use the requested deadline and disconnects do not cancel accepted research', async () => {
+  await fixture(async (ctx, connection, state) => {
+    const { mkdir } = await import('node:fs/promises');
+    const { writeConnection } = await import('../dist/installation.js');
+    ctx.config.profiles.personal!.submind!.mode = 'model';
+    ctx.config.profiles.personal!.submind!.hookResearch = 'wait';
+    ctx.config.profiles.personal!.hooks.claude = true;
+    await saveConfig(ctx.configPath, ctx.config);
+    const selected = loadContext(ctx.configPath);
+    const workspace = join(ctx.directory, 'waiting-workspace'); await mkdir(workspace);
+    await writeConnection(workspace, { configPath: selected.configPath, profileId: selected.profileId });
+    let release!: () => void, calls = 0;
+    let signal!: AbortSignal;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const bridge = await startMemoryBridge(selected, connection, {
+      store: { search: async () => ({ memories: [], exhaustive: false, truncated: false, inspected: 0 }), read: async () => ({ status: 'missing' }) },
+      generate: async (_profile, input) => {
+        signal = input.signal!; calls++; await held;
+        return { content: { kind: 'answer', findings: [] }, model: 'synthetic', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      const receipt = await memoryRequest(selected, 'prepare', { workspace, host: 'claude', sessionId: 'wait-session', query: 'synthetic' });
+      const input = receipt.actions.find(action => action.rel === 'poll')!.arguments;
+      assert.equal((await memoryRequest(selected, 'brief', { ...input, waitMs: 20 })).status, 'pending');
+      assert.equal(calls, 1);
+      // A long wait is legal at both ends; a short explicit transport deadline only
+      // abandons this waiter, while the server-owned job retains its model lease.
+      await assert.rejects(memoryRequest(selected, 'brief', { ...input, waitMs: 60_000 }, { timeoutMs: 50 }), /did not respond in time/);
+      assert.equal(signal.aborted, false);
+      const abort = new AbortController();
+      const abandoned = memoryRequest(selected, 'brief', { ...input, waitMs: 60_000 }, { signal: abort.signal });
+      const rejected = assert.rejects(abandoned, /cancelled/);
+      timer = setTimeout(() => abort.abort(), 30); await rejected; clearTimeout(timer);
+      assert.equal(signal.aborted, false);
+      const completed = memoryRequest(selected, 'brief', { ...input, waitMs: 60_000 });
+      timer = setTimeout(release, 40);
+      const response = await completed;
+      assert.equal(response.status, 'empty'); assert.equal(response.result!.usage.modelCalls, 1);
+      assert.equal(calls, 1); assert.equal(state.requests.length, 0);
+      await assert.rejects(memoryRequest(selected, 'cancel-brief', { ...input, waitMs: 0 } as any), /invalid/i);
+      await assert.rejects(memoryRequest(selected, 'brief', { ...input, waitMs: 60_001 }), /invalid/i);
+    } finally { clearTimeout(timer); release(); await bridge.close(); }
   });
 });

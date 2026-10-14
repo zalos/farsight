@@ -101,6 +101,24 @@ test.describe('Echo model settings', () => {
   });
 
   /** @covers packages/echo/public/app.js::captureForm */
+  test('bounded prompt waiting saves its limit without generating or altering another profile', async ({ page }) => {
+    const choice = page.getByLabel('Prompt memory research', { exact: true });
+    const limit = page.getByLabel('Wait limit (seconds)', { exact: true });
+    await expect(limit).toHaveValue('20');
+    await choice.selectOption('wait'); await limit.fill('45.5');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save settings', exact: true })).toBeDisabled();
+    const saved = JSON.parse(await readFile(configPath, 'utf8'));
+    expect(saved.profiles.personal.submind.hookResearch).toBe('wait');
+    expect(saved.profiles.personal.submind.hookWaitMs).toBe(45500);
+    expect(saved.profiles.work.submind).toBeUndefined();
+    expect(testedModels).toEqual([]); expect(discoveryCalls).toBe(0);
+    await page.reload();
+    await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+    await expect(choice).toHaveValue('wait'); await expect(limit).toHaveValue('45.5');
+  });
+
+  /** @covers packages/echo/public/app.js::captureForm */
   test('Ollama memory controls persist across provider changes without affecting compatibility', async ({ page }) => {
     await page.getByLabel('Ollama context allowance (tokens)', { exact: true }).fill('8192');
     await page.getByLabel('Keep model loaded (seconds)', { exact: true }).fill('30');

@@ -164,10 +164,10 @@ test('sub-mind defaults keep legacy profiles off and normalize bounded partial p
   assert.equal(submindSettings(legacy).mode, 'off');
   (profile as any).submind = { mode: 'mock', maxSteps: 2 };
   assert.deepEqual(validateConfig(config).profiles.personal!.submind, {
-    mode: 'mock', hookResearch: 'manual', maxSteps: 2, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12_000,
+    mode: 'mock', hookResearch: 'manual', hookWaitMs: 20000, maxSteps: 2, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12_000,
     inputMaxChars: 48_000, lookbackDays: 90, timeoutMs: 30_000, expandedMaxChars: 12_000,
   });
-  for (const [key, value] of Object.entries({ mode: 'unknown', hookResearch: 'unknown', maxSteps: 9, maxSearches: 0, maxCandidates: 51,
+  for (const [key, value] of Object.entries({ mode: 'unknown', hookResearch: 'unknown', hookWaitMs: 60001, maxSteps: 9, maxSearches: 0, maxCandidates: 51,
     evidenceMaxChars: 127, inputMaxChars: 256_001, lookbackDays: 3651, timeoutMs: 99, expandedMaxChars: 64_001 })) {
     (profile as any).submind = { [key]: value };
     assert.throws(() => validateConfig(config));
@@ -258,4 +258,18 @@ test('background prompt research requires a saved explicit policy', async () => 
   config.profiles.personal!.submind!.hookResearch = 'background';
   assert.equal(validateConfig(config).profiles.personal!.submind!.hookResearch, 'background');
   assert.equal(submindSettings(config.profiles.work!).hookResearch, 'manual');
+});
+
+
+test('prompt wait policy has a bounded limit independent of the model deadline', async () => {
+  const { submindSettings } = await import('../dist/config.js');
+  const config = defaultConfig();
+  const profile = config.profiles.personal!;
+  assert.equal(submindSettings(profile).hookWaitMs, 20000);
+  profile.submind!.hookResearch = 'wait'; profile.submind!.hookWaitMs = 60000;
+  assert.equal(validateConfig(config).profiles.personal!.submind!.hookWaitMs, 60000);
+  for (const limit of [0, 99, 60001, 1.5, '20000', null]) {
+    (profile.submind as any).hookWaitMs = limit;
+    assert.throws(() => validateConfig(config));
+  }
 });

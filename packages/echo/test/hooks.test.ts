@@ -52,7 +52,7 @@ for (const host of ['claude', 'codex'] as const) {
     for (const event of HOOK_EVENTS) {
       assert.equal(hookFile.hooks[event].length, 1);
       assert.equal(hookFile.hooks[event][0].hooks.length, 1);
-      assert.equal(hookFile.hooks[event][0].hooks[0].timeout, 5);
+      assert.equal(hookFile.hooks[event][0].hooks[0].timeout, 65);
     }
     if (host === 'codex') {
       const catalog = JSON.parse(await readFile(join(result.directory, '.agents', 'plugins', 'marketplace.json'), 'utf8'));
@@ -60,6 +60,7 @@ for (const host of ['claude', 'codex'] as const) {
       assert.equal(catalog.plugins[0].source.path, './');
       assert.equal(catalog.plugins[0].policy.installation, 'AVAILABLE');
     }
+    assert.match(await readFile(join(result.directory, 'scripts', 'echo-hook.mjs'), 'utf8'), /timeout: 64000/);
     assert.equal((await stat(join(result.directory, 'scripts', 'echo-hook.mjs'))).mode & 0o777, 0o700);
     await assert.rejects(access(join(ctx.directory, '.claude', 'settings.json')));
     await assert.rejects(access(join(ctx.directory, '.codex', 'config.toml')));
@@ -80,7 +81,7 @@ for (const host of ['claude', 'codex'] as const) {
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, '');
     assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), {
-      args: ['hook', '--config', ctx.configPath, '--profile', 'personal', '--host', host], input,
+      args: ['hook', '--config', ctx.configPath, '--profile', 'personal', '--host', host, '--hook-timeout-ms', '64000'], input,
     });
     await assert.rejects(access(join(root, 'ECHO_HOOK_MUST_NOT_EXIST')));
     const failure = spawnSync('/bin/sh', ['-c', command], { cwd: root, input, encoding: 'utf8', env: { ...env, ECHO_TEST_EXIT: '1' } });

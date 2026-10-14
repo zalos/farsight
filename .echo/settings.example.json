@@ -39,6 +39,7 @@
       "submind": {
         "mode": "off",
         "hookResearch": "manual",
+        "hookWaitMs": 20000,
         "maxSteps": 3,
         "maxSearches": 3,
         "maxCandidates": 12,
@@ -87,6 +88,7 @@
       "submind": {
         "mode": "off",
         "hookResearch": "manual",
+        "hookWaitMs": 20000,
         "maxSteps": 3,
         "maxSearches": 3,
         "maxCandidates": 12,

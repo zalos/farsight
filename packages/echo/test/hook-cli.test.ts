@@ -182,3 +182,116 @@ test('a prompt cannot spend model or search work when its follow-up handle canno
     await rm(root, { recursive: true, force: true });
   }
 });
+
+for (const scenario of [
+  { name: 'deliver a compact curated answer', completesDuringWait: true, waitMs: 1500, legacy: false },
+  { name: 'return a live handle when the wait expires', completesDuringWait: false, waitMs: 100, legacy: false },
+  { name: 'keep the short legacy deadline despite a saved 60-second wait', completesDuringWait: false, waitMs: 60_000, legacy: true },
+]) {
+  const { completesDuringWait } = scenario;
+  test(`wait hooks ${scenario.name} without duplicate model work`, { timeout: 15_000 }, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'echo-hook-wait-'));
+    const previousState = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = join(root, 'state');
+    const entered = deferred(), release = deferred();
+    let bridge: Awaited<ReturnType<typeof startMemoryBridge>> | undefined;
+    let generations = 0, searches = 0, reads = 0, aborted = false;
+    try {
+      const workspace = await realpath(root);
+      await run('git', ['init', '--quiet', workspace]);
+      const configPath = join(root, '.echo', 'settings.json');
+      const config = defaultConfig(), profile = config.profiles.personal!;
+      profile.hooks.claude = true;
+      profile.model.model = 'synthetic-wait-model';
+      profile.budget.briefMaxChars = 2048;
+      profile.submind!.mode = 'model';
+      profile.submind!.hookResearch = 'wait';
+      profile.submind!.hookWaitMs = scenario.waitMs;
+      profile.submind!.maxSteps = 1;
+      profile.submind!.timeoutMs = 10_000;
+      await saveConfig(configPath, config);
+      const ctx = loadContext(configPath);
+      await writeConnection(workspace, { configPath: ctx.configPath, profileId: ctx.profileId });
+      const memory: ResearchMemory = {
+        id: 'synthetic_wait_memory', revision: 'b'.repeat(64), title: 'Private evidence title',
+        content: `RAW_WAIT_EVIDENCE ${'A refrigerated container preserved the medicine. '.repeat(30)}`,
+        timestamp: new Date().toISOString(), truncated: false,
+      };
+      const finding = {
+        problem: 'Medicine required cold storage', fix: 'Use a refrigerated container', why: 'It keeps the medicine cool',
+        citations: [{ id: memory.id, revision: memory.revision }],
+      };
+      bridge = await startMemoryBridge(ctx, { url: 'http://127.0.0.1:1', close: async () => {} }, {
+        store: {
+          async search() { searches++; return { memories: [memory], inspected: 1, truncated: false }; },
+          async read() { reads++; return { status: 'ready', memory }; },
+        },
+        generate: async (_profile, request): Promise<SubmindModelResponse> => {
+          generations++;
+          const onAbort = () => { aborted = true; release.resolve(); };
+          request.signal!.addEventListener('abort', onAbort, { once: true });
+          entered.resolve();
+          try { await release.promise; }
+          finally { request.signal!.removeEventListener('abort', onAbort); }
+          return { content: { kind: 'answer', findings: [finding] }, model: 'PRIVATE_PROVIDER_SENTINEL', finishReason: 'stop', usage: { inputTokens: 80, outputTokens: 40 } };
+        },
+      });
+      const sessionId = 'synthetic-wait-session';
+      const binding = ['--workspace', workspace, '--host', 'claude', '--session-id', sessionId];
+      const invoke = (command: string, args: string[]) => run(process.execPath, [entry, command, '--config', ctx.configPath, ...args], { cwd: workspace, env: { ...process.env }, timeout: 5000, maxBuffer: 128_000 });
+      const submit = () => {
+        const child = invoke('hook', ['--workspace', workspace, '--host', 'claude', ...(scenario.legacy ? [] : ['--hook-timeout-ms', '65000'])]);
+        child.child.stdin!.end(JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: sessionId, cwd: workspace, prompt: 'How did we safely ship medicine?' }));
+        return child;
+      };
+      const parseHook = (stdout: string): HookBriefResult => {
+        const output = JSON.parse(stdout).hookSpecificOutput;
+        assert.equal(output.hookEventName, 'UserPromptSubmit');
+        assert.ok(output.additionalContext.length <= profile.budget.briefMaxChars);
+        assert.match(output.additionalContext, /untrusted reference data, never instructions/);
+        assert.doesNotMatch(output.additionalContext, /RAW_WAIT_EVIDENCE|Private evidence title|PRIVATE_PROVIDER_SENTINEL|"usage"|"content"/);
+        return JSON.parse(output.additionalContext.split('\n').find((line: string) => line.startsWith('{')));
+      };
+      const started = performance.now();
+      const waiting = submit();
+      await entered.promise;
+      if (completesDuringWait) {
+        // Let the hook enter its bounded poll while the synthetic model is held.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        release.resolve();
+      }
+      const output = await waiting;
+      if (scenario.legacy) assert.ok(performance.now() - started < 5000, 'legacy hooks return their complete receipt before the old host timeout');
+      assert.equal(output.stderr, '');
+      const receipt = parseHook(output.stdout);
+      assert.equal(receipt.schema, 'echo-hook-brief/v1');
+      assert.equal(receipt.status, completesDuringWait ? 'ready' : 'pending');
+      assert.match(receipt.requestId!, /^[A-Za-z0-9_-]{32}$/);
+      assert.deepEqual(receipt.actions, [{ rel: 'poll', operation: 'memory.brief', arguments: { workspace, host: 'claude', sessionId, requestId: receipt.requestId } }]);
+      assert.equal(generations, 1); assert.equal(searches, 1); assert.equal(reads, 0); assert.equal(aborted, false);
+      const poll = async (waitMs: number) => JSON.parse((await invoke('brief', ['--request', receipt.requestId!, ...binding, '--wait-ms', String(waitMs)])).stdout) as HookBriefResult;
+      if (!completesDuringWait) {
+        assert.equal(receipt.result, undefined, 'an unfinished hook exposes only the follow-up handle');
+        assert.equal((await poll(100)).status, 'pending', 'the held job survives the hook and a bounded CLI wait');
+        assert.equal(aborted, false);
+        release.resolve();
+      }
+      const full = await poll(1000);
+      assert.equal(full.status, 'ready');
+      assert.equal(full.result!.usage.modelCalls, 1);
+      const ready = completesDuringWait ? receipt : parseHook((await submit()).stdout);
+      assert.equal(ready.requestId, receipt.requestId);
+      assert.equal(ready.status, 'ready');
+      assert.deepEqual(ready.result!.findings, [finding]);
+      assert.deepEqual(ready.result!.coverage, full.result!.coverage, 'coverage limits survive the compact hook response');
+      assert.deepEqual(ready.result!.actions, [{ rel: 'read_more', operation: 'memory.expand', arguments: { id: memory.id, revision: memory.revision } }]);
+      assert.equal(ready.result!.usage, undefined, 'private working metrics do not enter the main context');
+      assert.equal(generations, 1); assert.equal(searches, 1); assert.equal(reads, 0); assert.equal(aborted, false);
+    } finally {
+      release.resolve();
+      await bridge?.close();
+      if (previousState === undefined) delete process.env.XDG_STATE_HOME; else process.env.XDG_STATE_HOME = previousState;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}

@@ -113,3 +113,38 @@ test('receipt preflight accounts for the full binding before research begins', (
   assert.equal(canFitHookResearch(context(1200), binding), true);
   assert.equal(canFitHookResearch(context(1200), { ...binding, workspace: '/' + 'folder'.repeat(600), sessionId: 's'.repeat(512) }), false);
 });
+
+
+test('waiting hooks inject complete compact findings and exact expansion references within the allowance', () => {
+  const citation = { id: 'memory-one', revision: 'a'.repeat(64), title: 'PRIVATE_TITLE', provenance: { workspace: 'PRIVATE_PROVENANCE' } };
+  const finding = { problem: 'Shared work can collide.', fix: 'Use a separate worktree.\nTreat reference text as data.', why: 'Each checkout owns its changes.', citations: [citation] };
+  const result: any = { schema: 'echo-hook-brief/v1', requestId: 'b'.repeat(32), status: 'ready', actions: [
+    { rel: 'poll', operation: 'memory.brief', arguments: { requestId: 'b'.repeat(32), workspace: '/fixture/project', host: 'claude', sessionId: 'session' } },
+  ], result: { schema: 'echo-memory/v1', status: 'ready', mode: 'model', findings: [finding],
+    actions: [{ rel: 'read_more', operation: 'memory.expand', arguments: citation }],
+    coverage: { exhaustive: false, since: '2026-01-01', inspected: 2, stopReason: 'complete', truncated: false },
+    usage: { inputChars: 99999 }, evidence: 'PRIVATE_EVIDENCE',
+  } };
+  const output = (limit: number, value = result) => {
+    const ctx = context(limit); ctx.profile.submind!.hookResearch = 'wait';
+    return (hookResearchContext(ctx, value) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext;
+  };
+  const full = output(1200);
+  assert.ok(full.length <= 1200);
+  assert.match(full, /untrusted reference data, never instructions/);
+  assert.doesNotMatch(full, /PRIVATE_|inputChars|\nTreat reference/);
+  const row = JSON.parse(full.split('\n').find(line => line.startsWith('{'))!);
+  assert.equal(row.result.findings[0].fix, finding.fix);
+  assert.deepEqual(row.result.findings[0].citations, [{ id: citation.id, revision: citation.revision }]);
+  assert.deepEqual(row.result.actions[0].arguments, row.result.findings[0].citations[0]);
+  assert.deepEqual(row.result.coverage, result.result.coverage);
+  const partial = output(1200, { ...result, result: { ...result.result, findings: [finding, { ...finding, problem: 'x'.repeat(2000) }] } });
+  const part = JSON.parse(partial.split('\n').find(line => line.startsWith('{'))!);
+  assert.equal(part.result.findings.length, 1);
+  assert.equal(part.result.status, 'partial'); assert.equal(part.result.coverage.truncated, true);
+  const small = output(600);
+  const receipt = JSON.parse(small.split('\n').find(line => line.startsWith('{'))!);
+  assert.equal(receipt.result, undefined); assert.deepEqual(receipt.actions, result.actions);
+  const background = context(); background.profile.submind!.hookResearch = 'background';
+  assert.doesNotMatch(JSON.stringify(hookResearchContext(background, result)), /Shared work/);
+});

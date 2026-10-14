@@ -39,7 +39,7 @@ function publicConfig(config: EchoConfig): EchoConfig {
       skills: { directories: [...p.skills.directories] },
       budget: { briefMaxChars: p.budget.briefMaxChars, modelMaxTokens: p.budget.modelMaxTokens, timeoutMs: p.budget.timeoutMs },
       ...(p.submind ? { submind: {
-        mode: p.submind.mode, hookResearch: p.submind.hookResearch, maxSteps: p.submind.maxSteps, maxSearches: p.submind.maxSearches,
+        mode: p.submind.mode, hookResearch: p.submind.hookResearch, hookWaitMs: p.submind.hookWaitMs, maxSteps: p.submind.maxSteps, maxSearches: p.submind.maxSearches,
         maxCandidates: p.submind.maxCandidates, evidenceMaxChars: p.submind.evidenceMaxChars,
         inputMaxChars: p.submind.inputMaxChars, lookbackDays: p.submind.lookbackDays,
         timeoutMs: p.submind.timeoutMs, expandedMaxChars: p.submind.expandedMaxChars,

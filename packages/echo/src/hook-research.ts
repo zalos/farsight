@@ -12,6 +12,7 @@ import type { EchoContext } from './types.js';
 export interface HookResearchBinding { workspace: string; host: 'claude' | 'codex' | 'vscode'; sessionId: string }
 export interface HookPrepareInput extends HookResearchBinding { query: string }
 export interface HookBriefInput extends HookResearchBinding { requestId: string }
+export interface HookWaitInput extends HookBriefInput { waitMs?: number }
 export interface HookBriefAction {
   rel: 'poll' | 'cancel';
   operation: 'memory.brief' | 'memory.cancel_brief';
@@ -26,7 +27,7 @@ export interface HookBriefResult {
 }
 export interface HookResearchRegistry {
   prepare(input: HookPrepareInput): Promise<HookBriefResult>;
-  brief(input: HookBriefInput): Promise<HookBriefResult>;
+  brief(input: HookWaitInput, signal?: AbortSignal): Promise<HookBriefResult>;
   cancel(input: HookBriefInput): Promise<HookBriefResult>;
   close(): void;
 }
@@ -47,6 +48,7 @@ interface Job {
   status: HookBriefResult['status'];
   controller: AbortController;
   timer: NodeJS.Timeout;
+  waiters: Set<() => void>;
   result?: SubmindResult;
 }
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
@@ -57,15 +59,18 @@ const envelope = (status: HookBriefResult['status'], requestId: string | null = 
 
 /** Client and bridge share strict input validation; browser/provider values cannot add an endpoint or identity override. */
 export function validateHookResearchInput(operation: 'prepare', input: unknown): HookPrepareInput;
-export function validateHookResearchInput(operation: 'brief' | 'cancel-brief', input: unknown): HookBriefInput;
-export function validateHookResearchInput(operation: 'prepare' | 'brief' | 'cancel-brief', input: unknown): HookPrepareInput | HookBriefInput {
-  if (!object(input) || Object.keys(input).some(key => !['workspace', 'host', 'sessionId', operation === 'prepare' ? 'query' : 'requestId'].includes(key))
+export function validateHookResearchInput(operation: 'brief', input: unknown): HookWaitInput;
+export function validateHookResearchInput(operation: 'cancel-brief', input: unknown): HookBriefInput;
+export function validateHookResearchInput(operation: 'prepare' | 'brief' | 'cancel-brief', input: unknown): HookPrepareInput | HookWaitInput {
+  const allowed = ['workspace', 'host', 'sessionId', operation === 'prepare' ? 'query' : 'requestId', ...(operation === 'brief' ? ['waitMs'] : [])];
+  if (!object(input) || Object.keys(input).some(key => !allowed.includes(key))
     || !validText(input.workspace, 4096) || !isAbsolute(input.workspace) || typeof input.host !== 'string' || !['claude', 'codex', 'vscode'].includes(input.host)
     || !validText(input.sessionId, 512)) throw new Error('input');
   const binding = { workspace: input.workspace, host: input.host as HookResearchBinding['host'], sessionId: input.sessionId };
   if (operation === 'prepare') return { ...binding, query: validateResearchQuery(input.query) };
   if (!validId(input.requestId)) throw new Error('input');
-  return { ...binding, requestId: input.requestId };
+  if (input.waitMs !== undefined && (!Number.isSafeInteger(input.waitMs) || Number(input.waitMs) < 0 || Number(input.waitMs) > 60_000)) throw new Error('input');
+  return { ...binding, requestId: input.requestId, ...(input.waitMs === undefined ? {} : { waitMs: Number(input.waitMs) }) };
 }
 
 /** Transient, session-scoped research only. Submission socket lifetime never owns accepted work. */
@@ -73,7 +78,7 @@ export function createHookResearchRegistry(ctx: EchoContext, dependencies: Depen
   const startup = structuredClone(ctx);
   const fingerprint = contextFingerprint(startup);
   const settings = submindSettings(startup.profile);
-  const enabled = settings.hookResearch === 'background' && settings.mode !== 'off';
+  const enabled = (settings.hookResearch === 'background' || settings.hookResearch === 'wait') && settings.mode !== 'off';
   const now = dependencies.now ?? Date.now;
   const ttlMs = Math.min(300_000, Math.max(1, dependencies.ttlMs ?? 300_000));
   const maxJobs = Math.min(16, Math.max(1, dependencies.maxJobs ?? 16));
@@ -81,12 +86,14 @@ export function createHookResearchRegistry(ctx: EchoContext, dependencies: Depen
   const jobs = new Map<string, Job>();
   let active: Job | undefined;
   let closed = false;
+  let waiterCount = 0;
 
   const keyFor = (binding: HookResearchBinding): string => hash(JSON.stringify([fingerprint, binding.workspace, binding.host, binding.sessionId]));
+  function notify(job: Job): void { for (const wake of [...job.waiters]) wake(); }
   function stop(job: Job, status: 'cancelled' | 'expired' | 'unavailable'): void {
-    job.status = status; job.result = undefined; job.controller.abort();
+    job.status = status; job.result = undefined; job.controller.abort(); notify(job);
   }
-  function forget(job: Job): void { clearTimeout(job.timer); jobs.delete(job.id); }
+  function forget(job: Job): void { clearTimeout(job.timer); jobs.delete(job.id); notify(job); }
   function bytes(): number {
     let size = 0;
     for (const job of jobs.values()) size += Buffer.byteLength(JSON.stringify({ id: job.id, key: job.key, binding: job.binding, queryHash: job.queryHash, expires: job.expires, status: job.status, result: job.result }));
@@ -151,7 +158,7 @@ export function createHookResearchRegistry(ctx: EchoContext, dependencies: Depen
       if (job.status === 'pending') job.status = error instanceof ModelBusyError ? 'busy' : 'unavailable';
     } finally {
       if (active === job) active = undefined;
-      prune();
+      prune(); notify(job);
     }
   }
   async function prepare(raw: HookPrepareInput): Promise<HookBriefResult> {
@@ -172,7 +179,7 @@ export function createHookResearchRegistry(ctx: EchoContext, dependencies: Depen
     // No queued work: a competing prompt receives busy and can explicitly retry later.
     const id = randomBytes(24).toString('base64url');
     const controller = new AbortController();
-    const job: Job = { id, key, binding, queryHash, expires: now() + ttlMs, status: 'pending', controller,
+    const job: Job = { id, key, binding, queryHash, expires: now() + ttlMs, status: 'pending', controller, waiters: new Set(),
       timer: setTimeout(() => { stop(job, 'expired'); forget(job); }, ttlMs) };
     job.timer.unref();
     jobs.set(id, job); active = job; prune();
@@ -180,20 +187,61 @@ export function createHookResearchRegistry(ctx: EchoContext, dependencies: Depen
     void complete(job, input.query);
     return read(job, true);
   }
-  async function selected(raw: HookBriefInput, cancel: boolean): Promise<HookBriefResult> {
-    const input = validateHookResearchInput(cancel ? 'cancel-brief' : 'brief', raw);
+  function waitForJob(job: Job, waitMs: number, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    // Retain at most 31 waiters so the 32-socket bridge keeps room for control
+    // requests. Excess callers get an immediate pending handle without listeners.
+    if (!waitMs || job.status !== 'pending' || waiterCount >= 31) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      let done = false;
+      const finish = (aborted = false): void => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer); job.waiters.delete(wake); waiterCount--;
+        signal?.removeEventListener('abort', onAbort);
+        if (aborted) reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+        else resolve();
+      };
+      const wake = (): void => finish();
+      const onAbort = (): void => finish(true);
+      const timer = setTimeout(wake, waitMs);
+      waiterCount++; job.waiters.add(wake);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
+    });
+  }
+  async function selected(raw: HookWaitInput, cancel: boolean, signal?: AbortSignal): Promise<HookBriefResult> {
+    const input: HookWaitInput = cancel ? validateHookResearchInput('cancel-brief', raw) : validateHookResearchInput('brief', raw);
+    signal?.throwIfAborted();
     if (closed) return envelope('unavailable');
     if (!enabled) return envelope('disabled');
     const binding = await bindingFor(input);
+    signal?.throwIfAborted();
     if (!binding || closed) return envelope('unavailable');
     prune();
-    const job = jobs.get(input.requestId);
+    let job = jobs.get(input.requestId);
     if (!job || job.key !== keyFor(binding)) return envelope('expired', input.requestId);
     if (cancel) stop(job, 'cancelled');
-    return read(job);
+    const waitMs = input.waitMs ?? 0;
+    if (!cancel && waitMs && job.status === 'pending') {
+      await waitForJob(job, waitMs, signal);
+      signal?.throwIfAborted();
+      // Settings, workspace connection and host session can change during a wait.
+      // Re-read their receipts before returning any result or continuing handle.
+      if (closed) return envelope('unavailable');
+      const currentBinding = await bindingFor(input);
+      signal?.throwIfAborted();
+      if (!currentBinding || closed) return envelope('unavailable');
+      prune();
+      job = jobs.get(input.requestId);
+      if (!job || job.key !== keyFor(currentBinding)) return envelope('expired', input.requestId);
+    }
+    // A waited result can become a compact hook receipt when its findings do not
+    // fit; preserve the engine-created lookup action for that fallback.
+    return read(job, !cancel && waitMs > 0);
   }
   return {
-    prepare, brief: input => selected(input, false), cancel: input => selected(input, true),
+    prepare, brief: (input, signal) => selected(input, false, signal), cancel: input => selected(input, true),
     close() { closed = true; for (const job of jobs.values()) { stop(job, 'cancelled'); forget(job); } },
   };
 }
