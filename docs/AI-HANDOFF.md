@@ -783,8 +783,6 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 - **CI on every push and PR** (`ci.yml`): validate (install, build, typecheck, tests, string lint, ~1 min) and e2e
   (Playwright chromium, 109 specs, ~1.5 min) in parallel on Ubuntu; artifacts on failure; the live tracker tests skip
   there. First run on `main` green. → `docs/CI.md`. Watch: `ubuntu-latest` moves to Ubuntu 26 on 2026-10-19.
-- Small: `farsight work --help` from a non-git cwd prints the version banner and a *failed to run git* line instead of
-  the work usage — the `--help` form of a subcommand should not touch git.
 
 ## Next work, ranked
 
