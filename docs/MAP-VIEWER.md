@@ -1380,6 +1380,19 @@ says *pinned to sync N · this server shows sync M* (`drawPinNote`, kept beside 
 `#syncchipwrap` and a `hashchange` listener; `pinMismatch`). A graph without a sync number has no pinned link; the menu
 says so.
 
+## Who may do what — `surfaces/roles.js` (outsider round 2026-10-13, F4)
+
+`#/roles[?role=&guard=&flow=&repo=]`: one row per action a role check stands in front of — the action in its authors'
+words (hybrid adds `METHOD path`), one column per role the code names (*may* · *not listed*, or *roles not read*
+across them), *read from* (the constant; not in business), the journeys and screens that reach it (doors to the Map)
+and the test that proves it, quoted, with its own last run. Reads `GET /api/roles` and folds nothing; saves CSV and
+JSON. Doors: the front door's state of play (*still open* column), the Map dock's *about* tab (`?flow=`) and every
+role guard's gate card (*who may do what*: the action the card was opened from first, `here`, then *also guards n
+actions*). A gate is drawn at every action it guards with that action's roles (`lib/journey-model.js jrnGatesIn`
+over `segments[].gates[].at`), and each gate group carries `data-gate-ids` — the register parity spec reads it. A
+gate's business name falls back to its `@business` sentence before *a check nobody has put in words*; the hybrid
+card prints the sentence with the code form beside it.
+
 ## Release readiness brief — `surfaces/readiness.js`, `lib/readiness-door.js` (round 2026-10-10, proposal 6)
 
 `#/readiness/<storyline>[?repo=<source>]` (a surface reached by doors, not a tab): `GET /api/readiness` drawn as a

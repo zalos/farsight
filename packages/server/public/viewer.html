@@ -3021,6 +3021,45 @@
   .gc-lvl{font-family:var(--hud);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border:1px solid var(--line);border-radius:2px;padding:0 4px}
   .gc-none,.gc-more{margin:0;font-size:11.5px;color:var(--dim)}
   .gc-none .sym{width:12px;height:12px;margin-right:4px;vertical-align:-2px}
+  /* who may do what on a role guard's card (outsider round 2026-10-13, F4) */
+  .gc-codeform{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-left:6px;overflow-wrap:anywhere}
+  .gc-role .gc-roles{font-size:11.5px;color:var(--ink);font-weight:600}
+  .gc-role .gc-roles.unread{font-weight:400;color:var(--dim);font-style:italic}
+  .gc-role .gc-proof{flex-basis:100%}
+  .gc-role.here{background:var(--accent-dim);border-radius:3px;padding:4px 6px}
+  .gc-here{font-family:var(--hud);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);border:1px solid var(--accent);border-radius:2px;padding:0 4px}
+  .gc-also>summary{cursor:pointer;font-size:11.5px;color:var(--muted);padding:4px 0}
+  .gc-holders{margin:6px 0 2px}
+  /* who may do what (#/roles, surfaces/roles.js) */
+  .rl-wrap{max-width:1280px}
+  .rl-lead,.rl-holders{color:var(--muted);font-size:12px;margin:4px 0 10px}
+  .rl-holders .sym{width:12px;height:12px;margin-right:4px;vertical-align:-2px}
+  .rl-counts{font-size:12.5px;margin:6px 0}
+  .rl-save{display:flex;gap:8px;margin:6px 0 12px}
+  .rl-filters{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
+  .rl-chip{font-size:11px;padding:2px 8px;border:1px solid var(--line);border-radius:10px;color:var(--muted)}
+  .rl-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  .rl-scroll{overflow-x:auto}
+  .rl-table{border-collapse:collapse;width:100%;font-size:12px}
+  .rl-table th,.rl-table td{border-bottom:1px solid var(--line-soft);padding:6px 8px;text-align:left;vertical-align:top}
+  .rl-table thead th{font-family:var(--hud);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);white-space:nowrap}
+  .rl-a{min-width:240px;max-width:380px;font-weight:400}
+  .rl-a .rl-code{display:block;font-family:var(--mono);font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+  .rl-a .rl-act{display:block;color:var(--ink)}
+  .rl-a .rl-biz{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+  .rl-cell{text-align:center!important;white-space:nowrap;font-size:11px}
+  .rl-cell.may{color:var(--ok,#6FCF8E);font-weight:600}
+  .rl-cell.not{color:var(--dim)}
+  .rl-cell.unread{color:var(--dim);font-style:italic}
+  .rl-from code,.rl-loc{font-family:var(--mono);font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+  .rl-where{min-width:180px}
+  .rl-where .rl-sc{color:var(--dim);font-size:11px}
+  .rl-proof{min-width:220px;max-width:360px}
+  .rl-none{color:var(--dim)}
+  .rl-none .sym{width:12px;height:12px;margin-right:4px;vertical-align:-2px}
+  .rl-run{color:var(--muted);font-size:11px}
+  .rl-more{color:var(--dim);font-size:11px}
+  .jrn-gl-req{font-family:var(--mono);font-size:10px;color:var(--muted);overflow-wrap:anywhere}
   .map-hint .n{font-weight:600}
   .map-hint.floor{color:var(--ink)}
   /* ── export (lib/export.js): the Save control, its menu, its status line, and the pinned link's note ── */

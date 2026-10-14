@@ -109,6 +109,8 @@ export function stateOfPlayHtml(s) {
     lineHtml(o.blindSpots),
     lineHtml(o.drift),
     historyHtml(o.history),
+    // who may do what: the role table read from the code (outsider round 2026-10-13, F4)
+    '<li><a class="sop-roles" href="#/roles"' + defAttrs('roles.door') + '>' + esc(t('roles.door')) + ' ›</a></li>',
   ].join('');
   const col = (key, cls, body) => '<div class="sop-col ' + cls + '"><h3' + defAttrs(key) + '>' + esc(t(key)) + '</h3><ul>' + body + '</ul></div>';
   return '<h2' + defAttrs('state.title') + '>' + esc(t('state.title')) + '</h2>' + provenanceHtml(s.provenance || {})

@@ -252,6 +252,31 @@ test('a @guard that moves a record is the action itself; a role constant is read
   assert.equal(role?.meta?.requiresFrom, 'ROLES.approve');
 });
 
+test('a role list declared as a typed array, not as const, is read onto its guards edge too', async () => {
+  // the reference app's VENDOR_ACCOUNT_APPROVER_ROLES: readonly OpsRole[] = [...] — no `as const`, so the
+  // enum reader never saw it and the vendor approve route carried the role guard with no roles (outsider round
+  // 2026-10-13, F4: an admin may approve a vendor account but not an invoice)
+  const g = await ingest({
+    ...REPO,
+    'src/vendor-roles.ts': "export const VENDOR_APPROVERS: readonly string[] = ['ops.approver', 'ops.admin'];",
+    'src/vendor-routes.ts': [
+      "import { Router } from 'express';",
+      "import { requireRole } from './auth';",
+      "import { VENDOR_APPROVERS } from './vendor-roles';",
+      'export const router = Router();',
+      "router.post('/vendors/:id/approve', async (req, res) => {",
+      '  requireRole(req, VENDOR_APPROVERS);',
+      '  res.json({ ok: true });',
+      '});',
+    ].join('\n'),
+  });
+  const onVendor = g.edges.filter((e) => e.kind === 'guards' && e.from.endsWith('::requireRole') && e.meta?.requiresFrom === 'VENDOR_APPROVERS');
+  assert.ok(onVendor.length >= 1, 'the vendor route carries the roles');
+  assert.equal(onVendor[0]!.meta?.requires, 'ops.approver, ops.admin');
+  // the invoice approve keeps its own narrower list
+  assert.ok(g.edges.some((e) => e.kind === 'guards' && e.meta?.requiresFrom === 'ROLES.approve' && e.meta?.requires === 'ops.approver'));
+});
+
 test('@guard[policy] sets the tier; a schema read over a response is not a gate', async () => {
   const g = await ingest(REPO);
   const four = g.nodes.find((n) => n.id.endsWith('::fourEyes'))!;

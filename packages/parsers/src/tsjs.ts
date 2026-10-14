@@ -18,7 +18,7 @@ import { isTestFile } from './tests/cases.js';
 import { isStoryFile } from './stories/index.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
 import { propFactsOf, type PropFacts } from './callback-props.js';
-import { collectEnums, collectStatusFacts, linkLifecycles, constTables, type LifecycleFacts } from './lifecycle.js';
+import { collectEnums, collectStatusFacts, linkLifecycles, constTables, constLists, type LifecycleFacts } from './lifecycle.js';
 import { collectPreconditionFacts, emptyPreconditionFacts, linkPreconditions } from './preconditions.js';
 
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
@@ -465,6 +465,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
 
     { const en = collectEnums(program, file, line); lifeFacts.decls.push(...en.decls); lifeFacts.uses.push(...en.uses); }
     preFacts.tables.push(...constTables(program, file, line));
+    (preFacts.namedLists ??= []).push(...constLists(program, file, line));
     // declared functions & components & zod schemas
     const declared: { name: string; node: AstNode; body: AstNode | null; kind: NodeKind; cls?: string; clsGroup?: string }[] = [];
     walk(program, (n, parents) => {

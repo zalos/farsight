@@ -28,7 +28,7 @@ import {
 } from '../lib/journey-draw.js';
 import { tipAttrs, tipSource } from '../lib/tooltip.js';
 import { foldRow, pathHtml } from '../lib/fold-row.js';
-import { drillLayers, drillLayerOf, drillBeats } from '../lib/journey-model.js';
+import { drillLayers, drillLayerOf, drillBeats, jrnGatesIn } from '../lib/journey-model.js';
 import { impactBodyHtml, impactCached, impactFetch, impactHasHops, impactOpts, impactRings, impactHash } from '../impact.js';
 
 const JRN_DRILL_LANE = 172, JRN_DRILL_COL = 212, JRN_DRILL_SEAM_COL = 320, JRN_DRILL_STOP = 150, JRN_INSP_TESTS = 12;
@@ -83,7 +83,7 @@ function jrnDrillBeats(col, layers) {
   // narrows the timeline's and the sheet's; the model only places what it is handed
   const business = currentLens() === 'business';
   const tab = jrnBizTab();
-  const gs = jrnGatesShown((sg.gates || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to));
+  const gs = jrnGatesShown(jrnGatesIn(sg, mo.from, mo.to));
   // the business register draws who may, the records and policy; the technical checks fold to one line
   // on the lane (gates lane 2026-10-10)
   const gates = tab === 'decisions' ? [] : business ? gs.drawn.filter((g) => g.tier !== 'technical') : gs.drawn;

@@ -124,7 +124,7 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
     sitsOn: f.sitsOn,
     pending: answer == null,
     failed: answer === false,
-    calls: null, pages: null, tests: null, counted: null, evidence: null, truncated: false,
+    calls: null, pages: null, tests: null, counted: null, evidence: null, truncated: false, roles: null,
     // a rule the parser read out of a refusing comparison (gates lane 2026-10-10)
     precondition: (f.node && f.node.precondition) || null,
     // who it matters to, from the service's fold (core gate-class.ts) — null until it answers
@@ -144,8 +144,25 @@ export function gateCardModel(id, ctx = {}, opts = {}) {
     out.counted = answer.counted || null;
     out.evidence = { chip: answer.chip, evidenceWord: answer.evidenceWord, ...(answer.verdict ? { verdict: answer.verdict } : {}) };
     out.truncated = !!answer.truncated;
+    out.roles = gateRolesModel(answer, opts.here || [], cap);
   }
   return out;
+}
+
+/**
+ * Who may do what at each action a role guard stands in front of (outsider round 2026-10-13, F4), from the
+ * service's `roles` (core roles.ts `roleTable({ guard })`): the action the card was opened from first (`here`: the
+ * route or handler ids of that action), then the others it also guards, capped. Null for a gate that is not a role
+ * guard — the service sends no `roles` then.
+ */
+export function gateRolesModel(answer, here, cap = GATE_CARD_CAP) {
+  const t = answer && answer.roles;
+  if (!t || !t.rows || !t.rows.length) return null;
+  const ids = new Set(here || []);
+  const isHere = (r) => ids.has(r.action.id) || (!!r.action.handler && ids.has(r.action.handler));
+  const h = t.rows.filter(isHere);
+  const others = t.rows.filter((r) => !isHere(r));
+  return { here: h, others: others.slice(0, cap), more: Math.max(0, others.length - cap), alsoN: others.length, total: t.rows.length, counted: t.counted || null, roles: t.roles || [] };
 }
 
 /** `contact_vendor_links.status not in {PENDING, REJECTED}`: a precondition's code form, as the code register prints it. */

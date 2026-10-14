@@ -11,7 +11,7 @@ import {
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word, agentsCounted,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
-  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact,
+  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact, roleTable, roleTableLines, rolesCsv,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
   storylineDiff, storylineDiffDocument, storylineDiffLines, resolveCompareFrom, compareSideOf, parseFailOn, DELTA_KINDS,
 } from '@farsight/core';
@@ -133,6 +133,11 @@ usage:
                                                                run, gates no test is known to reach, commits since its last green
                                                                run (from the history), ship or hold with the reason; then the
                                                                rules register (gate · its words · screens · cases · owner)
+  farsight roles [--action words|id] [--role r] [--repo name] [--business] [--json | --csv] [--graph graph.json]
+                                                               who may do what: every action a role check stands in front of,
+                                                               the roles the code lists for it (read from the named list the
+                                                               check is handed there), the journeys that reach it and the test
+                                                               that proves it — the same fold as GET /api/roles and MCP roles
   farsight work sync [--source id]                             copy the work items of every work source in .farsight/settings.json
                                                                (Jira, Azure DevOps) into .farsight/work.db: full first, then
                                                                incremental from the stored cursor
@@ -1613,6 +1618,21 @@ switch (command) {
   }
   case 'readiness': {
     runReadiness({ flag: (n) => flag(n), has: hasFlag, workspace: process.cwd(), fail });
+    break;
+  }
+  case 'roles': {
+    // who may do what (outsider round 2026-10-13, F4): core roleTable(), the same fold GET /api/roles and MCP roles answer
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
+    const q = { action: flag('action'), role: flag('role'), repo: flag('repo') };
+    const table = roleTable(index, Object.fromEntries(Object.entries(q).filter(([, v]) => !!v)));
+    if (rest.includes('--json')) { console.log(JSON.stringify(table, null, 2)); break; }
+    if (rest.includes('--csv')) { process.stdout.write(rolesCsv(table)); break; }
+    console.log(roleTableLines(table, { business: rest.includes('--business'), cap: Number.MAX_SAFE_INTEGER }).join('\n'));
     break;
   }
   case 'work': {

@@ -616,6 +616,25 @@ and its second 23 → **20**. The three are `resolveEmailDelivery`, `resolveOpsD
 (meetings) drop by the same meetings. Segment coverage still counts a config check's node (it is code the screen's
 walk runs), so no tests number moves.
 
+### Who may do what (`/api/roles` → core `roles.ts` `roleTable()`; MCP `roles`, CLI `farsight roles`, `#/roles`, the gate card's *who may do what*)
+
+Outsider round 2026-10-13, F4. Every number is a `Counted` over `count.scope.workspace` (the sources in scope), narrowed
+by the query (`role`, `action`, `guard`, `flow`) — the rows it prints are what it counts.
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| actions behind a role check | `count.unit.roleActions` (both) | `count.scope.workspace` | `roleTable().rows.length` | routes (or a server function nothing routes to) a guard with a `meta.requires` on any of its `guards` edges stands in front of, each once (a route and the handler it inherits the edge from are one); breakdown `count.part.rolesRead` · `count.part.rolesUnread` (the guard sits on it, its list is not a named list) — a partition |
+| roles | `count.unit.roles` (both) | `count.scope.workspace` | `roleTable().roles.length` | distinct role strings in any row's list |
+| reached by a passed case | `count.unit.roleActionsPassed` *n of m* (both) | `count.scope.workspace` | `roleTable().rows` with a case (not a coverage run, not skipped in the file) whose own last run passed | each case by its own run, as `verdict.runs` counts; the row's verdict word stays the one `testVerdict()` |
+
+**A gate at every action it guards** (F2) moves no count: `segments[i].gates` is still deduped by name and
+`counts.gates` = `gates.length`; each gate carries `at[]`, one entry per meeting with that call site's `requires`, and
+an action's cell lists the gates whose `at` falls inside it (`gatesInRange` / `jrnGatesIn`). On the reference app's
+*verify and approve* the role guard now stands under every operator action of the review screen, approve's with
+`ops.approver` alone (it stood only under the first action, with the union of every action's roles). The per-action
+lists (the table's gates cell, the drill, `jrnChecksHtml`) therefore grow by the gates the fold used to leave on the
+first action only — those counts are the action's own (`count.scope.action`).
+
 ### Preconditions and tiers (gates lane 2026-10-10 — parsers `preconditions.ts`, core `gate-class.ts`, core `gates.ts` `withJourneyPreconditions`)
 
 A **precondition** is a `rule` node the parser built out of a refusing comparison — on the status, kind, flag or
