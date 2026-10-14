@@ -458,7 +458,7 @@ document's `counted` block carries them and `docs/contracts/farsight-affected-v1
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
 | `6 journeys` (business and hybrid; the rows) | C:`counted.steps` (unit `count.unit.journeys`; breakdown `count.part.storylineSteps` · `storylineBranches`) | the storyline's steps and branches, one row each | storyline | the summary strip |
-| `2 ship` · `4 hold` | C:`counted.ship` / `counted.hold` (hold's breakdown by first reason: `count.part.holdNotBuilt` · `holdFailed` · `holdSkipped`) | rows with no hold reason / with one; they sum to the rows. **A row holds only on a screen not built or on one of its own declared cases** (an end-to-end case whose `@covers` names the journey) failed or skipped, and names that case (`rows[].holdCases`); any other skipped or failed case in scope is a note on the row (`rows[].notes`, `readiness.note.*`), never a hold (swarm round 3) | storyline | the summary strip |
+| `2 ship` · `4 hold` | C:`counted.ship` / `counted.hold` (hold's breakdown by first reason: `count.part.holdNotBuilt` · `holdFailed` · `holdSkipped`) | rows with no hold reason / with one; they sum to the rows. **A row holds only on a screen not built or on one of its own declared cases** (an end-to-end case whose `@covers` names the journey) failed or skipped, and names that case (`rows[].holdCases`); any other skipped or failed case in scope is a note on the row (`rows[].notes`, `readiness.note.*`), never a hold (swarm round 3). **A case passed on one project and skipped on another by its own written condition passed** (core `foldRuns`, outsider demo 2026-10-13, F3): it is a note (`rows[].notes.projectSkips`, `readiness.note.projectSkip`), and a hold on a case no project passed names each project and its quoted reason (`holdCases[].projects` · `where`) | storyline | the summary strip |
 | `12 distinct skipped cases` · *distinct* | C:`counted.skipped` | distinct cases over the storyline whose own last run skipped them — the rows count a shared case on each journey, so they add up to more (the reference app: 12 here, 46 on the rows); the *distinct* word's tip lists each row's own count, the rows added up and the distinct total (`distinct.skipped`) | storyline | the summary strip |
 | `5 distinct gates no test is known to reach` · *distinct* | C:`counted.unreached` | distinct gates on the storyline's screens whose gate card lists no case; the rows add up to more (8 on the reference app); tip as above (`distinct.unreached`) | storyline | the summary strip |
 | `5 gates and rules` | C:`counted.rules` | distinct gates and rules the storyline's screens meet | storyline | the rules register heading |
@@ -742,6 +742,7 @@ none of the re-check commands.
 | `built.storylines` · `built.branches` | `count.unit.storylines` · `count.part.storylineBranches` | storylines, and the branches they declare | `journeyTree().storylines[].branches` | `farsight journeys` · `journeys` |
 | `validated.byVerdict[].journeys` | `count.unit.journeys` + the word (`verdict.word.key`, lane V's words) | the **fully built** journeys by their one test verdict, strongest class first — build state wins (swarm round 3: *10 of 18 journeys built* beside *17 journeys passed*) | `testsSurface().journeys[].coverage.verdict.word` | `farsight tests matrix` · `test_coverage` |
 | `validated.notFullyBuilt` | `state.unit.journeysBuiltOnly` *n journeys not fully built, so no journey verdict* | journeys with a screen designed and not built, whatever their word: counted apart, never under one | breakdown `count.part.partlyBuilt` (`verdict.word.builtOnly`) · `count.part.noScreenBuilt` (`coverage.sharedEvidence`) | `farsight tests matrix` · `test_coverage` |
+| `validated.heldInBrief` | `state.unit.journeysHeld` *n journeys held in the release brief by their own case* | **fully built** journeys whose word is pass-type and whose own declared end-to-end case failed or passed on no project (`EvidenceWord.held`, core `ownCaseHold` — the rule `readiness()` reads): counted apart, never under *passed* (outsider demo 2026-10-13, F3) | `testsSurface().journeys[].coverage.verdict.word.held` | `farsight tests matrix` · `test_coverage` |
 | `validated.lastE2e` | not a count: the newest end-to-end run and its one freshness fact | `freshnessFact()` over every active end-to-end case's run | `testNodes()` → `freshness.ts` | — |
 | `validated.cases` | `count.unit.cases` (business `journey.biz.countTests`) | every case by its own last run: passed · failed · skipped · flaky · no run recorded (sums to the cases) | `testsSurface().sources[].runs` | `farsight tests list` · `test_coverage` |
 | `open.screensNotBuilt` | `state.unit.screensNotBuilt` | screens a design declares that no code builds (first five named in `notBuiltNames`) | `designSurface().counts.designOnly` | `farsight design list` · `design_surface` |
@@ -915,3 +916,17 @@ the scope's chip words, the cell's one word (`testVerdict()`), and `· n failed 
 | number | unit | scope | source | what it counts |
 |---|---|---|---|---|
 | returned memories | `echo.portal.countShown` / `echo.portal.countShownOne` (both registers) | `echo.portal.scope` — this response before a browser topic filter | `echo.portal.browse.memories` in `createMemoryPortal()` | Exact returned records in one bounded, identity-scoped response. Each record once. This is neither the whole store size nor a total across accumulated pages. Upstream global facets/totals are not displayed. |
+
+## 5. A case several projects ran (outsider demo 2026-10-13, F3)
+
+A case run under more than one project (Playwright's `desktop-1440` and `mobile-390`) has one `TestRun` per project in
+`runs[]` and one fold in `run` (core `test-runs.ts` `foldRuns`, re-applied by `buildIndex` to a graph an older build
+wrote): **failed or flaky on any project is the case's status; otherwise passed on any project is passed; otherwise the
+weakest.** The fold keeps `projects[]` (each project's status and, for a skip, the `reason` its own condition wrote —
+Playwright's `skip`/`fixme` annotation, JUnit's `<skipped message>`). No count changes shape: such a case is in the
+*passed* part of every `runs` breakdown, and `TestVerdict.projectSplit` (`n` cases, a subset of *passed*) says the
+split beside it — *passed on desktop-1440 · skipped on mobile-390 (…)* (`tests.projectSplit` / `tests.projectSplitMany`,
+business `tests.biz.*`), printed by `lib/test-chip.js projectSplitHtml` and MCP's *their own last runs* line. On the
+reference app's 2026-10-08 report six cases have this shape; before the fold they read *skipped* and held every
+journey of the invoice storyline.
+

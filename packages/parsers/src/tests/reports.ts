@@ -49,6 +49,8 @@ export interface ObservedCase {
   project?: string;
   /** retries the reporter recorded before this verdict (Playwright: results.length - 1) */
   retries?: number;
+  /** a skipped row: the reason its own skip condition wrote (Playwright `skip` / `fixme` annotation, a reporter's skip message) */
+  reason?: string;
 }
 
 /** One function/component a coverage report saw execute. */
@@ -201,6 +203,22 @@ function readVitestJson(doc: Record<string, unknown>, repoRoot: string): { cases
 }
 
 /**
+ * The reason a skipped Playwright row's own condition wrote: the first `skip` or `fixme` annotation with a
+ * description, on the test entry, its last result (newer reporters) or the spec. Quoted as written.
+ */
+function skipReasonOf(...lists: unknown[]): string | undefined {
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const a of list as Record<string, unknown>[]) {
+      if ((a?.['type'] === 'skip' || a?.['type'] === 'fixme') && typeof a['description'] === 'string' && a['description'].trim()) {
+        return (a['description'] as string).trim();
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Playwright `json` reporter — nested suites; each spec carries its file, line
  * and one `tests[]` entry **per project**, so a case run under two projects is
  * two rows here, each naming its project (03 §3.1). `flaky` stays flaky, with
@@ -218,14 +236,17 @@ function readPlaywrightJson(doc: Record<string, unknown>): { cases: ObservedCase
         const last = results[results.length - 1];
         const retries = results.length - 1;
         const project = [t['projectName'], t['projectId']].find((v) => typeof v === 'string' && v) as string | undefined;
+        const status = statusOf(t['status'] ?? last?.['status']);
+        const reason = status === 'skipped' ? skipReasonOf(t['annotations'], last?.['annotations'], spec['annotations']) : undefined;
         cases.push({
           ...(file || spec['file'] ? { file: String(spec['file'] ?? file) } : {}),
           suite: here, title,
           fullName: [...here, title].join(' '),
-          status: statusOf(t['status'] ?? last?.['status']),
+          status,
           ...(typeof last?.['duration'] === 'number' ? { durationMs: last['duration'] as number } : {}),
           ...(project ? { project } : {}),
           ...(retries > 0 ? { retries } : {}),
+          ...(reason ? { reason } : {}),
         });
       }
     }
@@ -252,10 +273,13 @@ function readJunitXml(text: string): { cases: ObservedCase[]; at?: string } {
     const classname = attr(attrs, 'classname') ?? '';
     const suite = classname ? classname.split(/[.>]/).filter(Boolean) : [];
     const time = Number(attr(attrs, 'time'));
+    const status = /<failure|<error/.test(body) ? 'failed' : /<skipped/.test(body) ? 'skipped' : 'passed';
+    const reason = status === 'skipped' ? body.match(/<skipped\b[^>]*?\smessage="([^"]+)"/)?.[1]?.trim() : undefined;
     cases.push({
       suite, title, fullName: [...suite, title].join(' '),
-      status: /<failure|<error/.test(body) ? 'failed' : /<skipped/.test(body) ? 'skipped' : 'passed',
+      status,
       ...(Number.isFinite(time) ? { durationMs: Math.round(time * 1000) } : {}),
+      ...(reason ? { reason } : {}),
     });
   }
   const at = text.match(/timestamp="([^"]*)"/)?.[1];

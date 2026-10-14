@@ -2,6 +2,7 @@ import { offPlatformSteps, type OffPlatformStep } from './decisions.js';
 import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind, PersonaFrom } from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
 import { isConfigCheck } from './config-check.js';
+import { refoldRuns } from './test-runs.js';
 import { withJourneyPreconditions, type ActionPreconditions } from './gates.js';
 import { gateTierOf, isActionGate, type GateClass, type GateTier, type TierFrom } from './gate-class.js';
 import { withJourneyCounted, type JourneyCounted, type SegmentCounted, type SegmentAbsence, type AbsenceKind, type AbsenceWord } from './journey-counted.js';
@@ -24,6 +25,8 @@ export interface GraphIndex {
 }
 
 export function buildIndex(nodes: GraphNode[], edges: GraphEdge[]): GraphIndex {
+  // a case's `run` is the fold over its projects: read the fold this build makes, not the one the graph was written with
+  refoldRuns(nodes);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const out = new Map<string, GraphEdge[]>();
   const incoming = new Map<string, GraphEdge[]>();

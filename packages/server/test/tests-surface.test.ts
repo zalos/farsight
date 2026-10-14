@@ -426,7 +426,7 @@ describe('/api/tests/<id> is one test’s page (B3.4)', () => {
     assert.ok(d.identity.source_digest['invoice-app'], 'the content digest of the code it describes');
   });
 
-  test('a browser spec carries one run per project, and the case takes the weakest of them', async () => {
+  test('a browser spec carries one run per project; a fail or flake on any project is the case’s, a skip by its own condition is not', async () => {
     const d = await api(`/api/tests/${encodeURIComponent(LIST)}`);
     const runs = d.test.runs as { project: string; status: string; retries?: number }[];
     assert.deepEqual(runs.map((r) => r.project).sort(), ['desktop-1440', 'mobile-390']);
@@ -434,10 +434,12 @@ describe('/api/tests/<id> is one test’s page (B3.4)', () => {
     // flaky is its own status and is never folded into passed
     assert.equal(runs.find((r) => r.project === 'mobile-390')!.retries, 1);
     assert.equal(d.test.run.status, 'flaky', 'the fold is the weakest project, never the majority');
-    // a skipped project weakens the case the same way
+    // a project that skipped it by its own written condition does not: the case passed where it ran, and the
+    // fold keeps the projects and the reason (outsider demo 2026-10-13, F3)
     const created = await api(`/api/tests/${encodeURIComponent(CREATE)}`);
     assert.deepEqual((created.test.runs as { status: string }[]).map((r) => r.status).sort(), ['passed', 'skipped']);
-    assert.equal(created.test.run.status, 'skipped');
+    assert.equal(created.test.run.status, 'passed');
+    assert.deepEqual((created.test.run.projects as { project: string; status: string; reason?: string }[]).map((p) => [p.project, p.status, !!p.reason]), [['desktop-1440', 'passed', false], ['mobile-390', 'skipped', true]]);
   });
 
   test('a skipped or inactive case shows no observed edge, and says which silence it is', async () => {

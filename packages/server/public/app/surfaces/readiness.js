@@ -98,6 +98,7 @@ function verdictHtml(row) {
 let RULES_BY_ID = new Map();
 function rowHtml(row) {
   const scope = 'journey.scopeAll';
+  const biz = currentLens() === 'business';
   const screens = row.screens.map((s) => s.name).join(' · ');
   const built = row.built.all
     ? '<span class="rd-stamp ok"' + defAttrs('readiness.col.built') + '>' + esc(t('readiness.col.built')) + '</span>'
@@ -111,10 +112,18 @@ function rowHtml(row) {
     : '<span class="rd-badge hold"' + defAttrs('readiness.hold') + '>' + esc(t('readiness.hold')) + '</span><span class="rd-why">'
       + row.hold.map((h) => word('readiness.hold.' + h)).join(' · ') + '</span>'
       // the hold names its case (swarm round 3, finding 5)
-      + ((row.holdCases || []).length ? '<span class="rd-sub rd-cases">' + row.holdCases.map((c) => '<span data-hold-case="' + esc(c.status) + '">' + esc(c.name) + '</span>').join(' · ') + '</span>' : '');
+      + ((row.holdCases || []).length ? '<span class="rd-sub rd-cases">' + row.holdCases.map((c) => '<span data-hold-case="' + esc(c.status) + '">' + esc(c.name)
+        // where more than one project ran it: each project and the reason its own skip condition wrote (core's words)
+        // the projects inline, the quoted reasons in the tip (a reason can run to a paragraph); an older server sends no `short`
+        + (c.where ? ' <span class="rd-where"' + tipAttrs({ text: biz ? c.where.biz : c.where.text }) + '>(' + esc((biz ? c.where.shortBiz : c.where.short) || (biz ? c.where.biz : c.where.text)) + ')</span>' : '') + '</span>').join(' · ') + '</span>'
+        // each written reason once, quoted, under the cases it holds (three live-only cases share one paragraph)
+        + [...new Set(row.holdCases.flatMap((c) => (c.where && c.where.short && c.where.reasons) || []))].map((r) => '<span class="rd-sub rd-reason"' + defAttrs('tests.projectSkipped') + '>“' + esc(r) + '”</span>').join('') : '');
   // other skips and failures in scope: a note on the row, never a hold
   const n = row.notes || {};
-  const notes = ['failed', 'skipped'].filter((k) => n[k] > 0).map((k) => '<span class="rd-note" data-note="' + k + '"' + plainTip(n[k], 'readiness.note.' + k, scope, '/api/readiness') + '>' + esc(countWords('readiness.note.' + k, n[k])) + '</span>').join(' · ');
+  const notes = ['failed', 'skipped'].filter((k) => n[k] > 0).map((k) => '<span class="rd-note" data-note="' + k + '"' + plainTip(n[k], 'readiness.note.' + k, scope, '/api/readiness') + '>' + esc(countWords('readiness.note.' + k, n[k])) + '</span>')
+    // its own case passed on one project and was skipped on another by its own condition: a note, never a hold (F3)
+    .concat((n.projectSkips || []).map((p) => '<span class="rd-note" data-note="project-skip"' + defAttrs('readiness.note.projectSkip') + '>' + esc(biz ? p.words.biz : p.words.text) + '</span>'))
+    .join(' · ');
   return '<tr class="rd-row' + (row.kind === 'branch' ? ' rd-branch' : '') + '" data-step="' + esc(row.label) + '" data-decision="' + (row.ship ? 'ship' : 'hold') + '">'
     + '<td class="rd-step">' + esc(row.label) + '</td>'
     + '<td><a class="rd-name" href="#/map/' + esc(encodeURIComponent(row.flowId)) + '">' + esc(row.name) + '</a>'
@@ -191,12 +200,13 @@ registerExport('readiness', () => {
   csv: () => {
     const r = RD.data && RD.data.readiness;
     if (!r) return { header: [], rows: [] };
-    const header = ['step', 'journey', 'kind', 'branch_of', 'when', 'built', 'screens_built', 'screens', 'verdict', 'last_run', 'skipped', 'failed', 'never_run', 'gates', 'gates_no_test', 'commits_since_green', 'decision', 'reasons', 'owner'];
+    const header = ['step', 'journey', 'kind', 'branch_of', 'when', 'built', 'screens_built', 'screens', 'verdict', 'last_run', 'skipped', 'failed', 'never_run', 'gates', 'gates_no_test', 'commits_since_green', 'decision', 'reasons', 'owner', 'notes'];
     const rows = r.rows.map((x) => [x.label, x.name, x.kind, x.branchOf ? x.branchOf.name : '', x.branchOf ? x.branchOf.when : '',
       x.built.all ? 'yes' : 'no', String(x.built.n), String(x.built.of), x.verdict ? t(x.verdict.word.key) : '', x.lastRun || '',
       String(x.skipped), String(x.failed), String(x.unrun), String(x.gates.n), String(x.gates.unreached.length),
       x.commitsSince == null ? '' : String(x.commitsSince), x.ship ? t('readiness.ship') : t('readiness.hold'),
-      [...x.hold.map((h) => t('readiness.hold.' + h)), ...(x.holdCases || []).map((c) => c.name)].join(' · '), x.owner || '']);
+      [...x.hold.map((h) => t('readiness.hold.' + h)), ...(x.holdCases || []).map((c) => (c.where ? c.name + ' (' + c.where.text + ')' : c.name))].join(' · '), x.owner || '',
+      ((x.notes && x.notes.projectSkips) || []).map((p) => p.words.text).join(' · ')]);
     return { header, rows };
   },
 });

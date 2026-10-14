@@ -112,6 +112,12 @@
                       "retry": 0,
                       "status": "skipped"
                     }
+                  ],
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Creating an invoice from the list is a desktop task; the mobile layout only reads the list."
+                    }
                   ]
                 }
               ]
