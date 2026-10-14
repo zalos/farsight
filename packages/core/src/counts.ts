@@ -61,6 +61,8 @@ export interface Counted {
  * someone typed.
  */
 export const COUNT_SCOPES = [
+  'echo.portal.scope',     // only the bounded page of scoped memory records returned by Echo
+
   'journey.scopeAll',       // the whole journey, each thing once however many screens meet it
   'journey.scopeHere',      // one screen of a journey
   'count.scope.action',     // one action of one screen

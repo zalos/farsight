@@ -132,7 +132,9 @@ test('nx-workspace: a storyline across two apps draws a lane per persona in step
   assert.equal(m.stages.length, m.counts.screens.n);
   assert.deepEqual(m.stages.map((s: AnyRec) => s.col), m.stages.map((_: unknown, i: number) => i));
   assert.deepEqual(m.stages.map((s: AnyRec) => s.lane), ['billing', 'billing', 'ops', 'ops']);
-  const G = laneGeometry(m, { aspect: 1.6 });
+  // a stage under the chrome and the head is about 2.2 wide to 1 tall at 1440×900 (since lane S the cards are wider and
+  // shorter, so a square-ish 1.6 would wrap four stages into two rows to fit larger)
+  const G = laneGeometry(m, { aspect: 2.2 });
   assert.equal(G.k, 1);
 });
 

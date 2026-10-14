@@ -45,14 +45,23 @@ export function laneNoteText(n) {
   return fill(n.key, vars);
 }
 
-/** One stage card: its place, name, sub-line, one status chip, the street's test chip, and a decision the code holds. */
+/**
+ * One stage card at the street's density (cleanup pass 2026-10-11, lane S — the owner's *"the steps text is too large"*):
+ * its place, its name on one line with the status chip beside it, its sub-line, the street's test chip (the count with
+ * its scope on one row, the one verdict on the next, never folded), and a decision the code holds.
+ */
 function stageHtml(st, r, m, say) {
+  // one journey's lanes: every stage is step 1 of 1 of its storyline, so the badge says the screen's place instead
+  const nScreens = m.single ? m.stages.filter((x) => !x.branch).length : 0;
   const step = st.branch
     ? '<span class="map-step branch"' + tipAttrs({ text: fill('lanes.stage.branch', { when: st.branch.when }) + ' · ' + st.journeyName, noFocus: true }) + '>' + sym('fork') + '</span>'
-    : '<span class="map-step"' + tipAttrs({ text: fill(biz() ? 'map.storyline.bizStep' : 'map.storyline.step', { n: st.step, m: m.stepsOf }) + ' · ' + st.journeyName, noFocus: true }) + '>' + st.step + '</span>';
+    : m.single
+      ? '<span class="map-step"' + tipAttrs({ text: fill('map.crumb.screen', { n: st.screenIndex + 1, m: nScreens }) + ' · ' + st.journeyName, noFocus: true }) + '>' + (st.screenIndex + 1) + '</span>'
+      : '<span class="map-step"' + tipAttrs({ text: fill(biz() ? 'map.storyline.bizStep' : 'map.storyline.step', { n: st.step, m: m.stepsOf }) + ' · ' + st.journeyName, noFocus: true }) + '>' + st.step + '</span>';
   // the street's own test chip for this screen: the count with its scope and the one evidence word (lane V's chip);
-  // for a screen with no code it is the not-built chip, which then is the card's one status word too
-  const tests = st.tests ? mapTestsChips(st.tests, st.evidence, { hideZero: biz() }) : '';
+  // for a screen with no code it is the not-built chip, which then is the card's one status word too. Only the runs
+  // that are not *passed* ride beside the word (the count's tip has them all).
+  const tests = st.tests ? mapTestsChips(st.tests, st.evidence, { hideZero: biz(), runs: false }) : '';
   const says = tests.includes('data-not-built');
   const status = st.state === 'planned'
     ? (says ? '' : '<span class="map-chip k-warn"' + tipAttrs({ key: 'map.screen.planned', noFocus: true }) + '>' + sym('warning') + esc(t('map.screen.planned')) + '</span>')
@@ -65,12 +74,15 @@ function stageHtml(st, r, m, say) {
   return '<div class="ln-stage' + (st.state === 'planned' ? ' planned' : '') + (st.branch ? ' branch' : '') + '" role="button" tabindex="0"'
     + ' data-key="' + esc(st.key) + '" data-flow="' + esc(st.flowId) + '" data-index="' + st.screenIndex + '" data-name="' + esc(st.name) + '"'
     + ' aria-label="' + esc(label) + '" style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px">'
-    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: [st.name, st.sub ? say(st.sub) : '', st.words ? say(st.words) : ''].filter((x, i, a) => x && a.indexOf(x) === i).join(' · '), noFocus: true }) + '>' + esc(st.name) + '</span></div>'
-    + (st.sub ? '<div class="sub"' + tipAttrs({ text: say(st.sub), noFocus: true }) + '>' + esc(say(st.sub)) + '</div>' : '')
-    + '<div class="ln-chips">' + status + tests + '</div>' + dec + '</div>';
+    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: [st.name, st.sub ? say(st.sub) : '', st.words ? say(st.words) : ''].filter((x, i, a) => x && a.indexOf(x) === i).join(' · '), noFocus: true }) + '>' + esc(st.name) + '</span>' + status + '</div>'
+    + (st.sub && st.sub !== st.name ? '<div class="sub"' + tipAttrs({ text: say(st.sub), noFocus: true }) + '>' + esc(say(st.sub)) + '</div>' : '')
+    + '<div class="ln-chips">' + tests + '</div>' + dec + '</div>';
 }
 
-/** One pill: the record (first in its row), the move in words, and — outside business — the code that makes it. */
+/**
+ * One pill: the record and its move on one line (the record first in its row), the code that makes it small beneath
+ * (outside business), and what the move needs as a chip — each whole, wrapping at words, never an ellipsis.
+ */
 function pillHtml(p, r, m, say) {
   const st = (k) => m.stages.find((s) => s.key === k);
   const makers = p.stages.map(st).filter(Boolean).map((s) => s.name);
@@ -78,13 +90,13 @@ function pillHtml(p, r, m, say) {
     : p.kind === 'move' ? fill('lanes.pill.move', { status: statusWords(p.status, p.record.id) }) : t('lanes.pill.written');
   const by = p.writers.length ? fill('lanes.pill.by', { name: p.writers.join(', ') }) : '';
   const tip = recordWords(p.record.name) + ' · ' + move + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '');
+  const rec = p.first && !p.isStore;
+  const code = by && !biz() ? '<span class="by map-code">' + codeBreaks(fill('lanes.pill.by', { name: p.writers[0] })) + (p.writers.length > 1 ? ' <span class="more">' + esc(fill('fold.more', { n: p.writers.length - 1 })) + '</span>' : '') + '</span>' : '';
+  const needs = needsHtml(p, say);
   return '<div class="ln-pill ' + p.kind + '" data-key="' + esc(p.key) + '" data-record="' + esc(p.record.id) + '"' + (p.status != null ? ' data-status="' + esc(p.status) + '"' : '')
     + ' style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px"' + tipAttrs({ text: tip, noFocus: true }) + '>'
-    // the record and the move on two lines of their own, each whole — never an ellipsis (round-3 swarm: *inv… · status → S…*)
-    + (p.first && !p.isStore ? '<div class="rc">' + sym('record') + '<span class="rec">' + esc(recordWords(p.record.name)) + '</span></div>' : '')
-    + '<div class="mv">' + (p.first && !p.isStore ? '' : sym('record')) + '<span class="w">' + esc(move) + '</span></div>'
-    // the code that makes it breaks after a dot, never inside a name (*by PgBcOutboxRepository.claimNext*)
-    + (by && !biz() ? '<div class="by map-code">' + codeBreaks(fill('lanes.pill.by', { name: p.writers[0] })) + (p.writers.length > 1 ? ' <span class="more">' + esc(fill('fold.more', { n: p.writers.length - 1 })) + '</span>' : '') + '</div>' : '') + needsHtml(p, say) + '</div>';
+    + '<div class="mv">' + sym('record') + '<span class="w">' + (rec ? '<span class="rec">' + esc(recordWords(p.record.name)) + '</span><span class="sep"> · </span>' : '') + esc(move) + '</span></div>'
+    + (code || needs ? '<div class="by-row">' + code + needs + '</div>' : '') + '</div>';
 }
 
 /** A code name with a break chance after each dot and between the words of a camelCase name — never inside a word. */
@@ -114,22 +126,23 @@ function needsHtml(p, say) {
     : '';
   const action = biz() ? '' : n.action.split('::').pop();
   const tip = t('handoff.needs').replace('{action}', action || t('lanes.pill.thisMove')).replace('{list}', items.join(' · ')) + (nc ? ' · ' + nc : '');
-  return '<div class="nd"' + tipAttrs({ text: tip, noFocus: true }) + '>' + sym('gate')
+  return '<span class="nd map-chip"' + tipAttrs({ text: tip, noFocus: true }) + '>' + sym('gate')
     + (n.counted ? countedHtml(n.counted, API, { cls: 'ln-n', words: fill('lanes.pill.needs', { n: n.counted.n }) }) : '<span>' + esc(fill('lanes.pill.needs', { n: n.shown.length + n.technical })) + '</span>')
-    + (nc ? '<span class="nc">' + sym('warning') + esc(t('lanes.pill.uncheckedShort')) + '</span>' : '') + '</div>';
+    + (nc ? '<span class="nc">' + sym('warning') + esc(t('lanes.pill.uncheckedShort')) + '</span>' : '') + '</span>';
 }
 
-/** The lane's head: its word, its second line, what it is, and its count with the scope it counts over. */
+/** The lane's head: its word and its count on one line, its second line clamped to one, what it folded. */
 function laneHeadHtml(l, single) {
   const glyph = l.kind === 'store' ? sym('record') : sym('human');
   const sub = l.kind === 'store'
     ? fill(single ? 'lanes.store.subJourney' : 'lanes.store.sub', { kind: t('map.store.kind.' + storeKindOf(l)) })
     : l.description;
   const word = l.kind === 'store' ? (l.declaredName || storeShownName(l.store, biz()) || t('map.store.kind.' + storeKindOf(l))) : l.name || t('lanes.persona.none');
-  return '<div class="ln-head"><div class="nm">' + glyph + '<span>' + esc(word) + '</span></div>'
+  return '<div class="ln-head"><div class="ln-hrow"><div class="nm">' + glyph + '<span class="w">' + esc(word) + '</span></div>'
+    + '<span class="n">' + countedHtml(l.count, API, { cls: 'ln-n' }) + ' <span class="sc">· ' + esc(t(l.count.scope)) + '</span></span></div>'
     + (l.surface ? '<div class="surf">' + esc(l.surface) + '</div>' : '')
-    + (sub ? '<div class="d">' + esc(sub) + '</div>' : '')
-    + '<div class="n">' + countedHtml(l.count, API, { cls: 'ln-n' }) + ' <span class="sc">· ' + esc(t(l.count.scope)) + '</span></div>' + moreHtml(l) + '</div>';
+    + (sub ? '<div class="d"' + tipAttrs({ text: sub, noFocus: true }) + '>' + esc(sub) + '</div>' : '')
+    + moreHtml(l) + '</div>';
 }
 
 /**
@@ -207,11 +220,11 @@ function arrowsSvg(m, G, labels) {
   return out;
 }
 
-/** The legend: one row per mark the board draws. */
+/** The legend: one flat row of the marks the board draws, beside the footer's counts — never a stacked box. */
 function legendHtml(m) {
-  const row = (cls, key) => '<div class="lg"><span class="sw ' + cls + '"></span><span' + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</span></div>';
+  const row = (cls, key) => '<span class="lg"><span class="sw ' + cls + '"></span><span' + tipAttrs({ key, noFocus: true }) + '>' + esc(t(key)) + '</span></span>';
   const has = (k) => m.arrows.some((a) => a.kind === k);
-  return '<div class="ln-legend"><div class="hud-label"' + tipAttrs({ key: 'lanes.legend.title', noFocus: true }) + '>' + esc(t('lanes.legend.title')) + '</div>'
+  return '<div class="ln-legend"><span class="hud-label"' + tipAttrs({ key: 'lanes.legend.title', noFocus: true }) + '>' + esc(t('lanes.legend.title')) + '</span>'
     + row('moves', 'lanes.legend.moves')
     + (has('seen') ? row('seen', 'lanes.legend.seen') : '')
     + (m.stages.some((s) => s.state === 'planned') ? row('planned', 'lanes.legend.notBuilt') : '')
@@ -242,10 +255,12 @@ function footerHtml(m) {
  * journey prints it, with the moves this storyline makes marked as made here.
  */
 function lifeHtml(m) {
+  // one journey's lanes sit under the journey's head, which already prints the record's strip: never twice
+  if (m.single) return '';
   const made = new Set(m.pills.flatMap((p) => p.moves.map((x) => p.record.id + '|' + x.by + '|' + p.status)));
   return m.lifecycles.slice(0, 1).map((lc) => {
     const here = lc.lifecycle.transitions.map((tr) => made.has(lc.nodeId + '|' + tr.by + '|' + tr.to));
-    return '<div class="ln-life">' + lifecycleStripHtml({ ...lc, onJourney: here }, API, { flow: m.firstFlow || '' }) + '</div>';
+    return '<div class="ln-life">' + lifecycleStripHtml({ ...lc, onJourney: here }, API, { flow: m.firstFlow || '', compact: true }) + '</div>';
   }).join('');
 }
 
@@ -285,8 +300,10 @@ export function lanesHtml(m, G, ctx = {}) {
     html += '<div class="ln-label ' + lb.cls + '" style="left:' + lb.x + 'px;top:' + lb.y + 'px' + (lb.max ? ';max-width:' + lb.max + 'px' : '') + '">' + esc(lb.text) + '</div>';
   }
   // under the lanes: the lifecycle strips, the legend beside them, the footer
-  html += '<div class="ln-bottom" style="left:' + G.geom.margin + 'px;top:' + (G.lanesBottom + 12) + 'px;width:' + (G.size.w - G.geom.margin * 2) + 'px">'
-    + '<div class="ln-lifes">' + lifeHtml(m) + footerHtml(m) + '</div>' + legendHtml(m) + '</div>';
+  // under the lanes: the record's lifecycle on one line (only where no journey head prints it), then the footer's
+  // counts and the legend on one row
+  html += '<div class="ln-bottom" style="left:' + G.geom.margin + 'px;top:' + (G.lanesBottom + 8) + 'px;width:' + (G.size.w - G.geom.margin * 2) + 'px">'
+    + lifeHtml(m) + '<div class="ln-footrow">' + footerHtml(m) + legendHtml(m) + '</div></div>';
   return html;
 }
 

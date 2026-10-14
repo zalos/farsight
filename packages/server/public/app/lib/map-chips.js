@@ -112,7 +112,8 @@ export function mapScreensChips(k) {
 // ── nothing clips: a card's chip row folds to `+n` by measurement (cleanup pass 2026-10-11) ─────────────────────
 // The test verdict is the one chip that is always whole (`.tchip`, `.k-ev`): the others fold first, from the last.
 // A cover keeps two rows; a screen card and a lane's stage card keep what their box has left under the chips' row.
-const KEEP = '.tchip,.k-ev';
+// a comparison's chips on a lane's stage card are the comparison's verdict for that screen: never folded either
+const KEEP = '.tchip,.k-ev,.map-cmp-chip';
 
 /** The bottom a chip row must end above: its card's content box, less what the card draws under the row. */
 function bottomFor(row, card) {

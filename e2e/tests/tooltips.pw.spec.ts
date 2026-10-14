@@ -100,6 +100,8 @@ test.describe('tips', () => {
    * @covers packages/server/public/app/keymap.js::onKeydown
    */
   test('on a journey\'s table: the screens tip lists the screens, and Esc closes the tip before the table', async ({ page }) => {
+    // the head's line 1 folds the numbers past the status and the tests into +n (lane S): a window wide enough for all
+    await page.setViewportSize({ width: 2400, height: 900 });
     await openJourneyAt(page, 'table', 'hybrid');
     const journey = page.locator('.map-table .jrn-sheet');
     const screens = page.locator('.map-jhead .jrn-count .jrn-screens');
@@ -120,6 +122,7 @@ test.describe('tips', () => {
 
   /** @covers packages/server/public/app/lib/journey-draw.js::jrnScreensTip */
   test('the business lens reads the same tip without the endpoint', async ({ page }) => {
+    await page.setViewportSize({ width: 2400, height: 900 });
     await openJourneyAt(page, 'table', 'business');
     const screens = page.locator('.map-jhead .jrn-count .jrn-screens');
     await expect(screens).toHaveText('3 screens');
@@ -137,7 +140,12 @@ test.describe('tips', () => {
   test('the conditions not in plain language are listed behind their number, in every lens, in words', async ({ page }) => {
     for (const lens of ['business', 'hybrid', 'code']) {
       await openJourneyAt(page, 'table', lens);
-      const n = page.locator('.map-jhead .jrn-count .jrn-untrn');
+      // folded into the head's +n (lane S)? Its click opens the whole row in the dock's about tab
+      let n = page.locator('.map-jhead .jrn-count .jrn-untrn');
+      if (!(await n.isVisible())) {
+        await page.locator('.map-jhead .jh-more').click();
+        n = page.locator('.map-dock .md-about-chips .jrn-untrn');
+      }
       await expect(n).toBeVisible();
       const count = Number(((await n.textContent()) || '').match(/\d+/)![0]);
       expect(count).toBeGreaterThan(0);
