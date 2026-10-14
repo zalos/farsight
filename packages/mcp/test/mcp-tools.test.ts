@@ -424,9 +424,12 @@ describe('journeys', () => {
     assert.ok(out.indexOf('## Storylines') < out.indexOf('## Billing'), 'the storylines come before the personas');
     assert.match(out, /^## Billing — 3 journeys/m);
     assert.match(out, /^### Invoices — 2 journeys/m);
-    assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
+    // the example's discard screen names the operator (screens[].persona): the billing cycle is drawn with them
+    assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · with Operations \(1 of 3 screens\) · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
     // the fixture's config moves draft-and-send into Review and send; it is under both personas
-    assert.match(out, /^- Draft and send an invoice — .* · also under Operations · placed by farsight\.config\.json · /m);
+    assert.match(out, /^- Draft and send an invoice — .* · also under Operations · with Operations \(1 of 2 screens\) · placed by farsight\.config\.json · /m);
+    // who uses each screen, and what placed it: the screen row, Billing's routes, the journey
+    assert.match(out, /^3 screens across every source in scope \(1 named by its screen row · 1 by its address · 1 by its journey\)$/m);
     assert.ok(out.indexOf('## Billing') < out.indexOf('## Operations'), 'declared order, not alphabetical');
   });
 
@@ -443,7 +446,7 @@ describe('journeys', () => {
 
   test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
     const guide = await call('design_guide');
-    for (const words of ['personas[] { id, name, description? }', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
+    for (const words of ['personas[] { id, name, description?, routes?, signsInWith? }', 'screens[].persona', 'personas[].routes', '"For A · with B"', 'personaFrom (screen · routes · guard · journey)', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
       'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', '{ id, branchOf,\n  when, rejoins? }', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
       assert.ok(guide.includes(words), `design_guide does not say ${words}`);
     }

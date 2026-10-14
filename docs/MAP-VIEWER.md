@@ -40,7 +40,9 @@ row's right end**, the same pixel column at every stop. `fitChrome` folds by mea
 SCREEN · ACTION · CODE stops, never in the zoomable world (it rode over the first screen card at every zoom). It takes
 **two lines and the description** (cleanup pass 2026-10-11, lane S — the owner's *"the header is now taking up 1/3 of the
 screen height"*; with the chrome it stays within 170 px at 1920, 1440 and 1280 in every register, ~153 px on the
-reference app, was ~188): **line 1** the name (one line, whole in its tip), *For <persona> · <group>* (`forLineHtml`), the
+reference app, was ~188): **line 1** the name (one line, whole in its tip), *For <persona> · <group>* (`forLineHtml`;
+*· with <B>* instead of *also for* when some of its screens are another persona's — `screenPersonaOthers()` in
+`lib/journeys-model.js` over the row's `screenPersonas`, each person's screens and what placed them in the tip), the
 storyline position with ‹ › (`storyNavLineHtml`), then the numbers on what the line has left — the street's chips
 (`aggHtml`), or at the table layout the table's own count line (`tableCountHtml` ← `jrnHeaderHtml`) — folded to one `+n`
 by measurement (`foldHead`): the status (`.k-built`, *n of m screens built*) and the test chip (the one verdict with its
@@ -853,8 +855,11 @@ engine's, and its `+ − 0` with `zoomStep` and its own fit.
 neighbours in `surfaces/map.js`). With a storyline drawn the toolbar carries *Layout: chain · lanes*
 (`layoutToolHtml`, `?layout=lanes`, the `w` key; `MAP.layout`). Lanes: `laneLayout(storyline, designs, tree,
 summaries, { lanes?, handoffs?, byId })` folds the tree's storyline and the journeys read so far into **lanes** —
-one per persona that owns a journey (the tree's order; a branch on its first persona other than its step's lane)
-and one per store a stage's write markers name — **stages** (the steps' screens in order, a screen met again drawn
+one per persona that owns a journey (the tree's order; a branch on its first persona other than its step's lane) or
+uses a screen of one — a stage sits in its **screen's** persona's lane when its own row (`screens[].persona`), a
+persona's `routes` or the sign-in guard its code meets places it (`seg.screen.persona` once read, else the tree row's
+`screenPersonas[]`; the stage carries `persona` · `personaFrom`, the card `data-lane` · `data-persona-from` and the
+reason in its name's tip; lane persona 2026-10-13) — and one per store a stage's write markers name — **stages** (the steps' screens in order, a screen met again drawn
 once; a branch's screens on its lane from the column after its step), **pills** (per store, a row per record it
 writes: a record with a lifecycle gets one pill per status the storyline's code moves it into, in the lifecycle's
 order, `created` for the first declared status; any other record one *written* pill; two rows drawn, the rest

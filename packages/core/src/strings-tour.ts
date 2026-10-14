@@ -50,7 +50,7 @@ export const TOUR_STRINGS: Record<string, StringEntry> = {
     professional: 'Nobody has written what {screen} is for yet.',
     define: 'Neither the page that serves this screen nor the design describes it. A business sentence on the page, or a description in the design manifest, would be read here.',
   },
-  'tour.screen.who': same('{persona} uses it.', 'Who the journey is for, as the design or the configuration declares it.'),
+  'tour.screen.who': same('{persona} uses it.', 'Who uses this screen: the person its own row in the design names, else the person whose addresses it lives under, else the person the sign-in check its code meets lets in, else the person its journey is for.'),
   'tour.ref.after': same('After “{action}” moved the {record} to {status} (stop {stop}), this screen comes next.',
     'The stop before this one was a hand-off: the walk names it so the screen is read in its place.'),
   'tour.ref.reads': same('It reads the {record} that {screen} wrote (stop {stop}).',

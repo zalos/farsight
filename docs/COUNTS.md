@@ -527,6 +527,8 @@ package.json) are facts, not counts, and print beside the row.
 | journeys under a persona | `count.unit.journeys` (both) | `count.scope.persona` | `JourneyPersona.counts.journeys` | the journeys listed under that persona; equals the sum of its groups' counts. A journey for two personas is counted in each, once in the tree |
 | journeys in a group | `count.unit.journeys` (both) | `count.scope.group` | `JourneyGroup.counts.journeys` | the journeys listed in that group under that persona |
 | built journeys | `count.unit.journeysBuilt` *n of m journeys built* (both) | `count.scope.persona` / `count.scope.group` | `counts.built` on a persona or a group | journeys whose every screen exists in code (`status: both`), of the journeys beside it; a partly built journey is not built |
+| screens by who uses them | `count.unit.personaScreens` *n screens* (both) | `count.scope.workspace` | `journeyTree().counts.screens` — `JourneyRow.screenPersonas` (core `personaOfScreen`) over every journey in scope | each screen of a declared journey once (its first journey's placement); breakdown by where its persona came from — `count.part.personaFromScreen` (its own row, `screens[].persona`) · `personaFromRoutes` (a persona's `routes` glob) · `personaFromGuard` (the identity guard its code meets signs one persona in) · `personaFromJourney` (its journey's first persona) — a partition; printed by `farsight journeys` / MCP `journeys` when a part other than the journey's is non-zero |
+| screens a persona uses | `count.unit.personaScreens` (both) | `count.scope.persona` | `JourneyPersona.counts.screens` | the screens of every journey in scope whose persona is this one, each once, with the same breakdown — an operator's screen in a journey listed only under the contractor counts for the operator; the personas' counts sum to the tree's |
 | storylines | `count.unit.storylines` *n storylines* (hud *n questlines*) | `count.scope.workspace` | `journeyTree().counts.storylines` | storylines declared by the sources in scope, one per id (a second source's same id is a note) |
 | journeys in a storyline | `count.unit.journeys` (both) | `count.scope.storyline` | `JourneyStoryline.counts.journeys` | the storyline's steps and branches: journeys it names that a manifest declares and the tree draws in scope, each once; with a branch, a breakdown `count.part.storylineSteps` (*n on the main path*) · `count.part.storylineBranches` (*n branches*) |
 | built journeys in a storyline | `count.unit.journeysBuilt` (both) | `count.scope.storyline` | `JourneyStoryline.counts.built` | its steps and branches whose every screen exists in code, of them all |
@@ -889,3 +891,9 @@ the scope's chip words, the cell's one word (`testVerdict()`), and `· n failed 
 - **The frozen matrix CSV** gains two appended columns (additive): `evidence_word` — the case's own word as the screen
   prints it — and `verdict` — its run status where a named case's run earned the word, `''` otherwise
   (`docs/contracts/farsight-tests-matrix-v1.md`).
+
+### Echo memory portal (`POST /api/memory/browse`)
+
+| number | unit | scope | source | what it counts |
+|---|---|---|---|---|
+| returned memories | `echo.portal.countShown` / `echo.portal.countShownOne` (both registers) | `echo.portal.scope` — this response before a browser topic filter | `echo.portal.browse.memories` in `createMemoryPortal()` | Exact returned records in one bounded, identity-scoped response. Each record once. This is neither the whole store size nor a total across accumulated pages. Upstream global facets/totals are not displayed. |

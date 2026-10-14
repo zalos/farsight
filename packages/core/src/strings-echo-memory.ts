@@ -2,6 +2,8 @@ import type { StringEntry } from './strings.js';
 const same = (word: string, define: string): StringEntry => ({ hud: word, professional: word, define });
 
 export const ECHO_MEMORY_STRINGS: Record<string, StringEntry> = {
+  'echo.memory.aborted': same('Echo memory request cancelled.', 'Cancelling a browser request closes its private connection and stops the associated research.'),
+  'echo.memory.busy': same('Echo is already researching a question for this profile. Try again shortly.', 'One research job runs per profile service. Additional requests are refused rather than starting competing model work.'),
   'echo.memory.unavailable': same('Echo memory is unavailable. Start Echo for this profile and try again.', 'The local bridge must be running before another process can read or save memory.'),
   'echo.memory.input': same('The memory request is invalid or too large.', 'Echo accepts bounded text, topic labels and a recall limit from one to five. Requests cannot choose their own identity or memory store.'),
   'echo.memory.credential': same('This memory looks like a credential. Keep secrets in the keychain instead.', 'Shared memories refuse the same credential shapes as pinned lessons. Refusal messages never repeat the supplied value.'),

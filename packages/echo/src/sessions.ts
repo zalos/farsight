@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { chmod, link, lstat, mkdir, open, readFile, realpath, unlink } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
+import { submindSettings, validateModelSettings } from './config.js';
 import type { EchoContext } from './types.js';
 
 function hash(value: string): string { return createHash('sha256').update(value).digest('hex'); }
@@ -16,7 +17,9 @@ function stable(value: unknown): string {
 export function contextFingerprint(ctx: EchoContext): string {
   return hash(stable({
     configPath: ctx.configPath, profileId: ctx.profileId, dataDirectory: ctx.dataDirectory,
-    identity: ctx.profile.identity, backend: ctx.profile.backend, model: ctx.profile.model,
+    identity: ctx.profile.identity, backend: ctx.profile.backend,
+    model: { ...validateModelSettings(ctx.profile.model), allowInsecureHttp: ctx.profile.model.allowInsecureHttp ?? false },
+    budget: ctx.profile.budget, submind: submindSettings(ctx.profile),
   }));
 }
 
