@@ -555,6 +555,58 @@ test('a case run under two projects joins one run per project, and `run` is the 
   assert.equal(entry.eachJoined, 0);
 });
 
+test('a case passed on one project and skipped there by its own written condition is passed, with the reason kept', async () => {
+  // the reference app's storyline-wide case (outsider demo 2026-10-13, F3): passed on desktop-1440, skipped on
+  // mobile-390 by `test.skip(({ viewport }) => viewport.width < 1024, '…designed for desktop…')`
+  const reason = 'The walk crosses the ops console, which is designed for desktop (the OPS frames are 1440 only).';
+  const dir = tempRepo({
+    'src/checkout.ts': 'export function pay() { return 1; }\n',
+    'e2e/checkout.pw.spec.ts': [
+      "import { test } from '@playwright/test';",
+      "test.describe('checkout', () => {",
+      "  test('pays', async () => {});",
+      "  test('refunds', async () => {});",
+      '});',
+    ].join('\n'),
+    'farsight.config.json': JSON.stringify({ tests: { e2e: { runner: 'playwright', results: 'e2e/results.json' } } }),
+    'e2e/results.json': JSON.stringify({
+      config: { version: '1.62' },
+      stats: { startTime: '2026-10-08T22:35:00.000Z' },
+      suites: [{
+        title: 'e2e/checkout.pw.spec.ts', file: 'e2e/checkout.pw.spec.ts', specs: [], suites: [{
+          title: 'checkout', file: 'e2e/checkout.pw.spec.ts',
+          specs: [
+            {
+              title: 'pays', file: 'e2e/checkout.pw.spec.ts', tests: [
+                { projectName: 'desktop-1440', status: 'expected', annotations: [], results: [{ status: 'passed', duration: 900 }] },
+                { projectName: 'mobile-390', status: 'skipped', annotations: [{ type: 'skip', description: reason }], results: [{ status: 'skipped', annotations: [{ type: 'skip', description: reason }] }] },
+              ],
+            },
+            {
+              // skipped on every project: stays skipped, each reason kept (newer reporters put it on the result only)
+              title: 'refunds', file: 'e2e/checkout.pw.spec.ts', tests: [
+                { projectName: 'desktop-1440', status: 'skipped', results: [{ status: 'skipped', annotations: [{ type: 'skip', description: 'live only' }] }] },
+                { projectName: 'mobile-390', status: 'skipped', annotations: [{ type: 'skip', description: reason }], results: [{ status: 'skipped' }] },
+              ],
+            },
+          ],
+          suites: [],
+        }],
+      }],
+    }),
+  });
+  const pw = readReport(dir, join(dir, 'e2e/results.json'))!;
+  assert.deepEqual(pw.cases.map((c) => c.reason ?? null), [null, reason, 'live only', reason]);
+  const f = await ingestRepo(dir, { repoName: 'shop' });
+  const pays = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'pays')!;
+  assert.deepEqual(pays.test!.runs!.map((r) => [r.project, r.status, r.reason ?? null]), [['desktop-1440', 'passed', null], ['mobile-390', 'skipped', reason]]);
+  assert.equal(pays.test!.run!.status, 'passed', 'passed on a project, skipped elsewhere by its own condition: the case passed');
+  assert.deepEqual(pays.test!.run!.projects, [{ project: 'desktop-1440', status: 'passed' }, { project: 'mobile-390', status: 'skipped', reason }]);
+  const refunds = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'refunds')!;
+  assert.equal(refunds.test!.run!.status, 'skipped');
+  assert.deepEqual(refunds.test!.run!.projects!.map((p) => p.reason), ['live only', reason]);
+});
+
 test('foldRuns: the weakest status wins, the latest timestamp is kept, and one project stays named', () => {
   const base = { id: 'r', freshness: 'unknown' as const, stale: false };
   const one = foldRuns([{ ...base, at: '2026-09-01T00:00:00.000Z', status: 'passed', project: 'desktop' }])!;
