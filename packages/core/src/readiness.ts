@@ -19,11 +19,13 @@
  */
 import type { GraphNode, GateClass, GateTier } from './graph.js';
 import { gateTierOf } from './gate-class.js';
+import { t } from './strings.js';
 import { type GraphIndex, journey, journeySummary } from './query.js';
 import { screensFor } from './design.js';
 import { counted, type Counted } from './counts.js';
 import { gateCard, gateNameParts } from './gates.js';
-import type { CoverageTestRef, EvidenceWord } from './coverage.js';
+import { ownCaseHold, projectSplitWords, caseProjectSplit, type ProjectSplit, type CoverageTestRef, type EvidenceWord, type OwnCaseHold } from './coverage.js';
+import type { TestRunProject } from './graph.js';
 import type { JourneyTree, JourneyStoryline, JourneyRow } from './journeys.js';
 
 /** Why a row holds — a closed set, printed through `readiness.hold.<reason>`. */
@@ -56,12 +58,19 @@ export interface ReadinessRow {
   commitsSince: number | null;
   ship: boolean;
   hold: ReadinessHoldReason[];
-  /** the journey's own declared cases (an end-to-end `@covers` naming it) that hold it: each named, with its run */
-  holdCases: { id: string; name: string; status: 'failed' | 'skipped' }[];
+  /**
+   * the journey's own declared cases (an end-to-end `@covers` naming it) that hold it: each named, with its run — and,
+   * when more than one project ran it, each project's status and the reason its own skip condition wrote
+   */
+  holdCases: OwnCaseHold['cases'];
   /** its own declared cases, how many — the cases the policy reads */
   ownCases: number;
-  /** cases in scope that skipped or failed and are not its own declared cases: said on the row, never a hold */
-  notes: { skipped: number; failed: number };
+  /**
+   * cases in scope that skipped or failed and are not its own declared cases: said on the row, never a hold — and its
+   * own cases that passed on one project and were skipped on another by their own condition (outsider demo
+   * 2026-10-13, F3: the reference app's storyline-wide case held all six journeys on its mobile skip)
+   */
+  notes: { skipped: number; failed: number; projectSkips: { id: string; name: string; passedOn: string[]; skippedOn: { project: string; reason?: string }[]; words: { text: string; biz: string } }[] };
   owner?: string;
 }
 
@@ -94,6 +103,12 @@ export interface Readiness {
    * skipped cases, 46 on the rows; 5 gates, 8 on the rows).
    */
   distinct: { skipped: { label: string; name: string; n: number }[]; unreached: { label: string; name: string; n: number }[] };
+}
+
+/** A row's note for its own case a project skipped: *note: <case> passed on … · skipped on … (…)*, both registers. */
+function noteWords(name: string, split: ProjectSplit): { text: string; biz: string } {
+  const say = (key: string, words: string) => t(key, 'professional').split('{name}').join(name).split('{split}').join(words);
+  return { text: say('readiness.note.projectSkip', projectSplitWords(split)), biz: say('readiness.note.projectSkip', projectSplitWords(split, true)) };
 }
 
 /** The order the register reads: business first, then policy, then technical — and within a tier the fewest tests first. */
@@ -141,7 +156,9 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
       }
       const cov = sum.coverage?.journey;
       if (cov) {
-        verdict = { word: cov.verdict.word, ...(cov.verdict.status ? { status: cov.verdict.status } : {}), runs: cov.verdict.runs };
+        // the row's own decision says the hold; the word beside it does not repeat it
+        const { held: _held, ...word } = cov.verdict.word;
+        verdict = { word, ...(cov.verdict.status ? { status: cov.verdict.status } : {}), runs: cov.verdict.runs };
         refs = cov.tests.filter((t) => !t.runLevel);
       }
     } catch { /* a journey that cannot be walked: its row says what the tree knows and nothing more */ }
@@ -151,18 +168,22 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
     const greens = refs.filter((t) => t.status === 'passed' && t.at).map((t) => t.at!).sort();
     const lastGreen = greens.pop() ?? null;
     // the journey's own declared cases: an end-to-end case whose `@covers` names this journey (by its id or node id)
-    const own = refs.filter((t) => {
-      if (t.level !== 'e2e') return false;
-      const d = index.byId.get(t.id)?.test?.declares ?? [];
-      return d.includes(r.id) || d.includes(r.nodeId);
-    });
+    const { own, hold: ownHold } = ownCaseHold(index, [r.id, r.nodeId], refs);
     const ownIds = new Set(own.map((t) => t.id));
-    const holdCases = own.filter((t) => t.status === 'failed' || t.status === 'skipped')
-      .map((t) => ({ id: t.id, name: t.name, status: t.status as 'failed' | 'skipped' }))
-      .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'failed' ? -1 : 1));
+    const holdCases = ownHold?.cases ?? [];
+    const projectSkips = own.filter((t) => t.status === 'passed' && t.projects?.some((p) => p.status === 'skipped'))
+      .map((t) => ({
+        id: t.id, name: t.name,
+        passedOn: t.projects!.filter((p) => p.status === 'passed').map((p) => p.project),
+        skippedOn: t.projects!.filter((p) => p.status === 'skipped').map((p: TestRunProject) => ({ project: p.project, ...(p.reason ? { reason: p.reason } : {}) })),
+        // the row's note in words, made once here (`readiness.note.projectSkip` over `projectSplitWords`)
+        words: noteWords(t.name, caseProjectSplit(t)!),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     const notes = {
       skipped: refs.filter((t) => t.status === 'skipped' && !ownIds.has(t.id)).length,
       failed: refs.filter((t) => t.status === 'failed' && !ownIds.has(t.id)).length,
+      projectSkips,
     };
     const unreached = [...gateIds].filter((id) => (card(id)?.tests.length ?? 0) === 0)
       .map((id) => ({ id, name: index.byId.get(id)?.name ?? id }));
@@ -258,14 +279,18 @@ export function readiness(index: GraphIndex, tree: JourneyTree, storylineId: str
 
 /** The brief as a spreadsheet: one line per row, the words a reader sees (the CLI and the viewer's CSV). */
 export function readinessCsvRows(r: Readiness, word: (key: string) => string): { header: string[]; rows: string[][] } {
-  const header = ['step', 'journey', 'kind', 'branch_of', 'when', 'built', 'screens_built', 'screens', 'verdict', 'last_run', 'skipped', 'failed', 'unrun', 'gates', 'gates_no_test', 'commits_since_green', 'decision', 'reasons', 'owner'];
+  // `notes` is appended last so a sheet that reads the earlier columns by position keeps reading them
+  const header = ['step', 'journey', 'kind', 'branch_of', 'when', 'built', 'screens_built', 'screens', 'verdict', 'last_run', 'skipped', 'failed', 'unrun', 'gates', 'gates_no_test', 'commits_since_green', 'decision', 'reasons', 'owner', 'notes'];
   const rows = r.rows.map((x) => [
     x.label, x.name, x.kind, x.branchOf?.name ?? '', x.branchOf?.when ?? '',
     x.built.all ? 'yes' : 'no', String(x.built.n), String(x.built.of),
     x.verdict ? word(x.verdict.word.key) : '', x.lastRun ?? '',
     String(x.skipped), String(x.failed), String(x.unrun), String(x.gates.n), String(x.gates.unreached.length),
     x.commitsSince == null ? '' : String(x.commitsSince),
-    x.ship ? 'ship' : 'hold', [...x.hold.map((h) => word(`readiness.hold.${h}`)), ...x.holdCases.map((c) => c.name)].join(' · '), x.owner ?? '',
+    x.ship ? 'ship' : 'hold',
+    [...x.hold.map((h) => word(`readiness.hold.${h}`)), ...x.holdCases.map((c) => (c.where ? `${c.name} (${c.where.text})` : c.name))].join(' · '),
+    x.owner ?? '',
+    (x.notes.projectSkips ?? []).map((p) => p.words.text).join(' · '),
   ]);
   return { header, rows };
 }

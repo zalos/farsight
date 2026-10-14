@@ -103,6 +103,7 @@ const counts = (s: any): [string, any][] => [
   ...Object.entries(s.built).map(([k, c]) => [`built.${k}`, c] as [string, any]),
   ...s.validated.byVerdict.map((v: any, i: number) => [`validated.byVerdict[${i}]`, v.journeys] as [string, any]),
   ['validated.cases', s.validated.cases],
+  ['validated.heldInBrief', s.validated.heldInBrief],
   ...['screensNotBuilt', 'operationsNotImplemented', 'blindSpots', 'drift'].map((k) => [`open.${k}`, s.open[k]] as [string, any]),
 ];
 
@@ -118,7 +119,10 @@ test('the state of play: three columns of sound typed counts, each with its re-c
   // the parts of the cases add up to the cases, and failed · skipped · flaky are among them
   const parts = body.validated.cases.breakdown;
   assert.equal(parts.reduce((a: number, p: any) => a + p.n, 0), body.validated.cases.n);
-  assert.ok(body.validated.byVerdict.length >= 1, 'some journey has a verdict word');
+  // the fixture's one fully built journey passed by its declaration and its own case failed on mobile: the release brief
+  // holds it, so it is counted apart and never under *passed* (outsider demo 2026-10-13)
+  assert.equal(body.validated.heldInBrief.n, 1, 'the held journey is counted apart');
+  assert.equal(body.validated.byVerdict.reduce((a: number, v: any) => a + v.journeys.n, 0), 0, 'and not under its word');
   assert.ok(body.validated.lastE2e && body.validated.lastE2e.fresh && body.validated.lastE2e.fresh.key, 'the newest end-to-end run with its one freshness fact');
   // no history store in this temp workspace: said as no history, never as zero commits
   assert.equal(body.open.history, null);

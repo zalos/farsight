@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { parseSync } from 'oxc-parser';
 import type { GraphFragment, GraphNode, GraphEdge, TestRef, TestRun, TestsMeta, TestsConfigBlock, TestReportConfig } from '@farsight/core';
-import { stringList } from '@farsight/core';
+import { stringList, foldRuns } from '@farsight/core';
 import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 import { walk, isNode, lineIndex, type AstNode } from '../walk.js';
 import { collectFiles } from '../shared/files.js';
@@ -540,24 +540,11 @@ function clearPriorImport(
   }
 }
 
-/** Weakest first: a case is only as green as its worst project (03 §3.2). */
+/** Weakest first — for the `.each` rows of one template within one project (03 §3.2). */
 const STATUS_RANK: TestRun['status'][] = ['failed', 'flaky', 'skipped', 'unknown', 'passed'];
 
-/**
- * The fold over `runs[]` that `TestRef.run` is: the weakest status across the
- * projects, the latest timestamp, and no `project` once more than one ran it —
- * so a consumer that only reads `run` is never told a case passed when one
- * project failed it.
- */
-export function foldRuns(runs: TestRun[]): TestRun | undefined {
-  if (!runs.length) return undefined;
-  if (runs.length === 1) return { ...runs[0]! };
-  const weakest = [...runs].sort((a, b) => STATUS_RANK.indexOf(a.status) - STATUS_RANK.indexOf(b.status))[0]!;
-  const latest = runs.reduce((a, b) => (b.at > a.at ? b : a));
-  const fold: TestRun = { ...weakest, at: latest.at };
-  delete fold.project;
-  return fold;
-}
+/** The fold over a case's projects lives in core (`foldRuns`), so the index re-folds a graph an older build wrote. */
+export { foldRuns };
 
 /**
  * Join a results report's cases to the test nodes by full name — status,
@@ -635,6 +622,7 @@ function attachRuns(
           ...(c.durationMs != null ? { durationMs: c.durationMs } : {}),
           ...(c.retries != null ? { retries: c.retries } : {}),
           project: c.project ?? 'default',
+          ...(c.status === 'skipped' && c.reason ? { reason: c.reason } : {}),
           join: 'exact',
         }, c.project);
       }
@@ -666,6 +654,7 @@ function attachRuns(
         ...(durations.length ? { durationMs: durations.reduce((a, b) => a + b, 0) } : {}),
         ...(retries.length ? { retries: Math.max(...retries) } : {}),
         project,
+        ...(status === 'skipped' && rows.find((r) => r.reason)?.reason ? { reason: rows.find((r) => r.reason)!.reason! } : {}),
         join: 'each-template',
         rows: rows.length,
       }, rows[0]!.project);

@@ -1785,6 +1785,13 @@
   /* a partly built journey: build state first, the word over its built screens without the pass colour (swarm round 3) */
   .tc-pb{color:var(--amber);font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9px;display:inline-flex;align-items:center;gap:4px}
   .tc-pba,.tchip .tc-basis{color:var(--muted)}
+  .tc-held{color:var(--amber);display:inline-flex;align-items:center;gap:4px}
+  .tc-split{color:var(--muted)}
+  /* the Map head's line 1 is a budget: the hold line and the project split clip to a few words, their tips carry all of it */
+  /* the head's line 1 is a budget: the project split is said on the screens, the table and the chip's tip, not here */
+  .map-jhead .tc-split-w{display:none}
+  .tc-held .tc-held-short,.map-jhead .tc-held .tc-held-long{display:none}
+  .map-jhead .tc-held .tc-held-short{display:inline}
   .builtonly,.ev.builtonly,.jrn-e2e.builtonly,.map-chip.k-ev.builtonly,.jrn-mk.cov.builtonly,.rd-ev.builtonly{color:var(--muted)!important;border-color:var(--line,#2a3142)!important;background:none!important;box-shadow:none!important}
   .builtonly .sym{color:var(--muted)!important}
   .tchip.nb .tc-nb{font-family:var(--hud);text-transform:uppercase;letter-spacing:.08em;font-size:9px;display:inline-flex;align-items:center;gap:4px}
@@ -3328,7 +3335,10 @@
   /* no room for the kept chips: the storyline's words give way first (whole in the crumb and the tip), then the test chip's tail */
   .map-jhead .jh-l1.tight .agg{flex:none}
   .map-jhead .jh-l1.tight .nm{flex-shrink:.3;min-width:min(10em,28%)}
-  .map-jhead .jh-l1.tight .story{flex:0 2 auto;min-width:5em;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l1.tight .story{flex:0 2 auto;min-width:5em;display:inline-flex;align-items:center}
+  /* only the words give way: the ‹ › doors stay whole and clickable however tight the line (PR #108 CI) */
+  .map-jhead .jh-l1.tight .story .story-t{min-width:0;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis}
+  .map-jhead .jh-l1.tight .story .map-story-nav{flex:none}
   .map-jhead .jh-l1.tight .for{flex:0 1 auto;min-width:4em;overflow:hidden;text-overflow:ellipsis}
   .map-jhead .jh-l1.tight2 .agg{flex:0 1 auto}
   .map-jhead .jh-l1 .agg.tight > .k-test,.map-jhead .jh-l1 .agg.tight .jrn-count > .jrn-hg:has(.jrn-htests){flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}

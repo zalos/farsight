@@ -2155,7 +2155,7 @@ server.registerTool('test_coverage', {
       `verified by ${covers.length} test(s)${step ? ` — e2e ${step.e2e} · unit/integration ${step.unit}${step.observed ? ' · observed by a run' : ' · no run observed it'}` : ''}:`,
       // the one verdict of this node — the word the HUD's chip prints — then its cases by their own runs, a count
       ...(step?.verdict ? [`evidence: ${chipWord({ chip: step.chip ?? 'none', evidenceWord: step.verdict.word, ...(step.observation ? { observation: step.observation } : {}) })}${step.verdict.status ? ` · the run behind it: ${step.verdict.status}` : ''}`,
-        `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})`] : []),
+        `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${step.verdict.projectSplit?.words ? ` · ${step.verdict.projectSplit.words.text}` : ''}`] : []),
       ...(step?.sameLoc?.length ? [`read with ${step.sameLoc.map((id) => `\`${id}\``).join(', ')} — the same file:line`] : []),
       ...covers.map(testLine),
       ...(step?.note ? [step.note] : []),
@@ -2204,8 +2204,10 @@ server.registerTool('test_coverage', {
         : 'observed by: nothing — no run reached this flow',
       // the cases' own runs are a count beside the verdict, never a second verdict (swarm 2026-10-05, finding 1)
       c.verdict?.runs.n
-        ? `their own last runs: ${countedText(c.verdict.runs)} (${breakdownText({ ...c.verdict.runs, breakdown: (c.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${c.run?.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''}`
+        ? `their own last runs: ${countedText(c.verdict.runs)} (${breakdownText({ ...c.verdict.runs, breakdown: (c.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${c.run?.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''}${c.verdict.projectSplit?.words ? ` · ${c.verdict.projectSplit.words.text}` : ''}`
         : 'their own last runs: no case reaches this flow',
+      // the release brief holds it on its own case: said beside the word, never left for the brief alone (F3)
+      ...(c.verdict?.word.held ? [c.verdict.word.held.full ?? c.verdict.word.held.text] : []),
       c.note,
       row.gap,
       '',

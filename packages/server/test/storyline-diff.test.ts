@@ -135,7 +135,7 @@ test('one change of every kind, each a sentence, in a stable order, counted over
 
   // verdict: the skipped case moves both journeys it covers; freshness (the code moved after the run) is not a change
   assert.deepEqual(by('verdict').map((d) => d.subject.id).sort(), [BILLING, NEW].sort());
-  for (const d of by('verdict')) { assert.match(d.from!, /^passed/); assert.match(d.to!, /3 skipped/); assert.doesNotMatch(d.to!, /stale/); }
+  for (const d of by('verdict')) { assert.match(d.from!, /^passed/); assert.match(d.to!, /2 skipped/); assert.doesNotMatch(d.to!, /stale/); }
 });
 
 test('the cards: one entry per journey, one chip per kind present, and the built count of the later sync', () => {

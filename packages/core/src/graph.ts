@@ -248,6 +248,23 @@ export interface TestRun {
   commit?: string;
   /** repo-relative path to the html/json report for the ⧉ link */
   report?: string;
+  /**
+   * A skipped row only: the reason the case's own skip condition wrote (Playwright's `skip` / `fixme` annotation,
+   * a reporter's skip message) — *the ops console is designed for desktop*. Quoted, never paraphrased.
+   */
+  reason?: string;
+  /**
+   * The fold only (`foldRuns`), when more than one project ran the case: each project's own status and, for a skip,
+   * its reason — so *passed* on a case skipped on one project by its own condition still says where it did not run.
+   */
+  projects?: TestRunProject[];
+}
+
+/** One project's run of a case, as the fold keeps it. */
+export interface TestRunProject {
+  project: string;
+  status: TestRun['status'];
+  reason?: string;
 }
 
 /** `test` nodes only: what kind of test this is and where it sits — like `contract` on a route. */

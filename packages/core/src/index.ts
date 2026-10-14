@@ -8,6 +8,7 @@ export * from './snapshots.js';
 export * from './history.js';
 export * from './agent-trailer.js';
 export * from './diff.js';
+export * from './test-runs.js';
 export * from './openapi.js';
 export * from './stitch.js';
 export * from './design.js';
