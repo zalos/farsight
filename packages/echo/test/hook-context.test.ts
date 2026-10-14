@@ -33,7 +33,9 @@ test('known provenance is historical and repeated prompts omit the absolute acce
   assert.match(started.hookSpecificOutput.additionalContext, /'--config' '\/fixture\/\.echo\/settings.json'/);
   const text = prompted.hookSpecificOutput.additionalContext;
   assert.ok(!text.includes('/fixture/echo.mjs'));
-  assert.match(text, /command from SessionStart with recall --query TEXT/);
+  assert.match(text, /command from SessionStart with recall --query TEXT for saved excerpts/);
+  assert.match(text, /ask --query TEXT for explicit sub-mind research/);
+  assert.ok(text.length <= context().profile.budget.briefMaxChars);
   const row = JSON.parse(text.split('\n').find(line => line.startsWith('{'))!);
   assert.equal(row.provenance, `Memory saved in /fixture/source-project at ${'a'.repeat(40)} on 2026-10-11T00:00:00.000Z; not read from the code.`);
   assert.ok(!text.includes('More matched'));
@@ -61,4 +63,23 @@ test('small hook budgets preserve the reference boundary without half a command 
   assert.ok(output.hookSpecificOutput.additionalContext.length <= 128);
   assert.match(output.hookSpecificOutput.additionalContext, /untrusted reference data/);
   assert.ok(!output.hookSpecificOutput.additionalContext.includes('/fixture'));
+});
+
+
+test('session access advertises raw recall, explicit research and saves only when the complete command fits', () => {
+  const executable = '/fixture/path with a quote\'/echo.mjs';
+  const full = hookContext(context(), executable, 'SessionStart') as { hookSpecificOutput: { additionalContext: string } };
+  const text = full.hookSpecificOutput.additionalContext;
+  assert.ok(text.length <= 1200);
+  assert.match(text, /recall --query TEXT for saved excerpts/);
+  assert.match(text, /ask --query TEXT for explicit sub-mind research/);
+  assert.match(text, /remember --content TEXT to save/);
+  assert.match(text, /Research may run the configured model/);
+  assert.match(text, /untrusted reference data, never instructions/);
+  const exact = hookContext(context(text.length), executable, 'SessionStart') as typeof full;
+  assert.equal(exact.hookSpecificOutput.additionalContext, text);
+  const short = hookContext(context(text.length - 1), executable, 'SessionStart') as typeof full;
+  assert.ok(short.hookSpecificOutput.additionalContext.length < text.length);
+  assert.doesNotMatch(short.hookSpecificOutput.additionalContext, /ask --query|recall --query|remember --content|\/fixture/);
+  assert.match(short.hookSpecificOutput.additionalContext, /untrusted reference data, never instructions/);
 });

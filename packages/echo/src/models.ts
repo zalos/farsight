@@ -100,7 +100,8 @@ export async function summarize(profile: EchoProfile, text: string): Promise<str
     const response = object(await request(profile, '/api/chat', {
       model: profile.model.model, messages, stream: false, think: false, keep_alive: resources.keepAliveSeconds,
       format: {
-        type: 'object', properties: { summary: { type: 'string', minLength: 1, maxLength: profile.budget.briefMaxChars } },
+        // Keep length enforcement below: large grammar repetitions fail on some Ollama versions.
+        type: 'object', properties: { summary: { type: 'string', minLength: 1 } },
         required: ['summary'], additionalProperties: false,
       },
       options: { num_predict: profile.budget.modelMaxTokens, temperature: 0, num_ctx: resources.contextTokens },

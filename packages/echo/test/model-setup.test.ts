@@ -68,7 +68,7 @@ test('explicit model test runs once over synthetic evidence even in off/mock mod
     const result = await testSetupModel('personal', profile, new AbortController().signal, { generate: async (selected, input) => {
       calls++;
       assert.equal(selected.submind!.mode, mode);
-      assert.equal(input.maxOutputTokens, 128);
+      assert.equal(input.maxOutputTokens, profile.budget.modelMaxTokens);
       assert.ok(input.signal);
       assert.equal(input.schema.additionalProperties, false);
       assert.deepEqual(input.schema.required, ['status', 'evidenceId']);
@@ -82,6 +82,23 @@ test('explicit model test runs once over synthetic evidence even in off/mock mod
     assert.deepEqual(result.usage, { modelCalls: 1, inputTokens: 31, outputTokens: 12 });
     assert.ok(result.elapsedMs >= 0);
     assert.doesNotMatch(JSON.stringify(result), /untrusted-provider-model|evidenceId|secret/);
+  }
+});
+
+test('synthetic model tests honor the saved output allowance without an extra ceiling or budget increase', async () => {
+  for (const modelMaxTokens of [32, 128, 1024, 4096]) {
+    const profile = fixture().profiles.work!;
+    profile.budget.modelMaxTokens = modelMaxTokens;
+    const original = structuredClone(profile);
+    let calls = 0;
+    await testSetupModel('work', profile, new AbortController().signal, { generate: async (selected, input) => {
+      calls++;
+      assert.equal(selected.budget.modelMaxTokens, modelMaxTokens);
+      assert.equal(input.maxOutputTokens, modelMaxTokens);
+      return ready();
+    } });
+    assert.equal(calls, 1);
+    assert.deepEqual(profile, original);
   }
 });
 

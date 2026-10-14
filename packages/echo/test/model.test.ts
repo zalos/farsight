@@ -180,3 +180,26 @@ test('model discovery supports cancellation before dispatch and while waiting fo
     });
   }
 });
+
+
+test('large summary allowances avoid unsupported grammar repetitions and still clip complete code points', async () => {
+  await fixture((request, response) => {
+    let raw = '';
+    request.on('data', chunk => { raw += chunk; });
+    request.on('end', () => {
+      const body = JSON.parse(raw);
+      assert.equal(body.options.num_predict, 1024);
+      if (body.format.properties.summary.maxLength >= 2000) {
+        response.writeHead(400); response.end(JSON.stringify({ error: 'Failed to initialize samplers: failed to parse grammar' }));
+        return;
+      }
+      response.end(JSON.stringify({ message: { content: JSON.stringify({ summary: 'x'.repeat(4095) + '😀 trailing text' }) }, done: true, done_reason: 'stop' }));
+    });
+  }, async profile => {
+    profile.budget.briefMaxChars = 4096;
+    profile.budget.modelMaxTokens = 1024;
+    const summary = await summarize(profile, 'Synthetic source text.');
+    assert.equal(summary, 'x'.repeat(4095));
+    assert.equal(summary.isWellFormed(), true);
+  });
+});

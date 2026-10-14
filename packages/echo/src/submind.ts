@@ -34,19 +34,28 @@ export function validateExpansion(value: unknown): { id: string; revision: strin
   return { id: value.id, revision: value.revision };
 }
 
+// Large string maxLength values become unsupported repetitions in some Ollama grammars.
+// Validate the 4000-character limits below; generation and transport remain independently capped.
 const actionSchema: Record<string, unknown> = {
-  type: 'object', additionalProperties: false, required: ['kind'],
-  properties: {
-    kind: { type: 'string', enum: ['search', 'answer'] },
-    query: { type: 'string', maxLength: 4000 },
-    findings: { type: 'array', maxItems: 5, items: {
-      type: 'object', additionalProperties: false, required: ['problem', 'fix', 'why', 'citations'],
+  anyOf: [
+    {
+      type: 'object', additionalProperties: false, required: ['kind', 'query'],
+      properties: { kind: { type: 'string', enum: ['search'] }, query: { type: 'string' } },
+    },
+    {
+      type: 'object', additionalProperties: false, required: ['kind', 'findings'],
       properties: {
-        problem: { type: 'string', maxLength: 4000 }, fix: { type: 'string', maxLength: 4000 }, why: { type: ['string', 'null'], maxLength: 4000 },
-        citations: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'object', additionalProperties: false, required: ['id', 'revision'], properties: { id: { type: 'string' }, revision: { type: 'string' } } } },
+        kind: { type: 'string', enum: ['answer'] },
+        findings: { type: 'array', maxItems: 5, items: {
+          type: 'object', additionalProperties: false, required: ['problem', 'fix', 'why', 'citations'],
+          properties: {
+            problem: { type: 'string' }, fix: { type: 'string' }, why: { type: ['string', 'null'] },
+            citations: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'object', additionalProperties: false, required: ['id', 'revision'], properties: { id: { type: 'string' }, revision: { type: 'string' } } } },
+          },
+        } },
       },
-    } },
-  },
+    },
+  ],
 };
 function findingsFrom(value: unknown, evidence: Map<string, ResearchMemory>): SubmindFinding[] | undefined {
   if (!Array.isArray(value) || value.length > 5) return;

@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultConfig, submindSettings } from '../dist/config.js';
 import { research, expandMemory } from '../dist/submind.js';
@@ -52,6 +54,18 @@ test('model can rephrase a search inside a fixed scope/window and return validat
   };
   const result = await research(profile('model'), f.store, { query: 'shipment' }, { now, generate: async (_p, request) => {
     assert.ok(request.signal); assert.ok(request.schema); calls++;
+    const branches = request.schema.anyOf as any[];
+    assert.equal(branches.length, 2);
+    const search = branches.find(branch => branch.properties.kind.enum[0] === 'search');
+    const answerBranch = branches.find(branch => branch.properties.kind.enum[0] === 'answer');
+    assert.deepEqual(search.required, ['kind', 'query']);
+    assert.deepEqual(Object.keys(search.properties).sort(), ['kind', 'query']);
+    assert.equal(search.additionalProperties, false);
+    assert.deepEqual(answerBranch.required, ['kind', 'findings']);
+    assert.deepEqual(Object.keys(answerBranch.properties).sort(), ['findings', 'kind']);
+    assert.equal(answerBranch.additionalProperties, false);
+    assert.ok(request.messages[0]!.content.includes('{"kind":"search","query":'));
+    assert.ok(request.messages[0]!.content.includes('{"kind":"answer","findings":'));
     if (calls === 1) return { ...answer(), content: { kind: 'search', query: 'cold containers' } };
     assert.ok(request.messages[1]?.content.includes(item.revision)); return answer();
   } });
@@ -66,6 +80,9 @@ test('invented citations and model-supplied actions are refused without returnin
   for (const content of [
     answer([{ id: 'foreign', revision: 'b'.repeat(64) }]).content,
     { kind: 'search', query: 'shipping', scope: 'another-user' },
+    { kind: 'search', query: 'shipping', findings: [] },
+    { kind: 'answer' },
+    { kind: 'answer', query: 'shipping', findings: [] },
     { kind: 'answer', findings: [], command: 'PRIVATE_SENTINEL' },
   ]) {
     const result = await research(profile('model'), fixture().store, { query: 'shipping' }, { now, generate: async () => ({ ...answer(), content }) });
@@ -186,3 +203,51 @@ for (const mode of ['mock', 'model'] as const) {
     assert.equal(calls, mode === 'mock' ? 0 : 4);
   });
 }
+
+
+test('native research works with a provider that refuses large grammar repetitions', async t => {
+  let calls = 0;
+  const hasLargeRepetition = (value: unknown): boolean => !!value && typeof value === 'object' && (
+    typeof (value as Record<string, unknown>).maxLength === 'number' && Number((value as Record<string, unknown>).maxLength) >= 2000
+    || Object.values(value).some(hasLargeRepetition)
+  );
+  const server = createServer((req, res) => {
+    let text = '';
+    req.on('data', chunk => { text += chunk; });
+    req.on('end', () => {
+      calls++;
+      assert.equal(req.url, '/api/chat');
+      const request = JSON.parse(text);
+      // Reproduces the native grammar compiler failure seen before inference.
+      if (hasLargeRepetition(request.format)) {
+        res.writeHead(400); res.end(JSON.stringify({ error: 'Failed to initialize samplers: failed to parse grammar' }));
+        return;
+      }
+      res.end(JSON.stringify({ done: true, done_reason: 'stop', message: { content: JSON.stringify(answer().content) }, prompt_eval_count: 100, eval_count: 35 }));
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  const p = profile('model');
+  p.model = { provider: 'ollama', model: 'synthetic-provider', baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}` };
+  const result = await research(p, fixture().store, { query: 'cold shipping' }, { now });
+  assert.equal(calls, 1);
+  assert.equal(result.status, 'ready');
+  assert.equal(result.findings[0]!.fix, 'Use the blue container');
+  assert.deepEqual(result.actions[0]!.arguments, { id: item.id, revision: item.revision });
+});
+
+test('research rejects overlong fields and follow-up queries independently of provider grammar constraints', async () => {
+  for (const field of ['problem', 'fix', 'why'] as const) {
+    const response = answer();
+    (response.content as any).findings[0][field] = 'x'.repeat(4001);
+    const result = await research(profile('model'), fixture().store, { query: 'cold shipping' }, { now, generate: async () => response });
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.coverage.stopReason, 'invalid_response');
+    assert.deepEqual(result.findings, []); assert.deepEqual(result.actions, []);
+  }
+  const f = fixture();
+  const result = await research(profile('model'), f.store, { query: 'cold shipping' }, { now, generate: async () => ({ ...answer(), content: { kind: 'search', query: 'x'.repeat(4001) } }) });
+  assert.equal(result.coverage.stopReason, 'invalid_response');
+  assert.equal(f.searches.length, 1);
+});

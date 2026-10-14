@@ -55,7 +55,7 @@ export async function testSetupModel(profileId: string, profile: EchoProfile, si
         type: 'object', additionalProperties: false, required: ['status', 'evidenceId'],
         properties: { status: { type: 'string', enum: ['ready'] }, evidenceId: { type: 'string', enum: ['echo-model-test'] } },
       },
-      maxOutputTokens: Math.min(profile.budget.modelMaxTokens, 128), signal,
+      maxOutputTokens: profile.budget.modelMaxTokens, signal,
     }));
   } catch (error) { throw failure(error); }
   signal.throwIfAborted();
