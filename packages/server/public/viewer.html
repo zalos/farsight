@@ -3204,7 +3204,7 @@
   .ln-legend .sw.off{height:9px;border:1px dotted var(--muted);border-radius:2px}
   .ln-stage.off{border:1.5px dotted var(--muted);background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--line) 18%,transparent) 6px 7px),var(--ground);cursor:default}
   /* the name keeps the street card's one line (its whole words are in the card's tip); the sub-line may wrap */
-  .ln-stage.off .sub{white-space:normal}
+  .ln-stage.off .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ln-stage.off .map-step.off{background:none;border:1px dotted var(--muted)}
   .map-chip.k-off{border:1px dotted var(--muted);color:var(--muted)}
   .map-chip.k-none{color:var(--muted);border-color:var(--line-soft)}

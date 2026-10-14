@@ -466,6 +466,8 @@ export const LANE_GEOM = Object.freeze({
   // beneath (a pill that needs more lays the lanes out again with it, surfaces/map-lanes.js fitLaneText)
   head: 150, col: 248, cardW: 236, cardH: 96, rowGap: 10, pad: 8, pillH: 44, pillRow: 50,
   laneGap: 6, segGap: 28, top: 36, margin: 16, storeMinH: 66,
+  // a card done outside the code is a name, who does it and two chips: shorter than a screen's, so a party's lane costs little height
+  offH: 64,
 });
 
 /**
@@ -478,7 +480,8 @@ export function laneGeometry(model, opts = {}) {
   const cols = Math.max(1, model.columns || 1);
   const laneH = model.lanes.map((l) => (l.kind === 'store'
     ? Math.max(g.storeMinH, g.pad * 2 + Math.max(1, l.rowCount || 1) * g.pillRow - (g.pillRow - g.pillH))
-    : g.pad * 2 + Math.max(1, l.rowCount || 1) * (g.cardH + g.rowGap) - g.rowGap));
+    : l.kind === 'party' ? g.pad * 2 + Math.max(1, l.rowCount || 1) * (g.offH + g.rowGap) - g.rowGap
+      : g.pad * 2 + Math.max(1, l.rowCount || 1) * (g.cardH + g.rowGap) - g.rowGap));
   const lanesH = laneH.reduce((a, b) => a + b, 0) + g.laneGap * Math.max(0, laneH.length - 1);
   const extraH = opts.extraH || 0;
   const aspect = opts.aspect > 0 ? opts.aspect : 1.6;
@@ -511,7 +514,10 @@ export function laneGeometry(model, opts = {}) {
   const rects = new Map();
   for (const s of model.stages) {
     const p = at(s.lane, s.col);
-    rects.set(s.key, { x: p.x, y: p.y + s.row * (g.cardH + g.rowGap), w: g.cardW, h: g.cardH, segment: p.sg.index });
+    const party = s.off && String(s.lane).startsWith('party:');
+    rects.set(s.key, party
+      ? { x: p.x, y: p.y + s.row * (g.offH + g.rowGap), w: g.cardW, h: g.offH, segment: p.sg.index }
+      : { x: p.x, y: p.y + s.row * (g.cardH + g.rowGap), w: g.cardW, h: g.cardH, segment: p.sg.index });
   }
   for (const p of model.pills) {
     const a = at(p.lane, p.col);

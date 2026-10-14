@@ -52,7 +52,7 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
   await expect(off).toContainText('no test can reach it');
   await expect(page.locator('.map-lanes .ln-foot')).toContainText('1 done outside the code');
   await expect(page.locator('.map-lanes .ln-stage.branch')).toHaveCount(2);
-  expect(await page.locator('.map-lanes .ln-stage:not(.branch)').evaluateAll((els) => els.map((e) => [e.getAttribute('data-name'), e.getAttribute('data-lane'), e.getAttribute('data-persona-from')])))
+  expect(await page.locator('.map-lanes .ln-stage:not(.branch):not(.off)').evaluateAll((els) => els.map((e) => [e.getAttribute('data-name'), e.getAttribute('data-lane'), e.getAttribute('data-persona-from')])))
     .toEqual([['New invoice', 'billing', 'routes'], ['Invoice list', 'billing', 'journey'], ['Discard draft', 'ops', 'screen']]);
   const sum = await page.evaluate(async () => (await (await fetch('/api/journey?entry=invoice-app::flow::billing-cycle&steps=0')).json()).summary.user);
   expect(sum.map((u: any) => [u.designId, u.persona, u.personaFrom])).toEqual([['INV-02', 'billing', 'routes'], ['INV-01', 'billing', 'journey'], ['INV-03', 'ops', 'screen']]);
