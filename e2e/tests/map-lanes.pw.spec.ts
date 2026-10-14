@@ -20,7 +20,7 @@ async function openLanes(page: Page) {
   await mapOn(page);
   await page.evaluate((h) => { location.hash = h; }, LANES);
   // every journey of the storyline read: the footer stops saying how many are left
-  await expect(page.locator('.map-lanes .ln-stage')).toHaveCount(5);
+  await expect(page.locator('.map-lanes .ln-stage:not(.off)')).toHaveCount(5);
   await expect(page.locator('.map-lanes .ln-foot .rd')).toHaveCount(0);
 }
 
@@ -35,14 +35,22 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
   // the layout control says lanes, and the link carries it
   await expect(page.locator('.map-layout .map-seg[data-layout="lanes"]')).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => location.hash)).toContain('layout=lanes');
-  // the lanes: Billing, Operations (persona), Invoice DB (store) — one panel each in the one segment
+  // the lanes: Billing, Operations (persona), the customer's bank (a party the design says pays outside the code),
+  // Invoice DB (store) — one panel each in the one segment
   const lanes = page.locator('.map-lanes .ln-lane');
-  await expect(lanes).toHaveCount(3);
+  await expect(lanes).toHaveCount(4);
+  await expect(page.locator('.map-lanes .ln-lane.party .ln-head .nm')).toHaveText(['Customer bank']);
   await expect(page.locator('.map-lanes .ln-lane.persona .ln-head .nm')).toHaveText(['Billing', 'Operations']);
   await expect(page.locator('.map-lanes .ln-lane.store .ln-head .nm')).toHaveText(['Invoice DB']);
   // the screens: three on the main path, the branch's two on Operations'; the discard screen's own row names the
   // operator (screens[].persona), so its main-path stage sits in Operations' lane too — a persona per screen
-  await expect(page.locator('.map-lanes .ln-stage:not(.branch)')).toHaveCount(3);
+  await expect(page.locator('.map-lanes .ln-stage:not(.branch):not(.off)')).toHaveCount(3);
+  // the bank's payment: a dotted card in its lane, done outside the code, never a screen and never a verdict
+  const off = page.locator('.map-lanes .ln-stage.off');
+  await expect(off).toHaveCount(1);
+  await expect(off).toContainText('done by Customer bank');
+  await expect(off).toContainText('no test can reach it');
+  await expect(page.locator('.map-lanes .ln-foot')).toContainText('1 done outside the code');
   await expect(page.locator('.map-lanes .ln-stage.branch')).toHaveCount(2);
   expect(await page.locator('.map-lanes .ln-stage:not(.branch)').evaluateAll((els) => els.map((e) => [e.getAttribute('data-name'), e.getAttribute('data-lane'), e.getAttribute('data-persona-from')])))
     .toEqual([['New invoice', 'billing', 'routes'], ['Invoice list', 'billing', 'journey'], ['Discard draft', 'ops', 'screen']]);
