@@ -4,6 +4,9 @@ const word = (text: string, define: string): StringEntry => ({ hud: text, profes
 
 /** Words for Echo's scoped memory reader and explicitly requested research. */
 export const ECHO_PORTAL_STRINGS: Record<string, StringEntry> = {
+  'echo.portal.demoTitle': word('Synthetic preview', 'This preview uses example memories held in memory without a live model or memory backend.'),
+  'echo.portal.demoNote': word('Example memories only. No model or memory backend runs.', 'The preview demonstrates browsing and deterministic research using synthetic records. It does not read your saved memories.'),
+  'echo.portal.demoSettings': word('Preview settings are read-only.', 'This synthetic preview cannot save configuration changes. Start Echo normally to configure a real profile.'),
   'echo.portal.invalid': word('Check the memory request and try again.', 'The submitted search or memory reference did not meet the request contract.'),
   'echo.portal.unavailable': word('Memory browsing is unavailable. Start Echo with its memory connection.', 'This view has no active memory connection. Settings remain available.'),
   'echo.portal.stale': word('Settings changed. Restart Echo before reading memories.', 'The saved identity or memory connection differs from the running process. No memories are returned until the process restarts.'),
