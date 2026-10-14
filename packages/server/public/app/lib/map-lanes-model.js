@@ -222,6 +222,15 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     for (const lc of (a && a.lifecycles) || []) if (lc && lc.lifecycle && !lifeOf.has(lc.nodeId)) lifeOf.set(lc.nodeId, lc);
   }
 
+  /** the live moves a stage's actions make of one record into one status by one writer */
+  function movesAt(st, recordId, to, by) {
+    const out = [];
+    for (const { seg } of st.segs) for (const mo of seg.moments || []) {
+      for (const mv of (mo && mo.preconditions && mo.preconditions.moves) || []) if (mv.table === recordId && mv.to === to && mv.by === by) out.push({ mv, mo });
+    }
+    return out;
+  }
+
   // ── the pills: in each store lane a row per record it writes — a record whose statuses the code declares gets one
   // pill per status the storyline moves it into, in the lifecycle's order; any other record one *written* pill
   const pills = [];
@@ -238,7 +247,10 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
         const life = lc.lifecycle;
         const byTo = new Map();
         life.transitions.forEach((tr) => {
-          const makers = stages.filter((s) => s.runs.has(tr.by));
+          // the stages whose actions make this move on a live path (lane moves, 2026-10-13: the actions' own moves, so a
+          // call a constant switches off never places a pill), else the stages whose walk runs the writer
+          const own = stages.filter((s) => movesAt(s, r.id, tr.to, tr.by).length);
+          const makers = own.length ? own : stages.filter((s) => s.runs.has(tr.by));
           if (!makers.length) return;
           if (!byTo.has(tr.to)) byTo.set(tr.to, { to: tr.to, moves: [], stages: [] });
           const p = byTo.get(tr.to);
@@ -324,23 +336,40 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   }
   for (const l of pl.concat(parties)) l.rowCount = Math.max(1, ...stages.filter((s) => s.lane === l.id).map((s) => s.row + 1));
 
-  // ── what each move needs (lane G's `moments[k].preconditions`): read from the first screen that makes the move — the
-  // action's checks in tier order, and whether the code checks the status it moves from
+  // ── what each move needs (lane G's `moments[k].preconditions`): read from the action that makes the move most directly
+  // (fewest calls under its own call), first screen on a tie — never simply the first place the walk met (lane moves,
+  // 2026-10-13) — the action's checks in tier order, and whether the code checks the status it moves from. The other
+  // live actions fold into *also reached from n*; an action that holds the move under a constant that switches it off
+  // is named apart, never as the mover
   const stageObj = new Map(stages.map((s) => [s.key, s]));
   for (const p of pills) {
     if (p.kind === 'written') continue;
-    const first = [...p.stages].map((k) => stageObj.get(k)).filter(Boolean).sort((a, b) => a.col - b.col)[0];
-    if (!first) continue;
-    let found = null;
-    for (const { seg } of first.segs) {
-      for (const mo of seg.moments || []) {
-        const pre = mo && mo.preconditions;
-        const mv = pre && (pre.moves || []).find((x) => (x.table === p.record.id || x.record === p.record.name) && x.to === p.status);
-        if (mv) { found = { pre, mv }; break; }
+    const ordered = [...p.stages].map((k) => stageObj.get(k)).filter(Boolean).sort((a, b) => a.col - b.col);
+    const cands = [];
+    for (const st of ordered) {
+      for (const { seg } of st.segs) {
+        for (const mo of seg.moments || []) {
+          const pre = mo && mo.preconditions;
+          const mv = pre && (pre.moves || []).find((x) => (x.table === p.record.id || x.record === p.record.name) && x.to === p.status);
+          if (mv) cands.push({ pre, mv, mo, st });
+        }
       }
-      if (found) break;
     }
+    const offs = [];
+    for (const st of stages) {
+      for (const { seg } of st.segs) {
+        for (const mo of seg.moments || []) {
+          const so = mo && mo.preconditions && (mo.preconditions.switchedOff || []).find((x) => (x.table === p.record.id || x.record === p.record.name) && x.to === p.status);
+          if (so && !offs.some((o) => o.label === mo.label)) offs.push({ label: mo.label, screen: st.name, flag: so.flag, value: so.value, at: so.at });
+        }
+      }
+    }
+    if (offs.length) p.switchedOff = offs;
+    const found = cands.slice().sort((a, b) => (a.mv.hops || 0) - (b.mv.hops || 0) || a.st.col - b.st.col)[0];
     if (!found) continue;
+    p.action = found.mo.label;
+    const labels = [...new Set(cands.map((c) => c.mo.label))].filter((x) => x !== found.mo.label);
+    if (labels.length) p.also = labels;
     const list = found.pre.preconditions || [];
     const lc = lifeOf.get(p.record.id);
     const statuses = lc ? lc.lifecycle.statuses : [];
@@ -352,6 +381,8 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
       counted: found.pre.counted || null,
       shown: list.filter((x) => x.tier !== 'technical').map((x) => ({ words: x.words, wordsFrom: x.wordsFrom, tier: x.tier, class: x.class, role: x.role || null, evidence: x.evidence || null, loc: x.loc || '', planned: !!x.planned })),
       technical: list.filter((x) => x.tier === 'technical').length,
+      // every one of the N, technical included, so the chip's tip can list what it counts (gap log S2)
+      all: list.map((x) => ({ words: x.words, tier: x.tier, role: x.role || null, evidence: x.evidence || null, loc: x.loc || '' })),
       notChecked: unchecked ? { record: p.record.name, status: at > 0 ? statuses[at - 1] : (found.mv.fromAny || [])[0] || null } : null,
     };
   }

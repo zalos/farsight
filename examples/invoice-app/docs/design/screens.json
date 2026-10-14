@@ -109,6 +109,17 @@
       ],
       "phase": "2",
       "description": "Confirm and discard a draft invoice that will never be sent."
+    },
+    {
+      "id": "INV-04",
+      "name": "Get paid",
+      "route": "/invoices/[id]/pay",
+      "operations": [
+        "recordPaymentIntent",
+        "markInvoicePaid"
+      ],
+      "phase": "2",
+      "description": "Record how an invoice will be paid, then mark it paid when the bank confirms."
     }
   ],
   "flows": [
@@ -169,6 +180,21 @@
         "deleteInvoice"
       ],
       "phase": "1"
+    },
+    {
+      "id": "get-paid",
+      "name": "Get paid",
+      "description": "Operations plans the payment of an invoice and marks it paid when the money arrives.",
+      "persona": "ops",
+      "group": "review",
+      "screens": [
+        "INV-04"
+      ],
+      "operations": [
+        "recordPaymentIntent",
+        "markInvoicePaid"
+      ],
+      "phase": "2"
     }
   ]
 }

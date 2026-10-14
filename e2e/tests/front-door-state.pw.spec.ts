@@ -17,9 +17,9 @@ test.describe('the state of play', () => {
     await expect(card.locator('.sop-col h3')).toHaveText([/built and walkable/i, /validated by a run/i, /still open/i]);
     await expect(page.locator('.jrn-readthis h2')).toHaveText(/read this if/i);
     // the fixture's own numbers, as the design and API surfaces count them
-    await expect(card).toContainText('1 of 3 journeys built');
-    await expect(card).toContainText('2 of 3 screens built');
-    await expect(card).toContainText('6 of 7 operations implemented');
+    await expect(card).toContainText('2 of 4 journeys built');
+    await expect(card).toContainText('3 of 4 screens built');
+    await expect(card).toContainText('8 of 9 operations implemented');
     await expect(card).toContainText('1 screen designed, not built');
     await expect(card.locator('.sop-names')).toHaveText('(Discard draft)');
     // every number carries its tip — what it counts, over what, from where
@@ -41,7 +41,7 @@ test.describe('the state of play', () => {
     await gotoReady(page, '#/journeys?lens=business');
     const card = page.locator('#sop-card');
     await expect(card.locator('.sop-col')).toHaveCount(3);
-    await expect(card).toContainText('2 of 3 screens built');
+    await expect(card).toContainText('3 of 4 screens built');
     await expect(card.locator('.sop-re')).toHaveCount(0);
     await expect(card.locator('.sop-cmd')).toHaveCount(0);
   });

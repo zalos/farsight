@@ -48,13 +48,13 @@ test.describe('map — keyboard, fast travel and links', () => {
   test('Tab walks the level pills, the tools, then one stop per journey; Enter walks into it', async ({ page }) => {
     await mapOn(page);
     await go(page, '#/map');
-    await expect(page.locator('.map-dcover')).toHaveCount(3);
+    await expect(page.locator('.map-dcover')).toHaveCount(4);
     await expect(page.locator('.map-world')).toHaveClass(/lvl-nb/);
     // start from the level pills: the chrome comes before the board
     await page.locator('.map-lvls button[data-l="nb"]').focus();
     const seen: string[] = [];
     // five level pills (ALL · JOURNEY · SCREEN · ACTION · CODE) and the tools come first
-    for (let i = 0; i < 30 && seen.filter((x) => x.startsWith('map-dcover')).length < 3; i++) {
+    for (let i = 0; i < 30 && seen.filter((x) => x.startsWith('map-dcover')).length < 4; i++) {
       await page.keyboard.press('Tab');
       seen.push(await focused(page));
     }
@@ -67,6 +67,7 @@ test.describe('map — keyboard, fast travel and links', () => {
     expect(covers).toEqual([
       'map-dcover:invoice-app::flow::billing-cycle',
       'map-dcover:invoice-app::flow::draft-and-send',
+      'map-dcover:invoice-app::flow::get-paid',
       'map-dcover:invoice-app::flow::new-invoice',
     ]);
     // the last journey reached by Tab is on screen, with a visible ring
@@ -75,6 +76,8 @@ test.describe('map — keyboard, fast travel and links', () => {
     await expect(last).toBeInViewport();
     expect(await last.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
     // h steps back a journey, Enter walks into it and the keyboard lands on its first screen
+    await page.keyboard.press('h');
+    await expect(page.locator('.map-dcover[data-enter="invoice-app::flow::get-paid"]')).toBeFocused();
     await page.keyboard.press('h');
     await expect(page.locator('.map-dcover[data-enter="invoice-app::flow::draft-and-send"]')).toBeFocused();
     await page.keyboard.press('h');
@@ -181,7 +184,7 @@ test.describe('map — keyboard, fast travel and links', () => {
     await expect(fresh.locator('.map-xcard')).toBeVisible();
     await expect(fresh.locator('.map-xcard .nm')).toHaveText(cardName!);
     // every walk lands without moving the picture
-    await expect(fresh.locator('.map-district.loaded')).toHaveCount(3);
+    await expect(fresh.locator('.map-district.loaded')).toHaveCount(4);
     const got = await transform(fresh);
     expect(Math.abs(got.s - want.s)).toBeLessThan(0.001);
     expect(Math.abs(got.tx - want.tx)).toBeLessThanOrEqual(1);
@@ -198,8 +201,8 @@ test.describe('map — keyboard, fast travel and links', () => {
   test('⌘K started on the Map arrives on the Map: a journey is its street, a screen opens on its journey', async ({ page }) => {
     await mapOn(page);
     await go(page, '#/map');
-    await expect(page.locator('.map-dcover')).toHaveCount(3);
-    await expect(page.locator('.map-district.loaded')).toHaveCount(3);
+    await expect(page.locator('.map-dcover')).toHaveCount(4);
+    await expect(page.locator('.map-district.loaded')).toHaveCount(4);
     await page.keyboard.press('ControlOrMeta+k');
     const palette = page.getByRole('dialog', { name: 'Search' });
     await expect(palette).toBeVisible();

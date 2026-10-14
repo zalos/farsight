@@ -11,7 +11,7 @@
 import { esc, humanize, currentLens } from '../store.js';
 import { t } from '../strings.js';
 import { sym } from '../sym.js';
-import { countedHtml, countWords } from '../lib/counted.js';
+import { countedHtml, countWords, countedTipArgs } from '../lib/counted.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { mapTestsChips } from '../lib/map-chips.js';
 import { lifecycleStripHtml } from '../lib/lifecycle-strip.js';
@@ -91,7 +91,10 @@ function pillHtml(p, r, m, say) {
   const move = p.kind === 'created' ? fill('lanes.pill.created', { status: statusWords(p.status, p.record.id) })
     : p.kind === 'move' ? fill('lanes.pill.move', { status: statusWords(p.status, p.record.id) }) : t('lanes.pill.written');
   const by = p.writers.length ? fill('lanes.pill.by', { name: p.writers.join(', ') }) : '';
-  const tip = recordWords(p.record.name) + ' · ' + move + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '');
+  // the action that makes the move most directly is named; the other live actions fold; a switched-off one is said so
+  const also = p.also && p.also.length ? ' · ' + fill('lifecycle.alsoReached', { n: p.also.length }) : '';
+  const off = (p.switchedOff || []).map((o) => ' · ' + (biz() ? fill('lifecycle.biz.switchedOffMover', { action: say(o.label) }) : fill('lifecycle.switchedOffMover', { action: o.label, flag: o.flag, value: o.value }))).join('');
+  const tip = recordWords(p.record.name) + ' · ' + move + (p.action ? ' · ' + say(p.action) : '') + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '') + also + off;
   const rec = p.first && !p.isStore;
   const code = by && !biz() ? '<span class="by map-code">' + codeBreaks(fill('lanes.pill.by', { name: p.writers[0] })) + (p.writers.length > 1 ? ' <span class="more">' + esc(fill('fold.more', { n: p.writers.length - 1 })) + '</span>' : '') + '</span>' : '';
   const needs = needsHtml(p, say);
@@ -128,8 +131,21 @@ function needsHtml(p, say) {
     : '';
   const action = biz() ? '' : n.action.split('::').pop();
   const tip = t('handoff.needs').replace('{action}', action || t('lanes.pill.thisMove')).replace('{list}', items.join(' · ')) + (nc ? ' · ' + nc : '');
+  // *needs N* lists the N (gap log S2): the number's tip is the count with its scope, then one row per precondition —
+  // its words, its tier, its evidence — so the column adds up to N; business folds the technical ones into one row
+  let num = '';
+  if (n.counted) {
+    const args = countedTipArgs(n.counted, API);
+    const all = n.all || [];
+    const tierWord = (x) => t('gate.tier.' + x.tier);
+    const rows = biz()
+      ? n.shown.map((x) => [line(x), 1]).concat(n.technical ? [[countWords('gate.group.technical', n.technical), n.technical]] : [])
+      : all.map((x) => [line(x) + ' · ' + tierWord(x), 1]);
+    if (rows.length) args.breakdown = { rows };
+    num = '<span class="ln-n"' + tipAttrs({ number: args }) + '>' + esc(fill('lanes.pill.needs', { n: n.counted.n })) + '</span>';
+  } else num = '<span>' + esc(fill('lanes.pill.needs', { n: n.shown.length + n.technical })) + '</span>';
   return '<span class="nd map-chip"' + tipAttrs({ text: tip, noFocus: true }) + '>' + sym('gate')
-    + (n.counted ? countedHtml(n.counted, API, { cls: 'ln-n', words: fill('lanes.pill.needs', { n: n.counted.n }) }) : '<span>' + esc(fill('lanes.pill.needs', { n: n.shown.length + n.technical })) + '</span>')
+    + num
     + (nc ? '<span class="nc">' + sym('warning') + esc(t('lanes.pill.uncheckedShort')) + '</span>' : '') + '</span>';
 }
 

@@ -43,9 +43,17 @@ function tableHtml(view, lens) {
     };
     const from = m.from && m.from.length
       ? ' <span class="lc-from"' + defAttrs('lifecycle.table.from') + '>' + esc(t('lifecycle.table.from').replace('{from}', m.from.map(word).join(t('lifecycle.table.fromOr')))) + '</span>' : '';
+    const fill = (k, v) => Object.entries(v).reduce((x, [a, b]) => x.split('{' + a + '}').join(String(b)), t(k));
+    const when = m.when ? ' <span class="lc-from"' + defAttrs('lifecycle.whenArm') + '>' + esc(fill('lifecycle.whenArm', { when: m.when })) + '</span>' : '';
+    const act = m.at && m.at.action ? ' <span class="lc-at">' + esc(m.at.action) + '</span>' : '';
+    const also = m.also ? ' <span class="lc-at"' + defAttrs('lifecycle.alsoReached') + '>' + esc(fill('lifecycle.alsoReached', { n: m.also })) + '</span>' : '';
+    const off = (m.switchedOff || []).map((o) => '<div class="lc-off"' + defAttrs('switch.word') + '>' + sym('warning') + ' '
+      + esc(lens === 'business' ? fill('lifecycle.biz.switchedOffMover', { action: o.action }) : fill('lifecycle.switchedOffMover', { action: o.action, flag: o.flag, value: o.value }) + ' · ' + o.at) + '</div>').join('');
+    // a writer every place of which is switched off says so instead of *not on a journey*
+    const placeShown = !m.at && off ? '' : ' ' + place;
     // a decision the team made or left open on the code that makes this move (lib/decisions.js)
     const decs = decisionChipsHtml([m.by]);
-    return '<div class="lc-mover">' + name + from + ' ' + place + (decs ? ' ' + decs : '') + '</div>';
+    return '<div class="lc-mover">' + name + from + when + placeShown + act + also + (decs ? ' ' + decs : '') + off + '</div>';
   };
   const body = rows.map((r) => {
     const word = '<td class="lc-tw' + (r.kind === 'status' && !r.declared ? ' undecl' : '') + '"'

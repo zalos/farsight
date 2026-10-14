@@ -82,9 +82,9 @@ test.describe('map — the Affected mode', () => {
     await go(page, '#/map?affected=' + encodeURIComponent('package:' + ZOD));
     await expect(page.locator('.map-affbar .map-affname')).toHaveText('zod');
     const districts = page.locator('.map-district');
-    await expect(districts).toHaveCount(3);
+    await expect(districts).toHaveCount(4); // + Get paid (lane moves)
     await expect(page.locator('.map-district.aff-hit')).toHaveCount(3);
-    for (const d of await districts.all()) await expect(d.locator('.map-dcover .map-affb')).toHaveText('reached at hop 1');
+    for (const d of await page.locator('.map-district.aff-hit').all()) await expect(d.locator('.map-dcover .map-affb')).toHaveText('reached at hop 1');
     await expect(page.locator('.map-affbar')).toContainText('in 3 journeys');
   });
 
@@ -99,11 +99,11 @@ test.describe('map — the Affected mode', () => {
     const tab = page.locator('#mp-tab-affected');
     await expect(tab).toBeVisible();
     // four screen rows on three journeys, two pages: a screen several journeys share is counted once (round 2)
-    await expect(tab.locator('.mp-tabn')).toHaveText('2');
+    await expect(tab.locator('.mp-tabn')).toHaveText('3'); // + Get paid's screen (lane moves)
     await tab.click();
     const body = page.locator('#mp-body');
-    await expect(body.locator('.mp-aff .mp-chips')).toContainText(['in 3 journeys']);
-    await expect(body.locator('.mp-aff .mp-chips')).toContainText('6 calls reach it');
+    await expect(body.locator('.mp-aff .mp-chips')).toContainText(['in 4 journeys']);
+    await expect(body.locator('.mp-aff .mp-chips')).toContainText('8 calls reach it');
     await expect(body.locator('.mp-affbound')).toContainText('≥ a floor');
     // per distance: their own path meets it, then what uses it directly holds the first tests
     await expect(body.locator('.mp-affgroup[data-hop="0"] .mp-affhop')).toHaveText('its path meets it');

@@ -104,10 +104,11 @@ export interface JourneyLifecycle {
  */
 export function journeyLifecycles(
   index: { byId: Map<string, GraphNode> } | GraphIndex,
-  j: { steps: { nodeId: string }[] },
-  opts: { personas?: LifecyclePersona[]; locate?: (writerId: string) => LifecyclePlace | undefined } = {},
+  j: { steps: { nodeId: string; switchedOff?: unknown }[] },
+  opts: { personas?: LifecyclePersona[]; locate?: (writerId: string) => LifecyclePlace | undefined; places?: (writerId: string) => LifecyclePlaces } = {},
 ): JourneyLifecycle[] {
-  const visited = new Set(j.steps.map((s) => s.nodeId));
+  // a call a constant switches off is named, not run: its writer is not on the journey
+  const visited = new Set(j.steps.filter((s) => !s.switchedOff).map((s) => s.nodeId));
   const out: JourneyLifecycle[] = [];
   const seen = new Set<string>();
   for (const s of j.steps) {
@@ -135,7 +136,20 @@ export function journeyLifecycles(
 
 export interface LifecyclePersona { id: string; name: string }
 /** Where a writer runs: a journey's screen (1-based ordinal of its summary segment) — the journey link's `step`. */
-export interface LifecyclePlace { flowId: string; flowName: string; screen: number; screenName: string; here: boolean }
+export interface LifecyclePlace {
+  flowId: string; flowName: string; screen: number; screenName: string; here: boolean;
+  /** the action on that screen whose call reaches the writer, when one does (its label as the moment prints it) */
+  action?: string;
+  /** how many calls under that action's call the writer runs (0 = the action's call is the writer) */
+  hops?: number;
+}
+/** A place whose action holds the call to the writer under a constant that switches it off. */
+export interface LifecycleSwitchedPlace extends LifecyclePlace { flag: string; value: boolean; at: string }
+/**
+ * Every place a writer runs (lane moves, 2026-10-13): the live ones, the action that calls the writer most directly
+ * first — never the first place the walk met — and the ones a constant switches off, listed apart.
+ */
+export interface LifecyclePlaces { live: LifecyclePlace[]; off: LifecycleSwitchedPlace[] }
 export interface LifecycleMover {
   /** node id of the function that writes it */
   by: string;
@@ -149,7 +163,14 @@ export interface LifecycleMover {
   /** the statuses the code lets the record leave for this one, when its writer goes through a table of moves or a check */
   fromAny?: string[];
   line?: number;
+  /** the place a surface names: the live action that calls the writer most directly */
   at?: LifecyclePlace;
+  /** the other live places that reach the same writer, folded behind *also reached from n* */
+  also?: LifecyclePlace[];
+  /** places whose call to the writer a constant switches off: *switched off by <flag>*, never the mover */
+  switchedOff?: LifecycleSwitchedPlace[];
+  /** one arm of a ternary of literal statuses: the condition the code writes it under */
+  when?: string;
 }
 export interface LifecycleStatusRow {
   kind: 'status';
@@ -195,14 +216,19 @@ function wordsFor(life: RecordLifecycle, persona?: LifecyclePersona): Record<str
   return hit ? views[hit] : undefined;
 }
 
-function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], locate?: (id: string) => LifecyclePlace | undefined, extra: { from?: string; fromAny?: string[]; line?: number } = {}): LifecycleMover {
+type Locate = { locate?: (id: string) => LifecyclePlace | undefined; places?: (id: string) => LifecyclePlaces };
+function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], loc: Locate, extra: { from?: string; fromAny?: string[]; line?: number; when?: string } = {}): LifecycleMover {
   const n = index.byId.get(by);
   const name = n?.name ?? nameOfId(by);
-  const at = locate?.(by);
+  const all = loc.places?.(by);
+  const at = all ? all.live[0] : loc.locate?.(by);
+  const also = all?.live.slice(1) ?? [];
+  const off = all?.off ?? [];
   return {
     by, name, words: n?.facets?.business?.label ?? humanizeName((name.split(': ')[0] ?? name).split('.').pop() ?? name), via,
     ...(extra.from !== undefined ? { from: extra.from } : {}), ...(extra.fromAny?.length ? { fromAny: extra.fromAny } : {}),
-    ...(extra.line ? { line: extra.line } : {}), ...(at ? { at } : {}),
+    ...(extra.line ? { line: extra.line } : {}), ...(at ? { at } : {}), ...(also.length ? { also } : {}), ...(off.length ? { switchedOff: off } : {}),
+    ...(extra.when ? { when: extra.when } : {}),
   };
 }
 
@@ -213,7 +239,7 @@ function moverOf(index: GraphIndex, by: string, via: LifecycleMover['via'], loca
 export function lifecycleViews(
   index: GraphIndex,
   node: GraphNode,
-  opts: { personas?: LifecyclePersona[]; locate?: (writerId: string) => LifecyclePlace | undefined } = {},
+  opts: { personas?: LifecyclePersona[]; locate?: (writerId: string) => LifecyclePlace | undefined; places?: (writerId: string) => LifecyclePlaces } = {},
 ): LifecycleView[] {
   const life = node.lifecycle;
   if (!life) return [];
@@ -224,16 +250,20 @@ export function lifecycleViews(
     const list = movers.get(tr.to) ?? [];
     // where the record comes from: the status the writer checks, else the statuses its table of moves or its check lets
     // it leave (swarm round 3: approve requires *under review* and the lifecycle never said *from*)
-    if (!list.some((m) => m.by === tr.by)) list.push(moverOf(index, tr.by, tr.via, opts.locate, { ...(tr.from !== undefined ? { from: tr.from } : {}), ...(tr.fromAny?.length ? { fromAny: tr.fromAny } : {}), ...(tr.line ? { line: tr.line } : {}) }));
+    if (!list.some((m) => m.by === tr.by)) list.push(moverOf(index, tr.by, tr.via, opts, { ...(tr.from !== undefined ? { from: tr.from } : {}), ...(tr.fromAny?.length ? { fromAny: tr.fromAny } : {}), ...(tr.line ? { line: tr.line } : {}), ...(tr.when ? { when: tr.when } : {}) }));
     movers.set(tr.to, list);
   }
+  // a writer every one of whose places a constant switches off is not what moves the record there: the live movers
+  // of a status come first (lane moves, 2026-10-13)
+  const offOnly = (m: LifecycleMover) => !m.at && !!m.switchedOff?.length;
+  for (const [k, list] of movers) movers.set(k, [...list.filter((m) => !offOnly(m)), ...list.filter(offOnly)]);
   const overlays: LifecycleOverlayRow[] = (life.names?.overlays ?? []).map((o) => {
     const seen = new Set<string>();
     const ms: LifecycleMover[] = [];
     for (const e of index.in.get(o.tableId) ?? []) {
       if (e.kind !== 'writes' || seen.has(e.from)) continue;
       seen.add(e.from);
-      ms.push(moverOf(index, e.from, 'writes', opts.locate));
+      ms.push(moverOf(index, e.from, 'writes', opts));
     }
     return { kind: 'overlay', name: o.name, when: o.when, table: o.table, tableId: o.tableId, tableName: index.byId.get(o.tableId)?.name ?? o.table, movers: ms };
   });
@@ -292,19 +322,52 @@ export function flowPersonas(index: { byId: Map<string, GraphNode> }, metas: Rec
  * include it (a function the action reaches). `here` — the journey the reader has open.
  */
 export function placeOnJourney(flow: { id: string; name: string }, j: Pick<Journey, 'steps'>, summary: Pick<JourneySummary, 'segments'>, here = true): (writerId: string) => LifecyclePlace | undefined {
-  const cache = new Map<string, LifecyclePlace | undefined>();
+  const all = placesOnJourney(flow, j, summary, here);
+  return (id) => all(id).live[0];
+}
+
+/**
+ * Every place on one journey a writer runs (lane moves, 2026-10-13) — never the first the walk met. Live places:
+ * each action whose move the writer makes, the one that calls it most directly first (fewest calls under the
+ * action's call), then journey order; else each screen whose markers or walked steps name it. Switched-off places:
+ * each action whose call to the writer a constant switches off. A lead segment with no screen folds into the next
+ * screen, as the street draws it; one place per screen and action.
+ */
+export function placesOnJourney(flow: { id: string; name: string }, j: Pick<Journey, 'steps'>, summary: Pick<JourneySummary, 'segments'>, here = true): (writerId: string) => LifecyclePlaces {
+  const cache = new Map<string, LifecyclePlaces>();
+  const shown = (seg: JourneySummary['segments'][number]) => (seg.screen ? seg : summary.segments.find((sg) => sg.index > seg.index && sg.screen) ?? seg);
+  const place = (seg: JourneySummary['segments'][number], extra: { action?: string; hops?: number } = {}): LifecyclePlace => {
+    const sg = shown(seg);
+    return { flowId: flow.id, flowName: flow.name, screen: sg.index + 1, screenName: sg.screen?.name ?? '', here, ...(extra.action ? { action: extra.action } : {}), ...(extra.hops != null ? { hops: extra.hops } : {}) };
+  };
   return (id) => {
-    if (cache.has(id)) return cache.get(id);
-    let seg = summary.segments.find((sg) => sg.markers.some((m) => m.nodeId === id));
-    if (!seg) {
-      const orders = j.steps.filter((s) => s.nodeId === id).map((s) => s.order);
-      seg = summary.segments.find((sg) => orders.some((o) => o >= sg.from && o <= sg.to));
+    const hit = cache.get(id);
+    if (hit) return hit;
+    const live: LifecyclePlace[] = [];
+    const off: LifecycleSwitchedPlace[] = [];
+    const keyOf = (p: LifecyclePlace) => `${p.screen}|${p.action ?? ''}`;
+    for (const sg of summary.segments) {
+      for (const mo of sg.moments ?? []) {
+        const mv = mo.preconditions?.moves.filter((m) => m.by === id) ?? [];
+        if (mv.length) live.push(place(sg, { action: mo.label, hops: Math.min(...mv.map((m) => m.hops ?? 0)) }));
+        const so = mo.preconditions?.switchedOff?.find((m) => m.by === id);
+        if (so && !mv.length) off.push({ ...place(sg, { action: mo.label, hops: so.hops ?? 0 }), flag: so.flag, value: so.value, at: so.at });
+      }
     }
-    // a lead segment with no screen folds into the next screen, as the street draws it
-    if (seg && !seg.screen) seg = summary.segments.find((sg) => sg.index > seg!.index && sg.screen) ?? seg;
-    const at = seg ? { flowId: flow.id, flowName: flow.name, screen: seg.index + 1, screenName: seg.screen?.name ?? '', here } : undefined;
-    cache.set(id, at);
-    return at;
+    if (!live.length) {
+      // a writer whose record the action does not reach as a walked step: the screens that name or walk it
+      const orders = j.steps.filter((s) => s.nodeId === id && !s.switchedOff).map((s) => s.order);
+      for (const sg of summary.segments) {
+        if (sg.markers.some((m) => m.nodeId === id) || orders.some((o) => o >= sg.from && o <= sg.to)) live.push(place(sg));
+      }
+    }
+    const order = (a: LifecyclePlace, b: LifecyclePlace) => (a.hops ?? 99) - (b.hops ?? 99) || a.screen - b.screen;
+    const dedupe = <T extends LifecyclePlace>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((p) => !seen.has(keyOf(p)) && !!seen.add(keyOf(p))); };
+    // a switched-off call is one fact per action, however many screens show that action
+    const offs = off.sort(order).filter((p, i, xs) => xs.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
+    const out = { live: dedupe(live.sort(order)), off: offs };
+    cache.set(id, out);
+    return out;
   };
 }
 

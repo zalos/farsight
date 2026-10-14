@@ -158,5 +158,8 @@ const INVOICE_HTTP: string[] = [
   'PATCH invoice-app::src/api/client.ts::updateInvoice -> invoice-app::route::PATCH /invoices/:id',
   'POST invoice-app::src/api/client.ts::createInvoice -> invoice-app::route::POST /invoices',
   'POST invoice-app::src/api/client.ts::finalizeInvoice -> invoice-app::route::POST /invoices/:id/finalize',
+  // the payments shape (lane moves, 2026-10-13): two literal POSTs, each to its own route
+  'POST invoice-app::src/api/client.ts::markInvoicePaid -> invoice-app::route::POST /invoices/:id/mark-paid',
+  'POST invoice-app::src/api/client.ts::recordPaymentIntent -> invoice-app::route::POST /invoices/:id/payment-intent',
   'POST invoice-app::src/server/erpClient.ts::ErpClient.request -> invoice-app::external::Example ERP',
 ];

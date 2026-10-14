@@ -335,8 +335,32 @@ export function tourOf(
   /** a record's last writer stop: the screen that wrote it, for a later stop that reads it */
   const wroteAt = new Map<string, { stop: number; screen: string; name: string }>();
   let firstPersona: LifecyclePersona | undefined;
+  // where each move is credited (lane moves, 2026-10-13): of every place a leg's action makes it, the one whose action
+  // calls the writer most directly — fewest calls under the action's call — then the first in storyline order. Never
+  // simply the first place the walk met. The places a constant switches off are kept to be named beside it.
+  const bestMove = new Map<string, { leg: number; seg: number; mo: number; hops: number }>();
+  const offMoves = new Map<string, { label: string; screen: string; action?: string; flag: string; value: boolean; at: string }[]>();
+  legs.forEach((leg, li) => {
+    const w = flowSummary(index, leg.row.nodeId);
+    for (const sg of w?.sum.segments ?? []) {
+      if (!sg.screen) continue;
+      for (const mo of sg.moments) {
+        for (const mv of mo.preconditions?.moves ?? []) {
+          const k = `${mv.table}|${mv.to}|${mv.by}`;
+          const had = bestMove.get(k);
+          if (!had || (mv.hops ?? 0) < had.hops) bestMove.set(k, { leg: li, seg: sg.index, mo: mo.index, hops: mv.hops ?? 0 });
+        }
+        for (const so of mo.preconditions?.switchedOff ?? []) {
+          const k = `${so.table}|${so.to}|${so.by}`;
+          const list = offMoves.get(k) ?? [];
+          if (!list.some((x) => x.label === mo.label && x.flag === so.flag)) list.push({ label: mo.label, screen: sg.screen.name, ...(mo.preconditions?.action ? { action: mo.preconditions.action } : {}), flag: so.flag, value: so.value, at: so.at });
+          offMoves.set(k, list);
+        }
+      }
+    }
+  });
 
-  for (const leg of legs) {
+  for (const [legIndex, leg] of legs.entries()) {
     const walked = flowSummary(index, leg.row.nodeId);
     if (!walked) { notes.push(`${leg.row.name} could not be walked`); continue; }
     const { sum } = walked;
@@ -447,6 +471,8 @@ export function tourOf(
         {
           const mk = `${mv.table}|${mv.to}|${mv.by}`;
           if (seenMove.has(mk)) continue;
+          const best = bestMove.get(mk);
+          if (best && (best.leg !== legIndex || best.seg !== sg.index || best.mo !== mo.index)) continue;
           seenMove.add(mk);
           const table = index.byId.get(mv.table);
           const writer = index.byId.get(mv.by);
@@ -462,6 +488,11 @@ export function tourOf(
             [actNode, mv.by, mv.table], { bizKey: 'tour.biz.handoff.who', bizVars: { persona: who, record: rec, status: word, action: bare(mo.label), screen: sc.name } }));
           const from = mv.from ?? mv.fromAny?.join(' or ')
             ?? mo.preconditions?.preconditions.find((p) => p.relation === 'own' && p.requires?.length)?.requires?.join(' or ');
+          // the same move held by another action under a constant that switches it off: named here, never credited
+          for (const o of (offMoves.get(mk) ?? []).slice(0, 2)) {
+            cl.push(clause('refer', 'switch.tour.off', { action: bare(o.label), screen: o.screen, writer: writerName, flag: o.flag, value: String(o.value), at: o.at },
+              [o.action, mv.by], { bizKey: 'switch.biz.tour.off', bizVars: { action: bare(o.label), screen: o.screen } }));
+          }
           if (mv.creates) cl.push(clause('check', 'tour.handoff.creates', { record: rec }, [mv.table, mv.by]));
           else if (mv.checked) cl.push(clause('check', 'tour.handoff.checked', { record: rec, from: from ?? '' }, [mv.by], { bizKey: 'tour.biz.handoff.checked', bizVars: { record: rec, from: fromWords(index, table, from, persona) } }));
           else cl.push(clause('check', 'tour.handoff.unchecked', { record: rec, writer: writerName }, [mv.by], { warn: true, bizKey: 'tour.biz.handoff.unchecked', bizVars: { record: rec } }));

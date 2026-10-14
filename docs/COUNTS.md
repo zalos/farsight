@@ -690,6 +690,27 @@ The statuses one field of a record (a table node) may hold, read from the code b
 | unmoved | `lifecycle.count.unwritten` / `lifecycle.biz.unmoved` *n nothing moves yet* | `count.scope.node` | `counts.unmoved` = statuses − `transitions[].to` | the same set as *statuses no code moves to*, in business words |
 | overlays | `lifecycle.count.overlays` *n conditions that are not a status* (both) | `count.scope.node` | `counts.overlays` over `lifecycle.names.overlays` | the config's overlays whose table the graph has (one it does not is a note, never a row); not printed on the strip — the table draws them as rows |
 
+**Every live path, the direct one first; switched-off paths apart** (lane moves, 2026-10-13). A move's writer may run
+from several actions. No surface takes the first place the walk met: each action whose live call path reaches the writer
+is a place, ranked by how many calls under the action's own call the writer runs (`ActionMove.hops`; a route's own
+handler counts as the route), then journey order. The surfaces name the first and fold the rest behind *also reached
+from n* (`lifecycle.alsoReached`, `ask.set.also` — `count.unit.places`, scope `count.scope.node`, the places after the
+first, each screen · action once). A call under a constant whose value means it does not run (`meta.inactive`, parsers
+`flag-gates.ts`) is never a place and never counted in what an action moves or reaches: it is listed as *switched off by
+<flag> = <value>* (`LifecycleMover.switchedOff`, `ActionPreconditions.switchedOff`, `JourneyMoment.switchedOff`). The
+lanes' *needs N* chip's tip lists the N, one row per precondition with its tier and evidence (business folds the
+technical ones into one row), so the rows add up to N.
+
+### Switches (core `switches.ts` `switchesOf()`; MCP `graph_overview` one line + one per switch, `describe_node` on a record, the Map property's Overview)
+
+A switch is a module-level `const X = true|false` that a branch tests before a call (`calls` edges carrying
+`meta.whenFlag`), read from the code — never a hand-kept list.
+
+| number | unit / bizUnit | scope | source | counts |
+|---|---|---|---|---|
+| switches | `count.unit.switches` *n switches* (both) | `count.scope.source` | `switchesOf().counted` over `edges[].meta.whenFlag` | each constant once (name + declaration); breakdown `count.part.switchesOff` *switched off* (its value stops at least one call it guards) · `count.part.switchesOn` *on* — a partition |
+| calls one switch decides | `switch.calls` *n calls* | `count.scope.node` | `Switch.counted` over the switch's `calls` edges | each caller → callee once; breakdown `count.part.switchCallsOff` · `count.part.switchCallsOn` — a partition |
+
 ### Freshness — *stale* is a comparison (core `freshness.ts`; swarm-fixes 2026-10-05, finding 2)
 
 Freshness is a sentence with two sides, never a bare word and never a number of its own. `freshnessFact(runs, code)`

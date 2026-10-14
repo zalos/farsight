@@ -103,7 +103,7 @@ test.describe('MCP data flow', () => {
   /** @covers packages/mcp/src/run.ts::runMcpServer */
   test('graph_overview describes the fixture graph and its freshness', async () => {
     const out = await call('graph_overview');
-    expect(out).toContain('Farsight semantic graph: 113 nodes'); // 87 parts + 3 preconditions + 8 packages + 12 module nodes + 2 cited documents + 1 party
+    expect(out).toContain('Farsight semantic graph: 130 nodes'); // 87 parts + 3 preconditions + 8 packages + 12 module nodes + 2 cited documents + 1 party + 17 for the payments shape (lane moves)
     expect(out).toContain(`repos: ${REPO}`);
     expect(out).toContain('sync:1');
   });
@@ -155,7 +155,7 @@ test.describe('MCP data flow', () => {
 
     // MCP: refresh_graph re-ingests the recorded root in place and saves graph.json
     const refreshed = await call('refresh_graph');
-    expect(refreshed).toMatch(/re-ingested 1 source root\(s\): 114 nodes, \d+ edges \(was 113\//);
+    expect(refreshed).toMatch(/re-ingested 1 source root\(s\): 131 nodes, \d+ edges \(was 130\//);
     expect(await call('search_graph', { query: PROBE })).toContain(PROBE_ID);
     expect(await call('describe_node', { node_id: PROBE_ID })).toContain('A flat surcharge the e2e suite adds');
     const onDisk = JSON.parse(readFileSync(ws.graph, 'utf8')) as { nodes: { id: string }[] };
