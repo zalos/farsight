@@ -8,8 +8,8 @@
 // theme is (restored on leaving), prints on A4 one storyline per page (the `@media print` rules in
 // viewer.html), saves as a light PDF on one A4 page through lib/export.js, and as a CSV.
 
-import { S, esc, currentLens } from '../store.js';
-import { t } from '../strings.js';
+import { S, esc, currentLens, humanize } from '../store.js';
+import { t, plainWords, schemaWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, countWords, defAttrs, plainTip } from '../lib/counted.js';
 import { tipAttrs, registerTip, tableTip } from '../lib/tooltip.js';
@@ -127,16 +127,29 @@ function rowHtml(row) {
     + '<td>' + decision + (notes ? '<span class="rd-sub rd-notes">' + notes + '</span>' : '') + '</td></tr>';
 }
 
+/**
+ * A rule's name in the business register (outsider round 2026-10-13, F6 · G8): the words somebody wrote, else a
+ * schema named by its form (`invoiceStatusSchema` → *the invoice status form's rules*) or a precondition's code form
+ * in words (`fn: invoices.status = APPROVED` → *invoices status must be approved*), else the name humanized — never the identifier.
+ */
+function bizRuleName(g) {
+  if (g.words) return plainWords(g.words) || g.words;
+  const w = schemaWords(g.name);
+  if (w !== g.name) return w;
+  const id = schemaWords(g.ident || g.name);
+  return id !== (g.ident || g.name) ? id : humanize(g.ident || g.name);
+}
+
 function rulesHtml(r) {
   if (!r.rules.length) return '';
   const head = ['readiness.col.gate', 'readiness.col.words', 'readiness.col.screens', 'readiness.col.tests', 'readiness.col.owner'];
   return '<h2 class="rd-h2"><span' + defAttrs('readiness.rules') + '>' + esc(t('readiness.rules')) + '</span> '
     + countedHtml(r.counted.rules, '/api/readiness', { cls: 'rd-hsub' }) + ' <span class="rd-hsub">' + esc(t('readiness.rulesSub')) + '</span></h2>'
     + '<table class="rd-table rd-rules"><thead><tr>' + head.map((k) => '<th' + defAttrs(k) + '>' + esc(t(k)) + '</th>').join('') + '</tr></thead><tbody>'
-    + r.rules.map((g) => '<tr><td class="rd-gate">' + esc(currentLens() === 'business' && g.words ? g.words : g.name)
+    + r.rules.map((g) => '<tr><td class="rd-gate">' + esc(currentLens() === 'business' ? bizRuleName(g) : g.name)
       // who it matters to (gates lane 2026-10-10): the tier chip, its class in the tip
       + (g.tier ? ' <span class="gate-tier ' + esc(g.tier) + '"' + defAttrs(g.class ? 'gate.class.' + g.class : 'gate.tier.' + g.tier) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '') + '</td>'
-      + '<td>' + (g.words ? esc(g.words) : '<span class="rd-warn"' + defAttrs('readiness.noWords') + '>' + esc(t('readiness.noWords')) + '</span>') + '</td>'
+      + '<td>' + (g.words ? esc(currentLens() === 'business' ? plainWords(g.words) || g.words : g.words) : '<span class="rd-warn"' + defAttrs('readiness.noWords') + '>' + esc(t('readiness.noWords')) + '</span>') + '</td>'
       + '<td>' + num(g.screens, 'readiness.screensN', 'count.scope.gate') + '</td>'
       + '<td>' + num(g.tests, 'readiness.casesN', 'count.scope.gate') + '</td>'
       + '<td>' + (g.owners.length ? esc(g.owners.join(', ')) : '<span class="rd-warn"' + defAttrs('readiness.noOwner') + '>' + esc(t('readiness.noOwner')) + '</span>') + '</td></tr>').join('')

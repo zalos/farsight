@@ -955,11 +955,23 @@ function checksOf(index: GraphIndex, c: Cand): { gates: Map<string, { tier: Gate
   return { gates, moments };
 }
 
+/**
+ * A refusal message with a hole the code fills when it runs (*Vendor account is …, not ACTIVE*), as the business
+ * register reads it: the hole says *(a value)* and a status constant reads as a word (outsider round, F6 · S2). The
+ * viewer's `filledMessage()` is the same rule.
+ */
+export function holeWords(text: string): string {
+  const s = String(text ?? '');
+  if (!/…/.test(s)) return s;
+  const v = t('plain.aValue');
+  return s.replace(/\(\s*…\s*\)/g, v).replace(/…/g, v).replace(/\b[A-Z]{4,}(?:_[A-Z]+)*\b/g, (w) => (/^ADR/.test(w) ? w : w.replace(/_/g, ' ').toLowerCase()));
+}
+
 /** A check as an answer row: its words, its kind and where it is, with the gate card's verdict. */
 function needRow(index: GraphIndex, id: string, g: { tier: GateTier; words: string; loc?: string }): TourClause {
   const card = gateCard(index, id);
   const kind = t(index.byId.get(id)?.kind === 'rule' ? 'ask.kind.rule' : 'ask.kind.guard');
-  return line('need', 'ask.row.need', { words: bare(g.words), kind, at: g.loc ?? '' }, [id], { tier: g.tier, ...(card ? { evidence: card.verdict } : {}), bizKey: 'ask.biz.row.need', bizVars: { words: bare(g.words), kind } });
+  return line('need', 'ask.row.need', { words: bare(g.words), kind, at: g.loc ?? '' }, [id], { tier: g.tier, ...(card ? { evidence: card.verdict } : {}), bizKey: 'ask.biz.row.need', bizVars: { words: holeWords(bare(g.words)), kind } });
 }
 
 /** An action's name for a sentence: its label's first clause, without its code. */
@@ -1333,7 +1345,7 @@ function answerSet(index: GraphIndex, question: string, opts: { metas?: Record<s
       const kind = t(index.byId.get(pre.id)?.kind === 'rule' ? 'ask.kind.rule' : 'ask.kind.guard');
       gateDoor ??= pre.id;
       must.push(line('need', 'ask.row.need', { words: bare(pre.words), kind, at: pre.loc ?? '' }, [pre.id],
-        { tier: pre.tier, ...(card ? { evidence: card.verdict } : {}), bizKey: 'ask.biz.row.need', bizVars: { words: bare(pre.words), kind } }));
+        { tier: pre.tier, ...(card ? { evidence: card.verdict } : {}), bizKey: 'ask.biz.row.need', bizVars: { words: holeWords(bare(pre.words)), kind } }));
     }
     const w = flowSummary(index, p.flowId);
     for (const d of w?.sum.segments[p.sg.index]?.decisions ?? []) {

@@ -2762,6 +2762,7 @@
   .ask-derived,.ask-phrased{font-family:var(--hud);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--ok,#6FCF8E);color:var(--ok,#6FCF8E);border-radius:3px;padding:0 5px}
   .ask-phrased{border-color:var(--warn,#E8A13C);color:var(--warn,#E8A13C)}
   .ask-lead{margin:0}
+  .ask-lead.ask-read{font-style:italic;color:var(--muted);border-left:2px solid var(--accent);padding-left:8px;margin-bottom:4px}
   .ask-shapes{margin:0;padding-left:18px;color:var(--muted)}
   .ask-suggest{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}.ask-sugg{font:inherit;font-size:12px;color:var(--cyan);background:none;border:1px solid var(--line,#2a3142);border-radius:4px;padding:2px 8px;cursor:pointer;text-align:left}.ask-sugg:hover{border-color:var(--cyan)}
   .ask-sec .hud-label{font-size:9.5px;color:var(--muted)}
@@ -3380,19 +3381,22 @@
   .md-lc-head{margin-bottom:8px;font-size:11.5px;color:var(--muted)}
   .md-lc-head .lc-head{white-space:normal;flex-wrap:wrap;row-gap:2px}
   .md-scroll{overflow-wrap:break-word}
-  .md-lc-tbl .lc-table{width:100%}
+  .md-lc-tbl .lc-table,.md-panels .lc-table{width:100%;table-layout:auto}
+  /* the third column (what moves a record into it) wraps inside the dock instead of running off it (outsider round, G6) */
+  .md-panels .lc-table td{overflow-wrap:anywhere;min-width:0}
+  .md-panels .lc-tblbox{max-width:100%;min-width:0}
   /* a narrow dock stacks each status (round-3 swarm: three columns in 360 px): the word, its constant beneath, what
      moves a record into it beneath that — the table's own columns come back when the dock is wide (along the bottom) */
   .md-panels{container-type:inline-size}
   @container (max-width:560px){
-    .md-lc-tbl .lc-table thead{display:none}
-    .md-lc-tbl .lc-table,.md-lc-tbl .lc-table tbody{display:block;width:100%}
-    .md-lc-tbl .lc-table tr{display:flex;flex-direction:column;gap:2px;padding:6px 2px;border-bottom:1px solid var(--line-soft)}
-    .md-lc-tbl .lc-table td{display:block;padding:0;border:0;min-width:0}
-    .md-lc-tbl .lc-table td.lc-tw{font-weight:600;color:var(--ink)}
-    .md-lc-tbl .lc-table td.lc-tc{overflow-wrap:anywhere}
-    .md-lc-tbl .lc-table td.lc-tm{padding-left:10px;font-size:12px}
-    .md-lc-tbl .lc-table td.lc-tm .lc-mover{margin-top:2px}
+    .md-panels .lc-table thead{display:none}
+    .md-panels .lc-table,.md-panels .lc-table tbody{display:block;width:100%}
+    .md-panels .lc-table tr{display:flex;flex-direction:column;gap:2px;padding:6px 2px;border-bottom:1px solid var(--line-soft)}
+    .md-panels .lc-table td{display:block;padding:0;border:0;min-width:0}
+    .md-panels .lc-table td.lc-tw{font-weight:600;color:var(--ink)}
+    .md-panels .lc-table td.lc-tc{overflow-wrap:anywhere}
+    .md-panels .lc-table td.lc-tm{padding-left:10px;font-size:12px}
+    .md-panels .lc-table td.lc-tm .lc-mover{margin-top:2px}
   }
   .md-about-nm{margin:0 0 8px;font-family:var(--hud);text-transform:uppercase;letter-spacing:.12em;font-size:14px;color:var(--ink);font-weight:500}
   .md-about-desc{margin:0;color:var(--ink);font-size:13px;line-height:1.5;user-select:text}

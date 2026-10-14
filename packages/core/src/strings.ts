@@ -48,6 +48,7 @@ import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
 import { ASK_STRINGS } from './strings-ask.js';
+import { PLAIN_STRINGS } from './strings-plain.js';
 import { VERDICT_STRINGS } from './strings-verdict.js';
 
 export type Register = 'hud' | 'professional';
@@ -171,6 +172,8 @@ export const STRINGS: Record<string, StringEntry> = {
   // the guided walk and Ask (round 2026-10-10, proposal 8) live in strings-tour.ts and strings-ask.ts (tour.*, ask.*, their counts)
   ...TOUR_STRINGS,
   ...ASK_STRINGS,
+  // the business register's words for what the app wrote (outsider round, F6) live in strings-plain.ts
+  ...PLAIN_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 
