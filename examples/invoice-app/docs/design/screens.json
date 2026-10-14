@@ -119,7 +119,7 @@
         "markInvoicePaid"
       ],
       "phase": "2",
-      "description": "Record how an approved invoice will be paid, then mark it paid when the bank confirms."
+      "description": "Record how an invoice will be paid, then mark it paid when the bank confirms."
     }
   ],
   "flows": [
@@ -184,7 +184,7 @@
     {
       "id": "get-paid",
       "name": "Get paid",
-      "description": "Operations plans the payment of an approved invoice and marks it paid when the money arrives.",
+      "description": "Operations plans the payment of an invoice and marks it paid when the money arrives.",
       "persona": "ops",
       "group": "review",
       "screens": [

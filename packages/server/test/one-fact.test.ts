@@ -115,8 +115,8 @@ const OFF_ROUTE = 'invoice-app::route::POST /invoices/:id/payment-intent';
 const LIVE_FN = 'invoice-app::src/server/payments.ts::markInvoicePaid';
 const OFF_FN = 'invoice-app::src/server/payments.ts::recordPaymentIntent';
 const WRITER = 'invoice-app::src/server/payments.ts::settleInvoice';
-const LIVE_LABEL = 'Mark an approved invoice paid once the bank confirms.';
-const OFF_LABEL = 'Record how an approved invoice will be paid.';
+const LIVE_LABEL = 'Mark the invoice paid once the bank confirms.';
+const OFF_LABEL = 'Record how the invoice will be paid.';
 
 test('the graph holds the shape: the call under the false constant is kept, marked inactive, and settleInvoice writes paid', () => {
   const off = (index.out.get(OFF_FN) ?? []).filter((e) => e.kind === 'calls' && e.to === WRITER);

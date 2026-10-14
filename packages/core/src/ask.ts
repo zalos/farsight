@@ -1169,7 +1169,7 @@ function moveLines(index: GraphIndex, opts: { metas?: Record<string, JourneysMet
   const rec = recordWord(table.name);
   const to = norm(humanizeName(tr.to));
   const out = [line('move', key, { record: rec, to, writer: writerName, at: locOf(writer, tr.line) || tr.by }, [tr.by, table.id], { bizKey: `ask.biz.${key.slice(4)}`, bizVars: { record: rec, to } })];
-  const p = placesOf(index, opts.metas, table.id, tr.to, tr.by, opts.repo)[0];
+  const p = placesOf(index, opts.metas, table.id, tr.to, tr.by, opts.repo).live[0]; // the most direct live place (lane moves)
   if (p) {
     const persona = p.persona ?? p.flowName;
     out.push(line('who', 'ask.happens.where', { persona, action: bare(p.mo.label), screen: p.sg.screen!.name, journey: p.flowName },

@@ -122,7 +122,8 @@ test('the state of play: three columns of sound typed counts, each with its re-c
   // the fixture's one fully built journey passed by its declaration and its own case failed on mobile: the release brief
   // holds it, so it is counted apart and never under *passed* (outsider demo 2026-10-13)
   assert.equal(body.validated.heldInBrief.n, 1, 'the held journey is counted apart');
-  assert.equal(body.validated.byVerdict.reduce((a: number, v: any) => a + v.journeys.n, 0), 0, 'and not under its word');
+  // the second fully built journey, Get paid (lane moves), holds nothing in the brief: it is the one counted under a word
+  assert.equal(body.validated.byVerdict.reduce((a: number, v: any) => a + v.journeys.n, 0), 1, 'the held one is not under its word; Get paid is');
   assert.ok(body.validated.lastE2e && body.validated.lastE2e.fresh && body.validated.lastE2e.fresh.key, 'the newest end-to-end run with its one freshness fact');
   // no history store in this temp workspace: said as no history, never as zero commits
   assert.equal(body.open.history, null);

@@ -1,8 +1,8 @@
 import { recordPaymentIntent, markInvoicePaid } from '../api/client';
 
 /**
- * Plan and confirm the payment of one approved invoice.
- * @business Operations records how an approved invoice will be paid, then marks it paid when the bank confirms.
+ * Plan and confirm the payment of one invoice.
+ * @business Operations records how an invoice will be paid, then marks it paid when the bank confirms.
  */
 export function PaymentsPage({ invoiceId }: { invoiceId: string }) {
   async function onIntent(ref: string) {

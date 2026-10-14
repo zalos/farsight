@@ -5,8 +5,8 @@ import { db, type InvoiceStatus } from './db';
 export const INTENT_MARKS_PAID = false;
 
 /**
- * Records how and when an approved invoice will be paid.
- * @business The payment is planned, not made: the invoice stays approved until the bank confirms it.
+ * Records how and when an invoice will be paid.
+ * @business The payment is planned, not made: the invoice keeps its status until the bank confirms it.
  */
 export async function recordPaymentIntent(id: string, ref: string) {
   const invoice = await db.invoices.findOne({ id });
@@ -21,7 +21,7 @@ export async function recordPaymentIntent(id: string, ref: string) {
 }
 
 /**
- * Marks an approved invoice paid once the bank confirms the payment.
+ * Marks an invoice paid once the bank confirms the payment.
  * @business The invoice is paid when the money has arrived, never before.
  */
 export async function markInvoicePaid(id: string) {

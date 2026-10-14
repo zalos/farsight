@@ -103,7 +103,7 @@ paths:
     post:
       operationId: recordPaymentIntent
       tags: [Payments]
-      summary: Record how an approved invoice will be paid.
+      summary: Record how the invoice will be paid.
       security:
         - billingAuth: [billing:admin]
       parameters:
@@ -117,7 +117,7 @@ paths:
     post:
       operationId: markInvoicePaid
       tags: [Payments]
-      summary: Mark an approved invoice paid once the bank confirms.
+      summary: Mark the invoice paid once the bank confirms.
       security:
         - billingAuth: [billing:admin]
       parameters:
