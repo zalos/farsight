@@ -34,7 +34,7 @@
  */
 import type { GraphNode, EdgeKind, JourneysMeta, GateTier } from './graph.js';
 import { type GraphIndex, type JourneySegment, type JourneyMoment, humanizeName } from './query.js';
-import { journeyTree } from './journeys.js';
+import { journeyTree, personaOfScreen } from './journeys.js';
 import { counted, scopeWord, type Counted, type CountScope } from './counts.js';
 import { t as tr, type Register } from './strings.js';
 
@@ -912,6 +912,14 @@ function rolesOn(index: GraphIndex, ids: Iterable<string>): RoleRow[] {
   }
   return out;
 }
+/**
+ * The one seam the *who may* shape reads roles through: the role checks on the parts an action's walk passes. Today
+ * it folds the `guards` edges directly (`rolesOn`); when the gates lane's core `roles.ts` lands, its
+ * `rolesFor(index, { action })` answers here and this fold is the fallback for a graph it cannot place.
+ */
+function rolesForAction(index: GraphIndex, c: Cand): RoleRow[] {
+  return rolesOn(index, partsOf(index, c));
+}
 const ALL_ROLES = new WeakMap<GraphIndex, RoleRow[]>();
 function allRoleRows(index: GraphIndex, repo?: string): RoleRow[] {
   let rows = ALL_ROLES.get(index);
@@ -999,7 +1007,7 @@ function answerWho(index: GraphIndex, question: string, term: string, opts: { re
   a.resolved.push({ term, id: c.id, name });
   const picked = pickedLine(index, c, R.best ? R.others : RT?.others ?? []);
   if (picked) a.lead.push(picked);
-  const rows = rolesOn(index, partsOf(index, c));
+  const rows = rolesForAction(index, c);
   const roles = [...new Set(rows.flatMap((r) => r.roles))];
   if (rows.length) {
     a.lead.push(line('who', 'ask.who.head', { action: name, roles: roles.join(', ') }, [...rows.map((r) => r.guard), c.id],
@@ -1263,8 +1271,11 @@ function placesOf(index: GraphIndex, metas: Record<string, JourneysMeta> | undef
     const personaId = row?.personaIds?.[0];
     for (const sg of w.sum.segments) {
       if (!sg.screen) continue;
+      // who uses this screen: the screen's own persona first, then a persona's routes, its sign-in guard, the journey's (#105)
+      const sp = personaOfScreen(index, metas, sg.screen.id, id);
+      const who = sp ? { persona: sp.personaName, personaId: sp.persona } : { ...(persona ? { persona } : {}), ...(personaId ? { personaId } : {}) };
       for (const mo of rankOrder(sg)) {
-        const place = { flowId: id, flowName, ...(persona ? { persona } : {}), ...(personaId ? { personaId } : {}), sg, mo };
+        const place = { flowId: id, flowName, ...who, sg, mo };
         if (mo.preconditions?.moves.some((m) => m.table === table && m.to === to && m.by === by)) out.push(place);
         else if (!fallback.length && w.j.steps.some((s) => s.nodeId === by && s.order >= mo.from && s.order <= mo.to)) fallback.push(place);
       }
