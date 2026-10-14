@@ -41,17 +41,37 @@ function firstParagraph(lines: string[], at: number, stopAtHeading: boolean): { 
       }
       continue;
     }
-    const meta = /^[-*]?\s*\**([A-Za-z][A-Za-z ]{1,24})\**\s*:\s*\**\s*(.+)$/.exec(line);
-    if (!para.length && meta && meta[2]!.length < 120) {
-      if (/^status$/i.test(meta[1]!.trim()) && !status) status = meta[2]!.replace(/\*\*/g, '').trim();
+    // a block of `- **Key:** value` items (an ADR's Status, Date, Deciders…) is metadata, however long: skip it to its
+    // blank line, keeping the Status as written
+    if (!para.length && /^(?:[-*]\s+)?\*\*[^*]{1,40}:?\*\*:?/.test(line)) {
+      for (; i < lines.length && lines[i]!.trim(); i++) {
+        const item = /^(?:[-*]\s+)?\*\*([^*]{1,40}?):?\*\*:?\s*(.*)$/.exec(lines[i]!.trim());
+        if (item && /^status$/i.test(item[1]!.trim()) && !status) status = inline(item[2]!);
+      }
       continue;
     }
+    const meta = /^[-*]?\s*\**([A-Za-z][A-Za-z ]{1,24})\**\s*:\s*\**\s*(.+)$/.exec(line);
+    if (!para.length && meta && meta[2]!.length < 120) {
+      if (/^status$/i.test(meta[1]!.trim()) && !status) status = inline(meta[2]!);
+      continue;
+    }
+    // a leading quoted note (`> 2026-07-12 revisions: …`) is an aside to the document, not its first paragraph
+    if (!para.length && line.startsWith('>')) { for (; i < lines.length && lines[i]!.trim(); i++); continue; }
     if (!para.length && (/^\|/.test(line) || /^(-{3,}|\*{3,}|_{3,})$/.test(line) || /^```/.test(line))) continue;
     // the line under a `## Status` heading is the status, not the paragraph
     if (!para.length && status && line.replace(/^[-*]\s+/, '').replace(/\*\*/g, '') === status) continue;
     para.push(line);
   }
-  return { text: para.join(' '), ...(status ? { status } : {}) };
+  return { text: inline(para.join(' ')), ...(status ? { status } : {}) };
+}
+
+/**
+ * Markdown's marks out of a quoted line, the words kept as written: `[text](url)` reads *text*, `**x**` / `_x_` / a
+ * backticked span read *x*. Nothing is reworded.
+ */
+function inline(text: string): string {
+  return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')
+    .replace(/`([^`]*)`/g, '$1').replace(/\s+/g, ' ').trim();
 }
 
 /** Cut a paragraph at a word near `QUOTE_MAX`, never inside a word. */

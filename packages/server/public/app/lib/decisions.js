@@ -10,7 +10,7 @@
 import { S, esc, currentLens, expose } from '../store.js';
 import { t } from '../strings.js';
 import { sym } from '../sym.js';
-import { tipAttrs, registerTip } from './tooltip.js';
+import { tipAttrs, registerTip, showTip, hideTip, tipOpen, tipAnchor } from './tooltip.js';
 import { editorHref } from './detail-links.js';
 
 const API = '/api/decisions';
@@ -70,9 +70,11 @@ export function decisionChipHtml(r, opts = {}) {
   const state = !r.declared ? 'unknown' : r.state || 'unknown';
   // inside a card that already shows the decision's card: the chip is its heading, not a second door to it
   if (opts.static) return '<span class="dec-chip map-chip s-' + esc(state) + '"' + tipAttrs({ key: w.key, noFocus: true }) + '>' + sym('decision') + '<span class="w">' + esc(w.text) + '</span></span>';
-  return '<button type="button" class="dec-chip map-chip s-' + esc(state) + (opts.cls ? ' ' + esc(opts.cls) : '') + '" data-decision="' + esc(r.repo + '|' + r.id) + '"'
-    + tipAttrs({ id: 'decision', args: { key: r.repo + '|' + r.id }, noFocus: true }) + ' aria-label="' + esc(w.text) + '">'
-    + sym('decision') + '<span class="w">' + esc(w.text) + '</span></button>';
+  // a tip trigger, not a button: the tip primitive opens its card on a click, Enter or `?`, pinned (a button's own tip
+  // opens on hover only — its click is the button's)
+  return '<span class="dec-chip map-chip s-' + esc(state) + (opts.cls ? ' ' + esc(opts.cls) : '') + '" data-decision="' + esc(r.repo + '|' + r.id) + '"'
+    + tipAttrs({ id: 'decision', args: { key: r.repo + '|' + r.id } }) + ' aria-label="' + esc(w.text) + '">'
+    + sym('decision') + '<span class="w">' + esc(w.text) + '</span></span>';
 }
 
 /** Every chip for these nodes, in one row; '' when none bears on them. */
@@ -90,7 +92,7 @@ function stateWords(r) {
 const defAttrs = (key) => tipAttrs({ key, noFocus: true });
 
 /** The card: state · owner · the team's words · the document quoted · where the code names it · what it bears on. */
-export function decisionCardHtml(r) {
+export function decisionCardHtml(r, opts = {}) {
   if (!r) return '';
   const roots = S.ROOTS || {};
   const b = biz();
@@ -125,12 +127,29 @@ export function decisionCardHtml(r) {
     : '';
   const from = r.from ? '<p class="dec-from"' + defAttrs('decision.declaredIn') + '>' + esc(fill('decision.declaredIn', { path: r.from })) + '</p>' : '';
   return '<div class="dec-card" data-dec="' + esc(r.repo + '|' + r.id) + '">'
-    + '<div class="dec-head">' + sym('decision') + '<span class="hud-label"' + defAttrs('decision.card.title') + '>' + esc(t('decision.card.title')) + ' ' + esc(r.id) + '</span></div>'
+    + (opts.noHead ? '' : '<div class="dec-head">' + sym('decision') + '<span class="hud-label"' + defAttrs('decision.card.title') + '>' + esc(t('decision.card.title')) + ' ' + esc(r.id) + '</span></div>')
     + (r.title ? '<b class="tip-h dec-title">' + esc(r.title) + '</b>' : '')
     + '<div class="dec-meta">' + state + owner + '</div>'
     + said + doc + sites + affects + from + '</div>';
 }
 
 registerTip('decision', (el, args) => decisionCardHtml(D.byId.get((args && args.key) || '')));
+
+/**
+ * A click on a chip opens its card pinned everywhere — on the Map too, where a tip otherwise opens on hover only and a
+ * click is for what the trigger sits on. Listened for after the tip primitive's own capture handler has closed what
+ * was open; a second click on the chip whose card is open closes it.
+ */
+let openOn = null;
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('pointerdown', (e) => { const el = e.target && e.target.closest ? e.target.closest('[data-decision]') : null; openOn = el && tipOpen() && tipAnchor() === el ? el : null; }, true);
+  document.addEventListener('click', (e) => {
+    const el = e.target && e.target.closest ? e.target.closest('[data-decision]') : null;
+    if (!el || (el.closest && el.closest('.fs-tip'))) return;
+    if (openOn === el) { hideTip(); openOn = null; return; }
+    const r = D.byId.get(el.getAttribute('data-decision'));
+    if (r) showTip(el, decisionCardHtml(r), { rich: true, pinned: true, via: 'click', label: t('decision.card.title') + ' ' + r.id });
+  });
+}
 
 expose({ loadDecisions });

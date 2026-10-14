@@ -39,9 +39,9 @@ export function offPlatformStageHtml(st, r) {
   return '<div class="ln-stage off" data-key="' + esc(st.key) + '" data-off="' + esc(st.decl.by) + '" data-flow="' + esc(st.flowId) + '" data-index="' + st.screenIndex + '"'
     + ' style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px"' + tipAttrs({ text: tip, noFocus: true }) + '>'
     + '<div class="ttl"><span class="map-step off">' + sym('human') + '</span><span class="nm">' + esc(st.name) + '</span>'
-    + '<span class="map-chip k-off"' + tipAttrs({ key: 'offPlatform.chip', noFocus: true }) + '>' + esc(t('offPlatform.chip')) + '</span></div>'
+    + '</div>'
     + '<div class="sub">' + esc(by) + (st.decl.where ? ' · ' + esc(st.decl.where) : '') + '</div>'
-    + '<div class="ln-chips"><span class="map-chip k-none"' + tipAttrs({ key: 'offPlatform.noTest', noFocus: true }) + '>' + esc(t('offPlatform.noTest')) + '</span></div></div>';
+    + '<div class="ln-chips"><span class="map-chip k-off"' + tipAttrs({ key: 'offPlatform.chip', noFocus: true }) + '>' + esc(t('offPlatform.chip')) + '</span><span class="map-chip k-none"' + tipAttrs({ key: 'offPlatform.noTest', noFocus: true }) + '>' + esc(t('offPlatform.noTest')) + '</span></div></div>';
 }
 
 /** The off-platform rows of a screen for a list (the Map property's Overview): name · done by · where. */

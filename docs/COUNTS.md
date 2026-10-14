@@ -478,7 +478,9 @@ document's `counted` block carries them and `docs/contracts/farsight-affected-v1
 
 | printed | source | counts | scope | where |
 |---|---|---|---|---|
-| `3 lanes` | viewer Counted `lanes.count.lanes` ← `laneLayout().lanes` | the lanes drawn; breakdown `lanes.part.personaLanes` · `lanes.part.storeLanes` partitions them | `count.scope.storyline` | the lanes board's header |
+| `3 lanes` | viewer Counted `lanes.count.lanes` ← `laneLayout().lanes` | the lanes drawn; breakdown `lanes.part.personaLanes` · `lanes.part.partyLanes` (only when a party lane is drawn) · `lanes.part.storeLanes` partitions them | `count.scope.storyline` | the lanes board's header |
+| `1 done here` | viewer Counted `party.lane.count` ← `lib/parties-model.js partyLaneCount()` | the off-platform cards in one party's lane (manifest `steps[].by` whose `who` names a party external) | `count.scope.storyline` · `journey.scopeAll` for one journey | a party lane's head |
+| `2 done outside the code` | viewer Counted `count.unit.offPlatform` ← `lib/parties-model.js offPlatformCounted()` | the off-platform cards the lanes draw, each declared step once | `count.scope.storyline` · `journey.scopeAll` | breakdown `count.part.offPlatformPerson` · `…Partner` · `…External`, summing to `n`; the lanes' footer; never a screen, never in `lanes.count.distinctScreens` |
 | `4 screens · in this lane` | viewer Counted `lanes.count.screens` ← the stages whose lane is this one | stage cards in one persona lane (a screen met again on the main path is one card; a branch's screen is its own card); breakdown `lanes.part.mainPath` · `lanes.part.branch` | `lanes.scope.lane` | a persona lane's head |
 | `3 writes · in this storyline` | viewer Counted `lanes.count.writes` ← the store lane's pills + its folded records | each status the storyline's code moves a record of this store into, once per status, plus each other record it writes; breakdown `lanes.part.statusMoves` · `lanes.part.recordsWritten` · `lanes.part.folded` (records past the two the lane draws) | `count.scope.storyline` | a store lane's head |
 | `13 writes · across this journey` (one journey's lanes, 2026-10-11) | the same Counted over a storyline of one journey (`laneLayout` with `kind: 'journey'`, `m.single`) | the same, over the journey | `journey.scopeAll` — never `count.scope.storyline` (round-3 swarm: *in this storyline* was said of one journey); the footer's journeys · screens · built · branches and the header's lanes count take the same scope | a store lane's head on the journey stop's *lanes* layout |
@@ -790,7 +792,7 @@ tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cit
 
 | number | field | what it counts | scope | rule |
 |---|---|---|---|---|
-| `5 stops` (*stop n of m*'s m) | `tour.counted.stops` (`count.unit.tourStops`) | the walk's stops: screens each once however many journeys of the storyline show them, then one per move a screen's actions make to a record (each `table · status · writer` once) | `count.scope.storyline` · `journey.scopeAll` for one journey | breakdown `count.part.tourScreens` · `count.part.tourHandoffs`, summing to `n` |
+| `5 stops` (*stop n of m*'s m) | `tour.counted.stops` (`count.unit.tourStops`) | the walk's stops: screens each once however many journeys of the storyline show them, then one per move a screen's actions make to a record (each `table · status · writer` once), then one per step the design says is done outside the code (each `screen · step` once) | `count.scope.storyline` · `journey.scopeAll` for one journey | breakdown `count.part.tourScreens` · `count.part.tourHandoffs` · `count.part.tourOffPlatform` (only when there is one), summing to `n` |
 | `…and 2 technical checks` (a screen stop) | clause `counted` (`count.unit.gatesTechnical`) | distinct preconditions of tier technical on the screen's actions | `journey.scopeHere` | the business and policy ones are listed by their words beside it, never counted twice |
 | `…and 4 technical checks` (a hand-off, an answer's *must be true first*) | clause `counted` (`count.unit.gatesTechnical`) | the same, on the one action that makes the move | `count.scope.action` | the action's `preconditions.counted` technical part |
 | `in 5 hops` / `in 5 links` (business) | `PathResult.counted` (`ask.unit.pathLinks`, biz `ask.biz.pathLinks`) | the links of the shortest chain from one part to another: calls, requests, renders, reads, writes, sends, receives | `count.scope.path` | breadth first over the edge index; `more` (`count.unit.paths`) = other chains of the same length, capped at 9 |
@@ -819,6 +821,19 @@ tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cit
 - **Conditions not in plain language** print their scope words beside the number on every panel (`lib/scope-words.js`,
   the viewer's copy of `SCOPE_WORDS`, pinned equal by `server/test/scope-words.test.ts`): *over this journey* · *over
   this screen* · *over this action*.
+
+### Decisions, work done outside the code, parties (the 2026-10-13 outsider round, F8 — core `decisions.ts`; `/api/decisions`, MCP `decisions` + `graph_overview`, CLI `farsight decisions`)
+
+A decision is a declaration the team wrote (manifest `decisions[]`, config `decisions[]`) joined to the code's
+`DECISION(<id>)` comments; it is printed as one, never as evidence. Off-platform steps (`steps[].by`) are a build state
+of their own — never a gate, never a verdict, never a screen.
+
+| number | field | what it counts | scope | rule |
+|---|---|---|---|---|
+| `7 decisions` | `decisionsCounted().decisions` (`count.unit.decisions`) | every decision a source declares, and every id a `DECISION(<id>)` comment names that nothing declares, each once | `count.scope.workspace` | breakdown `count.part.decisionsOpen` · `…Decided` · `…CodeOnly` (by state), summing to `n`; `recheck` `farsight decisions` · MCP `decisions` |
+| (the same 7) | `decisionsCounted().cited` (`count.unit.decisions`) | the same decisions, split by whether a comment in the code names them | `count.scope.workspace` | breakdown `count.part.decisionsCited` · `…Uncited` — a second partition of the same number, printed beside the first, never summed with it |
+| `1 done outside the code` | `summary.counted.offPlatform` / `segment.counted.offPlatform` (`count.unit.offPlatform`) | the steps the design says a person, a partner or another system does on the journey's screens (each `screen · step` once) / on one screen | `journey.scopeAll` / `journey.scopeHere` | breakdown `count.part.offPlatformPerson` · `…Partner` · `…External`; absent when nothing is declared |
+| `1 party` | `count.unit.parties` | party externals a source declares (`externals[]` with `kind: 'party'`, no import) | `count.scope.workspace` | catalog unit for a list of parties; a party is listed in `summary.system.externals` with `party: true` and no ops |
 
 ## 4. Open — found, not changed here
 

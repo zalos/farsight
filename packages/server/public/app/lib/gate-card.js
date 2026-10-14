@@ -222,7 +222,7 @@ function rolesHtml(m) {
 function decisionsSecHtml(m) {
   const rows = decisionsOn([m.id]);
   if (!rows.length) return '';
-  return '<section class="gc-sec" data-gc-sec="decisions">' + rows.map((r) => '<div class="gc-dec">' + decisionChipHtml(r, { static: true }) + decisionCardHtml(r) + '</div>').join('') + '</section>';
+  return '<section class="gc-sec" data-gc-sec="decisions">' + rows.map((r) => '<div class="gc-dec">' + decisionChipHtml(r, { static: true }) + decisionCardHtml(r, { noHead: true }) + '</div>').join('') + '</section>';
 }
 /** The whole card for one model. `step` (a journey's walk order) adds *show it in the journey*. */
 export function gateCardHtml(m, opts = {}) {

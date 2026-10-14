@@ -1481,3 +1481,30 @@ redraws it without asking again (`redrawAsk`).
 
 e2e: `tour.pw.spec.ts` (the walk on the fixture's storyline moving the Map, Ask's skipped proof, the business register's
 identifier walk over every stop, WALK and the front door's doors).
+
+## Decisions, work done outside the code, parties — `lib/decisions.js`, `lib/parties.js`, `lib/parties-model.js` (outsider round 2026-10-13, F8)
+
+**Decisions.** `lib/decisions.js` reads `GET /api/decisions` once per graph (`loadDecisions()`; the Map calls it when it
+loads its designs, the gate card and the lifecycle table on open) and indexes the rows by every node they bear on
+(`indexDecisions()`, pure). `decisionChipsHtml(ids)` draws a chip — *pending decision D7 · <title>* (amber), *decided
+D5 · …* (green), *decision D3 · named in code* (a comment names it, nothing declares it) — for the decisions on any of
+those nodes. The chip is a tip trigger (`data-tip-id="decision"`); a click opens its card pinned everywhere, the Map
+included (a bubble-phase click listener after the tip primitive's own): the state, the owner, the team's summary
+quoted, the cited document's heading and first paragraph quoted (*quoted from <path>*, a door to it), each code line
+that names it with the comment's own words and a door (not in the business register), what it bears on, and the file
+that declared it. Where the chips are: the gate card (a section with the card in place, `decisionsSecHtml`), the Map
+property's Overview under *what it is* (the page, its components and handlers, its gates and calls —
+`decisionIdsOf()`), each WALK stop (the screen, the stop's cited nodes and a hand-off's writer), and each mover of the
+lifecycle table. Nothing on the card is generated: every word is the team's or the catalog's (`strings-decisions.ts`).
+
+**Work done outside the code and parties.** A screen's `steps[]` entry with `by` reaches the viewer as
+`segment.offPlatform` on `/api/journey`. `lib/parties-model.js` (pure, no DOM) turns them into lanes cards:
+`offPlatformStages()` — one card per declared step at its screen's column, in the party's own lane when `who` names a
+party external, else under the screen in its person's lane (the next row); `partyLanes()` — one lane per party,
+between the people's lanes and the stores'; `partyLaneCount()` and `offPlatformCounted()` the two counts.
+`laneLayout()` calls them; the cards are never screens (not in `lanes.count.distinctScreens`, not in the *then*
+arrows, not in a persona lane's count). `lib/parties.js` draws them: `offPlatformStageHtml()` — a dotted, hatched card
+with the step's name, *done by <who>* and where, *done outside the code* and *no test can reach it* where a test chip
+would be (never a status chip, never a verdict); `partyLaneHeadHtml()` — the party's name, its count and *a party · no
+code reaches it*; `offPlatformListHtml()` — the rows the Map property's Overview lists under *done outside the code*.
+The WALK prints a stop of kind `offPlatform` after the screen's hand-offs (core `tour.ts`).

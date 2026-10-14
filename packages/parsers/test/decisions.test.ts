@@ -153,3 +153,17 @@ test('a long first paragraph is cut at a word and says so; nothing is reworded',
   assert.ok(words.startsWith(ref.quote!));
   assert.ok(/word\d+$/.test(ref.quote!));
 });
+
+test('an ADR whose metadata is a block of long bold-key items quotes the paragraph after it, links read as their words', () => {
+  const dir = repo({
+    'docs/decisions/0031-sign-in.md': '# 0031 — Sign-in\n\n- **Status:** Accepted — amended by [ADR 0021](0021-x.md) (2026-09-05: a very long amendment note that runs on well past one hundred and twenty characters of text, as real ADRs do)\n- **Deciders:** the owner, for\n  everything in the tenant\n\nOperators sign in with **Entra ID** through the `openid-client` library; see [the plan](../plan.md).\n',
+  });
+  const ref = readDocQuote(dir, 'docs/decisions/0031-sign-in.md')!;
+  assert.equal(ref.quote, 'Operators sign in with Entra ID through the openid-client library; see the plan.');
+  assert.ok(ref.status!.startsWith('Accepted — amended by ADR 0021 (2026-09-05'), ref.status);
+});
+
+test('a leading quoted note is passed over for the first paragraph', () => {
+  const dir = repo({ 'docs/adr/0015-x.md': '# 0015 — X\n\n> 2026-07-12 revisions:\n> 1. inverted\n\nThe system of record is the ERP.\n' });
+  assert.equal(readDocQuote(dir, 'docs/adr/0015-x.md')!.quote, 'The system of record is the ERP.');
+});

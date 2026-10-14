@@ -91,3 +91,22 @@
 - `.farsight/settings.json` — workspace settings: sources (with `exclude` globs), collections, theme, default lens. `.mcp.json` + `farsight.config.json` are checked in for dogfooding.
 - `tools/recap-md/` — zero-dependency Node ESM CLI (`recap-md.mjs`, launcher symlink in `/opt/homebrew/bin`): spoken rewrite/recap of markdown via local Ollama (`MODELHUB_LLM`, default `qwen3:4b`), `--speak` chains into `speak-md`; emits Model Hub events; ingested into the dogfood graph as group "Recap tool".
 - `prototypes/` — three static HTML UX prototypes that set the design language; keep them untouched as reference.
+
+**Decisions, steps done outside the code, parties, cited documents (outsider round 2026-10-13, F8 + F11).**
+`packages/core/src/decisions.ts` — `decisionsMetaOf()` (the manifests' `decisions[]`, each config block's
+`decisions[]` over them field by field, the code's `DECISION(<id>)` sites joined by id; notes for an id declared twice
+with two titles and an id the code names that nothing declares), `decisionsFor()` / `decisionsAnswer()` /
+`decisionsCounted()` / `decisionsText()` / `decisionsOverviewLine()` (behind `GET /api/decisions`, MCP `decisions` in the
+core tier, `farsight decisions`, a `graph_overview` line), `offPlatformSteps()` / `offPlatformCounted()` / `partiesOf()`
+(a screen's `steps[].by`, on `JourneySegment.offPlatform` and a WALK stop of kind `offPlatform`); `strings-decisions.ts`
+its words. Graph additions: node kind `doc` (`DocRef`), edge kind `cites`, `ExternalKind` `party` (`ExternalRef.role` /
+`persona`, `ExternalDecl.import` optional for a party), `DesignStep.by/who/where`, `GraphNode.decisions`,
+`meta.decisions` (`DecisionsMeta`). `packages/parsers/src/decisions.ts` — `decisionSites()` (every `DECISION(<id>)`
+comment, placed on the declaration under it, the innermost node holding it, or the module-level constant under it),
+`applyDecisions()` (folds `meta.decisions`, quotes each decision's `doc`), `applyParties()` (a node per party
+external, no location, no edge). `packages/parsers/src/cited-docs.ts` — `readDocQuote()` (a markdown file inside the
+source: its first heading, or the heading an anchor names, its Status line and its first paragraph verbatim, cut at a
+word near 400 characters; metadata blocks and a leading quoted note passed over; markdown marks dropped, words kept)
+and `applyCitedDocs()` (a `doc` node per cited document and a `cites` edge from each flow that lists it and each node
+whose `@business` sentence or doc comment names it by path or as *ADR NNNN*).
+
