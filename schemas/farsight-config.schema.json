@@ -425,6 +425,20 @@
               "description": {
                 "type": "string",
                 "description": "One sentence on them."
+              },
+              "routes": {
+                "type": "array",
+                "description": "Route globs this persona's screens live under (/ops/**); replaces the manifest's list.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "signsInWith": {
+                "type": "array",
+                "description": "The guards that sign this persona in, by name or node id; replaces the manifest's list.",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }

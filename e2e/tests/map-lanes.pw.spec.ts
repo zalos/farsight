@@ -40,9 +40,14 @@ test('the invoice storyline as lanes: two persona lanes and one store lane, the 
   await expect(lanes).toHaveCount(3);
   await expect(page.locator('.map-lanes .ln-lane.persona .ln-head .nm')).toHaveText(['Billing', 'Operations']);
   await expect(page.locator('.map-lanes .ln-lane.store .ln-head .nm')).toHaveText(['Invoice DB']);
-  // the screens: three on Billing's lane (the main path), the branch's two on Operations'
+  // the screens: three on the main path, the branch's two on Operations'; the discard screen's own row names the
+  // operator (screens[].persona), so its main-path stage sits in Operations' lane too — a persona per screen
   await expect(page.locator('.map-lanes .ln-stage:not(.branch)')).toHaveCount(3);
   await expect(page.locator('.map-lanes .ln-stage.branch')).toHaveCount(2);
+  expect(await page.locator('.map-lanes .ln-stage:not(.branch)').evaluateAll((els) => els.map((e) => [e.getAttribute('data-name'), e.getAttribute('data-lane'), e.getAttribute('data-persona-from')])))
+    .toEqual([['New invoice', 'billing', 'routes'], ['Invoice list', 'billing', 'journey'], ['Discard draft', 'ops', 'screen']]);
+  const sum = await page.evaluate(async () => (await (await fetch('/api/journey?entry=invoice-app::flow::billing-cycle&steps=0')).json()).summary.user);
+  expect(sum.map((u: any) => [u.designId, u.persona, u.personaFrom])).toEqual([['INV-02', 'billing', 'routes'], ['INV-01', 'billing', 'journey'], ['INV-03', 'ops', 'screen']]);
   await expect(page.locator('.map-lanes .ln-stage.planned')).toHaveCount(2);
   // the record lane reads in the lifecycle's order: created (draft), then status → open
   const inv = page.locator('.map-lanes .ln-pill[data-record="invoice-app::table::invoices"]');

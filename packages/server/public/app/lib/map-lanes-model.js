@@ -78,6 +78,16 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   const personaRows = ((tree && tree.personas) || []).filter((p) => p && !p.key);
   const personaOrder = personaRows.map((p) => p.id);
 
+  // who uses a screen (core journeys.ts personaOfScreen): the journey answer's screen once it is read, else the tree
+  // row's list — its own row, a persona's routes or the sign-in guard its code meets place it in that persona's lane;
+  // a screen only its journey places stays in the journey's lane (a branch's lane rule included)
+  const personaNames = new Map(personaRows.map((p) => [p.id, p.name]));
+  function screenPersonaOf(row, sc, screen) {
+    if (screen && screen.persona) return { persona: screen.persona, personaName: screen.personaName || '', personaFrom: screen.personaFrom || 'journey' };
+    const list = (row && row.screenPersonas) || [];
+    return list.find((x) => x && (x.designId === sc.key || x.screen === sc.key)) || (sc.seg ? null : list[sc.index]) || null;
+  }
+
   // the screens a design names, by design id — a stage's name and words before its journey is read
   const designScreens = new Map();
   for (const d of Array.isArray(designs) ? designs : []) {
@@ -133,9 +143,13 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     journeyStages.set(b.nodeId, list);
   }
 
-  function newStage(sc, row, lane, c, extra) {
+  function newStage(sc, row, journeyLane, c, extra) {
     const seg = sc.seg;
     const screen = seg ? seg.screen : null;
+    const sp = screenPersonaOf(row, sc, screen);
+    const placed = sp && sp.personaFrom && sp.personaFrom !== 'journey';
+    const lane = placed ? 'p:' + sp.persona : journeyLane;
+    if (sp && sp.personaName && !personaNames.has(sp.persona)) personaNames.set(sp.persona, sp.personaName);
     const ds = designScreens.get(sc.key) || null;
     const node = screen ? get(screen.id) : ds && ds.nodeId ? get(ds.nodeId) : null;
     const words = (screen && screen.business) || (node && (node.bizDescription || node.docs)) || (ds && ds.description) || '';
@@ -148,6 +162,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
       words, sub: firstSentence(words),
       state: planned ? 'planned' : 'built',
       read: !!seg,
+      persona: lane.slice(2), personaFrom: placed ? sp.personaFrom : 'journey',
       segs: seg ? [{ seg, a: sc.a }] : [],
       ...extra,
     };
@@ -241,13 +256,15 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
 
   // ── the lanes, in order: persona lanes in the tree's order, then store lanes; a lane the config names takes its id,
   // its word and its second line, and the lanes it names come first in its order
-  const usedPersonas = [...new Set([...laneOfJourney.values()])].map((x) => x.slice(2));
+  // the persona lanes the stages sit in, and the lane of a journey with no screen to draw
+  const staged = new Set(stages.map((st) => st.flowId));
+  const usedPersonas = [...new Set([...stages.map((st) => st.lane), ...[...laneOfJourney].filter(([id]) => !staged.has(id)).map(([, l]) => l)])].map((x) => x.slice(2));
   const personaIndex = (p) => { const i = personaOrder.indexOf(p); return i < 0 ? personaOrder.length : i; };
   usedPersonas.sort((a, b) => personaIndex(a) - personaIndex(b));
   const lanes = [];
   for (const p of usedPersonas) {
     const row = personaRows.find((x) => x.id === p);
-    lanes.push({ id: p || 'nobody', ref: 'p:' + p, kind: 'persona', persona: p, name: row ? row.name : '', description: row && row.description ? row.description : '', surface: '', declared: null });
+    lanes.push({ id: p || 'nobody', ref: 'p:' + p, kind: 'persona', persona: p, name: row ? row.name : personaNames.get(p) || '', description: row && row.description ? row.description : '', surface: '', declared: null });
   }
   for (const sl of lanesStore) lanes.push({ id: 'store:' + sl.store.name, ref: 'st:' + storeKey(sl.store), kind: 'store', store: sl.store, name: sl.store.name, description: '', surface: '', declared: null, rows: sl.rows, folded: sl.folded });
   laneDecls.forEach((d, i) => {
