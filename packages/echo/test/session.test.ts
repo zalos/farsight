@@ -103,3 +103,25 @@ test('a workspace session cannot switch between local and global stores after re
   await bindSession(global, 'codex', 'another-workspace-session', { workspace: otherWorkspace });
   await bindSession(global, 'codex', 'fresh-global-session', { workspace });
 }));
+
+test('session fingerprints include normalized sub-mind policies and all request budgets', async () => fixture(async path => {
+  const context = loadContext(path);
+  const legacy = structuredClone(context);
+  delete legacy.profile.submind;
+  const explicit = structuredClone(context);
+  explicit.profile.model.allowInsecureHttp = false;
+  assert.equal(contextFingerprint(legacy), contextFingerprint(context));
+  assert.equal(contextFingerprint(explicit), contextFingerprint(context));
+  await bindSession(context, 'claude', 'policy-session');
+  for (const key of Object.keys(context.profile.budget) as (keyof typeof context.profile.budget)[]) {
+    const changed = structuredClone(context);
+    changed.profile.budget[key]++;
+    await assert.rejects(bindSession(changed, 'claude', 'policy-session'), /already bound/);
+  }
+  for (const key of Object.keys(context.profile.submind!) as (keyof NonNullable<typeof context.profile.submind>)[]) {
+    const changed = structuredClone(context);
+    if (key === 'mode') changed.profile.submind!.mode = 'mock';
+    else changed.profile.submind![key]++;
+    await assert.rejects(bindSession(changed, 'claude', 'policy-session'), /already bound/);
+  }
+}));
