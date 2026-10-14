@@ -2,6 +2,7 @@
 import { parseArgs } from 'node:util';
 import { isAbsolute, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
+import { realpath } from 'node:fs/promises';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { defaultConfig, loadContext, initConfig, trustConfig, updateConfig, validateConfig, submindSettings } from './config.js';
@@ -12,7 +13,7 @@ import { prepareHooks, type HookHost, HOOK_EVENTS } from './hooks.js';
 import { disconnectWorkspaceHooks, installWorkspaceHooks } from './workspace-hooks.js';
 import { startWeb } from './web.js';
 import { startMemoryBridge, memoryRequest } from './memory.js';
-import { hookContext } from './hook-context.js';
+import { hookContext, hookResearchContext, canFitHookResearch } from './hook-context.js';
 import { installRuntime, startBackend, backendHealth, closeOwnedBackends, installedBackendVersion, runtimeInstalled, hasGlobalBackendConfig, AGENTMEMORY_VERSION, ENGINE_VERSION } from './runtime.js';
 import { smoke } from './smoke.js';
 import { word } from './words.js';
@@ -29,6 +30,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   install: { type: 'boolean' }, workspace: { type: 'string' }, content: { type: 'string' },
   query: { type: 'string' }, topic: { type: 'string', multiple: true }, limit: { type: 'string' },
   scope: { type: 'string' }, port: { type: 'string' }, 'backend-port': { type: 'string' },
+  request: { type: 'string' }, 'session-id': { type: 'string' },
   confirm: { type: 'boolean' }, id: { type: 'string' }, revision: { type: 'string' },
 } });
 const command = values.help ? 'help' : positionals[0] ?? 'help';
@@ -179,6 +181,14 @@ async function hook(): Promise<void> {
     if (payload.hook_event_name === 'SessionStart') {
       print(hookContext(ctx, fileURLToPath(import.meta.url), 'SessionStart'));
     } else if (payload.hook_event_name === 'UserPromptSubmit' && typeof payload.prompt === 'string' && payload.prompt.trim()) {
+      if (submindSettings(ctx.profile).hookResearch === 'background') {
+        const binding = { workspace: await realpath(root), host: values.host as HookHost, sessionId: payload.session_id };
+        if (!canFitHookResearch(ctx, binding)) {
+          print({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: word('hookCuratorTooSmall') } }); return;
+        }
+        const result = await memoryRequest(ctx, 'prepare', { query: payload.prompt.slice(0, 2000), ...binding }, { timeoutMs: 1800 });
+        print(hookResearchContext(ctx, result)); return;
+      }
       const result = await memoryRequest(ctx, 'recall', { query: payload.prompt.slice(0, 2000), limit: 5 }, { timeoutMs: 1800 });
       if (result.memories.length || result.truncated) print(hookContext(ctx, fileURLToPath(import.meta.url), 'UserPromptSubmit', result));
     }
@@ -269,6 +279,10 @@ async function main(): Promise<void> {
   if (command === 'ask') {
     if (!values.query?.trim()) throw new Error(word('queryRequired'));
     print(await memoryRequest(ctx, 'ask', { query: values.query })); return;
+  }
+  if (command === 'brief' || command === 'cancel-brief') {
+    if (!values.request || !values.workspace || !values['session-id'] || !['claude', 'codex', 'vscode'].includes(values.host ?? '')) throw new Error(word('briefRequired'));
+    print(await memoryRequest(ctx, command, { requestId: values.request, workspace: workspace(), host: values.host as HookHost, sessionId: values['session-id'] })); return;
   }
   if (command === 'expand') {
     if (!values.id || !values.revision) throw new Error(echoSubmindWord('reference'));

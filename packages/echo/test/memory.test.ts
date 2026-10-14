@@ -311,7 +311,7 @@ test('research bridge rejects concurrent inference and aborts work when the call
 
 test('a browser-style abort cancels its private research request and reaches the provider', async () => {
   await fixture(async (ctx, connection) => {
-    ctx.profile.submind = { mode: 'model', maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000, inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 10000, expandedMaxChars: 12000 };
+    ctx.profile.submind = { mode: 'model', hookResearch: 'manual', maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000, inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 10000, expandedMaxChars: 12000 };
     ctx.config.profiles[ctx.profileId] = ctx.profile;
     await saveConfig(ctx.configPath, ctx.config);
     let started!: () => void, cancelled!: () => void;
@@ -338,5 +338,91 @@ test('a browser-style abort cancels its private research request and reaches the
       finally { clearTimeout(timer); }
       assert.equal(calls, 1);
     } finally { await bridge.close(); }
+  });
+});
+
+
+test('background preparation survives the short request socket and holds model ownership through cancellation', async () => {
+  await fixture(async (ctx, connection, state) => {
+    const { mkdir } = await import('node:fs/promises');
+    const { writeConnection } = await import('../dist/installation.js');
+    ctx.config.profiles.personal!.submind!.mode = 'model';
+    ctx.config.profiles.personal!.submind!.hookResearch = 'background';
+    ctx.config.profiles.personal!.hooks.claude = true;
+    await saveConfig(ctx.configPath, ctx.config);
+    const selected = loadContext(ctx.configPath);
+    const workspace = join(ctx.directory, 'hook-workspace'); await mkdir(workspace);
+    await writeConnection(workspace, { configPath: selected.configPath, profileId: selected.profileId });
+    const binding = { workspace, host: 'claude' as const, sessionId: 'background-session' };
+    let started!: () => void, release!: () => void, calls = 0;
+    let signal!: AbortSignal;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const bridge = await startMemoryBridge(selected, connection, {
+      store: { search: async () => ({ memories: [], exhaustive: false, truncated: false, inspected: 0 }), read: async () => ({ status: 'missing' }) },
+      generate: async (_profile, input) => {
+        calls++; signal = input.signal!; started(); await waiting;
+        return { content: { kind: 'answer', findings: [] }, model: 'synthetic', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
+    try {
+      const prepared = await memoryRequest(selected, 'prepare', { ...binding, query: 'synthetic' }, { timeoutMs: 1800 });
+      assert.equal(prepared.status, 'pending');
+      await entered;
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(signal.aborted, false, 'closing the submission socket does not cancel accepted work');
+      const input = prepared.actions.find(action => action.rel === 'poll')!.arguments;
+      assert.equal((await memoryRequest(selected, 'prepare', { ...binding, query: 'synthetic' })).requestId, prepared.requestId);
+      assert.equal((await memoryRequest(selected, 'brief', input)).status, 'pending');
+      await assert.rejects(memoryRequest(selected, 'ask', { query: 'overlap' }), /already researching/);
+      assert.equal(calls, 1);
+      assert.equal((await memoryRequest(selected, 'cancel-brief', input)).status, 'cancelled');
+      assert.equal(signal.aborted, true);
+      await assert.rejects(memoryRequest(selected, 'ask', { query: 'still overlap' }), /already researching/);
+      release(); await new Promise(resolve => setImmediate(resolve));
+      assert.equal((await memoryRequest(selected, 'ask', { query: 'after settlement' })).mode, 'model');
+      assert.equal(calls, 2);
+      assert.equal(state.requests.length, 0, 'the supplied synthetic store is the only evidence source');
+    } finally { release(); await bridge.close(); }
+  });
+});
+
+
+test('bridge cancels background work on saved selection changes but not a mismatched caller', async () => {
+  await fixture(async (ctx, connection) => {
+    const { mkdir } = await import('node:fs/promises');
+    const { writeConnection } = await import('../dist/installation.js');
+    ctx.config.profiles.personal!.submind!.mode = 'model';
+    ctx.config.profiles.personal!.submind!.hookResearch = 'background';
+    ctx.config.profiles.personal!.hooks.claude = true;
+    await saveConfig(ctx.configPath, ctx.config);
+    const selected = loadContext(ctx.configPath);
+    const workspace = join(ctx.directory, 'changing-workspace'); await mkdir(workspace);
+    await writeConnection(workspace, { configPath: selected.configPath, profileId: selected.profileId });
+    let started!: () => void, release!: () => void;
+    let signal!: AbortSignal;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    const waiting = new Promise<void>(resolve => { release = resolve; });
+    const bridge = await startMemoryBridge(selected, connection, {
+      store: { search: async () => ({ memories: [], exhaustive: false, truncated: false, inspected: 0 }), read: async () => ({ status: 'missing' }) },
+      generate: async (_profile, input) => {
+        signal = input.signal!; started(); await waiting;
+        return { content: { kind: 'answer', findings: [] }, model: 'synthetic', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } };
+      },
+    });
+    try {
+      const prepared = await memoryRequest(selected, 'prepare', { workspace, host: 'claude', sessionId: 'selection-session', query: 'synthetic' });
+      await entered;
+      const input = prepared.actions.find(action => action.rel === 'poll')!.arguments;
+      const mismatch = structuredClone(selected); mismatch.profile.model.model = 'caller-only-change';
+      await assert.rejects(memoryRequest(mismatch, 'brief', input), /settings changed/);
+      assert.equal(signal.aborted, false);
+      assert.equal((await memoryRequest(selected, 'brief', input)).status, 'pending');
+      selected.config.profiles.personal!.model.model = 'saved-change';
+      await saveConfig(selected.configPath, selected.config);
+      const updated = loadContext(selected.configPath);
+      await assert.rejects(memoryRequest(updated, 'brief', input), /settings changed/);
+      assert.equal(signal.aborted, true);
+    } finally { release(); await bridge.close(); }
   });
 });

@@ -17,3 +17,4 @@ export * from './portal-types.js';
 export * from './portal.js';
 export * from './model-setup-types.js';
 export * from './model-setup.js';
+export * from './hook-research.js';

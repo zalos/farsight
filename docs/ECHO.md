@@ -13,7 +13,7 @@ The intended workflow is a small brief before each agent request, with source li
 | Managed local or explicitly configured external agentmemory | Shared hosted deployment and synchronization |
 | Configurable sub-mind through local/remote Ollama or a hosted compatible API; deterministic mock mode | Additional native providers, endpoint-specific live acceptance checks, and automatic provider selection |
 | Standalone read-only memory portal with timeline cards, search, evidence detail, explicit research, and a settings tab; allowed Farsight embedding origin | Memory editing/deletion and a Farsight navigation entry |
-| Explicit managed-memory saves, scoped recall, bounded prompt context, and explicit sub-mind research with follow-up evidence reads | Automatic capture, proactive hook curation, and memory edits |
+| Explicit managed-memory saves, scoped recall, bounded prompt context, and explicit or opted-in background sub-mind research with follow-up evidence reads | Automatic capture and memory edits |
 | Workspace hooks for Claude Code, Codex, and VS Code Local; optional Claude/Codex plugin preparation | Copilot Agent Host integration and automatic host trust |
 | Configured skill directories | Skill discovery, installation, and execution |
 | Synthetic save, search, restart, and isolation verification; isolated model-free portal preview | Production retention, daily/topic rollups, and memory mutation workflows |
@@ -196,7 +196,7 @@ Optional `model.ollama` settings contain `contextTokens` (2,048–131,072) and `
 
 ## Sub-mind research and remote inference
 
-The sub-mind is an optional read-only curator invoked by `ask --query TEXT` or the portal’s explicit **Ask sub-mind** action; installed hooks retain raw recall.
+The sub-mind is an optional read-only curator invoked by `ask --query TEXT`, the portal’s **Ask sub-mind** action, or opted-in background prompt research. In Settings, choose **Prepare a brief in the background** under **Prompt memory research** (`submind.hookResearch: "background"`), restart Echo, and start a fresh host session. Hooks then return a small session-bound handle; `brief` fetches the curated result without further inference. Raw evidence stays inside Echo. See the [background research walkthrough](../packages/echo/README.md#let-the-sub-mind-handle-prompt-memory-research) for polling, cancellation and limits. Missing policies keep manual lookup for compatibility.
 It defaults to off, so an existing installation does not begin making model requests after upgrade. Mock mode
 searches the selected memory store and produces labeled deterministic excerpts without model calls. Model mode
 uses the profile's configured endpoint to research and summarize evidence. There is no fallback to another endpoint.
@@ -206,7 +206,7 @@ are independent: the memory backend can remain local while a desktop Ollama serv
 performs inference. This milestone does not host the full Echo service remotely or expose the localhost portal.
 
 The settings view edits mode and limits without inference. It displays the running mode separately from saved
-configuration. Saving and restarting applies the mode; generation occurs only on explicit research, **Test model**
+configuration. Saving and restarting applies the mode. Generation occurs on explicit research, opted-in background prompt research, **Test model**
 in Settings, `model-test`, or the optional `smoke --with-model` check. These explicit model checks make a real model
 call even when research mode is off or mock.
 
@@ -262,7 +262,7 @@ Search ranking remains an upstream limitation: the pinned backend ranks up to 50
 before applying the exact identity filters. A crowded shared backend can therefore omit a matching scoped memory.
 Use dedicated instances for this preview; bounded excerpts and exact filtering do not establish exhaustive recall.
 
-Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo’s selected model handles explicit sub-mind research in model mode and the optional synthetic summary check. Prompt-time hooks still make no model call. Engine/package installation requires downloads. Local model inference does not require a hosted model API. Research spends sidecar compute, and the brief delivered to the main agent consumes its context. Mock research performs no inference.
+Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo’s selected model handles sub-mind research in model mode and the optional synthetic summary check. Manual prompt lookup makes no model call; opted-in background research can use the configured model once per new prompt, within its request limits. Engine/package installation requires downloads. Local model inference does not require a hosted model API. Research spends sidecar compute, and the brief delivered to the main agent consumes its context. Mock research performs no inference.
 
 ## Memory access and isolation
 
@@ -337,8 +337,7 @@ workspace trust and `chat.useHooks` enabled, not Copilot Agent Host. The install
 editor preferences. See [VS Code's hook guide](https://code.visualstudio.com/docs/agent-customization/hooks).
 
 `SessionStart` establishes the session binding and supplies bounded memory-access instructions. `UserPromptSubmit`
-uses the prompt as a scoped recall query and returns bounded results through additional context. Neither calls the
-configured model. Prompt callbacks reference the session access command without repeating absolute paths. If the service is unavailable, hooks fail
+uses the prompt as a scoped lookup. Manual mode returns bounded excerpts without a model call. Background mode submits bounded sub-mind research and returns a complete follow-up handle instead of raw evidence; if the handle cannot fit, research is skipped before any model work. Prompt callbacks reference the session access command without repeating absolute paths. If the service is unavailable, hooks fail
 open and the host continues without memory context. They do not automatically save the prompt or the response.
 The complete injected context, including instructions and record metadata, is capped at `budget.briefMaxChars`.
 Omitted or shortened results print “More matched; not shown.”

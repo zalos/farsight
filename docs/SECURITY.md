@@ -73,8 +73,9 @@ permits canonical private IPv4 literals in RFC1918 ranges; public HTTP and remot
 The exception refuses credentials on remote plaintext transport, but questions and evidence are still unencrypted.
 It does not change backend endpoint policy, expose the local bridge, or manage the remote model service.
 Settings loads and provider dispatch both enforce this policy. Research policy and all budgets are included in
-session fingerprints, so upgrading or changing them requires a fresh session and service restart. Existing hooks
-remain bounded raw recall and never automatically invoke the sub-mind in this milestone.
+session fingerprints, so upgrading or changing them requires a fresh session and service restart. Legacy hooks remain bounded raw recall. The separate `submind.hookResearch: "background"` opt-in lets prompt hooks submit research while returning only a small engine-created handle. Saved settings alone never generate.
+
+Background work uses a server-owned cancellation controller rather than the submission socket. Jobs require a trusted workspace connection and an immutable host/session binding in addition to the startup fingerprint. Polling and cancellation require that same binding and an opaque request identifier; polling never runs inference. Results expire after five minutes, are capped at sixteen retained jobs and 256 KiB, and are discarded on restart. A newer prompt cancels active work in its own session; competing work receives busy rather than queuing. Cancellation retains the model operation gate until the provider actually settles. Changed configuration/connection refuses stale results. No background job saves a transcript or acquires write authority.
 
 **The memory portal reads only the running scope.** The local `POST /api/memory/browse`,
 `POST /api/memory/expand`, and `POST /api/memory/ask` routes share the host/origin/fetch-site guard and require

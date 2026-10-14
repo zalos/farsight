@@ -86,7 +86,7 @@ export function validateModelSettings(value: unknown): EchoProfile['model'] {
 }
 
 const SUBMIND_DEFAULTS: Readonly<SubmindSettings> = Object.freeze({
-  mode: 'off', maxSteps: 3, maxSearches: 3, maxCandidates: 12,
+  mode: 'off', hookResearch: 'manual', maxSteps: 3, maxSearches: 3, maxCandidates: 12,
   evidenceMaxChars: 12_000, inputMaxChars: 48_000, lookbackDays: 90,
   timeoutMs: 30_000, expandedMaxChars: 12_000,
 });
@@ -96,10 +96,12 @@ export function submindSettings(profile: Pick<EchoProfile, 'submind'>): SubmindS
   const settings = profile.submind === undefined ? {} : record(profile.submind, Object.keys(SUBMIND_DEFAULTS));
   const mode = settings.mode === undefined ? SUBMIND_DEFAULTS.mode : settings.mode;
   if (mode !== 'off' && mode !== 'mock' && mode !== 'model') fail('echo.config.submind');
-  const limit = (key: Exclude<keyof SubmindSettings, 'mode'>, min: number, max: number) =>
+  const hookResearch = settings.hookResearch === undefined ? SUBMIND_DEFAULTS.hookResearch : settings.hookResearch;
+  if (hookResearch !== 'manual' && hookResearch !== 'background') fail('echo.config.submind');
+  const limit = (key: Exclude<keyof SubmindSettings, 'mode' | 'hookResearch'>, min: number, max: number) =>
     integer(settings[key] === undefined ? SUBMIND_DEFAULTS[key] : settings[key], min, max, 'echo.config.submind');
   return {
-    mode, maxSteps: limit('maxSteps', 1, 8), maxSearches: limit('maxSearches', 1, 8),
+    mode, hookResearch, maxSteps: limit('maxSteps', 1, 8), maxSearches: limit('maxSearches', 1, 8),
     maxCandidates: limit('maxCandidates', 1, 50), evidenceMaxChars: limit('evidenceMaxChars', 128, 64_000),
     inputMaxChars: limit('inputMaxChars', 1024, 256_000), lookbackDays: limit('lookbackDays', 1, 3650),
     timeoutMs: limit('timeoutMs', 100, 300_000), expandedMaxChars: limit('expandedMaxChars', 128, 64_000),

@@ -38,6 +38,7 @@
       },
       "submind": {
         "mode": "off",
+        "hookResearch": "manual",
         "maxSteps": 3,
         "maxSearches": 3,
         "maxCandidates": 12,
@@ -85,6 +86,7 @@
       },
       "submind": {
         "mode": "off",
+        "hookResearch": "manual",
         "maxSteps": 3,
         "maxSearches": 3,
         "maxCandidates": 12,

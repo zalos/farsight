@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { defaultConfig, submindSettings } from '../dist/config.js';
 import { research, expandMemory } from '../dist/submind.js';
+import { submindInputChars } from '../dist/models.js';
 import { submindDemo } from '../dist/submind-demo.js';
 import type { ResearchMemory, ResearchStore, SubmindModelResponse } from '../dist/submind-types.js';
 
@@ -91,17 +92,123 @@ test('invented citations and model-supplied actions are refused without returnin
   }
 });
 
-test('repeated searches, step limits and total input budgets stop independently of the model', async () => {
+test('a repeated query switches to final synthesis without rerunning the lookup', async () => {
   const p = profile('model'); const f = fixture();
   let calls = 0;
-  const repeat = await research(p, f.store, { query: 'shipping' }, { now, generate: async () => { calls++; return { ...answer(), content: { kind: 'search', query: 'shipping' } }; } });
-  assert.equal(repeat.coverage.stopReason, 'budget'); assert.equal(repeat.status, 'partial'); assert.equal(calls, 1); assert.equal(f.searches.length, 1);
+  const result = await research(p, f.store, { query: 'shipping' }, { now, generate: async (_p, request) => {
+    calls++;
+    const context = JSON.parse(request.messages[1]!.content);
+    if (calls === 1) {
+      assert.equal(context.canSearch, true);
+      assert.deepEqual(context.remaining, { modelCalls: 3, searches: 2, candidates: 11, evidenceChars: 12000 - item.title.length - item.content.length, inputChars: 48000 });
+      return { ...answer(), content: { kind: 'search', query: ' SHIPPING ' } };
+    }
+    assert.equal(context.canSearch, false);
+    assert.equal(context.remaining.modelCalls, 2);
+    assert.equal(context.remaining.searches, 2);
+    assert.ok(context.remaining.inputChars < 48000);
+    assert.deepEqual(context.previousQueries, ['shipping']);
+    assert.deepEqual(context.evidence, [item]);
+    assert.equal(request.schema.anyOf, undefined);
+    assert.deepEqual((request.schema.properties as any).kind.enum, ['answer']);
+    assert.ok(request.messages[0]!.content.includes('This is the final synthesis.'));
+    return answer();
+  } });
+  assert.equal(result.status, 'ready'); assert.equal(result.coverage.stopReason, 'complete');
+  assert.equal(calls, 2); assert.equal(result.usage.modelCalls, 2); assert.equal(f.searches.length, 1);
+  assert.deepEqual(result.actions[0]!.arguments, { id: item.id, revision: item.revision });
+});
+
+test('exhausted search, candidate or evidence allowances still permit a sourced final answer', async () => {
+  for (const limit of ['searches', 'candidates', 'evidenceChars'] as const) {
+    const p = profile('model'); const f = fixture();
+    if (limit === 'searches') p.submind!.maxSearches = 1;
+    if (limit === 'candidates') p.submind!.maxCandidates = 1;
+    if (limit === 'evidenceChars') p.submind!.evidenceMaxChars = item.title.length + item.content.length;
+    const result = await research(p, f.store, { query: 'shipping' }, { now, generate: async (_p, request) => {
+      const context = JSON.parse(request.messages[1]!.content);
+      assert.equal(context.canSearch, false);
+      assert.equal(context.remaining[limit], 0);
+      assert.deepEqual((request.schema.properties as any).kind.enum, ['answer']);
+      return answer();
+    } });
+    assert.equal(result.status, 'ready'); assert.equal(result.usage.modelCalls, 1); assert.equal(f.searches.length, 1);
+    assert.ok(result.usage.searches <= p.submind!.maxSearches);
+    assert.ok(result.coverage.inspected <= p.submind!.maxCandidates);
+    assert.ok(result.usage.evidenceChars <= p.submind!.evidenceMaxChars);
+  }
+});
+
+test('the final allowed model call is reserved for an answer, including a one-call policy', async () => {
+  for (const maxSteps of [1, 2]) {
+    const p = profile('model'); p.submind!.maxSteps = maxSteps;
+    const f = fixture(); let calls = 0;
+    const result = await research(p, f.store, { query: 'shipping' }, { now, generate: async (_p, request) => {
+      calls++;
+      const context = JSON.parse(request.messages[1]!.content);
+      if (calls < maxSteps) {
+        assert.equal(context.canSearch, true);
+        return { ...answer(), content: { kind: 'search', query: 'containers' } };
+      }
+      assert.equal(context.canSearch, false); assert.equal(context.remaining.modelCalls, 1);
+      assert.deepEqual((request.schema.properties as any).kind.enum, ['answer']);
+      return answer();
+    } });
+    assert.equal(result.status, 'ready'); assert.equal(result.usage.modelCalls, maxSteps);
+    assert.equal(f.searches.length, maxSteps);
+  }
+});
+
+test('answer-only replies still reject extra searches and fabricated citations', async () => {
+  for (const response of [
+    { ...answer(), content: { kind: 'search', query: 'another query' } },
+    answer([{ id: 'foreign', revision: 'b'.repeat(64) }]),
+  ]) {
+    const p = profile('model'); p.submind!.maxSteps = 1; const f = fixture();
+    const result = await research(p, f.store, { query: 'shipping' }, { now, generate: async () => response });
+    assert.equal(result.status, 'unavailable'); assert.equal(result.coverage.stopReason, 'invalid_response');
+    assert.equal(result.usage.modelCalls, 1); assert.equal(f.searches.length, 1);
+    assert.deepEqual(result.findings, []); assert.deepEqual(result.actions, []);
+  }
+  const p = profile('model'); p.submind!.maxSearches = 1;
+  const empty = await research(p, fixture([]).store, { query: 'shipping' }, { now, generate: async () => ({ ...answer(), content: { kind: 'answer', findings: [] } }) });
+  assert.equal(empty.status, 'empty'); assert.equal(empty.coverage.stopReason, 'no_matches');
+});
+
+test('final synthesis cannot exceed the cumulative model input allowance', async () => {
+  const p = profile('model'); let firstSize = 0;
+  await research(p, fixture().store, { query: 'shipping' }, { now, generate: async (selected, request) => {
+    firstSize = submindInputChars(selected, request); return answer();
+  } });
+  p.submind!.inputMaxChars = firstSize + 100;
+  const f = fixture(); let calls = 0;
+  const result = await research(p, f.store, { query: 'shipping' }, { now, generate: async () => {
+    calls++; return { ...answer(), content: { kind: 'search', query: 'shipping' } };
+  } });
+  assert.equal(calls, 1); assert.equal(f.searches.length, 1);
+  assert.equal(result.status, 'partial'); assert.equal(result.coverage.stopReason, 'budget');
+  assert.ok(result.usage.inputChars <= p.submind!.inputMaxChars);
+  assert.deepEqual(result.findings, []); assert.deepEqual(result.actions, []);
   p.submind!.inputMaxChars = 1024;
-  const limited = await research(p, f.store, { query: 'shipping' }, { now, generate: async () => { throw new Error('not reached'); } });
+  const limited = await research(p, fixture().store, { query: 'shipping' }, { now, generate: async () => { throw new Error('not reached'); } });
   assert.equal(limited.usage.modelCalls, 0); assert.equal(limited.coverage.stopReason, 'budget');
-  p.submind!.inputMaxChars = 48000; p.submind!.maxSteps = 1;
-  const step = await research(p, fixture().store, { query: 'shipping' }, { now, generate: async () => ({ ...answer(), content: { kind: 'search', query: 'another query' } }) });
-  assert.equal(step.usage.modelCalls, 1); assert.equal(step.usage.searches, 1); assert.equal(step.coverage.stopReason, 'budget');
+});
+
+test('final synthesis remains subject to the original research deadline', async () => {
+  const p = profile('model'); p.submind!.timeoutMs = 100; const f = fixture(); let calls = 0;
+  const keepAlive = setTimeout(() => {}, 1000);
+  try {
+    const started = Date.now();
+    const result = await research(p, f.store, { query: 'shipping' }, { generate: async (_p, request) => {
+      calls++;
+      if (calls === 1) return { ...answer(), content: { kind: 'search', query: 'shipping' } };
+      assert.equal(JSON.parse(request.messages[1]!.content).canSearch, false);
+      return new Promise(() => {});
+    } });
+    assert.equal(result.status, 'unavailable'); assert.equal(result.coverage.stopReason, 'timeout');
+    assert.equal(calls, 2); assert.equal(f.searches.length, 1); assert.ok(Date.now() - started < 900);
+    assert.deepEqual(result.findings, []); assert.deepEqual(result.actions, []);
+  } finally { clearTimeout(keepAlive); }
 });
 
 test('brief size includes full action and citation overhead; tiny limits omit whole findings', async () => {

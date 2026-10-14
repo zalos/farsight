@@ -85,6 +85,22 @@ test.describe('Echo model settings', () => {
   });
 
   /** @covers packages/echo/public/app.js::captureForm */
+  test('background prompt research is explicit, saved per profile and does not generate on save', async ({ page }) => {
+    const choice = page.getByLabel('Prompt memory research', { exact: true });
+    await expect(choice).toHaveValue('manual');
+    await choice.selectOption('background');
+    await page.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save settings', exact: true })).toBeDisabled();
+    const saved = JSON.parse(await readFile(configPath, 'utf8'));
+    expect(saved.profiles.personal.submind.hookResearch).toBe('background');
+    expect(saved.profiles.work.submind).toBeUndefined();
+    expect(testedModels).toEqual([]); expect(discoveryCalls).toBe(0);
+    await page.reload();
+    await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+    await expect(choice).toHaveValue('background');
+  });
+
+  /** @covers packages/echo/public/app.js::captureForm */
   test('Ollama memory controls persist across provider changes without affecting compatibility', async ({ page }) => {
     await page.getByLabel('Ollama context allowance (tokens)', { exact: true }).fill('8192');
     await page.getByLabel('Keep model loaded (seconds)', { exact: true }).fill('30');

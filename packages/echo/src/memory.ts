@@ -8,6 +8,7 @@ import { loadContext, submindSettings } from './config.js';
 import { createResearchStore } from './research-store.js';
 import { generateSubmind } from './models.js';
 import { ModelBusyError, withModelOperation } from './model-gate.js';
+import { createHookResearchRegistry, validateHookResearchInput, type HookBriefInput, type HookBriefResult, type HookPrepareInput } from './hook-research.js';
 import { research, expandMemory, validateResearchQuery, validateExpansion, type SubmindGenerator } from './submind.js';
 import type { SubmindModelResponse, SubmindResult, ExpandResult, ResearchStore } from './submind-types.js';
 import { backendRequest } from './runtime.js';
@@ -21,9 +22,9 @@ export interface RememberResult { id: string; createdAt: string }
 export interface RecalledMemory { id: string; title: string; content: string; timestamp: string; provenance?: MemoryProvenance }
 export interface RecallResult { memories: RecalledMemory[]; truncated: boolean }
 export interface MemoryRequestOptions { timeoutMs?: number; signal?: AbortSignal }
-type Operation = 'remember' | 'recall' | 'ask' | 'expand';
-type BridgeInput = RememberInput | RecallInput | { id: string; revision: string };
-type BridgeResult = RememberResult | RecallResult | SubmindResult | ExpandResult;
+type Operation = 'remember' | 'recall' | 'ask' | 'expand' | 'prepare' | 'brief' | 'cancel-brief';
+type BridgeInput = RememberInput | RecallInput | { id: string; revision: string } | HookPrepareInput | HookBriefInput;
+type BridgeResult = RememberResult | RecallResult | SubmindResult | ExpandResult | HookBriefResult;
 type FailureCode = 'unavailable' | 'input' | 'credential' | 'stale' | 'ownership' | 'running' | 'response' | 'timeout' | 'externalReadOnly' | 'busy' | 'aborted';
 const REQUEST_BYTES = 160_000;
 // A 64k-character expansion can require six JSON bytes per character.
@@ -81,6 +82,9 @@ async function recoverStaleSocket(path: string): Promise<void> {
 
 function inputFor(operation: Operation, input: unknown): BridgeInput {
   if (!object(input)) fail('input');
+  if (operation === 'prepare' || operation === 'brief' || operation === 'cancel-brief') {
+    try { return operation === 'prepare' ? validateHookResearchInput(operation, input) : validateHookResearchInput(operation, input); } catch { fail('input'); }
+  }
   if (operation === 'ask') {
     if (!keys(input, ['query'])) fail('input');
     try { return { query: validateResearchQuery(input.query) }; } catch { fail('input'); }
@@ -170,6 +174,25 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
   const fingerprint = contextFingerprint(snapshot);
   const store = dependencies.store ?? createResearchStore(snapshot, connection);
   let researching = false;
+  const runResearch = async (query: string, signal: AbortSignal): Promise<SubmindResult> => {
+    if (submindSettings(snapshot.profile).mode !== 'model') return research(snapshot.profile, store, { query }, { signal, generate: dependencies.generate });
+    return withModelOperation(async () => {
+      let generation: Promise<SubmindModelResponse> | undefined;
+      try {
+        return await research(snapshot.profile, store, { query }, {
+          signal,
+          generate: (profile, request) => {
+            generation = Promise.resolve().then(() => (dependencies.generate ?? generateSubmind)(profile, request));
+            return generation;
+          },
+        });
+      } finally {
+        // Cancellation can finish research before its adapter stops; retain model ownership.
+        await generation?.catch(() => {});
+      }
+    });
+  };
+  const background = createHookResearchRegistry(snapshot, { research: runResearch });
   const path = await checkDirectory(snapshot, true);
   await recoverStaleSocket(path);
   const sockets = new Set<Socket>();
@@ -196,8 +219,13 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
           if (newline !== buffer.length - 1) fail('input');
           const request: unknown = JSON.parse(buffer.subarray(0, newline).toString('utf8'));
           if (!object(request) || !keys(request, ['version', 'fingerprint', 'operation', 'input', 'timeoutMs', 'origin']) || request.version !== 1) fail('input');
-          if (request.fingerprint !== fingerprint || contextFingerprint(loadContext(snapshot.configPath, snapshot.profileId)) !== fingerprint) fail('stale');
-          if (typeof request.operation !== 'string' || !['remember', 'recall', 'ask', 'expand'].includes(request.operation)) fail('input');
+          let currentSelection = false;
+          try { currentSelection = contextFingerprint(loadContext(snapshot.configPath, snapshot.profileId)) === fingerprint; } catch {}
+          // Saved selection changes invalidate server-owned work even when the caller
+          // already has the new fingerprint. A mismatched client alone cannot cancel it.
+          if (!currentSelection) { background.close(); fail('stale'); }
+          if (request.fingerprint !== fingerprint) fail('stale');
+          if (typeof request.operation !== 'string' || !['remember', 'recall', 'ask', 'expand', 'prepare', 'brief', 'cancel-brief'].includes(request.operation)) fail('input');
           const operation = request.operation as Operation;
           const input = inputFor(operation, request.input);
           const origin = request.operation === 'remember' ? await verifyMemoryOrigin(request.origin) : undefined;
@@ -208,27 +236,14 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
           if (operation === 'ask') {
             if (researching) fail('busy');
             researching = true;
-            try {
-              const run = () => research(snapshot.profile, store, input as RecallInput, { signal: abort.signal, generate: dependencies.generate });
-              if (submindSettings(snapshot.profile).mode !== 'model') result = await run();
-              else result = await withModelOperation(async () => {
-                let generation: Promise<SubmindModelResponse> | undefined;
-                try {
-                  return await research(snapshot.profile, store, input as RecallInput, {
-                    signal: abort.signal,
-                    generate: (profile, request) => {
-                      generation = Promise.resolve().then(() => (dependencies.generate ?? generateSubmind)(profile, request));
-                      return generation;
-                    },
-                  });
-                } finally {
-                  // Research's deadline can finish before an adapter has stopped. Do not
-                  // admit another generation until that underlying promise has settled.
-                  await generation?.catch(() => {});
-                }
-              });
-            }
+            try { result = await runResearch((input as RecallInput).query, abort.signal); }
             finally { researching = false; }
+          } else if (operation === 'prepare') {
+            result = await background.prepare(input as HookPrepareInput);
+          } else if (operation === 'brief') {
+            result = await background.brief(input as HookBriefInput);
+          } else if (operation === 'cancel-brief') {
+            result = await background.cancel(input as HookBriefInput);
           } else if (operation === 'expand') {
             result = await expandMemory(snapshot.profile, store, input as { id: string; revision: string }, abort.signal);
           } else result = await execute(snapshot, connection, operation, input as RememberInput | RecallInput, deadline, origin);
@@ -252,6 +267,7 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
   let closing: Promise<void> | undefined;
   return { close() {
     closing ??= (async () => {
+      background.close();
       for (const socket of sockets) socket.destroy();
       await new Promise<void>(resolve => server.close(() => resolve()));
       // Node usually removes its own socket. Never remove a replacement.
@@ -265,6 +281,8 @@ export function memoryRequest(ctx: EchoContext, operation: 'remember', input: Re
 export function memoryRequest(ctx: EchoContext, operation: 'recall', input: RecallInput, options?: MemoryRequestOptions): Promise<RecallResult>;
 export function memoryRequest(ctx: EchoContext, operation: 'ask', input: { query: string }, options?: MemoryRequestOptions): Promise<SubmindResult>;
 export function memoryRequest(ctx: EchoContext, operation: 'expand', input: { id: string; revision: string }, options?: MemoryRequestOptions): Promise<ExpandResult>;
+export function memoryRequest(ctx: EchoContext, operation: 'prepare', input: HookPrepareInput, options?: MemoryRequestOptions): Promise<HookBriefResult>;
+export function memoryRequest(ctx: EchoContext, operation: 'brief' | 'cancel-brief', input: HookBriefInput, options?: MemoryRequestOptions): Promise<HookBriefResult>;
 export async function memoryRequest(ctx: EchoContext, operation: Operation, input: BridgeInput, options: MemoryRequestOptions = {}): Promise<BridgeResult> {
   if (options.signal?.aborted) fail('aborted');
   const validated = inputFor(operation, input);
@@ -302,7 +320,25 @@ export async function memoryRequest(ctx: EchoContext, operation: Operation, inpu
         if (reply.ok === false && codes.has(reply.code as FailureCode)) { finish(reply.code as FailureCode); return; }
         if (reply.ok !== true || !object(reply.result)) fail('response');
         const result = reply.result;
-        if (operation === 'remember') {
+        if (operation === 'prepare' || operation === 'brief' || operation === 'cancel-brief') {
+          if (result.schema !== 'echo-hook-brief/v1' || !['pending', 'ready', 'empty', 'busy', 'expired', 'unavailable', 'disabled', 'cancelled'].includes(String(result.status))
+            || result.requestId !== null && (typeof result.requestId !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(result.requestId))
+            || !Array.isArray(result.actions) || result.actions.length > 2) fail('response');
+          for (const action of result.actions) {
+            if (!object(action) || !keys(action, ['rel', 'operation', 'arguments'])
+              || !(action.rel === 'poll' && action.operation === 'memory.brief' || action.rel === 'cancel' && action.operation === 'memory.cancel_brief')) fail('response');
+            let args: HookBriefInput;
+            try { args = validateHookResearchInput('brief', action.arguments); } catch { fail('response'); }
+            if (args.requestId !== result.requestId || args.host !== (validated as HookPrepareInput).host || args.sessionId !== (validated as HookPrepareInput).sessionId) fail('response');
+          }
+          if (result.result !== undefined) {
+            const brief = result.result;
+            if (!object(brief) || brief.schema !== 'echo-memory/v1' || !['ready', 'partial', 'empty', 'disabled', 'unavailable'].includes(String(brief.status))
+              || brief.mode !== submindSettings(ctx.profile).mode || !Array.isArray(brief.findings) || !Array.isArray(brief.actions)
+              || !object(brief.coverage) || !object(brief.usage)) fail('response');
+            if (brief.findings.length && JSON.stringify({ findings: brief.findings, actions: brief.actions }).length > ctx.profile.budget.briefMaxChars) fail('response');
+          }
+        } else if (operation === 'remember') {
           if (!text(result.id, 256) || !text(result.createdAt, 64)) fail('response');
         } else if (operation === 'ask') {
           if (result.schema !== 'echo-memory/v1' || !['ready', 'partial', 'empty', 'disabled', 'unavailable'].includes(String(result.status))

@@ -41,6 +41,16 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Echo model setup and background research — 2026-10-13
+
+- Work remains on `codex/echo-live-model`, PR #104, building on merged PRs #102 and #103.
+- Model discovery/testing, running-versus-saved status, native Ollama context/retention controls and remote model configuration are wired into the real settings view. Setup checks and research share one process-level generation owner.
+- `submind.hookResearch` defaults to `manual`; `background` explicitly enables prompt research. Hooks return a bounded session/workspace-bound handle instead of raw records. `brief` polls without inference; `cancel-brief` cancels; checked `memory.expand` actions read exact evidence. Jobs expire after five minutes and have bounded retention, no unbounded queue, retry deduplication and cancellation that retains model ownership until settlement.
+- Repeated or exhausted searches now leave a permitted model decision for final synthesis, with an answer-only schema, checked citations and the original input/time limits. A hook whose handle cannot fit skips research before spending model work.
+- Verified: workspace build/typecheck, `pnpm test` (including 222 Echo cases; live tracker cases remain opt-in), catalog lint, standalone package check, and 339 browser/MCP cases. Review covered stale settings cancellation, cross-session isolation, cached A/active B/repeated A supersession and tiny hook allowances.
+- Live native Ollama acceptance: a prompt hook returned a 635-character handle in 64 ms; the configured model produced a cited brief in two model calls, one search and about sixteen seconds. Polling did not regenerate; the follow-up opened the exact saved evidence. Existing stored records remained unchanged.
+- Memory capture, model-assisted writes/edits/deletes and shared-team authentication remain separate work. This iteration adds the intelligent search intermediary; it does not grant the research model write authority. Local private import receipts and live evidence stay outside tracked files.
+
 ## Echo sub-mind development round — 2026-10-13
 
 Branch `codex/echo-submind`, based on `d6ff0c6`, implements the first bounded, read-only research path. This is
