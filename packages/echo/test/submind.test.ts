@@ -151,3 +151,38 @@ test('controller deadline holds even if a provider ignores cancellation', async 
     assert.equal(result.coverage.stopReason, 'timeout'); assert.ok(Date.now() - start < 900);
   } finally { clearTimeout(keepAlive); }
 });
+
+
+for (const mode of ['mock', 'model'] as const) {
+  test(`${mode} brief clipping keeps whole, nonempty code points or omits the finding`, async () => {
+    const memory = { ...item, id: 'm', title: 'title', content: '😀 fix' };
+    const p = profile(mode);
+    const minimal = { problem: '😀', fix: '😀', why: null, citations: [{ id: memory.id, revision: memory.revision, title: memory.title, timestamp: memory.timestamp }] };
+    const action = { rel: 'read_more', operation: 'memory.expand', arguments: { id: memory.id, revision: memory.revision } };
+    const minimumBudget = JSON.stringify({ findings: [minimal], actions: [action] }).length;
+    let calls = 0;
+    const generate = async () => {
+      calls++;
+      assert.equal(mode, 'model');
+      return { ...answer(), content: { kind: 'answer', findings: [{ problem: '  😀 problem  ', fix: '  😀 fix  ', why: null, citations: [{ id: memory.id, revision: memory.revision }] }] } };
+    };
+    for (const budget of [368, minimumBudget - 1, minimumBudget, 800]) {
+      p.budget.briefMaxChars = budget;
+      const result = await research(p, fixture([memory]).store, { query: '😀 problem' }, { now, generate });
+      assert.ok(JSON.stringify({ findings: result.findings, actions: result.actions }).length <= budget);
+      if (budget < minimumBudget) {
+        assert.deepEqual(result.findings, []); assert.deepEqual(result.actions, []);
+        assert.equal(result.coverage.stopReason, 'budget');
+      } else {
+        assert.equal(result.findings.length, 1);
+        for (const field of [result.findings[0]!.problem, result.findings[0]!.fix]) {
+          assert.ok(field.trim()); assert.ok(field.startsWith('😀')); assert.ok(field.isWellFormed());
+          assert.equal(field, field.trim());
+        }
+        if (budget === minimumBudget) assert.deepEqual(result.findings[0], minimal);
+        if (budget === 800) assert.equal(result.findings[0]!.fix, '😀 fix');
+      }
+    }
+    assert.equal(calls, mode === 'mock' ? 0 : 4);
+  });
+}

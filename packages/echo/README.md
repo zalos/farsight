@@ -57,7 +57,7 @@ node packages/echo/dist/cli.js serve
 
 Open the URL printed by `serve`: with the default personal profile it is [http://127.0.0.1:4480](http://127.0.0.1:4480). Leave this terminal running. Ctrl-C shuts down Echo's settings server and its owned memory processes.
 
-If you declined engine installation during setup, run `node packages/echo/dist/cli.js install-runtime` before the smoke test. To test storage without a model, run `smoke` without `--with-model`; the model check in `doctor` will still report an unconfigured or unavailable model.
+If you declined engine installation during setup, run `node packages/echo/dist/cli.js install-runtime` before the smoke test. To test storage without a model, run `smoke` without `--with-model`; `doctor` skips model readiness checks in off and mock modes (including legacy profiles without a sub-mind policy).
 
 You can also run `smoke` in a second terminal while `serve` is running. It chooses separate available ports and disposable stores; it does not test against or write into the running profile's store.
 
@@ -104,7 +104,7 @@ For a shared global store, run `farsight-echo setup --scope global`, then use th
 
 | Test | What to do | What a successful result means |
 |---|---|---|
-| Configuration | Run `doctor` | The pinned package, managed engine, isolation precondition, and chosen Ollama model are available. Managed `doctor` does not start the backend. |
+| Configuration | Run `doctor` | The pinned package and managed engine are available, and the isolation precondition passes; model mode also checks the chosen Ollama model. Managed `doctor` does not start the backend. |
 | Memory storage | Run `smoke` | `remember-recall`, `restart-persistence`, and `store-isolation` each report `ok: true`. |
 | Persistent memory | Keep `serve` running, then use `remember` and `recall` as shown below | The explicitly saved fact is returned from the selected managed profile and survives restart. |
 | Model-free sub-mind | Run `submind-demo` | A synthetic brief and follow-up read work without a model or backend. |
@@ -188,7 +188,7 @@ farsight-echo install-runtime --scope workspace
 | Skill directories | Save explicit future discovery locations. Echo does not yet read, install, or execute these skills. |
 | Farsight address for embedding | Optionally allow an exact local Farsight origin to frame the view. Farsight navigation integration is not built yet. |
 
-Use service origins without paths or credentials in URLs. The compatible adapter adds `/v1/chat/completions` itself; do not put `/v1` in the configured origin. Prefer HTTPS or a localhost SSH tunnel for remote endpoints. Private-network HTTP requires the explicit exception described below. Current remote request handling is verified with synthetic protocol fixtures; each real deployment still needs its own connection check when inference is appropriate. `doctor` checks only the model selection for compatible endpoints; the managed `smoke --with-model` path exercises an actual call.
+Use service origins without paths or credentials in URLs. The compatible adapter adds `/v1/chat/completions` itself; do not put `/v1` in the configured origin. Prefer HTTPS or a localhost SSH tunnel for remote endpoints. Private-network HTTP requires the explicit exception described below. Current remote request handling is verified with synthetic protocol fixtures; each real deployment still needs its own connection check when inference is appropriate. `doctor` in model mode checks only the model selection for compatible endpoints; the managed `smoke --with-model` path exercises an actual call.
 
 Personal and work have separate local stores. Within one configuration directory, a host session is bound to its chosen profile, identity, backend, and model settings. Start a **new host session** when changing those boundaries. Keep personal and work in the same configuration file so their session bindings are checked against the same registry. This is local isolation, not multi-user team authorization.
 
@@ -270,7 +270,7 @@ For a hosted or custom compatible gateway, configure its HTTPS origin:
 
 Echo adds `/v1/chat/completions`; do not append `/v1` to the configured address. The custom gateway must implement that request/response contract; an arbitrary inference API requires a separate adapter. Keep the credential in the operating system keychain. Credential references remain pinned to the approved service origin. Echo never silently falls back from one endpoint to another. Connection failures return a bounded failure result rather than starting a local model.
 
-Use the settings view to save these fields, or edit the local JSON and explicitly trust the reviewed configuration as described below. A page load, settings save, and service start never perform sub-mind generation. `doctor` and the connection-check button may inspect endpoint availability; `smoke --with-model` explicitly requests real inference. Do not use that option during a model-free test round.
+Use the settings view to save these fields, or edit the local JSON and explicitly trust the reviewed configuration as described below. A page load, settings save, and service start never perform sub-mind generation. `doctor` and the connection-check button inspect model endpoint availability only in model mode; `smoke --with-model` explicitly requests real inference. Do not use that option during a model-free test round.
 
 ## Trust an existing configuration
 
