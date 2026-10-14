@@ -43,6 +43,7 @@ import { stepCoverage, cellCoverage, segmentNotBuilt, type TestVerdict, type Cov
 import { gateCard } from './gates.js';
 import { gateTierOf } from './gate-class.js';
 import { isConfigCheck } from './config-check.js';
+import { rolesFor, roleTable, roleWord } from './roles.js';
 import { lifecycleViews } from './lifecycle.js';
 import {
   flowSummary, rankOrder, actionOrdinal, fillWords, bare, holeWords, needWord, bizWords, fromWords, wordsOf, recordWord, locOf, countWords, verdictVars, nodeRef,
@@ -913,12 +914,28 @@ function rolesOn(index: GraphIndex, ids: Iterable<string>): RoleRow[] {
   return out;
 }
 /**
- * The one seam the *who may* shape reads roles through: the role checks on the parts an action's walk passes. Today
- * it folds the `guards` edges directly (`rolesOn`); when the gates lane's core `roles.ts` lands, its
- * `rolesFor(index, { action })` answers here and this fold is the fallback for a graph it cannot place.
+ * The roles on an action, from core `roles.ts` (`rolesFor`, the role × action table's fold — one answer for Ask, the
+ * gate card, `farsight roles` and MCP `roles`): the action itself and the calls its walk makes. A role the parser left
+ * unread there (`rolesRead: false`) and a guard the table does not hold are read from a literal argument at the call
+ * (`requireScope('billing:admin')`) — the one shape `roles.ts` does not read.
  */
-function rolesForAction(index: GraphIndex, c: Cand): RoleRow[] {
-  return rolesOn(index, partsOf(index, c));
+function rolesForAction(index: GraphIndex, c: Cand, repo?: string): RoleRow[] {
+  const parts = partsOf(index, c);
+  const ids = [c.id, ...[...parts].filter((id) => id !== c.id && index.byId.get(id)?.kind === 'route')];
+  const out: RoleRow[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    for (const r of rolesFor(index, { action: id, ...(repo ? { repo } : {}) })) {
+      if (r.action.id !== id && r.action.handler !== id) continue;
+      const roles = r.rolesRead ? r.roles : (literalRole(r.guard.id) ? [literalRole(r.guard.id)!] : []);
+      const key = `${r.guard.id}\u0000${roles.join(',')}`;
+      if (!roles.length || seen.has(key)) continue;
+      seen.add(key);
+      out.push({ guard: r.guard.id, target: r.action.id, roles, ...(r.requiresFrom ? { from: r.requiresFrom } : {}) });
+    }
+  }
+  if (out.length) return out;
+  return rolesOn(index, parts);
 }
 const ALL_ROLES = new WeakMap<GraphIndex, RoleRow[]>();
 function allRoleRows(index: GraphIndex, repo?: string): RoleRow[] {
@@ -931,8 +948,6 @@ function allRoleRows(index: GraphIndex, repo?: string): RoleRow[] {
   }
   return repo ? rows.filter((r) => r.target.startsWith(`${repo}::`)) : rows;
 }
-/** A role in words: its last name, its separators as spaces (`ops.approver` → *approver*, `billing:admin` → *billing admin*). */
-const roleWord = (r: string) => r.replace(/^[a-z]+\./i, '').replace(/[._:/-]+/g, ' ').trim();
 
 /** The parts an action's walk passes through: the action, the calls it makes, its walk's steps. */
 function partsOf(index: GraphIndex, c: Cand): Set<string> {
@@ -995,7 +1010,7 @@ function answerWho(index: GraphIndex, question: string, term: string, opts: { re
   a.resolved.push({ term, id: c.id, name });
   const picked = pickedLine(index, c, R.best ? R.others : RT?.others ?? []);
   if (picked) a.lead.push(picked);
-  const rows = rolesForAction(index, c);
+  const rows = rolesForAction(index, c, opts.repo);
   const roles = [...new Set(rows.flatMap((r) => r.roles))];
   if (rows.length) {
     a.lead.push(line('who', 'ask.who.head', { action: name, roles: roles.join(', ') }, [...rows.map((r) => r.guard), c.id],
@@ -1031,6 +1046,16 @@ function answerWho(index: GraphIndex, question: string, term: string, opts: { re
 
 /** Every action a role check guards, each with the roles its call site hands the check — the role × action table. */
 function whoTable(index: GraphIndex, a: AskAnswer, repo?: string): AskAnswer {
+  // the role × action table (core roles.ts) when the code lists roles in constants; else the literal arguments
+  const table = roleTable(index, repo ? { repo } : {});
+  const read = table.rows.filter((r) => r.rolesRead);
+  if (read.length) {
+    const c = table.counted.actions;
+    a.lead.push(line('who', 'ask.who.table', { count: countWords(c) }, read.slice(0, 12).map((r) => r.action.id), { counted: c, bizVars: { count: countWords(c, true) } }));
+    a.sections.push({ key: 'ask.sec.roles', rows: read.slice().sort((x, y) => x.words.localeCompare(y.words)).map((r) =>
+      line('who', 'ask.who.tableRow', { action: r.words, roles: r.roles.join(', ') }, [r.action.id, r.guard.id], { bizVars: { action: r.words, roles: r.roles.map(roleWord).join(', ') } })) });
+    return a;
+  }
   const rows = allRoleRows(index, repo);
   const routes = rows.filter((r) => index.byId.get(r.target)?.kind === 'route');
   const use = routes.length ? routes : rows;
@@ -1039,7 +1064,7 @@ function whoTable(index: GraphIndex, a: AskAnswer, repo?: string): AskAnswer {
   if (!byTarget.size) { a.lead.push(line('who', 'ask.who.tableNone', {}, [])); return a; }
   const label = new Map<string, string>();
   for (const c of pool(index)) if (c.kind === 'action' && !label.has(c.id)) label.set(c.id, actionName(c, index));
-  const c = counted(byTarget.size, 'ask.unit.roleActions', 'count.scope.workspace', `${SRC} → allRoleRows (guards edges handed a role: meta.requires or a literal argument), one per call`, { bizUnit: 'ask.unit.roleActions' });
+  const c = counted(byTarget.size, 'count.unit.roleActions', 'count.scope.workspace', `${SRC} → allRoleRows (guards edges handed a literal role at the call), one per call`, { bizUnit: 'count.unit.roleActions' });
   a.lead.push(line('who', 'ask.who.table', { count: countWords(c) }, [...byTarget.keys()].slice(0, 12), { counted: c, bizVars: { count: countWords(c, true) } }));
   a.sections.push({ key: 'ask.sec.roles', rows: [...byTarget].sort((x, y) => (label.get(x[0]) ?? x[0]).localeCompare(label.get(y[0]) ?? y[0])).map(([target, rs]) => {
     const roles = [...new Set(rs.flatMap((r) => r.roles))];

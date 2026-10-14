@@ -92,7 +92,8 @@ test('who may: the roles the code hands the check, from the code — and a role 
   assert.equal(a.reworded, 'who may approve an invoice?');
   assert.equal(a.lead[0]!.text, 'I read that as: “who may approve an invoice?”');
   assert.match(a.lead[1]!.text, /billing:admin/);
-  assert.match(a.lead[1]!.biz, /billing admin/);
+  assert.match(a.lead[1]!.biz, /\badmin\b/);
+  assert.doesNotMatch(a.lead[1]!.biz, /billing:admin/);
   const no = ask(index, 'Can a reviewer approve an invoice?', { metas: meta.journeys });
   assert.ok(no.lead.some((c) => c.key === 'ask.who.no'), 'a role the code does not hand the check is a no');
   // asked in the shape itself, there is no reading line
