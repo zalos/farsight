@@ -34,7 +34,7 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 - Codex: `.codex/config.toml` configures the workspace CLI over MCP stdio.
 - Claude Code: `.mcp.json` configures the same workspace CLI and graph. `.claude/launch.json` defines the viewer on port 4477.
 - Both launch `node packages/cli/dist/cli.js mcp --graph graph.json` from this repository root. Select the supported Node runtime in the environment launching the client. Existing desktop clients may retain their older PATH until restarted.
-- Both provider configurations have eight corresponding review personas under their respective `agents/` directories (how to run them: `docs/review-swarm.md`).
+- Both provider configurations have eight corresponding review personas and three outsider personas (a comprehension round on the application Farsight displays) under their respective `agents/` directories (how to run them: `docs/review-swarm.md`).
 - After rebuilding, restart running viewer/MCP processes before trusting new behavior. Reload the browser after refreshing the graph.
 - Use `node packages/cli/dist/cli.js status` to inspect build/graph/server currency. Do not assume a successful build updated an existing server.
 - Preserve the multi-source dogfood graph: use the workspace server's `POST /api/sync` after restart. Bare CLI ingest replaces it and ignores workspace source excludes. Smoke-test ingest from a temporary cwd with an explicit output path instead; SQLite history is cwd-relative too.
@@ -683,6 +683,49 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
       duplicates the Affected bar; the gate card can open over the top nav; the *row n* note in an empty lane is words,
       not a link; the sweep's `-screen` shots click a `ONE SCREEN` label that no longer exists.
 
+19. **The outsider demo — can a stranger understand the reference app from Farsight alone?** (2026-10-13; three new
+    personas in `.claude/agents/review-outsider-{consultant,customer,board}.md` and their Codex twins, a demo guide that
+    lives in the reference app's own repository and knows only what Farsight shows; `docs/review-swarm.md` § *The
+    outsiders*; reports, 283 PNGs, the gap log and `_synthesis.md` outside the repo). The guide walked eight stops on
+    4477 (`c5a5c7a`, sync 114, read-only) and put eight seed questions to the screens and to ASK; three outsiders (a new
+    implementation consultant, a prospective customer's head of operations, a non-executive director) said the app back,
+    asked 39 questions, and the guide answered from 120 new PNGs. **Board: PARTLY · PARTLY · MOSTLY, understanding 7/10
+    and confidence 6/10 for all three.** Seed questions from the screens 1 · partly 6 · not at all 1; the 39 follow-ups
+    12 · 23 · 4; **ASK understood 0 of 8 as worded** (10 of 10 once reshaped). All three were correct on the roles, the
+    invoice path, the vendor path, four-eyes and the POC status. All three were **wrong from the business register on
+    the two first-order facts** and corrected only through hybrid, the code map inspector, ⌘K's test names and the
+    Tests page: *who may approve* (the role guard covers the approve action and a passed test refuses a reviewer, but the
+    approve column has no WHO MAY and the gate card reads *a check nobody has put in words*) and *what makes an invoice
+    Paid* (ASK, the lifecycle table and the lanes pill credit the payment intent; the code and the passed e2e say mark
+    paid). Operator screens draw in the Contractor lane; vendor approval is never credited with Pending → Active; the
+    invoice journeys' head shows the outbox lifecycle. What none could learn because Farsight has no slot for it: the
+    client persona (receives, approves, pays the consolidated invoice; two personas in the tree), what is configurable
+    and by whom, the money's counterparties (the payment partner, who verifies bank details), separation of duties,
+    the audit actions, the correction request's lifecycle, the domain glossary. The synthesis sorts the worklist into
+    four bins — Farsight defects (A), Farsight features missing (B), reference-app knowledge to add in its manifest,
+    config and tags (C), and reference-app product findings to pass to its session (D: a self-registered vendor is
+    queued to the ERP before approval, no reject path, no separation of duties, no amount limits).
+    **The eight personas then proposed how to address it** (`_proposals/` and `_worklist.md` outside the repo) and found
+    the root causes, which the lead verified in the code: the Paid move is credited to the payment intent because the
+    only PAID writer is called there under a constant the code sets to `false` (the parser reads the dead branch as live,
+    and every surface takes the *first* place a writer appears); WHO MAY is missing on the approve column because
+    `core/query.ts` merges a screen's gates by name onto the first occurrence and unions `requires` (the data is in
+    `meta.requires` already, and the guard carries a `@business` sentence the gate card never falls back to); the
+    readiness brief's *0 of 6 ship* is `foldRuns()` taking the weakest status across browser projects, so a desktop pass
+    plus a viewport-conditioned mobile skip reads as skipped. **The worklist:** Farsight wave 1 = F1 credit a status move
+    to the live path that writes it (constant-false branches inactive; never first-occurrence; positional-literal and
+    ternary writers) · F2 a gate at every action it guards with that site's `requires`, card titled by the app's words,
+    a register-parity test · F3 a skip with its own condition on one project is not a skip of the case, PASSED paired
+    with the brief's reason · F6 business words from what the app wrote; wave 2 = F4 the role × action table with the
+    pinning tests quoted · F5 `screens[].persona` / `personas[].routes` · F7 ASK shapes as worded with the rewording
+    shown; wave 3 = F8 `decisions[]` + off-platform steps (`by`) + party externals · F11 cited ADRs quoted. Recall pack 1
+    (slots exist) = lifecycle views from `displayStep` · `gateTiers` + `@guard`/`@business` on the role tables and the
+    duplicate match · a glossary keyed by table written against the code · `@covers` on the specs that pin controls;
+    pack 2 = the client persona on the existing `client-portal` surface + persona per OPS screen; pack 3 = qualified
+    decisions. Rejected by consensus: a configuration or environment view now, silent noun-mapping in ASK, reading
+    `displayStep` automatically, model-written summaries, counting role holders. Re-run bar: confidence ≥ 8, zero wrong
+    answers on who approves and what makes Paid, the outsiders driving the business register themselves first.
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -718,7 +761,7 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**Nothing is in flight (2026-10-11 evening).** Echo's PR #84 merged after a second review found its four blocking
+**Nothing is in flight (2026-10-13 night; the outsider demo, item 19, is synthesised and its worklist — Farsight waves F1–F3+F6 → F4·F5·F7 → F8·F11, Recall packs R1–R4 → R5·R6 → R7 — is the next round; see item 19).** Echo's PR #84 merged after a second review found its four blocking
 items fixed (the reviews stay outside the repo); lane S (#99) closed the cleanup pass. Next, in order: (1) a handoff prompt to
 the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
 `farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
