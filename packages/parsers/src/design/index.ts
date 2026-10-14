@@ -137,11 +137,11 @@ export interface DesignApplication { path: string; origin: 'file' | 'config'; re
  * (read here when absent): every file's `design[]`, rebased to the repo, is declared; a manifest declared
  * and also found by name is read once.
  */
-export async function applyDesigns(fragment: GraphFragment, repoRoot: string, options: IngestOptions, workspace?: WorkspaceConfig): Promise<{ applied: DesignApplication[]; errors: string[] }> {
+export async function applyDesigns(fragment: GraphFragment, repoRoot: string, options: IngestOptions, workspace?: WorkspaceConfig): Promise<{ applied: DesignApplication[]; errors: string[]; manifests: ParsedManifest[] }> {
   const ws = workspace ?? loadWorkspaceConfig(repoRoot, options);
   const { manifests, errors } = await discoverManifests(repoRoot, options, (ws.merged.design ?? []) as DesignDeclaration[]);
   const applied: DesignApplication[] = [];
-  if (!manifests.length) return { applied, errors };
+  if (!manifests.length) return { applied, errors, manifests };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
   for (const m of manifests) {
     const source: DesignSource = { repo: fragment.repo, path: m.path, ...(m.name ? { name: m.name } : {}), ...(m.lastModified ? { lastModified: m.lastModified, freshness: m.freshness } : {}) };
@@ -152,7 +152,7 @@ export async function applyDesigns(fragment: GraphFragment, repoRoot: string, op
   titleDocLinks(fragment, repoRoot);
   fragment.meta = { files: (fragment.meta?.files ?? 0) + manifests.length, sourceHash: hash.digest('hex').slice(0, 12) };
   foldJourneys(fragment, manifests, journeysBlocksOf(ws, manifests.map((m) => m.path)));
-  return { applied, errors };
+  return { applied, errors, manifests };
 }
 
 /**

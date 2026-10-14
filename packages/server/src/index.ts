@@ -16,7 +16,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts, gateCard, roleTable, rolesCsv, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
+  counted, journeyTree, configCounts, gateCard, roleTable, rolesCsv, decisionsAnswer, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
   tourOf, ask, askExample,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
@@ -1142,6 +1142,19 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         ...(typeof node.loc.endLine === 'number' ? { endLine: node.loc.endLine } : {}),
         code, ...(sliced && sliced.codeTruncated ? { codeTruncated: true } : {}),
       }));
+    }
+    if ((url === '/api/decisions' || url.startsWith('/api/decisions?')) && req.method === 'GET') {
+      // the decisions the sources declare and the code names (the 2026-10-13 outsider round, F8): every one, the one
+      // `id` names, or the ones on `node` — the team's words quoted, the document's first paragraph quoted, where the
+      // code names each — core decisionsAnswer(), the same fold MCP `decisions` and `farsight decisions` print
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const q = new URL(url, 'http://localhost').searchParams;
+      const g = loadJourneyGraph(graphPath);
+      const opts = { ...(q.get('repo') ? { repo: q.get('repo')! } : {}), ...(q.get('id') ? { id: q.get('id')! } : {}), ...(q.get('node') ? { node: q.get('node')! } : {}) };
+      if (opts.node && !g.index.byId.has(opts.node)) return send(404, JSON.stringify({ error: `no node ${opts.node} in this graph` }));
+      const answer = folded(g.index, 'decisions', `${opts.repo ?? ''}\u0000${opts.id ?? ''}\u0000${opts.node ?? ''}`, () => decisionsAnswer(g.index, g.meta.decisions, opts), 64);
+      if (opts.id && !answer.decisions.length) return send(404, JSON.stringify({ error: `no decision ${opts.id} is declared or named in code` }));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
     }
     if ((url === '/api/gate' || url.startsWith('/api/gate?')) && req.method === 'GET') {
       // one gate answered (swarm-fixes 2026-10-05, finding 4): what it is, the words somebody wrote, what it sits on,

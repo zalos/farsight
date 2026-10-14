@@ -14,6 +14,8 @@ import { applyStores } from './stores.js';
 import { applyProjects, projectOfPath } from './shared/projects.js';
 import { loadWorkspaceConfig, applyWorkspaceConfig, applyWorkspaceRouteGuards, recordConflict } from './shared/config-files.js';
 import { applyLifecycleConfig } from './shared/lifecycle-config.js';
+import { applyDecisions, applyParties } from './decisions.js';
+import type { ParsedManifest } from './design/index.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
@@ -21,6 +23,8 @@ export { applyStores, prismaProviders, springDatasourceJdbc } from './stores.js'
 export { applyProjects, discoverProjects, projectOfPath, projectImports, importSpecifiers, workspaceGlobs } from './shared/projects.js';
 export { readNxProjectGraph, NX_GRAPH_PATHS, NX_GRAPH_MAX_BYTES } from './shared/nx-graph.js';
 export { applyLifecycleConfig } from './shared/lifecycle-config.js';
+export { applyDecisions, applyParties, decisionSites } from './decisions.js';
+export { applyCitedDocs, readDocQuote, headingSlug, docNodeId } from './cited-docs.js';
 export { loadWorkspaceConfig, emptyWorkspaceConfig, applyWorkspaceConfig, applyWorkspaceRouteGuards, journeysConfigFor, rebasePath, CONFIG_FILE } from './shared/config-files.js';
 export type { ConfigFile, WorkspaceConfig, ScopedStoreDecl } from './shared/config-files.js';
 export { javaAdapter, ingestJava } from './java/index.js';
@@ -105,8 +109,13 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
     applyWorkspaceRouteGuards(merged.nodes, merged.edges, workspace);
   }
   // design manifests after the specs: reconciling a screen's operations needs the contracts on the routes
+  // the parties a config declares (`externals[]` with `kind: 'party'`): nodes no code reaches, before the design pass
+  // so a manifest step's `who` finds them
+  applyParties(merged, config.externals);
+  let manifests: ParsedManifest[] = [];
   if (options.design !== false) {
-    const { errors } = await applyDesigns(merged, repoRoot, opts, workspace);
+    const { errors, manifests: read } = await applyDesigns(merged, repoRoot, opts, workspace);
+    manifests = read;
     if (errors.length) merged.specErrors = [...(merged.specErrors ?? []), ...errors];
   }
   // which data store each table lives in: code rules first, the config's `stores` last (stores.ts)
@@ -125,6 +134,10 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   if (Object.keys(storesMeta).length) merged.meta.stores = storesMeta;
   else delete merged.meta.stores;
   if (packagesMeta) merged.meta.packages = packagesMeta;
+  // decisions the manifests and the config declare, joined to the code's DECISION(<id>) comments, and the documents
+  // the flows, the decisions and the team's sentences cite, quoted (decisions.ts, cited-docs.ts) — after the design
+  // pass (its manifests, its screen nodes) and after meta was rebuilt
+  applyDecisions(merged, repoRoot, opts, workspace, manifests);
   // which config files the source holds, what each gave, and what two of them disagreed on (§5.3)
   if (workspace.meta.files.length || workspace.meta.notes.length) merged.meta.config = workspace.meta;
   // tests last: `@covers SCR-07` resolves against design screens and `@covers POST /x`

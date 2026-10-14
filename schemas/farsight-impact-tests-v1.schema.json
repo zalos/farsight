@@ -197,7 +197,7 @@
     },
     "edgeKind": {
       "description": "The verb of the dependency, from the graph. The surface prints this verb and never promotes it to one of consequence.",
-      "enum": ["contains", "imports", "calls", "renders", "http", "publishes", "consumes", "reads", "writes", "validates", "guards", "covers", "tracks"]
+      "enum": ["contains", "imports", "calls", "renders", "http", "publishes", "consumes", "reads", "writes", "validates", "guards", "covers", "tracks", "cites"]
     },
     "tier": {
       "description": "A recorded confidence, or null when the adapter recorded none.",

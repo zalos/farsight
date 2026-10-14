@@ -133,8 +133,13 @@ test('tourOf walks the storyline: a stop per screen (each once) and per hand-off
   const tour = tourOf(index, 'invoice', { metas: meta.journeys })!;
   assert.ok(tour, 'the fixture declares the invoice storyline');
   assert.equal(tour.derived, true);
-  assert.deepEqual(tour.stops.map((s) => `${s.kind}:${s.kind === 'screen' ? s.screen.name : s.move!.status}`),
-    ['screen:New invoice', 'handoff:draft', 'screen:Invoice list', 'handoff:open', 'screen:Discard draft']);
+  // the customer's bank paying the sent invoice is a step the design says is done outside the code: a stop of its own after the move
+  assert.deepEqual(tour.stops.map((s) => `${s.kind}:${s.kind === 'screen' ? s.screen.name : s.kind === 'handoff' ? s.move!.status : s.offPlatform!.by}`),
+    ['screen:New invoice', 'handoff:draft', 'screen:Invoice list', 'handoff:open', 'offPlatform:partner', 'screen:Discard draft']);
+  const off = tour.stops[4]!;
+  assert.equal(off.offPlatform!.party!.name, 'Customer bank');
+  assert.ok(off.clauses.some((c) => c.key === 'tour.off.noTest'), 'no verdict, and why');
+  assert.ok(!off.clauses.some((c) => c.evidence), 'never an evidence word');
   assert.deepEqual(countedProblems(tour.counted.stops, 'stops'), []);
   assert.equal(tour.counted.stops.n, tour.stops.length);
   assert.equal(tour.counted.stops.scope, 'count.scope.storyline');
@@ -154,14 +159,14 @@ test('tourOf walks the storyline: a stop per screen (each once) and per hand-off
   assert.ok(open.clauses.some((c) => c.warn && c.key === 'tour.handoff.unchecked'));
   assert.equal(open.move!.checked, false);
   assert.ok(open.clauses.some((c) => c.role === 'need' && c.evidence), 'each precondition carries the gate card\'s verdict');
-  const after = tour.stops[4]!.clauses.find((c) => c.key === 'tour.ref.after')!;
+  const after = tour.stops[5]!.clauses.find((c) => c.key === 'tour.ref.after')!;
   assert.equal(after.refers, 4);
   assert.match(after.text, /\(stop 4\)/);
   // the business register prints the persona's word for a status
   assert.equal(open.title.biz, 'The invoice becomes Sent');
   assert.equal(open.title.text, 'The invoice becomes open');
   // a designed, not-built screen has no verdict
-  assert.ok(tour.stops[4]!.clauses.some((c) => c.key === 'tour.screen.notBuilt'));
+  assert.ok(tour.stops[5]!.clauses.some((c) => c.key === 'tour.screen.notBuilt'));
   // a journey alone walks too, scoped to the journey
   const one = tourOf(index, 'invoice-app::flow::new-invoice', { metas: meta.journeys })!;
   assert.equal(one.target.kind, 'flow');
@@ -275,7 +280,7 @@ test('GET /api/tour and GET /api/ask serve the same folds', async () => {
   const t = await get('/api/tour?storyline=invoice');
   assert.equal(t.status, 200);
   assert.equal(t.body.tour.derived, true);
-  assert.equal(t.body.tour.stops.length, 5);
+  assert.equal(t.body.tour.stops.length, 6);
   assert.equal((await get('/api/tour?flow=invoice-app::flow::new-invoice')).body.tour.target.kind, 'flow');
   assert.equal((await get('/api/tour?storyline=nope')).status, 404);
   assert.equal((await get('/api/tour')).status, 400);

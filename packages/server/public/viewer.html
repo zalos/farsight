@@ -708,7 +708,7 @@
   /* the freshness sentence (lib/freshness.js): stale with both sides, current with its sync, no source digest */
   .fresh{color:var(--dim);font-size:10px}
   .fresh.fresh-stale{color:var(--warn,#E8A13C)}
-  .fresh.fresh-current{color:var(--ok,#6FCF8E)}
+  .fresh.fresh-current{color:var(--ok)}
   .tst-card .fresh{display:block;font-size:11px;margin:4px 0}
   .jrn-count .jrn-e2e{margin-left:0}
   .jrn-count .jrn-e2e.stale{color:var(--amber);border-color:rgba(240,180,78,.45)}
@@ -2766,7 +2766,7 @@
   .ask-box .ask-q:focus{outline:1px solid var(--accent);border-color:var(--accent)}
   .ask-card{border:1px solid var(--line);border-radius:5px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;line-height:1.4;overflow-wrap:anywhere}
   .ask-chips{display:flex;gap:6px}
-  .ask-derived,.ask-phrased{font-family:var(--hud);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--ok,#6FCF8E);color:var(--ok,#6FCF8E);border-radius:3px;padding:0 5px}
+  .ask-derived,.ask-phrased{font-family:var(--hud);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;border:1px solid var(--ok);color:var(--ok);border-radius:3px;padding:0 5px}
   .ask-phrased{border-color:var(--warn,#E8A13C);color:var(--warn,#E8A13C)}
   .ask-lead{margin:0}
   .ask-lead.ask-read{font-style:italic;color:var(--muted);border-left:2px solid var(--accent);padding-left:8px;margin-bottom:4px}
@@ -3207,6 +3207,33 @@
   .ln-legend .sw{display:inline-block;width:20px;height:0;border-top:1.5px solid var(--tbl)}
   .ln-legend .sw.seen{border-top-style:dashed}
   .ln-legend .sw.planned{height:9px;border:1px dashed var(--warn);border-radius:2px}
+  /* work done outside the code (lib/parties.js): dotted, never the amber of designed-not-built; a party's lane in the ink of no code */
+  .ln-legend .sw.off{height:9px;border:1px dotted var(--muted);border-radius:2px}
+  .ln-stage.off{border:1.5px dotted var(--muted);background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--line) 18%,transparent) 6px 7px),var(--ground);cursor:default}
+  /* the name keeps the street card's one line (its whole words are in the card's tip); the sub-line may wrap */
+  .ln-stage.off .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ln-stage.off .map-step.off{background:none;border:1px dotted var(--muted)}
+  .map-chip.k-off{border:1px dotted var(--muted);color:var(--muted)}
+  .map-chip.k-none{color:var(--muted);border-color:var(--line-soft)}
+  .ln-lane.party{background:repeating-linear-gradient(135deg,transparent 0 10px,color-mix(in srgb,var(--line) 10%,transparent) 10px 11px)}
+  .ln-lane.party .ln-headbox{border-left:3px dotted var(--muted)}
+  /* a decision the team made or left open (lib/decisions.js): a chip, and its card in a pinned tip */
+  .dec-chips{display:inline-flex;flex-wrap:wrap;gap:4px;margin:2px 0}
+  .dec-chip{display:inline-flex;align-items:center;gap:4px;max-width:100%;font:inherit;font-size:11px;line-height:16px;padding:0 7px;border-radius:9px;cursor:pointer;background:transparent;border:1px solid var(--line);color:var(--ink);white-space:normal;text-align:left}
+  .dec-chip.s-open{border-color:var(--warn);color:var(--warn)}
+  .dec-chip.s-decided{border-color:var(--ok);color:var(--ok)}
+  .dec-chip .sym{width:11px;height:11px;flex:none}
+  .dec-card{display:flex;flex-direction:column;gap:6px;max-width:420px}
+  .dec-head{display:flex;align-items:center;gap:5px}
+  .dec-title{font-size:13px;line-height:1.35}
+  .dec-meta{display:flex;flex-wrap:wrap;gap:8px;font-size:11px}
+  .dec-state.s-open{color:var(--warn)}
+  .dec-state.s-decided{color:var(--ok)}
+  .dec-q{margin:2px 0 0;padding:2px 0 2px 8px;border-left:2px solid var(--line);font-size:12px;line-height:1.4;color:var(--ink)}
+  .dec-from,.dec-cut{font-size:10.5px;color:var(--muted)}
+  .dec-site{font-size:11px;margin-top:3px}
+  .dec-said{color:var(--muted);font-style:italic}
+  .gc .dec-card{max-width:none}
   .ln-legend .sw.branch{border-top:1.5px dashed var(--warn)}
   .ln-legend .sw.needs{height:9px;border:1px solid var(--tbl);border-radius:2px;background:color-mix(in srgb,var(--tbl) 12%,transparent)}
   /* ── the release readiness brief (#/readiness/<storyline>, surfaces/readiness.js) — a light document sheet ── */

@@ -47,6 +47,19 @@
       ]
     }
   ],
+  "decisions": [
+    {
+      "id": "D1",
+      "title": "Does an invoice above a limit need a second approver?",
+      "state": "open",
+      "owner": "Operations lead",
+      "summary": "One person with the billing admin scope approves any invoice today; a second approver above a limit is asked for and not decided.",
+      "doc": "docs/decisions/0001-approval-limits.md",
+      "affects": [
+        "INV-01"
+      ]
+    }
+  ],
   "screens": [
     {
       "id": "INV-01",
@@ -61,7 +74,16 @@
         "updateInvoice"
       ],
       "phase": "1",
-      "description": "Every invoice, newest first, with its status and a way into the draft editor."
+      "description": "Every invoice, newest first, with its status and a way into the draft editor.",
+      "steps": [
+        {
+          "id": "INV-01.1",
+          "name": "The customer pays the sent invoice by bank transfer",
+          "by": "partner",
+          "who": "Customer bank",
+          "where": "outside the app, by bank transfer"
+        }
+      ]
     },
     {
       "id": "INV-02",
@@ -139,7 +161,8 @@
         "INV-03"
       ],
       "docs": [
-        "docs/design/flows.md"
+        "docs/design/flows.md",
+        "docs/decisions/0001-approval-limits.md"
       ],
       "operations": [
         "listInvoices",

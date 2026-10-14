@@ -134,12 +134,12 @@ test('trace stops at a package instead of crossing it as a hub; search leaves mo
   assert.equal(search(index, 'date-fns')[0]!.id, 'app::package::date-fns', 'search matches package names');
 });
 
-test('farsight-diff v1: the nodeKind enum grew by package, additively', () => {
+test('farsight-diff v1: the nodeKind enum grew by package, then by doc, additively', () => {
   const s = schema('farsight-diff-v1.schema.json');
   assert.deepEqual(s.$defs.nodeKind.enum, [
     'repo', 'module', 'file', 'class', 'function', 'component', 'page',
     'route', 'table', 'queue', 'rule', 'guard', 'flag', 'external',
-    'api', 'design', 'flow', 'test', 'unknown', 'work', 'package',
+    'api', 'design', 'flow', 'test', 'unknown', 'work', 'package', 'doc',
   ]);
   assert.deepEqual(validate('package', s.$defs.nodeKind), []);
   assert.ok(validate('dependency', s.$defs.nodeKind).length > 0, 'the enumeration is still closed');

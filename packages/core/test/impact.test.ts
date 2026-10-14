@@ -186,7 +186,7 @@ test('the envelope validates against its schema, and the enums cannot drift from
   const diffTiers = DIFF_SCHEMA().$defs.confidence.enum.filter((t: string) => t !== 'resolved');
   assert.deepEqual(schema.$defs.tier.enum, [...diffTiers, null]);
   assert.deepEqual(schema.$defs.edgeKind.enum, [
-    'contains', 'imports', 'calls', 'renders', 'http', 'publishes', 'consumes', 'reads', 'writes', 'validates', 'guards', 'covers', 'tracks',
+    'contains', 'imports', 'calls', 'renders', 'http', 'publishes', 'consumes', 'reads', 'writes', 'validates', 'guards', 'covers', 'tracks', 'cites',
   ]);
 });
 

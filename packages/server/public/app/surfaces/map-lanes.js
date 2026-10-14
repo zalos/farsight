@@ -18,6 +18,7 @@ import { lifecycleStripHtml } from '../lib/lifecycle-strip.js';
 import { pickView } from '../lib/lifecycle-model.js';
 import { LANE_K } from '../lib/map-lanes-model.js';
 import { storeShownName } from '../lib/map-model.js';
+import { offPlatformStageHtml, partyLaneHeadHtml } from '../lib/parties.js';
 
 const biz = () => currentLens() === 'business';
 const fill = (key, vars) => Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
@@ -230,6 +231,7 @@ function legendHtml(m) {
     + (has('seen') ? row('seen', 'lanes.legend.seen') : '')
     + (m.stages.some((s) => s.state === 'planned') ? row('planned', 'lanes.legend.notBuilt') : '')
     + (has('branch') ? row('branch', 'lanes.legend.branch') : '')
+    + (m.stages.some((s) => s.off) ? row('off', 'lanes.legend.offPlatform') : '')
     + (m.needs ? row('needs', 'lanes.legend.needs') : '')
     + '</div>';
 }
@@ -242,6 +244,7 @@ function footerHtml(m) {
     countedHtml(c.screens, API, { cls: 'ln-n' }),
     countedHtml(c.built, API, { cls: 'ln-n' }),
     countedHtml(c.branches, '/api/journeys', { cls: 'ln-n' }),
+    c.offPlatform ? countedHtml(c.offPlatform, API, { cls: 'ln-n' }) : '',
   ].filter(Boolean);
   const reading = m.ready ? '' : '<span class="rd"' + tipAttrs({ key: 'lanes.footer.reading', noFocus: true }) + '>' + esc(fill('lanes.footer.reading', { n: m.read, m: m.of })) + '</span>';
   const notes = m.notes.length
@@ -276,7 +279,9 @@ export function lanesHtml(m, G, ctx = {}) {
   let html = '';
   // the board's header: the storyline, the LANES tag, how many lanes, the evidence of its journeys, its sentence
   const nLanes = { n: m.lanes.length, unit: 'lanes.count.lanes', bizUnit: 'lanes.count.lanes', scope: m.single ? 'journey.scopeAll' : 'count.scope.storyline', source: 'laneLayout → lanes',
-    breakdown: [{ key: 'lanes.part.personaLanes', n: m.lanes.filter((l) => l.kind === 'persona').length }, { key: 'lanes.part.storeLanes', n: m.lanes.filter((l) => l.kind === 'store').length }] };
+    breakdown: [{ key: 'lanes.part.personaLanes', n: m.lanes.filter((l) => l.kind === 'persona').length },
+      ...(m.lanes.some((l) => l.kind === 'party') ? [{ key: 'lanes.part.partyLanes', n: m.lanes.filter((l) => l.kind === 'party').length }] : []),
+      { key: 'lanes.part.storeLanes', n: m.lanes.filter((l) => l.kind === 'store').length }] };
   html += '<div class="ln-top" style="left:' + G.geom.margin + 'px;top:' + (G.geom.margin / 2) + 'px;width:' + (G.size.w - G.geom.margin * 2) + 'px">'
     + '<span class="nm">' + esc(m.storyline.name) + '</span>'
     + '<span class="tag"' + tipAttrs({ key: 'lanes.tag', noFocus: true }) + '>' + esc(t('lanes.tag')) + '</span>'
@@ -291,11 +296,11 @@ export function lanesHtml(m, G, ctx = {}) {
     const l = m.lanes.find((x) => x.id === lr.lane);
     if (!l) continue;
     html += '<div class="ln-lane ' + l.kind + '" data-lane="' + esc(l.id) + '" data-segment="' + lr.segment + '" style="left:' + lr.x + 'px;top:' + lr.y + 'px;width:' + lr.w + 'px;height:' + lr.h + 'px">'
-      + '<div class="ln-headbox" style="width:' + G.geom.head + 'px">' + laneHeadHtml(l, m.single) + '</div>' + emptyHtml(l, lr, m, G) + '</div>';
+      + '<div class="ln-headbox" style="width:' + G.geom.head + 'px">' + (l.kind === 'party' ? partyLaneHeadHtml(l) : laneHeadHtml(l, m.single)) + '</div>' + emptyHtml(l, lr, m, G) + '</div>';
   }
   html += '<svg class="ln-arrows" aria-hidden="true" width="' + G.size.w + '" height="' + G.size.h + '">' + arrowsSvg(m, G, labels) + '</svg>';
   const say = ctx.sentence || ((x) => x);
-  for (const st of m.stages) { const r = G.rects.get(st.key); if (r) html += stageHtml(st, r, m, say); }
+  for (const st of m.stages) { const r = G.rects.get(st.key); if (r) html += st.off ? offPlatformStageHtml(st, r) : stageHtml(st, r, m, say); }
   for (const p of m.pills) { const r = G.rects.get(p.key); const l = m.lanes.find((x) => x.id === p.lane); if (r) html += pillHtml({ ...p, isStore: !!(l && l.name === p.record.name) }, r, m, say); }
   for (const lb of labels) {
     html += '<div class="ln-label ' + lb.cls + '" style="left:' + lb.x + 'px;top:' + lb.y + 'px' + (lb.max ? ';max-width:' + lb.max + 'px' : '') + '">' + esc(lb.text) + '</div>';

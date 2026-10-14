@@ -27,6 +27,7 @@ const t = (key: string, reg: Register = 'professional'): string => tr(key, reg);
 import { stepCoverage, segmentNotBuilt, type TestVerdict } from './coverage.js';
 import { gateCard, gateNameParts } from './gates.js';
 import { lifecycleViews, type LifecyclePersona } from './lifecycle.js';
+import type { OffPlatformStep } from './decisions.js';
 
 /** One clause of a stop: a template, its fills, the sentence in each lens, and what it cites. */
 export interface TourClause {
@@ -60,7 +61,10 @@ export interface TourClause {
 export interface TourStop {
   /** 1-based */
   n: number;
-  kind: 'screen' | 'handoff';
+  /** `offPlatform`: something the design says a person, a partner or another system does here outside the code */
+  kind: 'screen' | 'handoff' | 'offPlatform';
+  /** an `offPlatform` stop's declared step: who does it and where, and the party it names */
+  offPlatform?: OffPlatformStep;
   title: { text: string; biz: string };
   sub: { text: string; biz: string };
   journey: { id: string; name: string; step?: number; branch?: { of: string; ofName: string; when: string } };
@@ -327,6 +331,7 @@ export function tourOf(
   const notes: string[] = [];
   const seenScreen = new Set<string>();
   const seenMove = new Set<string>();
+  const seenOff = new Set<string>();
   /** a record's last writer stop: the screen that wrote it, for a later stop that reads it */
   const wroteAt = new Map<string, { stop: number; screen: string; name: string }>();
   let firstPersona: LifecyclePersona | undefined;
@@ -357,7 +362,8 @@ export function tourOf(
       if (!seenScreen.has(key)) {
         seenScreen.add(key);
         const cl: TourClause[] = [];
-        const before = stops[stops.length - 1];
+        // a stop for work done outside the code is not a move: the screen is still read after the move before it
+        const before = [...stops].reverse().find((x) => x.kind !== 'offPlatform');
         // a screen right after a hand-off is read in its place: after the move
         if (before?.kind === 'handoff' && before.move) {
           const act = before.action;
@@ -491,6 +497,24 @@ export function tourOf(
           stops.push(stop);
         }
       }
+      // what the design says somebody does on this screen outside the code: a stop of its own, never a gate or a
+      // verdict — the walk says who does it and that no test can reach it (the 2026-10-13 outsider round, F8)
+      for (const st of sum.segments[sg.index]?.offPlatform ?? []) {
+        if (seenOff.has(`${st.screen}|${st.id}`)) continue;
+        seenOff.add(`${st.screen}|${st.id}`);
+        const who = st.party?.name ?? st.who ?? t(`offPlatform.by.${st.by}`);
+        const ocl: TourClause[] = [
+          clause('who', st.where ? 'tour.off.whoWhere' : 'tour.off.who', { who, where: st.where ?? '', screen: sc.name }, [sc.id, st.party?.id]),
+          ...(st.party ? [clause('who', st.party.role ? 'tour.off.partyRole' : 'tour.off.party', { party: st.party.name, role: bare(st.party.role ?? '') }, [st.party.id])] : []),
+          clause('verdict', 'tour.off.noTest', {}, [sc.id]),
+        ];
+        const off = makeStop(stops.length + 1, 'offPlatform',
+          { text: st.name, biz: st.name },
+          { text: fill('tour.off.sub', { screen: sc.name }), biz: fill('tour.off.sub', { screen: sc.name }) },
+          journeyRef, screenRef, persona, ocl, { flowId: leg.row.nodeId, screen: ordinal });
+        off.offPlatform = st;
+        stops.push(off);
+      }
     });
   }
   stops.forEach((s, i) => { s.prev = i ? i : null; s.next = i < stops.length - 1 ? i + 2 : null; });
@@ -498,6 +522,7 @@ export function tourOf(
   const nodes: Record<string, TourNodeRef> = {};
   for (const s of stops) for (const id of s.referenced) nodes[id] ??= nodeRef(index, id);
   const screensN = stops.filter((s) => s.kind === 'screen').length;
+  const offN = stops.filter((s) => s.kind === 'offPlatform').length;
   const scope = head.kind === 'storyline' ? 'count.scope.storyline' as const : 'journey.scopeAll' as const;
   return {
     target: head,
@@ -507,7 +532,10 @@ export function tourOf(
     counted: {
       stops: counted(stops.length, 'count.unit.tourStops', scope, `${SRC} → stops (screens each once, then a stop per move)`, {
         bizUnit: 'count.unit.tourStops',
-        breakdown: [{ key: 'count.part.tourScreens', n: screensN }, { key: 'count.part.tourHandoffs', n: stops.length - screensN }],
+        breakdown: [
+          { key: 'count.part.tourScreens', n: screensN }, { key: 'count.part.tourHandoffs', n: stops.length - screensN - offN },
+          ...(offN ? [{ key: 'count.part.tourOffPlatform', n: offN }] : []),
+        ],
       }),
     },
     derived: true,
