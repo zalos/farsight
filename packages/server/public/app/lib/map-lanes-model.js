@@ -264,7 +264,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   // its word and its second line, and the lanes it names come first in its order
   // the persona lanes the stages sit in, and the lane of a journey with no screen to draw
   const staged = new Set(stages.map((st) => st.flowId));
-  const usedPersonas = [...new Set([...stages.map((st) => st.lane), ...[...laneOfJourney].filter(([id]) => !staged.has(id)).map(([, l]) => l)])].map((x) => x.slice(2));
+  const usedPersonas = [...new Set([...stages.filter((st) => !st.off).map((st) => st.lane), ...[...laneOfJourney].filter(([id]) => !staged.has(id)).map(([, l]) => l)])].map((x) => x.slice(2));
   const personaIndex = (p) => { const i = personaOrder.indexOf(p); return i < 0 ? personaOrder.length : i; };
   usedPersonas.sort((a, b) => personaIndex(a) - personaIndex(b));
   const lanes = [];
