@@ -138,7 +138,7 @@ test('the role × action table: one row per guarded action, the roles from the c
   assert.equal(t.counted.actions.n, 3);
   assert.equal(t.counted.roles.n, 3);
   assert.equal(vendor.verdict.word.cls, 'reached', 'a static reach is not a verdict: no status');
-  assert.equal(t.counted.passed.n, 1, 'only an observed passed run proves an action');
+  assert.equal(t.counted.passed.n, 2, 'each case by its own last run: both actions are reached by a case that passed');
   for (const c of Object.values(t.counted)) assert.deepEqual(countedProblems(c), []);
 });
 

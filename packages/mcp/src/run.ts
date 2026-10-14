@@ -43,6 +43,7 @@ import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
 import { registerAffectedTools } from './affected-tools.js';
 import { registerWalkTools } from './walk-tools.js';
+import { registerRolesTools } from './roles-tools.js';
 import { cutToBudget, budgetFor, shortHeading, MIN_BUDGET, DEFAULT_BUDGET, type LeftOutPart } from './budget.js';
 import { resolveTier, inTier, tierOf, tierLine, CORE_TOOLS, type ToolTier } from './tiers.js';
 import { readAgentSettings, contextBlock, sinceOf } from './context.js';
@@ -556,6 +557,8 @@ const journeysTools = registerJourneysTools({ server, index: () => index, meta: 
 registerAffectedTools({ server, workspace: dirname(graphPath), index: () => index, meta: () => store.meta, roots: () => store.roots });
 // walk me through it, and ask — the tour (all tier) and a question answered from the graph (core tier) (walk-tools.ts)
 registerWalkTools({ server, index: () => index, meta: () => store.meta });
+// who may do what — the role × action table (core tier, roles-tools.ts)
+registerRolesTools({ server, index: () => index });
 
 server.registerTool('graph_overview', {
   title: 'Graph overview',

@@ -24,8 +24,8 @@ export const ROLES_STRINGS: Record<string, StringEntry> = {
   'count.unit.roles': same('{n} roles',
     'The distinct roles the code names in any action’s list. Who holds each role is data the code does not carry.'),
   'count.unit.rolesOne': one('1 role', 'count.unit.roles'),
-  'count.unit.roleActionsPassed': same('{n} of {m} proven by a passed test',
-    'Of the actions behind a role check, those whose tests’ one verdict is passed: a case that reaches the action ran and passed on its last run.'),
+  'count.unit.roleActionsPassed': same('{n} of {m} reached by a case whose last run passed',
+    'Of the actions behind a role check, those a test case reaches whose own last run passed. Each case is read by its own run; whether the run also measured the code is the verdict beside it.'),
 
   // ── the page and the table ─────────────────────────────────────────────────
   'roles.title': { hud: 'Who may do what', professional: 'Who may do what',

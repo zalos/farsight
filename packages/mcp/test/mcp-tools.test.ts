@@ -50,6 +50,8 @@ const TOOLS = [
   'gate',
   'graph_changes', 'graph_overview',
   'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
+  // who may do what (outsider round 2026-10-13, F4)
+  'roles',
   'search_graph', 'stories', 'storyline_diff', 'test_coverage', 'trace_flow',
   // in both tiers: the menu, and what a budget left out (round 2026-10-10, proposal 9)
   'expand', 'tools',
@@ -190,6 +192,16 @@ describe('tour and ask — assembled from the graph, every line cited (round 202
     const doc = JSON.parse(await call('tour', { target: 'invoice', json: true }));
     assert.equal(doc.derived, true);
     assert.equal(doc.counted.stops.n, doc.stops.length);
+  });
+
+  test('roles answers from the guards edges: the whole table, or one action and nothing else', async () => {
+    const all = await call('roles');
+    assert.match(all, /^who may do what: /);
+    const doc = JSON.parse(await call('roles', { json: true }));
+    assert.equal(doc.counted.actions.n, doc.rows.length);
+    assert.equal(doc.counted.actions.scope, 'count.scope.workspace');
+    const none = await call('roles', { action: 'no-such-action-anywhere' });
+    assert.match(none, /no action behind a role check matches/);
   });
 
   test('ask answers the four shapes from the graph and says what it understands otherwise', async () => {

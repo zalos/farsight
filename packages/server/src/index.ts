@@ -16,7 +16,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts, gateCard, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
+  counted, journeyTree, configCounts, gateCard, roleTable, rolesCsv, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
   tourOf, ask, askExample,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
@@ -1151,7 +1151,21 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const g = loadJourneyGraph(graphPath);
       const card = folded(g.index, 'gate', id, () => gateCard(g.index, id) ?? null, 64);
       if (!card) return send(404, JSON.stringify({ error: g.index.byId.has(id) ? `${id} is not a gate or a rule` : `no node ${id} in this graph` }));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...card }));
+      // a role guard's card says who may do what at each action it guards (F4)
+      const roles = card.gate.gateKind === 'guard' ? folded(g.index, 'roles', JSON.stringify({ guard: id }), () => roleTable(g.index, { guard: id }), 16) : null;
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...card, ...(roles && roles.rows.length ? { roles } : {}) }));
+    }
+    if ((url === '/api/roles' || url.startsWith('/api/roles?')) && req.method === 'GET') {
+      // who may do what (outsider round 2026-10-13, F4): every action a role guard stands in front of, the roles the
+      // code lists for it, where the list was read from, the journeys that reach it and the tests that prove it —
+      // core roleTable(), the same fold the MCP `roles` tool and `farsight roles` print. `format=csv` for a sheet
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const q = { repo: u.searchParams.get('repo') || undefined, role: u.searchParams.get('role') || undefined, action: u.searchParams.get('action') || undefined, guard: u.searchParams.get('guard') || undefined };
+      const g = loadJourneyGraph(graphPath);
+      const table = folded(g.index, 'roles', JSON.stringify(q), () => roleTable(g.index, q), 16);
+      if (u.searchParams.get('format') === 'csv') return send(200, rolesCsv(table), 'text/csv; charset=utf-8');
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...table }));
     }
     // ── Tests surface (docs/proposals/tests-surface.md §3.4) ─────────────
     if (url.startsWith('/api/tests') && req.method === 'GET') {
