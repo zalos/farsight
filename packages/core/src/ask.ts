@@ -1,5 +1,5 @@
 /**
- * Ask, with evidence (round 2026-10-10, proposal 8): **a small grammar, not a model**. Four shapes of question are
+ * Ask, with evidence (round 2026-10-10, proposal 8): **a small grammar, not a model**. Seven shapes of question are
  * recognised by their words, in either register, and each is answered from the index:
  *
  *  - `set` — *where is <record> set to <status>, and what must be true first*: the lifecycle's writer with its
@@ -10,10 +10,23 @@
  *  - `guards` — *what guards <action | call | screen>*: the gates and rules on it, by tier;
  *  - `path` — *how does <A> reach <B>*: `pathBetween()`, the shortest chain of calls, requests, renders, reads
  *    and writes, hop by hop — or *no path the graph knows*;
- *  - `proves` — *what proves <screen | action | gate>*: the cases with their own last runs under the one verdict.
+ *  - `proves` — *what proves <screen | action | gate>*: the cases with their own last runs under the one verdict;
+ *  - `who` — *who may <action>* (outsider round 2026-10-13, F7): the roles the code hands the role check on the
+ *    action's walk (`guards` edges' `meta.requires`, or a literal argument), each with the check's verdict, and the
+ *    other checks on the same action; *which roles can do which actions* is the role × action table;
+ *  - `configure` — *can <thing> be configured, and how*: the settings the app is started with (config checks), the
+ *    settings files the code reads, screens that set something up and the switches in the code (`meta.when.flag`),
+ *    whose words meet the thing's — else the absence word, scoped to the question;
+ *  - `happens` — *what happens to <record> once it is <status>*: the moves the code makes out of it, who makes each
+ *    and where, and the screens that reach the record; or what an action does to the records it writes.
  *
- * A question in no shape is answered with the four shapes (the catalog's words), never a guess. Every line is a
- * catalog template (`strings-ask.ts`) carrying the node ids it cites, and every answer says `derived: true`.
+ * A question in no shape as worded is **read as its nearest shape** by `readAs()` — a closed list of rules, each a
+ * template over the question's own words and the graph's own names (a verb read as the status it names, *approve* →
+ * approved, said so) — and the answer prints that reading first (*I read that as: …*), so nothing is mapped silently
+ * (six of the eight reviewers of the outsider round rejected silent noun-mapping). A question no rule reads is
+ * answered with the shapes and *did you mean*, never a guess. Every line is a catalog template (`strings-ask.ts`)
+ * carrying the node ids it cites, and every answer says `derived: true`. The questions the outsiders asked are a
+ * corpus in CI (`packages/core/test/ask-corpus.test.ts`).
  *
  * **The one extension point for a model**: `opts.phrase(answer)` may return the answer in other words; the answer
  * then carries `phrased: { text, by: 'model' }` beside — never instead of — its cited lines, and every surface
@@ -363,7 +376,7 @@ export function askShapeOf(q: string): { shape: AskShape; a?: string; b?: string
   if ((m = /^(?:can|how\s+(?:is|are|can))\s+(.+?)\s+(?:be\s+)?configured(?:\b.*)?$/i.exec(s))) return { shape: 'configure', a: m[1]! };
   if ((m = /^how\s+(?:do|can|does)\s+(?:you|we|i|one)\s+configure\s+(.+)$/i.exec(s))) return { shape: 'configure', a: m[1]! };
   if (/^what\s+can\s+be\s+configured\b/i.test(s)) return { shape: 'configure', a: '' };
-  if (/\b(?:set|sets|moved?|moves|becomes?|made|makes|turn(?:s|ed)?|changed?|goes|marked|put)\b/.test(l) && /\b(?:where|which|what|who|when|how)\b/.test(l)) return { shape: 'set', a: s };
+  if (/\b(?:set|sets|moved?|moves|becomes?|made|makes|turn(?:s|ed)?|changed?|goes|marks?|marked|put)\b/.test(l) && /\b(?:where|which|what|who|when|how)\b/.test(l)) return { shape: 'set', a: s };
   if ((m = /\b(?:how\s+(?:does|do|can|did)|does)\s+(.+?)\s+(?:reach(?:es)?|get\s+to|lead\s+to|call|calls|touch(?:es)?|connect\s+to|end\s+up\s+(?:in|at)|write\s+to|read)\s+(.+)$/i.exec(s))) return { shape: 'path', a: m[1]!, b: m[2]! };
   if ((m = /\b(?:path|route|way|chain)\s+from\s+(.+?)\s+to\s+(.+)$/i.exec(s))) return { shape: 'path', a: m[1]!, b: m[2]! };
   if ((m = /\bwhat\s+(?:proves|tests|verifies|covers)\s+(.+)$/i.exec(s))) return { shape: 'proves', a: m[1]! };
@@ -958,12 +971,21 @@ function answerWho(index: GraphIndex, question: string, term: string, opts: { re
   // *which roles can do which actions*: the whole table, each action with the roles its role check is handed
   if ((/\b(?:which|what|each|every|all|any)\b/i.test(term) && /\b(?:actions?|things?|operations?)\b/i.test(term)) || /^do\s+what$/i.test(term.trim())) return whoTable(index, a, opts.repo);
   const R = resolveAction(index, term, opts.repo);
-  const RT = R.best ? undefined : resolveTermAll(index, term, ['action', 'route', 'screen', 'function'], opts.repo);
-  const c = R.best ?? RT?.best;
+  // no action by its words: a verb that names a status (*open an invoice* → open) is the action that writes it
+  let viaStatus: Cand | undefined;
+  if (!R.best) {
+    const vr = verbRecord(index, term, opts.repo, { named: true });
+    const tr = vr?.status ? vr.table.lifecycle!.transitions.find((x) => x.to === vr.status) : undefined;
+    const w = tr ? index.byId.get(tr.by) : undefined;
+    if (w) viaStatus = { id: w.id, kind: w.kind, names: [humanizeName(w.name.split(': ')[0] ?? w.name)] };
+  }
+  const RT = R.best || viaStatus ? undefined : resolveTermAll(index, term, ['action', 'route', 'screen', 'function'], opts.repo);
+  // a record is not an action: *who may* never answers with the checks on every call that touches a table
+  const c = R.best ?? viaStatus ?? (RT?.best && RT.best.kind !== 'table' ? RT.best : undefined);
   if (!c) return notFound(index, a, term, opts.repo);
   const name = actionName(c, index);
   a.resolved.push({ term, id: c.id, name });
-  const picked = pickedLine(index, c, R.best ? R.others : RT!.others);
+  const picked = pickedLine(index, c, R.best ? R.others : RT?.others ?? []);
   if (picked) a.lead.push(picked);
   const rows = rolesOn(index, partsOf(index, c));
   const roles = [...new Set(rows.flatMap((r) => r.roles))];

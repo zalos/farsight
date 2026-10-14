@@ -32,7 +32,7 @@
     { "from": "customer 4", "q": "Can a person with only the reviewer role press \"Approve\" on an invoice, or \"Approve as a new vendor\"?", "shape": "who", "reworded": true },
     { "from": "customer 5", "q": "Four-eyes: does it apply to invoices the subcontractor uploads, or only to ones my office keys in?", "outside": "a question about a check's scope across records: answered by the check's gate card, not a shape" },
     { "from": "customer 6", "q": "Are there any amount-based approval limits or a second approver above a threshold?", "shape": "guards", "reworded": true },
-    { "from": "customer 7", "q": "Duplicate invoices: what stops the same invoice being submitted twice — same invoice number, same amount, same vendor, a resubmission under a second vendor account?", "shape": "guards", "reworded": true },
+    { "from": "customer 7", "q": "Duplicate invoices: what stops the same invoice being submitted twice — same invoice number, same amount, same vendor, a resubmission under a second vendor account?", "shape": "guards" },
     { "from": "customer 8", "q": "Bad path — wrong amount: if my reviewer thinks the amount is wrong, what can they do today (edit it themselves? send it back?) and what does the subcontractor see, given the \"action needed\" page isn't built?", "outside": "a what-can-I-do question over a screen: the screen's actions on the Map answer it, not a shape" },
     { "from": "customer 9", "q": "Bad path — rejection: can an invoice be rejected/denied at all today?", "shape": "set", "reworded": true },
     { "from": "customer 10", "q": "When does money actually leave, and who moves it?", "outside": "money leaving through a partner outside the platform is not in the code" },

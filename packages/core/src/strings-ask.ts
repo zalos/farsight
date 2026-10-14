@@ -1,6 +1,6 @@
 // Ask's words (round 2026-10-10, proposal 8: ask, with evidence). Spread into STRINGS in strings.ts.
 //
-// Ask is a small grammar, not a model: four shapes of question, recognised by their words in either register, each
+// Ask is a small grammar, not a model: seven shapes of question, recognised by their words in either register, each
 // answered from the graph's index. Every answer line is one of these templates filled with names the graph holds,
 // and each line carries the node it cites. A line that names code has an `ask.biz.*` twin with the code left out.
 import type { StringEntry } from './strings.js';

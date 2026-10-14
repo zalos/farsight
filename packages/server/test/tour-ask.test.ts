@@ -189,7 +189,7 @@ test('pathBetween: the shortest chain the graph knows, hop by hop, or none', () 
 });
 
 test('ask: the four shapes, from the graph, every line cited — and the shapes again for anything else', () => {
-  assert.deepEqual([...ASK_SHAPES], ['set', 'guards', 'path', 'proves']);
+  assert.deepEqual([...ASK_SHAPES], ['set', 'guards', 'path', 'proves', 'who', 'configure', 'happens']);
   const all: [string, TourClause][] = [];
   const lines = (a: ReturnType<typeof ask>) => [...a.lead, ...a.sections.flatMap((s) => s.rows)];
 
@@ -244,10 +244,15 @@ test('ask: the four shapes, from the graph, every line cited — and the shapes 
 
 test('ask, swarm round 3: did you mean from the question’s nouns, the part it picked named beside the others, the example from this graph', () => {
   // a plain question in no shape: the nearest shape filled with its nouns, a status this graph declares
-  const who = ask(index, 'who opens an invoice', { metas: meta.journeys });
+  const who = ask(index, 'opening invoices quickly', { metas: meta.journeys });
   assert.equal(who.shape, 'unknown');
   assert.equal(who.suggest![0], 'where is invoice set to open, and what must be true first?');
   assert.match(askLines(who).join('\n'), /Did you mean/);
+  // outsider round (F7): a question in a shape's other words is read as that shape, and the reading printed first
+  const opens = ask(index, 'who opens an invoice', { metas: meta.journeys });
+  assert.equal(opens.shape, 'who');
+  assert.equal(opens.reworded, 'who may open an invoice?');
+  assert.match(askLines(opens).join('\n'), /I read that as: “who may open an invoice\?”[\s\S]*billing:admin/);
   // every suggestion is a question Ask answers
   for (const q of who.suggest!) assert.notEqual(ask(index, q, { metas: meta.journeys }).shape, 'unknown', q);
   // the record-and-status question in the guards shape is the set shape's question, never an action's checks
