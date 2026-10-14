@@ -311,3 +311,88 @@ test('portal invalid input and cancellation fail before any backend request', as
     assert.equal(state.requests.length, 0);
   });
 });
+
+
+test('portal retries oversized multilingual pages at the same cursor and returns a usable continuation', async () => {
+  for (const chunked of [false, true]) await fixture(async (store, _ctx, state) => {
+    const original = state.rows[0]!;
+    const rows = Array.from({ length: 50 }, (_, index) => ({ ...original, id: `mem_${index}`, content: '界'.repeat(24000) }));
+    state.handle = (_req, res, url) => {
+      const limit = Number(url.searchParams.get('limit'));
+      const cursor = url.searchParams.get('cursor');
+      const offset = cursor ? JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')).offset : 0;
+      const body = JSON.stringify({ memories: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? Buffer.from(JSON.stringify({ offset: offset + limit })).toString('base64url') : null });
+      res.writeHead(200, chunked ? { 'transfer-encoding': 'chunked' } : { 'content-length': Buffer.byteLength(body) });
+      res.end(body);
+      return true;
+    };
+    const first = await store.browse({ query: 'cold', since: null, until: null });
+    assert.equal(first.memories.length, 10);
+    assert.equal(first.memories[0]!.id, 'mem_0');
+    assert.ok(first.nextCursor);
+    assert.equal(first.truncated, true);
+    assert.ok(first.memories.reduce((n, memory) => n + memory.title.length + memory.content.length, 0) <= 64000);
+    const second = await store.browse({ query: 'cold', since: null, until: null, cursor: first.nextCursor });
+    assert.equal(second.memories.length, 10);
+    assert.equal(second.memories[0]!.id, 'mem_10');
+    assert.deepEqual(state.requests.map(url => url.searchParams.get('limit')), ['50', '10', '50', '10']);
+    for (const url of state.requests) {
+      assert.equal(url.searchParams.get('q'), 'cold');
+      assert.equal(url.searchParams.get('project'), original.project);
+      assert.equal(url.searchParams.get('agentId'), original.agentId);
+      assert.equal(url.searchParams.get('latest'), 'true');
+    }
+    assert.equal(state.requests[2]!.searchParams.get('cursor'), first.nextCursor);
+    assert.equal(state.requests[3]!.searchParams.get('cursor'), first.nextCursor);
+  });
+});
+
+test('portal can shrink to one record but never retries malformed or failed responses', async () => {
+  await fixture(async (store, _ctx, state) => {
+    state.handle = (_req, res, url) => {
+      if (url.searchParams.get('limit') !== '1') { res.writeHead(200, { 'content-length': '2000001' }); res.end(); }
+      else res.end(JSON.stringify({ memories: state.rows, nextCursor: 'next_page' }));
+      return true;
+    };
+    const page = await store.browse({ query: '', since: null, until: null, cursor: 'current_page' });
+    assert.equal(page.memories.length, 1);
+    assert.equal(page.nextCursor, 'next_page');
+    assert.deepEqual(state.requests.map(url => url.searchParams.get('limit')), ['50', '10', '1']);
+    assert.ok(state.requests.every(url => url.searchParams.get('cursor') === 'current_page'));
+    for (const [status, body, failure] of [[200, '{bad json', 'response'], [503, 'unavailable', 'unavailable']] as const) {
+      state.requests.length = 0;
+      state.handle = (_req, res) => { res.writeHead(status); res.end(body); return true; };
+      await assert.rejects(store.browse({ query: '', since: null, until: null }), code(failure));
+      assert.equal(state.requests.length, 1);
+    }
+    state.requests.length = 0;
+    state.handle = (_req, res) => { res.writeHead(200, { 'content-length': '2000001' }); res.end(); return true; };
+    await assert.rejects(store.browse({ query: '', since: null, until: null }), code('oversized'));
+    assert.equal(state.requests.length, 3);
+  });
+});
+
+test('oversized page retries honor cancellation without requesting the next smaller page', async () => {
+  await fixture(async (store, _ctx, state) => {
+    const cancelled = new AbortController();
+    state.handle = (_req, res) => { res.writeHead(200, { 'content-length': '2000001' }); res.end(); cancelled.abort(); return true; };
+    await assert.rejects(store.browse({ query: '', since: null, until: null }, cancelled.signal), code('aborted'));
+    assert.equal(state.requests.length, 1);
+  });
+});
+
+test('all smaller-page attempts share one browse transport deadline', { timeout: 14000 }, async () => {
+  await fixture(async (store, _ctx, state) => {
+    let timer: NodeJS.Timeout | undefined;
+    state.handle = (_req, res, url) => {
+      if (url.searchParams.get('limit') === '50') timer = setTimeout(() => { res.writeHead(200, { 'content-length': '2000001' }); res.end(); }, 6000);
+      else { res.writeHead(200); res.write('{"memories":['); }
+      return true;
+    };
+    const start = Date.now();
+    try { await assert.rejects(store.browse({ query: '', since: null, until: null }), code('timeout')); }
+    finally { if (timer) clearTimeout(timer); }
+    assert.deepEqual(state.requests.map(url => url.searchParams.get('limit')), ['50', '10']);
+    assert.ok(Date.now() - start < 13000);
+  });
+});

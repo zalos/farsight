@@ -8,7 +8,7 @@ const RESPONSE_BYTES = 2_000_000;
 const MAX_CANDIDATES = 100;
 const MAX_EVIDENCE_CHARS = 256_000;
 const REQUEST_TIMEOUT_MS = 10_000;
-type FailureCode = 'input' | 'response' | 'unavailable' | 'timeout' | 'aborted';
+type FailureCode = 'input' | 'response' | 'unavailable' | 'timeout' | 'aborted' | 'oversized';
 
 /** Internal machine codes only. Callers decide which catalog message to show. */
 export class ResearchStoreFailure extends Error {
@@ -45,7 +45,7 @@ function memoryScope(ctx: EchoContext): { project: string; agentId: string } {
 }
 
 /** This GET transport accepts only service-owned paths and never exposes credentials or backend error bodies. */
-async function request(connection: Pick<BackendConnection, 'url' | 'secret'>, path: string, signal?: AbortSignal, missingAllowed = false): Promise<unknown> {
+async function request(connection: Pick<BackendConnection, 'url' | 'secret'>, path: string, signal?: AbortSignal, missingAllowed = false, distinguishOversize = false): Promise<unknown> {
   checkAbort(signal);
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -58,8 +58,9 @@ async function request(connection: Pick<BackendConnection, 'url' | 'secret'>, pa
     if (!response.ok) { await response.body?.cancel(); fail('unavailable'); }
     if (!response.body) fail('response');
     const length = response.headers.get('content-length');
-    if (length !== null && (!/^\d+$/.test(length) || Number(length) > RESPONSE_BYTES)) {
-      await response.body.cancel(); fail('response');
+    if (length !== null && !/^\d+$/.test(length)) { await response.body.cancel(); fail('response'); }
+    if (length !== null && Number(length) > RESPONSE_BYTES) {
+      await response.body.cancel(); fail(distinguishOversize ? 'oversized' : 'response');
     }
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -69,7 +70,7 @@ async function request(connection: Pick<BackendConnection, 'url' | 'secret'>, pa
         const { done, value } = await reader.read();
         if (done) break;
         bytes += value.byteLength;
-        if (bytes > RESPONSE_BYTES) { await reader.cancel(); fail('response'); }
+        if (bytes > RESPONSE_BYTES) { await reader.cancel(); fail(distinguishOversize ? 'oversized' : 'response'); }
         chunks.push(value);
       }
     } finally { reader.releaseLock(); }
@@ -80,6 +81,28 @@ async function request(connection: Pick<BackendConnection, 'url' | 'secret'>, pa
     if (timeout.aborted) fail('timeout');
     if (error instanceof ResearchStoreFailure) throw error;
     fail('unavailable');
+  }
+}
+
+/** Large stored records can exceed the wire allowance before clipping. Shrink only that page,
+ * preserving its exact cursor and selection. All attempts share one transport deadline. */
+async function browsePage(connection: Pick<BackendConnection, 'url' | 'secret'>, query: URLSearchParams, signal?: AbortSignal): Promise<{ result: unknown; limit: number }> {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  try {
+    for (const limit of [50, 10, 1]) {
+      checkAbort(combined);
+      query.set('limit', String(limit));
+      try { return { result: await request(connection, `/agentmemory/memories?${query}`, combined, false, true), limit }; }
+      catch (error) {
+        if (!(error instanceof ResearchStoreFailure) || error.code !== 'oversized' || limit === 1) throw error;
+      }
+    }
+    fail('response');
+  } catch (error) {
+    checkAbort(signal);
+    if (timeout.aborted) fail('timeout');
+    throw error;
   }
 }
 
@@ -114,8 +137,8 @@ export function createResearchStore(ctx: EchoContext, connection: BackendConnect
       if (input.cursor) query.set('cursor', input.cursor);
       // Unqueried listing scopes before pagination. Search still ranks only 500 global candidates.
       // Never request facets: upstream computes them before exact identity scope filtering.
-      const result = await request(backend, `/agentmemory/memories?${query}`, signal);
-      if (!object(result) || !Array.isArray(result.memories) || result.memories.length > 50
+      const { result, limit } = await browsePage(backend, query, signal);
+      if (!object(result) || !Array.isArray(result.memories) || result.memories.length > limit
         || result.nextCursor != null && (typeof result.nextCursor !== 'string' || !/^[a-zA-Z0-9_-]{1,4096}$/.test(result.nextCursor))
         || result.nextCursor != null && result.nextCursor === input.cursor) fail('response');
       const records = result.memories.map(value => checkedMemory(value, expected));
