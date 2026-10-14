@@ -273,7 +273,7 @@ export function decisionsText(
         : 'no decisions: no manifest or config declares one (decisions[]) and no DECISION(<id>) comment names one');
     return out;
   }
-  const name = (id: string) => opts.index?.byId.get(id)?.name ?? id;
+  const name = (id: string) => { const n = opts.index?.byId.get(id); return n ? (n.design?.name ?? n.name) : id; };
   for (const r of rows) {
     out.push('');
     const state = !r.declared ? 'named in code, not declared' : r.state === 'decided' ? `decided${r.decided ? ` ${r.decided}` : ''}` : 'open — not decided yet';

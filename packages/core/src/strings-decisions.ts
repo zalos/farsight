@@ -69,6 +69,15 @@ export const DECISION_STRINGS: Record<string, StringEntry> = {
   'lanes.legend.offPlatform': same('done outside the code', 'A dotted card is something the design says a person, a partner or another system does outside the application. It is not a screen waiting to be built.'),
   'lanes.part.partyLanes': same('{n} for a party', 'Lanes of the counterparties the design says do something here outside the application.'),
 
+  // the walk's stop for it (core tour.ts)
+  'tour.off.who': same('{who} does this outside the app.', 'The design says this is done outside the application, by whom it names. The walk prints it as declared; no code was read for it.'),
+  'tour.off.whoWhere': same('{who} does this outside the app — {where}.', 'The design says this is done outside the application, by whom and where it names. The walk prints it as declared; no code was read for it.'),
+  'tour.off.party': same('{party} is a party the team declared; no code reaches it.', 'A counterparty the team declared in its config file. The application hands work to it outside its code.'),
+  'tour.off.partyRole': same('{party} is a party the team declared — {role}; no code reaches it.', 'A counterparty the team declared in its config file, with what it does in the team’s words. The application hands work to it outside its code.'),
+  'tour.off.noTest': same('No test can reach it: there is no code here to test.', 'Something done outside the application has no code, so no test can reach it. This is not a missing test.'),
+  'tour.off.sub': same('done outside the code · on {screen}', 'This stop is something the design says is done outside the application, on this screen of the journey.'),
+  'count.part.tourOffPlatform': same('{n} done outside the code', 'Stops for things the design says a person, a partner or another system does outside the application.'),
+
   // cited documents
   'doc.quoted': same('quoted from {path}', 'The heading and the first paragraph are copied from this document as written. Nothing is summarised or reworded.'),
   'doc.status': same('status · {status}', 'The status line the document gives itself, as written.'),

@@ -126,3 +126,22 @@ test('a rule answers too; a missing id and an unknown id do not', async () => {
   assert.equal(miss.status, 404);
   assert.match(miss.body.error, /no node/);
 });
+
+// GET /api/decisions (the 2026-10-13 outsider round, F8): the decisions the fixture declares and the code names,
+// the same fold MCP `decisions` and `farsight decisions` print.
+test('the decisions answer: D1 declared and named on the approval, D2 named in code only, counted twice over', async () => {
+  const { status, body } = await get('/api/decisions');
+  assert.equal(status, 200);
+  assert.deepEqual(body.decisions.map((d: any) => `${d.id}:${d.declared}`), ['D1:true', 'D2:false']);
+  const d1 = body.decisions[0];
+  assert.equal(d1.state, 'open');
+  assert.equal(d1.docRef.title, 'ADR 0001 — Approval has no amount limit yet');
+  assert.ok(d1.nodes.includes('invoice-app::src/server/approvals.ts::approveInvoice'));
+  assert.equal(body.counted.decisions.n, 2);
+  assert.equal(body.counted.decisions.scope, 'count.scope.workspace');
+  assert.ok(body.notes.some((n: string) => n.includes('"D2"')));
+  const on = await get('/api/decisions?node=' + encodeURIComponent('invoice-app::src/server/approvals.ts::approveInvoice'));
+  assert.deepEqual(on.body.decisions.map((d: any) => d.id), ['D1']);
+  assert.equal((await get('/api/decisions?id=D9')).status, 404);
+  assert.equal((await get('/api/decisions?node=nope::x')).status, 404);
+});

@@ -45,6 +45,8 @@ const TOOLS = [
   // walk me through it, and ask (round 2026-10-10, proposal 8)
   'ask', 'tour',
   'config_files',
+  // what the team decided or left open (the 2026-10-13 outsider round, F8)
+  'decisions',
   'describe_node',
   'design_drift', 'design_guide', 'design_surface',
   'gate',
@@ -202,6 +204,22 @@ describe('tour and ask — assembled from the graph, every line cited (round 202
     assert.equal(doc.counted.actions.scope, 'count.scope.workspace');
     const none = await call('roles', { action: 'no-such-action-anywhere' });
     assert.match(none, /no action behind a role check matches/);
+  });
+
+  test('decisions prints the team\'s words, the document quoted, where the code names each, and the notes', async () => {
+    const out = await call('decisions');
+    assert.match(out, /2 decisions across every source in scope: 1 open · 0 decided · 1 named in code, not declared/);
+    assert.match(out, /## D1 · "Does an invoice above a limit need a second approver\?" — open — not decided yet/);
+    assert.match(out, /quoted: "An invoice is approved by one person/);
+    assert.match(out, /named in code: src\/server\/approvals\.ts:\d+ · on approveInvoice/);
+    assert.match(out, /named in code: src\/server\/approvals\.ts:\d+ · above SEND_PAYMENT_REMINDERS/);
+    const on = await call('decisions', { node_id: 'invoice-app::src/server/approvals.ts::approveInvoice' });
+    assert.match(on, /## D1/);
+    assert.doesNotMatch(on, /## D2/);
+    const doc = JSON.parse(await call('decisions', { json: true }));
+    assert.equal(doc.counted.decisions.n, doc.decisions.length);
+    const overview = await call('graph_overview');
+    assert.match(overview, /^decisions: 2 decisions/m);
   });
 
   test('ask answers the four shapes from the graph and says what it understands otherwise', async () => {
