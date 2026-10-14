@@ -473,6 +473,15 @@ The journey reaches it through `jrnWords`, `jrnMoLabel`, `jrnDeclLabel`, `jrnCal
 business lens also drops design ids (`jrnDesignIdHtml`), routes, HTTP verbs, contract chips and code links, folds
 parts the code tags `plumbing` (`jrnHelperTest`), and names the drill's places as *the request* / *the service*.
 `e2e/tests/journey-numbers.pw.spec.ts` holds the business views to zero identifier-shaped tokens.
+**What the app wrote, never a hole** (outsider round 2026-10-13, F6): `plainWords()` first puts a screen's name where its
+design id is used as a place (`screenIdsAsNames()`: *on CON-03 with business info* → *on Create your vendor account with
+…*; an id the graph does not hold → *a page*; an id in brackets or a range of ids is a cross-reference and goes), and
+reads a refusal message's hole (`filledMessage()`: *Vendor account is …, not ACTIVE* → *is (a value), not active*). The
+gate card says an HTTP refusal in words (`refusalWords()`: *Otherwise: the request is refused*, the code only in hybrid
+and code), and the readiness register names a rule nobody wrote words for by its form (`schemaWords()`:
+`invoiceStatusSchema` → *the invoice status form's rules*, `fn: invoices.status = APPROVED` → *invoices status must be
+approved*) — its steps' unreached gates read the register's own words. Words in `strings-plain.ts`; held by
+`server/test/business-words.test.ts`.
 
 **One word per position (2026-10-05).** *Step* is a journey's place in a storyline and nothing else (business:
 *journey n of m*); a **stop** is one time the journey does something — a Sheet column, the drill's rail (which walks the
@@ -1463,9 +1472,12 @@ lanes (`?storyline=&layout=lanes`) and marks the move's pill (`.ln-pill.walk-hot
 **Ask** (`askBoxHtml`, `askCardHtml`, `askNow`): a box in the walk panel and on the front door under the state of play
 (the front door scopes it to the one source picked, if one is). `GET /api/ask` answers; the card prints the
 *derived · no model* chip (a phrased answer would add *phrased by a model*, beside its cited lines), the lead lines, the
-sections — MUST BE TRUE FIRST · PROVEN BY · PATH · CHECKS · CASES — one row per line with its glyph and its chips, the
-four shapes when the question is in none of them, and the doors: the gate card, the Map at the action, the cases, and
-copy as MCP · curl · CLI. An answer is kept per box, so a lens change redraws it without asking again (`redrawAsk`).
+sections — MUST BE TRUE FIRST · PROVEN BY · PATH · CHECKS · CASES · WHO MAY · ALSO CHECKED · WHAT CONFIGURES IT · WHAT
+HAPPENS NEXT · WHERE IT IS SEEN — one row per line with its glyph and its chips, the shapes when the question is in none
+of them, and the doors: the gate card, the Map at the action, the cases, and copy as MCP · curl · CLI. A question Ask
+read as its nearest shape (outsider round 2026-10-13, F7) prints that reading first, set apart (`.ask-read`: *I read
+that as: “who may approve an invoice?”*, with the status a verb was read as). An answer is kept per box, so a lens change
+redraws it without asking again (`redrawAsk`).
 
 e2e: `tour.pw.spec.ts` (the walk on the fixture's storyline moving the Map, Ask's skipped proof, the business register's
 identifier walk over every stop, WALK and the front door's doors).
