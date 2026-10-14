@@ -154,7 +154,7 @@ describe('the server: the core tier by default, the context, expand', () => {
 
   test('graph_overview ends with the tier line; the tools tool lists every tool with its tier', async () => {
     const out = (await call('graph_overview')).text;
-    assert.match(out.trim().split('\n').pop()!, /^tools: the core tier is on \(12 of \d+ tools, from the default\)/);
+    assert.match(out.trim().split('\n').pop()!, /^tools: the core tier is on \(13 of \d+ tools, from the default\)/);
     const menu = (await call('tools')).text;
     assert.match(menu, /● journey · core — /);
     assert.match(menu, /○ refresh_graph · all · off in this session — /);

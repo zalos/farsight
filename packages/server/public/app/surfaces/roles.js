@@ -82,7 +82,7 @@ function rowHtml(row, roles) {
   const words = plainWords(row.words) || row.words;
   const action = b
     ? '<span class="rl-act">' + esc(words) + '</span>'
-      + '<span class="rl-biz">' + esc(fill('roles.biz.row', { action: words.replace(/[.]$/, ''), roles: row.rolesRead ? jrnRoleWords(row.roles.join(', ')) : t('roles.cell.unread') })) + '</span>'
+      + '<span class="rl-biz"' + defAttrs('roles.anyOf') + '>' + esc(row.rolesRead ? fill('roles.anyOf', { roles: jrnRoleWords(row.roles.join(', ')) }) : t('roles.cell.unread')) + '</span>'
     : '<code class="rl-code">' + esc(row.action.method && row.action.path ? row.action.method + ' ' + row.action.path : row.action.name) + '</code><span class="rl-act">' + esc(row.words) + '</span>';
   const cells = row.rolesRead
     ? roles.map((r) => (row.roles.includes(r)
