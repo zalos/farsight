@@ -168,7 +168,7 @@ function hopsCounted(n: number): Counted {
 
 type Cand = { id: string; kind: GraphNode['kind'] | 'action' | 'screen'; names: string[]; flowId?: string; seg?: number; mo?: number };
 
-const norm = (s: string) => String(s).toLowerCase().replace(/[`'"“”‘’?!.,()]/g, ' ').replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
+const norm = (s: string) => String(s).toLowerCase().replace(/[`'"“”‘’?!.,()]/g, ' ').replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim()
   .replace(/^(?:the|a|an|our|my)\s+/, '');
 const POOL = new WeakMap<GraphIndex, Cand[]>();
 const KIND_RANK: Record<string, number> = { action: 0, screen: 1, route: 2, table: 3, guard: 4, rule: 4, flow: 5, page: 6, function: 7, component: 8 };
@@ -399,7 +399,7 @@ export function ask(
   opts: { metas?: Record<string, JourneysMeta>; repo?: string; phrase?: (answer: AskAnswer) => string } = {},
 ): AskAnswer {
   const asWorded = answerShape(index, question, askShapeOf(question), opts);
-  if (asWorded && !weak(asWorded)) return finish(index, asWorded, opts.phrase);
+  if (asWorded && !weak(asWorded) && !LOOSE.has(asWorded)) return finish(index, asWorded, opts.phrase);
   // not a shape as worded (or its words matched nothing): the nearest shape filled with the question's own words, and
   // that rewording printed first — kept only when it finds what the words as worded did not
   const read = readAs(index, question, opts.repo);
@@ -410,6 +410,17 @@ export function ask(
       a.reworded = read.q;
       a.lead.unshift(rewordLine(index, read, a));
       return finish(index, a, opts.phrase);
+    }
+  }
+  if (asWorded && LOOSE.has(asWorded)) {
+    // a set question that named no record: the record and the status it was read as, printed first
+    const r = asWorded.resolved[0];
+    const tb = r ? index.byId.get(r.id) : undefined;
+    const st = tb?.lifecycle && asWorded.lead[0]?.vars.status;
+    if (tb && st) {
+      const q = fillWords(t('ask.suggest.set'), { record: recordWord(tb.name), status: norm(humanizeName(st)) });
+      asWorded.reworded = q;
+      asWorded.lead.unshift(line('words', 'ask.reworded', { question: q }, [tb.id]));
     }
   }
   if (asWorded) return finish(index, asWorded, opts.phrase);
@@ -432,6 +443,9 @@ function askShapeOfRest(q: string): ReturnType<typeof askShapeOf> {
   const m = /\bhow\s+(?:does|do)\s+(.+?)\s+(?:reach|get\s+to)\s+(.+?)\??$/i.exec(q);
   return m ? { shape: 'path', a: m[1]!, b: m[2]! } : null;
 }
+
+/** Set answers whose record the question never named (one status only one record declares picked it). */
+const LOOSE = new WeakSet<AskAnswer>();
 
 /** An answer that only says its words matched nothing — a rewording may still find what the question meant. */
 const weak = (a: AskAnswer) => a.lead.some((c) => c.key === 'ask.notFound' || c.key === 'ask.set.noRecord');
@@ -583,7 +597,8 @@ function recordNames(n: GraphNode): string[] {
  * kept so the answer can say it picked one.
  */
 export function verbRecord(index: GraphIndex, q: string, repo?: string, opts: { exact?: boolean; named?: boolean } = {}): { table: GraphNode; status?: string; verb?: string; others: GraphNode[] } | undefined {
-  const all = norm(q).split(' ').filter(Boolean);
+  // *sends back* is a return for correction, not a status *sent*
+  const all = norm(q).replace(/\b(?:send|sends|sent|sending)\s+back\b/g, 'return').split(' ').filter(Boolean);
   const have = new Set(all.flatMap((w) => [w, sing(w)]));
   const tables = [...index.byId.values()].filter((n) => n.kind === 'table' && n.lifecycle?.statuses.length && (!repo || n.id.startsWith(`${repo}::`)));
   const named = tables.map((n) => ({ n, w: recordNames(n).filter((nm) => nm.split(' ').every((x) => have.has(x) || have.has(sing(x)))).sort((a, b) => b.length - a.length)[0] }))
@@ -593,7 +608,7 @@ export function verbRecord(index: GraphIndex, q: string, repo?: string, opts: { 
     let best: { s: string; f: number; verb: string } | undefined;
     for (const s of n.lifecycle!.statuses) {
       const f = statusFit(index, n, s, words, q);
-      if (f >= min && (!best || f > best.f)) best = { s, f, verb: words.find((w) => statusFit(index, n, s, [w], q) >= f) ?? words[0] ?? '' };
+      if (f >= min && (!best || f > best.f)) best = { s, f, verb: words.find((w) => statusFit(index, n, s, [w], '') >= 1) ?? '' };
     }
     return best;
   };
@@ -629,7 +644,7 @@ function nounPhrase(s: string): string {
 }
 
 /** The term a question names after its shape words, with its trailing clause left off (*approve an invoice, and …*). */
-const clause = (s: string) => s.replace(/\s*[,;—–]\s.*$/, '').replace(/\s+and\s+(?:which|what|who|how|where|when|does|do|is)\b.*$/i, '').replace(/["“”]/g, '').trim();
+const clause = (s: string) => s.replace(/\s*[,;—–]\s.*$/, '').replace(/\s+(?:to|for|on)\s+(?:it|them)$/i, '').replace(/\s+and\s+(?:which|what|who|how|where|when|does|do|is)\b.*$/i, '').replace(/["“”]/g, '').trim();
 
 /** *what is required to approve an invoice* → the set shape when a record and a status are named, else the action's checks. */
 function readRequired(index: GraphIndex, term: string, repo: string | undefined, rule: string): Reading {
@@ -646,31 +661,55 @@ function readRequired(index: GraphIndex, term: string, repo: string | undefined,
  * (the answer is then *did you mean*). Pure over the index: the same words always read the same way.
  */
 export function readAs(index: GraphIndex, question: string, repo?: string): Reading | null {
-  const s = question.trim().replace(/\?+$/, '').replace(/\s+/g, ' ').trim();
+  // a leading topic the reader set off with a colon (*Bad path — rejection: can an invoice be …*) is a heading, not the question
+  let s = question.trim().replace(/\?+$/, '').replace(/\s+/g, ' ').trim();
+  const topic = /^[^:?]{1,48}:\s+(?=\S)/.exec(s);
+  if (topic && !/\b(?:who|what|which|how|can|does|is|are|when|where)\b.*\b(?:who|what|which|how|can|does|is|are|when|where)\b/i.test(topic[0])) s = s.slice(topic[0].length);
   const l = s.toLowerCase();
   let m: RegExpExecArray | null;
+  const strip = (x: string) => x.replace(/^(?:press|click|use|do|perform|hit|run|carry\s+out)\s+/i, '').replace(/["“”]/g, '')
+    .replace(/^(?:the\s+)?(\w+)\s+(?:button|action)\b\s*/i, '$1 ').trim();
   const who = (term: string, rule = 'who', role?: string): Reading | null => {
-    const tm = clause(term).replace(/^(?:press|click|use|do|perform|hit)\s+/i, '').replace(/^(?:the\s+)?["“]?(\w+)["”]?\s+(?:button|action)\s+/i, '$1 ').trim();
+    const tm = strip(clause(term));
     return tm ? { shape: 'who', rule, q: fillWords(t('ask.suggest.who'), { term: tm }), ...(role ? { role } : {}) } : null;
   };
-  // who may — *who is allowed to*, *which roles can*, *who approves*, *can a reviewer approve*
+  const guards = (term: string, rule: string): Reading | null => {
+    const tm = strip(clause(term)).replace(/^(?:the|a|an)\s+/i, '');
+    return tm ? { shape: 'guards', rule, q: fillWords(t('ask.suggest.guards'), { term: tm }) } : null;
+  };
+  // ── who may: *who is allowed to*, *which roles can*, *who performs*, *who approves*, *can a reviewer approve* ──
   if ((m = /^(?:who|which\s+(?:roles?|people|persons?|users?|operators?)|what\s+roles?)\s+(?:is|are)\s+(?:allowed|permitted|able|authori[sz]ed|entitled)\s+to\s+(.+)$/i.exec(s))) return who(m[1]!);
-  if ((m = /^(?:which|what)\s+roles?\s+(?:can|may|could|are\s+allowed\s+to)\s+(.+)$/i.exec(s))) return who(m[1]!);
+  if ((m = /^(?:which|what)\s+roles?\s+(?:can|may|could|are\s+allowed\s+to)\s+(.+)$/i.exec(s))) {
+    if (/^(?:do\s+)?(?:which|what|each|every|all|any)\b/i.test(m[1]!)) return { shape: 'who', rule: 'who', q: t('ask.suggest.whoAll') };
+    return who(m[1]!);
+  }
   if ((m = /^who\s+(?:has\s+(?:the\s+)?(?:right|permission)|gets)\s+to\s+(.+)$/i.exec(s))) return who(m[1]!);
-  if (/^(?:can|may|could|is)\b/i.test(s) && !/\bconfigur|\bcustomi[sz]/i.test(l)) {
+  if ((m = /^who\s+(?:performs|does|runs|carries\s+out|handles|presses|clicks)\s+(.+)$/i.exec(s))) return who(m[1]!);
+  if (/^(?:can|may|could)\b/i.test(s) && !/\bconfigur|\bcustomi[sz]/i.test(l)) {
+    // *can a person with only the reviewer role press "Approve" …*: the role the code knows, then what it would do
     const roles = roleWordsOf(index, repo);
-    const words = norm(s).split(' ');
-    const at = words.findIndex((w) => roles.has(w));
-    if (at >= 0) {
-      const rest = words.slice(at + 1).join(' ').replace(/^(?:role|roles)\s+/, '').replace(/^only\s+/, '');
-      const r = who(rest, 'who', roles.get(words[at]!));
-      if (r) return r;
-    }
+    const named = [...roles.keys()].sort((a, b) => b.length - a.length).find((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(s));
+    const rm = named ? new RegExp(`\\b${named.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b(?:\\s+roles?)?\\s+(.+)$`, 'i').exec(s) : null;
+    if (named && rm) { const r = who(rm[1]!, 'who', roles.get(named)); if (r) return r; }
+    const rr = /\b(?:the|a|an)\s+([a-z-]+)\s+role\s+(.+)$/i.exec(s);
+    if (rr) { const r = who(rr[2]!, 'who', rr[1]!.toLowerCase()); if (r) return r; }
+    // *can a reviewer approve an invoice*: a person, a verb an action is named by, its object
+    const pm = /^(?:can|may|could)\s+(?:a|an|the|any|one)\s+([a-z-]+)\s+(\w+)\s+(.+)$/i.exec(s);
+    if (pm && ACTION_VERBS.has(verbBase(pm[2]!)) && !/^(?:person|one|user)$/i.test(pm[1]!)) { const r = who(`${pm[2]} ${pm[3]}`, 'who', pm[1]!.toLowerCase()); if (r) return r; }
   }
   if ((m = /^who\s+([a-z]+s)\s+(.+)$/i.exec(s)) && !/^(?:is|was|has|does|goes|sees|says|knows|holds|receives|uses)$/i.test(m[1]!)) return who(`${verbBase(m[1]!)} ${m[2]!}`);
-  // configure — *can you configure X*, *how do we change X*, *what can a client configure*, *is X configurable*
+  // *…, and who closes it*: the verb on the record the sentence names
+  if ((m = /\bwho\s+([a-z]+s)\s+(?:it|them)\b/i.exec(s)) && !/^(?:is|was|has|does|sees|says|knows|holds|receives|uses)$/i.test(m[1]!)) {
+    const head = s.slice(0, m.index);
+    const vr = verbRecord(index, head, repo, { named: true });
+    const obj = vr ? recordWord(vr.table.name) : /\b(?:for|of|on|to)\s+(?:the\s+|a\s+|an\s+)?([a-z][a-z -]*?)\s*(?:,|$)/i.exec(head)?.[1];
+    if (obj) return who(`${verbBase(m[1]!)} ${obj}`);
+  }
+  // ── configure: *can you configure X*, *how do we change X*, *what can a client configure*, *is X configurable* ──
   if (/\b(?:configur\w*|customi[sz]\w*)\b/i.test(l) || /^(?:who|how|where)\s+(?:can|could|do|does)\s+(?:\w+\s+)?(?:change|set\s+up)\b/i.test(l)) {
-    const after = /\b(?:configure|configured|configurable|customi[sz]e|customi[sz]ed|change|set\s+up)\b\s*(.*)$/i.exec(s)?.[1] ?? '';
+    let after = /\b(?:configure|configured|configurable|customi[sz]e|customi[sz]ed|change|set\s+up)\b\s*(.*)$/i.exec(s)?.[1] ?? '';
+    // *what can my company configure without the vendor's developers: required documents, …* — the list after the colon
+    if (/:\s/.test(after)) after = after.slice(after.indexOf(':') + 1).trim();
     let thing = clause(after.replace(/^(?:a|an|the|its|their|our|your)\s+/i, ''));
     if (!thing) { const before = /^(?:is|are)\s+(.+?)\s+configurable/i.exec(s)?.[1]; if (before) thing = clause(before); }
     const req = /^what\s+(?:is|are)\s+(?:required|needed)\s+(?:on|for|of|in|by)\s+(.+)$/i.exec(thing);
@@ -680,25 +719,62 @@ export function readAs(index: GraphIndex, question: string, repo?: string): Read
       ? { shape: 'configure', rule: 'configure', q: fillWords(t('ask.suggest.configure'), { term: thing }) }
       : { shape: 'configure', rule: 'configure', q: t('ask.suggest.configureAll') };
   }
-  // what is required to — the set shape when the words name a record and a status, else the action's checks
+  // ── what proves: *is X built and working*, *was the X case ever run* ──
+  if ((m = /^(?:is|are)\s+(.+?)\s+(?:built|working|tested|live|done|finished)\b/i.exec(s))) return { shape: 'proves', rule: 'proves', q: fillWords(t('ask.suggest.proves'), { term: strip(clause(m[1]!)).replace(/^(?:the|a|an)\s+/i, '') }) };
+  if ((m = /^(?:was|were|has|have|did)\s+(?:the\s+)?(.+?)\s+(?:case|cases|test|tests)\s+(?:ever\s+)?(?:been\s+)?(?:run|pass|passed|green)\b/i.exec(s))) return { shape: 'proves', rule: 'proves', q: fillWords(t('ask.suggest.proves'), { term: strip(clause(m[1]!)) }) };
+  // ── how does A reach B: *does a vendor record land in Business Central before …* ──
+  if ((m = /^(?:when\s+.+?,\s*)?(?:does|do|can|will|could)\s+(?:a|an|the)?\s*(.+?)\s+(?:land|end\s+up|arrive|get\s+written)\s+(?:in|at|on)\s+(.+?)(?:\s+(?:before|after|when|until)\b.*)?$/i.exec(s))) {
+    return { shape: 'path', rule: 'path', q: fillWords(t('ask.suggest.path'), { a: m[1]!.trim(), b: m[2]!.trim() }) };
+  }
+  // ── what guards: separation of duties, limits, what stops, what is compared ──
+  if ((m = /^can\s+(?:one|the\s+same|a\s+single)\s+(?:person|user|operator|someone)\s+(.+?)\s+and\s+(?:then\s+)?(.+)$/i.exec(s))) return guards(m[2]!, 'separate');
+  if ((m = /^(?:are|is)\s+there\s+(?:any\s+|an?\s+)?(.+?)\s+(?:limits?|rules?|checks?|controls?|thresholds?)\b/i.exec(s))) {
+    const verb = contentWords(m[1]!).map((w) => NOUN_VERB[w] ?? w).filter((w) => ACTION_VERBS.has(w));
+    return guards(verb.length ? verb.join(' ') : m[1]!, 'limits');
+  }
+  if ((m = /^what\s+(?:stops|prevents|blocks|keeps)\s+(.+?)(?:\s+from)?$/i.exec(s))) {
+    const vm = /\b(?:being\s+)?(\w+ed)\b/i.exec(m[1]!);
+    const rec = verbRecord(index, m[1]!, repo, { named: true });
+    if (vm && rec) return guards(`${verbBase(vm[1]!)} ${recordWord(rec.table.name)}`, 'stops');
+    return guards(m[1]!, 'stops');
+  }
+  if ((m = /^what\s+(?:exactly\s+)?(?:does|do)\s+.+?\s+(?:compare|check|look\s+at|match|verify)\s+(?:in|on|for|during|against)\s+(.+)$/i.exec(s))) return guards(m[1]!, 'compare');
+  // ── what is required to: the set shape when the words name a record and a status, else the action's checks ──
   if ((m = /^what\s+(?:is|are)\s+(?:required|needed|necessary|checked)\s+(?:to|for|before)\s+(.+)$/i.exec(s))) return readRequired(index, clause(m[1]!), repo, 'required');
   if ((m = /^what\s+(?:do|does)\s+(?:you|we|i|one|it|they|a\s+\w+)\s+need\s+(?:to|for|before)\s+(.+)$/i.exec(s))) return readRequired(index, clause(m[1]!), repo, 'required');
   if ((m = /^what\s+does\s+it\s+take\s+(?:to|for)\s+(.+)$/i.exec(s))) return readRequired(index, clause(m[1]!), repo, 'required');
   if ((m = /^what\s+(?:has|have|needs?)\s+to\s+(?:be\s+true|happen)\s+(?:before|for|to)\s+(.+)$/i.exec(s))) return readRequired(index, clause(m[1]!), repo, 'required');
-  // how does <record> get <status> — the set shape; else the action's checks (*how does a vendor get approved*)
+  // ── can <record> be <status>: where is it set to that status (*can an invoice be rejected or cancelled at all*) ──
+  if ((m = /^can\s+(?:an?\s+|the\s+)?(.+?)\s+be\s+([a-z]+)(?:\s*(?:\/|\bor\b)\s*([a-z]+))?\b/i.exec(s))) {
+    const vr = verbRecord(index, m[1]!, repo, { named: true });
+    if (vr) {
+      const record = recordWord(vr.table.name);
+      const words = [m[2]!, m[3]].filter((x): x is string => !!x);
+      for (const w of words) {
+        const st = vr.table.lifecycle!.statuses.find((x) => statusFit(index, vr.table, x, [w], w) >= 2);
+        if (st) return { shape: 'set', rule: 'can-be', q: fillWords(t('ask.suggest.set'), { record, status: norm(humanizeName(st)) }), verb: { word: w, status: st, record, table: vr.table.id } };
+      }
+      return { shape: 'set', rule: 'can-be', q: fillWords(t('ask.suggest.set'), { record, status: words[0]!.toLowerCase() }) };
+    }
+  }
+  // ── how does <record> get <status> — the set shape; else the action's checks (*how does a vendor get approved*) ──
   if ((m = /^how\s+(?:does|do|is|are|can|did|would)\s+(?:an?\s+|the\s+)?(.+?)\s+(?:get|gets|become|becomes|end\s+up|turn)\s+(\w+)(?:\s.*)?$/i.exec(s))) {
     const vr = verbRecord(index, `${m[1]} ${m[2]}`, repo, { named: true });
     if (vr?.status) return readRequired(index, `${m[2]} ${m[1]}`, repo, 'get');
-    return { shape: 'guards', rule: 'get', q: fillWords(t('ask.suggest.guards'), { term: `${verbBase(m[2]!)} ${clause(m[1]!)}` }) };
+    return guards(`${verbBase(m[2]!)} ${m[1]!}`, 'get');
   }
-  // how do we know <X> — the checks on it
+  // ── how is <thing> verified · how do we know <X>: the checks on it ──
+  if ((m = /^how\s+(?:is|are)\s+(?:an?\s+|the\s+)?(.+?)\s+(verified|checked|validated|confirmed|approved|vetted)\b/i.exec(s))) return guards(`${verbBase(m[2]!)} ${m[1]!}`, 'verified');
   if ((m = /^how\s+(?:do|can|would|could|does|will)\s+(?:we|you|i|they|one|anyone|the\s+\w+)\s+(?:know|tell|check|verify|ensure|make\s+sure|confirm|prove)\s+(?:that\s+|whether\s+|if\s+)?(.+)$/i.exec(s))) {
     const np = nounPhrase(m[1]!);
     if (np) return { shape: 'guards', rule: 'know', q: fillWords(t('ask.suggest.guards'), { term: np }) };
   }
-  // a record and a status the words name exactly (*when does the business pay* → paid): the set shape
-  if (/^(?:when|where|how|can|could|is|are|does|do|which|what|who|has|have)\b/i.test(s)) {
-    const vr = verbRecord(index, s, repo, { exact: true });
+  // ── a record and a status the first clause names (*when does the business pay* → paid): the set shape ──
+  if (/^(?:when|where|which|what)\b/i.test(s)) {
+    const first = s.split(/,\s|\s+and\s+(?:where|who|what|how|when|which)\b/i)[0]!;
+    // a record the clause does not name is read from its verb only when the verb is what the question asks about
+    const verbAsked = /^(?:when\s+(?:does|do|did|will|is|are)|which\s+\w+\s+(?:actually\s+)?(?:makes?|marks?|sets?|moves?))\b/i.test(first);
+    const vr = verbRecord(index, first, repo, { exact: true, named: !verbAsked });
     if (vr?.status) {
       const record = recordWord(vr.table.name);
       return { shape: 'set', rule: 'status', q: fillWords(t('ask.suggest.set'), { record, status: norm(humanizeName(vr.status)) }), verb: { word: vr.verb ?? '', status: vr.status, record, table: vr.table.id }, ...(vr.others.length ? { others: vr.others } : {}) };
@@ -746,13 +822,23 @@ function actionWords(index: GraphIndex, c: Cand) {
 function resolveAction(index: GraphIndex, phrase: string, repo?: string): { best?: Cand; others: Cand[]; hits: number; of: number } {
   const q = [...new Set(contentWords(phrase).filter((w) => !GENERIC.has(w) || /^(?:change|set)$/.test(w)).map(wordKey))].filter((w) => w.length > 1);
   if (!q.length) return { others: [], hits: 0, of: 0 };
+  const rank = (list: Cand[]) => rankActions(index, q, list);
   const seen = new Set<string>();
-  const actions: Cand[] = [];
-  for (const c of pool(index)) {
-    if (c.kind !== 'action' || seen.has(c.id) || (repo && !c.id.startsWith(`${repo}::`))) continue;
-    seen.add(c.id);
-    actions.push(c);
-  }
+  const gather = (kind: Cand['kind']) => {
+    const out: Cand[] = [];
+    for (const c of pool(index)) {
+      if (c.kind !== kind || seen.has(c.id) || (repo && !c.id.startsWith(`${repo}::`))) continue;
+      seen.add(c.id);
+      out.push(c);
+    }
+    return out;
+  };
+  const first = rank(gather('action'));
+  // no action on a journey: a call the code serves (*approve an invoice* → the approve route), by the same words
+  return first.best ? first : rank(gather('route'));
+}
+
+function rankActions(index: GraphIndex, q: string[], actions: Cand[]): { best?: Cand; others: Cand[]; hits: number; of: number } {
   // a word most actions share (*invoice* on an invoicing app) tells them apart less than a rare one (*correction*)
   const df = new Map<string, number>();
   for (const c of actions) { const w = actionWords(index, c); for (const k of q) if (w.path.has(k) || w.label.has(k) || w.biz.has(k)) df.set(k, (df.get(k) ?? 0) + 1); }
@@ -870,7 +956,7 @@ const actionName = (c: Cand, index: GraphIndex) => bare((String(c.kind === 'acti
 function answerWho(index: GraphIndex, question: string, term: string, opts: { repo?: string }, role?: string): AskAnswer {
   const a = emptyAnswer(question, 'who');
   // *which roles can do which actions*: the whole table, each action with the roles its role check is handed
-  if (/\b(?:which|what|each|every|all|any)\b/i.test(term) && /\b(?:actions?|things?|operations?)\b/i.test(term)) return whoTable(index, a, opts.repo);
+  if ((/\b(?:which|what|each|every|all|any)\b/i.test(term) && /\b(?:actions?|things?|operations?)\b/i.test(term)) || /^do\s+what$/i.test(term.trim())) return whoTable(index, a, opts.repo);
   const R = resolveAction(index, term, opts.repo);
   const RT = R.best ? undefined : resolveTermAll(index, term, ['action', 'route', 'screen', 'function'], opts.repo);
   const c = R.best ?? RT?.best;
@@ -1026,7 +1112,9 @@ function readersLine(index: GraphIndex, table: GraphNode): TourClause | undefine
   return line('data', 'ask.happens.readers', { record: recordWord(table.name), count: countWords(c), screens: list }, [table.id, ...screens.slice(0, 6).map((x) => x.id)], { counted: c, bizVars: { record: recordWord(table.name), count: countWords(c, true), screens: list } });
 }
 
-function answerHappens(index: GraphIndex, question: string, term: string, opts: { metas?: Record<string, JourneysMeta>; repo?: string }): AskAnswer {
+function answerHappens(index: GraphIndex, question: string, term: string, opts: { metas?: Record<string, JourneysMeta>; repo?: string }): AskAnswer | null {
+  // *what happens … if Business Central is unavailable*: a condition the code holds no status for is not this shape
+  if (/\b(?:if|unless|while|in\s+case)\b/i.test(term)) return null;
   const a = emptyAnswer(question, 'happens');
   const vr = verbRecord(index, term, opts.repo);
   if (vr?.status) {
@@ -1051,7 +1139,7 @@ function answerHappens(index: GraphIndex, question: string, term: string, opts: 
   // no status the words name: the action they name, and what it does to the records
   const R = resolveAction(index, term, opts.repo);
   const c = R.best;
-  if (!c) return vr ? (a.lead.push(line('words', 'ask.set.unknownStatus', { record: recordWord(vr.table.name), status: clause(term) }, [vr.table.id])), a) : notFound(index, a, term, opts.repo);
+  if (!c) return notFound(index, a, clause(term), opts.repo, vr ? [vr.table.id] : []);
   const name = actionName(c, index);
   a.resolved.push({ term, id: c.id, name });
   const picked = pickedLine(index, c, R.others);
@@ -1085,7 +1173,7 @@ function answerHappens(index: GraphIndex, question: string, term: string, opts: 
 // ── where is <record> set to <status> ─────────────────────────────────────────────────────────────────────
 
 /** The record and status a question names: the status after *to* / *become* first, the longest word otherwise. */
-function recordAndStatus(index: GraphIndex, q: string, repo?: string): { table: GraphNode; status: string } | { table: GraphNode; missing: string } | { term: string } | null {
+function recordAndStatus(index: GraphIndex, q: string, repo?: string): { table: GraphNode; status: string; unnamed?: true } | { table: GraphNode; missing: string } | { term: string } | null {
   const l = ` ${norm(q)} `;
   const tables = [...index.byId.values()].filter((n) => n.kind === 'table' && n.lifecycle?.statuses.length && (!repo || n.id.startsWith(`${repo}::`)));
   if (!tables.length) return null;
@@ -1117,7 +1205,7 @@ function recordAndStatus(index: GraphIndex, q: string, repo?: string): { table: 
   }
   // no record named: a status only one record declares
   const withStatus = tables.map((n) => ({ n, st: statusIn(n) })).filter((x) => x.st);
-  if (withStatus.length === 1) return { table: withStatus[0]!.n, status: withStatus[0]!.st!.status };
+  if (withStatus.length === 1) return { table: withStatus[0]!.n, status: withStatus[0]!.st!.status, unnamed: true };
   const term = /\b(?:is|are|does|do)\s+(?:an?\s+|the\s+)?(.+?)\s+(?:set|moved?|made|marked|become|becomes|put)\b/i.exec(q)?.[1];
   return term ? { term } : null;
 }
@@ -1180,6 +1268,8 @@ function answerSet(index: GraphIndex, question: string, opts: { metas?: Record<s
     return a;
   }
   const status = hit.status;
+  // the question named no record: the status alone picked it — said, like any other reading (outsider round, F7)
+  if (hit.unnamed) LOOSE.add(a);
     const writes = table.lifecycle!.transitions.filter((x) => x.to === status);
   if (!writes.length) { a.lead.push(line('words', 'ask.set.noStatus', { record: rec, status }, [table.id])); return a; }
   let first = true;
