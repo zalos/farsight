@@ -1161,7 +1161,7 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // core roleTable(), the same fold the MCP `roles` tool and `farsight roles` print. `format=csv` for a sheet
       if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
       const u = new URL(url, 'http://localhost');
-      const q = { repo: u.searchParams.get('repo') || undefined, role: u.searchParams.get('role') || undefined, action: u.searchParams.get('action') || undefined, guard: u.searchParams.get('guard') || undefined };
+      const q = { repo: u.searchParams.get('repo') || undefined, role: u.searchParams.get('role') || undefined, action: u.searchParams.get('action') || undefined, guard: u.searchParams.get('guard') || undefined, flow: u.searchParams.get('flow') || undefined };
       const g = loadJourneyGraph(graphPath);
       const table = folded(g.index, 'roles', JSON.stringify(q), () => roleTable(g.index, q), 16);
       if (u.searchParams.get('format') === 'csv') return send(200, rolesCsv(table), 'text/csv; charset=utf-8');

@@ -88,6 +88,8 @@ export interface RoleQuery {
   action?: string;
   /** one guard's rows (the gate card's *who may do what*) */
   guard?: string;
+  /** only the actions one journey's walk reaches (a flow node id) */
+  flow?: string;
 }
 
 const STOP = new Set(['a', 'an', 'the', 'of', 'to', 'for', 'who', 'may', 'can', 'is', 'it', 'do', 'does', 'and', 'or', 'on', 'in']);
@@ -233,6 +235,7 @@ function matchesRole(r: RoleRow, q: string): boolean {
 export function roleTable(index: GraphIndex, q: RoleQuery = {}): RoleTable {
   const scoped = allRows(index).filter((r) => (!q.repo || repoOf(r.action) === q.repo)
     && (!q.guard || r.guard.id === q.guard)
+    && (!q.flow || r.journeys.some((j) => j.id === q.flow))
     && (!q.role || matchesRole(r, q.role)));
   const rows = q.action ? bestMatches(scoped, q.action) : scoped;
   // the roles in the order the widest list names them, then any a narrower list adds

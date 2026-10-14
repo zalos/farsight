@@ -148,6 +148,8 @@ test('rolesFor: who may do one action, by id or by its words', () => {
   assert.deepEqual(rolesFor(index, { action: 'approve an invoice' }).map((r) => r.action.id), [R_APPROVE], 'the contract summary');
   assert.deepEqual(rolesFor(index, { action: 'approve' }).map((r) => r.action.id).sort(), [R_APPROVE, R_VENDOR].sort());
   assert.deepEqual(roleTable(index, { role: 'ops.admin' }).rows.map((r) => r.action.id).sort(), [R_VERIFY, R_VENDOR].sort());
+  assert.equal(roleTable(index, { flow: FLOW }).rows.length, 3, 'a journey narrows to the actions its walk reaches');
+  assert.equal(roleTable(index, { flow: 'ops::flow::nope' }).rows.length, 0);
   const csv = rolesCsv(roleTable(index));
   assert.match(csv.split('\n')[0]!, /^action,method,path,roles,/);
   assert.equal(csv.trim().split('\n').length, 4);

@@ -29,7 +29,7 @@ import { defAttrs, countKey } from './counted.js';
 import { jrnDrillOrders, jrnDrillEnsureAction, jrnDrillSelected, jrnInspPanelHtml } from '../surfaces/journey-drill.js';
 import { lifecycleStripHtml, headerLifecycles } from './lifecycle-strip.js';
 import { freshLineHtml, freshSentence, freshShown } from './freshness.js';
-import { momOrdinal, buildTree, cellTree, sheetModel, stopOf, ladderModel, LADDER } from './journey-model.js';
+import { momOrdinal, buildTree, cellTree, sheetModel, stopOf, ladderModel, LADDER, jrnGatesIn } from './journey-model.js';
 import { testChipHtml, distinctArgs, builtOnlyHtml } from './test-chip.js';
 import { scopeWordKey } from './scope-words.js';
 
@@ -694,8 +694,12 @@ export function jrnGateInWords(g) {
   // the code — and said with the catalog's sentence for it.
   const shape = phrase && JRN_GATE_SHAPES.find(([, re]) => re.test(phrase));
   if (shape) return t('journey.biz.gateShape.' + shape[0]);
-  if (!phrase || JRN_BARE_IDENT.test(phrase) || JRN_DEV_TOKEN.test(phrase)) return '';
-  return phrase;
+  if (phrase && !JRN_BARE_IDENT.test(phrase) && !JRN_DEV_TOKEN.test(phrase)) return phrase;
+  // the sentence the team wrote for it (`@business`) before *a check nobody has put in words* (outsider round
+  // 2026-10-13, F2: the role guard carries one, and its card said nobody had)
+  const own = (node && node.facets && node.facets.business && node.facets.business.description)
+    || (g && g.facets && g.facets.business && g.facets.business.description);
+  return own ? String(own).trim() : '';
 }
 /** `ops.reviewer, ops.approver` → *reviewer or approver*: the last part of each role, in words.
  * @group Journey view */
@@ -747,6 +751,8 @@ function jrnGateRowHtml(g, qualifier) {
     + opens + ' title="' + esc(g.name || '') + '">'
     + sym(g.config ? 'gear' : g.kind === 'rule' ? 'shield' : 'lock')
     + '<span class="jrn-gl-w">' + esc(words) + (g.planned ? ' <i>' + esc(t('journey.plannedGate')) + '</i>' : '')
+    // the roles this action's call site handed a role guard, as the code names them (business says them in its words above)
+    + (g.requires && currentLens() !== 'business' ? ' <code class="jrn-gl-req"' + tipAttrs({ key: 'roles.col.roles', noFocus: true }) + '>' + esc(g.requires) + '</code>' : '')
     // the tier beside the name outside the business register, which groups by it instead
     + (g.tier && !g.config ? ' <span class="gate-tier ' + esc(g.tier) + '"' + tipAttrs({ key: 'gate.tier.' + g.tier }) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '')
     // a real space, not only the margin: this row is read in a screenshot and
@@ -809,8 +815,11 @@ function jrnGateGroupHtml(list, key, scopeKey, cls) {
     seen.set(w, i);
     return jrnGateRowHtml(g, t('journey.sameWords').replace('{i}', i).replace('{n}', n));
   }).join('');
+  // every gate this group holds, drawn, folded into another row's wording or counted as not in words: the register
+  // parity check reads it (a gate present in one register is never absent from another — outsider round 2026-10-13)
+  const ids = [...new Set(rows.flatMap((g) => [g.id, ...(g.foldedIds || [])]))];
   return jrnBizGroupHtml(key, rows.length, '<div class="jrn-gl-rows">' + html + '</div>',
-    mute, cls || (key === 'journey.bizGroup.rules' ? 'rules' : ''), scopeKey);
+    mute, cls || (key === 'journey.bizGroup.rules' ? 'rules' : ''), scopeKey).replace('<div class="jrn-gl-grp', '<div data-gate-ids="' + esc(ids.join(' ')) + '" class="jrn-gl-grp');
 }
 /**
  * The gates and rules of one screen as two aligned lists rather than one cloud
@@ -888,7 +897,7 @@ export function jrnGateTiers(gates) {
     if (g.class !== 'identity') { who.push(g); continue; }
     const w = jrnGateLabel(g) || t('gate.signedIn');
     const have = byWords.get(w);
-    if (have) { have.count = (have.count || 1) + (g.count || 1); have.folded = (have.folded || 1) + 1; continue; }
+    if (have) { have.count = (have.count || 1) + (g.count || 1); have.folded = (have.folded || 1) + 1; have.foldedIds = [...(have.foldedIds || []), g.id]; continue; }
     const row = { ...g, words: g.words || (jrnGateLabel(g) ? '' : t('gate.signedIn')) };
     if (!row.words) delete row.words;
     byWords.set(w, row);
@@ -917,7 +926,8 @@ export function jrnGateTiers(gates) {
  */
 export function jrnChecksHtml(sg, mo) {
   const tab = jrnBizTab();
-  const gates = (sg.gates || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to);
+  // each gate at every action it guards, with the roles that action's call site handed it (F2)
+  const gates = jrnGatesIn(sg, mo.from, mo.to);
   const configs = (sg.configChecks || []).filter((g) => g.stepOrder >= mo.from && g.stepOrder <= mo.to);
   const inRange = jrnSegDecisions(sg).filter((d) => d.order >= mo.from && d.order <= mo.to);
   // business draws the decisions somebody wrote; a guard-class condition nobody
@@ -1741,7 +1751,7 @@ function jrnRevealBizTab(i) {
   if (!sg) return;
   const d = jrnBizDecs(sg);
   const has = {
-    gates: (sg.gates || []).some((g) => g.stepOrder === i),
+    gates: jrnGatesIn(sg, i, i).length > 0,
     words: d.inWords.some((x) => x.order === i),
     decisions: d.shown.some((x) => x.order === i),
   };
