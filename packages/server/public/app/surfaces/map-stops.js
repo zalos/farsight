@@ -861,7 +861,8 @@ export function closeStops() {
  */
 export function storyNavLineHtml(tree, flow) {
   const story = storylineLineHtml(tree, flow);
-  return story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + story + storyNavHtml(tree, flow, 'next') + '</span>' : '';
+  // the words in their own span, so a tight head clips the words and never the ‹ › doors beside them
+  return story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + '<span class="story-t">' + story + '</span>' + storyNavHtml(tree, flow, 'next') + '</span>' : '';
 }
 
 /**

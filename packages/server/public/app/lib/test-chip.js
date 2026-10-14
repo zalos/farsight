@@ -92,7 +92,7 @@ export function projectSplitHtml(verdict) {
   const key = biz ? (p.n === 1 ? 'tests.biz.projectSplit' : 'tests.biz.projectSplitMany') : (p.n === 1 ? 'tests.projectSplit' : 'tests.projectSplitMany');
   // the chip row names the projects; the tip fills the sentence with each project's quoted reason (an older server sends no `short`)
   const vars = { n: p.n, passed: (p.passedOn || []).join(', '), skipped: p.words.skipped || (p.skippedOn || []).map((k) => k.project).join(', ') };
-  return SEP + '<span class="tc-split" data-project-split="' + esc(String(p.n)) + '"' + defAttrs(key, null, vars) + '>' + esc((biz ? p.words.shortBiz : p.words.short) || (biz ? p.words.biz : p.words.text)) + '</span>';
+  return '<span class="tc-split-w">' + SEP + '<span class="tc-split" data-project-split="' + esc(String(p.n)) + '"' + defAttrs(key, null, vars) + '>' + esc((biz ? p.words.shortBiz : p.words.short) || (biz ? p.words.biz : p.words.text)) + '</span></span>';
 }
 
 /** The evidence word as a chip, with the journey's evidence tip (registered by the journey surface). */
