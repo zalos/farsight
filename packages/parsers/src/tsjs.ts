@@ -18,6 +18,7 @@ import { isTestFile } from './tests/cases.js';
 import { isStoryFile } from './stories/index.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
 import { propFactsOf, type PropFacts } from './callback-props.js';
+import { flagRefAt, moduleBoolConsts, resolveFlagGates } from './flag-gates.js';
 import { collectEnums, collectStatusFacts, linkLifecycles, constTables, constLists, type LifecycleFacts } from './lifecycle.js';
 import { collectPreconditionFacts, emptyPreconditionFacts, linkPreconditions } from './preconditions.js';
 
@@ -137,6 +138,12 @@ interface SiteFlags {
   deferred: boolean;
   /** inside a withOps / withTenant / withTx / transaction callback */
   tx: boolean;
+  /**
+   * under a branch whose test is a bare identifier (`if (X)`, `if (!X)`, `X && f()`, `X ? f() : g()`):
+   * `<file>|X,!Y` — resolved after pass 1 against the module-level `const X = true|false` of that file
+   * or of the module it imports X from (`resolveFlagGates`), never guessed
+   */
+  when?: string;
 }
 
 /** A site with no function expression above it: a route's own body, a page's render. */
@@ -151,6 +158,7 @@ interface HttpCallSite {
   wrapper?: string;
   deferred: boolean;
   tx: boolean;
+  when?: string;
 }
 
 /** Parse a TS/JS repo into a GraphFragment. Heuristic, syntax-level extraction. */
@@ -181,25 +189,25 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const pkgUses: { fromId: string; file: string; abs: string; spec: string; line: number }[] = [];
   // call-site `line` (1-based, in the caller's file) orders callees so a
   // journey can replay them in the order the code runs
-  const pendingCalls: { fromId: string; file: string; callee: string; line?: number; deferred: boolean; tx: boolean; argsKey?: string }[] = [];
-  const pendingRenders: { fromId: string; file: string; callee: string; line?: number; jsx?: true; deferred: boolean; tx: boolean }[] = [];
+  const pendingCalls: { fromId: string; file: string; callee: string; line?: number; deferred: boolean; tx: boolean; when?: string; argsKey?: string }[] = [];
+  const pendingRenders: { fromId: string; file: string; callee: string; line?: number; jsx?: true; deferred: boolean; tx: boolean; when?: string }[] = [];
   const httpCalls: HttpCallSite[] = [];
   // functions whose `fetch` takes its URL from a parameter (see FetchWrapper), by node id
   const fetchWrappers = new Map<string, FetchWrapper>();
   // calls with their arguments summarised, resolved in pass 2 — wrapper callers become fetch sites
   const wrapperCallArgs = new Map<string, (ArgInfo | undefined)[]>();
-  const resolvedCalls: { fromId: string; toId: string; key: string; line?: number; deferred: boolean; tx: boolean }[] = [];
+  const resolvedCalls: { fromId: string; toId: string; key: string; line?: number; deferred: boolean; tx: boolean; when?: string }[] = [];
   // SQL driver specifier → the files that import it (the `sdk` store rule)
   const sqlDrivers = new Map<string, string[]>();
   // Drizzle-style ops name the table via an identifier argument — resolution
   // (imports, barrels, pgTable declarations) has to wait for pass 2
-  const pendingDbOps: { fromId: string; file: string; tableName: string; op: string; write: boolean; code: string; line?: number; sql?: boolean; deferred: boolean; tx: boolean }[] = [];
+  const pendingDbOps: { fromId: string; file: string; tableName: string; op: string; write: boolean; code: string; line?: number; sql?: boolean; deferred: boolean; tx: boolean; when?: string }[] = [];
   // a.b.method(…) — resolved in pass 2 to the one class method of that name (DI by name, not by type)
-  const pendingMethodCalls: { fromId: string; file: string; method: string; receiver: string; line?: number; deferred: boolean; tx: boolean; argsKey?: string }[] = [];
+  const pendingMethodCalls: { fromId: string; file: string; method: string; receiver: string; line?: number; deferred: boolean; tx: boolean; when?: string; argsKey?: string }[] = [];
   const methodIndex = new Map<string, { nodeId: string; cls: string; file: string }[]>();
   // `this.<field>.<…>.<fn>()` inside a class — a callback the constructor was handed;
   // pass 2 matches it against the object literal of a `new Class({ … })` somewhere else
-  const pendingHookCalls: { fromId: string; file: string; cls: string; path: string[]; line?: number; deferred: boolean; tx: boolean; tagIfUnbound?: boolean }[] = [];
+  const pendingHookCalls: { fromId: string; file: string; cls: string; path: string[]; line?: number; deferred: boolean; tx: boolean; when?: string; tagIfUnbound?: boolean }[] = [];
   // file -> the interfaces, classes and object-literal aliases it declares (01 §2.3.5)
   const typesByFile = new Map<string, Map<string, TypeDecl>>();
   // a member call whose receiver has a declared type: pass 2 follows the type to the
@@ -207,7 +215,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   // record the call would have been had the type turned out to name nothing.
   const pendingTypedCalls: {
     fromId: string; file: string; root: TypeRef; path: string[]; method: string; line?: number;
-    deferred: boolean; tx: boolean;
+    deferred: boolean; tx: boolean; when?: string;
     fallback: { kind: 'method'; receiver: string } | { kind: 'hook'; cls: string; path: string[] };
   }[] = [];
   const hookBindings: { file: string; className: string; classRef: { file: string; name: string }; path: string; fnId: string; line: number }[] = [];
@@ -219,7 +227,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   // `const NAME = 'literal'` per file — queue names and the like travel through imports as constants
   const constStrings = new Map<string, string>();
   // queue SDK calls (Azure Storage Queue today): the bound client's name → publishes / consumes
-  const pendingQueueOps: { fromId: string; file: string; queue: { literal?: string; ref?: string }; kind: 'publishes' | 'consumes'; line?: number; deferred: boolean; tx: boolean }[] = [];
+  const pendingQueueOps: { fromId: string; file: string; queue: { literal?: string; ref?: string }; kind: 'publishes' | 'consumes'; line?: number; deferred: boolean; tx: boolean; when?: string }[] = [];
   // ── externals, three sources (01 §2.3.4) ──
   // a function that used an imported SDK binding: pass 3 turns the first use into one
   // `http` edge to that SDK's system. The node is only ever made because an edge
@@ -227,7 +235,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const sdkUses: { fromId: string; file: string; via?: string; specifier: string; name: string; kind: ExternalKind; line?: number }[] = [];
   const markedSdk = new Set<string>(); // `${fromId}|${name}` — the first reference marks the function
   // a non-literal `fetch` inside a class whose base URL starts with a constant host
-  const pendingHostCalls: { fromId: string; file: string; cls: string; constName: string; method?: string; line?: number; deferred: boolean; tx: boolean }[] = [];
+  const pendingHostCalls: { fromId: string; file: string; cls: string; constName: string; method?: string; line?: number; deferred: boolean; tx: boolean; when?: string }[] = [];
   // every `fetch(` site inside a class method, keyed `${file}::${Class}` — what a
   // `<path>::<Class>` declaration attaches its edges to when nothing was detected
   const classFetchSites = new Map<string, { fromId: string; method?: string; line?: number }[]>();
@@ -250,6 +258,9 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const lifeFacts: LifecycleFacts = { decls: [], uses: [], writes: [], compares: [], checks: new Map() };
   // refusing comparisons, refused lists and transition tables (preconditions.ts)
   const preFacts = emptyPreconditionFacts();
+  // flag gates (lane moves, 2026-10-13): the file pass 1 is reading, and each file's module-level boolean constants
+  let curFile = '';
+  const boolConstsByFile = new Map<string, Map<string, { value: boolean; line: number }>>();
   let edgeSeq = 0;
 
   const addNode = (n: GraphNode) => {
@@ -303,11 +314,16 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
    * - `tx` — some ancestor function expression is a direct argument of a call
    *   whose member-chain tail is a transaction runner.
    */
-  const scanAncestors = (parents: AstNode[]): SiteFlags => {
+  const scanAncestors = (parents: AstNode[], site?: AstNode): SiteFlags => {
     let deferred = false;
     let tx = false;
+    const refs: string[] = [];
     for (let i = parents.length - 1; i >= 0; i--) {
       const f = parents[i]!;
+      if (site) {
+        const ref = flagRefAt(f, parents[i + 1] ?? site);
+        if (ref) refs.push(ref);
+      }
       if (f.type !== 'ArrowFunctionExpression' && f.type !== 'FunctionExpression') continue;
       const up = i > 0 ? parents[i - 1]! : undefined;
       if (!up) continue;
@@ -315,17 +331,20 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       else if (up.type === 'CallExpression' && Array.isArray(up.arguments)
         && (up.arguments as AstNode[]).includes(f) && TX_CALLEES.has(memberChain(up.callee).pop() ?? '')) tx = true;
     }
-    return { deferred, tx };
+    return { deferred, tx, ...(refs.length ? { when: `${curFile}|${refs.join(',')}` } : {}) };
   };
-  /** Stamp `deferred` / `tx` on an edge's meta — only when set, never `false`. */
+  /** Stamp `deferred` / `tx` on an edge's meta — only when set, never `false`; a flag reference waits for `resolveFlagGates`. */
   const withFlags = (base: GraphEdge['meta'] | undefined, f: SiteFlags): GraphEdge['meta'] | undefined => {
-    if (!f.deferred && !f.tx) return base;
-    return { ...(base ?? {}), ...(f.deferred ? { deferred: true } : {}), ...(f.tx ? { tx: true } : {}) };
+    if (!f.deferred && !f.tx && !f.when) return base;
+    return { ...(base ?? {}), ...(f.deferred ? { deferred: true } : {}), ...(f.tx ? { tx: true } : {}), ...(f.when ? { whenRef: f.when } : {}) };
   };
+  /** the dedupe key's flag part: a call under a flag and the same call outside it are two facts until resolved */
+  const flagKey = (f: { when?: string }): string => (f.when ? `|${f.when}` : '');
 
   // ── pass 1: per-file extraction ────────────────────────────────
   for (const abs of files) {
     const file = relative(repoRoot, abs);
+    curFile = file;
     const source = readFileSync(abs, 'utf8');
     if (claimsTests && isTestFile(file, source, options.testGlobs ?? {})) continue;
     const line = lineIndex(source);
@@ -339,6 +358,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     // this file keeps something alive for the whole process — the precondition
     // the `??=` builder heuristic needs before it calls anything start-up
     const singletonFile = SINGLETON_MARKERS.some((m) => source.includes(m));
+    // the module-level `const X = true|false` this file declares: the decision switches a branch can test
+    { const bc = moduleBoolConsts(program, line); if (bc.size) boolConstsByFile.set(file, bc); }
     const envSchemaFile = ENV_SCHEMA_BASENAME.test(file.split('/').pop() ?? '');
 
     // relative imports resolve on the filesystem; bare specifiers go through
@@ -644,7 +665,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       if (hasJsx && /^[A-Z]/.test(d.name)) kind = 'component';
       const id = symbolId(file, d.name);
       if (hasJsx) { const pf = propFactsOf(d.node, d.body, line); if (pf) propFacts.set(id, { file, ...pf }); }
-      { const sf = collectStatusFacts(d.body, id, line); lifeFacts.writes.push(...sf.writes); lifeFacts.compares.push(...sf.compares); }
+      { const sf = collectStatusFacts(d.body, id, line, source); lifeFacts.writes.push(...sf.writes); lifeFacts.compares.push(...sf.compares); }
       collectPreconditionFacts(d.body, id, file, source, line, preFacts);
       const doc = parseDoc(leadingComment(source, d.node.start ?? 0));
       // @guard — declared auth wrapper (withTenant(clientId, fn)…): a guard
@@ -755,7 +776,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             if (looksLikeSql(sqlText)) {
               const ops = sqlOps(sqlText);
               const code = sqlText.replace(/\s+/g, ' ').trim().slice(0, 200);
-              const sf = scanAncestors(bodyParents);
+              const sf = scanAncestors(bodyParents, b);
               for (const o of ops) pendingDbOps.push({ fromId, file, tableName: o.table, op: o.op, write: o.write, code, line: line(b.start ?? 0), sql: true, ...sf });
             }
             return false;
@@ -770,7 +791,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
           // <ChildComponent …/> → renders edge (embedded components)
           if (b.type === 'JSXElement') {
             const tag = jsxName(b);
-            if (tag && /^[A-Z]/.test(tag) && tag !== d.name) pendingRenders.push({ fromId, file, callee: tag, line: line(b.start ?? 0), jsx: true, ...scanAncestors(bodyParents) });
+            if (tag && /^[A-Z]/.test(tag) && tag !== d.name) pendingRenders.push({ fromId, file, callee: tag, line: line(b.start ?? 0), jsx: true, ...scanAncestors(bodyParents, b) });
             return;
           }
           // `h.promise ??= build().catch(…)` in a file that parks a process-wide
@@ -783,7 +804,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
             return; // the right-hand side is walked anyway: the `calls` edge is made below
           }
           if (b.type !== 'CallExpression') return;
-          const f = scanAncestors(bodyParents);
+          const f = scanAncestors(bodyParents, b);
           const chain = memberChain(b.callee);
           const args = (b.arguments as AstNode[]) ?? [];
           // query code for the edge: the whole enclosing statement, so builder
@@ -1276,13 +1297,13 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     const targetId = hit?.id;
     if (!targetId || targetId === call.fromId) continue;
     const target = nodes.get(targetId);
-    if (call.argsKey) resolvedCalls.push({ fromId: call.fromId, toId: targetId, key: call.argsKey, line: call.line, deferred: call.deferred, tx: call.tx });
+    if (call.argsKey) resolvedCalls.push({ fromId: call.fromId, toId: targetId, key: call.argsKey, line: call.line, deferred: call.deferred, tx: call.tx, ...(call.when ? { when: call.when } : {}) });
     const kind: GraphEdge['kind'] =
       target?.kind === 'rule' ? 'validates' : target?.kind === 'guard' ? 'guards' : 'calls';
     // a schema read over a response the server already sent (`toProblem(res: Response)` parsing an
     // error body) checks nothing a person submits: it is not a gate on the caller (gates lane 2026-10-10)
     if (kind === 'validates' && READS_RESPONSE.test(paramsText(nodes.get(call.fromId)?.snippet ?? ''))) continue;
-    const key = `${kind}|${call.fromId}|${targetId}`;
+    const key = `${kind}|${call.fromId}|${targetId}${flagKey(call)}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
     // the resolution names the fact that makes the edge what it is. For calls and
@@ -1337,7 +1358,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       tableId = `${repo}::table::${dop.tableName}`;
       addNode({ id: tableId, kind: 'table', name: dop.tableName, tags: autoTags('', dop.tableName, 'table') });
     }
-    const key = `${dop.write ? 'writes' : 'reads'}|${dop.fromId}|${tableId}|${dop.op}`;
+    const key = `${dop.write ? 'writes' : 'reads'}|${dop.fromId}|${tableId}|${dop.op}${flagKey(dop)}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
     addEdge(dop.write ? 'writes' : 'reads', dop.fromId, tableId, withFlags({ op: dop.op, code: dop.code, ...(dop.line != null ? { line: dop.line } : {}) }, dop),
@@ -1408,7 +1429,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
       if (tc.fallback.kind === 'hook') {
         pendingHookCalls.push({ fromId: tc.fromId, file: tc.file, cls: tc.fallback.cls, path: tc.fallback.path, line: tc.line, deferred: tc.deferred, tx: tc.tx });
       } else if (!BUILTIN_METHODS.has(tc.method)) {
-        pendingMethodCalls.push({ fromId: tc.fromId, file: tc.file, method: tc.method, receiver: tc.fallback.receiver, line: tc.line, deferred: tc.deferred, tx: tc.tx });
+        pendingMethodCalls.push({ fromId: tc.fromId, file: tc.file, method: tc.method, receiver: tc.fallback.receiver, line: tc.line, deferred: tc.deferred, tx: tc.tx, ...(tc.when ? { when: tc.when } : {}) });
       }
       continue;
     }
@@ -1449,7 +1470,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         : `${all.length} classes implement ${T.name}; ${production.length < all.length ? 'in-memory / mock twins set aside' : 'every production implementer is drawn'}`;
     for (const target of pool) {
       if (target.nodeId === tc.fromId) continue;
-      const key = `calls|${tc.fromId}|${target.nodeId}`;
+      const key = `calls|${tc.fromId}|${target.nodeId}${flagKey(tc)}`;
       if (seenEdge.has(key)) continue;
       seenEdge.add(key);
       const alternatives = all.filter((m) => m.nodeId !== target.nodeId).map((m) => m.nodeId);
@@ -1480,8 +1501,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     }
     if (pool.length !== 1) continue;
     const target = pool[0]!;
-    if (mc.argsKey) resolvedCalls.push({ fromId: mc.fromId, toId: target.nodeId, key: mc.argsKey, line: mc.line, deferred: mc.deferred, tx: mc.tx });
-    const key = `calls|${mc.fromId}|${target.nodeId}`;
+    if (mc.argsKey) resolvedCalls.push({ fromId: mc.fromId, toId: target.nodeId, key: mc.argsKey, line: mc.line, deferred: mc.deferred, tx: mc.tx, ...(mc.when ? { when: mc.when } : {}) });
+    const key = `calls|${mc.fromId}|${target.nodeId}${flagKey(mc)}`;
     if (seenEdge.has(key)) continue;
     seenEdge.add(key);
     const note = cands.length === 1
@@ -1579,7 +1600,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
         const path = normalizePath(renderUrl(seen.url));
         // a URL that is nothing but holes says nothing about where the call goes
         if (!/[A-Za-z0-9]/.test(path.replace(/:param/g, ''))) continue;
-        httpCalls.push({ fromId: rc.fromId, ...('lit' in seen.method ? { method: seen.method.lit } : {}), path, line: rc.line, deferred: rc.deferred, tx: rc.tx, wrapper: rc.toId });
+        httpCalls.push({ fromId: rc.fromId, ...('lit' in seen.method ? { method: seen.method.lit } : {}), path, line: rc.line, deferred: rc.deferred, tx: rc.tx, ...(rc.when ? { when: rc.when } : {}), wrapper: rc.toId });
       }
       frontier = next;
     }
@@ -1833,6 +1854,7 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
     }
   }
 
+  resolveFlagGates(edges, boolConstsByFile, importsByFile, reexportsByFile);
   linkLifecycles(repo, nodes, edges, lifeFacts);
   // after the lifecycle: the actions are the functions that move a record's status, and the routes
   linkPreconditions(repo, nodes, edges, preFacts, lifeFacts.decls);
