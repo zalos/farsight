@@ -52,6 +52,8 @@ test('summary calls are stateless with bounded input, generation and final outpu
   assert.equal(calls[0].think, false);
   assert.equal(calls[0].stream, false);
   assert.equal(calls[0].options.num_predict, 100);
+  assert.equal(calls[0].options.num_ctx, 4096);
+  assert.equal(calls[0].keep_alive, 0);
   assert.deepEqual(calls[0].format.required, ['summary']);
   assert.equal(calls[0].format.additionalProperties, false);
   assert.equal(calls[1].messages.length, 2);
@@ -67,12 +69,15 @@ test('OpenAI-compatible summaries use the configured origin and model with no hi
       const body = JSON.parse(raw);
       assert.equal(body.model, 'explicit-model');
       assert.equal(body.max_tokens, 384);
+      assert.equal(body.options, undefined);
+      assert.equal(body.keep_alive, undefined);
       assert.equal(request.headers.authorization, undefined);
       response.end(JSON.stringify({ choices: [{ message: { content: 'A brief.' } }] }));
     });
   }, async profile => {
     profile.model.provider = 'openai-compatible';
     profile.model.model = 'explicit-model';
+    profile.model.ollama = { contextTokens: 8192, keepAliveSeconds: 120 };
     assert.equal(await summarize(profile, 'source text'), 'A brief.');
     await assert.rejects(listModels(profile), /available for Ollama/);
   });
@@ -134,4 +139,44 @@ test('only structured Ollama summary text is returned; reasoning, extra fields a
     profile.model.provider = 'openai-compatible';
     await assert.rejects(summarize(profile, 'source'), /stopped before completing/);
   });
+});
+
+
+test('native Ollama summaries honor explicit resource settings', async () => {
+  await fixture((request, response) => {
+    let raw = '';
+    request.on('data', chunk => { raw += chunk; });
+    request.on('end', () => {
+      const body = JSON.parse(raw);
+      assert.equal(body.options.num_ctx, 8192);
+      assert.equal(body.keep_alive, 120);
+      response.end(JSON.stringify({ message: { content: '{"summary":"A bounded brief."}' }, done: true, done_reason: 'stop' }));
+    });
+  }, async profile => {
+    profile.model.ollama = { contextTokens: 8192, keepAliveSeconds: 120 };
+    assert.equal(await summarize(profile, 'source text'), 'A bounded brief.');
+  });
+});
+
+test('model discovery supports cancellation before dispatch and while waiting for headers or body', async () => {
+  const secretReason = 'private-discovery-abort';
+  const isCancelled = (error: unknown) => error instanceof Error && error.name === 'AbortError' && !error.message.includes(secretReason);
+  let calls = 0;
+  await fixture((_request, response) => { calls++; response.end('{"models":[]}'); }, async profile => {
+    const controller = new AbortController();
+    controller.abort(new Error(secretReason));
+    await assert.rejects(listModels(profile, { signal: controller.signal }), isCancelled);
+    assert.equal(calls, 0);
+  });
+  for (const stream of [false, true]) {
+    const controller = new AbortController();
+    await fixture((_request, response) => {
+      if (stream) { response.writeHead(200); response.write('{'); }
+      setTimeout(() => controller.abort(new Error(secretReason)), 10);
+    }, async profile => {
+      const started = Date.now();
+      await assert.rejects(listModels(profile, { signal: controller.signal }), isCancelled);
+      assert.ok(Date.now() - started < 2000);
+    });
+  }
 });

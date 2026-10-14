@@ -8,7 +8,7 @@ import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { parseKeychainRef } from './secrets.js';
 import { withSettingsLock } from './settings-lock.js';
 import { withConfigCredentialPins, recordFileTrust, requireFileTrust } from './trust.js';
-import type { EchoConfig, EchoContext, EchoProfile } from './types.js';
+import type { EchoConfig, EchoContext, EchoProfile, OllamaSettings } from './types.js';
 
 function fail(key = 'echo.config.shape'): never { throw new Error(echoConfigWord(key)); }
 function record(value: unknown, fields?: readonly string[]): Record<string, unknown> {
@@ -59,9 +59,19 @@ function origin(value: unknown, localOnly = false, allowPrivateHttp = false): { 
   return { url: parsed.origin, exactUrl, local, port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80)) };
 }
 
+/** Effective native Ollama resource limits without adding fields to legacy settings. */
+export function ollamaSettings(model: Pick<EchoProfile['model'], 'ollama'>): OllamaSettings {
+  if (model.ollama === undefined) return { contextTokens: 4096, keepAliveSeconds: 0 };
+  const settings = record(model.ollama, ['contextTokens', 'keepAliveSeconds']);
+  return {
+    contextTokens: integer(settings.contextTokens, 2048, 131_072),
+    keepAliveSeconds: integer(settings.keepAliveSeconds, 0, 3600),
+  };
+}
+
 /** Validate at dispatch as well as settings load; exported adapters cannot bypass transport policy. */
 export function validateModelSettings(value: unknown): EchoProfile['model'] {
-  const model = record(value, ['provider', 'baseUrl', 'model', 'secretRef', 'allowInsecureHttp']);
+  const model = record(value, ['provider', 'baseUrl', 'model', 'secretRef', 'allowInsecureHttp', 'ollama']);
   if (model.provider !== 'ollama' && model.provider !== 'openai-compatible') fail();
   const allowInsecureHttp = model.allowInsecureHttp === undefined ? false : bool(model.allowInsecureHttp);
   const address = origin(model.baseUrl, false, allowInsecureHttp);
@@ -71,6 +81,7 @@ export function validateModelSettings(value: unknown): EchoProfile['model'] {
     provider: model.provider, baseUrl: address.exactUrl, model: label(model.model, 'echo.config.shape', true),
     ...(modelSecret === undefined ? {} : { secretRef: modelSecret }),
     ...(model.allowInsecureHttp === undefined ? {} : { allowInsecureHttp }),
+    ...(model.ollama === undefined ? {} : { ollama: ollamaSettings({ ollama: model.ollama as OllamaSettings }) }),
   };
 }
 

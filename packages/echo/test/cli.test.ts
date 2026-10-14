@@ -181,3 +181,72 @@ test('existing settings need explicit trust and edited bytes invalidate approval
     assert.throws(() => loadContext(path));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('model setup CLI uses saved selection without memory startup, changing settings or automatic generation', async () => {
+  const { createServer } = await import('node:http');
+  const { defaultConfig } = await import('../dist/config.js');
+  const directory = mkdtempSync(join(tmpdir(), 'echo-cli-model-'));
+  const calls: { url?: string; body: any }[] = [];
+  const server = createServer(async (req, res) => {
+    let body = ''; for await (const chunk of req) body += chunk;
+    calls.push({ url: req.url, body: body ? JSON.parse(body) : undefined });
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/api/tags') res.end(JSON.stringify({ models: [{ name: 'fixture-model' }] }));
+    else if (req.url === '/api/chat') res.end(JSON.stringify({ done: true, done_reason: 'stop', prompt_eval_count: 10, eval_count: 9, message: { content: JSON.stringify({ status: 'ready', evidenceId: 'echo-model-test' }) } }));
+    else { res.statusCode = 404; res.end('{}'); }
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const configPath = join(directory, 'settings.json');
+    const config = defaultConfig();
+    config.profiles.work!.model = { provider: 'ollama', baseUrl: `http://127.0.0.1:${(server.address() as any).port}`, model: 'fixture-model' };
+    await saveConfig(configPath, config);
+    const original = readFileSync(configPath, 'utf8');
+    const invoke = async (command: string, extra: string[] = []) => JSON.parse((await run(process.execPath, [entry, command, '--config', configPath, '--profile', 'work', ...extra])).stdout);
+    const discovery = await invoke('models');
+    assert.deepEqual(discovery.models, ['fixture-model']);
+    assert.deepEqual(calls.map(row => row.url), ['/api/tags']);
+    const tested = await invoke('model-test');
+    assert.equal(tested.status, 'ready'); assert.equal(tested.profileId, 'work');
+    assert.deepEqual(tested.usage, { modelCalls: 1, inputTokens: 10, outputTokens: 9 });
+    assert.deepEqual(calls.map(row => row.url), ['/api/tags', '/api/chat']);
+    assert.equal(calls[1]!.body.model, 'fixture-model');
+    assert.equal(calls[1]!.body.keep_alive, 0);
+    assert.equal(calls[1]!.body.options.num_ctx, 4096);
+    await assert.rejects(invoke('model-test', ['--query', 'Do not send arbitrary text']));
+    assert.equal(calls.length, 2);
+    assert.equal(readFileSync(configPath, 'utf8'), original);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('interrupting model-test cancels the request and preserves the interrupted exit status', { timeout: 15000 }, async () => {
+  const { createServer } = await import('node:http');
+  const { spawn } = await import('node:child_process');
+  const { once } = await import('node:events');
+  const { defaultConfig } = await import('../dist/config.js');
+  const directory = mkdtempSync(join(tmpdir(), 'echo-cli-interrupt-'));
+  let started!: () => void;
+  const received = new Promise<void>(resolve => { started = resolve; });
+  const server = createServer((req, _res) => { req.resume(); started(); });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  let child: ReturnType<typeof spawn> | undefined;
+  try {
+    const configPath = join(directory, 'settings.json');
+    const config = defaultConfig();
+    config.profiles.personal!.model = { provider: 'ollama', baseUrl: `http://127.0.0.1:${(server.address() as any).port}`, model: 'fixture-model' };
+    await saveConfig(configPath, config);
+    child = spawn(process.execPath, [entry, 'model-test', '--config', configPath], { stdio: 'ignore' });
+    const exited = once(child, 'exit');
+    await Promise.race([received, exited.then(() => { throw new Error('The CLI exited before sending its model request'); })]);
+    child.kill('SIGINT');
+    const [code, signal] = await exited;
+    assert.equal(code, 130); assert.equal(signal, null);
+  } finally {
+    child?.kill('SIGTERM'); server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

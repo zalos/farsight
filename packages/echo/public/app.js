@@ -18,9 +18,73 @@ let config, revision, running, installation, selected, baseline, defaults, porta
 let portal, activeView = 'memories';
 let form, profileList, saveButton, editState, notice;
 let busy = false;
+let modelSetupAvailable = false, restartRequired = false, restartNotice, modelActions, modelJob;
+
+function settingsDirty() { return JSON.stringify(config) !== baseline; }
+
+function refreshModelActions() {
+  if (!modelActions) return;
+  const disabled = readOnly || busy || !modelSetupAvailable || settingsDirty() || !!modelJob;
+  modelActions.discover.disabled = disabled || config.profiles[selected].model.provider !== 'ollama';
+  modelActions.test.disabled = disabled || !config.profiles[selected].model.model;
+  modelActions.cancel.hidden = !modelJob;
+  modelActions.list.disabled = disabled;
+  modelActions.note.textContent = t(settingsDirty() ? 'modelSetupSaveFirst' : 'modelSetupNote');
+}
+
+function cancelModelSetup(show = false) {
+  const job = modelJob;
+  modelJob = undefined;
+  job?.controller.abort();
+  if (modelActions && job && show) modelActions.status.replaceChildren(word('p', 'modelSetupCancelled'));
+  refreshModelActions();
+}
+
+function modelIdentity(target, identity) {
+  const details = el('dl', 'model-identity');
+  for (const [key, value] of [['running', identity.profileId], ['provider', identity.provider === 'ollama' ? t('ollama') : t('compatible')], ['modelUrl', identity.origin ?? identity.baseUrl], ['modelName', identity.model || t('modelSetupNoModel')]]) {
+    details.append(word('dt', key === 'running' ? 'modelSetupProfile' : key), el('dd', '', value));
+  }
+  target.append(details);
+}
+
+async function runModelSetup(action) {
+  if (readOnly || busy || !modelSetupAvailable || settingsDirty() || modelJob) return;
+  const controls = modelActions;
+  const profileId = selected;
+  const controller = new AbortController();
+  const job = { controller, profileId, revision };
+  modelJob = job;
+  controls.status.replaceChildren(word('p', action === 'models' ? 'modelSetupDiscovering' : 'modelSetupTesting'));
+  controls.list.replaceChildren(word('option', 'modelSetupChoose'));
+  controls.list.hidden = true;
+  refreshModelActions();
+  try {
+    const data = await request(`/api/model/${action}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'If-Match': job.revision },
+      body: JSON.stringify({ profileId }),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(config.profiles[profileId].budget.timeoutMs + 2000)]),
+    });
+    if (modelJob !== job || selected !== profileId || revision !== job.revision || activeView !== 'settings') return;
+    controls.status.replaceChildren(word('p', data.status === 'unsupported' ? 'modelSetupUnsupported' : action === 'models' ? data.models.length ? 'modelSetupModelsReady' : 'modelSetupNoModels' : 'modelSetupReady'));
+    modelIdentity(controls.status, data);
+    if (action === 'models' && data.status === 'ready' && data.models.length) {
+      for (const name of data.models) { const option = el('option', '', name); option.value = name; controls.list.append(option); }
+      controls.list.firstElementChild.value = '';
+      controls.list.value = '';
+      controls.list.hidden = false;
+      if (data.truncated) controls.status.append(word('p', 'modelSetupModelsTruncated'));
+    }
+  } catch (error) {
+    if (modelJob !== job) return;
+    controls.status.replaceChildren(el('p', 'error', error.name === 'TimeoutError' ? t('modelSetupTimeout') : error.message || t('modelSetupFailed')));
+  } finally {
+    if (modelJob === job) { modelJob = undefined; refreshModelActions(); }
+  }
+}
 
 async function request(path, options) {
-  const response = await fetch(path, { ...options, signal: AbortSignal.timeout(20_000) });
+  const response = await fetch(path, { ...options, signal: options?.signal ?? AbortSignal.timeout(20_000) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || t('failed'));
   return data;
@@ -92,7 +156,9 @@ function captureForm() {
   const p = config.profiles[selected];
   p.identity = { individual: value('individual'), team: optional('team'), project: value('project') };
   p.backend = { mode: value('backendMode'), url: value('backendUrl'), ...(value('backendMode') === 'external' ? { secretRef: optional('backendSecret') } : {}) };
-  p.model = { provider: value('provider'), baseUrl: value('modelUrl'), model: value('modelName'), secretRef: optional('modelSecret'), ...(p.model.allowInsecureHttp !== undefined || values.has('allowInsecureHttp') ? { allowInsecureHttp: values.has('allowInsecureHttp') } : {}) };
+  const ollama = { contextTokens: Number(value('ollamaContext')), keepAliveSeconds: Number(value('ollamaKeepAlive')) };
+  const ollamaChanged = ollama.contextTokens !== 4096 || ollama.keepAliveSeconds !== 0;
+  p.model = { provider: value('provider'), baseUrl: value('modelUrl'), model: value('modelName'), secretRef: optional('modelSecret'), ...(p.model.allowInsecureHttp !== undefined || values.has('allowInsecureHttp') ? { allowInsecureHttp: values.has('allowInsecureHttp') } : {}), ...(p.model.ollama !== undefined || ollamaChanged ? { ollama } : {}) };
   const submind = {
     mode: value('submindMode'),
     maxSteps: Number(value('maxSteps')), maxSearches: Number(value('maxSearches')),
@@ -111,7 +177,9 @@ function captureForm() {
 
 function markDirty() {
   captureForm();
-  const dirty = JSON.stringify(config) !== baseline;
+  const dirty = settingsDirty();
+  if (dirty) { cancelModelSetup(); if (modelActions) { modelActions.status.replaceChildren(); modelActions.list.hidden = true; } }
+  refreshModelActions();
   editState.textContent = t(dirty ? 'unsaved' : 'savedState');
   editState.classList.toggle('dirty', dirty);
   saveButton.disabled = readOnly || busy || !dirty;
@@ -128,6 +196,7 @@ function renderProfiles() {
     button.addEventListener('click', () => {
       if (busy) return;
       captureForm();
+      cancelModelSetup();
       selected = id;
       renderProfiles();
       renderForm();
@@ -138,6 +207,8 @@ function renderProfiles() {
 }
 
 function renderForm() {
+  cancelModelSetup();
+  modelActions = undefined;
   form.replaceChildren();
   const p = config.profiles[selected];
   const context = el('div', 'editing-context');
@@ -166,6 +237,33 @@ function renderForm() {
   memory.grid.append(backendMode, field('backendUrl', 'backendUrl', p.backend.url, { type: 'url', required: true, wide: true }), backendSecret);
   const model = section('model', 'modelNote');
   model.grid.append(field('provider', 'provider', p.model.provider, { options: [['ollama', 'ollama'], ['openai-compatible', 'compatible']], wide: true }), field('modelUrl', 'modelUrl', p.model.baseUrl, { type: 'url', required: true, wide: true }), field('modelName', 'modelName', p.model.model, { wide: true, hint: 'optional' }), field('secretRef', 'modelSecret', p.model.secretRef, { wide: true, hint: 'secretsNote' }), toggle('allowInsecureHttp', 'allowInsecureHttp', p.model.allowInsecureHttp), word('p', 'remoteModelNote', 'field-hint wide'));
+  model.card.classList.add('model-settings');
+  const ollamaOptions = el('div', 'ollama-options wide');
+  ollamaOptions.append(field('ollamaContext', 'ollamaContext', p.model.ollama?.contextTokens ?? 4096, { type: 'number', min: 2048, max: 131072, required: true, hint: 'ollamaContextNote' }), field('ollamaKeepAlive', 'ollamaKeepAlive', p.model.ollama?.keepAliveSeconds ?? 0, { type: 'number', min: 0, max: 3600, required: true, hint: 'ollamaKeepAliveNote' }));
+  // Keep the inactive values in FormData so switching providers does not discard them.
+  const providerInput = model.grid.querySelector('[name="provider"]');
+  const showOllama = () => { ollamaOptions.hidden = providerInput.value !== 'ollama'; refreshModelActions(); };
+  providerInput.addEventListener('change', showOllama);
+  showOllama();
+  const setup = el('div', 'model-setup wide');
+  const setupNote = word('p', 'modelSetupNote', 'section-note');
+  const setupButtons = el('div', 'model-setup-buttons');
+  const discover = word('button', 'modelSetupDiscover', 'button secondary'); discover.type = 'button';
+  const modelTest = word('button', 'modelSetupTest', 'button secondary'); modelTest.type = 'button';
+  const cancel = word('button', 'modelSetupCancel', 'text-button'); cancel.type = 'button'; cancel.hidden = true;
+  discover.addEventListener('click', () => runModelSetup('models'));
+  modelTest.addEventListener('click', () => runModelSetup('test'));
+  cancel.addEventListener('click', () => cancelModelSetup(true));
+  setupButtons.append(discover, modelTest, cancel);
+  const discovered = el('select', 'discovered-models'); discovered.hidden = true;
+  discovered.setAttribute('aria-label', t('modelSetupChoose'));
+  discovered.title = strings['echo.ui.modelSetupChoose'].define;
+  discovered.addEventListener('change', () => { if (discovered.value) { form.elements.modelName.value = discovered.value; markDirty(); } });
+  const setupStatus = el('div', 'model-setup-status'); setupStatus.setAttribute('role', 'status'); setupStatus.setAttribute('aria-live', 'polite');
+  setup.append(setupNote, setupButtons, discovered, setupStatus);
+  modelActions = { discover, test: modelTest, cancel, list: discovered, status: setupStatus, note: setupNote };
+  model.grid.append(ollamaOptions, setup);
+  refreshModelActions();
   const submind = section('submind', 'submindNote');
   submind.card.classList.add('submind');
   const policy = p.submind ?? defaults.submind;
@@ -215,12 +313,15 @@ async function load() {
   defaults = data.defaults;
   portalOptions = data.portal ?? { available: false };
   readOnly = data.readOnly === true;
+  modelSetupAvailable = data.modelSetup?.available === true;
+  restartRequired = data.restartRequired === true;
   baseline = JSON.stringify(config);
   if (!selected || !config.profiles[selected]) selected = config.profiles[running.profileId] ? running.profileId : config.defaultProfile;
 }
 
 function render() {
   portal?.cancel();
+  cancelModelSetup();
   root.replaceChildren();
   const header = el('header', 'masthead');
   const brand = el('div');
@@ -243,6 +344,11 @@ function render() {
   pathRow('configLocation', installation.configPath);
   pathRow('runningLocation', running.dataDirectory);
   pathRow('workspaceLocation', installation.workspaceRoot);
+  const runtimeModel = el('section', 'card runtime-model');
+  runtimeModel.append(word('h2', 'runningModel'));
+  if (running.model) modelIdentity(runtimeModel, { ...running.model, profileId: running.profileId });
+  restartNotice = word('p', 'restartRequired', 'restart-required'); restartNotice.hidden = !restartRequired;
+  runtimeModel.append(restartNotice);
   location.append(locationHeading, word('p', `${installation.scope}ScopeNote`, 'section-note'), locations, word('p', 'installationNote', 'section-note installation-note'));
   const layout = el('div', 'layout');
   const sidebar = el('aside', 'sidebar');
@@ -261,7 +367,9 @@ function render() {
     event.preventDefault();
     if (readOnly) return;
     captureForm();
+    cancelModelSetup();
     busy = true;
+    refreshModelActions();
     form.inert = true;
     profileList.inert = true;
     reload.disabled = true;
@@ -271,7 +379,11 @@ function render() {
       const data = await request('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'If-Match': revision }, body: JSON.stringify(config) });
       config = data.config;
       revision = data.revision;
+      restartRequired = data.restartRequired === true;
+      restartNotice.hidden = !restartRequired;
       baseline = JSON.stringify(config);
+      // Show validated saved values before capturing the form again (for example a normalized origin).
+      renderForm();
       announce(t('saved'));
     } catch (error) { announce(error.message || t('failed'), true); }
     finally { busy = false; form.inert = false; profileList.inert = false; reload.disabled = false; saveButton.textContent = t('save'); markDirty(); }
@@ -310,6 +422,7 @@ function render() {
   const reload = word('button', 'reload', 'button secondary');
   reload.type = 'button';
   reload.addEventListener('click', async () => {
+    cancelModelSetup();
     reload.disabled = true;
     try { await load(); render(); } catch (error) { announce(error.message || t('unavailable'), true); reload.disabled = false; }
   });
@@ -322,12 +435,13 @@ function render() {
   footer.append(saveMessage, actions);
   const tabs = el('div', 'view-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', strings['echo.portal.navigation'].professional);
   const settingsPanel = el('section', 'settings-panel'); settingsPanel.id = 'echo-settings'; settingsPanel.setAttribute('role', 'tabpanel'); settingsPanel.setAttribute('aria-labelledby', 'tab-settings');
-  settingsPanel.append(hero, boundary, location, layout, footer);
+  settingsPanel.append(hero, boundary, location, runtimeModel, layout, footer);
   if (readOnly) { const note = el('p', 'synthetic-preview', strings['echo.portal.demoSettings'].professional); note.title = strings['echo.portal.demoSettings'].define; settingsPanel.prepend(note); }
   portal = createPortal({ strings, running, available: portalOptions.available, synthetic: portalOptions.synthetic });
   portal.element.setAttribute('role', 'tabpanel'); portal.element.setAttribute('aria-labelledby', 'tab-memories');
   const tabButtons = new Map();
   function selectView(view, focus = false) {
+    if (view !== activeView) cancelModelSetup(true);
     activeView = view;
     for (const [key, tab] of tabButtons) { tab.setAttribute('aria-selected', String(view === key)); tab.tabIndex = view === key ? 0 : -1; }
     settingsPanel.hidden = view !== 'settings'; portal.element.hidden = view !== 'memories';
@@ -356,4 +470,4 @@ try {
   root.replaceChildren(el('p', 'boot-error', strings ? t('unavailable') : root.dataset.error));
 }
 
-window.addEventListener('pagehide', () => portal?.cancel());
+window.addEventListener('pagehide', () => { portal?.cancel(); cancelModelSetup(); });

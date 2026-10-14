@@ -51,6 +51,8 @@ test('sub-mind Ollama uses bounded schema JSON requests with usage and no hidden
       usage: { inputTokens: 41, outputTokens: 12 },
     });
     assert.equal(calls[0].options.num_predict, 128);
+    assert.equal(calls[0].options.num_ctx, 4096);
+    assert.equal(calls[0].keep_alive, 0);
     assert.deepEqual(calls[0].format, input().schema);
     assert.equal(calls[0].stream, false);
     assert.equal(calls[0].think, false);
@@ -64,6 +66,8 @@ test('compatible sub-mind uses configured endpoint with JSON mode, schema instru
     void body(req).then(value => {
       assert.deepEqual(value.response_format, { type: 'json_object' });
       assert.equal(value.max_tokens, 384);
+      assert.equal(value.options, undefined);
+      assert.equal(value.keep_alive, undefined);
       assert.equal(value.model, 'configured-model');
       assert.ok(value.messages[0].content.includes(JSON.stringify(input().schema)));
       assert.deepEqual(value.messages.slice(1), input().messages);
@@ -71,6 +75,7 @@ test('compatible sub-mind uses configured endpoint with JSON mode, schema instru
     });
   }, async profile => {
     profile.model.provider = 'openai-compatible';
+    profile.model.ollama = { contextTokens: 8192, keepAliveSeconds: 60 };
     const result = await generateSubmind(profile, input());
     assert.deepEqual(result.usage, { inputTokens: 45, outputTokens: 14 });
     assert.deepEqual(result.content, { answer: 'A supported fix' });
@@ -240,4 +245,26 @@ test('input measurement needs neither a selected model nor a resolved credential
   assert.ok(submindInputChars(profile, input()) > 0);
   profile.model.provider = 'openai-compatible';
   assert.ok(submindInputChars(profile, input()) > 0);
+});
+
+
+test('native sub-mind requests honor resource limits and reject invalid values before dispatch', async () => {
+  let calls = 0;
+  await fixture((req, res) => {
+    calls++;
+    void body(req).then(value => {
+      assert.equal(value.options.num_ctx, 16384);
+      assert.equal(value.keep_alive, 300);
+      res.end(JSON.stringify(ollama()));
+    });
+  }, async profile => {
+    profile.model.ollama = { contextTokens: 16384, keepAliveSeconds: 300 };
+    await generateSubmind(profile, input());
+    assert.equal(calls, 1);
+    profile.model.ollama.keepAliveSeconds = -1;
+    await assert.rejects(generateSubmind(profile, input()));
+    await assert.rejects(summarize(profile, 'source'));
+    await assert.rejects(listModels(profile));
+    assert.equal(calls, 1);
+  });
 });

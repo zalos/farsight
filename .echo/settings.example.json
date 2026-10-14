@@ -14,7 +14,11 @@
       "model": {
         "provider": "ollama",
         "baseUrl": "http://127.0.0.1:11434",
-        "model": ""
+        "model": "",
+        "ollama": {
+          "contextTokens": 4096,
+          "keepAliveSeconds": 0
+        }
       },
       "web": {
         "port": 4480
@@ -57,7 +61,11 @@
       "model": {
         "provider": "ollama",
         "baseUrl": "http://127.0.0.1:11434",
-        "model": ""
+        "model": "",
+        "ollama": {
+          "contextTokens": 4096,
+          "keepAliveSeconds": 0
+        }
       },
       "web": {
         "port": 4481

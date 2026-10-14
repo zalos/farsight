@@ -7,10 +7,16 @@ export interface EchoConfig {
   profiles: Record<string, EchoProfile>;
 }
 
+/** Native Ollama resource limits; character budgets remain separate from model token capacity. */
+export interface OllamaSettings {
+  contextTokens: number;
+  keepAliveSeconds: number;
+}
+
 export interface EchoProfile {
   identity: { individual: string; team?: string; project: string };
   backend: { mode: 'managed' | 'external'; url: string; secretRef?: string };
-  model: { provider: 'ollama' | 'openai-compatible'; baseUrl: string; model: string; secretRef?: string; allowInsecureHttp?: boolean };
+  model: { provider: 'ollama' | 'openai-compatible'; baseUrl: string; model: string; secretRef?: string; allowInsecureHttp?: boolean; ollama?: OllamaSettings };
   submind?: SubmindSettings;
   web: { port: number; farsightOrigin?: string };
   hooks: { claude: boolean; codex: boolean; vscode?: boolean };

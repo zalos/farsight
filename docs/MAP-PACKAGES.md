@@ -15,6 +15,8 @@
   | `installation.ts` | local/global resolution, one workspace connection pointer, preflight, backups and pointer removal |
   | `secrets.ts` | Echo-only keychain references; origin verification before OS keychain access |
   | `sessions.ts` | immutable host-session bindings across both configuration and workspace state |
+  | `model-setup.ts`, `model-setup-types.ts` | saved-profile discovery and one synthetic structured model test, typed safe results, independent of memory storage |
+  | `model-gate.ts` | one process-owned model operation across setup tests and private-bridge research, retained until cancelled generation settles |
   | `models.ts` | bounded Ollama and OpenAI-compatible requests; model listing, explicit summaries, structured sub-mind generations, exact request accounting and remote transport policy |
   | `submind-types.ts`, `submind.ts` | typed research results/actions, read-only mock/model controller, bounded follow-up searches, validated citations, usage and exact evidence expansion |
   | `research-store.ts` | scoped candidate searches, paged browsing and exact reads; content-bound revisions, source topics, date filtering, bounded evidence, and adaptive page sizes for oversized responses |

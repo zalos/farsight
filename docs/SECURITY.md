@@ -36,6 +36,8 @@ a host session cannot switch identity or store mid-chat. These controls prevent 
 authentication and permission enforcement are not built. Keep managed ports local rather than publishing them
 as a shared team service.
 
+**Model setup is explicit and uses saved settings.** `POST /api/model/models` and `/api/model/test` accept only a profile ID and the current `If-Match` settings revision. The server loads and verifies the saved configuration, applies the existing address and credential-origin policies, and rechecks the revision before returning. Requests cannot supply arbitrary prompts, endpoints, headers or credentials. Discovery reads model metadata; testing sends fixed synthetic evidence once and validates a strict reply. Neither reads user memory or starts the memory engine. The synthetic preview refuses both operations. Disconnects and deadlines cancel work, and responses contain only allowlisted identity/status/usage fields or catalog errors. A process-owned gate prevents a setup test from overlapping model research in that service; separate CLI processes and independently started services still rely on the provider's own concurrency controls.
+
 **A checkout cannot approve its own configuration.** Echo records configuration, connection and credential-origin
 receipts under `${XDG_STATE_HOME:-~/.local/state}/farsight-echo/`, outside the workspace. The directories are
 owner-only (0700) and receipts are owner-only regular files (0600), with symbolic links refused. A configuration

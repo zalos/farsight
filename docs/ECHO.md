@@ -186,6 +186,14 @@ farsight-echo portal-demo --port 0
 
 The default is port `4491`; `--port 0` asks the operating system for an available port. Open the URL printed by the command. This uses the real portal and private memory bridge with synthetic in-memory records and mock research. It starts no model, agentmemory worker, or engine, and does not read an existing Echo configuration or memory store. Configuration and trust state are temporary, the **Synthetic preview** banner is visible, and settings are read-only. Ctrl-C closes both listeners and removes temporary state. It provides a low-resource interaction preview, not a persistence or model-quality test.
 
+## Saved model setup and live operation
+
+Settings can discover installed models from a saved Ollama endpoint and run one explicit synthetic structured-generation test. These actions read the selected saved profile, require its current settings revision, and do not depend on the memory backend. Discovery never generates or downloads. A test runs even when research is off or mock because it is an explicit request to use the model. Compatible endpoints use a manually entered model name. CLI equivalents are `models` and `model-test` with the ordinary scope/profile selectors.
+
+The running model identity and a restart indicator distinguish a successful test of saved settings from the currently running service. Saving does not start generation or hot-switch an active profile. Restart that profile's `serve` to apply runtime changes, then use the real Memories view and explicit sub-mind question. `portal-demo` always remains synthetic and disables live setup actions.
+
+Optional `model.ollama` settings contain `contextTokens` (2,048–131,072) and `keepAliveSeconds` (0–3,600), both required when the object is present. Effective defaults are 4,096 tokens and zero retention; legacy configuration files need no rewrite. Native Ollama requests include those values, while compatible requests omit them. Context capacity, serialized-input character allowance, and output allowance are distinct controls. Changing resource settings changes the session selection and requires a new service/host session.
+
 ## Sub-mind research and remote inference
 
 The sub-mind is an optional read-only curator invoked by `ask --query TEXT` or the portal’s explicit **Ask sub-mind** action; installed hooks retain raw recall.
@@ -198,8 +206,9 @@ are independent: the memory backend can remain local while a desktop Ollama serv
 performs inference. This milestone does not host the full Echo service remotely or expose the localhost portal.
 
 The settings view edits mode and limits without inference. It displays the running mode separately from saved
-configuration. Saving and restarting applies the mode; generation occurs only on explicit research or the optional
-`smoke --with-model` check. The latter is a real model call even when research mode is off or mock.
+configuration. Saving and restarting applies the mode; generation occurs only on explicit research, **Test model**
+in Settings, `model-test`, or the optional `smoke --with-model` check. These explicit model checks make a real model
+call even when research mode is off or mock.
 
 The policy defaults are `mode: off`, `maxSteps: 3`, `maxSearches: 3`, `maxCandidates: 12`,
 `evidenceMaxChars: 12000`, `inputMaxChars: 48000`, `lookbackDays: 90`, `timeoutMs: 30000`, and

@@ -6,8 +6,10 @@ import { echoMemoryWord } from '@farsight/core/dist/strings-echo-memory.js';
 import { containsCredentialShape } from '@farsight/core/dist/credential-shapes.js';
 import { loadContext, submindSettings } from './config.js';
 import { createResearchStore } from './research-store.js';
+import { generateSubmind } from './models.js';
+import { ModelBusyError, withModelOperation } from './model-gate.js';
 import { research, expandMemory, validateResearchQuery, validateExpansion, type SubmindGenerator } from './submind.js';
-import type { SubmindResult, ExpandResult, ResearchStore } from './submind-types.js';
+import type { SubmindModelResponse, SubmindResult, ExpandResult, ResearchStore } from './submind-types.js';
 import { backendRequest } from './runtime.js';
 import { contextFingerprint } from './sessions.js';
 import type { BackendConnection, EchoContext } from './types.js';
@@ -206,7 +208,26 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
           if (operation === 'ask') {
             if (researching) fail('busy');
             researching = true;
-            try { result = await research(snapshot.profile, store, input as RecallInput, { signal: abort.signal, generate: dependencies.generate }); }
+            try {
+              const run = () => research(snapshot.profile, store, input as RecallInput, { signal: abort.signal, generate: dependencies.generate });
+              if (submindSettings(snapshot.profile).mode !== 'model') result = await run();
+              else result = await withModelOperation(async () => {
+                let generation: Promise<SubmindModelResponse> | undefined;
+                try {
+                  return await research(snapshot.profile, store, input as RecallInput, {
+                    signal: abort.signal,
+                    generate: (profile, request) => {
+                      generation = Promise.resolve().then(() => (dependencies.generate ?? generateSubmind)(profile, request));
+                      return generation;
+                    },
+                  });
+                } finally {
+                  // Research's deadline can finish before an adapter has stopped. Do not
+                  // admit another generation until that underlying promise has settled.
+                  await generation?.catch(() => {});
+                }
+              });
+            }
             finally { researching = false; }
           } else if (operation === 'expand') {
             result = await expandMemory(snapshot.profile, store, input as { id: string; revision: string }, abort.signal);
@@ -216,7 +237,7 @@ export async function startMemoryBridge(ctx: EchoContext, connection: BackendCon
           if (Buffer.byteLength(reply) > RESPONSE_BYTES) fail('response');
           if (!socket.destroyed) socket.end(reply);
         } catch (error) {
-          const code = error instanceof MemoryFailure ? error.code : 'unavailable';
+          const code = error instanceof MemoryFailure ? error.code : error instanceof ModelBusyError ? 'busy' : 'unavailable';
           if (!socket.destroyed) socket.end(`${JSON.stringify({ ok: false, code })}\n`);
         }
       })();

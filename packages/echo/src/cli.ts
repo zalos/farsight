@@ -17,6 +17,7 @@ import { installRuntime, startBackend, backendHealth, closeOwnedBackends, instal
 import { smoke } from './smoke.js';
 import { word } from './words.js';
 import { submindDemo } from './submind-demo.js';
+import { discoverSetupModels, testSetupModel, ModelSetupFailure, modelSetupMessage } from './model-setup.js';
 import { startPortalDemo } from './portal-demo.js';
 import { createMemoryPortal, PortalFailure } from './portal.js';
 import { echoSubmindWord } from '@farsight/core/dist/strings-echo-submind.js';
@@ -218,6 +219,16 @@ async function main(): Promise<void> {
   if (values.port !== undefined || values['backend-port'] !== undefined) throw new Error(word('setupOptions'));
   const installation = target();
   const ctx = loadContext(installation.configPath, installation.profileId);
+  if (command === 'models' || command === 'model-test') {
+    if (Object.keys(values).some(key => !['config', 'scope', 'profile'].includes(key))) throw new Error(echoSubmindWord('input'));
+    const controller = new AbortController();
+    const interrupted = () => { process.exitCode = 130; controller.abort(); };
+    process.once('SIGINT', interrupted); process.once('SIGTERM', interrupted);
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(ctx.profile.budget.timeoutMs)]);
+    try { print(await (command === 'models' ? discoverSetupModels : testSetupModel)(ctx.profileId, ctx.profile, signal)); }
+    finally { process.off('SIGINT', interrupted); process.off('SIGTERM', interrupted); }
+    return;
+  }
   if (command === 'connect') {
     const host = values.host ?? 'all';
     if (host !== 'claude' && host !== 'codex' && host !== 'vscode' && host !== 'all') throw new Error(word('hostRequired'));
@@ -306,4 +317,4 @@ async function main(): Promise<void> {
   await starting;
 }
 
-main().catch(error => { process.stderr.write(`${error instanceof Error ? error.message : word('failed')}\n`); process.exitCode = 1; });
+main().catch(error => { process.stderr.write(`${error instanceof ModelSetupFailure ? modelSetupMessage(error) : error instanceof Error ? error.message : word('failed')}\n`); if (process.exitCode !== 130) process.exitCode = 1; });

@@ -222,11 +222,34 @@ farsight-echo install-runtime --scope workspace
 | Skill directories | Save explicit future discovery locations. Echo does not yet read, install, or execute these skills. |
 | Farsight address for embedding | Optionally allow an exact local Farsight origin to frame the view. Farsight navigation integration is not built yet. |
 
-Use service origins without paths or credentials in URLs. The compatible adapter adds `/v1/chat/completions` itself; do not put `/v1` in the configured origin. Prefer HTTPS or a localhost SSH tunnel for remote endpoints. Private-network HTTP requires the explicit exception described below. Current remote request handling is verified with synthetic protocol fixtures; each real deployment still needs its own connection check when inference is appropriate. `doctor` in model mode checks only the model selection for compatible endpoints; the managed `smoke --with-model` path exercises an actual call.
+Use service origins without paths or credentials in URLs. The compatible adapter adds `/v1/chat/completions` itself; do not put `/v1` in the configured origin. Prefer HTTPS or a localhost SSH tunnel for remote endpoints. Private-network HTTP requires the explicit exception described below. Current remote request handling is verified with synthetic protocol fixtures; each real deployment still needs its own connection check when inference is appropriate. `doctor` in model mode checks only the model selection for compatible endpoints; `model-test` verifies a structured generation without starting the memory backend; `smoke --with-model` additionally exercises disposable memory storage.
 
 Personal and work have separate local stores. Within one configuration directory, a host session is bound to its chosen profile, identity, backend, and model settings. Start a **new host session** when changing those boundaries. Keep personal and work in the same configuration file so their session bindings are checked against the same registry. This is local isolation, not multi-user team authorization.
 
 Global means a store owned by the current operating-system user. New global profiles start with `identity.project` set to `shared`; connected workspaces keep that configured namespace instead of substituting their folder names. Global setup does not create a hosted team service, install hooks in every workspace, merge local and global results, or copy existing memories. Connecting a workspace changes which profile it uses; any existing local store stays in place. Select it explicitly with `--scope workspace` or reconnect the workspace to it.
+
+## Find and test a model
+
+In **Settings**, save the selected profile before using **Find installed models** or **Test model**. Discovery lists models from the saved Ollama address without loading or downloading one. Choose a result and save again before testing it. Compatible APIs keep a manually entered model name.
+
+The model test sends fixed synthetic evidence and checks structured output. It makes one generation request, even when research is off or mock, and never reads saved memories or starts the memory backend. Cancel stops the request. Editing settings, switching profiles, or leaving Settings cancels and discards pending results. The synthetic portal preview disables these actions.
+
+The same checks work without a running Echo service:
+
+```sh
+farsight-echo models --scope global --profile personal
+farsight-echo model-test --scope global --profile personal
+```
+
+Settings shows the **running** provider, address, model, and research mode separately from the saved profile. A successful test verifies the saved endpoint; it does not switch the running memory service. When **Restart Echo to use the saved settings.** is shown, stop and restart that profile's `serve`, then open Memories and explicitly ask the sub-mind. Browse and Read more remain model-free.
+
+Native Ollama has two optional resource controls:
+
+```json
+"ollama": { "contextTokens": 4096, "keepAliveSeconds": 0 }
+```
+
+Place this object inside the profile's `model` object. Context size accepts 2,048–131,072 tokens; retention accepts 0–3,600 seconds. Omitted settings use 4,096 and zero: each completed request unloads the model. Longer retention keeps it warm for subsequent requests and uses memory between requests. These settings apply to local or remote native Ollama; compatible APIs control their own context and residency. Character allowances and the provider's context window are separate limits, not an exact token conversion. See Ollama's [context settings](https://docs.ollama.com/faq#how-can-i-specify-the-context-window-size) and [chat API](https://docs.ollama.com/api/chat).
 
 ## Configure the sub-mind and its remote model
 

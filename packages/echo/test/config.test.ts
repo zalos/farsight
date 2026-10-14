@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, realpath, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { defaultConfig, initConfig, loadContext, saveConfig, updateConfig, validateConfig } from '../dist/config.js';
+import { defaultConfig, initConfig, loadContext, saveConfig, updateConfig, validateConfig, ollamaSettings, validateModelSettings } from '../dist/config.js';
+import { contextFingerprint } from '../dist/sessions.js';
+import type { EchoContext } from '../dist/types.js';
 import { pinCredentialOrigin } from '../dist/trust.js';
 import { parseKeychainRef, resolveSecret } from '../dist/secrets.js';
 
@@ -200,4 +202,50 @@ test('private network model transport requires explicit opt-in, literal private 
   assert.equal(validateConfig(config).profiles.personal!.model.baseUrl, 'https://desktop.example.com');
   config.profiles.personal!.backend = { mode: 'external', url: 'http://192.168.1.25:4611' };
   assert.throws(() => validateConfig(config), /service address/, 'model exception never changes backend transport');
+});
+
+
+test('native Ollama resources are bounded and effective defaults leave legacy configuration unchanged', () => {
+  const config = defaultConfig();
+  const original = JSON.stringify(config);
+  const normalized = validateConfig(config);
+  assert.deepEqual(ollamaSettings(normalized.profiles.personal!.model), { contextTokens: 4096, keepAliveSeconds: 0 });
+  assert.equal(normalized.profiles.personal!.model.ollama, undefined);
+  assert.equal(JSON.stringify(config), original);
+  for (const settings of [
+    { contextTokens: 2048, keepAliveSeconds: 0 },
+    { contextTokens: 131_072, keepAliveSeconds: 3600 },
+  ]) {
+    config.profiles.personal!.model.ollama = settings;
+    assert.deepEqual(validateConfig(config).profiles.personal!.model.ollama, settings);
+    config.profiles.personal!.model.provider = 'openai-compatible';
+    assert.deepEqual(validateConfig(config).profiles.personal!.model.ollama, settings, 'preserves inactive settings when switching providers');
+  }
+  for (const settings of [
+    null, [], {}, { contextTokens: 4096 }, { keepAliveSeconds: 0 },
+    { contextTokens: 2047, keepAliveSeconds: 0 }, { contextTokens: 131_073, keepAliveSeconds: 0 },
+    { contextTokens: 4096.5, keepAliveSeconds: 0 }, { contextTokens: '4096', keepAliveSeconds: 0 },
+    { contextTokens: 4096, keepAliveSeconds: -1 }, { contextTokens: 4096, keepAliveSeconds: 3601 },
+    { contextTokens: 4096, keepAliveSeconds: 0.5 }, { contextTokens: 4096, keepAliveSeconds: '0' },
+    { contextTokens: 4096, keepAliveSeconds: 0, extra: 'private-invalid-setting' },
+  ]) {
+    (config.profiles.personal!.model as any).ollama = settings;
+    assert.throws(() => validateConfig(config), error => error instanceof Error && !error.message.includes('private-invalid-setting'));
+    assert.throws(() => validateModelSettings(config.profiles.personal!.model), 'dispatch validation matches settings validation');
+  }
+});
+
+test('session fingerprint treats omitted Ollama resources as defaults and detects resource changes', () => {
+  const config = defaultConfig();
+  const ctx: EchoContext = {
+    config, profileId: 'personal', profile: config.profiles.personal!, configPath: '/example/.echo/settings.json',
+    directory: '/example/.echo', dataDirectory: '/example/.echo/profiles/personal',
+  };
+  const legacy = contextFingerprint(ctx);
+  ctx.profile.model.ollama = { contextTokens: 4096, keepAliveSeconds: 0 };
+  assert.equal(contextFingerprint(ctx), legacy);
+  ctx.profile.model.ollama.contextTokens = 8192;
+  assert.notEqual(contextFingerprint(ctx), legacy);
+  ctx.profile.model.ollama = { contextTokens: 4096, keepAliveSeconds: 60 };
+  assert.notEqual(contextFingerprint(ctx), legacy);
 });
