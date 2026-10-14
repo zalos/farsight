@@ -2207,7 +2207,7 @@ server.registerTool('test_coverage', {
         ? `their own last runs: ${countedText(c.verdict.runs)} (${breakdownText({ ...c.verdict.runs, breakdown: (c.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${c.run?.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''}${c.verdict.projectSplit?.words ? ` · ${c.verdict.projectSplit.words.text}` : ''}`
         : 'their own last runs: no case reaches this flow',
       // the release brief holds it on its own case: said beside the word, never left for the brief alone (F3)
-      ...(c.verdict?.word.held ? [c.verdict.word.held.text] : []),
+      ...(c.verdict?.word.held ? [c.verdict.word.held.full ?? c.verdict.word.held.text] : []),
       c.note,
       row.gap,
       '',

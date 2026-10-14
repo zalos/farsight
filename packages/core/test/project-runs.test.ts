@@ -121,4 +121,5 @@ test('a hold on a case one project ran and skipped names that project and the re
   assert.deepEqual(row.hold, ['skipped']);
   assert.equal(row.holdCases[0]!.where!.text, 'skipped on live (runs only with E2E_LIVE=1)');
   assert.equal(row.holdCases[0]!.where!.biz, 'not run on live (runs only with E2E_LIVE=1)');
+  assert.equal(row.holdCases[0]!.where!.short, 'skipped on live');
 });

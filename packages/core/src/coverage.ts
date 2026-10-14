@@ -267,7 +267,7 @@ export interface EvidenceWord {
    * declared case (`CoverageFacts.held`), and this is the brief's one line in both registers. Every surface that prints
    * the word prints this beside it (`lib/test-chip.js builtOnlyHtml`), so *PASSED* never stands alone beside *HOLD*.
    */
-  held?: { text: string; biz: string };
+  held?: { text: string; biz: string; full: string; fullBiz: string };
 }
 
 /**
@@ -340,9 +340,9 @@ export interface OwnCaseHold {
   /** in the brief's order: a failed case first */
   reasons: ('failed' | 'skipped')[];
   /** each case no project passed, with its projects and their written reasons when more than one ran it */
-  cases: { id: string; name: string; status: 'failed' | 'skipped'; projects?: TestRunProject[]; where?: { text: string; biz: string } }[];
-  /** the brief's one line (`heldWords`), made here so every printer says the same: code and hybrid, and business */
-  words?: { text: string; biz: string };
+  cases: { id: string; name: string; status: 'failed' | 'skipped'; projects?: TestRunProject[]; where?: { text: string; biz: string; short: string; shortBiz: string; reasons: string[] } }[];
+  /** the brief's one line (`heldWords`), made here so every printer says the same: code and hybrid, and business; `full` names every case (a tip) */
+  words?: { text: string; biz: string; full: string; fullBiz: string };
 }
 
 /**
@@ -366,14 +366,15 @@ export function ownCaseHold(index: GraphIndex, flowIds: string[], refs: Coverage
       return {
         id: t.id, name: t.name, status: t.status as 'failed' | 'skipped',
         ...(t.projects ? { projects: t.projects } : {}),
-        ...(where ? { where: { text: where, biz: projectSkipWords(ran, true) } } : {}),
+        // `short` names the projects alone, for a page that carries the quoted reasons in a tip
+        ...(where ? { where: { text: where, biz: projectSkipWords(ran, true), short: projectSkipWords(ran?.map(({ reason: _r, ...p }) => p)), shortBiz: projectSkipWords(ran?.map(({ reason: _r, ...p }) => p), true), reasons: [...new Set((ran ?? []).filter((p) => p.status === 'skipped' && p.reason).map((p) => p.reason!))] } } : {}),
       };
     })
     .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'failed' ? -1 : 1));
   if (!cases.length) return { own };
   const reasons = (['failed', 'skipped'] as const).filter((r) => cases.some((c) => c.status === r));
   const hold: OwnCaseHold = { reasons, cases };
-  hold.words = { text: heldWords(hold), biz: heldWords(hold, true) };
+  hold.words = { text: heldWords(hold), biz: heldWords(hold, true), full: heldWords(hold, false, 'professional', { full: true }), fullBiz: heldWords(hold, true, 'professional', { full: true }) };
   return { own, hold };
 }
 
@@ -382,12 +383,16 @@ export function ownCaseHold(index: GraphIndex, flowIds: string[], refs: Coverage
  * skipped — <case> (skipped on desktop-1440 (live only), mobile-390 (…))*. The reason words are the brief's own
  * (`readiness.hold.*`).
  */
-export function heldWords(held: OwnCaseHold, business = false, register: Register = 'professional'): string {
+export function heldWords(held: OwnCaseHold, business = false, register: Register = 'professional', opts: { full?: boolean } = {}): string {
   const reason = held.reasons.map((r) => t(`readiness.hold.${r}`, register)).join(' · ');
-  const cases = held.cases.map((c) => {
+  const named = (c: OwnCaseHold['cases'][number]) => {
     const where = projectSkipWords(c.projects, business, register);
     return where ? `${c.name} (${where})` : c.name;
-  }).join('; ');
+  };
+  // one line beside a chip: the first case and how many more; `full` (the tip) names every case
+  const first = held.cases[0];
+  const cases = opts.full || held.cases.length === 1 || !first ? held.cases.map(named).join('; ')
+    : fill(t('readiness.held.more', register), { case: first.name, n: String(held.cases.length - 1) });
   return fill(t(business ? 'readiness.biz.held.line' : 'readiness.held.line', register), { reason: `${reason} — ${cases}` });
 }
 

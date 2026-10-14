@@ -75,7 +75,8 @@ export function heldHtml(ev) {
   const h = ev && ev.held;
   if (!h) return '';
   const biz = currentLens() === 'business';
-  return SEP + '<span class="tc-held" data-held' + defAttrs(biz ? 'readiness.biz.held.line' : 'readiness.held.line') + '>' + sym('warning') + esc(biz ? h.biz : h.text) + '</span>';
+  // the line names the first case; the tip names every case (an older server sends no `full`)
+  return SEP + '<span class="tc-held" data-held' + tipAttrs({ text: (biz ? h.fullBiz : h.full) || (biz ? h.biz : h.text) }) + '>' + sym('warning') + esc(biz ? h.biz : h.text) + '</span>';
 }
 
 /**

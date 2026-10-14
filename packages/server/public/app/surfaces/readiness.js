@@ -112,7 +112,10 @@ function rowHtml(row) {
       // the hold names its case (swarm round 3, finding 5)
       + ((row.holdCases || []).length ? '<span class="rd-sub rd-cases">' + row.holdCases.map((c) => '<span data-hold-case="' + esc(c.status) + '">' + esc(c.name)
         // where more than one project ran it: each project and the reason its own skip condition wrote (core's words)
-        + (c.where ? ' <span class="rd-where"' + defAttrs(biz ? 'tests.biz.skippedOn' : 'tests.skippedOn') + '>(' + esc(biz ? c.where.biz : c.where.text) + ')</span>' : '') + '</span>').join(' · ') + '</span>' : '');
+        // the projects inline, the quoted reasons in the tip (a reason can run to a paragraph); an older server sends no `short`
+        + (c.where ? ' <span class="rd-where"' + tipAttrs({ text: biz ? c.where.biz : c.where.text }) + '>(' + esc((biz ? c.where.shortBiz : c.where.short) || (biz ? c.where.biz : c.where.text)) + ')</span>' : '') + '</span>').join(' · ') + '</span>'
+        // each written reason once, quoted, under the cases it holds (three live-only cases share one paragraph)
+        + [...new Set(row.holdCases.flatMap((c) => (c.where && c.where.short && c.where.reasons) || []))].map((r) => '<span class="rd-sub rd-reason"' + defAttrs('tests.projectSkipped') + '>“' + esc(r) + '”</span>').join('') : '');
   // other skips and failures in scope: a note on the row, never a hold
   const n = row.notes || {};
   const notes = ['failed', 'skipped'].filter((k) => n[k] > 0).map((k) => '<span class="rd-note" data-note="' + k + '"' + plainTip(n[k], 'readiness.note.' + k, scope, '/api/readiness') + '>' + esc(countWords('readiness.note.' + k, n[k])) + '</span>')

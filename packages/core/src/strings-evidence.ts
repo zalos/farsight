@@ -34,6 +34,8 @@ export const EVIDENCE_STRINGS: Record<string, StringEntry> = {
   'state.unit.journeysHeldOne': { hud: '1 journey held in the release brief by its own case', professional: '1 journey held in the release brief by its own case', singularOf: 'state.unit.journeysHeld' },
   'readiness.held.line': same('held in the release brief: {reason}',
     'The release brief holds this journey: one of its own declared cases failed, or no project passed it. Said beside the test word so a pass is never read without the hold.'),
+  'readiness.held.more': same('{case} and {n} more',
+    'The first of the journey’s own cases that hold it, and how many more; the tip names every one.'),
   'readiness.biz.held.line': same('held back in the release brief: {reason}',
     'The release brief holds this journey back: one of its own checks failed, or did not run anywhere. Said beside the test word so a pass is never read without it.'),
   'count.scope.route': same('on the routes it will call', 'What the number beside it counts over: the routes a screen that is designed and not built will call. The screen has no code a test can reach.'),
