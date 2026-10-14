@@ -1,6 +1,6 @@
 # Echo: optional memory companion
 
-Echo runs alongside an agent and can optionally connect its settings view to Farsight. It has its own installable package, process, configuration, and storage. Installing or running the normal Farsight CLI does not start Echo or require agentmemory.
+Echo runs alongside an agent and can optionally embed its local memory and settings view in Farsight. It has its own installable package, process, configuration, and storage. Installing or running the normal Farsight CLI does not start Echo or require agentmemory.
 
 The intended workflow is a small brief before each agent request, with source links and detail calls for further retrieval. Echo would use its own model to find and summarize relevant memories and configured skills, then capture useful memories as work proceeds. For example, a cold-storage shipping request could surface a few relevant past shipments and container decisions. Those memory claims remain separate from Farsight's code-derived graph.
 
@@ -12,11 +12,11 @@ The intended workflow is a small brief before each agent request, with source li
 | Workspace stores or one current-user global store connected to selected workspaces | Memory migration and combined local/global retrieval |
 | Managed local or explicitly configured external agentmemory | Shared hosted deployment and synchronization |
 | Configurable sub-mind through local/remote Ollama or a hosted compatible API; deterministic mock mode | Additional native providers, endpoint-specific live acceptance checks, and automatic provider selection |
-| Standalone local settings view with an allowed Farsight embedding origin | A Farsight navigation entry and integrated memory viewer |
+| Standalone read-only memory portal with timeline cards, search, evidence detail, explicit research, and a settings tab; allowed Farsight embedding origin | Memory editing/deletion and a Farsight navigation entry |
 | Explicit managed-memory saves, scoped recall, bounded prompt context, and explicit sub-mind research with follow-up evidence reads | Automatic capture, proactive hook curation, and memory edits |
 | Workspace hooks for Claude Code, Codex, and VS Code Local; optional Claude/Codex plugin preparation | Copilot Agent Host integration and automatic host trust |
 | Configured skill directories | Skill discovery, installation, and execution |
-| Synthetic save, search, restart, and isolation verification | Production retention, daily/topic rollups, and memory review |
+| Synthetic save, search, restart, and isolation verification; isolated model-free portal preview | Production retention, daily/topic rollups, and memory mutation workflows |
 
 ## Install and configure
 
@@ -71,9 +71,9 @@ under `${XDG_STATE_HOME:-~/.local/state}/farsight-echo/`; a repository cannot su
 or older-preview connections with `connect`. After upgrading, run `install-runtime` and `connect` with explicit `--scope global`, `--scope workspace`, or `--config PATH`
 until reconnection approves the legacy pointer. Bare commands will refuse that untrusted pointer.
 
-`serve` runs in the foreground and prints the settings URL. The view remains available if the model or memory service needs fixing. Stop with Ctrl-C; Echo shuts down only its own child processes. Externally managed memory services remain running. Restart `serve` after changing runtime settings so its active services use the saved configuration.
+`serve` runs in the foreground and prints the memory portal URL. The view remains available if the model or memory service needs fixing. Stop with Ctrl-C; Echo shuts down only its own child processes. Externally managed memory services remain running. Restart `serve` after changing runtime settings so its active services use the saved configuration.
 
-The default workspace personal settings URL is `http://127.0.0.1:4480`; work uses port `4481`. Selecting work in the settings
+The default workspace personal portal URL is `http://127.0.0.1:4480`; work uses port `4481`. Selecting work in the settings
 view edits that profile and does not switch the running service. Start `serve --profile work` in another terminal
 to run its distinct store. Workspace backend base ports default to `4611` and `4711`. New global configurations
 use web ports `4490`/`4491` and backend base ports `5211`/`5311`, allowing a global service to run alongside one
@@ -164,9 +164,31 @@ uses `/v1/chat/completions`. Compatibility is tested with a local fixture; each 
 connection check. Ollama summaries use a structured response so thinking text is not mistaken for a brief.
 The final summary is capped by characters; this is not a claim about the main agent's exact token count.
 
+## Read-only memory portal
+
+Normal `serve` serves the local **Memories** view at the configured web port. Open the URL it prints. It presents saved records as timeline cards, grouped by their saved date in UTC, and shows known workspace provenance alongside excerpts. An explicit search queries the store; inclusive UTC start/end dates narrow the results. The topic menu uses actual saved concepts from loaded records only. Browsing and exact record reads never invoke the sub-mind.
+
+Each request remains bound to the running profile, identity, store, and policy. Selecting a different profile in **Settings** edits saved configuration but never switches the memory view. Unsaved edits survive tab switches. The web server checks trusted settings and the startup fingerprint before and after every asynchronous memory request; a changed running configuration requires a service restart. Another profile’s edits do not become a memory selection.
+
+Browse responses use `echo-portal/v1`, with the running scope, saved records, an opaque continuation, clipping/coverage flags, and a per-response `Counted`. Pages request up to 50 records. Only an oversized upstream response causes the same selection and continuation to retry at 10, then one record, within a shared deadline. Transport is capped at 2 MB; returned title/content/topic text shares a 64,000-character allowance. Dates are filtered after the upstream page, so an empty page can still have a continuation. Counts describe each response before the browser’s loaded-topic filter, not an overall inventory; the UI hides them during topic filtering. Pagination is not a stable snapshot and coverage remains non-exhaustive, including when the final continuation is empty. Queried search still inherits upstream’s global candidate ranking limit.
+
+Selecting a card follows its ID and content-bound revision through the existing expansion contract. Detail shows current saved evidence and provenance, with explicit changed, missing, and shortened states. Historical revisions are not retained by this contract. The browser renders memory and model text literally and only follows checked `memory.expand` actions; it does not invent a relation graph or execute model-provided links.
+
+**Ask sub-mind** is separate from ordinary search. Off leaves browsing available and disables research; mock returns labeled deterministic excerpts; model mode uses the selected local or remote provider. Results show problem/fix/why and checked citations. **Read more** is an exact evidence read without inference. Cancellation or leaving the Memories tab aborts active requests, and late responses are ignored. Loading the page, searching, and saving settings do not generate a model response. Memory edits, deletion, and automatic capture remain deferred.
+
+### Isolated preview
+
+```sh
+node packages/echo/dist/cli.js portal-demo
+# Installed package:
+farsight-echo portal-demo --port 0
+```
+
+The default is port `4491`; `--port 0` asks the operating system for an available port. Open the URL printed by the command. This uses the real portal and private memory bridge with synthetic in-memory records and mock research. It starts no model, agentmemory worker, or engine, and does not read an existing Echo configuration or memory store. Configuration and trust state are temporary, the **Synthetic preview** banner is visible, and settings are read-only. Ctrl-C closes both listeners and removes temporary state. It provides a low-resource interaction preview, not a persistence or model-quality test.
+
 ## Sub-mind research and remote inference
 
-The sub-mind is an optional read-only curator invoked by `ask --query TEXT`; installed hooks retain raw recall.
+The sub-mind is an optional read-only curator invoked by `ask --query TEXT` or the portal’s explicit **Ask sub-mind** action; installed hooks retain raw recall.
 It defaults to off, so an existing installation does not begin making model requests after upgrade. Mock mode
 searches the selected memory store and produces labeled deterministic excerpts without model calls. Model mode
 uses the profile's configured endpoint to research and summarize evidence. There is no fallback to another endpoint.
@@ -184,8 +206,8 @@ The policy defaults are `mode: off`, `maxSteps: 3`, `maxSearches: 3`, `maxCandid
 `expandedMaxChars: 12000`. Search history is based on recorded save timestamps, not a claim about when the event
 actually occurred. Research allowances are independent of the initial brief limit; the total serialized input
 allowance counts repeated evidence on subsequent model calls. These are per-request controls, not session/day
-quotas or currency spending guarantees. Proactivity controls, capture, caches, and a memory exploration/editing
-portal are later milestones.
+quotas or currency spending guarantees. Proactivity controls, capture, caches, and memory editing are later milestones.
+The read-only exploration portal is available now.
 
 The versioned `echo-memory/v1` result includes problem/fix/why findings, exact content citations, typed follow-up actions, non-exhaustive coverage, and per-request usage. The brief allowance bounds findings plus actions; envelope metadata is additional. `expand --id ID --revision HASH` reads more of the cited
 record without inference while rechecking scope and content revision. Echo constructs the actions; models cannot
@@ -235,9 +257,10 @@ Agentmemory can store and search without an external model API. The backend hand
 
 ## Memory access and isolation
 
-`serve` starts a filesystem-protected local memory bridge alongside the settings view. The bridge uses a Unix socket
+`serve` starts a filesystem-protected local memory bridge alongside the memory portal and settings view. The bridge uses a Unix socket
 under a current-user-only temporary directory on macOS/Linux, with owner-only socket access. It holds backend
-credentials in memory and exposes no memory HTTP route on the settings server. Local callers connect with a
+credentials in memory. The web server exposes guarded local read-only browse, expand, and ask routes;
+there is no memory mutation route. Expansion and research use the same private bridge as the CLI. Local callers connect with a
 fingerprint of the configuration path, profile, data path, identity, backend, and model. A stale caller is refused;
 restart the service and use a new host session after changing those boundaries.
 
@@ -257,8 +280,8 @@ Remember returns `{id, createdAt}`. Recall returns `{memories, truncated}`; each
 `id`, `title`, `content`, `timestamp`, and historical `provenance`. New saves record the calling workspace, HEAD
 revision when available, and server save time in a content-bound local record; legacy or changed records report
 unknown provenance. Hook output explicitly labels this as memory, not current code evidence. Credential-shaped
-content and topics use the same refusal predicate as pinned lessons, without echoing the value. `--topic` is repeatable and maps to concepts metadata. There is no date or
-topic navigation yet. Recall returns at most five records and caps combined title/content at `budget.briefMaxChars`.
+content and topics use the same refusal predicate as pinned lessons, without echoing the value. `--topic` is repeatable and maps to concepts metadata. The portal offers UTC saved-date navigation and
+filters the loaded results by those stored topics; it does not generate topic labels. Recall returns at most five records and caps combined title/content at `budget.briefMaxChars`.
 The released backend supplies ranking; it is keyword-based unless that backend has embeddings. Echo does not call
 Ollama to rerank or summarize these results.
 

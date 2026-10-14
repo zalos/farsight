@@ -14,7 +14,7 @@ covers what it trusts, what it refuses, and how to report a problem.
 | **secrets** | this process only | settings hold a *reference* (`keychain:farsight/<provider>-<instance>`, or `env:NAME` for tests and CI), never a value. `packages/work/src/secrets.ts` resolves it in process with `security` (macOS) or `secret-tool` (Linux). `PUT /api/settings` refuses an `auth.secret` that is not a reference, without echoing what was sent. Errors name the reference, never the value. The Jira client scrubs the token and the encoded header from any error text it keeps. Only response bodies are recorded as fixtures or stored as an item's `raw`; request headers never are. |
 | **trackers** (Jira, Azure DevOps) | reached with your credential | a write needs three verdicts: the workspace policy (`permissions`), the tracker's own answer for this item and action, and a usable credential. A source is `read-only` unless its settings say `edit`. |
 | **code hosts** (GitHub) | reached with your credential: `keychain:farsight/github-<org>` on a `type: 'code-host'` source, read in process; the GitHub CLI's own login **only** when you pass `--via gh` | `farsight affected --post` writes one comment (found again by its marker line and edited in place) and one commit status, through the same three verdicts as a tracker write (the source's `allow.people` / `allow.agents` and `mode: 'edit'` — default deny · the host says the pull request is open and the credential may push · the credential is accepted) and `--confirm`. MCP `affected` reads only, and is registered only when a source grants agents `read`. Azure DevOps posting is refused with words (not built). |
-| **Echo settings** (`farsight-echo serve`, workspace defaults :4480/:4481; global defaults :4490/:4491) | processes on this machine; the local settings page | binds `127.0.0.1`. Checks the exact loopback `Host` and port, `Origin`, and `Sec-Fetch-Site`; settings writes require JSON, a body no larger than 64 KB, and the current `If-Match` revision. Cross-process locking prevents a stale browser or CLI update from silently overwriting another edit. No CORS headers; CSP permits embedding only by the explicitly configured local Farsight origin. A permitted frame can navigate to the HTML shell, but data requests still require the Echo origin. Responses contain credential references, never resolved values. (`echo/src/web.ts`, `settings-lock.ts`) |
+| **Echo portal and settings** (`farsight-echo serve`, workspace defaults :4480/:4481; global defaults :4490/:4491) | processes on this machine; the local memory/settings page | binds `127.0.0.1`. Checks the exact loopback `Host` and port, `Origin`, and `Sec-Fetch-Site`; settings writes require JSON, a body no larger than 64 KB, and the current `If-Match` revision. Cross-process locking prevents a stale browser or CLI update from silently overwriting another edit. No CORS headers; CSP permits embedding only by the explicitly configured local Farsight origin. A permitted frame can navigate to the HTML shell, but data requests still require the Echo origin. Read-only memory requests are bound to the trusted startup profile and rechecked before returning. Responses contain credential references, never resolved values. (`echo/src/web.ts`, `settings-lock.ts`) |
 | **Echo managed backend** (agentmemory + iii) | processes on this machine, through four loopback ports per running profile | with configured REST port `p`, Echo reserves `p` (REST), `p+1` (stream), `p+2` (agentmemory viewer), and `p+46023` (engine worker connection), then refuses any occupied port. REST calls use a fresh random Bearer secret per run, retained in process and the deliberately restricted child environment. The upstream viewer proxies to REST with that secret; these loopback services are not a per-user or team-authentication boundary. Echo owns two foreground child processes and stops only those processes. (`echo/src/runtime.ts`) |
 | **Echo memory bridge** | the current OS user through `/tmp/farsight-echo-<uid>/<profile-hash>.sock` | requires an owner-held 0700 directory and 0600 Unix socket, refuses foreign or symbolic replacements, and checks inode identity before removing a stale socket. Requests and replies have size limits and deadlines. Each request must match the running configuration, profile and identity fingerprint; backend secrets remain in the service. (`echo/src/memory.ts`) |
 | **Echo configuration, hooks and runtime** | the user who explicitly sets up Echo and grants host hook trust | user-state receipts bind the exact configuration and workspace connection bytes to their canonical paths. Repository-supplied settings or edited pointers cannot grant themselves trust. Runtime downloads and execution follow the checksum rules below; a workspace cannot supply the engine executable. Hooks are local opt-in files, protected from ordinary Git staging, and host trust remains separate. (`echo/src/trust.ts`, `installation.ts`, `workspace-hooks.ts`, `runtime.ts`) |
@@ -57,7 +57,7 @@ input, output and elapsed time. Live hooks currently retrieve bounded saved exce
 or automatically capture conversation content.
 
 **Sub-mind research is explicit and read-only.** New and legacy profiles default to off. Mock research
-never reaches a model; the standalone synthetic demo has no network or backend dependency. In model mode,
+never reaches a model; the standalone text demo has no network or backend dependency, while the portal demo uses only its own local web server and private bridge. In model mode,
 explicit questions and selected memory evidence are sent to the configured endpoint. The controller enforces
 per-request candidate, search, input, output and deadline limits, validates citations against inspected records,
 and constructs follow-up actions itself. It has no mutation or shell tools. The private bridge admits one research
@@ -73,6 +73,34 @@ It does not change backend endpoint policy, expose the local bridge, or manage t
 Settings loads and provider dispatch both enforce this policy. Research policy and all budgets are included in
 session fingerprints, so upgrading or changing them requires a fresh session and service restart. Existing hooks
 remain bounded raw recall and never automatically invoke the sub-mind in this milestone.
+
+**The memory portal reads only the running scope.** The local `POST /api/memory/browse`,
+`POST /api/memory/expand`, and `POST /api/memory/ask` routes share the host/origin/fetch-site guard and require
+bounded JSON requests. There is no memory edit/delete route. The server reads trusted settings and checks the
+startup fingerprint before and after asynchronous work; a changed running identity, connection or policy
+refuses the result until restart. Selecting another settings profile is never a memory scope input. Browser
+cancellation, disconnect and deadlines propagate through reads and private-bridge research.
+
+Browse continuations are signed with a per-process secret and bound to the startup scope, query and date
+selection. Upstream global topic facets are not exposed. Every returned record is checked
+against the exact namespace and individual scope. Upstream responses are capped at 2 MB; only oversized pages
+retry with limits of 50, 10, then one, within one deadline. Returned title/content/topic text shares a
+64,000-character page allowance. Date filtering can produce an empty page with a continuation; pagination and
+queried ranking do not establish a complete or stable snapshot. Exact detail reads check a content-bound revision
+and label changed or missing evidence rather than promising historical versions.
+
+The browser renders saved/model text with text content, never executable HTML or Markdown, and follows only
+checked read-more actions with an ID and revision. Search content is kept out of URLs and browser storage.
+Ordinary browsing and detail reads never generate; only explicit research invokes the running mode. Off disables
+research, mock uses deterministic excerpts, and model mode can send selected evidence to the configured provider.
+The portal is a local read boundary, not a shared-team authentication system.
+
+**The portal preview is disposable.** `portal-demo` starts the same UI and private bridge with synthetic records,
+mock research, temporary configuration and a temporary trust registry. It does not load existing Echo settings,
+resolve real credentials, start agentmemory/iii, or contact a model or memory backend. The preview binds a local
+port (default 4491; zero selects an available port), labels itself synthetic, and refuses settings writes. Normal
+shutdown closes its listeners and deletes its temporary state; forced process termination can leave temporary
+files for inspection. It does not change the user's saved configuration or trust registry.
 
 **Only the explicitly installed engine runs.** `install-runtime` fetches a pinned iii release from GitHub and
 compares the complete archive with its compiled-in SHA-256 before extraction. It stores the executable under
