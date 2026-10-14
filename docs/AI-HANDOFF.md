@@ -79,10 +79,10 @@ closed the cleanup pass.
 
 | | |
 |---|---|
-| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`c5a5c7a`** after the lanes round, the cleanup pass, swarm 3's fixes, Echo and the space pass (PRs #74–#99, items 15–18 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
-| tests | **1353** — core 366 · work 65 · echo 103 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 73 · server 370 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 324/324** (`journeys-organised`'s Map-head spec failed once under the full suite and passed alone — timing) (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
+| build | **`0.3.0`** (GitHub Release v0.3.0, 2026-10-04, release PR #43 — close/reopen still needed without a `RELEASE_TOKEN`), workspace main at **`fb503d7`** after the outsider round and its fix round (PRs #101, #105–#111, #98, item 19–20), before that **`c5a5c7a`** after the lanes round, the cleanup pass, swarm 3's fixes, Echo and the space pass (PRs #74–#99, items 15–18 below) on the swarm-fixes round (#62–#73), the 2026-10-05 round (#53–#61), the Map clarity pass (#50–#52) and the journey-organisation pass (#45–#49) on top of the map-view, data-stores, map-pass-2 and code-map-performance passes (PRs #8–#42) |
+| tests | **1474** on `fb503d7` — core 392 · work 65 · echo 170 · parsers 230 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 75 · server 382 · cli 64 · e2e **337/337** (`map-keys` ⌘K flaked once under load) · strings 3434 entries · 74 modules; before the round: **1353** — core 366 · work 65 · echo 103 · parsers 216 · work-fixture 18 · work-azdo 38 · work-jira 40 · mcp 73 · server 370 · cli 64 (+ `pnpm test:scripts` 14), 0 failed, 2 skipped (the live tracker tests, opt-in with `FARSIGHT_LIVE=1`) · **e2e 324/324** (`journeys-organised`'s Map-head spec failed once under the full suite and passed alone — timing) (every spec that opened the journey page now opens a Map address) (the `codemap-projects`, `codemap-toolbar` and `settings-config` specs start their own two-source server; `journeys-organised`, `map-journey-links` and the small perf preset run in CI; `pnpm e2e:perf` is the full thousand-project table, on demand; the suite is timing-sensitive on a loaded machine — `settings-config`, `codemap-projects` where-is, `map-street` fold, `thousand-perf` ⌘K and `chrome` Settings each failed once under seven parallel lanes and passed alone) |
 | string/symbol lint | **3105 entries · 35 sprite symbols · 70 modules** (60 retired view words left with the overlay); the define test bans backticks, markdown, unfilled placeholders and catalog keys; a catalog module per area (`strings-gate.ts`, `strings-evidence.ts`, `strings-stops.ts`, `strings-state.ts`, `strings-lifecycle.ts`, `strings-export.ts`, …) registered like `strings-doors.ts` |
-| servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `c5a5c7a` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 72, 4477 sync 114, then 4477 restarted `--read-only`); both prefixes' global `farsight` print `commit c5a5c7a`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
+| servers | the dogfood server on **4478** (workspace CLI) and the reference app's own `farsight` on **4477** (the global install under the Node 22 prefix, started from that workspace). **On 2026-10-14 both restarted on `fb503d7` and re-synced (4478 sync 73, 4477 sync 115 then restarted `--read-only`); both prefixes' global `farsight` print `commit fb503d7`.** Earlier: The `flags.map` and `journeyDrill` flags are retired (the Map always has its tab). Both restarted on `c5a5c7a` on 2026-10-11 and re-synced through `POST /api/sync` (4478 sync 72, 4477 sync 114, then 4477 restarted `--read-only`); both prefixes' global `farsight` print `commit c5a5c7a`; `farsight status` reads *up to date* on both; zero page errors on the front door, the lanes board in business, the compare panel, Settings, Changes, the readiness brief and the old-link redirect (`#/journeys/new-invoice?view=sheet&step=2` lands on `#/map/new-invoice?screen=2&layout=table`) of 4478. 4477 was started **without** `--read-only` so it could sync — restart it read-only before a swarm (a read-only server refuses `POST /api/sync`). macOS has no `setsid`: restart a server with `(nohup … &)` from its cwd and confirm `lsof` + `/api/version` before syncing. The reference app's own manifest declares two personas, six groups, placements on all 18 flows, two storylines and the correction journey as a **branch** of review; its design drift is **7**; it has no `gateTiers` or `lifecycle` block yet (see item 15's left-open). |
 | runtime | Node 24 is under nvm (`nvm use 24`); the shell default is still 22 for the 4477 server, so every build/test shell runs `nvm use` first |
 | trackers | a Jira test site and an Azure DevOps org, both reachable live on 2026-09-30 from a probe that reads the keychain in-process and prints only the outcome. Their names, accounts and credentials are kept outside the repo. |
 
@@ -753,6 +753,50 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
     `displayStep` automatically, model-written summaries, counting role holders. Re-run bar: confidence ≥ 8, zero wrong
     answers on who approves and what makes Paid, the outsiders driving the business register themselves first.
 
+20. **The outsider fix round — the worklist's Farsight side, in seven lanes** (2026-10-13 → 10-14; PRs #105–#111 plus
+    Dependabot #98; every lane measured on a read-only copy of the reference app's graph with zero page errors; the
+    briefs in the private round folder's `_lane-briefs/`). **Build `fb503d7`**, both servers restarted and re-synced
+    (4478 sync 73, 4477 read-only sync 115).
+    - **A status move is credited to the live path that writes it** (#111): a call under a constant-false flag is
+      `inactive` (`meta.whenFlag/whenValue/whenAt`, technique `flag-gate`), every live path to a writer is credited with
+      the direct one first (*also reached from n*), a status-named setter with a positional literal and a ternary of
+      literals are writers, a route file's own handler counts as the route, a writer met a second time still moves; a
+      *Switches* section (`count.unit.switches`); the one-fact harness (`server/test/one-fact.test.ts`) asks lifecycle · ASK
+      · tour · lanes · gate card the same question. On the reference app Paid is now credited to *Mark a distribution
+      paid* everywhere, with *Record the payment intent* printed as *switched off: PAYMENT_INTENT_MARKS_PAID = false*;
+      the vendor account's *Pending verification → Active* and the identity link's *Pending* have writers.
+    - **A gate at every action it guards, the card named in the app's words, the role × action table** (#107): the segment
+      fold places a guard under each action with that call site's `requires` (it merged by name onto the first); a role
+      list declared as a typed array is read; the gate card's name falls back to `@business` → `@guard` → *unnamed*; a
+      register-parity e2e; core `roles.ts` → `GET /api/roles` (+csv), MCP `roles` (core tier), `farsight roles`,
+      `#/roles`, a *who may do what* section on the gate card. Reference app: the approve column reads *WHO MAY · approver
+      role*; 27 rows; vendor approve = approver or admin, invoice approve = approver alone.
+    - **A case skipped on one browser project by its own condition passed where it ran** (#108): `foldRuns()` keeps the
+      projects and the skip reason; readiness holds only when no project passed and quotes the reason; PASSED is paired
+      with the brief's hold line. Reference app's invoice brief: 0 ship · 6 hold → **2 ship · 4 hold**, the holds now the
+      live-only cases, named.
+    - **A persona per screen** (#105): `screens[].persona`, `personas[].routes`, `personas[].signsInWith`, else the
+      sign-in guard's `@group`, else the journey; `screenPersonas` on `JourneyRow`, `summary.user[]`, lanes, WALK, street
+      head *For A · with B*; conflicts are notes. Reference app: operator screens in the Contractor lane 5 → 0 with no
+      declaration (the guard rule).
+    - **ASK reads a question as worded and shows its rewording** (#110): three new shapes (*who may*, *can … be
+      configured*, *what happens to … once it is …*), `readAs()` over a closed rule list with *I read that as: …* first, a
+      47-question corpus test; business words (a design id becomes the screen's name, holes read *(a value)*, refusals
+      in words, the readiness register in words). Reference app: the eight seed questions 0 → 8 of 8.
+    - **Declared decisions, off-platform steps, party externals, cited documents quoted** (#109): `decisions[]` joined to
+      `DECISION(<id>)` comments (`/api/decisions`, MCP `decisions`, `farsight decisions`, chips on the gate card, property,
+      WALK and lifecycle), `screens[].steps[].by: person|partner|external`, `externals[] kind: party`, `doc` nodes with the
+      first paragraph verbatim and `cites` edges. Reference app: 16 DECISION comments → 7 ids D3–D9 *named in code, not
+      declared*; 32 docs quoted (20 ADRs).
+    - **Housekeeping** (#106, #98): six dead overlay rules (the rest of `jrn-*` is live — the Map reuses the drawing); a
+      stale handoff line; the MCP SDK 1.31 bump; the two OpenTelemetry alerts come only through Echo's pinned engine and
+      need an upstream release or a forced override (left to Echo's owner); `pnpm install --offline` in a fresh worktree
+      takes 3 s.
+    - **Left open:** the Recall-side declarations (the handoff prompt is in the private folder, `_recall-handoff.md`); a
+      switch is read only from a bare-identifier test; the weekly-cycle head now leads with *distributions*; `roles` is
+      not a frozen contract; the `configure` ASK shape matches on words; a party lane's cards are shorter than persona
+      cards; the `?screen=2` cold-load race; e2e `map-keys` ⌘K and `map-street:410` each flaked once under load.
+
 ## Release and CI — 2026-10-01
 
 - **Releases are on demand.** `gh workflow run release.yml -f bump=patch|minor|major` (or the Actions tab; `-f dry_run=true`
@@ -786,7 +830,7 @@ ids, titles and bodies; the shapes are as recorded. A re-recording must be scrub
 
 ## Next work, ranked
 
-**Nothing is in flight (2026-10-13 night; the outsider demo, item 19, is synthesised and its worklist — Farsight waves F1–F3+F6 → F4·F5·F7 → F8·F11, Recall packs R1–R4 → R5·R6 → R7 — is the next round; see item 19).** Echo's PR #84 merged after a second review found its four blocking
+**Nothing is in flight (2026-10-14; the outsider fix round, item 20, is merged, packed, installed under both prefixes and live on both servers). Next: the Recall session runs the handoff prompt (`_recall-handoff.md` in the private round folder — packs R1–R7), re-stamps and re-ingests, restarts 4477 read-only; then the outsider demo re-run (same three outsiders, driving the business register themselves first; bar: confidence ≥ 8, zero wrong answers on who approves and what makes Paid).** Echo's PR #84 merged after a second review found its four blocking
 items fixed (the reviews stay outside the repo); lane S (#99) closed the cleanup pass. Next, in order: (1) a handoff prompt to
 the reference-app session — install the build, add `gateTiers` and `lifecycle.<record>.views` blocks to its
 `farsight.config.json` (today approve shows *18 that matter* because its `@guard` labels default to *authorisation*,
