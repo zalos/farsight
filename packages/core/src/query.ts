@@ -205,6 +205,38 @@ export function tierFactsOf(g: GateTierFacts | undefined): GateTierFacts {
   };
 }
 
+/** One place the walk met a gate: the step, and the roles or scopes that call site handed it. */
+export interface GateOccurrence {
+  stepOrder: number;
+  requires?: string;
+}
+/**
+ * One gate on a screen, deduped by name: `count` = how many steps met it, `stepOrder` = the first, `requires` =
+ * every role any action on the screen handed it, and `at` = each meeting with its own roles — what places the gate
+ * under every action it guards (`gatesInRange`).
+ */
+export type SegmentGate = { id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number; at?: GateOccurrence[] } & GateTierFacts;
+
+/**
+ * The gates one action meets — a screen's gates placed on a step range (a moment's `from`..`to`): each gate
+ * met inside the range once, at its first step there, with only the roles the call sites inside the range handed
+ * it and `count` = the meetings inside the range. A gate the screen met only under another action is not here.
+ * A gate from a summary without `at` falls back to its one `stepOrder`. Pure; the viewer's
+ * `lib/journey-model.js jrnGatesIn` is the same rule (outsider round 2026-10-13, F2).
+ */
+export function gatesInRange(seg: { gates: SegmentGate[] }, from: number, to: number): SegmentGate[] {
+  const out: SegmentGate[] = [];
+  for (const g of seg.gates) {
+    const at = (g.at && g.at.length ? g.at : [{ stepOrder: g.stepOrder, ...(g.requires ? { requires: g.requires } : {}) }])
+      .filter((o) => o.stepOrder >= from && o.stepOrder <= to);
+    if (!at.length) continue;
+    const roles = [...new Set(at.flatMap((o) => (o.requires ? o.requires.split(', ') : [])))];
+    const { requires: _all, ...rest } = g;
+    out.push({ ...rest, stepOrder: Math.min(...at.map((o) => o.stepOrder)), count: at.length, at, ...(roles.length ? { requires: roles.join(', ') } : {}) });
+  }
+  return out;
+}
+
 /** A fork in a caller that gates one hop of a journey. */
 export interface PathCondition {
   nodeId: string;
@@ -1144,7 +1176,7 @@ export interface JourneySegment {
   /** the segment's sub-columns: one per client-side action, in execution order */
   moments: JourneyMoment[];
   /** deduped by name within the segment; count = how many steps met it. Config checks are not here: see `configChecks` */
-  gates: ({ id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number } & GateTierFacts)[];
+  gates: SegmentGate[];
   /**
    * the config checks the walk met on this screen (core gates.ts `isConfigCheck`): guards that check how the app
    * was started — its settings — on the way to a request, never the request itself. Listed apart and counted apart
@@ -1652,13 +1684,17 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       }
       const kind: 'guard' | 'rule' = g?.kind === 'rule' ? 'rule' : 'guard';
       const have = seg.gates.find((x) => x.name === row.name && x.kind === kind);
+      // every place the walk met it, with the roles that call site handed it — one guard met by two actions
+      // stands under both, each with its own list (outsider round 2026-10-13, F2); `gatesInRange` reads it
+      const occ: GateOccurrence = { stepOrder: row.stepOrder, ...(g?.requires ? { requires: g.requires } : {}) };
       if (have) {
         have.count++;
-        // one guard handed different roles on this screen: both roles are what it requires here
-        if (g?.requires && have.requires && !have.requires.split(', ').includes(g.requires)) have.requires = [...new Set([...have.requires.split(', '), ...g.requires.split(', ')])].join(', ');
+        have.at = [...(have.at ?? []), occ];
+        // the screen's own list: every role any action on this screen handed it, an action's own column reads `at`
+        if (g?.requires && have.requires) have.requires = [...new Set([...have.requires.split(', '), ...g.requires.split(', ')])].join(', ');
         else if (g?.requires && !have.requires) have.requires = g.requires;
       }
-      else seg.gates.push({ id: row.nodeId, kind, name: row.name, ...(row.planned ? { planned: true as const } : {}), count: 1, stepOrder: row.stepOrder, ...tierFactsOf(g) });
+      else seg.gates.push({ id: row.nodeId, kind, name: row.name, ...(row.planned ? { planned: true as const } : {}), count: 1, stepOrder: row.stepOrder, ...tierFactsOf(g), at: [occ] });
       continue;
     }
     if (row.kind === 'decision') {

@@ -27,6 +27,7 @@ import { DOOR_STRINGS } from './strings-doors.js';
 import { LANES_STRINGS } from './strings-lanes.js';
 import { FOLD_STRINGS } from './strings-fold.js';
 import { GATE_STRINGS } from './strings-gate.js';
+import { ROLES_STRINGS } from './strings-roles.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
 import { EXPORT_STRINGS } from './strings-export.js';
@@ -145,6 +146,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...ECHO_INSTALLATION_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
+  // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)
+  ...ROLES_STRINGS,
   // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)
   ...LIFECYCLE_STRINGS,
   // the chrome's words live in strings-chrome.ts (the read-only session, the legend's key, Esc on a journey)
