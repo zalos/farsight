@@ -787,7 +787,7 @@ sentence is a count another fold already types — a screen's or an action's ver
 this screen* / *over this action*), a writer's (`stepCoverage().verdict.runs`, *over this part alone*), a gate's
 (`gateCard().verdict.runs`, *over this gate*) — carried on the clause as `counted` / `evidence` and printed with its
 tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cite*). A position — *stop n of m*, *(stop
-2)*, *screen 2, action 6* — is not a count. One scope is new, **`count.scope.path`** (*on this chain*).
+2)*, *screen 2, action 6* — is not a count. One scope is new, **`count.scope.path`** (*on this chain*). The reading line (*I read that as: …*) prints no number.
 
 | number | field | what it counts | scope | rule |
 |---|---|---|---|---|
@@ -798,6 +798,9 @@ tip (round 2026-10-10, proposal 8: *nothing is printed that the graph cannot cit
 | `2 others` (*read as X in Y — the words also match …*) | lead `counted` (`ask.unit.alsoMatch`) | the parts the question's words match as well as the one Ask answered for: the same kind, as good a match, another node (swarm round 3: *which tests reach loadDraft* answered one of two unnamed) | `count.scope.question` (new) | listed by name and place, the first five cited |
 | `12 checks` (*what guards …*) | lead `counted` (`count.unit.checks`) | the distinct gates and rules on an action, a call or a screen | `count.scope.action` · `journey.scopeHere` · `count.scope.node` | breakdown `count.part.tierBusiness` · `tierPolicy` · `tierTechnical`, summing to `n` |
 | `2 more places` (*where is … set to …*) | lead `counted` (`count.unit.places`) | other actions on journeys whose walk makes the same move, after the first one named | `count.scope.node` | each action once |
+| `27 actions behind a role check` (*who may do what*) | lead `counted` — `roleTable().counted.actions` (`count.unit.roleActions`, core `roles.ts`) | the actions a role check guards, the role list read from the code | `count.scope.workspace` | the role × action table's own count, reused; a graph whose roles are only literal arguments counts its guarded calls the same way (`allRoleRows`) |
+| `3 places` (*what the code holds whose words meet …*) | lead `counted` (`ask.unit.configures`) | config checks, settings files, set-up screens, record fields and switches whose words meet the question's | `count.scope.question` | each place once; *what can be configured* (no thing named) counts every one |
+| `11 screens reach the correction request` (*what happens …*) | section `counted` (`ask.unit.screensReach`) | the screens whose walk reaches the record, each once | `count.scope.node` | the first six named, the rest `+n` |
 
 ### Swarm round 3 (2026-10-11): build state, the runs sentence, scope words on positions and not-in-words counts
 

@@ -158,7 +158,20 @@ export function httpWords(text: string, word: (code: string) => string): string 
 }
 const HTTP_KNOWN = new Set(['400', '401', '403', '404', '409', '413', '415', '422', '429', '5xx']);
 
+/**
+ * A refusal message with a hole the code fills when it runs (*Vendor account is …, not ACTIVE*), as the business
+ * register reads it: the hole says *(a value)* and a status constant reads as a word (outsider round, F6 · S2). The
+ * viewer's `filledMessage()` is the same rule.
+ */
+export function holeWords(text: string): string {
+  const s = String(text ?? '');
+  if (!/…/.test(s)) return s;
+  const v = t('plain.aValue');
+  return s.replace(/\(\s*…\s*\)/g, v).replace(/…/g, v).replace(/\b[A-Z]{4,}(?:_[A-Z]+)*\b/g, (w) => (/^ADR/.test(w) ? w : w.replace(/_/g, ' ').toLowerCase()));
+}
+
 export function codeFree(text: string): string {
+  text = holeWords(text);
   const words = (x: string) => String(x).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
   const file = (p: string) => words((String(p).split('/').filter(Boolean).pop() ?? '').replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
   return httpWords(String(text ?? ''), (c) => (HTTP_KNOWN.has(c) ? t(`http.word.${c}`) : t('http.word.400')))

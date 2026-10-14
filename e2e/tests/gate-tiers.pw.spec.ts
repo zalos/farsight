@@ -56,7 +56,7 @@ test('a precondition opens the gate card with its tier and why, and what happens
   await expect(tier).toContainText('a record must be in a state');
   await expect(tier).toContainText('invoices.status = draft');
   await expect(tier).toContainText('tier from the kind of check');
-  await expect(c.locator('.gc-sec').filter({ hasText: /what it allows/i })).toContainText('Otherwise: 409 conflict');
+  await expect(c.locator('.gc-sec').filter({ hasText: /what it allows/i })).toContainText('Otherwise: refused (409 conflict)');
   await page.keyboard.press('Escape');
   await expect(c).toHaveCount(0);
 });
