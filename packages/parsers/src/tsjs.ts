@@ -279,6 +279,8 @@ export function ingestTsJs(repoPath: string, options: IngestOptions = {}): Graph
   const declaredClassExternals = new Map<string, ExternalDecl>();
   const sdkDecls = new Map<string, ExternalDecl>();
   for (const decl of options.externals ?? []) {
+    // a party (`kind: 'party'`) has no import: no code reaches it, so this parser has nothing to match (decisions.ts applyParties)
+    if (typeof decl.import !== 'string' || decl.kind === 'party') continue;
     if (decl.import.includes('::')) declaredClassExternals.set(decl.import.replace(/^\.\//, ''), decl);
     else { sdkTable.set(decl.import, { name: decl.name, kind: decl.kind, node: true }); sdkDecls.set(decl.import, decl); }
   }

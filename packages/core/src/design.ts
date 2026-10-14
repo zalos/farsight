@@ -10,7 +10,7 @@
  * location, drift is computed ONCE here and stored. Pure — reading files and
  * talking to Figma lives in parsers/server.
  */
-import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneyStorylineDecl, JourneysMeta } from './graph.js';
+import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneyStorylineDecl, JourneysMeta, DesignStep, DecisionDecl } from './graph.js';
 import { t } from './strings.js';
 import { buildIndex, type GraphIndex } from './query.js';
 
@@ -38,7 +38,7 @@ export interface DesignScreen {
    * `@covers SCR-07.2` resolves to this screen and keeps the step on the edge,
    * so a claim about one step of a screen is not an unresolved id (R33).
    */
-  steps?: { id: string; name: string; operation?: string }[];
+  steps?: DesignStep[];
   /** work items this screen is built for (Jira keys, Azure DevOps ids) — a declared `tracks` link (work-items-sync.md §9) */
   work?: string[];
   /**
@@ -93,6 +93,11 @@ export interface DesignManifest {
   groups?: JourneyGroupDecl[];
   /** storylines: named chains of journeys across features and personas, each its flow ids in order */
   storylines?: JourneyStorylineDecl[];
+  /**
+   * decisions the team made or left open (`{ id, title, state: open · decided, decided?, owner?, summary?, doc?,
+   * affects? }`): joined to the code by `DECISION(<id>)` comments and printed as the team's words (core decisions.ts)
+   */
+  decisions?: DecisionDecl[];
   figma?: { file?: string; token?: string };
   screens: DesignScreen[];
   flows?: DesignFlow[];

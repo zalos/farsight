@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl } from './graph.js';
+import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl, DecisionDecl } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -70,12 +70,22 @@ export interface FarsightConfig {
    * the statuses and the moves; this only names them — a status the code does not declare is a note.
    */
   lifecycle?: Record<string, LifecycleConfigEntry>;
+  /**
+   * Decisions the team made or left open, by id — the same shape as a manifest's `decisions[]` (core decisions.ts),
+   * every field but the id optional: an entry overrides a manifest's decision field by field, root file first and the
+   * nearest nested file last, and an id no manifest declares is declared here. A nested file's `doc` is relative to
+   * its folder.
+   */
+  decisions?: DecisionConfigEntry[];
 }
+
+/** `farsight.config.json → decisions[]`: a decision by id, every other field optional (an override gives only what it changes). */
+export type DecisionConfigEntry = Partial<Omit<DecisionDecl, 'id'>> & { id: string };
 
 /** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
 export const CONFIG_FIELDS = [
   'tags', 'glossary', 'guards', 'gateTiers', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
-  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle',
+  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle', 'decisions',
 ] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
@@ -154,12 +164,19 @@ export interface StorybookConfig {
 
 /** One declared third-party system: the client the calls go through, what to call it, and what kind of system it is. */
 export interface ExternalDecl {
-  /** a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through */
-  import: string;
+  /**
+   * a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through.
+   * Absent only on `kind: 'party'`: a counterparty no code reaches (a payment partner, the client)
+   */
+  import?: string;
   name: string;
   kind: ExternalKind;
   /** this external is (true) or is not (false) used as a data store — overrides the default from the kind (`erp` · `db` · `files` are) */
   store?: boolean;
+  /** `kind: 'party'` only: what it does, in the team's words (*pays the vendor on our instruction*) */
+  role?: string;
+  /** `kind: 'party'` only: a declared persona id it also is (the client who uses a portal) */
+  persona?: string;
 }
 
 /**

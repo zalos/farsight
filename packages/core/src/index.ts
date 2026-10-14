@@ -36,3 +36,4 @@ export * from './affected-words.js';
 export * from './storyline-diff.js';
 export * from './tour.js';
 export * from './ask.js';
+export * from './decisions.js';
