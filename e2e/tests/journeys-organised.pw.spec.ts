@@ -155,10 +155,9 @@ test.describe('journeys organised by persona and group, as the fixture declares 
     await expect(org).toContainText('For Billing · Review and send');
     // its discard screen is the operator's (the screen row): its screens span two people, said as *with*
     await expect(org).toContainText('with Operations');
-    await gotoReady(page, '#/map/' + encodeURIComponent('invoice-app::flow::billing-cycle') + '?layout=screens');
-    await expect(page.locator('.map-jhead[data-flow="invoice-app::flow::billing-cycle"] .for')).toHaveText('For Billing · Invoices with Operations');
     await gotoReady(page, '#/map/' + encodeURIComponent(FLOW) + '?layout=screens');
-    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .for`)).toHaveText('For Billing · Invoices');
+    // the billing cycle's discard screen is the operator's too
+    await expect(page.locator(`.map-jhead[data-flow="${FLOW}"] .for`)).toHaveText('For Billing · Invoices with Operations');
   });
 
   /** @covers packages/server/public/app/surfaces/portfolio.js::render */
