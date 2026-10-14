@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readMemoryProvenance } from './memory-provenance.js';
 import type { BackendConnection, EchoContext } from './types.js';
-import type { ResearchMemory, ResearchSearch, ResearchStore } from './submind-types.js';
+import type { ResearchCatalog, PortalMemory } from './portal-types.js';
+import type { ResearchMemory, ResearchSearch } from './submind-types.js';
 
 const RESPONSE_BYTES = 2_000_000;
 const MAX_CANDIDATES = 100;
@@ -25,7 +26,7 @@ function bounded(value: unknown, max: number): value is number {
 }
 function checkAbort(signal?: AbortSignal): void { if (signal?.aborted) fail('aborted'); }
 
-interface ScopedMemory { id: string; project: string; agentId: string; title: string; content: string; createdAt: string }
+interface ScopedMemory { id: string; project: string; agentId: string; title: string; content: string; createdAt: string; concepts?: unknown }
 function checkedMemory(value: unknown, expected: { project: string; agentId: string }): ScopedMemory {
   if (!object(value) || value.project !== expected.project || value.agentId !== expected.agentId
     || !idValid(value.id) || !dateValid(value.createdAt)
@@ -97,11 +98,63 @@ async function evidence(ctx: EchoContext, memory: ScopedMemory, maxChars: number
 }
 
 /** Read-only research over agentmemory 0.9.30. No models, engine startup, persistence, or backend mutation. */
-export function createResearchStore(ctx: EchoContext, connection: BackendConnection): ResearchStore {
+export function createResearchStore(ctx: EchoContext, connection: BackendConnection): ResearchCatalog {
   const snapshot = structuredClone(ctx);
   const expected = memoryScope(snapshot);
   const backend = { url: connection.url, secret: connection.secret };
   return {
+    async browse(input, signal) {
+      if (!object(input) || typeof input.query !== 'string' || input.query.length > 4000 || input.query.includes('\0')
+        || input.since !== null && !dateValid(input.since) || input.until !== null && !dateValid(input.until)
+        || input.since !== null && input.until !== null && input.since > input.until
+        || input.cursor !== undefined && (typeof input.cursor !== 'string' || !/^[a-zA-Z0-9_-]{1,4096}$/.test(input.cursor))) fail('input');
+      checkAbort(signal);
+      const query = new URLSearchParams({ ...expected, latest: 'true', limit: '50' });
+      if (input.query) query.set('q', input.query);
+      if (input.cursor) query.set('cursor', input.cursor);
+      // Unqueried listing scopes before pagination. Search still ranks only 500 global candidates.
+      // Never request facets: upstream computes them before exact identity scope filtering.
+      const result = await request(backend, `/agentmemory/memories?${query}`, signal);
+      if (!object(result) || !Array.isArray(result.memories) || result.memories.length > 50
+        || result.nextCursor != null && (typeof result.nextCursor !== 'string' || !/^[a-zA-Z0-9_-]{1,4096}$/.test(result.nextCursor))
+        || result.nextCursor != null && result.nextCursor === input.cursor) fail('response');
+      const records = result.memories.map(value => checkedMemory(value, expected));
+      if (new Set(records.map(memory => memory.id)).size !== records.length) fail('response');
+      const eligible = records.filter(memory => (!input.since || memory.createdAt >= input.since) && (!input.until || memory.createdAt <= input.until));
+      const memories: PortalMemory[] = [];
+      let remaining = 64000;
+      let truncated = false;
+      for (let index = 0; index < eligible.length; index++) {
+        const record = eligible[index]!;
+        const allowance = Math.floor(remaining / (eligible.length - index));
+        // Concepts are source data. Keep their text inside the page evidence allowance too.
+        let topics: string[] | undefined;
+        let topicsTruncated = false;
+        let topicChars = 0;
+        if (record.concepts !== undefined) {
+          if (!Array.isArray(record.concepts) || record.concepts.some(value => typeof value !== 'string')) fail('response');
+          const sourceTopics = [...new Set(record.concepts as string[])];
+          topics = [];
+          let topicAllowance = Math.min(256, Math.floor(allowance / 3));
+          for (const sourceTopic of sourceTopics.slice(0, 20)) {
+            if (sourceTopic.length > 120 || sourceTopic.length > topicAllowance) { topicsTruncated = true; continue; }
+            if (sourceTopic) topics.push(sourceTopic);
+            topicChars += sourceTopic.length;
+            topicAllowance -= sourceTopic.length;
+          }
+          topicsTruncated ||= sourceTopics.length > 20;
+        }
+        const memory: PortalMemory = await evidence(snapshot, record, allowance - topicChars, signal);
+        if (topics) memory.topics = topics;
+        memory.truncated ||= topicsTruncated;
+        remaining -= memory.title.length + memory.content.length + topicChars;
+        truncated ||= memory.truncated;
+        memories.push(memory);
+      }
+      const nextCursor = typeof result.nextCursor === 'string' ? result.nextCursor : null;
+      // Pagination is not a snapshot: earlier pages can change while a caller browses.
+      return { memories, nextCursor, exhaustive: false, truncated };
+    },
     async search(input, signal): Promise<ResearchSearch> {
       if (!object(input) || typeof input.query !== 'string' || !input.query.trim() || input.query.length > 8000 || input.query.includes('\0')
         || !bounded(input.limit, MAX_CANDIDATES) || !bounded(input.maxChars, MAX_EVIDENCE_CHARS) || !dateValid(input.since)) fail('input');
