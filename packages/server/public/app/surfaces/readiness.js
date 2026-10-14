@@ -94,6 +94,8 @@ function verdictHtml(row) {
     + '<span class="rd-sub">' + (row.lastRun ? esc(day(row.lastRun)) : esc(t('readiness.noRun'))) + '</span>';
 }
 
+/** The register's rules by id, so a row's unreached gates print the same words as the register (set per brief drawn). */
+let RULES_BY_ID = new Map();
 function rowHtml(row) {
   const scope = 'journey.scopeAll';
   const screens = row.screens.map((s) => s.name).join(' · ');
@@ -122,7 +124,7 @@ function rowHtml(row) {
     + '<td>' + verdictHtml(row) + '</td>'
     + '<td>' + num(row.skipped, 'count.part.skipped', scope) + ' / ' + num(row.unrun, 'count.part.noRun', scope) + '</td>'
     + '<td>' + num(row.gates.unreached.length, 'readiness.col.unreached', scope) + ' <span class="rd-sub-i">/ ' + esc(String(row.gates.n)) + '</span>'
-    + (row.gates.unreached.length ? '<span class="rd-sub rd-gates">' + row.gates.unreached.slice(0, 3).map((g) => esc(g.name)).join(' · ') + (row.gates.unreached.length > 3 ? ' · +' + (row.gates.unreached.length - 3) : '') + '</span>' : '') + '</td>'
+    + (row.gates.unreached.length ? '<span class="rd-sub rd-gates">' + row.gates.unreached.slice(0, 3).map((g) => esc(currentLens() === 'business' ? bizRuleName(RULES_BY_ID.get(g.id) || g) : g.name)).join(' · ') + (row.gates.unreached.length > 3 ? ' · +' + (row.gates.unreached.length - 3) : '') + '</span>' : '') + '</td>'
     + '<td>' + commits + '</td>'
     + '<td>' + decision + (notes ? '<span class="rd-sub rd-notes">' + notes + '</span>' : '') + '</td></tr>';
 }
@@ -176,7 +178,7 @@ function sheetHtml(d) {
     + (r.storyline.description ? '<p class="rd-desc">' + esc(r.storyline.description) + '</p>' : '')
     + '<div class="rd-tiles">' + tile(c.steps) + tile(c.ship) + tile(c.hold) + distinctTile(c.skipped, 'skipped') + distinctTile(c.unreached, 'unreached') + '</div>'
     + '<table class="rd-table rd-steps"><thead><tr>' + cols.map((k) => '<th' + defAttrs(k) + '>' + esc(t(k)) + '</th>').join('') + '</tr></thead><tbody>'
-    + r.rows.map((row) => rowHtml(row)).join('') + '</tbody></table>'
+    + (RULES_BY_ID = new Map((r.rules || []).map((g) => [g.id, g])), r.rows.map((row) => rowHtml(row)).join('')) + '</tbody></table>'
     + rulesHtml(r)
     + '<footer class="rd-foot"><span>' + esc(t('readiness.foot')) + '</span></footer>';
 }
