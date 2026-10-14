@@ -46,7 +46,7 @@ test('journeys: the fold as text, persona then group then journey, in declared o
 
 test('journeys --persona / --group narrow it; --json is the JourneyTree', () => {
   const ops = run(['journeys', '--persona', 'ops']);
-  assert.match(ops.out, /^1 journey · 1 storyline · 1 persona · 1 group /);
+  assert.match(ops.out, /^2 journeys · 1 storyline · 1 persona · 1 group /); // draft-and-send and get-paid (lane moves)
   assert.ok(!ops.out.includes('## Billing'));
   const invoices = run(['journeys', '--group', 'Invoices']);
   assert.match(invoices.out, /^2 journeys · 1 storyline · 1 persona · 1 group /);

@@ -143,13 +143,13 @@ test('every number is the one the other surfaces print, not a new count', async 
   assert.equal(body.built.operations.of, apis.reduce((a, x) => a + x.counts.operations, 0));
   const tree = (await get('/api/journeys')).body.tree;
   assert.equal(body.built.storylines.n, tree.storylines.length);
-  // the fixture as measured: 2 of 3 screens built, Discard draft designed and not built, 1 storyline with 1 branch
-  assert.equal(body.built.screens.n, 2);
+  // the fixture as measured: 3 of 4 screens built (Get paid since lane moves), Discard draft designed and not built, 1 storyline with 1 branch
+  assert.equal(body.built.screens.n, 3);
   assert.deepEqual(body.open.notBuiltNames, ['Discard draft']);
   assert.equal(body.built.branches.n, 1);
   // MCP and the CLI print the same object: a line per number, the re-check on each
   const lines = stateOfPlayLines(stateOfPlay(index, g.meta)).join('\n');
-  assert.match(lines, /2 of 3 screens built\s+— re-check: farsight design list · MCP design_surface/);
+  assert.match(lines, /3 of 4 screens built\s+— re-check: farsight design list · MCP design_surface/);
 });
 
 test('the history sentence has both halves, and the halves add up', () => {

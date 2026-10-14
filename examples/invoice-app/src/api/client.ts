@@ -29,3 +29,13 @@ export async function finalizeInvoice(id: string) {
   const res = await fetch(`/invoices/${id}/finalize`, { method: 'POST' });
   return res.json();
 }
+
+export async function recordPaymentIntent(id: string, ref: string) {
+  const res = await fetch(`/invoices/${id}/payment-intent`, { method: 'POST', body: JSON.stringify({ ref }) });
+  return res.json();
+}
+
+export async function markInvoicePaid(id: string) {
+  const res = await fetch(`/invoices/${id}/mark-paid`, { method: 'POST' });
+  return res.json();
+}
