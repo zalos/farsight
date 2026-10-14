@@ -330,7 +330,7 @@ farsight-echo smoke
 farsight-echo smoke --with-model
 ```
 
-`doctor` checks the selected setup, Ollama model availability, and external backend identity/version when applicable.
+`doctor` checks the selected setup and external backend identity/version when applicable. It checks Ollama model availability only in model mode; off, mock, and legacy profiles do not require a model endpoint.
 For a managed profile it checks prerequisites without starting the backend; use the running settings view's checks
 or smoke to verify readiness.
 For compatible model endpoints it checks selection only; use `smoke --with-model` to verify an actual call.

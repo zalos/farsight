@@ -4,7 +4,7 @@ import { isAbsolute, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { defaultConfig, loadContext, initConfig, trustConfig, updateConfig, validateConfig } from './config.js';
+import { defaultConfig, loadContext, initConfig, trustConfig, updateConfig, validateConfig, submindSettings } from './config.js';
 import { resolveInstallation, describeInstallation, readConnection, preflightConnection, writeConnection, removeConnection } from './installation.js';
 import { listModels } from './models.js';
 import { bindSession, contextFingerprint } from './sessions.js';
@@ -119,12 +119,14 @@ async function checks(ctx: EchoContext, connection?: BackendConnection): Promise
     { name: 'engine', ok: ctx.profile.backend.mode === 'external' || runtimeInstalled(ctx), detail: ctx.profile.backend.mode === 'external' ? 'external' : ENGINE_VERSION },
   ];
   if (ctx.profile.backend.mode === 'managed') checks.push({ name: 'backend-isolation', ok: !hasGlobalBackendConfig(), detail: hasGlobalBackendConfig() ? word('globalConfig') : word('isolated') });
-  if (ctx.profile.model.provider === 'openai-compatible') {
-    checks.push({ name: 'model-configuration', ok: !!ctx.profile.model.model, detail: word('compatibleCheck') });
-  } else try {
-    const models = await listModels(ctx.profile);
-    checks.push({ name: 'model', ok: !!ctx.profile.model.model && models.includes(ctx.profile.model.model), detail: ctx.profile.model.model || word('chooseModel') });
-  } catch { checks.push({ name: 'model', ok: false, detail: word('modelUnavailable') }); }
+  if (submindSettings(ctx.profile).mode === 'model') {
+    if (ctx.profile.model.provider === 'openai-compatible') {
+      checks.push({ name: 'model-configuration', ok: !!ctx.profile.model.model, detail: word('compatibleCheck') });
+    } else try {
+      const models = await listModels(ctx.profile);
+      checks.push({ name: 'model', ok: !!ctx.profile.model.model && models.includes(ctx.profile.model.model), detail: ctx.profile.model.model || word('chooseModel') });
+    } catch { checks.push({ name: 'model', ok: false, detail: word('modelUnavailable') }); }
+  }
   if (connection) {
     try { await backendHealth(connection); checks.push({ name: 'backend', ok: true, detail: word('ready') }); }
     catch { checks.push({ name: 'backend', ok: false, detail: word('backendUnavailable') }); }

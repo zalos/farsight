@@ -73,14 +73,19 @@ function actionsFor(findings: SubmindFinding[]): ExpandAction[] {
 function fitFindings(findings: SubmindFinding[], maxChars: number): { findings: SubmindFinding[]; actions: ExpandAction[]; truncated: boolean } {
   const kept: SubmindFinding[] = [];
   let truncated = false;
-  for (const source of findings) {
-    const fit = (size: number) => ({ ...source, problem: clipped(source.problem, size), fix: clipped(source.fix, size), why: source.why === null ? null : clipped(source.why, size) });
+  for (const original of findings) {
+    const source = { ...original, problem: original.problem.trim(), fix: original.fix.trim(), why: original.why?.trim() || null };
+    if (!source.problem || !source.fix) { truncated = true; continue; }
+    // The minimum must retain one whole code point in every required field.
+    const minimum = Math.max(...[source.problem, source.fix, source.why ?? ''].map(text => (text.codePointAt(0) ?? 0) > 0xffff ? 2 : 1));
+    const fit = (size: number) => ({ ...source, problem: clipped(source.problem, size).trimEnd(), fix: clipped(source.fix, size).trimEnd(), why: source.why === null ? null : clipped(source.why, size).trimEnd() });
     const sizeOf = (item: SubmindFinding) => JSON.stringify({ findings: [...kept, item], actions: actionsFor([...kept, item]) }).length;
-    if (sizeOf(fit(1)) > maxChars) { truncated = true; continue; }
-    let low = 1, high = Math.max(source.problem.length, source.fix.length, source.why?.length ?? 0);
+    const smallest = fit(minimum);
+    if (!smallest.problem || !smallest.fix || smallest.why === '' || sizeOf(smallest) > maxChars) { truncated = true; continue; }
+    let low = minimum, high = Math.max(source.problem.length, source.fix.length, source.why?.length ?? 0);
     while (low < high) { const mid = Math.ceil((low + high) / 2); if (sizeOf(fit(mid)) <= maxChars) low = mid; else high = mid - 1; }
     const item = fit(low);
-    truncated ||= item.problem !== source.problem || item.fix !== source.fix || item.why !== source.why;
+    truncated ||= item.problem !== original.problem || item.fix !== original.fix || item.why !== original.why;
     kept.push(item);
   }
   return { findings: kept, actions: actionsFor(kept), truncated };
