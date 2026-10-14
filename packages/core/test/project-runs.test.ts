@@ -69,7 +69,7 @@ test('readiness ships a journey whose own case passed on one project and was ski
   assert.equal(row.ship, true);
   assert.deepEqual(row.hold, []);
   assert.deepEqual(row.notes.projectSkips, [{ id: E2E, name: 'walks', passedOn: ['desktop-1440'], skippedOn: [{ project: 'mobile-390', reason: REASON }],
-    words: { text: `note: walks passed on desktop-1440 · skipped on mobile-390 (${REASON})`, biz: `note: walks passed on desktop-1440; not run on mobile-390 (${REASON}) by its own condition` } }]);
+    words: { text: `note: walks — passed on desktop-1440 · skipped on mobile-390 (${REASON})`, biz: `note: walks — passed on desktop-1440; not run on mobile-390 (${REASON}) by its own condition` } }]);
   assert.equal(row.skipped, 0, 'the case is not counted skipped');
 });
 
@@ -113,4 +113,12 @@ test('a journey the brief holds carries the brief’s one line beside its word; 
   // the brief and the chip read one rule: the same cases
   const r = readiness(app([run('skipped', 'desktop-1440', 'live only'), run('skipped', 'mobile-390', REASON)]), tree(), 's')!.rows[0]!;
   assert.deepEqual(r.holdCases, held.cases);
+});
+
+test('a hold on a case one project ran and skipped names that project and the reason it wrote', () => {
+  const index = app([run('skipped', 'live', 'runs only with E2E_LIVE=1')]);
+  const row = readiness(index, tree(), 's')!.rows[0]!;
+  assert.deepEqual(row.hold, ['skipped']);
+  assert.equal(row.holdCases[0]!.where!.text, 'skipped on live (runs only with E2E_LIVE=1)');
+  assert.equal(row.holdCases[0]!.where!.biz, 'not run on live (runs only with E2E_LIVE=1)');
 });

@@ -98,6 +98,8 @@ export interface CoverageTestRef {
   project?: string;
   /** more than one project ran the case: each project's own status and a skip's own reason (core `foldRuns`) */
   projects?: TestRunProject[];
+  /** one project ran it and skipped it: the reason its own skip condition wrote */
+  reason?: string;
   retries?: number;
   /** the node **in this scope** the test's edge lands on — judge a helper by what it reached */
   reaches: { nodeId: string; name: string; kind: GraphNode['kind'] };
@@ -358,11 +360,13 @@ export function ownCaseHold(index: GraphIndex, flowIds: string[], refs: Coverage
   });
   const cases = own.filter((t) => t.status === 'failed' || t.status === 'skipped')
     .map((t) => {
-      const where = projectSkipWords(t.projects);
+      // more than one project: each with its reason; one project that skipped it: that project and its reason
+      const ran = t.projects ?? (t.status === 'skipped' && (t.project || t.reason) ? [{ project: t.project ?? '', status: t.status, ...(t.reason ? { reason: t.reason } : {}) }] : undefined);
+      const where = projectSkipWords(ran);
       return {
         id: t.id, name: t.name, status: t.status as 'failed' | 'skipped',
         ...(t.projects ? { projects: t.projects } : {}),
-        ...(where ? { where: { text: where, biz: projectSkipWords(t.projects, true) } } : {}),
+        ...(where ? { where: { text: where, biz: projectSkipWords(ran, true) } } : {}),
       };
     })
     .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'failed' ? -1 : 1));
@@ -483,6 +487,7 @@ export function toCoverageRef(index: GraphIndex, t: CoveringTest, node: GraphNod
     ...(t.inactive ? { inactive: true } : {}),
     ...(t.project ? { project: t.project } : {}),
     ...(t.run?.projects ? { projects: t.run.projects } : {}),
+    ...(t.run?.reason ? { reason: t.run.reason } : {}),
     ...(t.retries != null ? { retries: t.retries } : {}),
     reaches: node
       ? { nodeId: node.id, name: node.name, kind: node.kind }
@@ -799,7 +804,8 @@ export function projectSplitWords(split: ProjectSplit, business = false, registe
 export function projectSkipWords(projects: TestRunProject[] | undefined, business = false, register: Register = 'professional'): string {
   if (!projects?.length) return '';
   const skipped = projects.filter((p) => p.status === 'skipped')
-    .map((p) => (p.reason ? fill(t('tests.projectSkipped', register), { project: p.project, reason: p.reason }) : p.project)).join(', ');
+    .map((p) => (!p.project ? p.reason ?? '' : p.reason ? fill(t('tests.projectSkipped', register), { project: p.project, reason: p.reason }) : p.project))
+    .filter(Boolean).join(', ');
   return skipped ? fill(t(business ? 'tests.biz.skippedOn' : 'tests.skippedOn', register), { skipped }) : '';
 }
 

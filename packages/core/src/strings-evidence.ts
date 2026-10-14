@@ -27,7 +27,7 @@ export const EVIDENCE_STRINGS: Record<string, StringEntry> = {
     'The projects that skipped this case, each with the reason its own skip condition wrote. No project passed it.'),
   'tests.biz.skippedOn': same('not run on {skipped}',
     'The settings this check was left out of, each with the reason written for it. It did not run anywhere.'),
-  'readiness.note.projectSkip': same('note: {name} {split}',
+  'readiness.note.projectSkip': same('note: {name} — {split}',
     'The journey’s own case passed on one project and was skipped on another by its own written condition. Said on the row, never a reason to hold: the case passed where it ran.'),
   'state.unit.journeysHeld': same('{n} journeys held in the release brief by their own case',
     'Fully built journeys whose own declared end-to-end case failed, or that no project passed. The release brief holds them, so they are counted apart from the journeys that passed.'),
