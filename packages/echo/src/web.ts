@@ -1,6 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { ECHO_PORTAL_STRINGS } from '@farsight/core/dist/strings-echo-portal.js';
+import { contextFingerprint } from './sessions.js';
+import { PortalFailure, validatePortalAsk, validatePortalBrowse, validatePortalExpand } from './portal.js';
+import type { PortalCallbacks } from './portal-types.js';
 import { ECHO_UI_STRINGS } from '@farsight/core/dist/strings-echo-ui.js';
 import { submindSettings, updateConfig, validateConfig } from './config.js';
 import { requireFileTrust } from './trust.js';
@@ -98,8 +102,11 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   try { return JSON.parse(body); } catch { throw new RequestError(400, 'invalid'); }
 }
 
-/** Settings only: every running dependency and session keeps its startup configuration. */
-export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Promise<CheckResult[]>; installation?: WebInstallation } = {}): Promise<{ url: string; close(): Promise<void> }> {
+/** Settings and read-only memory access retain the process startup configuration. */
+export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Promise<CheckResult[]>; installation?: WebInstallation; portal?: PortalCallbacks; demo?: boolean } = {}): Promise<{ url: string; close(): Promise<void> }> {
+  const startup = structuredClone(ctx);
+  const fingerprint = contextFingerprint(startup);
+  const requests = new Set<AbortController>();
   const frameOrigin = permittedFrameOrigin(ctx.profile.web.farsightOrigin);
   const activeProfile = ctx.profileId;
   const activeIdentity = structuredClone(ctx.profile.identity);
@@ -136,11 +143,12 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
       if (req.method === 'GET' && path === '/api/settings') {
         try {
           const current = await snapshot(ctx.configPath);
-          json(res, 200, { ...current, installation, defaults, running: { profileId: activeProfile, identity: activeIdentity, dataDirectory: activeDataDirectory, submindMode: activeSubmindMode } }, current.revision);
+          json(res, 200, { ...current, installation, defaults, readOnly: callbacks.demo === true, portal: { available: !!callbacks.portal, synthetic: callbacks.demo === true }, running: { profileId: activeProfile, identity: activeIdentity, dataDirectory: activeDataDirectory, submindMode: activeSubmindMode } }, current.revision);
         } catch { fail(res, 503, 'unavailable'); }
         return;
       }
       if (req.method === 'PUT' && path === '/api/settings') {
+        if (callbacks.demo) throw new RequestError(403, 'refused');
         const revision = req.headers['if-match'];
         if (typeof revision !== 'string') throw new RequestError(428, 'revisionRequired');
         const input = await readJson(req);
@@ -175,13 +183,55 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
         finally { if (timer) clearTimeout(timer); }
         return;
       }
-      if (req.method === 'GET' && path === '/api/strings') { json(res, 200, ECHO_UI_STRINGS); return; }
+      if (req.method === 'POST' && ['/api/memory/browse', '/api/memory/expand', '/api/memory/ask'].includes(path ?? '')) {
+        if (!callbacks.portal) throw new PortalFailure('unavailable');
+        const input = await readJson(req);
+        const action = path === '/api/memory/browse' ? () => callbacks.portal!.browse(validatePortalBrowse(input), controller.signal)
+          : path === '/api/memory/expand' ? () => callbacks.portal!.expand(validatePortalExpand(input), controller.signal)
+          : () => callbacks.portal!.ask(validatePortalAsk(input), controller.signal);
+        // Trust and selection are checked on both sides of an asynchronous read. A settings
+        // save cannot make an in-flight response disclose evidence from the old selection.
+        const checkSelection = async (): Promise<void> => {
+          try {
+            const current = await snapshot(startup.configPath);
+            const profile = current.config.profiles[startup.profileId];
+            if (!profile || contextFingerprint({ ...startup, config: current.config, profile }) !== fingerprint) throw new Error();
+          } catch { throw new PortalFailure('stale'); }
+        };
+        const controller = new AbortController();
+        requests.add(controller);
+        const disconnected = () => { if (!res.writableEnded) controller.abort(); };
+        const deadline = path === '/api/memory/ask' ? submindSettings(startup.profile).timeoutMs + 1000 : 15000;
+        const timer = setTimeout(() => controller.abort(new PortalFailure('timeout')), deadline);
+        timer.unref();
+        req.once('aborted', disconnected);
+        res.once('close', disconnected);
+        let aborted: (() => void) | undefined;
+        try {
+          const result = await Promise.race([
+            (async () => { await checkSelection(); if (controller.signal.aborted) throw controller.signal.reason; const value = await action(); await checkSelection(); return value; })(),
+            new Promise<never>((_, reject) => { aborted = () => reject(controller.signal.reason); controller.signal.addEventListener('abort', aborted, { once: true }); }),
+          ]);
+          if (!controller.signal.aborted && !res.destroyed) json(res, 200, result);
+        } catch (error) {
+          if (error instanceof PortalFailure || error instanceof RequestError) throw error;
+          throw new PortalFailure('failed');
+        } finally {
+          clearTimeout(timer);
+          if (aborted) controller.signal.removeEventListener('abort', aborted);
+          req.off('aborted', disconnected);
+          res.off('close', disconnected);
+          requests.delete(controller);
+        }
+        return;
+      }
+      if (req.method === 'GET' && path === '/api/strings') { json(res, 200, { ...ECHO_UI_STRINGS, ...ECHO_PORTAL_STRINGS }); return; }
       if (req.method === 'GET' && path === '/') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${html(text('title'))}</title><link rel="stylesheet" href="/style.css"></head><body><div id="app" data-error="${html(text('unavailable'))}"><p role="status">${html(text('loading'))}</p></div><script type="module" src="/app.js"></script></body></html>`);
         return;
       }
-      if (req.method === 'GET' && (path === '/app.js' || path === '/style.css')) {
+      if (req.method === 'GET' && (path === '/app.js' || path === '/portal.js' || path === '/style.css')) {
         const content = await readFile(new URL(`../public${path}`, import.meta.url));
         res.writeHead(200, { 'Content-Type': path.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/css; charset=utf-8' });
         res.end(content);
@@ -191,6 +241,8 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
       fail(res, 404, 'notFound');
     } catch (error) {
       req.resume();
+      if (res.destroyed) return;
+      if (error instanceof PortalFailure) { json(res, error.code === 'invalid' ? 400 : error.code === 'stale' ? 409 : error.code === 'timeout' ? 504 : 503, { error: ECHO_PORTAL_STRINGS[`echo.portal.${error.code}`]!.professional }); return; }
       if (!res.headersSent) fail(res, error instanceof RequestError ? error.status : 500, error instanceof RequestError ? error.key : 'failed');
       else res.end();
     }
@@ -206,6 +258,7 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
   return {
     url: `http://127.0.0.1:${port}`,
     close: async () => {
+      for (const controller of requests) controller.abort();
       await writes;
       await new Promise<void>((resolve, reject) => {
         server.close(error => error ? reject(error) : resolve());

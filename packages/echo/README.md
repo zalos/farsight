@@ -2,7 +2,7 @@
 
 Echo is an optional, independently running memory companion for Farsight. It has its own package, settings, model connection, and memory stores. The regular Farsight CLI does not need Echo or agentmemory.
 
-**This iteration supports explicit memory storage, scoped recall, and an optional sub-mind for memory research.** With `serve` running, you can save a memory, retrieve it from the CLI, or ask the sub-mind for a concise sourced brief with programmatic follow-up actions. The sub-mind can use a local model, a remote Ollama desktop, or a hosted OpenAI-compatible endpoint. It defaults to off; mock mode exercises the research flow without model inference. Host hooks continue to return bounded raw excerpts. Automatic conversation capture and a memory browsing/editing portal come later.
+**This iteration supports explicit memory storage, scoped recall, a read-only memory portal, and an optional sub-mind for memory research.** With `serve` running, you can save a memory, retrieve it from the CLI, or ask the sub-mind for a concise sourced brief with programmatic follow-up actions. The sub-mind can use a local model, a remote Ollama desktop, or a hosted OpenAI-compatible endpoint. It defaults to off; mock mode exercises the research flow without model inference. Host hooks continue to return bounded raw excerpts. The portal searches saved records and shows their source evidence. Automatic conversation capture and memory editing come later.
 
 Choose a **workspace store** for memories kept with one project, or a **global store** for your own memories shared across selected workspaces. Each workspace connects to one profile at a time. Two workspaces connected to the same global configuration and profile read and write the same memory store.
 
@@ -33,6 +33,38 @@ farsight-echo ask --query "What did we learn about cold shipping?"
 
 This searches the running profile's backend, so it requires that backend, but it never invokes a model. Opening settings or saving a mode never sends a generation request. Leave the mode off when no research should be allowed. Raw `recall` and installed hooks remain available in all modes.
 
+## Explore the portal without a backend or model
+
+From a built checkout:
+
+```sh
+node packages/echo/dist/cli.js portal-demo
+```
+
+From the installed package:
+
+```sh
+farsight-echo portal-demo
+```
+
+Open the printed URL. The default port is `4491`; use `portal-demo --port 0` to choose an available port, or provide another available port explicitly. The **Synthetic preview** banner identifies example memories held in memory. This command starts an isolated local web server and private memory bridge, creates disposable configuration and trust state, and neither reads existing Echo settings nor connects to a real memory store, model, or engine. Settings are read-only. Ctrl-C closes the preview and removes its temporary state. This preview tests the interaction flow, not model quality or stored-memory persistence.
+
+Try searching for `shipping`, selecting a card, and reading its evidence. **Load more** retrieves another page; **Topics in loaded results** filters only cards already fetched. Ask the mock sub-mind about `shipping`, then use **Read more** on a checked reference. Neither action loads or invokes a model in this preview.
+
+## Browse your saved memories
+
+Run the normal `serve` command with your selected configuration and profile, then open its printed URL. It serves the same portal on that profile’s configured web port, backed by its actual memory connection.
+
+- **Memories** presents compact cards grouped by saved date, with content excerpts, actual saved topics, and known source workspace. Select a card for saved content, timestamp, and verified provenance when available. The saved date describes when the record was stored, not necessarily when its subject happened.
+- **Search memories** sends an ordinary store lookup, without inference. The start and end dates include the full selected UTC days. The topic menu filters loaded records only; it is not a store-wide topic index.
+- **Load more** continues the current query and date selection. An empty page after date filtering can still have another page. Each displayed count covers its server response, not the whole store or all accumulated cards; counts are hidden while a topic filter is active. Pagination is not a snapshot and does not establish exhaustive recall.
+- **Memory detail** follows the exact ID and content revision. If the record changed, Echo labels the current content as changed; if it is missing or out of scope, no content is shown. Shortened evidence is labeled. Echo does not promise historical revision retention.
+- **Ask sub-mind** is a separate explicit action. Off mode disables research while leaving ordinary browsing available. Mock mode returns labeled deterministic excerpts. Model mode sends the question and selected evidence to your configured local or remote provider. The brief shows problem, concise fix, supported explanation, and checked references. **Read more** follows a typed memory reference without inference. **Cancel research** or leaving the Memories tab cancels the active request.
+
+The running profile and its individual/team/project labels define the browsing scope. Selecting another profile in **Settings** edits that profile only; it never redirects the memory view. Changes to the running configuration require a restart before further memory requests. If the portal reports stale settings, restart the same `serve` command and reload the page. Unsaved form changes survive switching between the two tabs.
+
+Normal pages request at most 50 records. If the upstream response exceeds the 2 MB transport limit, Echo retries that same page with 10 records, then one; other errors do not trigger this retry. Returned titles, content, and topics share a 64,000-character page allowance. The portal reports clipping and incomplete coverage. Queried search inherits the pinned backend’s global candidate ranking limit, so additional pages cannot guarantee that every matching scoped memory will appear. There is no overall memory count or inferred relationship graph.
+
 ## Quick start from this repository
 
 Run these commands from the repository root using Node 24:
@@ -47,7 +79,7 @@ For a first test, choose an installed Ollama model, answer **no** to the hook qu
 
 Workspace setup creates `.echo/settings.json` with `personal` and `work` profiles. Both begin with hooks disabled and separate memory addresses. Setup configures the selected profile; the default is `personal`. It does not start a server. Without an explicit scope or configuration, interactive setup asks whether to use workspace or global settings.
 
-Check the configuration, exercise storage, then start the settings view:
+Check the configuration, exercise storage, then start the memory portal:
 
 ```sh
 node packages/echo/dist/cli.js doctor
@@ -55,7 +87,7 @@ node packages/echo/dist/cli.js smoke
 node packages/echo/dist/cli.js serve
 ```
 
-Open the URL printed by `serve`: with the default personal profile it is [http://127.0.0.1:4480](http://127.0.0.1:4480). Leave this terminal running. Ctrl-C shuts down Echo's settings server and its owned memory processes.
+Open the URL printed by `serve`: with the default personal profile it is [http://127.0.0.1:4480](http://127.0.0.1:4480). Leave this terminal running. Ctrl-C shuts down Echo's web server and its owned memory processes.
 
 If you declined engine installation during setup, run `node packages/echo/dist/cli.js install-runtime` before the smoke test. To test storage without a model, run `smoke` without `--with-model`; `doctor` skips model readiness checks in off and mock modes (including legacy profiles without a sub-mind policy).
 
@@ -87,7 +119,7 @@ Use `npx --no-install farsight-echo` for subsequent commands with that local pac
 
 Installing the executable and choosing the memory store are separate decisions. A globally installed executable can manage a workspace-only store. A workspace connected to a global store needs only its hook definitions and connection file; it does not need another package or backend copy.
 
-These commands install a local artifact; they do not publish to npm. The standalone package includes the settings view and pinned agentmemory dependency. Source workspace installs include that dependency tree; pnpm permits dependency lifecycle scripts only for esbuild. Engine installation remains an explicit setup step. Package installation never installs hooks or starts a service.
+These commands install a local artifact; they do not publish to npm. The standalone package includes the memory portal, settings view, and pinned agentmemory dependency. Source workspace installs include that dependency tree; pnpm permits dependency lifecycle scripts only for esbuild. Engine installation remains an explicit setup step. Package installation never installs hooks or starts a service.
 
 For a workspace store, change to the workspace and run:
 
@@ -107,10 +139,12 @@ For a shared global store, run `farsight-echo setup --scope global`, then use th
 | Configuration | Run `doctor` | The pinned package and managed engine are available, and the isolation precondition passes; model mode also checks the chosen Ollama model. Managed `doctor` does not start the backend. |
 | Memory storage | Run `smoke` | `remember-recall`, `restart-persistence`, and `store-isolation` each report `ok: true`. |
 | Persistent memory | Keep `serve` running, then use `remember` and `recall` as shown below | The explicitly saved fact is returned from the selected managed profile and survives restart. |
+| Model-free portal | Run `portal-demo --port 0`, open its printed URL, search and select a card, then explicitly ask the sub-mind | Synthetic memories, evidence detail, and mock research work without an existing configuration, backend, or model. |
 | Model-free sub-mind | Run `submind-demo` | A synthetic brief and follow-up read work without a model or backend. |
 | Research on your store | Choose mock mode, restart `serve`, run `ask --query TEXT` | Labeled deterministic excerpts and follow-up references come from the selected scope without inference. |
 | Optional model connection | Run `smoke --with-model` only when inference is desired | The same storage checks pass, plus `model-summary` returns a short summary of synthetic shipping text. |
-| Settings view | Run `serve`, open its URL, and refresh the checks | The settings page loads and the running backend reports readiness. The view remains available if the backend needs attention. |
+| Memory portal | Run `serve`, open its URL, search saved text, select a card, and follow its detail | The running profile’s records appear with saved dates, topics when present, and known source provenance. Browsing does not invoke a model. |
+| Settings view | In the portal, select Settings and refresh the checks | The settings page loads and the running backend reports readiness. Settings remain available if the backend needs attention. |
 | Save/reload | Change a harmless setting, save, and reload the page | The saved value persists. Restart `serve` to apply runtime changes. |
 | Profile editing | Select `work` in the settings view | You can edit work's settings; the running profile indicator remains on the profile started by `serve`. Selecting an editor tab does not switch services. |
 
@@ -118,7 +152,7 @@ Smoke uses disposable stores and synthetic text. It never writes into your perso
 
 The optional `smoke --with-model` check performs real inference, even when sub-mind mode is off or mock. It summarizes the synthetic sample directly after the storage assertions. To exercise the bounded research workflow instead, use `ask` with model mode explicitly enabled and available compute.
 
-The web view currently manages configuration and connection checks. Use the CLI and host verification below to inspect memory access; the web view is not a memory browser or a capture history view.
+The web view opens on **Memories**. Its separate **Settings** tab retains unsaved edits when you switch views. Memory editing, deletion, and conversation capture history are not part of this iteration.
 
 ## Save and recall a memory
 
@@ -131,13 +165,13 @@ farsight-echo recall --profile personal --query "echocoldtest" --limit 3
 
 `remember` returns the stored `id` and `createdAt`. `recall` returns a `memories` list with each record's `id`, `title`, `content`, and `timestamp`, plus historical `provenance` and a `truncated` indicator. New saves record the calling workspace, its HEAD revision when available, and the save date; old records report unknown provenance. These are memories, not facts read from the current code. Credential-shaped content or topics are refused without repeating the value. The list should contain the test fact. Stop and restart `serve`, then repeat `recall` to check that it persists. Unlike `smoke`, `remember` writes a real memory to the selected store; it is not a disposable test operation.
 
-Repeat `--topic` to attach more than one topic. Topics and timestamps are stored metadata; day/topic browsing and rollups are not implemented. Recall returns at most five records, with combined title/content bounded by the profile's brief-character limit. `--limit` can request fewer records; it cannot bypass that ceiling.
+Repeat `--topic` to attach more than one topic. Topics and timestamps are stored metadata. The portal groups records by saved date and filters loaded records by their saved topics; automatic day/topic rollups are not implemented. Recall returns at most five records, with combined title/content bounded by the profile's brief-character limit. `--limit` can request fewer records; it cannot bypass that ceiling.
 
 You can ask a host agent to invoke these commands after the hook has supplied the access instructions. Storing a memory is an explicit action. Echo does not import old chats or silently save each prompt, tool result, or response.
 
-Commands and hooks connect to the running Echo process through a local filesystem-protected Unix socket. The settings website does not expose a public memory read/write API. If Echo is stopped or its selected configuration has changed since startup, restart `serve` before using memory commands.
+Commands and hooks connect to the running Echo process through a local filesystem-protected Unix socket. The portal exposes guarded, local read-only memory routes; it has no memory mutation route. If Echo is stopped or its selected configuration has changed since startup, restart `serve` before using memory commands.
 
-**Explicit saves currently require managed mode.** External mode supports scoped recall only. Echo refuses external writes because the pinned backend's memory supersession can affect older unscoped records. External recall accepts only records already in the exact Echo namespace and individual scope; it does not import legacy unscoped memories.
+**Explicit saves currently require managed mode.** External mode supports scoped reads, including portal browsing and research, but no memory writes. Echo refuses external writes because the pinned backend's memory supersession can affect older unscoped records. External recall accepts only records already in the exact Echo namespace and individual scope; it does not import legacy unscoped memories.
 
 ## Configuration and profiles
 
@@ -443,6 +477,8 @@ Agentmemory uses iii's file-backed state store. These live files are not a Git c
 | Reconnected workspace still uses old hooks | Reopen the host in a fresh chat and review any changed hook trust. Remove a separately loaded Echo plugin if it still points to the old profile. |
 | No memories appear in the main agent | First confirm CLI `recall` finds an explicitly saved memory. Then check the intended workspace, host support, hook preference, exact-definition trust, and a fresh chat. Hooks fail open if Echo is unavailable. |
 | A conversation was not saved | Automatic capture, daily/topic rollups, and skill discovery are deferred. Use explicit `remember` for selected facts; `ask` researches memories already saved. |
+| Portal says settings changed | Restart the selected `serve` process and reload the page. Requests remain bound to the startup profile; selecting another editor profile is not a runtime switch. |
+| No cards match, but Load more remains | Continue paging. UTC date filtering can remove every record on one page without exhausting subsequent pages. |
 | Sub-mind research is disabled | Set mock or model mode, save, and restart the selected service. The running-mode indicator shows the startup mode. |
 | Remote model address is refused | Use an origin without a path. Prefer HTTPS or a local SSH tunnel; private numerical HTTP requires explicit opt-in and no credential reference. |
 

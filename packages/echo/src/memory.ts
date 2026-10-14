@@ -18,15 +18,15 @@ export interface RecallInput { query: string; limit?: number }
 export interface RememberResult { id: string; createdAt: string }
 export interface RecalledMemory { id: string; title: string; content: string; timestamp: string; provenance?: MemoryProvenance }
 export interface RecallResult { memories: RecalledMemory[]; truncated: boolean }
-export interface MemoryRequestOptions { timeoutMs?: number }
+export interface MemoryRequestOptions { timeoutMs?: number; signal?: AbortSignal }
 type Operation = 'remember' | 'recall' | 'ask' | 'expand';
 type BridgeInput = RememberInput | RecallInput | { id: string; revision: string };
 type BridgeResult = RememberResult | RecallResult | SubmindResult | ExpandResult;
-type FailureCode = 'unavailable' | 'input' | 'credential' | 'stale' | 'ownership' | 'running' | 'response' | 'timeout' | 'externalReadOnly' | 'busy';
+type FailureCode = 'unavailable' | 'input' | 'credential' | 'stale' | 'ownership' | 'running' | 'response' | 'timeout' | 'externalReadOnly' | 'busy' | 'aborted';
 const REQUEST_BYTES = 160_000;
 // A 64k-character expansion can require six JSON bytes per character.
 const RESPONSE_BYTES = 524_288;
-const codes = new Set<FailureCode>(['unavailable', 'input', 'credential', 'stale', 'ownership', 'running', 'response', 'timeout', 'externalReadOnly', 'busy']);
+const codes = new Set<FailureCode>(['unavailable', 'input', 'credential', 'stale', 'ownership', 'running', 'response', 'timeout', 'externalReadOnly', 'busy', 'aborted']);
 class MemoryFailure extends Error {
   constructor(readonly code: FailureCode) { super(echoMemoryWord(code)); }
 }
@@ -245,6 +245,7 @@ export function memoryRequest(ctx: EchoContext, operation: 'recall', input: Reca
 export function memoryRequest(ctx: EchoContext, operation: 'ask', input: { query: string }, options?: MemoryRequestOptions): Promise<SubmindResult>;
 export function memoryRequest(ctx: EchoContext, operation: 'expand', input: { id: string; revision: string }, options?: MemoryRequestOptions): Promise<ExpandResult>;
 export async function memoryRequest(ctx: EchoContext, operation: Operation, input: BridgeInput, options: MemoryRequestOptions = {}): Promise<BridgeResult> {
+  if (options.signal?.aborted) fail('aborted');
   const validated = inputFor(operation, input);
   const origin = operation === 'remember' ? await captureMemoryOrigin().catch(() => fail('input')) : undefined;
   const extended = operation === 'ask' || operation === 'expand';
@@ -257,10 +258,13 @@ export async function memoryRequest(ctx: EchoContext, operation: Operation, inpu
     let settled = false;
     const finish = (error?: FailureCode, result?: BridgeResult) => {
       if (settled) return;
-      settled = true; clearTimeout(timer); socket.destroy();
+      settled = true; clearTimeout(timer); options.signal?.removeEventListener('abort', onAbort); socket.destroy();
       if (error) reject(new MemoryFailure(error)); else resolve(result!);
     };
+    const onAbort = () => finish('aborted');
     const timer = setTimeout(() => finish('timeout'), deadline);
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    if (options.signal?.aborted) { finish('aborted'); return; }
     socket.once('connect', () => socket.write(`${JSON.stringify({ version: 1, fingerprint: contextFingerprint(ctx), operation, input: validated, timeoutMs: deadline, ...(origin ? { origin } : {}) })}\n`));
     socket.on('error', () => finish('unavailable'));
     socket.once('close', () => finish('unavailable'));

@@ -1,3 +1,5 @@
+import { createPortal } from './portal.js';
+
 let strings;
 const root = document.querySelector('#app');
 const t = key => strings[`echo.ui.${key}`].professional;
@@ -12,7 +14,8 @@ const word = (tag, key, className = '') => {
   node.title = strings[`echo.ui.${key}`].define;
   return node;
 };
-let config, revision, running, installation, selected, baseline, defaults;
+let config, revision, running, installation, selected, baseline, defaults, portalOptions, readOnly;
+let portal, activeView = 'memories';
 let form, profileList, saveButton, editState, notice;
 let busy = false;
 
@@ -82,7 +85,7 @@ function section(key, note) {
 }
 
 function captureForm() {
-  if (!form?.elements.individual) return;
+  if (readOnly || !form?.elements.individual) return;
   const values = new FormData(form);
   const value = name => String(values.get(name) ?? '').trim();
   const optional = name => value(name) || undefined;
@@ -111,7 +114,7 @@ function markDirty() {
   const dirty = JSON.stringify(config) !== baseline;
   editState.textContent = t(dirty ? 'unsaved' : 'savedState');
   editState.classList.toggle('dirty', dirty);
-  saveButton.disabled = busy || !dirty;
+  saveButton.disabled = readOnly || busy || !dirty;
 }
 
 function renderProfiles() {
@@ -194,6 +197,7 @@ function renderForm() {
   const cards = el('div', 'cards');
   cards.append(identity.card, memory.card, model.card, submind.card, hooks.card, skills.card, limits.card);
   form.append(cards);
+  if (readOnly) for (const input of form.querySelectorAll('input, select, textarea')) input.disabled = true;
 }
 
 function announce(message, error = false) {
@@ -209,11 +213,14 @@ async function load() {
   running = data.running;
   installation = data.installation;
   defaults = data.defaults;
+  portalOptions = data.portal ?? { available: false };
+  readOnly = data.readOnly === true;
   baseline = JSON.stringify(config);
   if (!selected || !config.profiles[selected]) selected = config.profiles[running.profileId] ? running.profileId : config.defaultProfile;
 }
 
 function render() {
+  portal?.cancel();
   root.replaceChildren();
   const header = el('header', 'masthead');
   const brand = el('div');
@@ -252,6 +259,7 @@ function render() {
   form.addEventListener('change', markDirty);
   form.addEventListener('submit', async event => {
     event.preventDefault();
+    if (readOnly) return;
     captureForm();
     busy = true;
     form.inert = true;
@@ -312,7 +320,29 @@ function render() {
   const saveMessage = el('div', 'save-message');
   saveMessage.append(editState, notice);
   footer.append(saveMessage, actions);
-  root.append(header, hero, boundary, location, layout, footer);
+  const tabs = el('div', 'view-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', strings['echo.portal.navigation'].professional);
+  const settingsPanel = el('section', 'settings-panel'); settingsPanel.id = 'echo-settings'; settingsPanel.setAttribute('role', 'tabpanel'); settingsPanel.setAttribute('aria-labelledby', 'tab-settings');
+  settingsPanel.append(hero, boundary, location, layout, footer);
+  if (readOnly) { const note = el('p', 'synthetic-preview', strings['echo.portal.demoSettings'].professional); note.title = strings['echo.portal.demoSettings'].define; settingsPanel.prepend(note); }
+  portal = createPortal({ strings, running, available: portalOptions.available, synthetic: portalOptions.synthetic });
+  portal.element.setAttribute('role', 'tabpanel'); portal.element.setAttribute('aria-labelledby', 'tab-memories');
+  const tabButtons = new Map();
+  function selectView(view, focus = false) {
+    activeView = view;
+    for (const [key, tab] of tabButtons) { tab.setAttribute('aria-selected', String(view === key)); tab.tabIndex = view === key ? 0 : -1; }
+    settingsPanel.hidden = view !== 'settings'; portal.element.hidden = view !== 'memories';
+    if (view === 'memories') portal.activate(); else portal.cancel();
+    if (focus) tabButtons.get(view).focus();
+  }
+  for (const view of ['memories', 'settings']) {
+    const entry = strings[`echo.portal.${view}`]; const tab = el('button', 'view-tab', entry.professional);
+    tab.type = 'button'; tab.title = entry.define; tab.id = `tab-${view}`; tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', `echo-${view}`);
+    tab.addEventListener('click', () => selectView(view));
+    tab.addEventListener('keydown', event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); selectView(event.key === 'Home' ? 'memories' : event.key === 'End' ? 'settings' : activeView === 'memories' ? 'settings' : 'memories', true); } });
+    tabButtons.set(view, tab); tabs.append(tab);
+  }
+  root.append(header, tabs, portal.element, settingsPanel);
+  selectView(activeView);
   renderProfiles();
   renderForm();
   markDirty();
@@ -325,3 +355,5 @@ try {
 } catch {
   root.replaceChildren(el('p', 'boot-error', strings ? t('unavailable') : root.dataset.error));
 }
+
+window.addEventListener('pagehide', () => portal?.cancel());

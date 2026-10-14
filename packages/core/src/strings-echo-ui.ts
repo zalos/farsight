@@ -4,7 +4,7 @@ const word = (text: string, define: string): StringEntry => ({ hud: text, profes
 
 /** Echo owns its settings surface; Farsight may frame it without owning its runtime. */
 export const ECHO_UI_STRINGS: Record<string, StringEntry> = {
-  'echo.ui.title': word('Echo · Settings', 'The local settings view for the Echo memory companion.'),
+  'echo.ui.title': word('Echo · Memory', 'The local memory and settings view for the Echo memory companion.'),
   'echo.ui.brand': word('Echo', 'The optional memory companion for Farsight and coding agents.'),
   'echo.ui.eyebrow': word('Farsight companion', 'Echo runs independently and can optionally connect to Farsight.'),
   'echo.ui.headline': word('Set up your memory companion.', 'Configure the memory store, model and identity Echo will use when it next starts.'),
@@ -30,7 +30,7 @@ export const ECHO_UI_STRINGS: Record<string, StringEntry> = {
   'echo.ui.configLocation': word('Configuration file', 'The file this settings view reads and saves. Its location cannot be changed in this form.'),
   'echo.ui.runningLocation': word('Running profile storage', 'The local directory used by the running profile. An external memory service stores its memories separately.'),
   'echo.ui.workspaceLocation': word('Workspace folder', 'The workspace associated with this configuration location.'),
-  'echo.ui.installationNote': word('Use Echo CLI setup to choose a location or connect workspace hooks. Changing the connection does not move existing memories.', 'This view edits saved settings only. It does not install hooks, relocate storage or combine local and global memories.'),
+  'echo.ui.installationNote': word('Use Echo CLI setup to choose a location or connect workspace hooks. Changing the connection does not move existing memories.', 'Settings edits do not install hooks, relocate storage or combine local and global memories.'),
   'echo.ui.identity': word('Identity', 'Labels that scope memory to an individual, team and project.'),
   'echo.ui.identityNote': word('These labels scope local memory. Team sign-in and permissions come later.', 'Local labels are not authentication and do not authorize access to a shared team deployment.'),
   'echo.ui.individual': word('Individual', 'The person whose local session this profile represents.'),
@@ -55,7 +55,7 @@ export const ECHO_UI_STRINGS: Record<string, StringEntry> = {
   'echo.ui.allowInsecureHttp': word('Allow unencrypted model access on a private network', 'Explicitly allow an unencrypted connection to a private numerical network address. Remote credentials are refused on this connection.'),
   'echo.ui.remoteModelNote': word('Prefer HTTPS or a local SSH tunnel. Private-network HTTP sends prompts and memory evidence without encryption and cannot use a keychain credential.', 'The exception applies only to a private numerical model address. It does not change the memory store or expose Echo to remote callers.'),
   'echo.ui.submind': word('Sub-mind', 'The optional memory curator that researches saved memories separately from the main agent.'),
-  'echo.ui.submindNote': word('Choose how explicit memory research runs. Loading or saving this page never generates a response.', 'Each profile has an independent mode and research allowance. Restart Echo to apply changes to the running service.'),
+  'echo.ui.submindNote': word('Choose how explicit memory research runs. Viewing or saving settings never generates a response.', 'Each profile has an independent mode and research allowance. Restart Echo to apply changes to the running service.'),
   'echo.ui.runningSubmind': word('Running sub-mind', 'The sub-mind mode captured when this Echo process started. Changing saved settings does not switch it.'),
   'echo.ui.submindMode': word('Research mode', 'Choose disabled research, deterministic excerpts, or the configured model.'),
   'echo.ui.submindOff': word('Off', 'Explicit sub-mind research is disabled. Existing raw recall remains available.'),
