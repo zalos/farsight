@@ -158,8 +158,10 @@ export const ASK_STRINGS: Record<string, StringEntry> = {
   'ask.unit.roleActions': same('{n} actions', 'Actions whose role check is handed its roles in the code, each once.'),
   'ask.unit.roleActionsOne': one('1 action', 'ask.unit.roleActions'),
   // can it be configured
-  'ask.configure.everything': same('anything', 'The question named no one thing, so every screen, setting and switch found is listed.'),
-  'ask.configure.head': same('What configures {thing}: {count}.', 'The screens, the settings the code reads when it starts and the switches in the code whose words meet the question’s.'),
+  'ask.configure.head': same('What the code holds whose words meet “{thing}”: {count}.', 'The record fields, the screens, the settings the code reads when it starts and the switches in the code whose words meet the question’s — each a place the thing may be set. Read each line: a word in common is not proof it is the one meant.'),
+  'ask.configure.headAll': same('What the code holds that may be configured: {count}.', 'Every record field, screen, setting the code reads when it starts and switch in the code that Farsight reads as a place something is set — the question named no one thing.'),
+  'ask.configure.column': same('{table}.{column} — kept as data on each {record}, not in the code', 'A field of a record whose name meets the question’s words: its value is data, one per record, set wherever that record is written — not a setting in the code.'),
+  'ask.biz.configure.column': same('Each {record} keeps its own {column} — set as data, not in the system’s code', 'A field each record keeps: its value is data, set wherever the record is written.'),
   'ask.configure.check': same('{name} at {at} — the code checks a setting the app was started with', 'A check on the settings the app was started with — the environment — rather than on a request. It is set where the app is deployed, not from a screen.'),
   'ask.biz.configure.check': same('{name} — a setting chosen where the system is set up, not on a screen', 'A setting the system reads when it starts. It is set where the system is deployed, not from a screen.'),
   'ask.configure.screen': same('{name} — a screen that sets something up', 'A screen whose name says it sets something up and whose words meet the question’s.'),

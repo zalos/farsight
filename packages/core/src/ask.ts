@@ -45,7 +45,7 @@ import { gateTierOf } from './gate-class.js';
 import { isConfigCheck } from './config-check.js';
 import { lifecycleViews } from './lifecycle.js';
 import {
-  flowSummary, rankOrder, actionOrdinal, fillWords, bare, needWord, bizWords, fromWords, wordsOf, recordWord, locOf, countWords, verdictVars, nodeRef,
+  flowSummary, rankOrder, actionOrdinal, fillWords, bare, holeWords, needWord, bizWords, fromWords, wordsOf, recordWord, locOf, countWords, verdictVars, nodeRef,
   type TourClause, type TourNodeRef,
 } from './tour.js';
 
@@ -963,18 +963,6 @@ function checksOf(index: GraphIndex, c: Cand): { gates: Map<string, { tier: Gate
   return { gates, moments };
 }
 
-/**
- * A refusal message with a hole the code fills when it runs (*Vendor account is …, not ACTIVE*), as the business
- * register reads it: the hole says *(a value)* and a status constant reads as a word (outsider round, F6 · S2). The
- * viewer's `filledMessage()` is the same rule.
- */
-export function holeWords(text: string): string {
-  const s = String(text ?? '');
-  if (!/…/.test(s)) return s;
-  const v = t('plain.aValue');
-  return s.replace(/\(\s*…\s*\)/g, v).replace(/…/g, v).replace(/\b[A-Z]{4,}(?:_[A-Z]+)*\b/g, (w) => (/^ADR/.test(w) ? w : w.replace(/_/g, ' ').toLowerCase()));
-}
-
 /** A check as an answer row: its words, its kind and where it is, with the gate card's verdict. */
 function needRow(index: GraphIndex, id: string, g: { tier: GateTier; words: string; loc?: string }): TourClause {
   const card = gateCard(index, id);
@@ -1063,6 +1051,9 @@ function whoTable(index: GraphIndex, a: AskAnswer, repo?: string): AskAnswer {
 
 // ── can <thing> be configured ─────────────────────────────────────────────────────────────────────────────
 
+/** Words that ask about configuring, never name the thing configured. */
+const CONFIG_WORDS = new Set(['configure', 'configured', 'configurable', 'configuration', 'change', 'changed', 'setting', 'settings', 'set', 'up', 'thing', 'things', 'option', 'options', 'value', 'values', 'customise', 'customize', 'where', 'today']);
+
 /** A setting's file: a config, settings or env folder or file. */
 const SETTING_PATH = /(?:^|\/)(?:config|configs|configuration|settings|env)(?:\/|\.[a-z]+$)/i;
 
@@ -1075,8 +1066,13 @@ const SETTING_PATH = /(?:^|\/)(?:config|configs|configuration|settings|env)(?:\/
  */
 function answerConfigure(index: GraphIndex, question: string, thing: string, repo?: string): AskAnswer {
   const a = emptyAnswer(question, 'configure');
-  const words = contentWords(thing).filter((w) => !GENERIC.has(w)).map(wordKey);
-  const name = thing.replace(/^(?:a|an|the)\s+/i, '').trim() || t('ask.configure.everything');
+  // the thing's own words, the record it is *on* left out when there is more (*requirements on an invoice* → requirements)
+  const own = contentWords(thing).filter((w) => !CONFIG_WORDS.has(w)).map(wordKey).filter((k) => k.length > 2);
+  const recordKeys = new Set<string>();
+  for (const n of index.byId.values()) if (n.kind === 'table') for (const k of keysOf(recordWord(n.name))) recordKeys.add(k);
+  const focus = own.filter((k) => !recordKeys.has(k));
+  const words = focus.length ? focus : own;
+  const name = thing.replace(/^(?:a|an|the)\s+/i, '').trim();
   const meets = (text: string) => !words.length || words.some((w) => keysOf(text).has(w));
   const found: TourClause[] = [];
   const seen = new Set<string>();
@@ -1092,6 +1088,17 @@ function answerConfigure(index: GraphIndex, question: string, thing: string, rep
     } else if ((n.kind === 'rule' || n.kind === 'function') && n.loc && (SETTING_PATH.test(n.loc.path) || n.tags.includes('env-schema')) && meets(text)) {
       seen.add(n.id);
       found.push(line('data', 'ask.configure.setting', { name: n.name, at: locOf(n) }, [n.id], { bizKey: 'ask.biz.configure.setting', bizVars: { name: wordsOf(n) } }));
+    }
+  }
+  // a record column the words name (*requirements* → `campaigns.document_requirements`): kept as data, one value per record
+  const colKeys = words.filter((k) => k.length > 3);
+  if (colKeys.length && focus.length) for (const n of index.byId.values()) {
+    if (n.kind !== 'table' || (repo && !n.id.startsWith(`${repo}::`))) continue;
+    const cols = /^columns:\s*(.+)$/.exec(n.signature ?? '')?.[1]?.split(/\s*,\s*/) ?? [];
+    for (const col of cols) {
+      if (/^(?:id|created_at|updated_at)$|_ids?$/.test(col) || !colKeys.some((k) => keysOf(col).has(k))) continue;
+      const record = recordWord(n.name);
+      found.push(line('data', 'ask.configure.column', { record, column: col, table: n.name }, [n.id], { bizKey: 'ask.biz.configure.column', bizVars: { record, column: humanizeName(col).toLowerCase() } }));
     }
   }
   // switches: a call the code makes only when a constant flag says so (`meta.when`, written by the moves lane's parser pass)
@@ -1116,7 +1123,7 @@ function answerConfigure(index: GraphIndex, question: string, thing: string, rep
     return a;
   }
   const c = counted(found.length, 'ask.unit.configures', 'count.scope.question', `${SRC} → answerConfigure (config checks · settings files · settings screens · switches whose words meet the question's)`, { bizUnit: 'ask.unit.configures' });
-  a.lead.push(line('data', 'ask.configure.head', { thing: name, count: countWords(c) }, found.flatMap((x) => x.cites).slice(0, 6), { counted: c, bizVars: { thing: name, count: countWords(c, true) } }));
+  a.lead.push(line('data', own.length ? 'ask.configure.head' : 'ask.configure.headAll', { thing: name, count: countWords(c) }, found.flatMap((x) => x.cites).slice(0, 6), { counted: c, bizVars: { thing: name, count: countWords(c, true) } }));
   a.sections.push({ key: 'ask.sec.configures', rows: found.slice(0, 12) });
   return a;
 }

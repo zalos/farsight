@@ -119,7 +119,7 @@ test('can it be configured: what the code holds, or the absence word scoped to t
   assert.match(none.lead.find((c) => c.key === 'ask.configure.none')!.text, /nothing of this kind was found/);
   const all = ask(index, 'what can be configured?', { metas: meta.journeys });
   assert.equal(all.shape, 'configure');
-  const head = all.lead.find((c) => c.key === 'ask.configure.head');
+  const head = all.lead.find((c) => c.key === 'ask.configure.headAll');
   assert.ok(head && head.counted && head.counted.n >= 1, 'the fixture reads its settings from config/env.ts');
 });
 
