@@ -103,7 +103,7 @@ moved out; open a map when you need it, not to orient.
 | [docs/COUNTS.md](docs/COUNTS.md) | before printing, changing or defending a number — every count the product prints, its source field, what it counts, the scope it counts over, and the `Counted` shape a surface wires |
 | [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) | at session start — the verified current state and the ranked next work |
 | [docs/proposals/](docs/proposals/) | how a design was argued before it was built |
-| [docs/review-swarm.md](docs/review-swarm.md) | how to run the eight review personas (their reports stay out of the repo) |
+| [docs/review-swarm.md](docs/review-swarm.md) | how to run the eight review personas and the three outsiders (their reports stay out of the repo) |
 | [docs/VISION.md](docs/VISION.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/ROADMAP.md](docs/ROADMAP.md) | why the product exists, its ADRs, what is done and next |
 
 **The invariants that always apply, wherever you are working.** Every user-facing string goes through the

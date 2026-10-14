@@ -18,7 +18,7 @@ export const TYPES = ['feat', 'fix', 'docs', 'test', 'chore', 'build', 'ci', 're
 /** The scopes a reader expects: the packages, the surfaces that are not a package, and the release. */
 export const SCOPES = [
   'core', 'parsers', 'server', 'mcp', 'cli', 'echo', 'work', 'work-jira', 'work-azdo', 'work-fixture',
-  'e2e', 'scripts', 'ci', 'docs', 'proposals', 'examples', 'release', 'deps', 'viewer', 'skills',
+  'e2e', 'scripts', 'ci', 'docs', 'proposals', 'examples', 'release', 'deps', 'viewer', 'skills', 'agents',
 ];
 export const MAX_SUBJECT = 120;
 
