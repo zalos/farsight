@@ -108,8 +108,10 @@ test('a journey the brief holds carries the brief’s one line beside its word; 
   assert.equal(cov([run('passed', 'desktop-1440'), run('skipped', 'mobile-390', REASON)]).held, undefined, 'it ships: nothing is paired');
   const held = cov([run('skipped', 'desktop-1440', 'live only'), run('skipped', 'mobile-390', REASON)]).held!;
   assert.deepEqual(held.reasons, ['skipped']);
-  assert.equal(heldWords(held), `held in the release brief: its own case was skipped — walks (skipped on desktop-1440 (live only), mobile-390 (${REASON}))`);
-  assert.match(heldWords(held, true), /^held back in the release brief: .*not run on desktop-1440/);
+  // beside a chip: the brief's reason alone; the tip and the brief name the case and where it skipped
+  assert.equal(heldWords(held), 'held in the release brief: its own case was skipped');
+  assert.equal(heldWords(held, false, 'professional', { full: true }), `held in the release brief: its own case was skipped — walks (skipped on desktop-1440 (live only), mobile-390 (${REASON}))`);
+  assert.match(held.words!.fullBiz, /^held back in the release brief: .*not run on desktop-1440/);
   // the brief and the chip read one rule: the same cases
   const r = readiness(app([run('skipped', 'desktop-1440', 'live only'), run('skipped', 'mobile-390', REASON)]), tree(), 's')!.rows[0]!;
   assert.deepEqual(r.holdCases, held.cases);

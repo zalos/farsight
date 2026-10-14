@@ -389,11 +389,9 @@ export function heldWords(held: OwnCaseHold, business = false, register: Registe
     const where = projectSkipWords(c.projects, business, register);
     return where ? `${c.name} (${where})` : c.name;
   };
-  // one line beside a chip: the first case and how many more; `full` (the tip) names every case
-  const first = held.cases[0];
-  const cases = opts.full || held.cases.length === 1 || !first ? held.cases.map(named).join('; ')
-    : fill(t('readiness.held.more', register), { case: first.name, n: String(held.cases.length - 1) });
-  return fill(t(business ? 'readiness.biz.held.line' : 'readiness.held.line', register), { reason: `${reason} — ${cases}` });
+  // one line beside a chip is the brief's reason alone; `full` (the tip, the brief) names every case and where it skipped
+  const cases = held.cases.map(named).join('; ');
+  return fill(t(business ? 'readiness.biz.held.line' : 'readiness.held.line', register), { reason: opts.full ? `${reason} — ${cases}` : reason });
 }
 
 /** The cases a project skipped while another passed them — `TestVerdict.projectSplit`. */
@@ -402,8 +400,12 @@ export interface ProjectSplit {
   passedOn: string[];
   /** each project that skipped, with the distinct reasons its cases' own conditions wrote (empty when none was written) */
   skippedOn: { project: string; reasons: string[] }[];
-  /** the one sentence, made here so no printer words it (`projectSplitWords`): the code and hybrid register, and business */
-  words?: { text: string; biz: string };
+  /**
+   * the one sentence, made here so no printer words it (`projectSplitWords`): the code and hybrid register, and business;
+   * `short` / `shortBiz` name the projects alone (a chip row, the quoted reasons in its tip); `skipped` / `skippedBiz` are
+   * the skipped projects with their reasons, the tip's fill
+   */
+  words?: { text: string; biz: string; short: string; shortBiz: string; skipped: string };
 }
 
 /** One action's tests, slim: the chip, the word, the typed counts and the observing run — no test list, no metric. */
@@ -787,7 +789,11 @@ function projectSplitOf(cases: Pick<CoverageTestRef, 'status' | 'projects'>[]): 
     n, passedOn: [...passedOn].sort(),
     skippedOn: [...skippedOn].sort(([a], [b]) => a.localeCompare(b)).map(([project, r]) => ({ project, reasons: [...r].sort() })),
   };
-  split.words = { text: projectSplitWords(split), biz: projectSplitWords(split, true) };
+  split.words = {
+    text: projectSplitWords(split), biz: projectSplitWords(split, true),
+    short: projectSplitWords(split, false, 'professional', { reasons: false }), shortBiz: projectSplitWords(split, true, 'professional', { reasons: false }),
+    skipped: projectSkippedList(split),
+  };
   return split;
 }
 
@@ -796,13 +802,18 @@ function projectSplitOf(cases: Pick<CoverageTestRef, 'status' | 'projects'>[]): 
  * on mobile-390 (the ops console is designed for desktop)*; *n of them …* for more than one case; the business twin
  * says *not run on … by its own condition*. A project with several written reasons says how many.
  */
-export function projectSplitWords(split: ProjectSplit, business = false, register: Register = 'professional'): string {
-  const skipped = split.skippedOn.map((s) => (
+export function projectSplitWords(split: ProjectSplit, business = false, register: Register = 'professional', opts: { reasons?: boolean } = {}): string {
+  const skipped = opts.reasons === false ? split.skippedOn.map((s) => s.project).join(', ') : projectSkippedList(split, register);
+  const key = `tests.${business ? 'biz.' : ''}${split.n === 1 ? 'projectSplit' : 'projectSplitMany'}`;
+  return fill(t(key, register), { n: String(split.n), passed: split.passedOn.join(', '), skipped });
+}
+
+/** The skipped projects of a split, each with its quoted reason (or how many it wrote): *mobile-390 (…)*. */
+function projectSkippedList(split: ProjectSplit, register: Register = 'professional'): string {
+  return split.skippedOn.map((s) => (
     s.reasons.length === 1 ? fill(t('tests.projectSkipped', register), { project: s.project, reason: s.reasons[0]! })
       : s.reasons.length > 1 ? fill(t('tests.projectSkipped', register), { project: s.project, reason: fill(t('tests.projectReasons', register), { n: String(s.reasons.length) }) })
         : s.project)).join(', ');
-  const key = `tests.${business ? 'biz.' : ''}${split.n === 1 ? 'projectSplit' : 'projectSplitMany'}`;
-  return fill(t(key, register), { n: String(split.n), passed: split.passedOn.join(', '), skipped });
 }
 
 /** A case no project passed, by its projects: *skipped on desktop-1440 (live only), mobile-390 (…)* — '' for one project. */
