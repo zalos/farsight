@@ -18,7 +18,7 @@
 // click, Enter and Space are answered here.
 
 import { S, esc, expose, currentLens } from '../store.js';
-import { t, plainWords } from '../strings.js';
+import { t, plainWords, refusalWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { showTip, hideTip, tipAnchor, tipOpen, repositionTip } from './tooltip.js';
 import { doorsFor, doorsHtml, fetchSource, copyDoorsHtml } from './detail-doors.js';
@@ -122,7 +122,7 @@ function sentenceHtml(m) {
   if (m.precondition) {
     const w = m.precondition.words || '';
     return '<p class="gc-says">' + esc(biz() ? plainWords(w) || w : w) + '</p>'
-      + (m.precondition.else ? '<p class="gc-dim"' + defAttrs('gate.pre.else') + '>' + esc(fill(t('gate.pre.else'), { else: m.precondition.else })) + '</p>' : '')
+      + (m.precondition.else ? '<p class="gc-dim"' + defAttrs('gate.pre.else') + '>' + esc(fill(t('gate.pre.else'), { else: refusalWords(m.precondition.else, currentLens()) })) + '</p>' : '')
       + (m.precondition.via ? '<p class="gc-dim"' + defAttrs('gate.pre.via.' + m.precondition.via) + '>' + esc(t('gate.pre.via.' + m.precondition.via)) + '</p>' : '');
   }
   const says = s.says.source === 'business' ? (biz() ? plainWords(s.says.words) : s.says.words)

@@ -8,8 +8,8 @@
 // theme is (restored on leaving), prints on A4 one storyline per page (the `@media print` rules in
 // viewer.html), saves as a light PDF on one A4 page through lib/export.js, and as a CSV.
 
-import { S, esc, currentLens } from '../store.js';
-import { t } from '../strings.js';
+import { S, esc, currentLens, humanize } from '../store.js';
+import { t, plainWords, schemaWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, countWords, defAttrs, plainTip } from '../lib/counted.js';
 import { tipAttrs, registerTip, tableTip } from '../lib/tooltip.js';
@@ -94,6 +94,8 @@ function verdictHtml(row) {
     + '<span class="rd-sub">' + (row.lastRun ? esc(day(row.lastRun)) : esc(t('readiness.noRun'))) + '</span>';
 }
 
+/** The register's rules by id, so a row's unreached gates print the same words as the register (set per brief drawn). */
+let RULES_BY_ID = new Map();
 function rowHtml(row) {
   const scope = 'journey.scopeAll';
   const screens = row.screens.map((s) => s.name).join(' · ');
@@ -122,9 +124,22 @@ function rowHtml(row) {
     + '<td>' + verdictHtml(row) + '</td>'
     + '<td>' + num(row.skipped, 'count.part.skipped', scope) + ' / ' + num(row.unrun, 'count.part.noRun', scope) + '</td>'
     + '<td>' + num(row.gates.unreached.length, 'readiness.col.unreached', scope) + ' <span class="rd-sub-i">/ ' + esc(String(row.gates.n)) + '</span>'
-    + (row.gates.unreached.length ? '<span class="rd-sub rd-gates">' + row.gates.unreached.slice(0, 3).map((g) => esc(g.name)).join(' · ') + (row.gates.unreached.length > 3 ? ' · +' + (row.gates.unreached.length - 3) : '') + '</span>' : '') + '</td>'
+    + (row.gates.unreached.length ? '<span class="rd-sub rd-gates">' + row.gates.unreached.slice(0, 3).map((g) => esc(currentLens() === 'business' ? bizRuleName(RULES_BY_ID.get(g.id) || g) : g.name)).join(' · ') + (row.gates.unreached.length > 3 ? ' · +' + (row.gates.unreached.length - 3) : '') + '</span>' : '') + '</td>'
     + '<td>' + commits + '</td>'
     + '<td>' + decision + (notes ? '<span class="rd-sub rd-notes">' + notes + '</span>' : '') + '</td></tr>';
+}
+
+/**
+ * A rule's name in the business register (outsider round 2026-10-13, F6 · G8): the words somebody wrote, else a
+ * schema named by its form (`invoiceStatusSchema` → *the invoice status form's rules*) or a precondition's code form
+ * in words (`fn: invoices.status = APPROVED` → *invoices status must be approved*), else the name humanized — never the identifier.
+ */
+function bizRuleName(g) {
+  if (g.words) return plainWords(g.words) || g.words;
+  const w = schemaWords(g.name);
+  if (w !== g.name) return w;
+  const id = schemaWords(g.ident || g.name);
+  return id !== (g.ident || g.name) ? id : humanize(g.ident || g.name);
 }
 
 function rulesHtml(r) {
@@ -133,10 +148,10 @@ function rulesHtml(r) {
   return '<h2 class="rd-h2"><span' + defAttrs('readiness.rules') + '>' + esc(t('readiness.rules')) + '</span> '
     + countedHtml(r.counted.rules, '/api/readiness', { cls: 'rd-hsub' }) + ' <span class="rd-hsub">' + esc(t('readiness.rulesSub')) + '</span></h2>'
     + '<table class="rd-table rd-rules"><thead><tr>' + head.map((k) => '<th' + defAttrs(k) + '>' + esc(t(k)) + '</th>').join('') + '</tr></thead><tbody>'
-    + r.rules.map((g) => '<tr><td class="rd-gate">' + esc(currentLens() === 'business' && g.words ? g.words : g.name)
+    + r.rules.map((g) => '<tr><td class="rd-gate">' + esc(currentLens() === 'business' ? bizRuleName(g) : g.name)
       // who it matters to (gates lane 2026-10-10): the tier chip, its class in the tip
       + (g.tier ? ' <span class="gate-tier ' + esc(g.tier) + '"' + defAttrs(g.class ? 'gate.class.' + g.class : 'gate.tier.' + g.tier) + '>' + esc(t('gate.tier.' + g.tier)) + '</span>' : '') + '</td>'
-      + '<td>' + (g.words ? esc(g.words) : '<span class="rd-warn"' + defAttrs('readiness.noWords') + '>' + esc(t('readiness.noWords')) + '</span>') + '</td>'
+      + '<td>' + (g.words ? esc(currentLens() === 'business' ? plainWords(g.words) || g.words : g.words) : '<span class="rd-warn"' + defAttrs('readiness.noWords') + '>' + esc(t('readiness.noWords')) + '</span>') + '</td>'
       + '<td>' + num(g.screens, 'readiness.screensN', 'count.scope.gate') + '</td>'
       + '<td>' + num(g.tests, 'readiness.casesN', 'count.scope.gate') + '</td>'
       + '<td>' + (g.owners.length ? esc(g.owners.join(', ')) : '<span class="rd-warn"' + defAttrs('readiness.noOwner') + '>' + esc(t('readiness.noOwner')) + '</span>') + '</td></tr>').join('')
@@ -163,7 +178,7 @@ function sheetHtml(d) {
     + (r.storyline.description ? '<p class="rd-desc">' + esc(r.storyline.description) + '</p>' : '')
     + '<div class="rd-tiles">' + tile(c.steps) + tile(c.ship) + tile(c.hold) + distinctTile(c.skipped, 'skipped') + distinctTile(c.unreached, 'unreached') + '</div>'
     + '<table class="rd-table rd-steps"><thead><tr>' + cols.map((k) => '<th' + defAttrs(k) + '>' + esc(t(k)) + '</th>').join('') + '</tr></thead><tbody>'
-    + r.rows.map((row) => rowHtml(row)).join('') + '</tbody></table>'
+    + (RULES_BY_ID = new Map((r.rules || []).map((g) => [g.id, g])), r.rows.map((row) => rowHtml(row)).join('')) + '</tbody></table>'
     + rulesHtml(r)
     + '<footer class="rd-foot"><span>' + esc(t('readiness.foot')) + '</span></footer>';
 }
