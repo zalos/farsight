@@ -182,9 +182,10 @@ test('one fact, five surfaces: mark paid moves the invoice to paid; the payment 
   }
 });
 
-test('the writer reader takes the setter and the ternary: void has two writers, draft is reached from a rejection', () => {
+test('the writer reader takes the setter and the ternary: draft and open each gain a writer, void stays unwritten', () => {
   const life = index.byId.get(TABLE)!.lifecycle!;
-  const into = (s: string) => life.transitions.filter((x) => x.to === s).map((x) => `${x.by.split('::').pop()}${x.when ? `?${x.when}` : ''}`).sort();
-  assert.deepEqual(into('void'), ['rejectApproval?raisedInError', 'voidInvoice']);
-  assert.ok(into('draft').includes('rejectApproval?not raisedInError'));
+  const into = (st: string) => life.transitions.filter((x) => x.to === st).map((x) => `${x.by.split('::').pop()}${x.when ? `?${x.when}` : ''}`).sort();
+  assert.deepEqual(into('draft'), ['createInvoice', 'rejectApproval?raisedInError', 'reopenInvoice']);
+  assert.deepEqual(into('open'), ['finalizeInvoice', 'rejectApproval?not raisedInError']);
+  assert.deepEqual(into('void'), []);
 });

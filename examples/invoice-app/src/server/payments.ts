@@ -39,20 +39,20 @@ async function settleInvoice(id: string) {
 }
 
 /**
- * Voids an invoice that will never be paid.
- * @business A voided invoice stays on record but is never collected.
+ * Takes a sent invoice back to draft so its lines can change.
+ * @business A sent invoice can be pulled back for changes; it is sent again from the draft.
  */
-export async function voidInvoice(id: string) {
-  await setInvoiceStatus(id, 'void');
-  return { id, status: 'void' };
+export async function reopenInvoice(id: string) {
+  await setInvoiceStatus(id, 'draft');
+  return { id, status: 'draft' };
 }
 
 /**
- * Sends an approved invoice back: to draft for changes, or void when it was raised in error.
- * @business A rejected approval either reopens the draft or voids the invoice for good.
+ * Sends an invoice back from approval: to draft when it was raised in error, else back to sent for another look.
+ * @business A rejected approval either reopens the draft or returns the invoice to the sender.
  */
 export async function rejectApproval(id: string, raisedInError: boolean) {
-  await setInvoiceStatus(id, raisedInError ? 'void' : 'draft');
+  await setInvoiceStatus(id, raisedInError ? 'draft' : 'open');
   return { id };
 }
 
