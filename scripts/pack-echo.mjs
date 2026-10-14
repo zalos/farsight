@@ -21,7 +21,7 @@ await build({
 cpSync(join(root, 'packages/echo/public'), join(out, 'public'), { recursive: true });
 cpSync(join(root, 'packages/echo/README.md'), join(out, 'README.md'));
 writeFileSync(join(out, 'README.md'), readFileSync(join(out, 'README.md'), 'utf8').replace('../../docs/ECHO.md', 'ECHO.md'));
-cpSync(join(root, 'docs/ECHO.md'), join(out, 'ECHO.md'));
+writeFileSync(join(out, 'ECHO.md'), readFileSync(join(root, 'docs/ECHO.md'), 'utf8').replaceAll('../packages/echo/README.md', 'README.md'));
 cpSync(join(root, '.echo/settings.example.json'), join(out, 'settings.example.json'));
 writeFileSync(join(out, 'package.json'), JSON.stringify({
   name: 'farsight-echo', version: pkg.version,
