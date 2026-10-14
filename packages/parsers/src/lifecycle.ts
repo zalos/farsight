@@ -411,6 +411,35 @@ export function constTables(program: AstNode, file: string, line: (o: number) =>
   return out;
 }
 
+/** A constant list of strings by name (`const ROLES: readonly Role[] = ['a', 'b']`). */
+export interface ConstList {
+  name: string;
+  file: string;
+  line: number;
+  values: string[];
+}
+
+/**
+ * Every `const NAME = ['a', …]` in a file whose elements are all string literals, through `as const` and
+ * `satisfies` **and** a plain type annotation (outsider round 2026-10-13, F4). The enum reader above takes only
+ * the `as const` form of two or more, which is right for a record's statuses; a role list handed to a guard is
+ * often typed instead (`VENDOR_ACCOUNT_APPROVER_ROLES: readonly OpsRole[] = [...]`) and may hold one role.
+ * Read only by `parsers/src/preconditions.ts` to name the roles a guard is handed — never as a lifecycle.
+ */
+export function constLists(program: AstNode, file: string, line: (o: number) => number): ConstList[] {
+  const out: ConstList[] = [];
+  walk(program, (n) => {
+    if (n.type !== 'VariableDeclarator' || !isNode(n.id) || (n.id as AstNode).type !== 'Identifier') return;
+    let init = n.init as AstNode | undefined;
+    while (init && (init.type === 'TSAsExpression' || init.type === 'TSSatisfiesExpression' || init.type === 'ParenthesizedExpression')) init = init.expression as AstNode;
+    if (!init || init.type !== 'ArrayExpression') return;
+    const vals = ((init.elements as unknown[]) ?? []).map(strLit);
+    if (!vals.length || !vals.every((x): x is string => x !== undefined)) return;
+    out.push({ name: String((n.id as AstNode).name), file, line: line(n.start ?? 0), values: vals });
+  });
+  return out;
+}
+
 /** The keys whose list holds `to`: the statuses a transition table lets a record leave for `to`. */
 export function priorStatusesIn(table: ConstTable, to: string): string[] {
   return Object.keys(table.entries).filter((k) => table.entries[k]!.includes(to));

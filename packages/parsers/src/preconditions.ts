@@ -28,7 +28,7 @@
 import type { GraphEdge, GraphNode, GateClass, Precondition } from '@farsight/core';
 import { CONFIG_CHECK_TAG } from '@farsight/core';
 import { walk, isNode, type AstNode } from './walk.js';
-import { STATUS_KEY, fieldKey, priorStatusesIn, type ConstTable, type EnumDecl } from './lifecycle.js';
+import { STATUS_KEY, fieldKey, priorStatusesIn, type ConstTable, type ConstList, type EnumDecl } from './lifecycle.js';
 import { leadingBranchLabel, trailingBranchLabel } from './shared/labels.js';
 
 /** A field compared as a kind or a type is a state of the record too (`kind`, `type`, `fooType`). */
@@ -95,10 +95,12 @@ export interface PreconditionFacts {
   /** function id → the constant tables it indexes (`T[from]`) */
   tableRefs: Map<string, Set<string>>;
   tables: ConstTable[];
+  /** constant string lists by name, typed or `as const` (a role list handed to a guard) */
+  namedLists?: ConstList[];
 }
 
 export function emptyPreconditionFacts(): PreconditionFacts {
-  return { checks: [], lists: [], returned: new Map(), transitions: [], bindings: [], constArgs: [], tableRefs: new Map(), tables: [] };
+  return { checks: [], lists: [], returned: new Map(), transitions: [], bindings: [], constArgs: [], tableRefs: new Map(), tables: [], namedLists: [] };
 }
 
 // ── reading one body ───────────────────────────────────────────────────────
@@ -565,7 +567,7 @@ export function linkPreconditions(repo: string, nodes: Map<string, GraphNode>, e
       // a route that inherits a handler's gate reads the handler's call
       ?? (typeof e.meta?.handler === 'string' ? f.constArgs.find((c) => c.fromId === e.meta!.handler && c.callee === ident) : undefined);
     if (!call) continue;
-    const values = constValues(call.ref, f.tables, decls);
+    const values = constValues(call.ref, f.tables, decls, f.namedLists ?? []);
     if (!values?.length) continue;
     e.meta = { ...e.meta, requires: values.join(', '), requiresFrom: call.ref.key ? `${call.ref.table}.${call.ref.key}` : call.ref.table };
     result.roles++;
@@ -590,11 +592,15 @@ function statusOfCallee(nodes: Map<string, GraphNode>, ids: string[]): { status?
   return {};
 }
 
-function constValues(ref: ConstArgCall['ref'], tables: ConstTable[], decls: EnumDecl[]): string[] | undefined {
+function constValues(ref: ConstArgCall['ref'], tables: ConstTable[], decls: EnumDecl[], lists: ConstList[] = []): string[] | undefined {
   if (ref.key) {
     const t = tables.filter((x) => x.name === ref.table);
     return t.length === 1 ? t[0]!.entries[ref.key] : undefined;
   }
   const d = decls.filter((x) => x.name === ref.table && x.values.length);
-  return d.length === 1 ? d[0]!.values : undefined;
+  if (d.length === 1) return d[0]!.values;
+  if (d.length > 1) return undefined;
+  // a typed list (`: readonly Role[] = [...]`), never guessed between two of one name
+  const l = lists.filter((x) => x.name === ref.table);
+  return l.length === 1 ? l[0]!.values : undefined;
 }
