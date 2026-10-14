@@ -308,3 +308,35 @@ test('research bridge rejects concurrent inference and aborts work when the call
     } finally { await bridge.close(); }
   });
 });
+
+test('a browser-style abort cancels its private research request and reaches the provider', async () => {
+  await fixture(async (ctx, connection) => {
+    ctx.profile.submind = { mode: 'model', maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000, inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 10000, expandedMaxChars: 12000 };
+    ctx.config.profiles[ctx.profileId] = ctx.profile;
+    await saveConfig(ctx.configPath, ctx.config);
+    let started!: () => void, cancelled!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const stopped = new Promise<void>(resolve => { cancelled = resolve; });
+    let calls = 0;
+    const bridge = await startMemoryBridge(ctx, connection, {
+      store: { async search() { return { memories: [], inspected: 0, truncated: false, exhaustive: false }; }, async read() { return { status: 'missing' }; } },
+      generate: async (_profile, input) => {
+        calls++; started();
+        return new Promise((_resolve, reject) => input.signal!.addEventListener('abort', () => { cancelled(); reject(new Error('synthetic cancellation')); }, { once: true }));
+      },
+    });
+    try {
+      const pre = new AbortController(); pre.abort();
+      await assert.rejects(memoryRequest(ctx, 'ask', { query: 'synthetic shipping' }, { signal: pre.signal }), /cancelled/);
+      assert.equal(calls, 0);
+      const abort = new AbortController();
+      const pending = memoryRequest(ctx, 'ask', { query: 'synthetic shipping' }, { signal: abort.signal });
+      await Promise.race([ready, pending.then(() => { throw new Error('research finished before synthetic provider'); })]); abort.abort();
+      await assert.rejects(pending, /cancelled/);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([stopped, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('provider did not receive cancellation')), 1000); })]); }
+      finally { clearTimeout(timer); }
+      assert.equal(calls, 1);
+    } finally { await bridge.close(); }
+  });
+});

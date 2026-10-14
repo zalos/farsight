@@ -870,3 +870,9 @@ the scope's chip words, the cell's one word (`testVerdict()`), and `· n failed 
 - **The frozen matrix CSV** gains two appended columns (additive): `evidence_word` — the case's own word as the screen
   prints it — and `verdict` — its run status where a named case's run earned the word, `''` otherwise
   (`docs/contracts/farsight-tests-matrix-v1.md`).
+
+### Echo memory portal (`POST /api/memory/browse`)
+
+| number | unit | scope | source | what it counts |
+|---|---|---|---|---|
+| returned memories | `echo.portal.countShown` / `echo.portal.countShownOne` (both registers) | `echo.portal.scope` — this response before a browser topic filter | `echo.portal.browse.memories` in `createMemoryPortal()` | Exact returned records in one bounded, identity-scoped response. Each record once. This is neither the whole store size nor a total across accumulated pages. Upstream global facets/totals are not displayed. |
