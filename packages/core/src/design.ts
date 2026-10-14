@@ -41,6 +41,12 @@ export interface DesignScreen {
   steps?: { id: string; name: string; operation?: string }[];
   /** work items this screen is built for (Jira keys, Azure DevOps ids) — a declared `tracks` link (work-items-sync.md §9) */
   work?: string[];
+  /**
+   * who uses this screen — a persona id or name from `personas[]`. It wins over a persona's `routes`, the identity
+   * guard the screen's code meets and the journey's persona, so an operator's screen inside a journey for two kinds
+   * of person is drawn in the operator's lane (core journeys.ts `personaOfScreen`)
+   */
+  persona?: string;
 }
 
 /**
@@ -428,6 +434,7 @@ function refOf(screen: DesignScreen, manifest: DesignManifest, source: DesignSou
     ...(screen.operations?.length ? { operations: screen.operations } : {}),
     ...(screen.phase ? { phase: String(screen.phase) } : {}),
     ...(screen.steps?.length ? { steps: screen.steps } : {}),
+    ...(typeof screen.persona === 'string' && screen.persona.trim() ? { persona: screen.persona.trim() } : {}),
     ...(drift.length ? { drift } : {}),
   };
 }
@@ -530,6 +537,8 @@ export interface ScreenRow {
   freshness?: 'figma' | 'manifest';
   drift: DesignDrift[];
   loc?: Loc;
+  /** the persona the manifest's screen row names (`screens[].persona`); absent when it names none */
+  persona?: string;
 }
 
 export interface DesignSurface {
@@ -594,6 +603,7 @@ function screenRow(n: GraphNode): ScreenRow {
     ...(d.freshness ? { freshness: d.freshness } : {}),
     drift: d.drift ?? [],
     ...(n.loc ? { loc: n.loc } : {}),
+    ...(typeof d.persona === 'string' ? { persona: d.persona } : {}),
   };
 }
 
@@ -794,7 +804,7 @@ The front door, the Portfolio, the Map, GET /api/journeys, the MCP journeys tool
   ]
 }
 
-- personas[] { id, name, description? } — in the order they are shown.
+- personas[] { id, name, description?, routes?, signsInWith? } — in the order they are shown.
 - groups[] { id, name, description?, persona? } — in the order they are shown inside a persona. A group
   with "persona" exists under that persona only; one without exists under every persona that has a
   journey in it (Access under Contractor and Access under Operations are two sections, one word).
@@ -812,10 +822,34 @@ The front door, the Portfolio, the Map, GET /api/journeys, the MCP journeys tool
 - The persona's way in ("start here") is computed: the first journey nothing requires that has
   something built and the most screens.
 
+A journey for two kinds of person still has screens only one of them uses — an operator's review
+screen inside "Create a vendor account". Each screen is placed with the person who uses it, by the
+first of four rules that says something:
+
+1. screens[].persona — the screen row names a persona id or name: { "id": "OPS-04", "route":
+   "/ops/vendor-accounts", "persona": "ops" }.
+2. personas[].routes — route globs the persona's screens live under: { "id": "ops", "name":
+   "Operations", "routes": ["/ops/**"] }. "**" is any number of segments (none included), "*" one
+   segment; the most specific glob wins, two personas tied say nothing (a note). A component screen
+   takes the route of the pages that render it, when they all agree.
+3. The sign-in guard its code meets — an identity guard (a session, a sign-in) that personas[]
+   .signsInWith names (["requireOpsSession"], the guard's name or node id), or whose own @group is a
+   declared persona's id or name. Only when every such guard the screen's code reaches signs in the
+   same persona.
+4. The journey's first persona.
+
+The lanes draw a screen in its persona's lane, the walk (WALK, tour) says who uses each stop, and the
+Map's head reads "For A · with B" when a journey's screens span two people. Every screen in GET
+/api/journey (summary.user[]) and every JourneyRow (screenPersonas[]) carries persona, personaName and
+personaFrom (screen · routes · guard · journey). Where they disagree — a screen row naming A whose
+route matches B's routes, a screen placed with A whose code meets only B's sign-in guard — the
+journeys tool, farsight journeys, GET /api/journeys and the Settings config list print a note; the
+stronger rule is kept.
+
 The same block in farsight.config.json organises across manifests without editing them:
 
 { "journeys": {
-    "personas": [ { "id": "ops" }, { "id": "contractor" } ],
+    "personas": [ { "id": "ops", "routes": ["/ops/**"] }, { "id": "contractor" } ],
     "groups":   [ { "id": "access", "name": "Ways in" } ],
     "flows":    [ { "id": "vendor-account-creation", "group": "access", "order": 3 } ] } }
 

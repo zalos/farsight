@@ -213,3 +213,34 @@ test('one journey drawn as lanes counts over the journey, never a storyline (rou
   for (const c of Object.values(m.counts) as AnyRec[]) assert.equal(c.scope, 'journey.scopeAll');
   assert.equal(model('invoice').single, false);
 });
+
+test('a persona per screen (lane persona, 2026-10-13): a screen its row, a route or its sign-in guard places goes in that persona\'s lane', () => {
+  const f = fx.invoice;
+  // the tree as the server now sends it: billing-cycle's discard screen is the operator's (its screen row)
+  const story = JSON.parse(JSON.stringify(f.storyline));
+  for (const j of story.journeys) {
+    if (j.id === 'billing-cycle') j.screenPersonas = [
+      { screen: 'x', designId: 'INV-02', persona: 'billing', personaName: 'Billing', personaFrom: 'routes', declared: true, evidence: [] },
+      { screen: 'y', designId: 'INV-01', persona: 'billing', personaName: 'Billing', personaFrom: 'journey', declared: true, evidence: [] },
+      { screen: 'z', designId: 'INV-03', persona: 'ops', personaName: 'Operations', personaFrom: 'screen', declared: true, evidence: [] },
+    ];
+  }
+  const m = laneLayout(story, fx.designs, fx.tree, new Map(Object.entries(f.journeys)), {});
+  const main = m.stages.filter((s: AnyRec) => !s.branch);
+  assert.deepEqual(main.map((s: AnyRec) => [s.name, s.lane, s.personaFrom]), [
+    // New invoice is the first step's screen (new-invoice carries no list here), drawn once
+    ['New invoice', 'billing', 'journey'], ['Invoice list', 'billing', 'journey'], ['Discard draft', 'ops', 'screen'],
+  ]);
+  // once the journey answer is read, the screen's own persona (core withScreenPersonas) is what places it
+  const answers = JSON.parse(JSON.stringify(f.journeys));
+  for (const a of Object.values(answers) as AnyRec[]) {
+    const ans = a.summary ? a : a.data;
+    for (const sg of ans.summary.segments) if (sg.screen && sg.screen.designId === 'INV-01') Object.assign(sg.screen, { persona: 'ops', personaName: 'Operations', personaFrom: 'guard' });
+  }
+  const m2 = laneLayout(f.storyline, fx.designs, fx.tree, new Map(Object.entries(answers)), {});
+  assert.deepEqual(m2.stages.filter((s: AnyRec) => s.name === 'Invoice list').map((s: AnyRec) => [s.lane, s.personaFrom]), [['ops', 'guard'], ['ops', 'guard']]);
+  // a screen only its journey places stays in the journey's lane — the branch's rule included
+  const plain = model('invoice');
+  assert.ok(plain.stages.every((s: AnyRec) => s.personaFrom === 'journey'));
+  assert.deepEqual(plain.stages.filter((s: AnyRec) => s.branch).map((s: AnyRec) => s.lane), ['ops', 'ops']);
+});

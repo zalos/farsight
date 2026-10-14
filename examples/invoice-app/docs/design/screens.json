@@ -7,7 +7,10 @@
     {
       "id": "billing",
       "name": "Billing",
-      "description": "The people who draft invoices and send them to customers."
+      "description": "The people who draft invoices and send them to customers.",
+      "routes": [
+        "/invoices/new"
+      ]
     },
     {
       "id": "ops",
@@ -77,6 +80,7 @@
       "id": "INV-03",
       "name": "Discard draft",
       "route": "/invoices/[id]/discard",
+      "persona": "ops",
       "nodeId": "1-4",
       "operations": [
         "deleteInvoice"

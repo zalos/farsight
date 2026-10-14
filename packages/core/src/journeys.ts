@@ -21,9 +21,10 @@
  * *Not grouped* persona; a flow naming no group sits in the persona's trailing
  * *Other journeys* group.
  */
-import type { JourneysMeta, JourneyGroupDecl, JourneyPersonaDecl, JourneyStorylineEntryDecl, JourneyStorylineBranch, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl } from './graph.js';
+import type { GraphNode, JourneysMeta, JourneyGroupDecl, JourneyPersonaDecl, JourneyStorylineEntryDecl, JourneyStorylineBranch, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl, PersonaFrom } from './graph.js';
 import { storylineEntry, storylineLane, storylineHandoff, type JourneysConfig } from './config.js';
-import { designSurface, flowStatusWord, type DesignManifest, type FlowRow } from './design.js';
+import { designSurface, flowStatusWord, screenRouteKey, type DesignManifest, type FlowRow } from './design.js';
+import { gateClass } from './gate-class.js';
 import { counted, countedText, breakdownText, type Counted } from './counts.js';
 import { t } from './strings.js';
 import type { GraphIndex } from './query.js';
@@ -35,6 +36,11 @@ export const JOURNEY_NO_GROUP = '_other';
 
 const key = (s: string): string => s.trim().toLowerCase();
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+/** A list of non-empty strings as written (a lone string is a list of one); absent or empty: undefined. */
+const strList = (v: unknown): string[] | undefined => {
+  const list = (typeof v === 'string' ? [v] : Array.isArray(v) ? v : []).map(str).filter((x): x is string => !!x);
+  return list.length ? list : undefined;
+};
 
 // ── ingest: the declarations of one source ───────────────────────────────
 
@@ -86,7 +92,9 @@ export function journeysMetaOf(
       const e = personas[at]!;
       if (p.name) { e.name = p.name; given.add('name'); }
       if (p.description) { e.description = p.description; given.add('description'); }
-      if (p.name || p.description || !given.size) e.from = b.from;
+      if (p.routes) { e.routes = p.routes.slice(); given.add('routes'); }
+      if (p.signsInWith) { e.signsInWith = p.signsInWith.slice(); given.add('signsInWith'); }
+      if (p.name || p.description || p.routes || p.signsInWith || !given.size) e.from = b.from;
     }
     for (const g of b.journeys.groups ?? []) {
       const k = key(g.id);
@@ -111,12 +119,14 @@ export function journeysMetaOf(
       if (!id) continue;
       const name = str(raw.name) ?? id;
       const description = str(raw.description);
+      const routes = strList((raw as Partial<JourneyPersonaDecl>).routes);
+      const signsInWith = strList((raw as Partial<JourneyPersonaDecl>).signsInWith);
       const k = key(id);
       const at = pAt.get(k);
       if (at == null) {
         pAt.set(k, personas.length);
         firstPersona.set(k, path);
-        personas.push({ id, name, ...(description ? { description } : {}), declared: true, from: path });
+        personas.push({ id, name, ...(description ? { description } : {}), declared: true, from: path, ...(routes ? { routes } : {}), ...(signsInWith ? { signsInWith } : {}) });
         continue;
       }
       const given = cfgPersona.get(k);
@@ -126,6 +136,8 @@ export function journeysMetaOf(
         const e = personas[at]!;
         if (!given.has('name')) e.name = name;
         if (!given.has('description') && description) e.description = description;
+        if (!given.has('routes') && routes) e.routes = routes;
+        if (!given.has('signsInWith') && signsInWith) e.signsInWith = signsInWith;
       } else if (firstPersona.get(k) !== path && key(personas[at]!.name) !== key(name) && !given?.has('name')) {
         notes.push(`persona "${id}" is declared by ${firstPersona.get(k)} and ${path} with different names; "${personas[at]!.name}" from ${firstPersona.get(k)} is kept`);
       }
@@ -375,6 +387,327 @@ function branchesOf(
   return out;
 }
 
+// ── request time: who uses each screen (lane persona, 2026-10-13) ──────────
+
+/**
+ * The persona of one screen and where it came from. Four rules, strongest first, each a fact somebody wrote or the
+ * parser read — never a guess from an id prefix:
+ *
+ * 1. `screen` — the manifest's screen row names it (`screens[].persona`).
+ * 2. `routes` — a declared persona's `routes` glob matches the screen's route (the most specific glob wins; a
+ *    component screen takes the route of the pages that render it, when they agree).
+ * 3. `guard` — the screen's code (a bounded walk over calls, renders and http) meets identity guards that sign in
+ *    exactly one persona: the persona's `signsInWith` names the guard, or the guard's own `@group` (or a
+ *    `persona:<id>` tag) is a declared persona's id or name. Two personas' guards met: the rule says nothing.
+ * 4. `journey` — the first persona of the journey the screen is read in.
+ */
+export interface ScreenPersona {
+  /** the screen's node id */
+  screen: string;
+  /** the design's id for it (`OPS-04c`), when a manifest names it */
+  designId?: string;
+  /** the persona's id (the value as written when no `personas[]` entry declares it) */
+  persona: string;
+  personaName: string;
+  personaFrom: PersonaFrom;
+  /** a `personas[]` entry declares it */
+  declared: boolean;
+  /** what the rule read: the manifest path, the glob that matched (`/ops/** ← /ops/invoices`), or the guard node ids met */
+  evidence: string[];
+}
+
+interface Resolved { id: string; name: string; declared: boolean }
+type RuleHit = { p: Resolved; evidence: string[] } | { ambiguous: Resolved[]; evidence: string[] };
+/** What the rules above the journey say about one screen — the same in every journey it is read in. */
+interface ScreenFacts { node: GraphNode; screen?: RuleHit; routes?: RuleHit; guard?: RuleHit }
+
+const REACH_KINDS = new Set(['calls', 'renders', 'http']);
+const GUARD_WALK_DEPTH = 8;
+
+/** A route glob as a test: `**` any number of segments (none included), `*` one segment, `[id]` / `:id` / `{id}` one segment. */
+function routeGlob(glob: string): { re: RegExp; weight: number } {
+  const segs = screenRouteKey(glob.replace(/\/\*\*(?=\/|$)/g, '/__GLOBSTAR__')).split('/').filter(Boolean);
+  let src = '^';
+  let weight = 0;
+  for (const seg of segs) {
+    if (seg === '__GLOBSTAR__') { src += '(?:/.*)?'; continue; }
+    if (seg === '*' || seg === ':param') { src += '/[^/]+'; weight += 1; continue; }
+    src += '/' + seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    weight += 2;
+  }
+  return { re: new RegExp((segs.length ? src : '^/?') + '/?$'), weight };
+}
+
+/** The resolver for one graph and one set of metas, cached per index: screen facts are folded once per screen. */
+interface PersonaResolver {
+  facts(screenId: string): ScreenFacts | undefined;
+  flowPersona(flowId: string): Resolved | undefined;
+  resolve(repo: string, value: string): Resolved;
+}
+
+const RESOLVERS = new WeakMap<GraphIndex, WeakMap<object, PersonaResolver>>();
+const NO_METAS = {};
+
+function personaResolver(index: GraphIndex, metas: Record<string, JourneysMeta> | undefined): PersonaResolver {
+  const mkey = metas ?? NO_METAS;
+  let per = RESOLVERS.get(index);
+  if (!per) { per = new WeakMap(); RESOLVERS.set(index, per); }
+  const had = per.get(mkey);
+  if (had) return had;
+
+  const repoOfId = (id: string): string => index.byId.get(id)?.loc?.repo ?? id.split('::')[0]!;
+  const declOf = (repo: string): JourneysMeta['personas'] => metas?.[repo]?.personas ?? [];
+  const resolve = (repo: string, value: string): Resolved => {
+    const d = declOf(repo).find((p) => key(p.id) === key(value)) ?? declOf(repo).find((p) => key(p.name) === key(value));
+    return d ? { id: d.id, name: d.name, declared: true } : { id: value.trim(), name: value.trim(), declared: false };
+  };
+
+  // the routes each source declares per persona, as tests
+  const globs = new Map<string, { p: Resolved; glob: string; re: RegExp; weight: number }[]>();
+  const globsOf = (repo: string) => {
+    let g = globs.get(repo);
+    if (!g) {
+      g = declOf(repo).flatMap((p) => (p.routes ?? []).map((glob) => ({ p: { id: p.id, name: p.name, declared: true }, glob, ...routeGlob(glob) })));
+      globs.set(repo, g);
+    }
+    return g;
+  };
+  /** the persona a route belongs to: the most specific glob; two personas tied at the top say nothing */
+  const routeHit = (repo: string, route: string): RuleHit | undefined => {
+    const k = screenRouteKey(route);
+    const hits = globsOf(repo).filter((x) => x.re.test(k));
+    if (!hits.length) return undefined;
+    const top = Math.max(...hits.map((h) => h.weight));
+    const best = hits.filter((h) => h.weight === top);
+    const ids = [...new Map(best.map((h) => [h.p.id, h.p])).values()];
+    const evidence = best.map((h) => `${h.glob} ← ${k}`);
+    return ids.length === 1 ? { p: ids[0]!, evidence } : { ambiguous: ids, evidence };
+  };
+
+  // the guards that sign a persona in, per source: named by `signsInWith`, else an identity guard whose @group names one
+  const guardPersona = new Map<string, Resolved>();
+  const signs = new Map<string, Resolved[]>();
+  for (const [repo, m] of Object.entries(metas ?? {})) {
+    for (const p of m.personas ?? []) for (const g of p.signsInWith ?? []) {
+      const list = signs.get(`${repo}|${key(g)}`) ?? [];
+      list.push({ id: p.id, name: p.name, declared: true });
+      signs.set(`${repo}|${key(g)}`, list);
+    }
+  }
+  const anyDecl = Object.values(metas ?? {}).some((m) => (m.personas ?? []).length);
+  if (anyDecl) {
+    for (const n of index.byId.values()) {
+      if (n.kind !== 'guard') continue;
+      const repo = repoOfId(n.id);
+      if (!declOf(repo).length) continue;
+      const ident = n.name.split(': ')[0]!;
+      const named = signs.get(`${repo}|${key(ident)}`) ?? signs.get(`${repo}|${key(n.id)}`);
+      if (named) { if (new Set(named.map((x) => x.id)).size === 1) guardPersona.set(n.id, named[0]!); continue; }
+      if (gateClass(n) !== 'identity') continue;
+      const words = [n.group, ...n.tags.filter((x) => x.startsWith('persona:')).map((x) => x.slice('persona:'.length))].filter((x): x is string => !!x && !!x.trim());
+      const found = [...new Map(words.map((w) => declOf(repo).find((p) => key(p.id) === key(w) || key(p.name) === key(w))).filter((p): p is JourneysMeta['personas'][number] => !!p).map((p) => [p.id, p])).values()];
+      if (found.length === 1) guardPersona.set(n.id, { id: found[0]!.id, name: found[0]!.name, declared: true });
+    }
+  }
+  /** the persona-signing guards a node's code meets: a bounded walk over calls, renders and http */
+  const guardsMet = (fromId: string): Map<string, string[]> => {
+    const met = new Map<string, string[]>();
+    if (!guardPersona.size) return met;
+    const seen = new Set<string>([fromId]);
+    let frontier = [fromId];
+    for (let d = 0; d <= GUARD_WALK_DEPTH && frontier.length; d++) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        for (const e of index.in.get(id) ?? []) {
+          if (e.kind !== 'guards') continue;
+          const p = guardPersona.get(e.from);
+          if (!p) continue;
+          const list = met.get(p.id) ?? [];
+          if (!list.includes(e.from)) list.push(e.from);
+          met.set(p.id, list);
+        }
+        if (d === GUARD_WALK_DEPTH) continue;
+        for (const e of index.out.get(id) ?? []) {
+          if (!REACH_KINDS.has(e.kind) || seen.has(e.to)) continue;
+          seen.add(e.to);
+          next.push(e.to);
+        }
+      }
+      frontier = next;
+    }
+    return met;
+  };
+  const guardHit = (met: Map<string, string[]>): RuleHit | undefined => {
+    if (!met.size) return undefined;
+    const ps = [...met.keys()].map((id) => [...guardPersona.values()].find((p) => p.id === id)!);
+    const evidence = [...met.values()].flat();
+    return ps.length === 1 ? { p: ps[0]!, evidence } : { ambiguous: ps, evidence };
+  };
+  /** the pages that render a component screen (a bounded walk up its renders edges, never through a flow) */
+  const renderingPages = (id: string): GraphNode[] => {
+    const pages: GraphNode[] = [];
+    const seen = new Set<string>([id]);
+    let frontier = [id];
+    for (let d = 0; d < 4 && frontier.length && !pages.length; d++) {
+      const next: string[] = [];
+      for (const x of frontier) for (const e of index.in.get(x) ?? []) {
+        if (e.kind !== 'renders' || seen.has(e.from)) continue;
+        seen.add(e.from);
+        const up = index.byId.get(e.from);
+        if (!up || up.kind === 'flow') continue;
+        if (up.kind === 'page') pages.push(up); else next.push(e.from);
+      }
+      frontier = next;
+    }
+    return pages;
+  };
+
+  const factsCache = new Map<string, ScreenFacts | undefined>();
+  const facts = (screenId: string): ScreenFacts | undefined => {
+    if (factsCache.has(screenId)) return factsCache.get(screenId);
+    const node = index.byId.get(screenId);
+    if (!node) { factsCache.set(screenId, undefined); return undefined; }
+    const repo = repoOfId(screenId);
+    const f: ScreenFacts = { node };
+    const own = typeof node.design?.persona === 'string' ? str(node.design.persona) : undefined;
+    if (own) f.screen = { p: resolve(repo, own), evidence: [node.design?.designId ? node.design.designId.slice(`${repo}::design::`.length) : 'screens[].persona'] };
+    if (globsOf(repo).length) {
+      if (node.kind === 'page') f.routes = routeHit(repo, node.name);
+      else {
+        const pages = renderingPages(screenId);
+        const hits = pages.map((pg) => routeHit(repo, pg.name)).filter((h): h is RuleHit => !!h);
+        const ps = [...new Map(hits.flatMap((h) => ('p' in h ? [h.p] : h.ambiguous)).map((p) => [p.id, p])).values()];
+        const evidence = hits.flatMap((h) => h.evidence);
+        // every page that renders it must say the same: a page no glob matches leaves the rule silent
+        if (hits.length && hits.length === pages.length) f.routes = ps.length === 1 ? { p: ps[0]!, evidence } : { ambiguous: ps, evidence };
+      }
+    }
+    if (guardPersona.size) {
+      let met = guardsMet(screenId);
+      // a component that calls nothing guarded is read where it is drawn: the pages that render it
+      if (!met.size && node.kind === 'component') {
+        for (const pg of renderingPages(screenId)) for (const [p, ids] of guardsMet(pg.id)) met.set(p, [...(met.get(p) ?? []), ...ids.filter((x) => !(met.get(p) ?? []).includes(x))]);
+      }
+      f.guard = guardHit(met);
+    }
+    factsCache.set(screenId, f);
+    return f;
+  };
+
+  const flowCache = new Map<string, Resolved | undefined>();
+  const flowPersona = (flowId: string): Resolved | undefined => {
+    if (flowCache.has(flowId)) return flowCache.get(flowId);
+    const flow = index.byId.get(flowId);
+    let out: Resolved | undefined;
+    if (flow?.kind === 'flow') {
+      const repo = repoOfId(flowId);
+      const designId = flow.design?.id ?? flowId.split('::').pop()!;
+      const raw = metas?.[repo]?.flows?.[designId]?.persona ?? flow.design?.persona;
+      const first = (typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : []).map(str).find((x): x is string => !!x);
+      if (first) out = resolve(repo, first);
+    }
+    flowCache.set(flowId, out);
+    return out;
+  };
+
+  const r: PersonaResolver = { facts, flowPersona, resolve };
+  per.set(mkey, r);
+  return r;
+}
+
+const sp = (f: ScreenFacts, p: Resolved, from: PersonaFrom, evidence: string[]): ScreenPersona => ({
+  screen: f.node.id, ...(f.node.design?.id ? { designId: f.node.design.id } : {}),
+  persona: p.id, personaName: p.name, personaFrom: from, declared: p.declared, evidence,
+});
+
+/**
+ * Who uses one screen, and where that came from (`screen · routes · guard · journey`, strongest first — see
+ * `ScreenPersona`). `metas` is the graph's `meta.journeys`; `flowId` the journey the screen is read in, whose first
+ * persona is the last rule. Undefined when no rule says anything (a screen read outside any journey that no
+ * declaration and no guard places). The lanes, the WALK and ASK all place a screen with this one function.
+ */
+export function personaOfScreen(index: GraphIndex, metas: Record<string, JourneysMeta> | undefined, screenId: string, flowId?: string): ScreenPersona | undefined {
+  const r = personaResolver(index, metas);
+  const f = r.facts(screenId);
+  if (!f) return undefined;
+  for (const [rule, hit] of [['screen', f.screen], ['routes', f.routes], ['guard', f.guard]] as const) {
+    if (hit && 'p' in hit) return sp(f, hit.p, rule, hit.evidence);
+  }
+  const jp = flowId ? r.flowPersona(flowId) : undefined;
+  return jp ? sp(f, jp, 'journey', flowId ? [flowId] : []) : undefined;
+}
+
+/**
+ * Stamp who uses each screen onto a journey answer's screens (`summary.user[]`, which the segments share): `persona`,
+ * `personaName`, `personaFrom`. `flowId` — the journey they are read in (absent for a journey that starts at a
+ * screen, which takes no journey's persona). Idempotent; returns the list.
+ */
+export function withScreenPersonas<T extends { id: string; persona?: string; personaName?: string; personaFrom?: PersonaFrom }>(
+  index: GraphIndex, metas: Record<string, JourneysMeta> | undefined, screens: T[], flowId?: string,
+): T[] {
+  for (const u of screens) {
+    const x = personaOfScreen(index, metas, u.id, flowId);
+    if (!x) continue;
+    u.persona = x.persona;
+    u.personaName = x.personaName;
+    u.personaFrom = x.personaFrom;
+  }
+  return screens;
+}
+
+/** The screens a flow renders, in the order a person meets them (node ids). */
+function flowScreenIds(index: GraphIndex, flowId: string): string[] {
+  return (index.out.get(flowId) ?? [])
+    .filter((e) => e.kind === 'renders')
+    .sort((a, b) => (Number(a.meta?.line) || 0) - (Number(b.meta?.line) || 0))
+    .map((e) => e.to)
+    .filter((id) => index.byId.has(id));
+}
+
+/** Every screen of one journey with its persona, in its order — `JourneyRow.screenPersonas`, the lanes' stage data. */
+export function screenPersonasOfFlow(index: GraphIndex, metas: Record<string, JourneysMeta> | undefined, flowId: string): ScreenPersona[] {
+  return flowScreenIds(index, flowId).map((id) => personaOfScreen(index, metas, id, flowId)).filter((x): x is ScreenPersona => !!x);
+}
+
+/**
+ * Where the declarations and the code disagree about who uses a screen — each a sentence, never a silent choice:
+ * a screen row naming persona A whose route matches B's `routes`; a screen placed with A (by its row or a route)
+ * whose code meets only B's sign-in guard; a route two personas' globs match equally; a screen whose code meets two
+ * personas' sign-in guards inside a journey for neither alone. Over every journey's screens of the sources in scope,
+ * each screen once.
+ */
+export function screenPersonaNotes(index: GraphIndex, metas: Record<string, JourneysMeta> | undefined, scope?: Set<string> | null): string[] {
+  const r = personaResolver(index, metas);
+  const notes: string[] = [];
+  const seen = new Set<string>();
+  const label = (f: ScreenFacts) => f.node.design?.id ? `screen ${f.node.design.id}` : `screen ${f.node.name}`;
+  for (const n of index.byId.values()) {
+    if (n.kind !== 'flow') continue;
+    const repo = n.loc?.repo ?? n.id.split('::')[0]!;
+    if (scope && !scope.has(repo)) continue;
+    for (const id of flowScreenIds(index, n.id)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const f = r.facts(id);
+      if (!f) continue;
+      const routeP = f.routes && 'p' in f.routes ? f.routes.p : undefined;
+      const guardP = f.guard && 'p' in f.guard ? f.guard.p : undefined;
+      const own = f.screen && 'p' in f.screen ? f.screen.p : undefined;
+      if (own && routeP && own.id !== routeP.id) {
+        notes.push(`${label(f)} is declared for persona "${own.id}", and its route matches the routes of "${routeP.id}" (${f.routes!.evidence.join(', ')}) — "${own.id}" is kept`);
+      }
+      if (f.routes && 'ambiguous' in f.routes) {
+        notes.push(`${label(f)}: its route matches the routes of ${f.routes.ambiguous.map((p) => `"${p.id}"`).join(' and ')} equally (${f.routes.evidence.join(', ')}) — the routes say nothing for it`);
+      }
+      const placed = own ? { p: own, by: 'its screen row' } : routeP ? { p: routeP, by: 'its route' } : undefined;
+      if (placed && guardP && placed.p.id !== guardP.id) {
+        notes.push(`${label(f)} is placed with "${placed.p.id}" by ${placed.by}, and its code meets only the sign-in guard of "${guardP.id}" (${f.guard!.evidence.map((g) => g.split('::').pop()).join(', ')}) — check the declaration`);
+      }
+    }
+  }
+  return notes;
+}
+
 // ── request time: the tree ───────────────────────────────────────────────
 
 /** One journey where the tree shows it: the design's flow row with the organisation applied. */
@@ -395,6 +728,11 @@ export interface JourneyRow extends FlowRow {
   placedBy?: string;
   /** every storyline (by id) this journey is a step of, in the tree's storyline order */
   storylines: string[];
+  /**
+   * who uses each of its screens, in its order (`personaOfScreen`): the screen's own row, a persona's routes, the
+   * identity guard its code meets, else the journey's first persona. The lanes place a stage by it
+   */
+  screenPersonas: ScreenPersona[];
 }
 
 /** One step of a storyline: the journey's row (its first place in the tree) and where it stands in the chain. */
@@ -461,7 +799,8 @@ export interface JourneyPersona {
   /** the catalog key the name was printed from, for the trailing *Not grouped* persona */
   key?: string;
   groups: JourneyGroup[];
-  counts: { journeys: Counted; built: Counted };
+  /** `screens` — the journeys' screens (anywhere in scope) whose persona is this one, each once, parted by where that came from */
+  counts: { journeys: Counted; built: Counted; screens?: Counted };
 }
 
 export interface JourneyTree {
@@ -469,7 +808,7 @@ export interface JourneyTree {
   storylines: JourneyStoryline[];
   personas: JourneyPersona[];
   /** journeys counts each flow ONCE, however many personas show it */
-  counts: { journeys: Counted; personas: Counted; groups: Counted; storylines: Counted };
+  counts: { journeys: Counted; personas: Counted; groups: Counted; storylines: Counted; screens?: Counted };
   /** some persona came from a screen-id prefix */
   derived: boolean;
   notes: string[];
@@ -498,10 +837,31 @@ function storylineCounts(steps: JourneyRow[], id: string, branches: JourneyRow[]
   };
 }
 
+const FROM_PARTS: [PersonaFrom, string][] = [
+  ['screen', 'count.part.personaFromScreen'], ['routes', 'count.part.personaFromRoutes'],
+  ['guard', 'count.part.personaFromGuard'], ['journey', 'count.part.personaFromJourney'],
+];
+
+/**
+ * The journeys' screens as one number, each screen once (its first journey's placement), parted by where its persona
+ * came from; with `personaId`, only the screens placed with that persona. Over `rows` — the journeys in scope.
+ */
+function screensCounted(rows: JourneyRow[], scope: 'count.scope.workspace' | 'count.scope.persona', personaId?: string): Counted {
+  const first = new Map<string, ScreenPersona>();
+  for (const r of rows) for (const x of r.screenPersonas ?? []) if (!first.has(x.screen)) first.set(x.screen, x);
+  const list = [...first.values()].filter((x) => !personaId || x.persona === personaId);
+  const breakdown = FROM_PARTS.map(([from, k]) => ({ key: k, n: list.filter((x) => x.personaFrom === from).length })).filter((b) => b.n);
+  return counted(list.length, 'count.unit.personaScreens', scope,
+    `${SRC} → journeys[].screenPersonas, each screen once${personaId ? ` where persona = ${personaId}` : ''}, by personaFrom`,
+    { bizUnit: 'count.unit.personaScreens', ...(breakdown.length ? { breakdown } : {}) });
+}
+
 function treeCounts(personas: JourneyPersona[], storylines: JourneyStoryline[]): JourneyTree['counts'] {
   const unique = new Set(personas.flatMap((p) => p.groups.flatMap((g) => g.journeys.map((j) => j.nodeId))));
   const sections = personas.reduce((n, p) => n + p.groups.length, 0);
+  const rows = personas.flatMap((p) => p.groups.flatMap((g) => g.journeys));
   return {
+    screens: screensCounted(rows, 'count.scope.workspace'),
     storylines: counted(storylines.length, 'count.unit.storylines', 'count.scope.workspace', `${SRC} → storylines`, { bizUnit: 'count.unit.storylines' }),
     journeys: counted(unique.size, 'count.unit.journeys', 'count.scope.workspace', `${SRC} → distinct flow node ids`, { bizUnit: 'count.unit.journeys' }),
     personas: counted(personas.length, 'count.unit.personas', 'count.scope.workspace', `${SRC} → personas`, { bizUnit: 'count.unit.personas' }),
@@ -620,6 +980,13 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
   };
 
   const personaIdsOf = new Map<string, { ids: string[]; names: string[] }>();
+  // who uses each screen, once per journey (every row of one journey shares the list)
+  const spOf = new Map<string, ScreenPersona[]>();
+  const screensOfFlow = (flowId: string): ScreenPersona[] => {
+    let list = spOf.get(flowId);
+    if (!list) { list = screenPersonasOfFlow(index, metas, flowId); spOf.set(flowId, list); }
+    return list;
+  };
   const personas: JourneyPersona[] = rank([...pBuckets.values()], pIndex).map((pb) => {
     const groups = rank([...pb.groups.values()], gIndex).map((gb) => {
       const journeys: JourneyRow[] = gb.rows.slice().sort(journeyOrder).map((p) => {
@@ -632,6 +999,7 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
           pinned: false,
           statusKey: flowStatusWord(p.row.built, p.row.total).key,
           storylines: [],
+          screenPersonas: screensOfFlow(p.row.nodeId),
           ...(p.placedBy ? { placedBy: p.placedBy } : {}),
         };
         // the organisation applied: what the tree placed it by, not only what the manifest said
@@ -673,7 +1041,10 @@ export function journeyTree(index: GraphIndex, metas: Record<string, JourneysMet
 
   const multi = inScope.length > 1;
   const notes = inScope.flatMap(([repo, m]) => (m.notes ?? []).map((n) => (multi ? `${repo}: ${n}` : n)));
+  // where a screen's declarations and its code disagree about who uses it
+  for (const [repo] of inScope) notes.push(...screenPersonaNotes(index, metas, new Set([repo])).map((n) => (multi ? `${repo}: ${n}` : n)));
   const storylines = storylinesFold(personas, inScope, notes);
+  withPersonaScreens(personas);
   return { storylines, personas, counts: treeCounts(personas, storylines), derived: derivedAny, notes };
 }
 
@@ -753,6 +1124,12 @@ function storylinesFold(personas: JourneyPersona[], inScope: [string, JourneysMe
   });
 }
 
+/** Each persona's screens count, over every journey kept — an operator's screen inside a journey for two is the operator's. */
+function withPersonaScreens(personas: JourneyPersona[]): void {
+  const rows = personas.flatMap((p) => p.groups.flatMap((g) => g.journeys));
+  for (const p of personas) p.counts = { ...p.counts, screens: screensCounted(rows, 'count.scope.persona', p.id) };
+}
+
 // ── reading the tree ─────────────────────────────────────────────────────
 
 const matches = (x: { id: string; name: string }, q: string) => key(x.id) === key(q) || key(x.name) === key(q);
@@ -776,6 +1153,7 @@ export function pickJourneys(tree: JourneyTree, opts: { persona?: string; group?
       return { ...p, groups, counts: groupCounts(groups.flatMap((g) => g.journeys), 'count.scope.persona', p.id) };
     })
     .filter((p) => p.groups.length);
+  withPersonaScreens(personas);
   // narrowed by persona or group: the storylines that have a step among what is kept, each whole (a chain crosses personas)
   const kept = opts.persona || opts.group ? new Set(personas.flatMap((p) => p.groups.flatMap((g) => g.journeys.map((j) => j.nodeId)))) : null;
   const shown = kept ? storylines.filter((s) => [...s.journeys, ...(s.branches ?? [])].some((j) => kept.has(j.nodeId))) : storylines;
@@ -842,6 +1220,9 @@ export function journeyTreeLines(tree: JourneyTree, opts: { openHint?: string } 
   const lines: string[] = [];
   if (!tree.personas.length) return ['no journeys in scope — a design manifest (docs/design/screens.json) declares them as flows; design_guide explains how'];
   lines.push(journeyTreeSummary(tree).replace(/ — first: .*$/, ''));
+  // who uses each screen, when something other than the journeys placed some of them
+  const sc = tree.counts.screens;
+  if (sc && sc.breakdown?.some((b) => b.key !== 'count.part.personaFromJourney')) lines.push(`${countedText(sc)} (${breakdownText(sc)})`);
   if (tree.derived) lines.push(`(${t('portfolio.personaDerived', 'professional')})`);
   if (tree.storylines?.length) {
     // the storylines first: the whole life of one business thing, across the personas below
@@ -867,7 +1248,11 @@ export function journeyTreeLines(tree: JourneyTree, opts: { openHint?: string } 
         // a status word that already says n of m is not followed by the same numbers again
         const built = t(word.key, 'professional').includes('{m}') ? '' : ` · built ${j.built} of ${j.total}`;
         const others = j.personaIds.length > 1 ? ` · also under ${j.personaNames.filter((_, i) => j.personaIds[i] !== p.id).join(', ')}` : '';
-        lines.push(`- ${j.name} — ${word.text}${built}${j.pinned ? ` · ${t('portfolio.pinned', 'professional')}` : ''}${others}${j.placedBy ? ` · placed by ${j.placedBy}` : ''} · \`${j.nodeId}\`${opts.openHint ? ` ${opts.openHint}` : ''}`);
+        // screens of it another person uses (their own row, a route, a sign-in guard), with how many
+        const by = new Map<string, number>();
+        for (const x of j.screenPersonas ?? []) if (x.persona !== p.id) by.set(x.personaName, (by.get(x.personaName) ?? 0) + 1);
+        const withWho = by.size ? ` · ${t('journeys.persona.with', 'professional').replace('{names}', [...by].map(([n, c]) => `${n} (${c} of ${j.screenPersonas.length} screens)`).join(', '))}` : '';
+        lines.push(`- ${j.name} — ${word.text}${built}${j.pinned ? ` · ${t('portfolio.pinned', 'professional')}` : ''}${others}${withWho}${j.placedBy ? ` · placed by ${j.placedBy}` : ''} · \`${j.nodeId}\`${opts.openHint ? ` ${opts.openHint}` : ''}`);
       }
     }
   }
