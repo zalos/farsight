@@ -17,6 +17,8 @@ import { installRuntime, startBackend, backendHealth, closeOwnedBackends, instal
 import { smoke } from './smoke.js';
 import { word } from './words.js';
 import { submindDemo } from './submind-demo.js';
+import { startPortalDemo } from './portal-demo.js';
+import { createMemoryPortal, PortalFailure } from './portal.js';
 import { echoSubmindWord } from '@farsight/core/dist/strings-echo-submind.js';
 import type { EchoConfig, EchoContext, CheckResult, BackendConnection } from './types.js';
 
@@ -186,6 +188,13 @@ async function hook(): Promise<void> {
 async function main(): Promise<void> {
   if (command === 'help') { print(word('help')); return; }
   if (command === 'hook') { await hook(); return; }
+  if (command === 'portal-demo') {
+    if (positionals.length > 1 || Object.keys(values).some(key => key !== 'port') || values.port !== undefined && !/^\d+$/.test(values.port)) throw new Error(echoSubmindWord('input'));
+    const demo = await startPortalDemo(values.port === undefined ? undefined : Number(values.port));
+    process.once('SIGINT', () => { void demo.close(); });
+    process.once('SIGTERM', () => { void demo.close(); });
+    print({ url: demo.url, synthetic: true, mode: 'mock', modelCalls: 0 }); return;
+  }
   if (command === 'submind-demo') {
     if (positionals.length > 1 || Object.keys(values).some(key => key !== 'query')) throw new Error(echoSubmindWord('input'));
     print(await submindDemo(values.query)); return;
@@ -262,8 +271,13 @@ async function main(): Promise<void> {
   let backend: BackendConnection | undefined;
   let memory: { close(): Promise<void> } | undefined;
   let startup: string | undefined;
+  let portal: ReturnType<typeof createMemoryPortal> | undefined;
   // Settings remain reachable even if a backend or model needs configuration.
-  const web = await startWeb(ctx, { installation: describeInstallation(ctx.configPath), checks: async () => [
+  const web = await startWeb(ctx, { installation: describeInstallation(ctx.configPath), portal: {
+    browse: (input, signal) => { if (!portal) throw new PortalFailure('unavailable'); return portal.browse(input, signal); },
+    ask: (input, signal) => memoryRequest(ctx, 'ask', input, { signal }),
+    expand: (input, signal) => memoryRequest(ctx, 'expand', input, { signal }),
+  }, checks: async () => [
     ...await checks(ctx, backend),
     ...(startup ? [{ name: 'backend', ok: false, detail: startup }] : []),
   ] });
@@ -282,6 +296,7 @@ async function main(): Promise<void> {
     try {
       if (!stopping) memory = await startMemoryBridge(ctx, result);
       backend = result;
+      if (!stopping) portal = createMemoryPortal(ctx, result);
     } catch (error) { await result.close(); throw error; }
   }).catch(async error => {
     startup = error instanceof Error ? error.message : word('backendUnavailable');

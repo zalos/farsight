@@ -13,3 +13,5 @@ export * from './installation.js';
 export * from './submind-types.js';
 export * from './submind.js';
 export * from './research-store.js';
+export * from './portal-types.js';
+export * from './portal.js';

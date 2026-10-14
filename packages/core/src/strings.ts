@@ -39,6 +39,7 @@ import { ECHO_CONFIG_STRINGS } from './strings-echo-config.js';
 import { ECHO_HOOK_STRINGS } from './strings-echo-hooks.js';
 import { ECHO_UI_STRINGS } from './strings-echo-ui.js';
 import { ECHO_PORTAL_STRINGS } from './strings-echo-portal.js';
+import { ECHO_DEMO_STRINGS } from './strings-echo-demo.js';
 import { ECHO_SUBMIND_STRINGS } from './strings-echo-submind.js';
 import { ECHO_MEMORY_STRINGS } from './strings-echo-memory.js';
 import { ECHO_INSTALLATION_STRINGS } from './strings-echo-installation.js';
@@ -142,6 +143,7 @@ export const STRINGS: Record<string, StringEntry> = {
   // Echo's settings view words.
   ...ECHO_UI_STRINGS,
   ...ECHO_PORTAL_STRINGS,
+  ...ECHO_DEMO_STRINGS,
   // Echo's memory bridge words.
   ...ECHO_MEMORY_STRINGS,
   ...ECHO_SUBMIND_STRINGS,
