@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { request } from 'node:http';
+import { createServer, request } from 'node:http';
 import { startWeb } from '../dist/web.js';
 import { saveConfig } from '../dist/config.js';
 import type { EchoConfig, EchoContext } from '../src/types.js';
@@ -35,10 +35,9 @@ function fixture(): EchoConfig {
   } };
 }
 
-async function setup(t: TestContext, checks?: Parameters<typeof startWeb>[1]) {
+async function setup(t: TestContext, checks?: Parameters<typeof startWeb>[1], config = fixture()) {
   const directory = await mkdtemp(join(tmpdir(), 'echo-web-'));
   const configPath = join(directory, 'config.json');
-  const config = fixture();
   await saveConfig(configPath, config);
   const ctx: EchoContext = { configPath, config, profileId: 'personal', profile: structuredClone(config.profiles.personal!), directory, dataDirectory: join(directory, 'personal') };
   ctx.profile.web.port = 0;
@@ -189,4 +188,82 @@ test('diagnostics report availability explicitly', async t => {
   assert.deepEqual(await (await fetch(`${view.url}/api/checks`)).json(), { available: false, checks: [] });
   const active = await setup(t, { checks: async () => [{ name: 'Ollama', ok: true, detail: 'Available' }] });
   assert.deepEqual(await (await fetch(`${active.url}/api/checks`)).json(), { available: true, checks: [{ name: 'Ollama', ok: true, detail: 'Available' }] });
+});
+
+
+test('legacy settings expose off defaults without adding a policy on read', async t => {
+  const view = await setup(t);
+  const before = await readFile(view.configPath, 'utf8');
+  const state = await (await fetch(`${view.url}/api/settings`)).json();
+  assert.equal(state.config.profiles.personal.submind, undefined);
+  assert.equal(state.running.submindMode, 'off');
+  assert.deepEqual(state.defaults.submind, {
+    mode: 'off', maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000,
+    inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 30000, expandedMaxChars: 12000,
+  });
+  assert.equal(await readFile(view.configPath, 'utf8'), before);
+});
+
+test('sub-mind and remote model policies roundtrip without switching running mode', async t => {
+  const view = await setup(t);
+  const state = await (await fetch(`${view.url}/api/settings`)).json();
+  const policy = { ...state.defaults.submind, mode: 'mock', maxSteps: 5, lookbackDays: 365, inputMaxChars: 64000 };
+  state.config.profiles.personal.submind = policy;
+  state.config.profiles.personal.model = { provider: 'ollama', baseUrl: 'http://192.168.1.20:11434', model: 'fixture-model', allowInsecureHttp: true };
+  const response = await fetch(`${view.url}/api/settings`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'If-Match': state.revision }, body: JSON.stringify(state.config),
+  });
+  assert.equal(response.status, 200);
+  const saved = await response.json();
+  assert.deepEqual(saved.config.profiles.personal.submind, policy);
+  assert.deepEqual(saved.config.profiles.personal.model, state.config.profiles.personal.model);
+  const current = await (await fetch(`${view.url}/api/settings`)).json();
+  assert.equal(current.running.submindMode, 'off');
+  assert.deepEqual(current.config.profiles.work, view.config.profiles.work);
+  assert.deepEqual(JSON.parse(await readFile(view.configPath, 'utf8')).profiles.personal.submind, policy);
+  const stale = await fetch(`${view.url}/api/settings`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'If-Match': state.revision }, body: JSON.stringify(state.config),
+  });
+  assert.equal(stale.status, 409);
+});
+
+test('private-network transport and research bounds are validated before settings writes', async t => {
+  const view = await setup(t);
+  const state = await (await fetch(`${view.url}/api/settings`)).json();
+  for (const change of [
+    (config: EchoConfig) => { config.profiles.personal!.model = { provider: 'ollama', baseUrl: 'http://192.168.1.20:11434', model: 'fixture' }; },
+    (config: EchoConfig) => { config.profiles.personal!.model = { provider: 'ollama', baseUrl: 'http://192.168.1.20:11434', model: 'fixture', allowInsecureHttp: true, secretRef: 'keychain:farsight-echo/fixture-private' }; },
+    (config: EchoConfig) => { config.profiles.personal!.submind = { ...state.defaults.submind, maxSearches: 9 }; },
+  ]) {
+    const config = structuredClone(state.config);
+    change(config);
+    const response = await fetch(`${view.url}/api/settings`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'If-Match': state.revision }, body: JSON.stringify(config),
+    });
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual(JSON.parse(await readFile(view.configPath, 'utf8')), view.config);
+});
+
+test('opening and saving model-mode settings never contacts the model or runs diagnostics', async t => {
+  let modelRequests = 0;
+  let checks = 0;
+  const model = createServer((_req, res) => { modelRequests++; res.writeHead(500); res.end(); });
+  await new Promise<void>(resolve => model.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => model.close(error => error ? reject(error) : resolve())));
+  const address = model.address();
+  assert.ok(address && typeof address !== 'string');
+  const config = fixture();
+  config.profiles.personal!.model.baseUrl = `http://127.0.0.1:${address.port}`;
+  const view = await setup(t, { checks: async () => { checks++; return []; } }, config);
+  const state = await (await fetch(`${view.url}/api/settings`)).json();
+  for (const path of ['/', '/app.js', '/style.css', '/api/strings']) assert.equal((await fetch(`${view.url}${path}`)).status, 200);
+  state.config.profiles.personal.submind = { ...state.defaults.submind, mode: 'model' };
+  const response = await fetch(`${view.url}/api/settings`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'If-Match': state.revision }, body: JSON.stringify(state.config),
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).config.profiles.personal.submind.mode, 'model');
+  assert.equal(checks, 0);
+  assert.equal(modelRequests, 0);
 });

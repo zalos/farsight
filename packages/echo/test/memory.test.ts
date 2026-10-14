@@ -241,3 +241,102 @@ test('a prompt hook reports omitted matches even when no record is returned', as
     } finally { await bridge.close(); }
   });
 });
+
+test('private bridge and CLI research mocked memories then expand exact evidence without model calls', async () => {
+  await fixture(async (ctx, connection, state) => {
+    const { submindSettings } = await import('../dist/config.js');
+    ctx.config.profiles.personal!.submind = { ...submindSettings(ctx.profile), mode: 'mock', expandedMaxChars: 64000 };
+    await saveConfig(ctx.configPath, ctx.config);
+    const selected = loadContext(ctx.configPath);
+    state.override = (req, res) => {
+      if (!req.url?.startsWith('/agentmemory/memories/')) return false;
+      const id = decodeURIComponent(req.url.split('/').at(-1)!);
+      const memory = state.memories.find(m => m.id === id);
+      res.writeHead(memory ? 200 : 404); res.end(JSON.stringify({ memory })); return true;
+    };
+    let calls = 0;
+    const bridge = await startMemoryBridge(selected, connection, { generate: async () => { calls++; throw new Error('model forbidden'); } });
+    try {
+      const saved = await memoryRequest(selected, 'remember', { content: 'Problem: Cold shipping needed a container. Fix: Use blue insulation. Why: The test kept the required temperature.' });
+      const brief = await memoryRequest(selected, 'ask', { query: 'Cold shipping' });
+      assert.equal(brief.mode, 'mock'); assert.equal(brief.status, 'ready'); assert.equal(brief.usage.modelCalls, 0);
+      assert.equal(brief.actions[0]!.arguments.id, saved.id);
+      const expanded = await memoryRequest(selected, 'expand', brief.actions[0]!.arguments);
+      assert.equal(expanded.status, 'ready'); assert.equal(expanded.memory?.content, state.memories[0]!.content);
+      assert.ok(expanded.memory?.provenance);
+      const { promisify } = await import('node:util'); const { execFile } = await import('node:child_process');
+      const { fileURLToPath } = await import('node:url');
+      const run = promisify(execFile); const entry = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
+      const cli = await run(process.execPath, [entry, 'ask', '--config', ctx.configPath, '--query', 'Cold shipping']);
+      assert.equal(JSON.parse(cli.stdout).mode, 'mock');
+      const detail = await run(process.execPath, [entry, 'expand', '--config', ctx.configPath, '--id', saved.id, '--revision', brief.actions[0]!.arguments.revision]);
+      assert.equal(JSON.parse(detail.stdout).status, 'ready');
+      state.memories[0]!.content = 'A newer correction';
+      assert.equal((await memoryRequest(selected, 'expand', brief.actions[0]!.arguments)).status, 'changed');
+      for (const character of ['中', '\u0001']) {
+        state.memories[0]!.content = character.repeat(64000);
+        const large = await memoryRequest(selected, 'expand', brief.actions[0]!.arguments);
+        assert.equal(large.status, 'changed');
+        assert.ok(Buffer.byteLength(JSON.stringify(large)) > 160000);
+        assert.ok(large.memory!.content.length + large.memory!.title.length <= 64000);
+      }
+      state.memories[0]!.project = 'foreign-scope';
+      assert.equal((await memoryRequest(selected, 'expand', brief.actions[0]!.arguments)).status, 'missing');
+      assert.equal(calls, 0);
+    } finally { await bridge.close(); }
+  });
+});
+
+test('research bridge rejects concurrent inference and aborts work when the caller disconnects', async () => {
+  await fixture(async (ctx, connection) => {
+    const { submindSettings } = await import('../dist/config.js');
+    ctx.config.profiles.personal!.submind = { ...submindSettings(ctx.profile), mode: 'model' };
+    await saveConfig(ctx.configPath, ctx.config); const selected = loadContext(ctx.configPath);
+    let started!: () => void, aborted!: () => void;
+    const reached = new Promise<void>(resolve => { started = resolve; });
+    const stopped = new Promise<void>(resolve => { aborted = resolve; });
+    const bridge = await startMemoryBridge(selected, connection, { generate: async (_profile, request) => {
+      started();
+      return new Promise((_, reject) => request.signal!.addEventListener('abort', () => { aborted(); reject(new Error('cancelled')); }, { once: true }));
+    } });
+    try {
+      const pending = assert.rejects(memoryRequest(selected, 'ask', { query: 'shipping' }, { timeoutMs: 500 }));
+      await reached;
+      await assert.rejects(memoryRequest(selected, 'ask', { query: 'another question' }), /already researching/);
+      await pending;
+      await Promise.race([stopped, new Promise((_, reject) => setTimeout(() => reject(new Error('abort not propagated')), 1500))]);
+    } finally { await bridge.close(); }
+  });
+});
+
+test('a browser-style abort cancels its private research request and reaches the provider', async () => {
+  await fixture(async (ctx, connection) => {
+    ctx.profile.submind = { mode: 'model', maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000, inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 10000, expandedMaxChars: 12000 };
+    ctx.config.profiles[ctx.profileId] = ctx.profile;
+    await saveConfig(ctx.configPath, ctx.config);
+    let started!: () => void, cancelled!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const stopped = new Promise<void>(resolve => { cancelled = resolve; });
+    let calls = 0;
+    const bridge = await startMemoryBridge(ctx, connection, {
+      store: { async search() { return { memories: [], inspected: 0, truncated: false, exhaustive: false }; }, async read() { return { status: 'missing' }; } },
+      generate: async (_profile, input) => {
+        calls++; started();
+        return new Promise((_resolve, reject) => input.signal!.addEventListener('abort', () => { cancelled(); reject(new Error('synthetic cancellation')); }, { once: true }));
+      },
+    });
+    try {
+      const pre = new AbortController(); pre.abort();
+      await assert.rejects(memoryRequest(ctx, 'ask', { query: 'synthetic shipping' }, { signal: pre.signal }), /cancelled/);
+      assert.equal(calls, 0);
+      const abort = new AbortController();
+      const pending = memoryRequest(ctx, 'ask', { query: 'synthetic shipping' }, { signal: abort.signal });
+      await Promise.race([ready, pending.then(() => { throw new Error('research finished before synthetic provider'); })]); abort.abort();
+      await assert.rejects(pending, /cancelled/);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([stopped, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('provider did not receive cancellation')), 1000); })]); }
+      finally { clearTimeout(timer); }
+      assert.equal(calls, 1);
+    } finally { await bridge.close(); }
+  });
+});

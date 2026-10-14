@@ -4,7 +4,7 @@ import { isAbsolute, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { defaultConfig, loadContext, initConfig, trustConfig, updateConfig, validateConfig } from './config.js';
+import { defaultConfig, loadContext, initConfig, trustConfig, updateConfig, validateConfig, submindSettings } from './config.js';
 import { resolveInstallation, describeInstallation, readConnection, preflightConnection, writeConnection, removeConnection } from './installation.js';
 import { listModels } from './models.js';
 import { bindSession, contextFingerprint } from './sessions.js';
@@ -16,6 +16,10 @@ import { hookContext } from './hook-context.js';
 import { installRuntime, startBackend, backendHealth, closeOwnedBackends, installedBackendVersion, runtimeInstalled, hasGlobalBackendConfig, AGENTMEMORY_VERSION, ENGINE_VERSION } from './runtime.js';
 import { smoke } from './smoke.js';
 import { word } from './words.js';
+import { submindDemo } from './submind-demo.js';
+import { startPortalDemo } from './portal-demo.js';
+import { createMemoryPortal, PortalFailure } from './portal.js';
+import { echoSubmindWord } from '@farsight/core/dist/strings-echo-submind.js';
 import type { EchoConfig, EchoContext, CheckResult, BackendConnection } from './types.js';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
@@ -24,7 +28,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   install: { type: 'boolean' }, workspace: { type: 'string' }, content: { type: 'string' },
   query: { type: 'string' }, topic: { type: 'string', multiple: true }, limit: { type: 'string' },
   scope: { type: 'string' }, port: { type: 'string' }, 'backend-port': { type: 'string' },
-  confirm: { type: 'boolean' },
+  confirm: { type: 'boolean' }, id: { type: 'string' }, revision: { type: 'string' },
 } });
 const command = values.help ? 'help' : positionals[0] ?? 'help';
 const print = (data: unknown) => process.stdout.write(`${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}\n`);
@@ -117,12 +121,14 @@ async function checks(ctx: EchoContext, connection?: BackendConnection): Promise
     { name: 'engine', ok: ctx.profile.backend.mode === 'external' || runtimeInstalled(ctx), detail: ctx.profile.backend.mode === 'external' ? 'external' : ENGINE_VERSION },
   ];
   if (ctx.profile.backend.mode === 'managed') checks.push({ name: 'backend-isolation', ok: !hasGlobalBackendConfig(), detail: hasGlobalBackendConfig() ? word('globalConfig') : word('isolated') });
-  if (ctx.profile.model.provider === 'openai-compatible') {
-    checks.push({ name: 'model-configuration', ok: !!ctx.profile.model.model, detail: word('compatibleCheck') });
-  } else try {
-    const models = await listModels(ctx.profile);
-    checks.push({ name: 'model', ok: !!ctx.profile.model.model && models.includes(ctx.profile.model.model), detail: ctx.profile.model.model || word('chooseModel') });
-  } catch { checks.push({ name: 'model', ok: false, detail: word('modelUnavailable') }); }
+  if (submindSettings(ctx.profile).mode === 'model') {
+    if (ctx.profile.model.provider === 'openai-compatible') {
+      checks.push({ name: 'model-configuration', ok: !!ctx.profile.model.model, detail: word('compatibleCheck') });
+    } else try {
+      const models = await listModels(ctx.profile);
+      checks.push({ name: 'model', ok: !!ctx.profile.model.model && models.includes(ctx.profile.model.model), detail: ctx.profile.model.model || word('chooseModel') });
+    } catch { checks.push({ name: 'model', ok: false, detail: word('modelUnavailable') }); }
+  }
   if (connection) {
     try { await backendHealth(connection); checks.push({ name: 'backend', ok: true, detail: word('ready') }); }
     catch { checks.push({ name: 'backend', ok: false, detail: word('backendUnavailable') }); }
@@ -182,6 +188,17 @@ async function hook(): Promise<void> {
 async function main(): Promise<void> {
   if (command === 'help') { print(word('help')); return; }
   if (command === 'hook') { await hook(); return; }
+  if (command === 'portal-demo') {
+    if (positionals.length > 1 || Object.keys(values).some(key => key !== 'port') || values.port !== undefined && !/^\d+$/.test(values.port)) throw new Error(echoSubmindWord('input'));
+    const demo = await startPortalDemo(values.port === undefined ? undefined : Number(values.port));
+    process.once('SIGINT', () => { void demo.close(); });
+    process.once('SIGTERM', () => { void demo.close(); });
+    print({ url: demo.url, synthetic: true, mode: 'mock', modelCalls: 0 }); return;
+  }
+  if (command === 'submind-demo') {
+    if (positionals.length > 1 || Object.keys(values).some(key => key !== 'query')) throw new Error(echoSubmindWord('input'));
+    print(await submindDemo(values.query)); return;
+  }
   if (positionals.length > 1) throw new Error(word('unknownCommand'));
   if (command === 'trust') {
     if (!values.confirm) throw new Error(word('trustConfirm'));
@@ -238,6 +255,14 @@ async function main(): Promise<void> {
     if (!values.content?.trim()) throw new Error(word('contentRequired'));
     print(await memoryRequest(ctx, 'remember', { content: values.content, topics: values.topic })); return;
   }
+  if (command === 'ask') {
+    if (!values.query?.trim()) throw new Error(word('queryRequired'));
+    print(await memoryRequest(ctx, 'ask', { query: values.query })); return;
+  }
+  if (command === 'expand') {
+    if (!values.id || !values.revision) throw new Error(echoSubmindWord('reference'));
+    print(await memoryRequest(ctx, 'expand', { id: values.id, revision: values.revision })); return;
+  }
   if (command === 'recall') {
     if (!values.query?.trim()) throw new Error(word('queryRequired'));
     print(await memoryRequest(ctx, 'recall', { query: values.query, ...(values.limit === undefined ? {} : { limit: Number(values.limit) }) })); return;
@@ -246,8 +271,13 @@ async function main(): Promise<void> {
   let backend: BackendConnection | undefined;
   let memory: { close(): Promise<void> } | undefined;
   let startup: string | undefined;
+  let portal: ReturnType<typeof createMemoryPortal> | undefined;
   // Settings remain reachable even if a backend or model needs configuration.
-  const web = await startWeb(ctx, { installation: describeInstallation(ctx.configPath), checks: async () => [
+  const web = await startWeb(ctx, { installation: describeInstallation(ctx.configPath), portal: {
+    browse: (input, signal) => { if (!portal) throw new PortalFailure('unavailable'); return portal.browse(input, signal); },
+    ask: (input, signal) => memoryRequest(ctx, 'ask', input, { signal }),
+    expand: (input, signal) => memoryRequest(ctx, 'expand', input, { signal }),
+  }, checks: async () => [
     ...await checks(ctx, backend),
     ...(startup ? [{ name: 'backend', ok: false, detail: startup }] : []),
   ] });
@@ -266,6 +296,7 @@ async function main(): Promise<void> {
     try {
       if (!stopping) memory = await startMemoryBridge(ctx, result);
       backend = result;
+      if (!stopping) portal = createMemoryPortal(ctx, result);
     } catch (error) { await result.close(); throw error; }
   }).catch(async error => {
     startup = error instanceof Error ? error.message : word('backendUnavailable');
