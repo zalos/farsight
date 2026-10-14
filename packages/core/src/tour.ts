@@ -18,7 +18,7 @@
 import type { GraphNode, GateTier, JourneysMeta } from './graph.js';
 import { type GraphIndex, type Journey, type JourneySummary, type JourneySegment, type JourneyMoment, journey, journeySummary, humanizeName } from './query.js';
 import { screensFor } from './design.js';
-import { journeyTree, type JourneyRow, type JourneyStoryline, type JourneyTree } from './journeys.js';
+import { journeyTree, personaOfScreen, type JourneyRow, type JourneyStoryline, type JourneyTree } from './journeys.js';
 import { counted, countKey, scopeWord, type Counted } from './counts.js';
 import { t as tr, type Register } from './strings.js';
 
@@ -322,8 +322,8 @@ export function tourOf(
     const walked = flowSummary(index, leg.row.nodeId);
     if (!walked) { notes.push(`${leg.row.name} could not be walked`); continue; }
     const { sum } = walked;
-    const persona = personaFor(leg.row, opts.persona);
-    firstPersona ??= persona;
+    const legPersona = personaFor(leg.row, opts.persona);
+    firstPersona ??= legPersona;
     const flowNode = index.byId.get(leg.row.nodeId);
     const jName = leg.row.name ?? flowNode?.name ?? leg.row.nodeId;
     const screens = sum.segments.filter((sg) => sg.screen);
@@ -332,6 +332,12 @@ export function tourOf(
 
     screens.forEach((sg, si) => {
       const sc = sg.screen!;
+      // who uses this screen: its own row, a persona's routes, the sign-in guard its code meets — else the journey's
+      // persona (the one the reader picked, where it is for several)
+      const sp = personaOfScreen(index, opts.metas, sc.id, leg.row.nodeId);
+      const own = sp && sp.personaFrom !== 'journey';
+      const persona: LifecyclePersona | undefined = own ? { id: sp.persona, name: sp.personaName } : legPersona;
+      const whoRefs = own ? [sc.id, ...(sp.personaFrom === 'guard' ? sp.evidence : [])] : [leg.row.nodeId];
       const key = sc.designId ?? sc.id;
       const ordinal = sg.index + 1;
       const screenRef = { id: sc.id, name: sc.name, ordinal, of: screens.length };
@@ -348,7 +354,7 @@ export function tourOf(
         cl.push(sc.business
           ? clause('words', 'tour.screen.words', { words: sc.business }, [sc.id])
           : clause('words', 'tour.screen.noWords', { screen: sc.name }, [sc.id]));
-        if (persona) cl.push(clause('who', 'tour.screen.who', { persona: persona.name }, [leg.row.nodeId]));
+        if (persona) cl.push(clause('who', 'tour.screen.who', { persona: persona.name }, whoRefs));
         // the actions it starts, in the order the screen prints them
         const acts = rankOrder(sg);
         const labels: string[] = [];

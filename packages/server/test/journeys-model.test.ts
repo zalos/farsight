@@ -248,3 +248,12 @@ test('on the invoice-app fixture the fallback fold draws exactly what core journ
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('screenPersonaOthers: the people a journey\'s screens are used by besides its lead, with how many — the Map head\'s *with B*', () => {
+  const sp = (persona: string, personaName: string, personaFrom: string) => ({ screen: persona + personaFrom, persona, personaName, personaFrom });
+  const tree = { personas: [{ id: 'contractor', groups: [{ journeys: [{ nodeId: 'f', screenPersonas: [sp('contractor', 'Contractor', 'guard'), sp('ops', 'Operator', 'routes'), sp('ops', 'Operator', 'guard')] }] }] }] };
+  assert.deepEqual(M.screenPersonaOthers(tree, 'f', 'contractor'), [{ id: 'ops', name: 'Operator', screens: 2, from: 'routes', of: 3 }]);
+  assert.deepEqual(M.screenPersonaOthers(tree, 'f', 'ops').map((x: { id: string; screens: number }) => [x.id, x.screens]), [['contractor', 1]]);
+  assert.deepEqual(M.screenPersonaOthers(tree, 'nope', 'contractor'), []);
+  assert.deepEqual(M.screenPersonaOthers({ personas: [{ id: 'a', groups: [{ journeys: [{ nodeId: 'f' }] }] }] }, 'f', 'a'), [], 'an older server sends no screen personas');
+});

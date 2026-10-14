@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename, sep } from 'node:path';
 import {
-  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, journeyLifecycles, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
+  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, withScreenPersonas, screenPersonaNotes, journeyLifecycles, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown,
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
@@ -1065,6 +1065,8 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // summary only; on a large graph the steps are most of the answer and every one reads its file)
       const withSteps = !['0', 'false'].includes(q.get('steps') ?? '');
       const summary = journeySummary(g.index, jr, screens);
+      // who uses each screen (its own row, a persona's routes, the sign-in guard its code meets, else the journey's)
+      withScreenPersonas(g.index, g.meta.journeys, summary.user, entryNode.kind === 'flow' ? entry : undefined);
       // the lifecycle in the words of the persona(s) the flow is for, each writer placed on this journey's screen
       const flowName = entryNode.kind === 'flow' ? (entryNode.design?.name ?? entryNode.name) : entryNode.name;
       const lifecycles = journeyLifecycles(g.index, jr, {
@@ -1478,7 +1480,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const config = Object.fromEntries(Object.entries(g.meta.config ?? {}).filter(([r]) => !repo || r === repo));
       // the typed counts per source (files, conflicts), so the Settings list prints the fold's numbers
       const counts = Object.fromEntries(Object.entries(config).map(([r, m]) => [r, configCounts(m)]));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts }));
+      // where a manifest's persona declarations and the code disagree about who uses a screen (core screenPersonaNotes)
+      const personaNotes = Object.fromEntries(Object.keys(config).map((r) => [r, screenPersonaNotes(g.index, g.meta.journeys, new Set([r]))]).filter(([, n]) => (n as string[]).length));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts, personaNotes }));
     }
     if (url.startsWith('/api/openapi') && req.method === 'GET') {
       // a spec generated from the code — every inference marked x-farsight-inferred

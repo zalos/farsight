@@ -166,8 +166,12 @@ export interface DesignRef {
   /** flow nodes only: the flows this one requires first / leads to next (manifest flow ids) — linked journeys */
   requires?: string[];
   leadsTo?: string[];
-  /** flow nodes only: who the flow is for (one persona or several), and who answers for it (absent prints as an absence word) */
+  /**
+   * flow nodes: who the flow is for (one persona or several); screen nodes: the persona the manifest's screen row
+   * names (`screens[].persona`), which places the screen in that person's lane whatever its journey says
+   */
   persona?: string | string[];
+  /** flow nodes only: who answers for it (absent prints as an absence word) */
   owner?: string;
   /** flow nodes only: the group the manifest puts it in under its persona(s), and its order there (journey-organisation-and-config-files.md §4.1) */
   group?: string;
@@ -603,8 +607,16 @@ export interface ProjectsMeta {
   graphFile?: { path: string; projects: number; dependencies: number };
 }
 
-/** A persona a manifest or a config declares — `{ id, name, description? }`, in the order it is shown. */
-export interface JourneyPersonaDecl { id: string; name: string; description?: string }
+/**
+ * A persona a manifest or a config declares — `{ id, name, description? }`, in the order it is shown. Two optional
+ * slots place a screen with the person who uses it (lane persona, 2026-10-13): `routes` — route globs (`/ops/**`)
+ * matched against a screen's route, the persona whose most specific glob matches wins; `signsInWith` — the guards
+ * (by name, the part before `: `, or node id) that sign this persona in, so an identity guard a screen's code meets
+ * names its persona.
+ */
+export interface JourneyPersonaDecl { id: string; name: string; description?: string; routes?: string[]; signsInWith?: string[] }
+/** Where a screen's persona came from, strongest first: its own manifest row, a persona's `routes`, the identity guard its code meets, its journey. */
+export type PersonaFrom = 'screen' | 'routes' | 'guard' | 'journey';
 /** A group of journeys under a persona; with `persona` it exists under that persona only. */
 export interface JourneyGroupDecl { id: string; name: string; description?: string; persona?: string }
 /**
@@ -651,7 +663,7 @@ export interface JourneyFlowPlacement { id: string; persona?: string | string[];
  */
 export interface JourneysMeta {
   /** declared personas in the order they are shown; `from` = the manifest or config path that declared it (the config when it named it) */
-  personas: { id: string; name: string; description?: string; declared: boolean; from: string }[];
+  personas: { id: string; name: string; description?: string; declared: boolean; from: string; routes?: string[]; signsInWith?: string[] }[];
   groups: { id: string; name: string; description?: string; persona?: string; declared: boolean; from: string }[];
   /** the config's placements, by flow id — only flows a manifest declared */
   flows: Record<string, { persona?: string | string[]; group?: string; order?: number; from: string; index: number }>;

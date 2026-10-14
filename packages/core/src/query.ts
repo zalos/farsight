@@ -1,4 +1,4 @@
-import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind } from './graph.js';
+import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind, PersonaFrom } from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
 import { isConfigCheck } from './config-check.js';
 import { withJourneyPreconditions, type ActionPreconditions } from './gates.js';
@@ -1193,7 +1193,11 @@ export interface JourneySummary {
   /** what tests verify this journey and each segment (core/coverage.ts) — absent when the graph has no test nodes */
   coverage?: JourneyCoverage;
   /** band 1 — screens in order (the entry when it is a screen; a flow's screens; else the pages upstream) */
-  user: { id: string; name: string; kind: GraphNode['kind']; business?: string; designId?: string; designStatus?: string; hasImage: boolean; links: NonNullable<GraphNode['links']>; components: string[]; loc?: GraphNode['loc'] }[];
+  user: {
+    id: string; name: string; kind: GraphNode['kind']; business?: string; designId?: string; designStatus?: string; hasImage: boolean; links: NonNullable<GraphNode['links']>; components: string[]; loc?: GraphNode['loc'];
+    /** who uses this screen (a persona id), its name and what placed it — set by core journeys.ts `withScreenPersonas` where the journey is served */
+    persona?: string; personaName?: string; personaFrom?: PersonaFrom;
+  }[];
   /** band 2 — the plain-language story: description, documents, the rules and gates in force, the decisions along the way */
   business: {
     description?: string;

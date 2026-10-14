@@ -168,6 +168,20 @@
         "description": {
           "type": "string",
           "description": "One sentence on them."
+        },
+        "routes": {
+          "type": "array",
+          "description": "route globs this persona's screens live under (/ops/**): a screen whose route matches is drawn in this persona's lane unless its own row names a persona; the most specific glob wins",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signsInWith": {
+          "type": "array",
+          "description": "the guards that sign this persona in, by name or node id: a screen whose code meets only these is this persona's",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -279,6 +293,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "persona": {
+          "type": "string",
+          "description": "who uses this screen — a persona id or name from personas[]; it wins over a persona's routes, the sign-in guard its code meets and its journey's persona"
         }
       }
     },
