@@ -168,6 +168,48 @@ export function decisionsFor(index: GraphIndex, metas: Record<string, DecisionsM
   return rows.filter((r) => ids.has(r.id));
 }
 
+/** The nodes whose edges are gated on a flag constant a decision's comment sits above (`meta.when` names it). */
+function flagGated(index: GraphIndex, row: DecisionRow): string[] {
+  const symbols = row.sites.map((s) => s.symbol).filter((x): x is string => !!x);
+  if (!symbols.length) return [];
+  const res = symbols.map((sym) => new RegExp(`\\b${sym}\\b`));
+  const out = new Set<string>();
+  for (const [from, edges] of index.out) {
+    for (const e of edges) {
+      const when = e.meta?.when;
+      if (when == null) continue;
+      const text = typeof when === 'string' ? when : JSON.stringify(when);
+      if (res.some((re) => re.test(text))) out.add(from);
+    }
+  }
+  return [...out];
+}
+
+/** The answer `GET /api/decisions`, MCP `decisions json:true` and `farsight decisions --json` give: one fold. */
+export interface DecisionsAnswer {
+  counted: { decisions: Counted; cited: Counted };
+  decisions: (DecisionRow & { repo: string; names: Record<string, string> })[];
+  notes: string[];
+}
+
+/**
+ * Every decision (or the one `id` names, or the ones on `node`), each with the nodes it bears on — its comments' and
+ * its `affects`', and the callers whose calls are gated on a flag constant it sits above — and the names of those
+ * nodes, the counts over the sources in scope and the notes.
+ */
+export function decisionsAnswer(index: GraphIndex, metas: Record<string, DecisionsMeta> | undefined, opts: { repo?: string; id?: string; node?: string } = {}): DecisionsAnswer {
+  let rows = opts.node ? decisionsFor(index, metas, opts.node) : decisionRows(metas, opts.repo);
+  if (opts.id) rows = rows.filter((r) => r.id === opts.id);
+  const decisions = rows.map((r) => {
+    const nodes = [...new Set([...r.nodes, ...flagGated(index, r)])];
+    const names: Record<string, string> = {};
+    for (const id of nodes) { const n = index.byId.get(id); if (n) names[id] = n.design?.name ?? n.name; }
+    return { ...r, nodes, names };
+  });
+  const notes = Object.entries(metas ?? {}).filter(([r]) => !opts.repo || r === opts.repo).flatMap(([, m]) => m.notes ?? []);
+  return { counted: decisionsCounted(metas, opts.repo), decisions, notes };
+}
+
 /** One row as the chip prints it: `pending decision D7 · who verifies a bank-detail change`, or `decided D5 · …`. */
 export function decisionChipWords(d: Pick<DecisionRow, 'id' | 'title' | 'state'>): { key: string; vars: Record<string, string> } {
   const key = !d.state ? 'decision.chip.unknown' : d.state === 'open' ? 'decision.chip.open' : 'decision.chip.decided';

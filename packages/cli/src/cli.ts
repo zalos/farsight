@@ -11,7 +11,7 @@ import {
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word, agentsCounted,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
-  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact, roleTable, roleTableLines, rolesCsv,
+  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact, roleTable, roleTableLines, rolesCsv, decisionsAnswer, decisionsText,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
   storylineDiff, storylineDiffDocument, storylineDiffLines, resolveCompareFrom, compareSideOf, parseFailOn, DELTA_KINDS,
 } from '@farsight/core';
@@ -162,6 +162,11 @@ usage:
   farsight state [--repo name] [--json] [--graph graph.json]    the state of play: what is built and walkable, what a test run validated,
                                                                what is still open, and the commits read into history and ingested —
                                                                the front door's three columns, each number with its re-check command
+  farsight decisions [--repo name] [--id D7] [--node <id>] [--json] [--graph graph.json]
+                                                               what the team decided or left open (manifest decisions[],
+                                                               farsight.config.json → decisions[]) and every DECISION(<id>)
+                                                               comment that names one: state, owner, the team's words and the
+                                                               cited document quoted, the code lines, the notes
   farsight journeys [--repo name] [--persona p] [--group g] [--storyline s] [--json] [--graph graph.json]
                                                                the storylines (named chains of journeys, in order), then the journeys
                                                                by persona, then by group, in the order the manifests and
@@ -1664,6 +1669,23 @@ switch (command) {
     const state = stateOfPlay(index, store.meta, { scope, history });
     if (rest.includes('--json')) { console.log(JSON.stringify(state, null, 2)); break; }
     console.log(stateOfPlayLines(state).join('\n'));
+    break;
+  }
+  case 'decisions': {
+    // what the team decided or left open, and where the code names each (the 2026-10-13 outsider round, F8): the same
+    // core decisionsAnswer() GET /api/decisions and the MCP decisions tool answer with
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const index = buildIndex(nodes, edges);
+    const repo = flag('repo');
+    const id = flag('id');
+    const node = flag('node');
+    if (node && !index.byId.has(node)) fail(`no node ${node} in ${graphFile}`);
+    const opts = { ...(repo ? { repo } : {}), ...(id ? { id } : {}), ...(node ? { node } : {}) };
+    if (rest.includes('--json')) { console.log(JSON.stringify(decisionsAnswer(index, store.meta.decisions, opts), null, 2)); break; }
+    console.log(decisionsText(store.meta.decisions, { ...opts, index }).join('\n'));
     break;
   }
   case 'journeys': {

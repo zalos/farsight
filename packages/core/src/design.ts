@@ -981,6 +981,60 @@ team declared. To improve it:
 - Stamp the test runs (tests.e2e results, coverage): each stop and each precondition carries the one verdict with
   its scope; a skipped case is said, never hidden.
 
+## 1⅞++ · Decisions, work done outside the code, parties, and the documents you cite
+
+Say what the team decided or left open, what a person or a partner does by hand, and who those partners are —
+so a reader can tell "the team has not decided this" from "Farsight found nothing". All three are declarations,
+printed as declarations with where they came from; none changes what the code was found to do.
+
+"decisions": [
+  { "id": "D7", "title": "Who verifies a payee's bank-detail change?", "state": "open",
+    "owner": "Finance lead", "summary": "Undecided; the payment partner may own it.",
+    "doc": "docs/product/open-business-decisions.md#d7", "affects": ["OPS-04c"] },
+  { "id": "D5", "title": "Four-eyes on operator-keyed invoices", "state": "decided", "decided": "2026-09-04" }
+]
+
+- decisions[] { id, title, state: open | decided, decided? (YYYY-MM-DD), owner?, summary?, doc?, affects? } in the
+  manifest; farsight.config.json → decisions[] overrides by id, field by field (root file first, the nearest nested
+  file last), and may declare an id no manifest does when it gives a title and a state.
+- The code names a decision with a comment, // DECISION(D7): <what this code does until it is decided>, on a line
+  above the function, the call or the flag constant it governs, or inside the body beside the call. The comment's
+  node carries the decision; above a module-level constant the site keeps the constant's name.
+- Keep one list of ids per source: when two documents number their decisions separately, qualify the ids
+  (OBD-D7, ACP-D7) in the comments and the manifest. Two manifests that declare one id with different titles are a
+  note (the first read is kept); an id the code names that nothing declares is a note and a row of its own, its
+  title unknown.
+- doc names a markdown file inside the source; with #anchor the heading that anchor names. Its heading and first
+  paragraph are quoted on the decision card, verbatim, cut between words near 400 characters.
+- Where it shows: a chip "pending decision D7 · <title>" (or "decided D5 · …") on the gate card, the Map
+  property's Overview, the WALK stop and the lifecycle table row the decision bears on, opening a card with the
+  state, the owner, the team's words quoted, the document quoted and a door to it and to each code line;
+  GET /api/decisions[?id=&node=], MCP decisions, farsight decisions [--json], a decisions line in graph_overview.
+
+A step somebody does on purpose outside the app — a W-9 request by email, the partner's payout, a bank check in the
+ERP — is a step with by:
+
+  "steps": [ { "id": "OPS-08.5", "name": "The payment partner pays out", "by": "partner",
+               "who": "Payment partner", "where": "outside the platform" } ]
+
+- by is person | partner | external (another system the app does not call); who is the team's words, a persona
+  id, or a party's name; where is optional. Such a step is drawn dotted with "done by <who>", counted apart (done
+  outside the code), and is never a gate and never a verdict — no test can reach it. It is not "designed, not
+  built": that means the code is meant to do it and does not yet.
+
+A counterparty no code calls (the payment partner, the client) is a party — an externals[] entry in
+farsight.config.json with kind "party" and no import:
+
+  "externals": [ { "name": "Payment partner", "kind": "party", "role": "Moves the money on the platform's instruction" } ]
+
+- A party is a node no code reaches ("declared, no code reaches it"). The storyline's lanes draw it as a lane of
+  its own when a step's who names it, with its steps in it.
+
+Documents you cite are quoted: a flow's docs[], a decision's doc, and an ADR named in a @business sentence or a
+doc comment ("ADR 0007", when the source keeps its ADRs in a decisions/ or adr/ folder) become doc nodes carrying
+the document's heading, its Status line and its first paragraph verbatim; the citing node gets a cites edge.
+Start each ADR with one plain paragraph saying what was decided — that paragraph is what a reader sees.
+
 ## 2 · What the graph does with it (no code needed yet)
 
 - Each screen resolves to the page/component node the code adapter emitted, or becomes a page node
