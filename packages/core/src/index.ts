@@ -30,6 +30,7 @@ export * from './gates.js';
 export * from './roles.js';
 export * from './gate-class.js';
 export * from './lifecycle.js';
+export * from './switches.js';
 export * from './freshness.js';
 export * from './state-of-play.js';
 export * from './readiness.js';

@@ -388,7 +388,32 @@ function overviewHtml(pm, st) {
     + sec('map.prop.ov.calls', calls)
     + sec('map.prop.ov.gates', gateList(o.gates, 'ov-gates'))
     + propLifecycleHtml(pm, st)
+    + propSwitchesHtml(pm, st)
     + sec('map.prop.ov.work', workRowsHtml(pm, st, true));
+}
+
+/**
+ * The Overview's switches (lane moves, 2026-10-13, F9): each call this screen's actions hold under a constant whose value
+ * switches it off — the constant, its value, where it is declared and the action that holds the call. Read from the
+ * journey answer's moments (`switchedOff`); `''` when the screen holds none. The business register says it in words.
+ * @group Map
+ */
+function propSwitchesHtml(pm, st) {
+  const data = st.ctx && st.ctx.data;
+  const seg = data && data.summary && pm.screen && pm.screen.segment ? (data.summary.segments || [])[pm.screen.segment.index] : null;
+  const rows = [];
+  for (const mo of (seg && seg.moments) || []) {
+    for (const so of mo.switchedOff || []) {
+      if (rows.some((r) => r.flag === so.flag && r.nodeId === so.nodeId)) continue;
+      rows.push({ ...so, action: mo.label });
+    }
+  }
+  if (!rows.length) return '';
+  const fill = (k, v) => Object.entries(v).reduce((x, [a, b]) => x.split('{' + a + '}').join(String(b)), t(k));
+  const biz = currentLens() === 'business';
+  return sec('switch.section', rows.map((r) => '<div class="mp-row"' + defAttrs('switch.word') + '>' + sym('warning') + ' <span>'
+    + esc(biz ? fill('lifecycle.biz.switchedOffMover', { action: r.action }) : fill('lifecycle.switchedOffMover', { action: r.action, flag: r.flag, value: r.value }) + ' · ' + r.name + ' · ' + r.at)
+    + '</span></div>').join(''));
 }
 
 /**

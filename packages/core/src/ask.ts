@@ -1292,8 +1292,9 @@ function placesOf(index: GraphIndex, metas: Record<string, JourneysMeta> | undef
   const rows = tree.personas.flatMap((p) => p.groups.flatMap((g) => g.journeys));
   for (const r of rows) if (!order.includes(r.nodeId)) order.push(r.nodeId);
   for (const n of index.byId.values()) if (n.kind === 'flow' && !order.includes(n.id) && (!repo || n.id.startsWith(`${repo}::`))) order.push(n.id);
-  const out: { flowId: string; flowName: string; persona?: string; personaId?: string; sg: JourneySegment; mo: JourneyMoment }[] = [];
+  const out: { flowId: string; flowName: string; persona?: string; personaId?: string; sg: JourneySegment; mo: JourneyMoment; hops?: number; off?: { flag: string; value: boolean; at: string } }[] = [];
   const fallback: typeof out = [];
+  const off: typeof out = [];
   for (const id of order) {
     const w = flowSummary(index, id);
     if (!w) continue;
@@ -1308,12 +1309,20 @@ function placesOf(index: GraphIndex, metas: Record<string, JourneysMeta> | undef
       const who = sp ? { persona: sp.personaName, personaId: sp.persona } : { ...(persona ? { persona } : {}), ...(personaId ? { personaId } : {}) };
       for (const mo of rankOrder(sg)) {
         const place = { flowId: id, flowName, ...who, sg, mo };
-        if (mo.preconditions?.moves.some((m) => m.table === table && m.to === to && m.by === by)) out.push(place);
-        else if (!fallback.length && w.j.steps.some((s) => s.nodeId === by && s.order >= mo.from && s.order <= mo.to)) fallback.push(place);
+        const mv = mo.preconditions?.moves.find((m) => m.table === table && m.to === to && m.by === by);
+        const so = mo.preconditions?.switchedOff?.find((m) => m.table === table && m.to === to && m.by === by);
+        if (mv) out.push({ ...place, hops: mv.hops ?? 0 });
+        else if (so) off.push({ ...place, off: { flag: so.flag, value: so.value, at: so.at } });
+        else if (!fallback.length && w.j.steps.some((s) => s.nodeId === by && !s.switchedOff && s.order >= mo.from && s.order <= mo.to)) fallback.push(place);
       }
     }
   }
-  return out.length ? out : fallback;
+  // every live path, the action that calls the writer most directly first — never the first one the walks met
+  // (lane moves, 2026-10-13); a stable sort keeps the storyline order among equals
+  out.sort((a, b) => (a.hops ?? 0) - (b.hops ?? 0));
+  // one place per screen and action: the same screen on two journeys is one place a person acts from
+  const once = (xs: typeof out) => { const seen = new Set<string>(); return xs.filter((x) => { const k = `${x.sg.screen?.id ?? ''}|${x.mo.label}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
+  return { live: once(out.length ? out : fallback), off: once(off) };
 }
 
 function caseRows(tests: CoverageTestRef[], cap = 8): TourClause[] {
@@ -1354,11 +1363,20 @@ function answerSet(index: GraphIndex, question: string, opts: { metas?: Record<s
     const writer = index.byId.get(tr.by);
     const writerName = writer?.name ?? tr.by.split('::').pop() ?? tr.by;
     const at = locOf(writer, tr.line) || tr.by;
-    const places = placesOf(index, opts.metas, table.id, status, tr.by, opts.repo);
+    const found = placesOf(index, opts.metas, table.id, status, tr.by, opts.repo);
+    const places = found.live;
     const p = places[0];
     const word = lifecycleViews(index, table, p?.personaId ? { personas: [{ id: p.personaId, name: p.persona ?? p.personaId }] } : {})[0]?.rows.find((r) => r.status === status)?.word ?? humanizeName(status);
     a.lead.push(line('move', 'ask.set.writer', { status, writer: writerName, at }, [tr.by, table.id], { bizKey: 'ask.biz.set.writer', bizVars: { status: word } }));
-    if (!p) { a.lead.push(line('who', 'ask.set.whereNone', { writer: writerName }, [tr.by])); continue; }
+    // a path to the writer that a constant switches off: named, never the answer (lane moves, 2026-10-13)
+    const switchedOffLines = () => {
+      for (const q of found.off.slice(0, 2)) {
+        const act = q.mo.preconditions?.action || q.flowId;
+        a.lead.push(line('who', 'switch.ask.off', { writer: writerName, action: bare(q.mo.label), screen: q.sg.screen!.name, flag: q.off!.flag, value: String(q.off!.value), at: q.off!.at },
+          [act, tr.by], { bizKey: 'switch.biz.ask.off', bizVars: { action: bare(q.mo.label), screen: q.sg.screen!.name } }));
+      }
+    };
+    if (!p) { a.lead.push(line('who', 'ask.set.whereNone', { writer: writerName }, [tr.by])); switchedOffLines(); continue; }
     const sc = p.sg.screen!;
     const actNode = p.mo.preconditions?.action || tr.by;
     const persona = p.persona ?? p.flowName;
@@ -1369,6 +1387,7 @@ function answerSet(index: GraphIndex, question: string, opts: { metas?: Record<s
       const c = counted(places.length - 1, 'count.unit.places', 'count.scope.node', `${SRC} → the actions whose walk makes this move, after the first`);
       a.lead.push(line('who', 'ask.set.also', { count: countWords(c) }, places.slice(1).map((x) => x.mo.preconditions?.action || x.flowId), { counted: c }));
     }
+    switchedOffLines();
     if (!first) continue;
     first = false;
     a.doors.push({ kind: 'map', flowId: p.flowId, screen: p.sg.index + 1, action: ordinal });

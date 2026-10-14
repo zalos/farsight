@@ -27,6 +27,7 @@ import { DOOR_STRINGS } from './strings-doors.js';
 import { LANES_STRINGS } from './strings-lanes.js';
 import { DECISION_STRINGS } from './strings-decisions.js';
 import { FOLD_STRINGS } from './strings-fold.js';
+import { SWITCHES_STRINGS } from './strings-switches.js';
 import { GATE_STRINGS } from './strings-gate.js';
 import { ROLES_STRINGS } from './strings-roles.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
@@ -135,6 +136,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...DECISION_STRINGS,
   // the fold's words: a row of chips folded to +n, a path that keeps its two ends, a rail's tabs folded to a menu
   ...FOLD_STRINGS,
+  // a call a constant switches off, and the switches themselves (lane moves, 2026-10-13)
+  ...SWITCHES_STRINGS,
   // compare two syncs on a storyline (round 2026-10-10, proposal 7) live in strings-compare.ts (compare.*, map.biz.compare.*, count.unit.deltas)
   ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts

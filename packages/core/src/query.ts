@@ -304,6 +304,21 @@ export interface JourneyStep {
   deferred?: true;
   /** the hop that reached it was made inside a transaction callback (`meta.tx`) */
   tx?: true;
+  /**
+   * switched off: the call that reached it sits under a branch on a module-level constant whose value means it
+   * does not run (`meta.inactive` on the edge — parsers/src/flag-gates.ts). Named where it is written, never
+   * walked, and never counted as what an action reaches or moves.
+   */
+  switchedOff?: SwitchedOff;
+}
+
+/** The constant that switches a call off: its name, its literal value, and `path:line` of its declaration. */
+export interface SwitchedOff { flag: string; value: boolean; at: string }
+
+/** The switch on an edge, when the code fixes it off (`meta.inactive`). */
+export function switchedOffOf(e: GraphEdge | undefined): SwitchedOff | undefined {
+  if (!e?.meta?.inactive || typeof e.meta.whenFlag !== 'string') return undefined;
+  return { flag: e.meta.whenFlag, value: e.meta.whenValue === true, at: typeof e.meta.whenAt === 'string' ? e.meta.whenAt : '' };
 }
 
 /**
@@ -543,7 +558,7 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
    * spends the re-visit budget nor makes a later real call read as a repeat.
    */
   const pushFlagged = (
-    flag: 'setup' | 'deferred',
+    flag: 'setup' | 'deferred' | 'switchedOff',
     c: { edge: GraphEdge; childId: string; via: JourneyStep['via'] },
     depth: number,
     callSite: JourneyStep['callSite'],
@@ -557,10 +572,11 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       ...(callSite ? { callSite } : {}),
       nodeId: c.childId,
       crossRepo: !!parent.loc?.repo && !!child.loc?.repo && child.loc.repo !== parent.loc.repo,
-      gates: gatesOf(c.childId), repeat: false, cycle: false,
+      // a switched-off call carries no gates: none of them stands in front of anything that runs
+      gates: flag === 'switchedOff' ? [] : gatesOf(c.childId), repeat: false, cycle: false,
       ...(conditions?.length ? { conditions } : {}),
       ...(c.edge.meta?.tx ? { tx: true as const } : {}),
-      ...(flag === 'setup' ? { setup: true as const } : { deferred: true as const }),
+      ...(flag === 'setup' ? { setup: true as const } : flag === 'deferred' ? { deferred: true as const } : { switchedOff: switchedOffOf(c.edge)! }),
     });
   };
 
@@ -656,7 +672,9 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       // there: one step, no subtree, outside the visit budget — so the second request does
       // not re-print the container, and a later genuine call to the same function is not a
       // re-visit of it (01 §2.3.3).
-      const origin = c.edge.meta?.origin === 'setup' ? 'setup' : c.edge.meta?.deferred ? 'deferred' : undefined;
+      // a call the code switches off with a constant is named where it is written and not walked: nothing under
+      // it runs, so nothing under it is this journey's work (lane moves, 2026-10-13)
+      const origin = c.edge.meta?.origin === 'setup' ? 'setup' : c.edge.meta?.deferred ? 'deferred' : switchedOffOf(c.edge) ? 'switchedOff' : undefined;
       if (origin) {
         if (origin === 'setup') {
           if (setupSeen.has(c.childId)) continue;
@@ -909,7 +927,7 @@ export function journeyChoices(index: GraphIndex, j: Journey): Map<number, Journ
   for (const s of j.steps) {
     // the boot and the work that runs later are named where they were reached, never
     // walked — they are not a call site anyone is reading down
-    if (!s.edgeId || s.setup || s.deferred || s.planned) continue;
+    if (!s.edgeId || s.setup || s.deferred || s.switchedOff || s.planned) continue;
     const p = parentOf.get(s.order) ?? -1;
     const parent = p >= 0 ? stepById.get(p) : undefined;
     if (!parent) continue;
@@ -1026,7 +1044,7 @@ export function journeyTransactions(index: GraphIndex, j: Journey): { known: boo
     // the boot and the work that runs later are named where they were reached, never
     // sequenced with the caller's own hops — `meta.tx` on a deferred edge says the
     // *registration* was inside a transaction, not the work
-    if (s.setup || s.deferred) continue;
+    if (s.setup || s.deferred || s.switchedOff) continue;
     const p = parentOf.get(s.order) ?? -1;
     if (p < 0) continue;
     const list = kids.get(p);
@@ -1157,6 +1175,11 @@ export interface JourneyMoment {
   declared: boolean;
   /** deferred work registered inside this action — the Afterwards row (R2) */
   afterwards: { stepOrder: number; nodeId: string; name: string; title?: string; hostStep: number }[];
+  /**
+   * calls this action's code makes only when a constant it fixes says so, and the constant says no — named, never
+   * walked (lane moves, 2026-10-13). Absent when there are none.
+   */
+  switchedOff?: { stepOrder: number; nodeId: string; name: string; flag: string; value: boolean; at: string }[];
   counts: { markers: number; calls: number; planned: number; records: number; messages: number; helpers: number };
   /**
    * what this action needs before it goes through (core gates.ts `withJourneyPreconditions`): the gates
@@ -1611,9 +1634,12 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     }
   }
 
+  /** the calls a constant switches off: named on the action that holds them, never a marker */
+  const switchedOffSteps: { stepOrder: number; nodeId: string; name: string; flag: string; value: boolean; at: string }[] = [];
   for (const s of j.steps) {
     const n = index.byId.get(s.nodeId);
     if (!n) continue;
+    if (s.switchedOff) { switchedOffSteps.push({ stepOrder: s.order, nodeId: n.id, name: nameOf(n), ...s.switchedOff }); continue; }
     const repo = repoOf(n);
     if (n.loc) repos.add(repo);
     const business = businessSummary(n);
@@ -1909,6 +1935,12 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     // what the design says somebody does on this screen outside the code — a build state of its own, never a stop
     const off = offPlatformSteps(index, sg.screen ? index.byId.get(sg.screen.id) : undefined);
     if (off.length) sg.offPlatform = off;
+    for (const so of switchedOffSteps) {
+      if (so.stepOrder < sg.from || so.stepOrder > sg.to) continue;
+      let at = 0;
+      for (let k = moments.length - 1; k >= 0; k--) if (so.stepOrder >= moments[k]!.from) { at = k; break; }
+      (moments[at]!.switchedOff ??= []).push(so);
+    }
     for (const mk of sg.markers) {
       let at = 0;
       for (let k = moments.length - 1; k >= 0; k--) if (mk.stepOrder >= moments[k]!.from) { at = k; break; }

@@ -12,7 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
-  lifecycleLines, lifecycleViews, lifecycleViewLines,
+  lifecycleLines, lifecycleViews, lifecycleViewLines, switchesOf, switchLines, recordSwitchLines,
   GraphStore, buildIndex, setFreshnessMeta, search, trace, rulesFor, isDeclaredOnly, journey, journeySummary, journeyChoices, journeyTransactions, screensFor, resolveEntry, categorizeBranch, businessSummary,
   t,
   readModelHubState, resolveModelHubDir,
@@ -128,6 +128,9 @@ function nodeDetail(n: GraphNode, full = false): string {
     const personaIds = Object.keys(n.lifecycle.names?.views ?? {});
     const views = lifecycleViews(index, n, { personas: personaIds.map((id) => ({ id, name: id })) });
     lines.push(...lifecycleViewLines(views).map((l) => `  ${l}`));
+    // the moves the code holds under a call a constant switches off (lane moves, 2026-10-13): named, never credited
+    const sw = recordSwitchLines(index, n);
+    if (sw.length) lines.push(`  ${t('switch.section', 'professional')}`, ...sw.map((l) => `  ${l}`));
   }
   // the workspace project the node sits in, its type and its tags by dimension (dependencies-and-nx.md §2.2)
   const projRepo = n.loc?.repo ?? n.id.split('::')[0]!;
@@ -612,6 +615,7 @@ server.registerTool('graph_overview', {
     '## what is in it',
     ...journeysTools.overviewLines(),
     ...flowLines(),
+    ...switchOverviewLines(),
     ...routePrefixLines(),
     ...dataLines(),
     ...queueLines(),
@@ -624,6 +628,14 @@ server.registerTool('graph_overview', {
   ];
   return text(lines.join('\n'));
 });
+
+/** One line: the constants that switch a call on or off (core switches.ts), then each one — absent when there are none. */
+function switchOverviewLines(): string[] {
+  const a = switchesOf(index);
+  if (!a.switches.length) return [];
+  const off = a.switches.filter((x) => x.off).length;
+  return [t('switch.overview', 'professional').replace('{count}', countedText(a.counted)).replace('{off}', String(off)), ...switchLines(a.switches)];
+}
 
 /** The tier line: which tier is on, how many tools, and how to get the other (tiers.ts). */
 function toolsTierLine(): string {
