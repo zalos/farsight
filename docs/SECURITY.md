@@ -56,6 +56,24 @@ transport in `packages/core/src/keychain.ts`; their reference and authorization 
 input, output and elapsed time. Live hooks currently retrieve bounded saved excerpts; they do not call a model
 or automatically capture conversation content.
 
+**Sub-mind research is explicit and read-only.** New and legacy profiles default to off. Mock research
+never reaches a model; the standalone synthetic demo has no network or backend dependency. In model mode,
+explicit questions and selected memory evidence are sent to the configured endpoint. The controller enforces
+per-request candidate, search, input, output and deadline limits, validates citations against inspected records,
+and constructs follow-up actions itself. It has no mutation or shell tools. The private bridge admits one research
+job per profile process, aborts disconnected callers, and rechecks settings before returning results. Both normal
+and exact-id reads verify the complete profile namespace. A content hash detects changed evidence; it is not a
+promise of retained historical revisions. Search coverage remains non-exhaustive because the pinned backend
+ranks globally before applying scope filters. Requests with no provider usage report unknown token totals.
+
+Models may use a remote HTTPS API or a localhost tunnel. The explicit model-only allowInsecureHttp setting
+permits canonical private IPv4 literals in RFC1918 ranges; public HTTP and remote DNS names remain refused.
+The exception refuses credentials on remote plaintext transport, but questions and evidence are still unencrypted.
+It does not change backend endpoint policy, expose the local bridge, or manage the remote model service.
+Settings loads and provider dispatch both enforce this policy. Research policy and all budgets are included in
+session fingerprints, so upgrading or changing them requires a fresh session and service restart. Existing hooks
+remain bounded raw recall and never automatically invoke the sub-mind in this milestone.
+
 **Only the explicitly installed engine runs.** `install-runtime` fetches a pinned iii release from GitHub and
 compares the complete archive with its compiled-in SHA-256 before extraction. It stores the executable under
 `~/.cache/farsight-echo/runtime/<version>/<platform>/`, never under a checkout's `.echo/` directory. The cache

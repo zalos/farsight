@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { ECHO_UI_STRINGS } from '@farsight/core/dist/strings-echo-ui.js';
-import { updateConfig, validateConfig } from './config.js';
+import { submindSettings, updateConfig, validateConfig } from './config.js';
 import { requireFileTrust } from './trust.js';
 import type { CheckResult, EchoConfig, EchoContext } from './types.js';
 
@@ -27,11 +27,17 @@ function publicConfig(config: EchoConfig): EchoConfig {
     profiles[id] = {
       identity: { individual: p.identity.individual, team: p.identity.team, project: p.identity.project },
       backend: { mode: p.backend.mode, url: p.backend.url, secretRef: p.backend.secretRef },
-      model: { provider: p.model.provider, baseUrl: p.model.baseUrl, model: p.model.model, secretRef: p.model.secretRef },
+      model: { provider: p.model.provider, baseUrl: p.model.baseUrl, model: p.model.model, secretRef: p.model.secretRef, ...(p.model.allowInsecureHttp === undefined ? {} : { allowInsecureHttp: p.model.allowInsecureHttp }) },
       web: { port: p.web.port, farsightOrigin: p.web.farsightOrigin },
       hooks: { claude: p.hooks.claude, codex: p.hooks.codex, vscode: p.hooks.vscode ?? false },
       skills: { directories: [...p.skills.directories] },
       budget: { briefMaxChars: p.budget.briefMaxChars, modelMaxTokens: p.budget.modelMaxTokens, timeoutMs: p.budget.timeoutMs },
+      ...(p.submind ? { submind: {
+        mode: p.submind.mode, maxSteps: p.submind.maxSteps, maxSearches: p.submind.maxSearches,
+        maxCandidates: p.submind.maxCandidates, evidenceMaxChars: p.submind.evidenceMaxChars,
+        inputMaxChars: p.submind.inputMaxChars, lookbackDays: p.submind.lookbackDays,
+        timeoutMs: p.submind.timeoutMs, expandedMaxChars: p.submind.expandedMaxChars,
+      } } : {}),
     };
   }
   return { version: 1, defaultProfile: config.defaultProfile, profiles };
@@ -98,6 +104,8 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
   const activeProfile = ctx.profileId;
   const activeIdentity = structuredClone(ctx.profile.identity);
   const activeDataDirectory = ctx.dataDirectory;
+  const activeSubmindMode = submindSettings(ctx.profile).mode;
+  const defaults = { submind: submindSettings({ ...ctx.profile, submind: undefined }) };
   // Installation describes this process, never a value an editor may save or move.
   // Keep the actual opened path authoritative and copy only the public fields.
   const installation: WebInstallation = {
@@ -128,7 +136,7 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
       if (req.method === 'GET' && path === '/api/settings') {
         try {
           const current = await snapshot(ctx.configPath);
-          json(res, 200, { ...current, installation, running: { profileId: activeProfile, identity: activeIdentity, dataDirectory: activeDataDirectory } }, current.revision);
+          json(res, 200, { ...current, installation, defaults, running: { profileId: activeProfile, identity: activeIdentity, dataDirectory: activeDataDirectory, submindMode: activeSubmindMode } }, current.revision);
         } catch { fail(res, 503, 'unavailable'); }
         return;
       }

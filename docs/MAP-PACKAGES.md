@@ -15,12 +15,15 @@
   | `installation.ts` | local/global resolution, one workspace connection pointer, preflight, backups and pointer removal |
   | `secrets.ts` | Echo-only keychain references; origin verification before OS keychain access |
   | `sessions.ts` | immutable host-session bindings across both configuration and workspace state |
-  | `models.ts` | bounded Ollama and OpenAI-compatible requests; model listing and explicit stateless summaries |
+  | `models.ts` | bounded Ollama and OpenAI-compatible requests; model listing, explicit summaries, structured sub-mind generations, exact request accounting and remote transport policy |
+  | `submind-types.ts`, `submind.ts` | typed research results/actions, read-only mock/model controller, bounded follow-up searches, validated citations, usage and exact evidence expansion |
+  | `research-store.ts` | scoped candidate searches and exact reads, content-bound revisions, separate evidence limits and explicit incomplete coverage |
+  | `submind-demo.ts` | synthetic in-memory demonstration with no settings, service, persistence or model dependency |
   | `runtime.ts` | pinned agentmemory/iii versions, user-owned engine cache and hash verification, four reserved loopback ports, restricted child environment, foreground process ownership and backend requests |
   | `smoke.ts` | synthetic save/recall, persistence, profile isolation and optional explicit model checks |
   | `hooks.ts` | reviewable Claude/Codex plugin preparation and VS Code hook files; only session-start and prompt events |
   | `workspace-hooks.ts` | local host installation, Git excludes, profile retargeting, private restore journal and non-destructive disconnect |
-  | `memory.ts` | owner-only Unix-socket transport, bounded explicit saves/recalls, credential-shape refusal and profile namespaces |
+  | `memory.ts` | owner-only Unix-socket transport, bounded saves/recalls/research/expansion, single active research job, cancellation, credential-shape refusal and profile namespaces |
   | `memory-provenance.ts` | verified originating workspace and HEAD revision, save time, content-bound private attribution records |
   | `hook-context.ts` | JSON-encoded untrusted memory excerpts, historical provenance and visible omission notices within the brief budget |
   | `web.ts`, `public/app.js`, `public/style.css` | loopback settings API/view, request guards, revision checks, installation location and running-profile display |
@@ -28,10 +31,10 @@
   | `words.ts` | professional-register runtime messages from the shared catalog |
   | `test/run.mjs`, `test/` | isolated user-state test runner and focused package tests |
 
-  Echo's six two-register catalog modules live in `packages/core/src/`: `strings-echo-config.ts` (settings,
+  Echo's seven two-register catalog modules live in `packages/core/src/`: `strings-echo-config.ts` (settings,
   trust and model errors), `strings-echo-installation.ts` (location and connection selection),
   `strings-echo-hooks.ts` (host preparation/install/remove guidance), `strings-echo-memory.ts` (memory bridge
-  outcomes), `strings-echo-runtime.ts` (CLI/runtime/hook context), and `strings-echo-ui.ts` (settings view).
+  outcomes), `strings-echo-submind.ts` (research instructions and synthetic examples), `strings-echo-runtime.ts` (CLI/runtime/hook context), and `strings-echo-ui.ts` (settings view).
   Shared credential helpers live in `packages/core/src/`:
 
   | core module | responsibility |

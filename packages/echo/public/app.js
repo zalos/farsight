@@ -12,7 +12,7 @@ const word = (tag, key, className = '') => {
   node.title = strings[`echo.ui.${key}`].define;
   return node;
 };
-let config, revision, running, installation, selected, baseline;
+let config, revision, running, installation, selected, baseline, defaults;
 let form, profileList, saveButton, editState, notice;
 let busy = false;
 
@@ -89,7 +89,16 @@ function captureForm() {
   const p = config.profiles[selected];
   p.identity = { individual: value('individual'), team: optional('team'), project: value('project') };
   p.backend = { mode: value('backendMode'), url: value('backendUrl'), ...(value('backendMode') === 'external' ? { secretRef: optional('backendSecret') } : {}) };
-  p.model = { provider: value('provider'), baseUrl: value('modelUrl'), model: value('modelName'), secretRef: optional('modelSecret') };
+  p.model = { provider: value('provider'), baseUrl: value('modelUrl'), model: value('modelName'), secretRef: optional('modelSecret'), ...(p.model.allowInsecureHttp !== undefined || values.has('allowInsecureHttp') ? { allowInsecureHttp: values.has('allowInsecureHttp') } : {}) };
+  const submind = {
+    mode: value('submindMode'),
+    maxSteps: Number(value('maxSteps')), maxSearches: Number(value('maxSearches')),
+    maxCandidates: Number(value('maxCandidates')), evidenceMaxChars: Number(value('evidenceMaxChars')),
+    inputMaxChars: Number(value('inputMaxChars')), lookbackDays: Number(value('lookbackDays')),
+    timeoutMs: Math.round(Number(value('submindTimeout')) * 1000), expandedMaxChars: Number(value('expandedMaxChars')),
+  };
+  // Older settings remain byte-shape compatible until the reader changes this policy.
+  if (p.submind || Object.keys(submind).some(key => submind[key] !== defaults.submind[key])) p.submind = submind;
   p.web = { port: Number(value('port')), farsightOrigin: optional('farsightOrigin') };
   p.hooks = { claude: values.has('claude'), codex: values.has('codex'), vscode: values.has('vscode') };
   p.skills = { directories: value('skillDirectories').split('\n').map(line => line.trim()).filter(Boolean) };
@@ -153,7 +162,29 @@ function renderForm() {
   setBackendMode();
   memory.grid.append(backendMode, field('backendUrl', 'backendUrl', p.backend.url, { type: 'url', required: true, wide: true }), backendSecret);
   const model = section('model', 'modelNote');
-  model.grid.append(field('provider', 'provider', p.model.provider, { options: [['ollama', 'ollama'], ['openai-compatible', 'compatible']], wide: true }), field('modelUrl', 'modelUrl', p.model.baseUrl, { type: 'url', required: true, wide: true }), field('modelName', 'modelName', p.model.model, { wide: true, hint: 'optional' }), field('secretRef', 'modelSecret', p.model.secretRef, { wide: true, hint: 'secretsNote' }));
+  model.grid.append(field('provider', 'provider', p.model.provider, { options: [['ollama', 'ollama'], ['openai-compatible', 'compatible']], wide: true }), field('modelUrl', 'modelUrl', p.model.baseUrl, { type: 'url', required: true, wide: true }), field('modelName', 'modelName', p.model.model, { wide: true, hint: 'optional' }), field('secretRef', 'modelSecret', p.model.secretRef, { wide: true, hint: 'secretsNote' }), toggle('allowInsecureHttp', 'allowInsecureHttp', p.model.allowInsecureHttp), word('p', 'remoteModelNote', 'field-hint wide'));
+  const submind = section('submind', 'submindNote');
+  submind.card.classList.add('submind');
+  const policy = p.submind ?? defaults.submind;
+  const mode = field('submindMode', 'submindMode', policy.mode, { options: [['off', 'submindOff'], ['mock', 'submindMock'], ['model', 'submindModel']], wide: true });
+  const modeNote = word('p', `submind${policy.mode[0].toUpperCase()}${policy.mode.slice(1)}Note`, 'mode-note');
+  modeNote.setAttribute('role', 'status');
+  mode.addEventListener('change', () => {
+    const value = mode.querySelector('select').value;
+    const key = `submind${value[0].toUpperCase()}${value.slice(1)}Note`;
+    modeNote.textContent = t(key);
+    modeNote.title = strings[`echo.ui.${key}`].define;
+  });
+  submind.grid.append(mode, modeNote,
+    field('maxSteps', 'maxSteps', policy.maxSteps, { type: 'number', min: 1, max: 8, required: true }),
+    field('maxSearches', 'maxSearches', policy.maxSearches, { type: 'number', min: 1, max: 8, required: true }),
+    field('maxCandidates', 'maxCandidates', policy.maxCandidates, { type: 'number', min: 1, max: 50, required: true }),
+    field('lookbackDays', 'lookbackDays', policy.lookbackDays, { type: 'number', min: 1, max: 3650, required: true }),
+    field('evidenceMaxChars', 'evidenceMaxChars', policy.evidenceMaxChars, { type: 'number', min: 128, max: 64000, required: true }),
+    field('inputMaxChars', 'inputMaxChars', policy.inputMaxChars, { type: 'number', min: 1024, max: 256000, required: true }),
+    field('submindTimeout', 'submindTimeout', policy.timeoutMs / 1000, { type: 'number', min: 0.1, max: 300, step: '0.001', required: true }),
+    field('expandedMaxChars', 'expandedMaxChars', policy.expandedMaxChars, { type: 'number', min: 128, max: 64000, required: true }),
+    word('p', 'submindLimitsNote', 'field-hint wide'));
   const hooks = section('hooks', 'hooksNote');
   hooks.grid.append(toggle('claude', 'claude', p.hooks.claude), toggle('codex', 'codex', p.hooks.codex), toggle('vscode', 'vscode', p.hooks.vscode));
   const skills = section('skills', 'skillsNote');
@@ -161,7 +192,7 @@ function renderForm() {
   const limits = section('limits');
   limits.grid.append(field('briefLimit', 'briefLimit', p.budget.briefMaxChars, { type: 'number', min: 128, max: 16384, required: true }), field('tokenLimit', 'tokenLimit', p.budget.modelMaxTokens, { type: 'number', min: 32, max: 4096, required: true }), field('timeout', 'timeout', p.budget.timeoutMs / 1000, { type: 'number', min: 0.1, max: 300, step: '0.001', required: true }), field('port', 'port', p.web.port, { type: 'number', min: 1024, max: 65535, required: true }), field('farsightOrigin', 'farsightOrigin', p.web.farsightOrigin, { type: 'url', wide: true, hint: 'embedNote' }));
   const cards = el('div', 'cards');
-  cards.append(identity.card, memory.card, model.card, hooks.card, skills.card, limits.card);
+  cards.append(identity.card, memory.card, model.card, submind.card, hooks.card, skills.card, limits.card);
   form.append(cards);
 }
 
@@ -177,6 +208,7 @@ async function load() {
   revision = data.revision;
   running = data.running;
   installation = data.installation;
+  defaults = data.defaults;
   baseline = JSON.stringify(config);
   if (!selected || !config.profiles[selected]) selected = config.profiles[running.profileId] ? running.profileId : config.defaultProfile;
 }
@@ -187,7 +219,7 @@ function render() {
   const brand = el('div');
   brand.append(word('p', 'eyebrow', 'eyebrow'), word('h1', 'brand', 'brand'));
   const state = el('div', 'runtime');
-  state.append(word('span', 'running', 'eyebrow'), el('strong', '', running.profileId));
+  state.append(word('span', 'running', 'eyebrow'), el('strong', '', running.profileId), word('span', 'runningSubmind', 'eyebrow'), word('strong', `submind${running.submindMode[0].toUpperCase()}${running.submindMode.slice(1)}`));
   header.append(brand, state);
   const hero = el('div', 'hero');
   hero.append(word('span', 'foundation', 'badge'), word('h2', 'headline'), word('p', 'intro'));

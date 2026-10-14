@@ -1,3 +1,5 @@
+import type { SubmindSettings } from './submind-types.js';
+
 /** Versioned setup contract. Identity labels are local routing metadata, not team authorization. */
 export interface EchoConfig {
   version: 1;
@@ -8,7 +10,8 @@ export interface EchoConfig {
 export interface EchoProfile {
   identity: { individual: string; team?: string; project: string };
   backend: { mode: 'managed' | 'external'; url: string; secretRef?: string };
-  model: { provider: 'ollama' | 'openai-compatible'; baseUrl: string; model: string; secretRef?: string };
+  model: { provider: 'ollama' | 'openai-compatible'; baseUrl: string; model: string; secretRef?: string; allowInsecureHttp?: boolean };
+  submind?: SubmindSettings;
   web: { port: number; farsightOrigin?: string };
   hooks: { claude: boolean; codex: boolean; vscode?: boolean };
   skills: { directories: string[] };
