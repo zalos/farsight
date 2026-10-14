@@ -41,6 +41,33 @@ All eight return the same skeleton — Verdict, Fit score, sections, then `[BLOC
 4. **Single-voice gems** — high-severity findings only one persona could have caught (Rafael's accessibility items, Anna's bypass paths). Don't let vote-counting drown them.
 5. **Unanswered questions** — the union of every persona's "questions I'd ask" is a ready-made FAQ/backlog.
 
+## The outsiders — a comprehension round, not a review (2026-10-13)
+
+The eight personas judge *Farsight*. Three further agents judge **how much of the application a stranger can
+understand through Farsight** — they are shown a demo and asked to say the application back, not to score the tool.
+
+| Outsider | Agent | Needs to leave with |
+|---|---|---|
+| Nadia Ferreira, new implementation consultant | `review-outsider-consultant` | roles, the record's flow with its side paths, the rules before approval, what is configurable — well enough to train a client |
+| Grant Whitfield, head of operations at a prospective customer | `review-outsider-customer` | who approves, what is checked, how a vendor is proven real, the bad paths, where money moves, built vs promised |
+| Eleanor Voss, non-executive director doing diligence | `review-outsider-board` | the one-paragraph story, where money moves and what it depends on, the controls, what is real, the audit-committee risks |
+
+They share one output skeleton (*could I explain it* · understanding n/10 · confidence n/10 · the application in my
+words with every claim marked `[sure]` / `[think so]` / `[guessing]` · questions asked and whether the tool answered
+them · what I still cannot say · where I was misled · where the tool got in my way · three things I'd tell the team),
+so the three merge the same way the eight do.
+
+**The demo guide lives in the application's own repository**, not here: an agent that drives the read-only Farsight
+server on that application, narrates each stop in plain words, answers questions, and knows **only what Farsight
+shows** — it never reads the application's code or docs. Everything it cannot answer goes into a gap log: the
+question, what Farsight showed instead, and what knowledge about the application Farsight would have needed (a
+manifest field, a config block, a doc tag, a parser capability). The outsiders' wrong guesses and the guide's gap log
+are the round's product: the first says where Farsight misleads, the second what to add from the application. Run:
+the guide walks the stops and writes the pack (PNGs + narration + the seed questions through ASK); the outsiders read
+the pack, say it back and ask; the lead relays the questions to the guide, who answers from new screenshots; the
+outsiders write their reports; synthesize as a comprehension board, what all three got right, what all three got wrong
+or could not say, and the gap log ranked by how many asked. Reports and PNGs stay outside the repo.
+
 ## Extending
 
 To add a persona, copy any agent file and change: identity, world/tools background, personality, the "What you look for" bullets, and the header of the output format. Keep the output skeleton identical — it's the contract that makes swarm synthesis cheap.
