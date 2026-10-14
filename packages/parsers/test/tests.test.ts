@@ -157,7 +157,7 @@ test('a results report joins status + duration onto the case, and the stamped re
   assert.equal(meta.blindSpots.some((s: string) => s.includes('records no source digest')), false);
 });
 
-test('the e2e report joins one run per Playwright project: a flaky verdict keeps its retries and a skipped project is not a pass', async () => {
+test('the e2e report joins one run per Playwright project: a flaky verdict keeps its retries, and a project that skipped by its own condition is said beside the pass', async () => {
   const f = await ingestRepo(invoiceApp, { repoName: 'invoice-app' });
   const list = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name.startsWith('the invoice list'))!;
   assert.deepEqual(list.test!.runs!.map((r) => [r.project, r.status]), [['desktop-1440', 'passed'], ['mobile-390', 'flaky']]);
@@ -168,7 +168,12 @@ test('the e2e report joins one run per Playwright project: a flaky verdict keeps
 
   const created = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name.startsWith('a new invoice is created'))!;
   assert.deepEqual(created.test!.runs!.map((r) => [r.project, r.status]), [['desktop-1440', 'passed'], ['mobile-390', 'skipped']]);
-  assert.equal(created.test!.run!.status, 'skipped');
+  // passed where it ran; the mobile project skipped it by its own written condition, kept beside the fold (F3)
+  assert.equal(created.test!.run!.status, 'passed');
+  assert.deepEqual(created.test!.run!.projects, [
+    { project: 'desktop-1440', status: 'passed' },
+    { project: 'mobile-390', status: 'skipped', reason: 'Creating an invoice from the list is a desktop task; the mobile layout only reads the list.' },
+  ]);
 });
 
 test('the fixture\'s parametrised case joins its expanded rows, and .skip / .todo are inactive', async () => {

@@ -9,7 +9,7 @@
 // Runs against the built package: `pnpm build` first.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildIndex, foldRuns, readiness, journey, journeySummary, screensFor, journeyCoverage, projectSplitWords, STRINGS } from '../dist/index.js';
+import { buildIndex, foldRuns, readiness, journey, journeySummary, screensFor, journeyCoverage, projectSplitWords, heldWords, STRINGS } from '../dist/index.js';
 import type { GraphNode, GraphEdge, JourneyTree, TestRun } from '../dist/index.js';
 
 const R = 'app';
@@ -68,7 +68,8 @@ test('readiness ships a journey whose own case passed on one project and was ski
   const row = readiness(index, tree(), 's')!.rows[0]!;
   assert.equal(row.ship, true);
   assert.deepEqual(row.hold, []);
-  assert.deepEqual(row.notes.projectSkips, [{ id: E2E, name: 'walks', passedOn: ['desktop-1440'], skippedOn: [{ project: 'mobile-390', reason: REASON }] }]);
+  assert.deepEqual(row.notes.projectSkips, [{ id: E2E, name: 'walks', passedOn: ['desktop-1440'], skippedOn: [{ project: 'mobile-390', reason: REASON }],
+    words: { text: `note: walks passed on desktop-1440 · skipped on mobile-390 (${REASON})`, biz: `note: walks passed on desktop-1440; not run on mobile-390 (${REASON}) by its own condition` } }]);
   assert.equal(row.skipped, 0, 'the case is not counted skipped');
 });
 
@@ -76,8 +77,9 @@ test('readiness holds when no project passed, and names the project and the writ
   const index = app([run('skipped', 'desktop-1440', 'live only'), run('skipped', 'mobile-390', REASON)]);
   const row = readiness(index, tree(), 's')!.rows[0]!;
   assert.deepEqual(row.hold, ['skipped']);
-  assert.deepEqual(row.holdCases, [{ id: E2E, name: 'walks', status: 'skipped',
+  assert.deepEqual(row.holdCases.map(({ where: _w, ...c }) => c), [{ id: E2E, name: 'walks', status: 'skipped',
     projects: [{ project: 'desktop-1440', status: 'skipped', reason: 'live only' }, { project: 'mobile-390', status: 'skipped', reason: REASON }] }]);
+  assert.equal(row.holdCases[0]!.where!.text, `skipped on desktop-1440 (live only), mobile-390 (${REASON})`);
 });
 
 test('the verdict says both projects in one sentence, in both registers, and keeps its word', () => {
@@ -86,11 +88,29 @@ test('the verdict says both projects in one sentence, in both registers, and kee
   const cov = journeyCoverage(index, j, journeySummary(index, j, screensFor(index, FLOW)))!;
   const v = cov.journey.verdict;
   assert.equal(v.skipped, 0);
-  assert.deepEqual(v.projectSplit, { n: 1, passedOn: ['desktop-1440'], skippedOn: [{ project: 'mobile-390', reasons: [REASON] }] });
+  const { words, ...split } = v.projectSplit!;
+  assert.deepEqual(split, { n: 1, passedOn: ['desktop-1440'], skippedOn: [{ project: 'mobile-390', reasons: [REASON] }] });
+  assert.equal(words!.text, `passed on desktop-1440 · skipped on mobile-390 (${REASON})`);
   assert.equal(projectSplitWords(v.projectSplit!, false), `passed on desktop-1440 · skipped on mobile-390 (${REASON})`);
   assert.match(projectSplitWords(v.projectSplit!, true), /not run on mobile-390/);
-  for (const k of ['tests.projectSplit', 'tests.projectSplitMany', 'tests.projectSkipped', 'readiness.note.projectSkip']) {
+  for (const k of ['tests.projectSplit', 'tests.projectSplitMany', 'tests.biz.projectSplit', 'tests.projectSkipped', 'tests.skippedOn', 'readiness.note.projectSkip', 'readiness.held.line']) {
     assert.ok(STRINGS[k]?.define, k);
-    assert.ok(STRINGS[k]?.business, k);
+    assert.ok(STRINGS[k]?.professional, k);
   }
+});
+
+test('a journey the brief holds carries the brief’s one line beside its word; one that ships carries none', () => {
+  const cov = (runs: TestRun[]) => {
+    const index = app(runs);
+    const j = journey(index, FLOW);
+    return journeyCoverage(index, j, journeySummary(index, j, screensFor(index, FLOW)))!.journey;
+  };
+  assert.equal(cov([run('passed', 'desktop-1440'), run('skipped', 'mobile-390', REASON)]).held, undefined, 'it ships: nothing is paired');
+  const held = cov([run('skipped', 'desktop-1440', 'live only'), run('skipped', 'mobile-390', REASON)]).held!;
+  assert.deepEqual(held.reasons, ['skipped']);
+  assert.equal(heldWords(held), `held in the release brief: its own case was skipped — walks (skipped on desktop-1440 (live only), mobile-390 (${REASON}))`);
+  assert.match(heldWords(held, true), /^held back in the release brief: .*not run on desktop-1440/);
+  // the brief and the chip read one rule: the same cases
+  const r = readiness(app([run('skipped', 'desktop-1440', 'live only'), run('skipped', 'mobile-390', REASON)]), tree(), 's')!.rows[0]!;
+  assert.deepEqual(r.holdCases, held.cases);
 });

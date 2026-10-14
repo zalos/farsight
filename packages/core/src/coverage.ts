@@ -16,7 +16,7 @@
  * Nothing below the third rung may wear the word *verified*, and no surface
  * may invent a fourth rung.
  */
-import type { ConfidenceTier, GraphNode, ResolutionTechnique, TestRef, Loc } from './graph.js';
+import type { ConfidenceTier, GraphNode, ResolutionTechnique, TestRef, TestRunProject, Loc } from './graph.js';
 import type { GraphIndex, Journey, JourneySummary } from './query.js';
 import { flowScreenIds, isDeclaredOnly, journey } from './query.js';
 import { computeMetric, testsCovering, EVIDENCE_RANK, type MetricValue, type MetricScope, type CoveringTest } from './metrics.js';
@@ -96,6 +96,8 @@ export interface CoverageTestRef {
   inactive?: boolean;
   /** the Playwright / Nx project of the run behind this case */
   project?: string;
+  /** more than one project ran the case: each project's own status and a skip's own reason (core `foldRuns`) */
+  projects?: TestRunProject[];
   retries?: number;
   /** the node **in this scope** the test's edge lands on — judge a helper by what it reached */
   reaches: { nodeId: string; name: string; kind: GraphNode['kind'] };
@@ -217,6 +219,13 @@ export interface CoverageFacts {
    */
   notBuilt?: true;
   /**
+   * Flow scopes only: the journey's **own** declared end-to-end cases (a case whose `@covers` names this journey)
+   * that no project passed — the release brief holds the journey on them (`ownCaseHold`, the rule `readiness()`
+   * reads). A surface that prints this journey's word beside *passed* prints the brief's reason with it, so *PASSED*
+   * never stands alone beside *HOLD* (outsider demo 2026-10-13). A screen not built is said by `builtOnly` instead.
+   */
+  held?: OwnCaseHold;
+  /**
    * The covering tests' runs folded to their weakest verdict — kept for
    * consumers that read it, and **never printed as the cell's verdict**: one
    * skipped case among a hundred made it *skipped* beside a word a passed run
@@ -251,6 +260,12 @@ export interface EvidenceWord {
    * evidence is real, its scope is narrower.
    */
   builtOnly?: { built: number; of: number };
+  /**
+   * Flow scopes only, on a pass-type word (observed or stale): the release brief holds this journey on its own
+   * declared case (`CoverageFacts.held`), and this is the brief's one line in both registers. Every surface that prints
+   * the word prints this beside it (`lib/test-chip.js builtOnlyHtml`), so *PASSED* never stands alone beside *HOLD*.
+   */
+  held?: { text: string; biz: string };
 }
 
 /**
@@ -309,6 +324,77 @@ export interface TestVerdict {
   flaky: number;
   /** the scope is a designed, not-built screen: no word, no status (see `CoverageFacts.notBuilt`) */
   notBuilt?: true;
+  /**
+   * Cases counted *passed* in `runs` that a project skipped (outsider demo 2026-10-13, F3): they passed where they
+   * ran and one project did not run them, by its own written condition — *passed on desktop-1440 · skipped on
+   * mobile-390 (the ops console is designed for desktop)*. Said beside the word, never folded into it; absent when
+   * no case is split. `n` is a subset of the *passed* part, so the breakdown still sums.
+   */
+  projectSplit?: ProjectSplit;
+}
+
+/** Why the release brief holds a journey on its own declared cases, and which cases — `ownCaseHold`. */
+export interface OwnCaseHold {
+  /** in the brief's order: a failed case first */
+  reasons: ('failed' | 'skipped')[];
+  /** each case no project passed, with its projects and their written reasons when more than one ran it */
+  cases: { id: string; name: string; status: 'failed' | 'skipped'; projects?: TestRunProject[]; where?: { text: string; biz: string } }[];
+  /** the brief's one line (`heldWords`), made here so every printer says the same: code and hybrid, and business */
+  words?: { text: string; biz: string };
+}
+
+/**
+ * The journey's own declared cases — end-to-end cases whose `@covers` names the journey (by design id or node id) —
+ * and the hold they make: a case that failed, or that no project passed (skipped everywhere it was asked to run). A
+ * case that passed on one project and was skipped on another by its own condition **passed** (`foldRuns`), and is
+ * never a hold. The one rule `readiness()` and `CoverageFacts.held` read.
+ */
+export function ownCaseHold(index: GraphIndex, flowIds: string[], refs: CoverageTestRef[]): { own: CoverageTestRef[]; hold?: OwnCaseHold } {
+  const ids = new Set(flowIds.filter(Boolean));
+  const own = refs.filter((t) => {
+    if (t.level !== 'e2e' || t.runLevel) return false;
+    const d = index.byId.get(t.id)?.test?.declares ?? [];
+    return d.some((x) => ids.has(x));
+  });
+  const cases = own.filter((t) => t.status === 'failed' || t.status === 'skipped')
+    .map((t) => {
+      const where = projectSkipWords(t.projects);
+      return {
+        id: t.id, name: t.name, status: t.status as 'failed' | 'skipped',
+        ...(t.projects ? { projects: t.projects } : {}),
+        ...(where ? { where: { text: where, biz: projectSkipWords(t.projects, true) } } : {}),
+      };
+    })
+    .sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'failed' ? -1 : 1));
+  if (!cases.length) return { own };
+  const reasons = (['failed', 'skipped'] as const).filter((r) => cases.some((c) => c.status === r));
+  const hold: OwnCaseHold = { reasons, cases };
+  hold.words = { text: heldWords(hold), biz: heldWords(hold, true) };
+  return { own, hold };
+}
+
+/**
+ * The brief's one line for a held journey, as every printer says it: *held in the release brief: its own case was
+ * skipped — <case> (skipped on desktop-1440 (live only), mobile-390 (…))*. The reason words are the brief's own
+ * (`readiness.hold.*`).
+ */
+export function heldWords(held: OwnCaseHold, business = false, register: Register = 'professional'): string {
+  const reason = held.reasons.map((r) => t(`readiness.hold.${r}`, register)).join(' · ');
+  const cases = held.cases.map((c) => {
+    const where = projectSkipWords(c.projects, business, register);
+    return where ? `${c.name} (${where})` : c.name;
+  }).join('; ');
+  return fill(t(business ? 'readiness.biz.held.line' : 'readiness.held.line', register), { reason: `${reason} — ${cases}` });
+}
+
+/** The cases a project skipped while another passed them — `TestVerdict.projectSplit`. */
+export interface ProjectSplit {
+  n: number;
+  passedOn: string[];
+  /** each project that skipped, with the distinct reasons its cases' own conditions wrote (empty when none was written) */
+  skippedOn: { project: string; reasons: string[] }[];
+  /** the one sentence, made here so no printer words it (`projectSplitWords`): the code and hybrid register, and business */
+  words?: { text: string; biz: string };
 }
 
 /** One action's tests, slim: the chip, the word, the typed counts and the observing run — no test list, no metric. */
@@ -396,6 +482,7 @@ export function toCoverageRef(index: GraphIndex, t: CoveringTest, node: GraphNod
     ...(t.observedVia ? { observedVia: t.observedVia } : {}),
     ...(t.inactive ? { inactive: true } : {}),
     ...(t.project ? { project: t.project } : {}),
+    ...(t.run?.projects ? { projects: t.run.projects } : {}),
     ...(t.retries != null ? { retries: t.retries } : {}),
     reaches: node
       ? { nodeId: node.id, name: node.name, kind: node.kind }
@@ -660,11 +747,68 @@ export function testVerdict(
     bizUnit: 'journey.biz.countTests',
     breakdown: [...RUN_PARTS.map((s) => ({ key: `count.part.${s}`, n: n(s) })), { key: 'count.part.noRun', n: noRun }],
   });
+  const projectSplit = projectSplitOf(cases);
   return {
     word, ...(status && word.cls !== 'none' && word.cls !== 'declared' && word.cls !== 'reached' ? { status } : {}), runs,
     scopeWord: scopeWord(countScope), failed: n('failed'), skipped: n('skipped'), flaky: n('flaky'),
+    ...(projectSplit ? { projectSplit } : {}),
   };
 }
+
+/** The passed cases a project skipped, folded: which projects passed them, which skipped them and why. */
+function projectSplitOf(cases: Pick<CoverageTestRef, 'status' | 'projects'>[]): ProjectSplit | undefined {
+  let n = 0;
+  const passedOn = new Set<string>();
+  const skippedOn = new Map<string, Set<string>>();
+  for (const c of cases) {
+    if (c.status !== 'passed' || !c.projects?.some((p) => p.status === 'skipped')) continue;
+    n++;
+    for (const p of c.projects) {
+      if (p.status === 'passed') passedOn.add(p.project);
+      else if (p.status === 'skipped') {
+        const r = skippedOn.get(p.project) ?? new Set<string>();
+        if (p.reason) r.add(p.reason);
+        skippedOn.set(p.project, r);
+      }
+    }
+  }
+  if (!n) return undefined;
+  const split: ProjectSplit = {
+    n, passedOn: [...passedOn].sort(),
+    skippedOn: [...skippedOn].sort(([a], [b]) => a.localeCompare(b)).map(([project, r]) => ({ project, reasons: [...r].sort() })),
+  };
+  split.words = { text: projectSplitWords(split), biz: projectSplitWords(split, true) };
+  return split;
+}
+
+/**
+ * One case's projects (or a scope's split) as the one sentence every printer uses: *passed on desktop-1440 · skipped
+ * on mobile-390 (the ops console is designed for desktop)*; *n of them …* for more than one case; the business twin
+ * says *not run on … by its own condition*. A project with several written reasons says how many.
+ */
+export function projectSplitWords(split: ProjectSplit, business = false, register: Register = 'professional'): string {
+  const skipped = split.skippedOn.map((s) => (
+    s.reasons.length === 1 ? fill(t('tests.projectSkipped', register), { project: s.project, reason: s.reasons[0]! })
+      : s.reasons.length > 1 ? fill(t('tests.projectSkipped', register), { project: s.project, reason: fill(t('tests.projectReasons', register), { n: String(s.reasons.length) }) })
+        : s.project)).join(', ');
+  const key = `tests.${business ? 'biz.' : ''}${split.n === 1 ? 'projectSplit' : 'projectSplitMany'}`;
+  return fill(t(key, register), { n: String(split.n), passed: split.passedOn.join(', '), skipped });
+}
+
+/** A case no project passed, by its projects: *skipped on desktop-1440 (live only), mobile-390 (…)* — '' for one project. */
+export function projectSkipWords(projects: TestRunProject[] | undefined, business = false, register: Register = 'professional'): string {
+  if (!projects?.length) return '';
+  const skipped = projects.filter((p) => p.status === 'skipped')
+    .map((p) => (p.reason ? fill(t('tests.projectSkipped', register), { project: p.project, reason: p.reason }) : p.project)).join(', ');
+  return skipped ? fill(t(business ? 'tests.biz.skippedOn' : 'tests.skippedOn', register), { skipped }) : '';
+}
+
+/** A case's projects as a split (passed on one, skipped on another), for `projectSplitWords`; undefined otherwise. */
+export function caseProjectSplit(c: Pick<CoverageTestRef, 'status' | 'projects'>): ProjectSplit | undefined {
+  return projectSplitOf([c]);
+}
+
+const fill = (s: string, vars: Record<string, string>) => s.replace(/\{(\w+)\}/g, (m, k: string) => vars[k] ?? m);
 
 /**
  * The refs that earned an observed word, strongest attribution first: the
@@ -765,6 +909,14 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
     facts.evidenceWord = { ...facts.evidenceWord, builtOnly };
     facts.verdict = { ...facts.verdict, word: facts.evidenceWord };
   }
+  // the release brief's rule over this journey's own declared cases, carried so a word beside it is never alone
+  const held = scope.kind === 'flow' && scope.flowId
+    ? ownCaseHold(index, [scope.flowId, index.byId.get(scope.flowId)?.design?.id ?? ''], tests).hold
+    : undefined;
+  if (held?.words && (facts.evidenceWord.cls === 'observed' || facts.evidenceWord.cls === 'stale')) {
+    facts.evidenceWord = { ...facts.evidenceWord, held: held.words };
+    facts.verdict = { ...facts.verdict, word: facts.evidenceWord };
+  }
 
   // ── the run: the weakest verdict across the covering tests' runs ──
   const withRuns = active.filter((t) => t.at);
@@ -808,6 +960,7 @@ export function coverageFor(index: GraphIndex, nodeIds: string[], scope: MetricS
     ...(facts.observation ? { observation: facts.observation } : {}),
     ...(facts.freshness.state !== 'none' ? { freshness: facts.freshness } : {}),
     ...(sharedEvidence ? { sharedEvidence } : {}),
+    ...(held ? { held } : {}),
     ...(run ? { run } : {}),
     tests,
     ...(last?.at ? { lastRun: { at: last.at, status: last.status ?? 'unknown', freshness: last.freshness ?? 'unknown', stale: !!last.stale, ...(last.changedBy ? { changedBy: last.changedBy } : {}) } } : {}),
