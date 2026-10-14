@@ -1322,7 +1322,8 @@ function placesOf(index: GraphIndex, metas: Record<string, JourneysMeta> | undef
   out.sort((a, b) => (a.hops ?? 0) - (b.hops ?? 0));
   // one place per screen and action: the same screen on two journeys is one place a person acts from
   const once = (xs: typeof out) => { const seen = new Set<string>(); return xs.filter((x) => { const k = `${x.sg.screen?.id ?? ''}|${x.mo.label}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
-  return { live: once(out.length ? out : fallback), off: once(off) };
+  const offOnce = off.filter((x, i) => off.findIndex((y) => y.mo.label === x.mo.label && y.off!.flag === x.off!.flag) === i);
+  return { live: once(out.length ? out : fallback), off: offOnce };
 }
 
 function caseRows(tests: CoverageTestRef[], cap = 8): TourClause[] {

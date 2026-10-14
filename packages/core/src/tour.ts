@@ -353,7 +353,7 @@ export function tourOf(
         for (const so of mo.preconditions?.switchedOff ?? []) {
           const k = `${so.table}|${so.to}|${so.by}`;
           const list = offMoves.get(k) ?? [];
-          if (!list.some((x) => x.label === mo.label && x.screen === sg.screen!.name)) list.push({ label: mo.label, screen: sg.screen.name, ...(mo.preconditions?.action ? { action: mo.preconditions.action } : {}), flag: so.flag, value: so.value, at: so.at });
+          if (!list.some((x) => x.label === mo.label && x.flag === so.flag)) list.push({ label: mo.label, screen: sg.screen.name, ...(mo.preconditions?.action ? { action: mo.preconditions.action } : {}), flag: so.flag, value: so.value, at: so.at });
           offMoves.set(k, list);
         }
       }

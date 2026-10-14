@@ -1129,7 +1129,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
           live.sort((a, b) => Number(b.here) - Number(a.here) || (a.hops ?? 99) - (b.hops ?? 99) || a.rank - b.rank || a.screen - b.screen);
           // one place per screen and action: the same screen on two journeys is one place a person acts from
           const once = <T extends LifecyclePlace>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((p) => { const k = `${p.screenName}|${p.action ?? ''}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
-          return { live: once(live.map(({ rank: _r, ...p }) => p)), off: once(off) };
+          // a switched-off call is one fact per action, however many screens show that action
+          const offOnce = off.filter((p, i) => off.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
+          return { live: once(live.map(({ rank: _r, ...p }) => p)), off: offOnce };
         };
         return { node: id, name: node.name, views: lifecycleViews(g.index, node, { personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [], places }) };
       }, 32);

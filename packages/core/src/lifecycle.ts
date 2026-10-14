@@ -363,7 +363,9 @@ export function placesOnJourney(flow: { id: string; name: string }, j: Pick<Jour
     }
     const order = (a: LifecyclePlace, b: LifecyclePlace) => (a.hops ?? 99) - (b.hops ?? 99) || a.screen - b.screen;
     const dedupe = <T extends LifecyclePlace>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((p) => !seen.has(keyOf(p)) && !!seen.add(keyOf(p))); };
-    const out = { live: dedupe(live.sort(order)), off: dedupe(off.sort(order)) };
+    // a switched-off call is one fact per action, however many screens show that action
+    const offs = off.sort(order).filter((p, i, xs) => xs.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
+    const out = { live: dedupe(live.sort(order)), off: offs };
     cache.set(id, out);
     return out;
   };
