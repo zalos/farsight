@@ -67,15 +67,18 @@ test('fingerprint includes source, alias configuration, dependency manifests, op
 });
 
 test('include and exclude constrain source files without controlling enrichment', async () => {
-  await fixture({ ...sample, 'other/ignored.ts': 'export function ignored() {}', 'src/check.test.ts': 'export function testHelper() {}' }, async root => {
+  await fixture({ ...sample, 'other/ignored.ts': 'export function ignored() {}', 'other/legacy.py': 'print(1)', 'src/check.test.ts': 'export function testHelper() {}' }, async root => {
     const r = await parser.parseRepository({ root, sourceId: 'sample', include: ['src/**'], exclude: ['**/save.ts'] });
     assert.ok(!r.graph.nodes.some(n => n.name === 'ignored' || n.name === 'save'));
     assert.ok(r.graph.nodes.some(n => n.name === 'testHelper'));
+    assert.equal(r.analysis.complete, true, canonicalJson(r.analysis.diagnostics));
+    assert.ok(!r.analysis.files.some(f => f.path === 'other/legacy.py'));
     const withoutTests = await parser.parseRepository({ root, sourceId: 'sample', testFiles: 'exclude' });
     assert.ok(!withoutTests.graph.nodes.some(n => n.name === 'testHelper'));
     assert.ok(withoutTests.analysis.files.some(f => f.path === 'src/check.test.ts' && f.reason === 'test-file'));
     const empty = await parser.parseRepository({ root, sourceId: 'sample', include: [] });
     assert.equal(empty.graph.nodes.length, 0);
+    assert.equal(empty.analysis.complete, true);
   });
 });
 

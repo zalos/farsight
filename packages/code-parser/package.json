@@ -49,6 +49,7 @@
   },
   "dependencies": {
     "@farsight/graph": "workspace:^",
+    "@types/node": "26.1.0",
     "oxc-parser": "0.138.0",
     "@vscode/tree-sitter-wasm": "0.3.1"
   }

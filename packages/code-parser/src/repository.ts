@@ -21,6 +21,7 @@ export class RepositoryRead {
   readonly inputs = new Map<string, InputFingerprint>();
   readonly selected = new Set<string>();
   selectionReady = false;
+  discoveringSources = false;
   discoveryExtensions: readonly string[] = [];
   private readonly started = performance.now();
   private readonly bodies = new Map<string, Buffer>();

@@ -63,10 +63,14 @@ try {
     import { tsJsAdapter } from '@farsight/code-parser/adapters/tsjs';
     import { javaAdapter } from '@farsight/code-parser/adapters/java';
     import { graphDocument, type GraphFragment, type EdgeOccurrence } from '@farsight/graph';
+    import * as support from '@farsight/code-parser/support';
+    import * as semantics from '@farsight/graph/semantics';
+    import type { GraphNode } from '@farsight/graph/types';
     const result: AnalysisArtifact = await createParser({ adapters: [tsJsAdapter, javaAdapter] }).parseRepository({root: '.', sourceId: 'types'});
     const graph: GraphFragment = { repo: 'types', nodes: result.graph.nodes, edges: result.graph.edges };
     const occurrences: EdgeOccurrence[] | undefined = graph.edges[0]?.occurrences;
-    graphDocument(graph); void occurrences;
+    const node: GraphNode | undefined = graph.nodes[0];
+    graphDocument(graph); void occurrences; void node; void support; void semantics;
   `);
   run(process.execPath, [join(root, 'node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'consumer.mts']);
   console.log(`Parser tarballs verified outside workspace on ${process.platform}/${process.arch}: native Oxc, Java WASM, public types, serialization and independent traversal.`);

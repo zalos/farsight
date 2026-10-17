@@ -65,6 +65,9 @@ importers:
       '@farsight/graph':
         specifier: workspace:^
         version: link:../graph
+      '@types/node':
+        specifier: 26.1.0
+        version: 26.1.0
       '@vscode/tree-sitter-wasm':
         specifier: 0.3.1
         version: 0.3.1

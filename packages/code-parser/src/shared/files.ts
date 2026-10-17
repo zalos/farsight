@@ -57,7 +57,7 @@ export function collectFiles(
           continue;
         }
         out.push(abs);
-      } else if (scope && !scope.selectionReady && !scope.discoveryExtensions.some(ext => entry.endsWith(ext)) && /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|java|py|go|rs|cs|rb|php|kt|swift|c|cpp)$/.test(entry)) {
+      } else if (scope?.discoveringSources && !scope.selectionReady && (!includes || includes.some(re => re.test(rel))) && !scope.discoveryExtensions.some(ext => entry.endsWith(ext)) && /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|java|py|go|rs|cs|rb|php|kt|swift|c|cpp)$/.test(entry)) {
         scope.files.set(rel, { path: rel, status: 'skipped', reason: 'unsupported' });
         scope.report({ code: 'unsupported', severity: 'warning', path: rel, message: 'No registered adapter supports this source file.' });
       }

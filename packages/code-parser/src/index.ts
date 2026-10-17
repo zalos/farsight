@@ -58,6 +58,7 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
           scope.report({ code: 'read-error', severity: 'error', path: scope.path(file), message: 'Resolution input could not be read as a configuration object.' });
         }
       }
+      scope.discoveringSources = true;
       const files = collectFiles(scope.root, exts, opts, name => name.endsWith('.d.ts')).sort();
       for (const file of files) {
         if (scope.selected.size % 100 === 0) await yieldToEventLoop();

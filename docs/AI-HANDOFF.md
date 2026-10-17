@@ -41,6 +41,34 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Parser library extraction — 2026-10-17
+
+Branch `codex/parser-package-extraction`, including main at `056b9a6`, implements
+`docs/proposals/parser-package-extraction.md`. The paired MIT libraries `@farsight/graph` and
+`@farsight/code-parser` start at 0.1.0, independently of application releases. Graph types remain canonical;
+core re-exports them. Farsight's parser composes the same Oxc 0.138.0 and Tree-sitter WASM 0.3.1 adapters and
+retains configuration/enrichment ordering. Four pre-extraction fixtures pin TS/JS, Java, mixed and workspace
+structure, resolution evidence and enrichment. New occurrence evidence survives relationship deduplication
+and storage. See `docs/PARSER-LIBRARIES.md` for API, boundaries, tarballs and release instructions.
+
+The portable instance API adds explicit selection, per-file outcomes, diagnostics, bounded local reads,
+cooperative cancellation, immutable artifacts, and fingerprints of the bytes actually analyzed and resolution
+inputs. Graph v1 has generated runtime validation, canonical serialization and independent traversal.
+The low-level composition API preserves Farsight's legacy IO; its output is not the portable analysis cache key.
+
+Local validation under Node 24: workspace build and typechecks, 1,564 unit tests passed (two opt-in live tracker
+tests skipped), 20 script tests, string lint (3,477 entries), schema drift check, actionlint, 345 browser/MCP
+checks and 11 small-preset performance checks. Final portable-only file-selection and public-type corrections
+were followed by parser and compatibility reruns. Actual tarballs installed outside the workspace on
+macOS/arm64, parsed TS/JS and Java, resolved every public TypeScript entry point without skipLibCheck, and
+saved/reloaded/queried the graph in a separate process. CLI and Echo tarballs also built successfully.
+Linux/macOS tarball CI and the repository's six required checks run on the PR.
+
+Registry publication is separate: the owner must confirm npm scope/package access, bootstrap the two names
+and configure their trusted publisher and `parser-libraries` environment before the manual provenance
+workflow can publish. No npm publication, global install, deployed service or dogfood graph was changed.
+Complete execution/taint analysis and an agent-stage scheduler remain later work.
+
 ## PR #104 review and main refresh — 2026-10-17
 
 PR #104 remains open on `codex/echo-live-model`. The review branch `codex/pr-104-review` merged main
