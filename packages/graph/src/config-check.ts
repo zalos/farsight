@@ -61,4 +61,3 @@ export function isConfigCheck(node: GraphNode | undefined): boolean {
   if (node.loc?.endLine && node.loc.endLine - node.loc.line + 1 > CONFIG_CHECK_MAX_LINES && node.snippet && USE_CASE_PARAMS.test(paramsText(node.snippet))) return false;
   return !!node.snippet && configCheckOf(node.snippet);
 }
-
