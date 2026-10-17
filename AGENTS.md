@@ -10,6 +10,10 @@ This file is the canonical project guidance for Codex/GPT and Claude Code. `CLAU
 
 Use Node 24+ (`.nvmrc`) and pnpm 9.0.0. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. For concurrent implementation use separate worktrees, and record branch, changes, checks, and unresolved issues in the handoff before switching providers. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
 
+**Validate affected work only.** Use the change-to-check table in [docs/CI.md](docs/CI.md) for local checks too.
+Ordinary Markdown documentation edits need no build, unit tests or e2e; packaged docs and test fixtures are the
+exceptions. CI uses `scripts/ci-changes.mjs` to select suites, with full checks for shared or unknown inputs.
+
 **Preserve the dogfood graph:** bare CLI ingest replaces `graph.json` with a single source and does not apply workspace source excludes. Refresh the existing multi-source graph using the restarted workspace server's `POST /api/sync`. For isolated validation, run the absolute CLI path from a temporary directory with an explicit `--out`; snapshots are written relative to cwd too. Restart MCP connections after rebuilding or changing tools.
 
 ## Core principles (do not violate)
@@ -21,7 +25,18 @@ Use Node 24+ (`.nvmrc`) and pnpm 9.0.0. Build before tests, which import `dist/`
 
 ## Git conventions (conventional commits since 2026-07; PR-only, squash-merged `main` since 2026-10-04)
 
-Every change is a branch (`feat/…`, `fix/…`, `docs/…`, `chore/…`) and a pull request into `main`; nothing is committed or merged on `main` locally. **PRs are squash-merged** (`gh pr merge --squash`, the only kind `main` accepts), so one PR = one commit on `main` = one line in the changelog. That makes **the PR title the commit that matters**: it must be a [Conventional Commit](https://www.conventionalcommits.org/), `type(scope): what changed` with the scope a package name (`feat(parsers): …`, `fix(cli): …`, `docs: …`; the full type and scope lists live in `scripts/lint-commits.mjs`), and the PR body — the template `.github/PULL_REQUEST_TEMPLATE.md`: *what changed · why · how it was checked · left open* — becomes that commit's message. Commits on the branch are conventional too (the `commit-msg` hook that `pnpm install` installs and CI's required `commits` check both run `scripts/lint-commits.mjs`; `pnpm lint:commits --message '…'` tries a subject), but they are working notes: commit often and leave them as they are, the squash folds them. Never `--admin`, never a local merge into `main`, never `git stash` (see *Dispatching subagents*). History before July 2026 predates the convention; history before 2026-10-04 has merge commits — don't imitate either.
+Every change is a branch (`feat/…`, `fix/…`, `docs/…`, `chore/…`) and a pull request into `main`; nothing is committed or merged on `main` locally. **PRs are squash-merged** (`gh pr merge --squash`, the only kind `main` accepts), so one PR = one commit on `main` = one line in the changelog. That makes **the PR title the commit that matters**: it must be a [Conventional Commit](https://www.conventionalcommits.org/), `type(scope): what changed` with an optional package or surface scope (`feat(parsers): …`, `fix(cli): …`, `docs: …`; the full type and scope lists live in `scripts/lint-commits.mjs`), and the PR body — the template `.github/PULL_REQUEST_TEMPLATE.md`: *what changed · why · how it was checked · left open* — becomes that commit's message. Commits on the branch are conventional too (the `commit-msg` hook that `pnpm install` installs and CI's required `commits` check both run `scripts/lint-commits.mjs`; `pnpm lint:commits --message '…'` tries a subject), but they are working notes: commit often and leave them as they are, the squash folds them. Never `--admin`, never a local merge into `main`, never `git stash` (see *Dispatching subagents*). History before July 2026 predates the convention; history before 2026-10-04 has merge commits — don't imitate either.
+
+**Required for both Codex and Claude:**
+
+- Every authored commit and PR title follows [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
+  `type: summary` or `type(scope): summary`. Scope is optional; use a registered scope when present. `feat` adds a
+  feature, `fix` repairs a bug, and `!` or a `BREAKING CHANGE:` footer marks a breaking change.
+- Validate the exact PR title with `pnpm lint:commits --message '…'` before create/edit/merge.
+  Preserve it as the squash-commit subject; the template-based PR body becomes its message.
+- PR/review feedback uses [Conventional Comments](https://conventionalcomments.org/): `label (blocking|non-blocking):
+  subject`, with a reason and requested action where useful. Notes/nitpicks are non-blocking. Correct your own
+  noncompliant material; preserve others' work. These labels do not apply to source-code comments or ordinary chat.
 
 ## Commands
 

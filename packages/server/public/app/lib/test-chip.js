@@ -14,7 +14,7 @@
 // Nothing here counts: every number and word is the fold's. The scope words fall
 // back to the scope key's own words against an older server.
 
-import { esc } from '../store.js';
+import { esc, currentLens } from '../store.js';
 import { t, def } from '../strings.js';
 import { sym } from '../sym.js';
 import { countedHtml, countWords, defAttrs, plainTip } from './counted.js';
@@ -56,12 +56,43 @@ export function runPartsHtml(verdict, api) {
  */
 export function builtOnlyHtml(ev) {
   const b = ev && ev.builtOnly;
-  if (!b) return { before: '', after: '', cls: '' };
+  const held = heldHtml(ev);
+  if (!b) return { before: '', after: held, cls: held ? ' held' : '' };
   return {
     before: '<span class="tc-pb"' + defAttrs('tests.builtOnly.before', null, { n: b.built, m: b.of }) + '>' + sym('warning') + esc(countWords('tests.builtOnly.before', b.built, b.of)) + '</span>' + SEP,
-    after: SEP + '<span class="tc-pba"' + defAttrs('tests.builtOnly.after', null, { n: b.built }) + '>' + esc(countWords('tests.builtOnly.after', b.built)) + '</span>',
-    cls: ' builtonly',
+    after: SEP + '<span class="tc-pba"' + defAttrs('tests.builtOnly.after', null, { n: b.built }) + '>' + esc(countWords('tests.builtOnly.after', b.built)) + '</span>' + held,
+    cls: ' builtonly' + (held ? ' held' : ''),
   };
+}
+
+/**
+ * The release brief's one line beside a pass-type word the brief holds (core `EvidenceWord.held`, made by
+ * `ownCaseHold` — the rule `readiness()` reads): *held in the release brief: its own case was skipped*, the cases named in its tip. Said
+ * after the word on every surface that prints it through here, so *PASSED* never stands alone beside *HOLD*
+ * (outsider demo 2026-10-13). '' when the brief ships the journey.
+ */
+export function heldHtml(ev) {
+  const h = ev && ev.held;
+  if (!h) return '';
+  const biz = currentLens() === 'business';
+  // the line is the brief's reason; the tip names every case and where it skipped (an older server sends no `full`)
+  return SEP + '<span class="tc-held" data-held' + tipAttrs({ text: (biz ? h.fullBiz : h.full) || (biz ? h.biz : h.text) }) + '>' + sym('warning')
+    // the Map head's line 1 is a budget: it prints the short word (`readiness.held.short`), every other row the line
+    + '<span class="tc-held-long">' + esc(biz ? h.biz : h.text) + '</span><span class="tc-held-short">' + esc(t('readiness.held.short')) + '</span></span>';
+}
+
+/**
+ * The cases a project skipped while another passed them (core `TestVerdict.projectSplit`): *passed on desktop-1440 ·
+ * skipped on mobile-390 (…)* — the sentence is core's, in the lens's register. '' when no case is split.
+ */
+export function projectSplitHtml(verdict) {
+  const p = verdict && verdict.projectSplit;
+  if (!p || !p.words) return '';
+  const biz = currentLens() === 'business';
+  const key = biz ? (p.n === 1 ? 'tests.biz.projectSplit' : 'tests.biz.projectSplitMany') : (p.n === 1 ? 'tests.projectSplit' : 'tests.projectSplitMany');
+  // the chip row names the projects; the tip fills the sentence with each project's quoted reason (an older server sends no `short`)
+  const vars = { n: p.n, passed: (p.passedOn || []).join(', '), skipped: p.words.skipped || (p.skippedOn || []).map((k) => k.project).join(', ') };
+  return '<span class="tc-split-w">' + SEP + '<span class="tc-split" data-project-split="' + esc(String(p.n)) + '"' + defAttrs(key, null, vars) + '>' + esc((biz ? p.words.shortBiz : p.words.short) || (biz ? p.words.biz : p.words.text)) + '</span></span>';
 }
 
 /** The evidence word as a chip, with the journey's evidence tip (registered by the journey surface). */
@@ -138,6 +169,7 @@ export function testChipHtml(facts, opts = {}) {
     + num + SEP + scopeWordHtml(scope) + distinct
     + (word ? SEP + word + (opts.basis === false ? '' : testBasisHtml(f)) : '')
     + (opts.runs === false ? runPartsHtml(f.verdict, opts.api) : runsSentenceHtml(f.verdict, opts.api))
+    + (opts.runs === false ? '' : projectSplitHtml(f.verdict))
     + '</span>';
 }
 

@@ -59,12 +59,25 @@ test('Ask answers a plain question with did you mean, and a click asks it', asyn
   await expect(box.locator('.ask-q')).toBeVisible();
   // the example is this graph's own
   await expect.poll(() => box.locator('.ask-q').getAttribute('placeholder')).toMatch(/^where is .+ set to .+, and what must be true first\?$/);
-  await box.locator('.ask-q').fill('who opens an invoice');
+  await box.locator('.ask-q').fill('opening invoices quickly');
   await box.locator('.ask-go').click();
   const sugg = box.locator('.ask-suggest .ask-sugg').first();
   await expect(sugg).toHaveText('where is invoice set to open, and what must be true first?');
   await sugg.click();
   await expect(box.locator('.ask-card')).toHaveAttribute('data-shape', 'set');
+});
+
+/** @covers packages/server/public/app/lib/ask.js::askCardHtml */
+test('Ask reads a question in other words as its nearest shape, and prints the reading first (outsider round, F7)', async ({ page }) => {
+  await gotoReady(page, '#/journeys');
+  const box = page.locator('.jrn-ask .ask-wrap').first();
+  await box.locator('.ask-q').fill('Who is allowed to approve an invoice?');
+  await box.locator('.ask-go').click();
+  const card = box.locator('.ask-card');
+  await expect(card).toHaveAttribute('data-shape', 'who');
+  await expect(card.locator('.ask-lead').first()).toHaveClass(/ask-read/);
+  await expect(card.locator('.ask-read')).toContainText('I read that as: “who may approve an invoice?”');
+  await expect(card).toContainText(/admin/);
 });
 
 /** @covers packages/server/public/app/surfaces/map.js::drawRisk */

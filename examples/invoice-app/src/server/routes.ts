@@ -34,3 +34,14 @@ import { approveInvoice } from './approvals';
 router.post('/invoices/:id/approve', requireScope('billing:admin'), async (req, res) => {
   res.json(await approveInvoice(req.params.id));
 });
+
+// Payments came after approvals: an intent, and the confirmation that marks the invoice paid.
+import { recordPaymentIntent, markInvoicePaid } from './payments';
+
+router.post('/invoices/:id/payment-intent', requireScope('billing:admin'), async (req, res) => {
+  res.json(await recordPaymentIntent(req.params.id, String(req.body?.ref ?? '')));
+});
+
+router.post('/invoices/:id/mark-paid', requireScope('billing:admin'), async (req, res) => {
+  res.json(await markInvoicePaid(req.params.id));
+});

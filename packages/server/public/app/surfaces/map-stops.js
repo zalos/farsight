@@ -24,7 +24,7 @@ import { t } from '../strings.js';
 import { sym } from '../sym.js';
 import { tipAttrs, registerTip } from '../lib/tooltip.js';
 import { designThumbHtml } from '../lib/graph-render.js';
-import { storylineOf, placesOf } from '../lib/journeys-model.js';
+import { storylineOf, placesOf, screenPersonaOthers } from '../lib/journeys-model.js';
 import { jrnPersonaName, jrnGroupName } from '../lib/journeys-tree.js';
 import { sheetModel, screenActions, screenOfAction, actionOfMarker, beatOrder, segmentActionOf } from '../lib/journey-model.js';
 import { storylineLineHtml } from '../lib/detail-doors.js';
@@ -861,7 +861,8 @@ export function closeStops() {
  */
 export function storyNavLineHtml(tree, flow) {
   const story = storylineLineHtml(tree, flow);
-  return story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + story + storyNavHtml(tree, flow, 'next') + '</span>' : '';
+  // the words in their own span, so a tight head clips the words and never the ‹ › doors beside them
+  return story ? '<span class="story">' + storyNavHtml(tree, flow, 'prev') + '<span class="story-t">' + story + '</span>' + storyNavHtml(tree, flow, 'next') + '</span>' : '';
 }
 
 /**
@@ -875,10 +876,15 @@ export function forLineHtml(tree, flow) {
   if (!places.length) return '';
   const p = places[0];
   const others = [...new Set(places.slice(1).map((x) => x.persona))].filter((x) => x !== p.persona);
+  // its screens span two people (their own rows, a persona's routes, the sign-in check their code meets): *with B*
+  const withWho = screenPersonaOthers(tree, flow, p.persona.id);
+  const withTip = withWho.map((x) => x.name + ' · ' + x.screens + ' / ' + x.of + ' · ' + t('journeys.personaFrom.' + x.from)).join(' — ');
   return '<span class="for g-org"><span' + tipAttrs({ key: 'journeys.persona.for', noFocus: true }) + '>' + esc(t('journeys.persona.for')) + '</span> '
     + '<a href="' + esc('#/journeys?persona=' + encodeURIComponent(p.persona.id)) + '">' + esc(jrnPersonaName(p.persona)) + '</a>'
     + ' · <span>' + esc(jrnGroupName(p.group)) + '</span>'
-    + (others.length ? ' <span' + tipAttrs({ key: 'journeys.persona.alsoUnder', noFocus: true }) + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
+    + (withWho.length
+      ? ' <span class="for-with"' + tipAttrs({ text: t('journeys.persona.with').replace('{names}', '') + ' ' + withTip, noFocus: true }) + '>' + esc(t('journeys.persona.with').replace('{names}', withWho.map((x) => x.name).join(' · '))) + '</span>'
+      : others.length ? ' <span' + tipAttrs({ key: 'journeys.persona.alsoUnder', noFocus: true }) + '>' + esc(t('journeys.persona.alsoUnder').replace('{names}', others.map(jrnPersonaName).join(' · '))) + '</span>' : '')
     + '</span>';
 }
 /** ‹ or › beside the storyline: the journey before or after this one in it, on the Map. '' at an end or in none. */

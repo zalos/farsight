@@ -31,6 +31,7 @@ import { flowWork, flowChipHtml } from '../work-chips.js';
 import { mapCountChip, mapScreensChips, mapTestsChips, mapOwnerChip, mapErpChip, erpReached, mapEvidenceChip, foldMapChips } from '../lib/map-chips.js';
 import { neighbourhoodModel, streetModel, screensUsing, layoutDistricts, routeLinks, storesOf, boardWidth, MODE_ORDER, storylineModel, storeShownName, placeBranches, storylineEvidence, laneLayout, laneGeometry, LANE_K } from '../lib/map-model.js';
 import { lanesHtml, fitLaneText } from './map-lanes.js';
+import { loadDecisions } from '../lib/decisions.js';
 import { pathHtml } from '../lib/fold-row.js';
 import { journeyDomain, canBandByDomain } from '../lib/codemap-model.js';
 import { loadJourneyTree, jrnGroupName, screenThumbHtml } from '../lib/journeys-tree.js';
@@ -875,6 +876,8 @@ function start() {
   MAP.journeys = new Map();
   MAP.open = new Set();
   MAP.designs = null;
+  // the decisions the team declared, read once per graph so a chip is there when a card or a table opens (lib/decisions.js)
+  loadDecisions();
   MAP.failed = false;
   renderAll();
   const scope = S.scope === 'all' || !S.scope || !S.scope.length ? 'all' : S.scope.join(',');
@@ -2264,7 +2267,9 @@ function openAbout() {
   // the head's whole chip row — the numbers its line 1 folded into `+n` — under the name, then the description
   panel.innerHTML = '<div class="md-scroll"><h3 class="md-about-nm">' + esc(nameWords(d.name)) + '</h3>' + branchLineHtml(d)
     + (MAP.headChips ? '<div class="md-about-chips">' + MAP.headChips + '</div>' : '')
-    + '<p class="md-about-desc">' + esc(sentence(d.description)) + '</p></div>';
+    + '<p class="md-about-desc">' + esc(sentence(d.description)) + '</p>'
+    // who may do each action of this journey: the role table narrowed to it (outsider round 2026-10-13, F4)
+    + '<p><a class="dd-door" href="#/roles?flow=' + esc(encodeURIComponent(flow)) + '"' + tipAttrs({ key: 'roles.door' }) + '>' + esc(t('roles.door')) + ' ›</a></p></div>';
   openPanel('about');
 }
 

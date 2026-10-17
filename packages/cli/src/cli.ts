@@ -11,7 +11,7 @@ import {
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word, agentsCounted,
   search, impactOf, impactTestsV1, impactTestsReaching, nodesInHunks, IMPACT_MAX_HOPS,
   packagesOf, importersOf, resolvePackage, configFilesText,
-  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact,
+  journeyTree, pickJourneys, journeyTreeLines, unknownStorylineText, tourOf, tourLines, ask, askLines, stateOfPlay, stateOfPlayLines, historyFact, roleTable, roleTableLines, rolesCsv, decisionsAnswer, decisionsText,
   attributeDiffOver, spineRowNote, spineSentences, parseSyncRef as parseSyncRefValue, INCOMPLETE_SENTENCE,
   storylineDiff, storylineDiffDocument, storylineDiffLines, resolveCompareFrom, compareSideOf, parseFailOn, DELTA_KINDS,
 } from '@farsight/core';
@@ -133,6 +133,11 @@ usage:
                                                                run, gates no test is known to reach, commits since its last green
                                                                run (from the history), ship or hold with the reason; then the
                                                                rules register (gate · its words · screens · cases · owner)
+  farsight roles [--action words|id] [--role r] [--repo name] [--business] [--json | --csv] [--graph graph.json]
+                                                               who may do what: every action a role check stands in front of,
+                                                               the roles the code lists for it (read from the named list the
+                                                               check is handed there), the journeys that reach it and the test
+                                                               that proves it — the same fold as GET /api/roles and MCP roles
   farsight work sync [--source id]                             copy the work items of every work source in .farsight/settings.json
                                                                (Jira, Azure DevOps) into .farsight/work.db: full first, then
                                                                incremental from the stored cursor
@@ -157,6 +162,11 @@ usage:
   farsight state [--repo name] [--json] [--graph graph.json]    the state of play: what is built and walkable, what a test run validated,
                                                                what is still open, and the commits read into history and ingested —
                                                                the front door's three columns, each number with its re-check command
+  farsight decisions [--repo name] [--id D7] [--node <id>] [--json] [--graph graph.json]
+                                                               what the team decided or left open (manifest decisions[],
+                                                               farsight.config.json → decisions[]) and every DECISION(<id>)
+                                                               comment that names one: state, owner, the team's words and the
+                                                               cited document quoted, the code lines, the notes
   farsight journeys [--repo name] [--persona p] [--group g] [--storyline s] [--json] [--graph graph.json]
                                                                the storylines (named chains of journeys, in order), then the journeys
                                                                by persona, then by group, in the order the manifests and
@@ -1615,6 +1625,21 @@ switch (command) {
     runReadiness({ flag: (n) => flag(n), has: hasFlag, workspace: process.cwd(), fail });
     break;
   }
+  case 'roles': {
+    // who may do what (outsider round 2026-10-13, F4): core roleTable(), the same fold GET /api/roles and MCP roles answer
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const index = buildIndex(nodes, edges);
+    setFreshnessMeta(index, store.meta);
+    const q = { action: flag('action'), role: flag('role'), repo: flag('repo') };
+    const table = roleTable(index, Object.fromEntries(Object.entries(q).filter(([, v]) => !!v)));
+    if (rest.includes('--json')) { console.log(JSON.stringify(table, null, 2)); break; }
+    if (rest.includes('--csv')) { process.stdout.write(rolesCsv(table)); break; }
+    console.log(roleTableLines(table, { business: rest.includes('--business'), cap: Number.MAX_SAFE_INTEGER }).join('\n'));
+    break;
+  }
   case 'work': {
     await runWork({
       sub: positional[0], positional: positional.slice(1), workspace: process.cwd(), fail,
@@ -1644,6 +1669,23 @@ switch (command) {
     const state = stateOfPlay(index, store.meta, { scope, history });
     if (rest.includes('--json')) { console.log(JSON.stringify(state, null, 2)); break; }
     console.log(stateOfPlayLines(state).join('\n'));
+    break;
+  }
+  case 'decisions': {
+    // what the team decided or left open, and where the code names each (the 2026-10-13 outsider round, F8): the same
+    // core decisionsAnswer() GET /api/decisions and the MCP decisions tool answer with
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(`no graph at ${graphFile} — run \`farsight ingest\` first`);
+    const store = GraphStore.load(graphFile);
+    const { nodes, edges } = store.toJSON();
+    const index = buildIndex(nodes, edges);
+    const repo = flag('repo');
+    const id = flag('id');
+    const node = flag('node');
+    if (node && !index.byId.has(node)) fail(`no node ${node} in ${graphFile}`);
+    const opts = { ...(repo ? { repo } : {}), ...(id ? { id } : {}), ...(node ? { node } : {}) };
+    if (rest.includes('--json')) { console.log(JSON.stringify(decisionsAnswer(index, store.meta.decisions, opts), null, 2)); break; }
+    console.log(decisionsText(store.meta.decisions, { ...opts, index }).join('\n'));
     break;
   }
   case 'journeys': {

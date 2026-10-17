@@ -63,8 +63,10 @@ test('a range lands on the function its hunks sit in, and reaches the journeys t
   assert.equal(doc.files.find((f) => f.path === 'src/server/invoiceService.ts')!.granularity, 'lines');
   assert.equal(doc.files.find((f) => f.path === 'README.md')!.granularity, 'none');
   const names = doc.journeys.map((j) => j.name).sort();
-  assert.deepEqual(names, ['Billing cycle', 'Draft and send an invoice']);
-  for (const j of doc.journeys) assert.equal(j.hop, 0, `${j.name} runs the changed function itself`);
+  assert.deepEqual(names, ['Billing cycle', 'Draft and send an invoice', 'Get paid']);
+  for (const j of doc.journeys.filter((x) => x.name !== 'Get paid')) assert.equal(j.hop, 0, `${j.name} runs the changed function itself`);
+  // the payments journey (lane moves) only shares what finalize touches downstream: reached, never at hop 0
+  assert.ok(doc.journeys.find((j) => j.name === 'Get paid')!.hop > 0);
   const cycle = doc.journeys.find((j) => j.name === 'Billing cycle')!;
   assert.deepEqual(cycle.storylines.map((s) => [s.id, s.step, s.of, s.branch_of]), [['invoice', 2, 2, null]]);
   const branch = doc.journeys.find((j) => j.name === 'Draft and send an invoice')!;

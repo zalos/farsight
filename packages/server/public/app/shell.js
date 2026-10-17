@@ -23,6 +23,7 @@ import { mountMap, mapRefresh, mapUpdate, unmountMap, mapOpen, mapTravel } from 
 import { renderConfigFiles } from './surfaces/settings-config.js';
 import { renderLessons } from './surfaces/settings-lessons.js';
 import { mountReadiness, unmountReadiness, readinessRefresh } from './surfaces/readiness.js';
+import { mountRoles, rolesRefresh } from './surfaces/roles.js';
 import { closeShare } from './share.js';
 import { initKeymap } from './keymap.js';
 import { impactFromRoute } from './impact.js';
@@ -69,6 +70,8 @@ const SURFACES = {
   stewardship: { mount: mountStewardship },
   // the release readiness brief of one storyline (#/readiness/<id>): reached by its doors, not a tab
   readiness: { mount: mountReadiness, unmount: unmountReadiness, refresh: readinessRefresh },
+  // who may do what (#/roles, outsider round 2026-10-13 F4): reached from the state of play, the Map's about tab and a role guard's card
+  roles: { mount: mountRoles, refresh: rolesRefresh },
   grammar: { mount: mountGrammar, refresh: refreshGrammar },
   // Settings is an address (`#/settings`, round 2026-10-10 finding 3.2) and keeps the top bar (3.3): the page
   // mounts into the surface frame under the chrome instead of covering the window
@@ -204,6 +207,9 @@ export function parseRoute() {
     assignee: q.get('assignee'),
     q: q.get('q'),
     flow: q.get('flow'),
+    // the role table's filters (#/roles): one role, one guard's actions
+    role: q.get('role'),
+    guard: q.get('guard'),
     // the Map's picture (§K): its scale and the world point at the middle, and the explore card open (`<kind>:<nodeId>`)
     z: q.get('z'),
     x: q.get('x'),

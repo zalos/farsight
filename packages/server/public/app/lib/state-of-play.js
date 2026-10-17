@@ -101,6 +101,8 @@ export function stateOfPlayHtml(s) {
   const validated = words.map((x, i) => lineHtml(x.journeys, ' <span class="sop-word ev-' + esc(x.word.cls) + '"' + defAttrs(x.word.key) + '>' + esc(t(x.word.key)) + '</span>', i === 0)).join('')
     // build state wins: journeys with a screen not built are counted apart, never under *passed* (swarm round 3)
     + (v.notFullyBuilt && v.notFullyBuilt.n ? lineHtml(v.notFullyBuilt) : '')
+    // the release brief holds them on their own case: counted apart, never under *passed* (outsider demo 2026-10-13)
+    + (v.heldInBrief && v.heldInBrief.n ? lineHtml(v.heldInBrief) : '')
     + runLine + casesLine;
   const names = (o.notBuiltNames || []).length ? ' <span class="sop-names">(' + esc(o.notBuiltNames.join(', ')) + ')</span>' : '';
   const stillOpen = [
@@ -109,6 +111,8 @@ export function stateOfPlayHtml(s) {
     lineHtml(o.blindSpots),
     lineHtml(o.drift),
     historyHtml(o.history),
+    // who may do what: the role table read from the code (outsider round 2026-10-13, F4)
+    '<li><a class="sop-roles" href="#/roles"' + defAttrs('roles.door') + '>' + esc(t('roles.door')) + ' ›</a></li>',
   ].join('');
   const col = (key, cls, body) => '<div class="sop-col ' + cls + '"><h3' + defAttrs(key) + '>' + esc(t(key)) + '</h3><ul>' + body + '</ul></div>';
   return '<h2' + defAttrs('state.title') + '>' + esc(t('state.title')) + '</h2>' + provenanceHtml(s.provenance || {})

@@ -273,12 +273,23 @@ export interface ActionMove {
   checked: boolean;
   /** the record is written in its first declared status: it is being created, with nothing to move from */
   creates?: true;
+  /**
+   * how many calls under the action's own call the writer runs (0 = the action's call is the writer): the action
+   * that calls the writer most directly is the one a surface names first (lane moves, 2026-10-13)
+   */
+  hops?: number;
+  /** one arm of a ternary of literal statuses: the condition the code writes this status under */
+  when?: string;
 }
+/** A move the action's code would make, under a call a constant switches off: listed, never credited. */
+export interface SwitchedOffMove extends ActionMove { flag: string; value: boolean; at: string }
 /** What one action needs, in the order a reader meets it: who, the record's own state, the records around it, policy, then the technical checks. */
 export interface ActionPreconditions {
   /** the route the action calls, else the function that starts it */
   action: string;
   moves: ActionMove[];
+  /** the moves its code holds under a call a constant switches off — named *switched off*, never credited. Absent when none */
+  switchedOff?: SwitchedOffMove[];
   preconditions: ActionPrecondition[];
   /** the preconditions counted, each once, by tier (scope: one action) */
   counted: Counted;
@@ -331,6 +342,61 @@ function needOrder(a: ActionPrecondition, b: ActionPrecondition): number {
  * saying whether the code checks the status it moves from. Pure over the walk; the verdict is the
  * gate card's own, folded once per gate per index.
  */
+/** writer id → the lifecycle moves it performs, folded once per index */
+const MOVES_BY_WRITER = new WeakMap<GraphIndex, Map<string, { table: GraphNode; tr: NonNullable<GraphNode['lifecycle']>['transitions'][number] }[]>>();
+export function movesByWriter(index: GraphIndex): Map<string, { table: GraphNode; tr: NonNullable<GraphNode['lifecycle']>['transitions'][number] }[]> {
+  let m = MOVES_BY_WRITER.get(index);
+  if (m) return m;
+  m = new Map();
+  for (const n of index.byId.values()) {
+    if (n.kind !== 'table' || !n.lifecycle) continue;
+    for (const tr of n.lifecycle.transitions) { const l = m.get(tr.by) ?? []; l.push({ table: n, tr }); m.set(tr.by, l); }
+  }
+  MOVES_BY_WRITER.set(index, m);
+  return m;
+}
+
+/**
+ * The moves a switched-off call would make: the writer it names, or a writer it calls within the move depth over
+ * live edges. Never credited — a surface lists them as *switched off by <flag>*.
+ */
+function switchedOffMoves(index: GraphIndex, nodeId: string, sw: { flag: string; value: boolean; at: string }): SwitchedOffMove[] {
+  const byWriter = movesByWriter(index);
+  const out: SwitchedOffMove[] = [];
+  const seen = new Set<string>();
+  let frontier = [nodeId];
+  for (let hop = 0; hop <= MOVE_DEPTH && frontier.length; hop++) {
+    const next: string[] = [];
+    for (const id of frontier) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      for (const { table, tr } of byWriter.get(id) ?? []) {
+        if (out.some((m) => m.table === table.id && m.to === tr.to && m.by === tr.by)) continue;
+        const creates = !tr.from && tr.to === table.lifecycle!.statuses[0];
+        out.push({ record: table.name, table: table.id, field: table.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked: creates || !!tr.from || !!tr.fromAny?.length, ...(creates ? { creates: true as const } : {}), hops: hop, ...sw });
+      }
+      for (const e of index.out.get(id) ?? []) if (e.kind === 'calls' && !e.meta?.inactive && !e.meta?.deferred) next.push(e.to);
+    }
+    frontier = next;
+  }
+  return out;
+}
+
+/** The handler a route's own file exports, run by the route node: the route's body, not a call under it. */
+function isRouteBody(index: GraphIndex, st: Journey['steps'][number], stepAt: Map<number, Journey['steps'][number]>): boolean {
+  if (st.via !== 'calls' || st.depth === 0) return false;
+  const n = index.byId.get(st.nodeId);
+  if (!n || n.kind !== 'function') return false;
+  // the parent is the latest earlier step one level up (pre-order)
+  for (let o = st.order - 1; o >= 0; o--) {
+    const p = stepAt.get(o);
+    if (!p || p.depth >= st.depth) continue;
+    const pn = index.byId.get(p.nodeId);
+    return pn?.kind === 'route' && !!pn.loc?.path && pn.loc.path === n.loc?.path;
+  }
+  return false;
+}
+
 export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary: JourneySummary): JourneySummary {
   const stepAt = new Map(j.steps.map((s) => [s.order, s] as const));
   for (const sg of summary.segments) {
@@ -339,12 +405,35 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
       // the writers a move is the action's own: the call and up to two calls under it (an outbox
       // drained later, three calls down, is the machinery's state, not this action's move)
       const callDepth = mo.callStep != null ? stepAt.get(mo.callStep)?.depth : stepAt.get(mo.actionStep)?.depth;
+      // a route's own body (the handler its file exports, which the route node calls) is the route, not a call under
+      // it: the hops below it count from the route (lane moves, 2026-10-13 — a Next.js route file put the service's
+      // writer three calls down, and the move to Paid was credited to nothing)
+      let bodyDepth: number | undefined;
+      const hopsAt = (st: Journey['steps'][number]): number => {
+        if (callDepth == null) return 0;
+        if (bodyDepth != null && st.depth <= bodyDepth) bodyDepth = undefined;
+        return Math.max(0, st.depth - callDepth - (bodyDepth != null ? 1 : 0));
+      };
       const inRange = new Set<string>();
+      /** writer id → how many calls under the action's call it first runs */
+      const hopsOf = new Map<string, number>();
       const tables: GraphNode[] = [];
+      const off: SwitchedOffMove[] = [];
       for (let o = mo.from; o <= mo.to; o++) {
         const st = stepAt.get(o);
         if (!st) continue;
-        if (callDepth == null || st.depth <= callDepth + MOVE_DEPTH) inRange.add(st.nodeId);
+        // a call a constant switches off runs nothing: its moves are listed apart, its gates stand in front of nothing
+        if (st.switchedOff) {
+          for (const m of switchedOffMoves(index, st.nodeId, st.switchedOff)) if (!off.some((x) => x.table === m.table && x.to === m.to && x.by === m.by)) off.push(m);
+          continue;
+        }
+        const h = hopsAt(st);
+        // the boot and the work that runs later are not this action's own move
+        if (h <= MOVE_DEPTH && !st.setup && !st.deferred) {
+          inRange.add(st.nodeId);
+          if (!hopsOf.has(st.nodeId) || hopsOf.get(st.nodeId)! > h) hopsOf.set(st.nodeId, h);
+        }
+        if (bodyDepth == null && callDepth != null && isRouteBody(index, st, stepAt)) bodyDepth = st.depth;
         const n = index.byId.get(st.nodeId);
         if (n?.kind === 'table' && n.lifecycle && !tables.includes(n)) tables.push(n);
         for (const g of st.gates) {
@@ -354,6 +443,10 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
       }
       const needs = [...seen.values()].sort(needOrder);
       const moves: ActionMove[] = [];
+      // the records the moment walks into, then the records its in-range writers move (a writer reached again, its
+      // subtree not walked twice, still makes its move: every live path, never only the first the walk met)
+      const byWriter = movesByWriter(index);
+      for (const id of inRange) for (const { table } of byWriter.get(id) ?? []) if (!tables.includes(table)) tables.push(table);
       for (const t of tables) {
         for (const tr of t.lifecycle!.transitions) {
           if (!inRange.has(tr.by)) continue;
@@ -362,15 +455,17 @@ export function withJourneyPreconditions(index: GraphIndex, j: Journey, summary:
           const checked = creates || !!tr.from || !!tr.fromAny?.length
             || needs.some((p) => p.relation === 'own' && p.field && index.byId.get(p.id)?.precondition?.table === t.id && p.field.replace(/_/g, '').toLowerCase() === t.lifecycle!.field.replace(/_/g, '').toLowerCase() && !!p.requires?.length);
           if (moves.some((m) => m.table === t.id && m.to === tr.to && m.by === tr.by)) continue;
-          moves.push({ record: t.name, table: t.id, field: t.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked, ...(creates ? { creates: true as const } : {}) });
+          moves.push({ record: t.name, table: t.id, field: t.lifecycle!.field, ...(tr.from ? { from: tr.from } : {}), ...(tr.fromAny ? { fromAny: tr.fromAny } : {}), to: tr.to, by: tr.by, checked, ...(creates ? { creates: true as const } : {}), hops: hopsOf.get(tr.by) ?? 0, ...(tr.when ? { when: tr.when } : {}) });
         }
       }
-      if (!needs.length && !moves.length) continue;
+      // a move the action makes live is never also listed as switched off
+      const offOnly = off.filter((m) => !moves.some((x) => x.table === m.table && x.to === m.to && x.by === m.by));
+      if (!needs.length && !moves.length && !offOnly.length) continue;
       const callNode = mo.callStep != null ? stepAt.get(mo.callStep)?.nodeId : undefined;
       const action = callNode ?? stepAt.get(mo.actionStep)?.nodeId ?? '';
       const tiers = (k: GateTier) => needs.filter((p) => p.tier === k).length;
       mo.preconditions = {
-        action, moves, preconditions: needs,
+        action, moves, ...(offOnly.length ? { switchedOff: offOnly } : {}), preconditions: needs,
         counted: counted(needs.length, 'count.unit.preconditions', 'count.scope.action', `journeySummary().segments[${sg.index}].moments[${mo.index}].preconditions`, {
           bizUnit: 'count.unit.preconditions',
           breakdown: [

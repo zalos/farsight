@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl } from './graph.js';
+import type { GraphNode, GraphEdge, ExternalKind, StoreKind, StoreEngine, TagDimension, JourneyStorylineEntryDecl, JourneyStorylineLaneDecl, JourneyStorylineHandoffDecl, DecisionDecl } from './graph.js';
 import { humanizeName } from './query.js';
 
 /**
@@ -70,12 +70,22 @@ export interface FarsightConfig {
    * the statuses and the moves; this only names them — a status the code does not declare is a note.
    */
   lifecycle?: Record<string, LifecycleConfigEntry>;
+  /**
+   * Decisions the team made or left open, by id — the same shape as a manifest's `decisions[]` (core decisions.ts),
+   * every field but the id optional: an entry overrides a manifest's decision field by field, root file first and the
+   * nearest nested file last, and an id no manifest declares is declared here. A nested file's `doc` is relative to
+   * its folder.
+   */
+  decisions?: DecisionConfigEntry[];
 }
+
+/** `farsight.config.json → decisions[]`: a decision by id, every other field optional (an override gives only what it changes). */
+export type DecisionConfigEntry = Partial<Omit<DecisionDecl, 'id'>> & { id: string };
 
 /** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
 export const CONFIG_FIELDS = [
   'tags', 'glossary', 'guards', 'gateTiers', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
-  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle',
+  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle', 'decisions',
 ] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
@@ -90,7 +100,7 @@ export interface JourneysConfig {
   storylines?: JourneysConfigStoryline[];
 }
 export interface JourneysConfigStoryline { id: string; name?: string; description?: string; journeys?: (string | JourneyStorylineEntryDecl)[]; lanes?: JourneyStorylineLaneDecl[]; handoffs?: JourneyStorylineHandoffDecl[] }
-export interface JourneysConfigPersona { id: string; name?: string; description?: string }
+export interface JourneysConfigPersona { id: string; name?: string; description?: string; routes?: string[]; signsInWith?: string[] }
 export interface JourneysConfigGroup { id: string; name?: string; description?: string; persona?: string }
 export interface JourneysConfigFlow { id: string; persona?: string | string[]; group?: string; order?: number }
 
@@ -154,12 +164,19 @@ export interface StorybookConfig {
 
 /** One declared third-party system: the client the calls go through, what to call it, and what kind of system it is. */
 export interface ExternalDecl {
-  /** a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through */
-  import: string;
+  /**
+   * a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through.
+   * Absent only on `kind: 'party'`: a counterparty no code reaches (a payment partner, the client)
+   */
+  import?: string;
   name: string;
   kind: ExternalKind;
   /** this external is (true) or is not (false) used as a data store — overrides the default from the kind (`erp` · `db` · `files` are) */
   store?: boolean;
+  /** `kind: 'party'` only: what it does, in the team's words (*pays the vendor on our instruction*) */
+  role?: string;
+  /** `kind: 'party'` only: a declared persona id it also is (the client who uses a portal) */
+  persona?: string;
 }
 
 /**
@@ -284,10 +301,17 @@ export function sanitizeJourneys(config: FarsightConfig): FarsightConfig {
   const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
   const entries = (v: unknown): Record<string, unknown>[] =>
     (Array.isArray(v) ? v : []).filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && !Array.isArray(e) && !!str((e as Record<string, unknown>).id));
+  // a list of non-empty strings (a lone string is a list of one); absent or empty: undefined
+  const strList = (v: unknown): string[] | undefined => {
+    const list = (typeof v === 'string' ? [v] : Array.isArray(v) ? v : []).map(str).filter((x): x is string => !!x);
+    return list.length ? list : undefined;
+  };
   const out: JourneysConfig = {};
   if (r.personas !== undefined) {
     out.personas = entries(r.personas).map((e) => ({
       id: str(e.id)!, ...(str(e.name) ? { name: str(e.name)! } : {}), ...(str(e.description) ? { description: str(e.description)! } : {}),
+      ...(strList(e.routes) ? { routes: strList(e.routes)! } : {}),
+      ...(strList(e.signsInWith) ? { signsInWith: strList(e.signsInWith)! } : {}),
     }));
   }
   if (r.groups !== undefined) {

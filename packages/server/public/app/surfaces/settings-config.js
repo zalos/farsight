@@ -58,7 +58,9 @@ export function configFilesHtml(data, lens) {
     const conflicts = (meta.conflicts || []).map((c) =>
       '<li class="cfg-conflict" data-kind="' + esc(c.kind) + '"' + defAttrs('config.conflict.' + c.kind) + '>'
       + esc(fill('config.conflict.' + c.kind, { key: c.key, files: (c.files || []).join(', '), kept: c.kept })) + '</li>').join('');
-    const notes = (meta.notes || []).map((n) => '<li class="cfg-note">' + esc(n) + '</li>').join('');
+    // with the configuration's own notes, where the design and the code disagree about who uses a screen
+    const personaNotes = (data.personaNotes && data.personaNotes[repo]) || [];
+    const notes = [...(meta.notes || []), ...personaNotes].map((n) => '<li class="cfg-note">' + esc(n) + '</li>').join('');
     return '<div class="cfg-src" data-repo="' + esc(repo) + '">'
       + '<div class="cfg-head"><b>' + esc(repo) + '</b> '
       + countedHtml(counts.files, API, { cls: 'cnt-n cfg-n-files' })

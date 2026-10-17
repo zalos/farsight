@@ -45,11 +45,15 @@ const TOOLS = [
   // walk me through it, and ask (round 2026-10-10, proposal 8)
   'ask', 'tour',
   'config_files',
+  // what the team decided or left open (the 2026-10-13 outsider round, F8)
+  'decisions',
   'describe_node',
   'design_drift', 'design_guide', 'design_surface',
   'gate',
   'graph_changes', 'graph_overview',
   'impact_of', 'journey', 'journeys', 'list_rules', 'model_hub_state', 'refresh_graph',
+  // who may do what (outsider round 2026-10-13, F4)
+  'roles',
   'search_graph', 'stories', 'storyline_diff', 'test_coverage', 'trace_flow',
   // in both tiers: the menu, and what a budget left out (round 2026-10-10, proposal 9)
   'expand', 'tools',
@@ -192,6 +196,32 @@ describe('tour and ask — assembled from the graph, every line cited (round 202
     assert.equal(doc.counted.stops.n, doc.stops.length);
   });
 
+  test('roles answers from the guards edges: the whole table, or one action and nothing else', async () => {
+    const all = await call('roles');
+    assert.match(all, /^who may do what: /);
+    const doc = JSON.parse(await call('roles', { json: true }));
+    assert.equal(doc.counted.actions.n, doc.rows.length);
+    assert.equal(doc.counted.actions.scope, 'count.scope.workspace');
+    const none = await call('roles', { action: 'no-such-action-anywhere' });
+    assert.match(none, /no action behind a role check matches/);
+  });
+
+  test('decisions prints the team\'s words, the document quoted, where the code names each, and the notes', async () => {
+    const out = await call('decisions');
+    assert.match(out, /2 decisions across every source in scope: 1 open · 0 decided · 1 named in code, not declared/);
+    assert.match(out, /## D1 · "Does an invoice above a limit need a second approver\?" — open — not decided yet/);
+    assert.match(out, /quoted: "An invoice is approved by one person/);
+    assert.match(out, /named in code: src\/server\/approvals\.ts:\d+ · on approveInvoice/);
+    assert.match(out, /named in code: src\/server\/approvals\.ts:\d+ · above SEND_PAYMENT_REMINDERS/);
+    const on = await call('decisions', { node_id: 'invoice-app::src/server/approvals.ts::approveInvoice' });
+    assert.match(on, /## D1/);
+    assert.doesNotMatch(on, /## D2/);
+    const doc = JSON.parse(await call('decisions', { json: true }));
+    assert.equal(doc.counted.decisions.n, doc.decisions.length);
+    const overview = await call('graph_overview');
+    assert.match(overview, /^decisions: 2 decisions/m);
+  });
+
   test('ask answers the four shapes from the graph and says what it understands otherwise', async () => {
     const set = await call('ask', { question: 'where is an invoice set to open, and what must be true first?' });
     assert.match(set, /derived · no model/);
@@ -282,7 +312,7 @@ describe('describe_node — what to know before changing it', () => {
 
   test('a guard says what it applies to', async () => {
     const out = await call('describe_node', { node_id: ADMIN });
-    assert.match(out, /applies to 2: /);
+    assert.match(out, /applies to 4: /); // finalize, approve, and the payments pair (lane moves)
   });
 
   test('context:false keeps the old shape', async () => {
@@ -406,21 +436,24 @@ describe('journeys', () => {
   test('text: persona, then group, then one line per journey — the core fold, line for line', async () => {
     const out = await call('journeys');
     assert.equal(out, journeyTreeLines(fold(), { openHint: '(open with journey)' }).join('\n'));
-    assert.match(out, /^3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope$/m);
+    assert.match(out, /^4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope$/m);
     assert.match(out, /^## Storylines — 1 storyline$/m);
     assert.match(out, /^1\. Start a new invoice — .*`invoice-app::flow::new-invoice` \(open with journey\)$/m);
     assert.ok(out.indexOf('## Storylines') < out.indexOf('## Billing'), 'the storylines come before the personas');
     assert.match(out, /^## Billing — 3 journeys/m);
     assert.match(out, /^### Invoices — 2 journeys/m);
-    assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
+    // the example's discard screen names the operator (screens[].persona): the billing cycle is drawn with them
+    assert.match(out, /^- Billing cycle — partly built · 2 of 3 · start here · with Operations \(1 of 3 screens\) · `invoice-app::flow::billing-cycle` \(open with journey\)$/m);
     // the fixture's config moves draft-and-send into Review and send; it is under both personas
-    assert.match(out, /^- Draft and send an invoice — .* · also under Operations · placed by farsight\.config\.json · /m);
+    assert.match(out, /^- Draft and send an invoice — .* · also under Operations · with Operations \(1 of 2 screens\) · placed by farsight\.config\.json · /m);
+    // who uses each screen, and what placed it: the screen row, Billing's routes, the journey
+    assert.match(out, /^4 screens across every source in scope \(1 named by its screen row · 1 by its address · 2 by their journey\)$/m);
     assert.ok(out.indexOf('## Billing') < out.indexOf('## Operations'), 'declared order, not alphabetical');
   });
 
   test('persona and group filters, and json is the JourneyTree', async () => {
     const ops = await call('journeys', { persona: 'operations' });
-    assert.match(ops, /^1 journey · 1 storyline · 1 persona · 1 group /m);
+    assert.match(ops, /^2 journeys · 1 storyline · 1 persona · 1 group /m);
     assert.ok(!ops.includes('## Billing'));
     const none = await call('journeys', { group: 'nope' });
     assert.match(none, /no journey under group "nope"/);
@@ -431,7 +464,7 @@ describe('journeys', () => {
 
   test('design_guide says how to organise them: personas, groups, persona lists, order, the config block, nested configs', async () => {
     const guide = await call('design_guide');
-    for (const words of ['personas[] { id, name, description? }', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
+    for (const words of ['personas[] { id, name, description?, routes?, signsInWith? }', 'screens[].persona', 'personas[].routes', '"For A · with B"', 'personaFrom (screen · routes · guard · journey)', 'groups[] { id, name, description?, persona? }', 'flows[].persona', 'flows[].group', 'flows[].order',
       'flows[].owner', 'flows[].work', 'surfaces[]', '{ "journeys": {', 'storylines[] { id, name, description?, journeys }', '"storylines"', '{ id, branchOf,\n  when, rejoins? }', 'below the source root applies to its', '"projects" and "tooling" are read from the root file only']) {
       assert.ok(guide.includes(words), `design_guide does not say ${words}`);
     }
@@ -439,7 +472,7 @@ describe('journeys', () => {
 
   test('graph_overview has the journeys line and journey names where a flow sits', async () => {
     const overview = await call('graph_overview');
-    assert.match(overview, /^journeys: 3 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
+    assert.match(overview, /^journeys: 4 journeys · 1 storyline · 2 personas · 3 groups across every source in scope — first: Billing › Invoices · Operations › Review and send — the journeys tool lists them by storyline, then persona and group/m);
     const j = await call('journey', { entry: 'draft-and-send' });
     assert.match(j, /^shown under: Billing › Review and send · Operations › Review and send \(start here\)$/m);
     // the fixture declares this journey a branch: what it leaves from, when, and where it comes back

@@ -1,6 +1,8 @@
-import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind } from './graph.js';
+import { offPlatformSteps, type OffPlatformStep } from './decisions.js';
+import type { GraphNode, GraphEdge, BranchPoint, ExternalKind, ResolutionTechnique, ConfidenceTier, StoreKind, PersonaFrom } from './graph.js';
 import { withJourneyCoverage, type JourneyCoverage } from './coverage.js';
 import { isConfigCheck } from './config-check.js';
+import { refoldRuns } from './test-runs.js';
 import { withJourneyPreconditions, type ActionPreconditions } from './gates.js';
 import { gateTierOf, isActionGate, type GateClass, type GateTier, type TierFrom } from './gate-class.js';
 import { withJourneyCounted, type JourneyCounted, type SegmentCounted, type SegmentAbsence, type AbsenceKind, type AbsenceWord } from './journey-counted.js';
@@ -23,6 +25,8 @@ export interface GraphIndex {
 }
 
 export function buildIndex(nodes: GraphNode[], edges: GraphEdge[]): GraphIndex {
+  // a case's `run` is the fold over its projects: read the fold this build makes, not the one the graph was written with
+  refoldRuns(nodes);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const out = new Map<string, GraphEdge[]>();
   const incoming = new Map<string, GraphEdge[]>();
@@ -205,6 +209,38 @@ export function tierFactsOf(g: GateTierFacts | undefined): GateTierFacts {
   };
 }
 
+/** One place the walk met a gate: the step, and the roles or scopes that call site handed it. */
+export interface GateOccurrence {
+  stepOrder: number;
+  requires?: string;
+}
+/**
+ * One gate on a screen, deduped by name: `count` = how many steps met it, `stepOrder` = the first, `requires` =
+ * every role any action on the screen handed it, and `at` = each meeting with its own roles — what places the gate
+ * under every action it guards (`gatesInRange`).
+ */
+export type SegmentGate = { id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number; at?: GateOccurrence[] } & GateTierFacts;
+
+/**
+ * The gates one action meets — a screen's gates placed on a step range (a moment's `from`..`to`): each gate
+ * met inside the range once, at its first step there, with only the roles the call sites inside the range handed
+ * it and `count` = the meetings inside the range. A gate the screen met only under another action is not here.
+ * A gate from a summary without `at` falls back to its one `stepOrder`. Pure; the viewer's
+ * `lib/journey-model.js jrnGatesIn` is the same rule (outsider round 2026-10-13, F2).
+ */
+export function gatesInRange(seg: { gates: SegmentGate[] }, from: number, to: number): SegmentGate[] {
+  const out: SegmentGate[] = [];
+  for (const g of seg.gates) {
+    const at = (g.at && g.at.length ? g.at : [{ stepOrder: g.stepOrder, ...(g.requires ? { requires: g.requires } : {}) }])
+      .filter((o) => o.stepOrder >= from && o.stepOrder <= to);
+    if (!at.length) continue;
+    const roles = [...new Set(at.flatMap((o) => (o.requires ? o.requires.split(', ') : [])))];
+    const { requires: _all, ...rest } = g;
+    out.push({ ...rest, stepOrder: Math.min(...at.map((o) => o.stepOrder)), count: at.length, at, ...(roles.length ? { requires: roles.join(', ') } : {}) });
+  }
+  return out;
+}
+
 /** A fork in a caller that gates one hop of a journey. */
 export interface PathCondition {
   nodeId: string;
@@ -268,6 +304,21 @@ export interface JourneyStep {
   deferred?: true;
   /** the hop that reached it was made inside a transaction callback (`meta.tx`) */
   tx?: true;
+  /**
+   * switched off: the call that reached it sits under a branch on a module-level constant whose value means it
+   * does not run (`meta.inactive` on the edge — parsers/src/flag-gates.ts). Named where it is written, never
+   * walked, and never counted as what an action reaches or moves.
+   */
+  switchedOff?: SwitchedOff;
+}
+
+/** The constant that switches a call off: its name, its literal value, and `path:line` of its declaration. */
+export interface SwitchedOff { flag: string; value: boolean; at: string }
+
+/** The switch on an edge, when the code fixes it off (`meta.inactive`). */
+export function switchedOffOf(e: GraphEdge | undefined): SwitchedOff | undefined {
+  if (!e?.meta?.inactive || typeof e.meta.whenFlag !== 'string') return undefined;
+  return { flag: e.meta.whenFlag, value: e.meta.whenValue === true, at: typeof e.meta.whenAt === 'string' ? e.meta.whenAt : '' };
 }
 
 /**
@@ -507,7 +558,7 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
    * spends the re-visit budget nor makes a later real call read as a repeat.
    */
   const pushFlagged = (
-    flag: 'setup' | 'deferred',
+    flag: 'setup' | 'deferred' | 'switchedOff',
     c: { edge: GraphEdge; childId: string; via: JourneyStep['via'] },
     depth: number,
     callSite: JourneyStep['callSite'],
@@ -521,10 +572,11 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       ...(callSite ? { callSite } : {}),
       nodeId: c.childId,
       crossRepo: !!parent.loc?.repo && !!child.loc?.repo && child.loc.repo !== parent.loc.repo,
-      gates: gatesOf(c.childId), repeat: false, cycle: false,
+      // a switched-off call carries no gates: none of them stands in front of anything that runs
+      gates: flag === 'switchedOff' ? [] : gatesOf(c.childId), repeat: false, cycle: false,
       ...(conditions?.length ? { conditions } : {}),
       ...(c.edge.meta?.tx ? { tx: true as const } : {}),
-      ...(flag === 'setup' ? { setup: true as const } : { deferred: true as const }),
+      ...(flag === 'setup' ? { setup: true as const } : flag === 'deferred' ? { deferred: true as const } : { switchedOff: switchedOffOf(c.edge)! }),
     });
   };
 
@@ -620,7 +672,9 @@ export function journey(index: GraphIndex, entryId: string, opts: JourneyOptions
       // there: one step, no subtree, outside the visit budget — so the second request does
       // not re-print the container, and a later genuine call to the same function is not a
       // re-visit of it (01 §2.3.3).
-      const origin = c.edge.meta?.origin === 'setup' ? 'setup' : c.edge.meta?.deferred ? 'deferred' : undefined;
+      // a call the code switches off with a constant is named where it is written and not walked: nothing under
+      // it runs, so nothing under it is this journey's work (lane moves, 2026-10-13)
+      const origin = c.edge.meta?.origin === 'setup' ? 'setup' : c.edge.meta?.deferred ? 'deferred' : switchedOffOf(c.edge) ? 'switchedOff' : undefined;
       if (origin) {
         if (origin === 'setup') {
           if (setupSeen.has(c.childId)) continue;
@@ -873,7 +927,7 @@ export function journeyChoices(index: GraphIndex, j: Journey): Map<number, Journ
   for (const s of j.steps) {
     // the boot and the work that runs later are named where they were reached, never
     // walked — they are not a call site anyone is reading down
-    if (!s.edgeId || s.setup || s.deferred || s.planned) continue;
+    if (!s.edgeId || s.setup || s.deferred || s.switchedOff || s.planned) continue;
     const p = parentOf.get(s.order) ?? -1;
     const parent = p >= 0 ? stepById.get(p) : undefined;
     if (!parent) continue;
@@ -990,7 +1044,7 @@ export function journeyTransactions(index: GraphIndex, j: Journey): { known: boo
     // the boot and the work that runs later are named where they were reached, never
     // sequenced with the caller's own hops — `meta.tx` on a deferred edge says the
     // *registration* was inside a transaction, not the work
-    if (s.setup || s.deferred) continue;
+    if (s.setup || s.deferred || s.switchedOff) continue;
     const p = parentOf.get(s.order) ?? -1;
     if (p < 0) continue;
     const list = kids.get(p);
@@ -1121,6 +1175,11 @@ export interface JourneyMoment {
   declared: boolean;
   /** deferred work registered inside this action — the Afterwards row (R2) */
   afterwards: { stepOrder: number; nodeId: string; name: string; title?: string; hostStep: number }[];
+  /**
+   * calls this action's code makes only when a constant it fixes says so, and the constant says no — named, never
+   * walked (lane moves, 2026-10-13). Absent when there are none.
+   */
+  switchedOff?: { stepOrder: number; nodeId: string; name: string; flag: string; value: boolean; at: string }[];
   counts: { markers: number; calls: number; planned: number; records: number; messages: number; helpers: number };
   /**
    * what this action needs before it goes through (core gates.ts `withJourneyPreconditions`): the gates
@@ -1144,7 +1203,7 @@ export interface JourneySegment {
   /** the segment's sub-columns: one per client-side action, in execution order */
   moments: JourneyMoment[];
   /** deduped by name within the segment; count = how many steps met it. Config checks are not here: see `configChecks` */
-  gates: ({ id: string; kind: 'guard' | 'rule'; name: string; planned?: true; count: number; stepOrder: number } & GateTierFacts)[];
+  gates: SegmentGate[];
   /**
    * the config checks the walk met on this screen (core gates.ts `isConfigCheck`): guards that check how the app
    * was started — its settings — on the way to a request, never the request itself. Listed apart and counted apart
@@ -1159,6 +1218,11 @@ export interface JourneySegment {
   systems: string[];
   /** operations the screen's manifest lists that no action in this segment made: dotted stops (R6) */
   declaredOnly: { op: string; routeId?: string; label: string }[];
+  /**
+   * the screen's designed steps somebody does outside the code (`steps[].by`, core decisions.ts): a person, a partner,
+   * another system — never a gate, never a verdict. Absent when the screen declares none.
+   */
+  offPlatform?: OffPlatformStep[];
   /** this segment's cut points as a list, each named where it happened (R24) */
   cutPoints: { parentStep: number; nodeId: string; name: string; reason: JourneyCutPoint['reason']; moment: number }[];
   /**
@@ -1193,7 +1257,11 @@ export interface JourneySummary {
   /** what tests verify this journey and each segment (core/coverage.ts) — absent when the graph has no test nodes */
   coverage?: JourneyCoverage;
   /** band 1 — screens in order (the entry when it is a screen; a flow's screens; else the pages upstream) */
-  user: { id: string; name: string; kind: GraphNode['kind']; business?: string; designId?: string; designStatus?: string; hasImage: boolean; links: NonNullable<GraphNode['links']>; components: string[]; loc?: GraphNode['loc'] }[];
+  user: {
+    id: string; name: string; kind: GraphNode['kind']; business?: string; designId?: string; designStatus?: string; hasImage: boolean; links: NonNullable<GraphNode['links']>; components: string[]; loc?: GraphNode['loc'];
+    /** who uses this screen (a persona id), its name and what placed it — set by core journeys.ts `withScreenPersonas` where the journey is served */
+    persona?: string; personaName?: string; personaFrom?: PersonaFrom;
+  }[];
   /** band 2 — the plain-language story: description, documents, the rules and gates in force, the decisions along the way */
   business: {
     description?: string;
@@ -1228,7 +1296,7 @@ export interface JourneySummary {
     records: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore }[];
     messages: { id: string; name: string }[];
     /** `ops` from the HTTP methods of the edges that reached it (`opOfMethod`); `store` when it is used as a data store */
-    externals: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore }[];
+    externals: { id: string; name: string; ops: ('reads' | 'writes')[]; store?: MarkerStore; party?: true }[];
     /**
      * the data stores the journey touches, each once by name, first-seen order: `records` = distinct
      * record nodes that live in it, `externals` = store-like external nodes that are it (an ERP is 1),
@@ -1460,6 +1528,18 @@ export function humanizeName(name: string): string {
  * disagree about what a feature is made of. Screens come from `screens`
  * (screensFor); everything else is derived from the steps.
  */
+/** The parties the journey's steps done outside the code name, each once, after the externals the walk reached. */
+function partiesNamed(segments: JourneySegment[], reached: Map<string, unknown>): JourneySummary['system']['externals'] {
+  const out = new Map<string, JourneySummary['system']['externals'][number]>();
+  for (const sg of segments) {
+    for (const st of sg.offPlatform ?? []) {
+      if (!st.party || reached.has(st.party.id) || out.has(st.party.id)) continue;
+      out.set(st.party.id, { id: st.party.id, name: st.party.name, ops: [], party: true });
+    }
+  }
+  return [...out.values()];
+}
+
 export function journeySummary(index: GraphIndex, j: Journey, screens: GraphNode[]): JourneySummary {
   return withJourneyPreconditions(index, j, withJourneyCoverage(index, j, withJourneyCounted(j, buildJourneySummary(index, j, screens))));
 }
@@ -1554,9 +1634,12 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     }
   }
 
+  /** the calls a constant switches off: named on the action that holds them, never a marker */
+  const switchedOffSteps: { stepOrder: number; nodeId: string; name: string; flag: string; value: boolean; at: string }[] = [];
   for (const s of j.steps) {
     const n = index.byId.get(s.nodeId);
     if (!n) continue;
+    if (s.switchedOff) { switchedOffSteps.push({ stepOrder: s.order, nodeId: n.id, name: nameOf(n), ...s.switchedOff }); continue; }
     const repo = repoOf(n);
     if (n.loc) repos.add(repo);
     const business = businessSummary(n);
@@ -1652,13 +1735,17 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       }
       const kind: 'guard' | 'rule' = g?.kind === 'rule' ? 'rule' : 'guard';
       const have = seg.gates.find((x) => x.name === row.name && x.kind === kind);
+      // every place the walk met it, with the roles that call site handed it — one guard met by two actions
+      // stands under both, each with its own list (outsider round 2026-10-13, F2); `gatesInRange` reads it
+      const occ: GateOccurrence = { stepOrder: row.stepOrder, ...(g?.requires ? { requires: g.requires } : {}) };
       if (have) {
         have.count++;
-        // one guard handed different roles on this screen: both roles are what it requires here
-        if (g?.requires && have.requires && !have.requires.split(', ').includes(g.requires)) have.requires = [...new Set([...have.requires.split(', '), ...g.requires.split(', ')])].join(', ');
+        have.at = [...(have.at ?? []), occ];
+        // the screen's own list: every role any action on this screen handed it, an action's own column reads `at`
+        if (g?.requires && have.requires) have.requires = [...new Set([...have.requires.split(', '), ...g.requires.split(', ')])].join(', ');
         else if (g?.requires && !have.requires) have.requires = g.requires;
       }
-      else seg.gates.push({ id: row.nodeId, kind, name: row.name, ...(row.planned ? { planned: true as const } : {}), count: 1, stepOrder: row.stepOrder, ...tierFactsOf(g) });
+      else seg.gates.push({ id: row.nodeId, kind, name: row.name, ...(row.planned ? { planned: true as const } : {}), count: 1, stepOrder: row.stepOrder, ...tierFactsOf(g), at: [occ] });
       continue;
     }
     if (row.kind === 'decision') {
@@ -1845,6 +1932,15 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
       const rt = routeFor(op);
       return { op, ...(rt ? { routeId: rt.id } : {}), label: nonEmpty(rt?.contract?.summary) ?? op };
     });
+    // what the design says somebody does on this screen outside the code — a build state of its own, never a stop
+    const off = offPlatformSteps(index, sg.screen ? index.byId.get(sg.screen.id) : undefined);
+    if (off.length) sg.offPlatform = off;
+    for (const so of switchedOffSteps) {
+      if (so.stepOrder < sg.from || so.stepOrder > sg.to) continue;
+      let at = 0;
+      for (let k = moments.length - 1; k >= 0; k--) if (so.stepOrder >= moments[k]!.from) { at = k; break; }
+      (moments[at]!.switchedOff ??= []).push(so);
+    }
     for (const mk of sg.markers) {
       let at = 0;
       for (let k = moments.length - 1; k >= 0; k--) if (mk.stepOrder >= moments[k]!.from) { at = k; break; }
@@ -1954,7 +2050,12 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
         items: untranslated,
       },
     },
-    system: { timeline, records: [...records.values()], messages: [...messages.values()], externals: [...externals.values()], stores: storesOf(records, externals), afterwards: [...afterwards.values()], repos: [...repos] },
+    system: {
+      timeline, records: [...records.values()], messages: [...messages.values()],
+      // the parties a step done outside the code names come after the systems the code reaches: declared, no code reaches them
+      externals: [...externals.values(), ...partiesNamed(segments, externals)],
+      stores: storesOf(records, externals), afterwards: [...afterwards.values()], repos: [...repos],
+    },
     segments,
     // rank first (the request path read downward), first-seen inside a rank
     systems: withRecordsStore([...systemRows.values()], segments).sort((a, b) => systemRank(a) - systemRank(b)),

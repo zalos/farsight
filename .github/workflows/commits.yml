@@ -1,0 +1,36 @@
+# A title edit must recheck the squash-commit title without cancelling running tests.
+name: Commit conventions
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: commits-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  commits:
+    name: commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # the title reaches the script through env, never pasted into shell text
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the lint walks base..head
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: The PR title is a Conventional Commit (it is the commit that lands on main)
+        run: node scripts/lint-commits.mjs --message "$PR_TITLE"
+      - name: Every commit on the branch is a Conventional Commit
+        run: node scripts/lint-commits.mjs --range "$BASE_SHA..$HEAD_SHA" --any-scope
+

@@ -174,7 +174,8 @@ test.describe('map property', () => {
     await expect(page.locator('.mp-body .mp-row[data-map-card="message"]')).toHaveCount(1);
 
     await openTab(page, 'tests');
-    await expect(page.locator('.mp-body .ev')).toHaveText(/seen by a coverage run/i);
+    // billing's create case passed on desktop and was skipped on mobile by its own condition: it passed, and declares this (F3)
+    await expect(page.locator('.mp-body .ev')).toHaveText(/passed, by its own declaration/i);
     await expect(page.locator('.mp-body .mp-row[data-map-card="test"]')).toHaveCount(6);
 
     await openTab(page, 'work');

@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve, basename, sep } from 'node:path';
 import {
-  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, journeyLifecycles, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
+  GraphStore, readModelHubState, rotateEventsFile, journey, journeySummary, withScreenPersonas, screenPersonaNotes, journeyLifecycles, resolveEntry, buildIndex, setFreshnessMeta, categorizeBranch, SnapshotDb, STRINGS,
   stitchHttp, apiSurface, consumersOf, graphToSpec, reconcile, driftMarkdown,
   designSurface, screensFor, reconcileDesign, designDriftMarkdown, figmaFileKey, designGuide, buildInfo, installState, currencyAdvice,
   storybookLive, storybooksOf, isStorybookUrl, storyCounts,
@@ -16,7 +16,7 @@ import {
   impactOf, affectedReach, search, buildLine, projectGraph, projectNodeIds, appClosure, findProject,
   packagesOf, importersOf, resolvePackage, IMPACT_MAX_HOPS,
   diffGraphs, toSarif, toMarkdown, changeSentence, attributeDiffOver, spineRowNote, spineSentences, parseSyncRef, INCOMPLETE_SENTENCE,
-  counted, journeyTree, configCounts, gateCard, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placeOnJourney, flowWalks, type LifecyclePlace,
+  counted, journeyTree, configCounts, gateCard, roleTable, rolesCsv, decisionsAnswer, stateOfPlay, historyFact, lifecycleViews, flowPersonas, placesOnJourney, flowWalks, type LifecyclePlace, type LifecyclePlaces, type LifecycleSwitchedPlace,
   tourOf, ask, askExample,
 } from '@farsight/core';
 import type { CoverageTestRef, GraphIndex, GraphEdge, GraphNode, JourneyStep, SourceStat, GraphMeta, TestsMeta, CommitSpine, SpineRow, CheckoutFact, ShotInput, ShotRow } from '@farsight/core';
@@ -1065,11 +1065,14 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       // summary only; on a large graph the steps are most of the answer and every one reads its file)
       const withSteps = !['0', 'false'].includes(q.get('steps') ?? '');
       const summary = journeySummary(g.index, jr, screens);
+      // who uses each screen (its own row, a persona's routes, the sign-in guard its code meets, else the journey's)
+      withScreenPersonas(g.index, g.meta.journeys, summary.user, entryNode.kind === 'flow' ? entry : undefined);
       // the lifecycle in the words of the persona(s) the flow is for, each writer placed on this journey's screen
       const flowName = entryNode.kind === 'flow' ? (entryNode.design?.name ?? entryNode.name) : entryNode.name;
       const lifecycles = journeyLifecycles(g.index, jr, {
         personas: flowPersonas(g.index, g.meta.journeys, entry),
-        ...(entryNode.kind === 'flow' ? { locate: placeOnJourney({ id: entry, name: flowName }, jr, summary) } : {}),
+        // every place a writer runs on this journey, the most direct live one first, the switched-off ones apart
+        ...(entryNode.kind === 'flow' ? { places: placesOnJourney({ id: entry, name: flowName }, jr, summary) } : {}),
       });
       return send(200, JSON.stringify({
         entry: enrichNode(entryNode),
@@ -1107,17 +1110,30 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const answer = folded(g.index, 'lifecycle', `${id}\u0000${flow}`, () => {
         const walks = flowWalks(g.index);
         const order = [...walks.filter((w) => w.id === flow), ...walks.filter((w) => w.id !== flow)];
-        const locate = (writer: string): LifecyclePlace | undefined => {
-          for (const w of order) {
-            const sc = w.screens.find((x) => x.nodes.has(writer));
-            if (sc) {
-              const f = g.index.byId.get(w.id);
-              return { flowId: w.id, flowName: f?.design?.name ?? w.name, screen: sc.segment + 1, screenName: sc.name, here: w.id === flow };
+        // every live place a writer runs (lane moves, 2026-10-13): the open journey first, then the action that calls the
+        // writer most directly — never the first screen the walks met; the places a constant switches off apart
+        const places = (writer: string): LifecyclePlaces => {
+          const live: (LifecyclePlace & { rank: number })[] = [];
+          const off: LifecycleSwitchedPlace[] = [];
+          order.forEach((w, wi) => {
+            const f = g.index.byId.get(w.id);
+            for (const sc of w.screens) {
+              const base = { flowId: w.id, flowName: f?.design?.name ?? w.name, screen: sc.segment + 1, screenName: sc.name, here: w.id === flow };
+              const wr = sc.writers?.get(writer);
+              if (wr) live.push({ ...base, action: wr.action, hops: wr.hops, rank: wi });
+              else if (sc.nodes.has(writer)) live.push({ ...base, rank: wi });
+              const o = sc.off?.get(writer);
+              if (o && (!wr || wr.action !== o.action)) off.push({ ...base, action: o.action, flag: o.flag, value: o.value, at: o.at });
             }
-          }
-          return undefined;
+          });
+          live.sort((a, b) => Number(b.here) - Number(a.here) || (a.hops ?? 99) - (b.hops ?? 99) || a.rank - b.rank || a.screen - b.screen);
+          // one place per screen and action: the same screen on two journeys is one place a person acts from
+          const once = <T extends LifecyclePlace>(xs: T[]): T[] => { const seen = new Set<string>(); return xs.filter((p) => { const k = `${p.screenName}|${p.action ?? ''}`; if (seen.has(k)) return false; seen.add(k); return true; }); };
+          // a switched-off call is one fact per action, however many screens show that action
+          const offOnce = off.filter((p, i) => off.findIndex((q) => q.action === p.action && q.flag === p.flag) === i);
+          return { live: once(live.map(({ rank: _r, ...p }) => p)), off: offOnce };
         };
-        return { node: id, name: node.name, views: lifecycleViews(g.index, node, { personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [], locate }) };
+        return { node: id, name: node.name, views: lifecycleViews(g.index, node, { personas: flow ? flowPersonas(g.index, g.meta.journeys, flow) : [], places }) };
       }, 32);
       return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
     }
@@ -1141,6 +1157,19 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
         code, ...(sliced && sliced.codeTruncated ? { codeTruncated: true } : {}),
       }));
     }
+    if ((url === '/api/decisions' || url.startsWith('/api/decisions?')) && req.method === 'GET') {
+      // the decisions the sources declare and the code names (the 2026-10-13 outsider round, F8): every one, the one
+      // `id` names, or the ones on `node` — the team's words quoted, the document's first paragraph quoted, where the
+      // code names each — core decisionsAnswer(), the same fold MCP `decisions` and `farsight decisions` print
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const q = new URL(url, 'http://localhost').searchParams;
+      const g = loadJourneyGraph(graphPath);
+      const opts = { ...(q.get('repo') ? { repo: q.get('repo')! } : {}), ...(q.get('id') ? { id: q.get('id')! } : {}), ...(q.get('node') ? { node: q.get('node')! } : {}) };
+      if (opts.node && !g.index.byId.has(opts.node)) return send(404, JSON.stringify({ error: `no node ${opts.node} in this graph` }));
+      const answer = folded(g.index, 'decisions', `${opts.repo ?? ''}\u0000${opts.id ?? ''}\u0000${opts.node ?? ''}`, () => decisionsAnswer(g.index, g.meta.decisions, opts), 64);
+      if (opts.id && !answer.decisions.length) return send(404, JSON.stringify({ error: `no decision ${opts.id} is declared or named in code` }));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...answer }));
+    }
     if ((url === '/api/gate' || url.startsWith('/api/gate?')) && req.method === 'GET') {
       // one gate answered (swarm-fixes 2026-10-05, finding 4): what it is, the words somebody wrote, what it sits on,
       // the calls a request goes through to meet it and the tests that reach them — core gateCard(), the same fold
@@ -1151,7 +1180,21 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const g = loadJourneyGraph(graphPath);
       const card = folded(g.index, 'gate', id, () => gateCard(g.index, id) ?? null, 64);
       if (!card) return send(404, JSON.stringify({ error: g.index.byId.has(id) ? `${id} is not a gate or a rule` : `no node ${id} in this graph` }));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...card }));
+      // a role guard's card says who may do what at each action it guards (F4)
+      const roles = card.gate.gateKind === 'guard' ? folded(g.index, 'roles', JSON.stringify({ guard: id }), () => roleTable(g.index, { guard: id }), 16) : null;
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...card, ...(roles && roles.rows.length ? { roles } : {}) }));
+    }
+    if ((url === '/api/roles' || url.startsWith('/api/roles?')) && req.method === 'GET') {
+      // who may do what (outsider round 2026-10-13, F4): every action a role guard stands in front of, the roles the
+      // code lists for it, where the list was read from, the journeys that reach it and the tests that prove it —
+      // core roleTable(), the same fold the MCP `roles` tool and `farsight roles` print. `format=csv` for a sheet
+      if (!existsSync(graphPath)) return send(404, JSON.stringify({ error: 'no graph yet — sync sources in settings or run farsight ingest' }));
+      const u = new URL(url, 'http://localhost');
+      const q = { repo: u.searchParams.get('repo') || undefined, role: u.searchParams.get('role') || undefined, action: u.searchParams.get('action') || undefined, guard: u.searchParams.get('guard') || undefined, flow: u.searchParams.get('flow') || undefined };
+      const g = loadJourneyGraph(graphPath);
+      const table = folded(g.index, 'roles', JSON.stringify(q), () => roleTable(g.index, q), 16);
+      if (u.searchParams.get('format') === 'csv') return send(200, rolesCsv(table), 'text/csv; charset=utf-8');
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, ...table }));
     }
     // ── Tests surface (docs/proposals/tests-surface.md §3.4) ─────────────
     if (url.startsWith('/api/tests') && req.method === 'GET') {
@@ -1478,7 +1521,9 @@ export function serveGraph(graphPath: string, port: number, workspaceDir = proce
       const config = Object.fromEntries(Object.entries(g.meta.config ?? {}).filter(([r]) => !repo || r === repo));
       // the typed counts per source (files, conflicts), so the Settings list prints the fold's numbers
       const counts = Object.fromEntries(Object.entries(config).map(([r, m]) => [r, configCounts(m)]));
-      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts }));
+      // where a manifest's persona declarations and the code disagree about who uses a screen (core screenPersonaNotes)
+      const personaNotes = Object.fromEntries(Object.keys(config).map((r) => [r, screenPersonaNotes(g.index, g.meta.journeys, new Set([r]))]).filter(([, n]) => (n as string[]).length));
+      return send(200, JSON.stringify({ generatedAt: g.meta.generatedAt, config, counts, personaNotes }));
     }
     if (url.startsWith('/api/openapi') && req.method === 'GET') {
       // a spec generated from the code — every inference marked x-farsight-inferred

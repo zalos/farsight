@@ -11,13 +11,14 @@
 import { esc, humanize, currentLens } from '../store.js';
 import { t } from '../strings.js';
 import { sym } from '../sym.js';
-import { countedHtml, countWords } from '../lib/counted.js';
+import { countedHtml, countWords, countedTipArgs } from '../lib/counted.js';
 import { tipAttrs } from '../lib/tooltip.js';
 import { mapTestsChips } from '../lib/map-chips.js';
 import { lifecycleStripHtml } from '../lib/lifecycle-strip.js';
 import { pickView } from '../lib/lifecycle-model.js';
 import { LANE_K } from '../lib/map-lanes-model.js';
 import { storeShownName } from '../lib/map-model.js';
+import { offPlatformStageHtml, partyLaneHeadHtml } from '../lib/parties.js';
 
 const biz = () => currentLens() === 'business';
 const fill = (key, vars) => Object.entries(vars || {}).reduce((s, [k, v]) => s.split('{' + k + '}').join(String(v)), t(key));
@@ -73,8 +74,9 @@ function stageHtml(st, r, m, say) {
   const label = t('lanes.stage.open') + ' · ' + st.name + ' · ' + st.journeyName;
   return '<div class="ln-stage' + (st.state === 'planned' ? ' planned' : '') + (st.branch ? ' branch' : '') + '" role="button" tabindex="0"'
     + ' data-key="' + esc(st.key) + '" data-flow="' + esc(st.flowId) + '" data-index="' + st.screenIndex + '" data-name="' + esc(st.name) + '"'
+    + ' data-lane="' + esc(st.lane) + '" data-persona-from="' + esc(st.personaFrom || 'journey') + '"'
     + ' aria-label="' + esc(label) + '" style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px">'
-    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: [st.name, st.sub ? say(st.sub) : '', st.words ? say(st.words) : ''].filter((x, i, a) => x && a.indexOf(x) === i).join(' · '), noFocus: true }) + '>' + esc(st.name) + '</span>' + status + '</div>'
+    + '<div class="ttl">' + step + '<span class="nm"' + tipAttrs({ text: [st.name, st.sub ? say(st.sub) : '', st.words ? say(st.words) : '', st.personaFrom && st.personaFrom !== 'journey' ? t('journeys.personaFrom.' + st.personaFrom) : ''].filter((x, i, a) => x && a.indexOf(x) === i).join(' · '), noFocus: true }) + '>' + esc(st.name) + '</span>' + status + '</div>'
     + (st.sub && st.sub !== st.name ? '<div class="sub"' + tipAttrs({ text: say(st.sub), noFocus: true }) + '>' + esc(say(st.sub)) + '</div>' : '')
     + '<div class="ln-chips">' + tests + '</div>' + dec + '</div>';
 }
@@ -89,7 +91,10 @@ function pillHtml(p, r, m, say) {
   const move = p.kind === 'created' ? fill('lanes.pill.created', { status: statusWords(p.status, p.record.id) })
     : p.kind === 'move' ? fill('lanes.pill.move', { status: statusWords(p.status, p.record.id) }) : t('lanes.pill.written');
   const by = p.writers.length ? fill('lanes.pill.by', { name: p.writers.join(', ') }) : '';
-  const tip = recordWords(p.record.name) + ' · ' + move + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '');
+  // the action that makes the move most directly is named; the other live actions fold; a switched-off one is said so
+  const also = p.also && p.also.length ? ' · ' + fill('lifecycle.alsoReached', { n: p.also.length }) : '';
+  const off = (p.switchedOff || []).map((o) => ' · ' + (biz() ? fill('lifecycle.biz.switchedOffMover', { action: say(o.label) }) : fill('lifecycle.switchedOffMover', { action: o.label, flag: o.flag, value: o.value }))).join('');
+  const tip = recordWords(p.record.name) + ' · ' + move + (p.action ? ' · ' + say(p.action) : '') + (by ? ' · ' + by : '') + (makers.length ? ' · ' + fill('lanes.pill.from', { names: makers.join(', ') }) : '') + also + off;
   const rec = p.first && !p.isStore;
   const code = by && !biz() ? '<span class="by map-code">' + codeBreaks(fill('lanes.pill.by', { name: p.writers[0] })) + (p.writers.length > 1 ? ' <span class="more">' + esc(fill('fold.more', { n: p.writers.length - 1 })) + '</span>' : '') + '</span>' : '';
   const needs = needsHtml(p, say);
@@ -126,8 +131,21 @@ function needsHtml(p, say) {
     : '';
   const action = biz() ? '' : n.action.split('::').pop();
   const tip = t('handoff.needs').replace('{action}', action || t('lanes.pill.thisMove')).replace('{list}', items.join(' · ')) + (nc ? ' · ' + nc : '');
+  // *needs N* lists the N (gap log S2): the number's tip is the count with its scope, then one row per precondition —
+  // its words, its tier, its evidence — so the column adds up to N; business folds the technical ones into one row
+  let num = '';
+  if (n.counted) {
+    const args = countedTipArgs(n.counted, API);
+    const all = n.all || [];
+    const tierWord = (x) => t('gate.tier.' + x.tier);
+    const rows = biz()
+      ? n.shown.map((x) => [line(x), 1]).concat(n.technical ? [[countWords('gate.group.technical', n.technical), n.technical]] : [])
+      : all.map((x) => [line(x) + ' · ' + tierWord(x), 1]);
+    if (rows.length) args.breakdown = { rows };
+    num = '<span class="ln-n"' + tipAttrs({ number: args }) + '>' + esc(fill('lanes.pill.needs', { n: n.counted.n })) + '</span>';
+  } else num = '<span>' + esc(fill('lanes.pill.needs', { n: n.shown.length + n.technical })) + '</span>';
   return '<span class="nd map-chip"' + tipAttrs({ text: tip, noFocus: true }) + '>' + sym('gate')
-    + (n.counted ? countedHtml(n.counted, API, { cls: 'ln-n', words: fill('lanes.pill.needs', { n: n.counted.n }) }) : '<span>' + esc(fill('lanes.pill.needs', { n: n.shown.length + n.technical })) + '</span>')
+    + num
     + (nc ? '<span class="nc">' + sym('warning') + esc(t('lanes.pill.uncheckedShort')) + '</span>' : '') + '</span>';
 }
 
@@ -229,6 +247,7 @@ function legendHtml(m) {
     + (has('seen') ? row('seen', 'lanes.legend.seen') : '')
     + (m.stages.some((s) => s.state === 'planned') ? row('planned', 'lanes.legend.notBuilt') : '')
     + (has('branch') ? row('branch', 'lanes.legend.branch') : '')
+    + (m.stages.some((s) => s.off) ? row('off', 'lanes.legend.offPlatform') : '')
     + (m.needs ? row('needs', 'lanes.legend.needs') : '')
     + '</div>';
 }
@@ -241,6 +260,7 @@ function footerHtml(m) {
     countedHtml(c.screens, API, { cls: 'ln-n' }),
     countedHtml(c.built, API, { cls: 'ln-n' }),
     countedHtml(c.branches, '/api/journeys', { cls: 'ln-n' }),
+    c.offPlatform ? countedHtml(c.offPlatform, API, { cls: 'ln-n' }) : '',
   ].filter(Boolean);
   const reading = m.ready ? '' : '<span class="rd"' + tipAttrs({ key: 'lanes.footer.reading', noFocus: true }) + '>' + esc(fill('lanes.footer.reading', { n: m.read, m: m.of })) + '</span>';
   const notes = m.notes.length
@@ -275,7 +295,9 @@ export function lanesHtml(m, G, ctx = {}) {
   let html = '';
   // the board's header: the storyline, the LANES tag, how many lanes, the evidence of its journeys, its sentence
   const nLanes = { n: m.lanes.length, unit: 'lanes.count.lanes', bizUnit: 'lanes.count.lanes', scope: m.single ? 'journey.scopeAll' : 'count.scope.storyline', source: 'laneLayout → lanes',
-    breakdown: [{ key: 'lanes.part.personaLanes', n: m.lanes.filter((l) => l.kind === 'persona').length }, { key: 'lanes.part.storeLanes', n: m.lanes.filter((l) => l.kind === 'store').length }] };
+    breakdown: [{ key: 'lanes.part.personaLanes', n: m.lanes.filter((l) => l.kind === 'persona').length },
+      ...(m.lanes.some((l) => l.kind === 'party') ? [{ key: 'lanes.part.partyLanes', n: m.lanes.filter((l) => l.kind === 'party').length }] : []),
+      { key: 'lanes.part.storeLanes', n: m.lanes.filter((l) => l.kind === 'store').length }] };
   html += '<div class="ln-top" style="left:' + G.geom.margin + 'px;top:' + (G.geom.margin / 2) + 'px;width:' + (G.size.w - G.geom.margin * 2) + 'px">'
     + '<span class="nm">' + esc(m.storyline.name) + '</span>'
     + '<span class="tag"' + tipAttrs({ key: 'lanes.tag', noFocus: true }) + '>' + esc(t('lanes.tag')) + '</span>'
@@ -290,11 +312,11 @@ export function lanesHtml(m, G, ctx = {}) {
     const l = m.lanes.find((x) => x.id === lr.lane);
     if (!l) continue;
     html += '<div class="ln-lane ' + l.kind + '" data-lane="' + esc(l.id) + '" data-segment="' + lr.segment + '" style="left:' + lr.x + 'px;top:' + lr.y + 'px;width:' + lr.w + 'px;height:' + lr.h + 'px">'
-      + '<div class="ln-headbox" style="width:' + G.geom.head + 'px">' + laneHeadHtml(l, m.single) + '</div>' + emptyHtml(l, lr, m, G) + '</div>';
+      + '<div class="ln-headbox" style="width:' + G.geom.head + 'px">' + (l.kind === 'party' ? partyLaneHeadHtml(l) : laneHeadHtml(l, m.single)) + '</div>' + emptyHtml(l, lr, m, G) + '</div>';
   }
   html += '<svg class="ln-arrows" aria-hidden="true" width="' + G.size.w + '" height="' + G.size.h + '">' + arrowsSvg(m, G, labels) + '</svg>';
   const say = ctx.sentence || ((x) => x);
-  for (const st of m.stages) { const r = G.rects.get(st.key); if (r) html += stageHtml(st, r, m, say); }
+  for (const st of m.stages) { const r = G.rects.get(st.key); if (r) html += st.off ? offPlatformStageHtml(st, r) : stageHtml(st, r, m, say); }
   for (const p of m.pills) { const r = G.rects.get(p.key); const l = m.lanes.find((x) => x.id === p.lane); if (r) html += pillHtml({ ...p, isStore: !!(l && l.name === p.record.name) }, r, m, say); }
   for (const lb of labels) {
     html += '<div class="ln-label ' + lb.cls + '" style="left:' + lb.x + 'px;top:' + lb.y + 'px' + (lb.max ? ';max-width:' + lb.max + 'px' : '') + '">' + esc(lb.text) + '</div>';

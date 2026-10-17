@@ -21,6 +21,7 @@ import { countedAttrs, defAttrs } from './counted.js';
 import { copyDoorsHtml } from './detail-doors.js';
 import { clauseHtml, citeChipHtml, askBoxHtml, redrawAsk } from './ask.js';
 import { foldRow } from './fold-row.js';
+import { loadDecisions, decisionChipsHtml } from './decisions.js';
 
 const API = '/api/tour';
 const biz = () => currentLens() === 'business';
@@ -167,6 +168,10 @@ function draw() {
     ? clauses.replace('<p class="tw-cl r-need', '<p class="tw-needs hud-label"' + defAttrs('tour.handoff.needsHead') + '>' + esc(t('tour.handoff.needsHead')) + '</p><p class="tw-cl r-need')
     : clauses;
   const refs = stop.referenced.filter((id) => (d.nodes[id] || {}).kind !== 'test');
+  // a decision the team made or left open on what this stop cites (lib/decisions.js); drawn again once they are read
+  const decIds = [stop.screen.id, ...stop.referenced, ...(stop.move ? [stop.move.by] : [])];
+  const decs = decisionChipsHtml(decIds, { cls: 'tw-decs' });
+  if (!decs) loadDecisions().then(() => { if (decisionChipsHtml(decIds) && TOUR.open && TOUR.data === d && d.stops[TOUR.at] === stop) draw(); });
   const referenced = refs.length ? '<div class="tw-refs"><span class="hud-label"' + defAttrs('tour.referenced') + '>' + esc(t('tour.referenced')) + '</span>'
     + refs.slice(0, 12).map((id) => citeChipHtml(id, d.nodes[id], place)).join('') + (refs.length > 12 ? '<span class="tw-more">+' + (refs.length - 12) + '</span>' : '') + '</div>' : '';
   const dots = '<div class="tw-dots" role="group" aria-label="' + esc(t('tour.dots')) + '"' + tipAttrs({ key: 'tour.dots', noFocus: true }) + '>'
@@ -181,6 +186,7 @@ function draw() {
     + '<div class="tw-body" tabindex="-1">'
     + '<h3 class="tw-stop-title">' + esc(b ? stop.title.biz : stop.title.text) + '</h3>'
     + '<p class="tw-sub">' + esc(b ? stop.sub.biz : stop.sub.text) + '</p>' + branch
+    + (decs ? '<div class="tw-dec">' + decs + '</div>' : '')
     + '<div class="tw-text">' + body + '</div>'
     + referenced
     + '<p class="tw-derived"' + defAttrs('tour.derived') + '>' + esc(t('tour.derived')) + '</p>'

@@ -177,7 +177,9 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
   // the first file to declare an import / a store name keeps it — the root's, when it has one
   const externals: ExternalDecl[] = [...(Array.isArray(root.externals) ? root.externals : [])];
   const stores: StoreDecl[] = [...(Array.isArray(root.stores) ? root.stores : [])];
-  const externalFrom = new Map<string, string>(externals.map((e) => [e.import, rootFile!.path]));
+  // a party has no import: it is keyed by its name
+  const extKey = (e: ExternalDecl) => (typeof e.import === 'string' ? e.import : `party:${String(e.name ?? '').toLowerCase()}`);
+  const externalFrom = new Map<string, string>(externals.map((e) => [extKey(e), rootFile!.path]));
   const storeFrom = new Map<string, string>(stores.map((s) => [s.name, rootFile!.path]));
   const storeDecl = new Map<string, StoreDecl>();
   for (const s of stores) if (!storeDecl.has(s.name)) storeDecl.set(s.name, s);
@@ -252,7 +254,16 @@ function mergeConfigs(files: ConfigFile[], meta: ConfigMeta, scoped: ScopedStore
     }
     if (Array.isArray(c.externals)) {
       for (const e of c.externals) {
-        if (!e || typeof e !== 'object' || typeof e.import !== 'string') continue;
+        if (!e || typeof e !== 'object') continue;
+        if (e.kind === 'party' && typeof e.import !== 'string' && typeof e.name === 'string') {
+          const k = extKey(e);
+          const first = externalFrom.get(k);
+          if (first) { addConflict(meta, 'external', e.name, [first, f.path], first); continue; }
+          externalFrom.set(k, f.path);
+          externals.push({ ...e });
+          continue;
+        }
+        if (typeof e.import !== 'string') continue;
         // `<path>::<Class>` names a file, so it is relative to the folder too; a bare package specifier is not a path
         const sep = e.import.indexOf('::');
         let imp = e.import;

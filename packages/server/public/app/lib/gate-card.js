@@ -17,8 +17,9 @@
 // A surface makes a gate open the card with `gateAttrs(id, { step, config })` on the element that names it; the
 // click, Enter and Space are answered here.
 
+import { loadDecisions, decisionsOn, decisionChipHtml, decisionCardHtml } from './decisions.js';
 import { S, esc, expose, currentLens } from '../store.js';
-import { t, plainWords } from '../strings.js';
+import { t, plainWords, refusalWords } from '../strings.js';
 import { sym } from '../sym.js';
 import { showTip, hideTip, tipAnchor, tipOpen, repositionTip } from './tooltip.js';
 import { doorsFor, doorsHtml, fetchSource, copyDoorsHtml } from './detail-doors.js';
@@ -26,7 +27,7 @@ import { countedHtml, defAttrs } from './counted.js';
 import { mapEvidenceChip } from './map-chips.js';
 import { testChipHtml } from './test-chip.js';
 import { gateCardModel } from './gate-card-model.js';
-import { jrnGateInWords, jrnGateText } from './journey-draw.js';
+import { jrnGateInWords, jrnGateText, jrnRoleWords } from './journey-draw.js';
 
 const API = '/api/gate';
 /** How long the card waits for the service before it opens with *reading what reaches it…* instead. */
@@ -64,8 +65,26 @@ function gateName(m) {
   const n = m.facts.node;
   // a precondition is named by its sentence everywhere but the code register, which prints its code form
   if (m.precondition && currentLens() !== 'code') return biz() ? plainWords(m.precondition.words) || m.precondition.words : m.precondition.words;
-  if (!biz()) return jrnGateText(n) || n.name;
-  return plainWords(jrnGateInWords(n)) || t('gate.unnamed');
+  if (currentLens() === 'code') return jrnGateText(n) || n.name;
+  return gateWords(m) || (biz() ? t('gate.unnamed') : jrnGateText(n) || n.name);
+}
+/**
+ * The words the app wrote for a gate, in the order a reader trusts them (outsider round 2026-10-13, F2): the
+ * precondition's sentence, the `@business` sentence, the `@guard` label when it is words, else ''. Never the
+ * identifier — the hybrid register prints the code form beside these words (`gateCodeForm`), not instead of them.
+ */
+export function gateWords(m) {
+  if (m.precondition && m.precondition.words) return biz() ? plainWords(m.precondition.words) || m.precondition.words : m.precondition.words;
+  const b = m.facts.business;
+  if (b) return biz() ? plainWords(b) || b : b;
+  const w = jrnGateInWords(m.facts.node);
+  return w ? (biz() ? plainWords(w) || '' : w) : '';
+}
+/** The code form the hybrid register prints beside the words: the gate's own name, when the title is not it already. */
+function gateCodeForm(m) {
+  if (currentLens() !== 'hybrid' || m.precondition) return '';
+  const code = jrnGateText(m.facts.node) || m.facts.node.name;
+  return code && code !== gateName(m) ? '<code class="gc-codeform">' + esc(code) + '</code>' : '';
 }
 function kindKey(m) {
   if (m.precondition) return 'gate.kind.precondition';
@@ -104,7 +123,7 @@ function sentenceHtml(m) {
   if (m.precondition) {
     const w = m.precondition.words || '';
     return '<p class="gc-says">' + esc(biz() ? plainWords(w) || w : w) + '</p>'
-      + (m.precondition.else ? '<p class="gc-dim"' + defAttrs('gate.pre.else') + '>' + esc(fill(t('gate.pre.else'), { else: m.precondition.else })) + '</p>' : '')
+      + (m.precondition.else ? '<p class="gc-dim"' + defAttrs('gate.pre.else') + '>' + esc(fill(t('gate.pre.else'), { else: refusalWords(m.precondition.else, currentLens()) })) + '</p>' : '')
       + (m.precondition.via ? '<p class="gc-dim"' + defAttrs('gate.pre.via.' + m.precondition.via) + '>' + esc(t('gate.pre.via.' + m.precondition.via)) + '</p>' : '');
   }
   const says = s.says.source === 'business' ? (biz() ? plainWords(s.says.words) : s.says.words)
@@ -165,6 +184,46 @@ function testsHtml(m) {
   return '<section class="gc-sec" data-gc-sec="tests">' + head + m.tests.rows.map((r) => testRowHtml(r, m)).join('')
     + (m.tests.more ? '<p class="gc-more">' + esc(fill(t('gate.more'), { n: m.tests.more })) + '</p>' : '') + '</section>';
 }
+// ── who may do what (outsider round 2026-10-13, F4) ─────────────────────────
+/** One action a role guard stands in front of: its words, the roles the code lists, the test that proves it. */
+function roleRowHtml(r, here) {
+  const b = biz();
+  const name = b ? (plainWords(r.words) || r.words) : (r.action.method && r.action.path ? r.action.method + ' ' + r.action.path : r.action.name);
+  const roles = r.rolesRead ? (b ? jrnRoleWords(r.roles.join(', ')) : r.roles.join(', ')) : t('roles.cell.unread');
+  const first = (r.tests || []).find((x) => !x.runLevel);
+  const proof = first
+    ? fill(t('roles.proof'), { test: first.name }) + (first.status ? ' · ' + fill(t('roles.lastRun'), { status: first.status, date: String(first.at || '').slice(0, 10) }) : '')
+      + (!b && first.loc ? ' · ' + first.loc.path + ':' + first.loc.line : '')
+    : t('roles.proof.none');
+  return '<div class="gc-row gc-role' + (here ? ' here' : '') + '" data-role-action="' + esc(r.action.id) + '">'
+    + (here ? '<span class="gc-here"' + defAttrs('gate.roles.here') + '>' + esc(t('gate.roles.here')) + '</span>' : '')
+    + '<span class="gc-rn">' + (b ? esc(name) : '<code>' + esc(name) + '</code> <span class="gc-dim">' + esc(r.words) + '</span>') + '</span>'
+    + '<span class="gc-roles' + (r.rolesRead ? '' : ' unread') + '"' + defAttrs(r.rolesRead ? 'roles.col.roles' : 'roles.cell.unread') + '>' + esc(roles)
+      + (!b && r.requiresFrom ? ' <span class="gc-dim">(' + esc(r.requiresFrom) + ')</span>' : '') + '</span>'
+    + '<span class="gc-dim gc-proof"' + defAttrs(first ? 'roles.proof' : 'roles.proof.none') + '>' + esc(proof) + '</span></div>';
+}
+function rolesHtml(m) {
+  const r = m.roles;
+  if (!r) return '';
+  const head = secHead('gate.sec.roles', r.counted ? countedHtml(r.counted.actions, '/api/roles', { cls: 'gc-n' }) : '');
+  const rest = r.others.map((x) => roleRowHtml(x, false)).join('') + (r.more ? '<p class="gc-more">' + esc(fill(t('gate.more'), { n: r.more })) + '</p>' : '');
+  const also = r.here.length && r.alsoN
+    ? '<details class="gc-also"><summary' + defAttrs('gate.roles.also') + '>' + esc(fill(t(r.alsoN === 1 ? 'gate.roles.alsoOne' : 'gate.roles.also'), { n: r.alsoN })) + '</summary>' + rest + '</details>'
+    : rest;
+  return '<section class="gc-sec" data-gc-sec="roles">' + head + r.here.map((x) => roleRowHtml(x, true)).join('') + also
+    + '<p class="gc-dim gc-holders"' + defAttrs('roles.holders') + '>' + esc(t('roles.holders')) + '</p>'
+    + '<a class="dd-door" href="#/roles?guard=' + esc(encodeURIComponent(m.id)) + '"' + defAttrs('gate.roles.all') + '>' + esc(t('gate.roles.all')) + ' ›</a></section>';
+}
+
+/**
+ * A decision the team made or left open that bears on this gate (lib/decisions.js): its chip, and — since the gate
+ * card is itself the open card — the decision's own card in place under it. '' when none does.
+ */
+function decisionsSecHtml(m) {
+  const rows = decisionsOn([m.id]);
+  if (!rows.length) return '';
+  return '<section class="gc-sec" data-gc-sec="decisions">' + rows.map((r) => '<div class="gc-dec">' + decisionChipHtml(r, { static: true }) + decisionCardHtml(r, { noHead: true }) + '</div>').join('') + '</section>';
+}
 /** The whole card for one model. `step` (a journey's walk order) adds *show it in the journey*. */
 export function gateCardHtml(m, opts = {}) {
   const n = m.facts.node;
@@ -177,12 +236,14 @@ export function gateCardHtml(m, opts = {}) {
     ? '<button type="button" class="dd-door lead" data-gc-step="' + esc(String(opts.step)) + '"' + defAttrs('gate.atStep') + '>' + esc(t('gate.atStep')) + '</button>' : '';
   const doors = doorsHtml(doorsFor(m.gateKind === 'rule' ? 'rule' : 'gate', n), lead);
   return '<div class="gc" data-gc="' + esc(m.id) + '">'
-    + '<div class="gc-head">' + kind + '<b class="tip-h gc-name">' + esc(gateName(m)) + '</b>' + at + '</div>'
+    + '<div class="gc-head">' + kind + '<b class="tip-h gc-name">' + esc(gateName(m)) + '</b>' + gateCodeForm(m) + at + '</div>'
     + (doors ? '<div class="gc-doors">' + doors + '</div>' : '')
     // copy as MCP call · curl · CLI with the full id (round 2026-10-10, proposal 9) — every register
     + (n && n.id ? '<div class="gc-copy">' + copyDoorsHtml(m.gateKind === 'rule' ? 'rule' : 'gate', n) + '</div>' : '')
     + tierHtml(m)
+    + decisionsSecHtml(m)
     + '<section class="gc-sec">' + secHead('gate.sec.allows') + sentenceHtml(m) + '</section>'
+    + rolesHtml(m)
     + '<section class="gc-sec" data-gc-sec="where">' + secHead('gate.sec.where') + whereHtml(m) + '</section>'
     + (biz() ? '' : '<section class="gc-sec">' + secHead('gate.sec.code') + '<div class="gc-code" data-gc-src="' + esc(m.id) + '"><span class="dd-load">' + esc(t('door.codeLoading')) + '</span></div></section>')
     + callsHtml(m) + testsHtml(m)
@@ -197,9 +258,28 @@ function modelFor(el, answer) {
     answer, lens: currentLens(), config: el.getAttribute('data-gate-config') === '1',
     inWords: n ? jrnGateInWords(n) : '',
     plain: plainWords,
+    here: hereIds(el),
   });
   if (m) m.flow = (S.JOURNEY && S.JOURNEY.entry && S.JOURNEY.entry.id) || null;
   return m;
+}
+/**
+ * The action a gate was opened from, as node ids: the step it was drawn on and the call of the action that step
+ * belongs to (the route a request goes through). Empty outside a journey.
+ */
+function hereIds(el) {
+  const step = el.getAttribute('data-gate-step');
+  const J = S.JOURNEY;
+  if (step == null || !J || !J.steps) return [];
+  const at = +step;
+  const out = [];
+  const nodeOf = (i) => { const st = J.steps[i]; return st ? (st.nodeId || (st.node && st.node.id)) : null; };
+  const own = nodeOf(at);
+  if (own) out.push(own);
+  const sg = ((J.summary && J.summary.segments) || []).find((x) => at >= x.from && at <= x.to);
+  const mo = sg && (sg.moments || []).find((x) => at >= x.from && at <= x.to);
+  if (mo && mo.callStep != null) { const c = nodeOf(mo.callStep); if (c) out.push(c); }
+  return out;
 }
 function fillCodeIn(layerRoot, id) {
   const slot = layerRoot && layerRoot.querySelector('.gc-code[data-gc-src]');
@@ -212,6 +292,10 @@ function show(el, m, via) {
   const root = document.querySelector('.fs-tip .gc[data-gc="' + CSS.escape(m.id) + '"]');
   if (root) {
     root.closest('.fs-tip').classList.add('gc-tip');
+    // the card is wider than a tip: place it again at its own width, or a card opened from the rightmost column
+    // keeps the narrow tip's left edge and runs off the window (G7 — the business register fetches no code, so
+    // nothing else placed it again)
+    repositionTip();
     fillCodeIn(root, m.id);
     const go = root.querySelector('[data-gc-step]');
     if (go) go.addEventListener('click', () => { const s = +go.getAttribute('data-gc-step'); hideTip(); window.mapShowPart(s); });
@@ -233,7 +317,7 @@ export async function openGateCard(el, e) {
   if (tipOpen() && tipAnchor() === host && host.dataset.gcOpen === '1') { hideTip(); host.dataset.gcOpen = ''; return; }
   const id = host.getAttribute('data-gate-card');
   const via = e && e.type === 'keydown' ? 'key' : 'click';
-  const pending = fetchGate(id);
+  const pending = Promise.all([fetchGate(id), loadDecisions()]).then(([a]) => a);
   const first = await Promise.race([pending, new Promise((r) => setTimeout(() => r(undefined), WAIT_MS))]);
   // the surface may have redrawn while the answer was on its way (the code map's inspector draws again on a select):
   // open on the element that names the same gate now

@@ -28,8 +28,8 @@ describe('tiers', () => {
     assert.deepEqual(resolveTier('core', 'all'), { tier: 'core', from: 'settings' });
     assert.deepEqual(resolveTier('everything', undefined), { tier: 'core', from: 'default', ignored: 'everything' });
   });
-  test('the core tier is the nine plus affected and ask; tools and expand are in both', () => {
-    assert.deepEqual([...CORE_TOOLS].sort(), ['affected', 'ask', 'describe_node', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'search_graph', 'test_coverage', 'trace_flow']);
+  test('the core tier is the nine plus affected, ask, roles and decisions; tools and expand are in both', () => {
+    assert.deepEqual([...CORE_TOOLS].sort(), ['affected', 'ask', 'decisions', 'describe_node', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'roles', 'search_graph', 'test_coverage', 'trace_flow']);
     for (const n of ['tools', 'expand']) { assert.ok(inTier(n, 'core')); assert.equal(tierOf(n), 'core'); }
     assert.ok(!inTier('refresh_graph', 'core'));
     assert.ok(inTier('refresh_graph', 'all'));
@@ -145,16 +145,16 @@ describe('the server: the core tier by default, the context, expand', () => {
     rmSync(work, { recursive: true, force: true });
   });
 
-  test('tools/list is the core tier: nine and ask (no code-host source, so no affected) plus tools and expand', async () => {
+  test('tools/list is the core tier: nine, ask, roles and decisions (no code-host source, so no affected) plus tools and expand', async () => {
     const { tools } = await client.listTools();
-    assert.deepEqual(tools.map((t) => t.name).sort(), ['ask', 'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'search_graph', 'test_coverage', 'tools', 'trace_flow']);
+    assert.deepEqual(tools.map((t) => t.name).sort(), ['ask', 'decisions', 'describe_node', 'expand', 'gate', 'graph_overview', 'impact_of', 'journey', 'journeys', 'roles', 'search_graph', 'test_coverage', 'tools', 'trace_flow']);
     for (const t of tools) assert.ok(Object.keys((t.inputSchema as { properties?: object }).properties ?? {}).includes('budget'), `${t.name} takes budget`);
     assert.ok((await call('refresh_graph')).isError, 'a tool outside the tier is off');
   });
 
   test('graph_overview ends with the tier line; the tools tool lists every tool with its tier', async () => {
     const out = (await call('graph_overview')).text;
-    assert.match(out.trim().split('\n').pop()!, /^tools: the core tier is on \(12 of \d+ tools, from the default\)/);
+    assert.match(out.trim().split('\n').pop()!, /^tools: the core tier is on \(14 of \d+ tools, from the default\)/);
     const menu = (await call('tools')).text;
     assert.match(menu, /● journey · core — /);
     assert.match(menu, /○ refresh_graph · all · off in this session — /);

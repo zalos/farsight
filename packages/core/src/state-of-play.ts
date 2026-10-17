@@ -57,6 +57,11 @@ export interface StateOfPlay {
     byVerdict: { word: EvidenceWord; journeys: Counted }[];
     /** journeys with a screen not built and a test word anyway (partly built, or no screen built): counted apart, never as passed */
     notFullyBuilt: Counted;
+    /**
+     * fully built journeys whose word the release brief holds on their own declared case (`EvidenceWord.held`):
+     * counted apart, never under *passed* — the front door's *n journeys passed* and the brief cannot disagree
+     */
+    heldInBrief: Counted;
     /** the newest end-to-end run and its one freshness fact; null when no end-to-end case has a run */
     lastE2e: { at: string; fresh?: FreshnessFact } | null;
     /** every case by its own last run — passed · failed · skipped · flaky · no run recorded */
@@ -120,12 +125,15 @@ export function stateOfPlay(
   const byKey = new Map<string, { word: EvidenceWord; n: number }>();
   let partly = 0;
   let noneBuilt = 0;
+  let held = 0;
   for (const r of tests.journeys) {
     const word = r.coverage.verdict?.word ?? r.coverage.evidenceWord;
     if (!word) continue;
     // build state wins: a journey with a screen not built never counts under a word
     if (word.builtOnly) { partly++; continue; }
     if (r.coverage.sharedEvidence) { noneBuilt++; continue; }
+    // the brief holds it on its own case: said apart, so *passed* never counts a held journey (outsider demo 2026-10-13)
+    if (word.held) { held++; continue; }
     const hit = byKey.get(word.key);
     if (hit) hit.n++; else byKey.set(word.key, { word, n: 1 });
   }
@@ -171,6 +179,9 @@ export function stateOfPlay(
       bizUnit: 'state.unit.journeysBuiltOnly',
       breakdown: [{ key: 'count.part.partlyBuilt', n: partly }, { key: 'count.part.noScreenBuilt', n: noneBuilt }],
       recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' },
+    }),
+    heldInBrief: counted(held, 'state.unit.journeysHeld', SCOPE, `${SRC} ← testsSurface().journeys[].coverage.verdict.word.held (core ownCaseHold)`, {
+      bizUnit: 'state.unit.journeysHeld', recheck: { cli: 'farsight tests matrix', mcp: 'test_coverage' },
     }),
     lastE2e,
     cases: counted(cases, 'count.unit.cases', SCOPE, `${SRC} ← testsSurface().sources[].runs`, { bizUnit: 'journey.biz.countTests', breakdown: caseParts, recheck: RECHECK.tests }),
@@ -226,6 +237,7 @@ export function stateOfPlayLines(s: StateOfPlay, opts: { register?: Register } =
   out.push(`${t('state.col.validated', register)}:`);
   for (const v of s.validated.byVerdict) if (v.word.cls !== 'none') out.push(`- ${w(v.journeys)} ${t(v.word.key, register)}${re(v.journeys)}`);
   if (s.validated.notFullyBuilt?.n) out.push(`- ${w(s.validated.notFullyBuilt)} (${breakdownText(s.validated.notFullyBuilt, register)})${re(s.validated.notFullyBuilt)}`);
+  if (s.validated.heldInBrief?.n) out.push(`- ${w(s.validated.heldInBrief)}${re(s.validated.heldInBrief)}`);
   if (s.validated.lastE2e) {
     const f = s.validated.lastE2e.fresh;
     out.push(`- ${t('state.lastE2e', register).replace('{date}', s.validated.lastE2e.at.slice(0, 10))}${f ? ` · ${fillFreshness(t(f.key, register), freshnessVars(f))}` : ''}`);

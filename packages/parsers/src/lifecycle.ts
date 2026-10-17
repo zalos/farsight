@@ -49,6 +49,8 @@ export interface StatusWrite {
   callee?: string[];
   /** sql: the table the statement updates */
   table?: string;
+  /** one arm of a ternary of literals: the condition under which this status is the one written, in words */
+  when?: string;
 }
 export interface StatusCompare { fromId: string; field: string; value: string }
 
@@ -191,28 +193,68 @@ function priorIs(cmp: AstNode, parents: AstNode[]): boolean {
   return false;
 }
 
+/** A status-named setter: `setContractorStatus`, `updateStatus`, `markState` — the status is handed as an argument. */
+export const STATUS_SETTER = /^(set|update|change|move|transition|mark)\w*(status|state)$/i;
+
+/** `x` → `x`, `!x` → `not x`, `a.b` → `a.b`, `a === 'X'` → `a is X`; else the source text, else undefined. */
+function condWords(test: AstNode | undefined, source?: string): string | undefined {
+  if (!test) return undefined;
+  if (test.type === 'ParenthesizedExpression') return condWords(test.expression as AstNode, source);
+  if (test.type === 'UnaryExpression' && test.operator === '!') { const w = condWords(test.argument as AstNode, source); return w ? `not ${w}` : undefined; }
+  const c = memberChain(test);
+  if (c.length && (test.type === 'Identifier' || test.type === 'MemberExpression' || test.type === 'StaticMemberExpression')) return c.join('.');
+  if (test.type === 'BinaryExpression' && ['===', '==', '!==', '!='].includes(String(test.operator))) {
+    const l = memberChain(test.left);
+    const r = strLit(test.right);
+    if (l.length && r !== undefined) return `${l.join('.')} ${String(test.operator).startsWith('!') ? 'is not' : 'is'} ${r}`;
+  }
+  if (source && typeof test.start === 'number' && typeof test.end === 'number') return source.slice(test.start, test.end).replace(/\s+/g, ' ').slice(0, 80);
+  return undefined;
+}
+
+/** A literal status, or both arms of a ternary of two literals, each with the condition it is written under. */
+function literalArms(n: unknown, source?: string): { value: string; when?: string }[] {
+  const v = strLit(n);
+  if (v !== undefined) return [{ value: v }];
+  if (!isNode(n) || n.type !== 'ConditionalExpression') return [];
+  const a = strLit(n.consequent), b = strLit(n.alternate);
+  if (a === undefined || b === undefined || a === b) return [];
+  const w = condWords(n.test as AstNode, source);
+  return [{ value: a, ...(w ? { when: w } : {}) }, { value: b, ...(w ? { when: w.startsWith('not ') ? w.slice(4) : `not ${w}` } : {}) }];
+}
+
 /** The status writes and compares inside one function body. */
-export function collectStatusFacts(body: AstNode | null, fromId: string, line: (o: number) => number): { writes: StatusWrite[]; compares: StatusCompare[] } {
+export function collectStatusFacts(body: AstNode | null, fromId: string, line: (o: number) => number, source?: string): { writes: StatusWrite[]; compares: StatusCompare[] } {
   const writes: StatusWrite[] = [];
   const compares: StatusCompare[] = [];
   if (!body) return { writes, compares };
-  const statusProps = (obj: AstNode): { field: string; value: string; at: number }[] =>
+  const statusProps = (obj: AstNode): { field: string; value: string; at: number; when?: string }[] =>
     ((obj.properties as AstNode[]) ?? []).flatMap((p) => {
       if (p.type !== 'Property') return [];
       const field = keyName(p.key);
-      const value = strLit(p.value);
-      return field && value !== undefined && STATUS_KEY.test(field) ? [{ field, value, at: line(p.start ?? 0) }] : [];
+      if (!field || !STATUS_KEY.test(field)) return [];
+      return literalArms(p.value, source).map((a) => ({ field, value: a.value, at: line(p.start ?? 0), ...(a.when ? { when: a.when } : {}) }));
     });
   walk(body, (n, parents) => {
     if (n.type === 'CallExpression') {
-      const objs = ((n.arguments as AstNode[]) ?? []).filter((a) => isNode(a) && a.type === 'ObjectExpression');
-      if (!objs.length) return;
+      const args = ((n.arguments as AstNode[]) ?? []);
       const callee = memberChain(n.callee);
+      // `repo.setContractorStatus(id, 'ACTIVE')`: a status-named setter handed one literal status (or a ternary of two)
+      const tail = callee[callee.length - 1] ?? '';
+      if (STATUS_SETTER.test(tail)) {
+        const lit = args.map((a) => literalArms(a, source)).filter((x) => x.length);
+        if (lit.length === 1) {
+          const field = /status$/i.test(tail) ? 'status' : 'state';
+          for (const a of lit[0]!) writes.push({ fromId, field, value: a.value, line: line(n.start ?? 0), via: 'update-call', callee, ...(a.when ? { when: a.when } : {}) });
+        }
+      }
+      const objs = args.filter((a) => isNode(a) && a.type === 'ObjectExpression');
+      if (!objs.length) return;
       // the last object literal is the patch; an earlier one is the filter (`update(where, patch)`)
       objs.forEach((o, i) => {
         for (const s of statusProps(o)) {
-          if (i === objs.length - 1) writes.push({ fromId, field: s.field, value: s.value, line: s.at, via: 'update-call', callee });
-          else compares.push({ fromId, field: s.field, value: s.value });
+          if (i === objs.length - 1) writes.push({ fromId, field: s.field, value: s.value, line: s.at, via: 'update-call', callee, ...(s.when ? { when: s.when } : {}) });
+          else if (!s.when) compares.push({ fromId, field: s.field, value: s.value });
         }
       });
       return;
@@ -359,8 +401,8 @@ export function linkLifecycles(repo: string, nodes: Map<string, GraphNode>, edge
     if (hits.length !== 1) continue;
     const life = hits[0]!.lifecycle!;
     const prior = [...new Set((comparesBy.get(w.fromId) ?? []).filter((c) => fieldKey(c.field) === fieldKey(life.field) && life.statuses.includes(c.value) && c.value !== w.value).map((c) => c.value))];
-    const tr: LifecycleTransition = { ...(prior.length === 1 ? { from: prior[0] } : {}), to: w.value, by: w.fromId, via: w.via, line: w.line };
-    if (life.transitions.some((x) => x.to === tr.to && x.by === tr.by && x.from === tr.from)) continue;
+    const tr: LifecycleTransition = { ...(prior.length === 1 ? { from: prior[0] } : {}), to: w.value, by: w.fromId, via: w.via, line: w.line, ...(w.when ? { when: w.when } : {}) };
+    if (life.transitions.some((x) => x.to === tr.to && x.by === tr.by && x.from === tr.from && x.when === tr.when)) continue;
     life.transitions.push(tr);
   }
   for (const node of nodes.values()) {
@@ -407,6 +449,35 @@ export function constTables(program: AstNode, file: string, line: (o: number) =>
     const keys = Object.keys(entries);
     if (keys.length < 2 || !keys.some((k) => entries[k]!.length)) return;
     out.push({ name: String((n.id as AstNode).name), file, line: line(n.start ?? 0), entries });
+  });
+  return out;
+}
+
+/** A constant list of strings by name (`const ROLES: readonly Role[] = ['a', 'b']`). */
+export interface ConstList {
+  name: string;
+  file: string;
+  line: number;
+  values: string[];
+}
+
+/**
+ * Every `const NAME = ['a', …]` in a file whose elements are all string literals, through `as const` and
+ * `satisfies` **and** a plain type annotation (outsider round 2026-10-13, F4). The enum reader above takes only
+ * the `as const` form of two or more, which is right for a record's statuses; a role list handed to a guard is
+ * often typed instead (`VENDOR_ACCOUNT_APPROVER_ROLES: readonly OpsRole[] = [...]`) and may hold one role.
+ * Read only by `parsers/src/preconditions.ts` to name the roles a guard is handed — never as a lifecycle.
+ */
+export function constLists(program: AstNode, file: string, line: (o: number) => number): ConstList[] {
+  const out: ConstList[] = [];
+  walk(program, (n) => {
+    if (n.type !== 'VariableDeclarator' || !isNode(n.id) || (n.id as AstNode).type !== 'Identifier') return;
+    let init = n.init as AstNode | undefined;
+    while (init && (init.type === 'TSAsExpression' || init.type === 'TSSatisfiesExpression' || init.type === 'ParenthesizedExpression')) init = init.expression as AstNode;
+    if (!init || init.type !== 'ArrayExpression') return;
+    const vals = ((init.elements as unknown[]) ?? []).map(strLit);
+    if (!vals.length || !vals.every((x): x is string => x !== undefined)) return;
+    out.push({ name: String((n.id as AstNode).name), file, line: line(n.start ?? 0), values: vals });
   });
   return out;
 }

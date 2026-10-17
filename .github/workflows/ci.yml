@@ -1,10 +1,7 @@
 # CI validation: every push to main and every pull request.
-# Four independent jobs, run in parallel so each reports its own verdict:
-#   validate — install, build, typecheck (packages + e2e), unit tests, string/symbol lint
-#   e2e      — install, build, Playwright suite on the real `farsight serve` (see docs/CI.md)
-#   secrets  — gitleaks over the pushed / PR commits, with .gitleaks.toml (see docs/SECURITY.md)
-#   commits  — on a PR: the PR title (it becomes the squash commit on main) and every
-#              commit on the branch are Conventional Commits (scripts/lint-commits.mjs)
+# A small path selector skips checks unaffected by the change (see docs/CI.md).
+# validate / e2e retain their required names; secrets always runs.
+# PR title and branch commit checks live in commits.yml so title edits don't restart CI.
 # Live tracker tests stay off: they run only with FARSIGHT_LIVE=1, which CI never sets.
 name: CI
 
@@ -21,27 +18,29 @@ permissions:
   contents: read
 
 jobs:
-  commits:
-    name: commits
-    if: ${{ github.event_name == 'pull_request' }}
+  changes:
+    name: affected checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    env:
-      # the title reaches the script through env, never pasted into shell text
-      PR_TITLE: ${{ github.event.pull_request.title }}
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    outputs:
+      validate: ${{ steps.select.outputs.validate }}
+      e2e: ${{ steps.select.outputs.e2e }}
+      echo: ${{ steps.select.outputs.echo }}
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # the lint walks base..head
+          fetch-depth: 0 # PR merge-base / all commits in a push; no LFS assets needed
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-      - name: The PR title is a Conventional Commit (it is the commit that lands on main)
-        run: node scripts/lint-commits.mjs --message "$PR_TITLE"
-      - name: Every commit on the branch is a Conventional Commit
-        run: node scripts/lint-commits.mjs --range "$BASE_SHA..$HEAD_SHA" --any-scope
+      - name: Check the selector
+        run: node --test scripts/test/ci-changes.test.mjs
+      - name: Select affected checks
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci-changes.mjs
 
   secrets:
     name: secrets
@@ -66,6 +65,9 @@ jobs:
 
   validate:
     name: validate
+    needs: changes
+    # A failed selector runs the check. Only an explicit false skips it.
+    if: ${{ !cancelled() && needs.changes.outputs.validate != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -82,48 +84,34 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: pnpm typecheck (every package, then e2e/)
-        run: pnpm typecheck
+      - name: Typecheck packages (e2e types are checked by the e2e job)
+        run: pnpm -r typecheck
       - run: pnpm -r test
       - run: pnpm test:scripts
       - run: pnpm lint:strings
 
-  # Optional integration evidence, outside the four required checks. Its network
-  # downloads run only when Echo or its packaging inputs change.
+  # Optional network integration evidence, outside the four required checks.
   echo-package:
     name: echo-package
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.echo != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Detect Echo changes
-        id: changes
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/echo packages/core/src/strings-echo-\* packages/core/src/credential-shapes.ts packages/core/src/keychain.ts scripts/pack-echo.mjs scripts/test-echo-package.mjs .echo/settings.example.json .echo/connection.example.json docs/ECHO.md package.json pnpm-lock.yaml .github/workflows/ci.yml; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
       - uses: pnpm/action-setup@v6
-        if: steps.changes.outputs.changed == 'true'
       - uses: actions/setup-node@v7
-        if: steps.changes.outputs.changed == 'true'
         with:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-        if: steps.changes.outputs.changed == 'true'
       - name: Install and verify the separate Echo package with synthetic memory
-        if: steps.changes.outputs.changed == 'true'
         run: pnpm test:echo:package
 
   e2e:
     name: e2e
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.e2e != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -144,6 +132,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+
+      - run: pnpm e2e:typecheck
 
       - name: Playwright version
         id: pw

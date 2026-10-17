@@ -4,6 +4,7 @@ import { fmt } from '@invoice/plumbing';
 /** `approvals` is written by migration 003; db.ts does not list it yet. */
 const db = base as typeof base & { approvals: (typeof base)['invoices'] };
 
+// DECISION(D1): one approver, whatever the amount, until a limit is decided
 /**
  * Approves an invoice: records who approved it and moves the invoice to approved,
  * both inside one transaction.
@@ -31,3 +32,6 @@ function receiptFor(id: string) {
 export async function withTx(fn: () => Promise<void>) {
   return fn();
 }
+
+// DECISION(D2): no reminder is sent for an unpaid invoice until the team decides when one goes out
+export const SEND_PAYMENT_REMINDERS = false;

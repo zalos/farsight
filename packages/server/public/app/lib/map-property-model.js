@@ -218,6 +218,8 @@ export function propertyModel(data, screenIndex, graphById, model, opts) {
         evidence: testsCount ? cov : null,
         calls,
         gates,
+        // what the design says somebody does on this screen outside the code (core decisions.ts): never a gate or a verdict
+        offPlatform: seg.offPlatform || [],
         work: 'lazy',
       },
       gates: {

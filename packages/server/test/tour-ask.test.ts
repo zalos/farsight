@@ -133,8 +133,13 @@ test('tourOf walks the storyline: a stop per screen (each once) and per hand-off
   const tour = tourOf(index, 'invoice', { metas: meta.journeys })!;
   assert.ok(tour, 'the fixture declares the invoice storyline');
   assert.equal(tour.derived, true);
-  assert.deepEqual(tour.stops.map((s) => `${s.kind}:${s.kind === 'screen' ? s.screen.name : s.move!.status}`),
-    ['screen:New invoice', 'handoff:draft', 'screen:Invoice list', 'handoff:open', 'screen:Discard draft']);
+  // the customer's bank paying the sent invoice is a step the design says is done outside the code: a stop of its own after the move
+  assert.deepEqual(tour.stops.map((s) => `${s.kind}:${s.kind === 'screen' ? s.screen.name : s.kind === 'handoff' ? s.move!.status : s.offPlatform!.by}`),
+    ['screen:New invoice', 'handoff:draft', 'screen:Invoice list', 'handoff:open', 'offPlatform:partner', 'screen:Discard draft']);
+  const off = tour.stops[4]!;
+  assert.equal(off.offPlatform!.party!.name, 'Customer bank');
+  assert.ok(off.clauses.some((c) => c.key === 'tour.off.noTest'), 'no verdict, and why');
+  assert.ok(!off.clauses.some((c) => c.evidence), 'never an evidence word');
   assert.deepEqual(countedProblems(tour.counted.stops, 'stops'), []);
   assert.equal(tour.counted.stops.n, tour.stops.length);
   assert.equal(tour.counted.stops.scope, 'count.scope.storyline');
@@ -154,14 +159,14 @@ test('tourOf walks the storyline: a stop per screen (each once) and per hand-off
   assert.ok(open.clauses.some((c) => c.warn && c.key === 'tour.handoff.unchecked'));
   assert.equal(open.move!.checked, false);
   assert.ok(open.clauses.some((c) => c.role === 'need' && c.evidence), 'each precondition carries the gate card\'s verdict');
-  const after = tour.stops[4]!.clauses.find((c) => c.key === 'tour.ref.after')!;
+  const after = tour.stops[5]!.clauses.find((c) => c.key === 'tour.ref.after')!;
   assert.equal(after.refers, 4);
   assert.match(after.text, /\(stop 4\)/);
   // the business register prints the persona's word for a status
   assert.equal(open.title.biz, 'The invoice becomes Sent');
   assert.equal(open.title.text, 'The invoice becomes open');
   // a designed, not-built screen has no verdict
-  assert.ok(tour.stops[4]!.clauses.some((c) => c.key === 'tour.screen.notBuilt'));
+  assert.ok(tour.stops[5]!.clauses.some((c) => c.key === 'tour.screen.notBuilt'));
   // a journey alone walks too, scoped to the journey
   const one = tourOf(index, 'invoice-app::flow::new-invoice', { metas: meta.journeys })!;
   assert.equal(one.target.kind, 'flow');
@@ -189,7 +194,7 @@ test('pathBetween: the shortest chain the graph knows, hop by hop, or none', () 
 });
 
 test('ask: the four shapes, from the graph, every line cited — and the shapes again for anything else', () => {
-  assert.deepEqual([...ASK_SHAPES], ['set', 'guards', 'path', 'proves']);
+  assert.deepEqual([...ASK_SHAPES], ['set', 'guards', 'path', 'proves', 'who', 'configure', 'happens']);
   const all: [string, TourClause][] = [];
   const lines = (a: ReturnType<typeof ask>) => [...a.lead, ...a.sections.flatMap((s) => s.rows)];
 
@@ -244,10 +249,15 @@ test('ask: the four shapes, from the graph, every line cited — and the shapes 
 
 test('ask, swarm round 3: did you mean from the question’s nouns, the part it picked named beside the others, the example from this graph', () => {
   // a plain question in no shape: the nearest shape filled with its nouns, a status this graph declares
-  const who = ask(index, 'who opens an invoice', { metas: meta.journeys });
+  const who = ask(index, 'opening invoices quickly', { metas: meta.journeys });
   assert.equal(who.shape, 'unknown');
   assert.equal(who.suggest![0], 'where is invoice set to open, and what must be true first?');
   assert.match(askLines(who).join('\n'), /Did you mean/);
+  // outsider round (F7): a question in a shape's other words is read as that shape, and the reading printed first
+  const opens = ask(index, 'who opens an invoice', { metas: meta.journeys });
+  assert.equal(opens.shape, 'who');
+  assert.equal(opens.reworded, 'who may open an invoice?');
+  assert.match(askLines(opens).join('\n'), /I read that as: “who may open an invoice\?”[\s\S]*billing:admin/);
   // every suggestion is a question Ask answers
   for (const q of who.suggest!) assert.notEqual(ask(index, q, { metas: meta.journeys }).shape, 'unknown', q);
   // the record-and-status question in the guards shape is the set shape's question, never an action's checks
@@ -270,7 +280,7 @@ test('GET /api/tour and GET /api/ask serve the same folds', async () => {
   const t = await get('/api/tour?storyline=invoice');
   assert.equal(t.status, 200);
   assert.equal(t.body.tour.derived, true);
-  assert.equal(t.body.tour.stops.length, 5);
+  assert.equal(t.body.tour.stops.length, 6);
   assert.equal((await get('/api/tour?flow=invoice-app::flow::new-invoice')).body.tour.target.kind, 'flow');
   assert.equal((await get('/api/tour?storyline=nope')).status, 404);
   assert.equal((await get('/api/tour')).status, 400);

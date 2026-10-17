@@ -18,7 +18,7 @@
 import type { GraphNode, GateTier, JourneysMeta } from './graph.js';
 import { type GraphIndex, type Journey, type JourneySummary, type JourneySegment, type JourneyMoment, journey, journeySummary, humanizeName } from './query.js';
 import { screensFor } from './design.js';
-import { journeyTree, type JourneyRow, type JourneyStoryline, type JourneyTree } from './journeys.js';
+import { journeyTree, personaOfScreen, type JourneyRow, type JourneyStoryline, type JourneyTree } from './journeys.js';
 import { counted, countKey, scopeWord, type Counted } from './counts.js';
 import { t as tr, type Register } from './strings.js';
 
@@ -27,6 +27,7 @@ const t = (key: string, reg: Register = 'professional'): string => tr(key, reg);
 import { stepCoverage, segmentNotBuilt, type TestVerdict } from './coverage.js';
 import { gateCard, gateNameParts } from './gates.js';
 import { lifecycleViews, type LifecyclePersona } from './lifecycle.js';
+import type { OffPlatformStep } from './decisions.js';
 
 /** One clause of a stop: a template, its fills, the sentence in each lens, and what it cites. */
 export interface TourClause {
@@ -60,7 +61,10 @@ export interface TourClause {
 export interface TourStop {
   /** 1-based */
   n: number;
-  kind: 'screen' | 'handoff';
+  /** `offPlatform`: something the design says a person, a partner or another system does here outside the code */
+  kind: 'screen' | 'handoff' | 'offPlatform';
+  /** an `offPlatform` stop's declared step: who does it and where, and the party it names */
+  offPlatform?: OffPlatformStep;
   title: { text: string; biz: string };
   sub: { text: string; biz: string };
   journey: { id: string; name: string; step?: number; branch?: { of: string; ofName: string; when: string } };
@@ -158,7 +162,20 @@ export function httpWords(text: string, word: (code: string) => string): string 
 }
 const HTTP_KNOWN = new Set(['400', '401', '403', '404', '409', '413', '415', '422', '429', '5xx']);
 
+/**
+ * A refusal message with a hole the code fills when it runs (*Vendor account is …, not ACTIVE*), as the business
+ * register reads it: the hole says *(a value)* and a status constant reads as a word (outsider round, F6 · S2). The
+ * viewer's `filledMessage()` is the same rule.
+ */
+export function holeWords(text: string): string {
+  const s = String(text ?? '');
+  if (!/…/.test(s)) return s;
+  const v = t('plain.aValue');
+  return s.replace(/\(\s*…\s*\)/g, v).replace(/…/g, v).replace(/\b[A-Z]{4,}(?:_[A-Z]+)*\b/g, (w) => (/^ADR/.test(w) ? w : w.replace(/_/g, ' ').toLowerCase()));
+}
+
 export function codeFree(text: string): string {
+  text = holeWords(text);
   const words = (x: string) => String(x).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
   const file = (p: string) => words((String(p).split('/').filter(Boolean).pop() ?? '').replace(/\.[\w.]+$/, '').replace(/\.(spec|test|stories)$/, ''));
   return httpWords(String(text ?? ''), (c) => (HTTP_KNOWN.has(c) ? t(`http.word.${c}`) : t('http.word.400')))
@@ -314,16 +331,41 @@ export function tourOf(
   const notes: string[] = [];
   const seenScreen = new Set<string>();
   const seenMove = new Set<string>();
+  const seenOff = new Set<string>();
   /** a record's last writer stop: the screen that wrote it, for a later stop that reads it */
   const wroteAt = new Map<string, { stop: number; screen: string; name: string }>();
   let firstPersona: LifecyclePersona | undefined;
+  // where each move is credited (lane moves, 2026-10-13): of every place a leg's action makes it, the one whose action
+  // calls the writer most directly — fewest calls under the action's call — then the first in storyline order. Never
+  // simply the first place the walk met. The places a constant switches off are kept to be named beside it.
+  const bestMove = new Map<string, { leg: number; seg: number; mo: number; hops: number }>();
+  const offMoves = new Map<string, { label: string; screen: string; action?: string; flag: string; value: boolean; at: string }[]>();
+  legs.forEach((leg, li) => {
+    const w = flowSummary(index, leg.row.nodeId);
+    for (const sg of w?.sum.segments ?? []) {
+      if (!sg.screen) continue;
+      for (const mo of sg.moments) {
+        for (const mv of mo.preconditions?.moves ?? []) {
+          const k = `${mv.table}|${mv.to}|${mv.by}`;
+          const had = bestMove.get(k);
+          if (!had || (mv.hops ?? 0) < had.hops) bestMove.set(k, { leg: li, seg: sg.index, mo: mo.index, hops: mv.hops ?? 0 });
+        }
+        for (const so of mo.preconditions?.switchedOff ?? []) {
+          const k = `${so.table}|${so.to}|${so.by}`;
+          const list = offMoves.get(k) ?? [];
+          if (!list.some((x) => x.label === mo.label && x.flag === so.flag)) list.push({ label: mo.label, screen: sg.screen.name, ...(mo.preconditions?.action ? { action: mo.preconditions.action } : {}), flag: so.flag, value: so.value, at: so.at });
+          offMoves.set(k, list);
+        }
+      }
+    }
+  });
 
-  for (const leg of legs) {
+  for (const [legIndex, leg] of legs.entries()) {
     const walked = flowSummary(index, leg.row.nodeId);
     if (!walked) { notes.push(`${leg.row.name} could not be walked`); continue; }
     const { sum } = walked;
-    const persona = personaFor(leg.row, opts.persona);
-    firstPersona ??= persona;
+    const legPersona = personaFor(leg.row, opts.persona);
+    firstPersona ??= legPersona;
     const flowNode = index.byId.get(leg.row.nodeId);
     const jName = leg.row.name ?? flowNode?.name ?? leg.row.nodeId;
     const screens = sum.segments.filter((sg) => sg.screen);
@@ -332,13 +374,20 @@ export function tourOf(
 
     screens.forEach((sg, si) => {
       const sc = sg.screen!;
+      // who uses this screen: its own row, a persona's routes, the sign-in guard its code meets — else the journey's
+      // persona (the one the reader picked, where it is for several)
+      const sp = personaOfScreen(index, opts.metas, sc.id, leg.row.nodeId);
+      const own = sp && sp.personaFrom !== 'journey';
+      const persona: LifecyclePersona | undefined = own ? { id: sp.persona, name: sp.personaName } : legPersona;
+      const whoRefs = own ? [sc.id, ...(sp.personaFrom === 'guard' ? sp.evidence : [])] : [leg.row.nodeId];
       const key = sc.designId ?? sc.id;
       const ordinal = sg.index + 1;
       const screenRef = { id: sc.id, name: sc.name, ordinal, of: screens.length };
       if (!seenScreen.has(key)) {
         seenScreen.add(key);
         const cl: TourClause[] = [];
-        const before = stops[stops.length - 1];
+        // a stop for work done outside the code is not a move: the screen is still read after the move before it
+        const before = [...stops].reverse().find((x) => x.kind !== 'offPlatform');
         // a screen right after a hand-off is read in its place: after the move
         if (before?.kind === 'handoff' && before.move) {
           const act = before.action;
@@ -348,7 +397,7 @@ export function tourOf(
         cl.push(sc.business
           ? clause('words', 'tour.screen.words', { words: sc.business }, [sc.id])
           : clause('words', 'tour.screen.noWords', { screen: sc.name }, [sc.id]));
-        if (persona) cl.push(clause('who', 'tour.screen.who', { persona: persona.name }, [leg.row.nodeId]));
+        if (persona) cl.push(clause('who', 'tour.screen.who', { persona: persona.name }, whoRefs));
         // the actions it starts, in the order the screen prints them
         const acts = rankOrder(sg);
         const labels: string[] = [];
@@ -422,6 +471,8 @@ export function tourOf(
         {
           const mk = `${mv.table}|${mv.to}|${mv.by}`;
           if (seenMove.has(mk)) continue;
+          const best = bestMove.get(mk);
+          if (best && (best.leg !== legIndex || best.seg !== sg.index || best.mo !== mo.index)) continue;
           seenMove.add(mk);
           const table = index.byId.get(mv.table);
           const writer = index.byId.get(mv.by);
@@ -437,6 +488,11 @@ export function tourOf(
             [actNode, mv.by, mv.table], { bizKey: 'tour.biz.handoff.who', bizVars: { persona: who, record: rec, status: word, action: bare(mo.label), screen: sc.name } }));
           const from = mv.from ?? mv.fromAny?.join(' or ')
             ?? mo.preconditions?.preconditions.find((p) => p.relation === 'own' && p.requires?.length)?.requires?.join(' or ');
+          // the same move held by another action under a constant that switches it off: named here, never credited
+          for (const o of (offMoves.get(mk) ?? []).slice(0, 2)) {
+            cl.push(clause('refer', 'switch.tour.off', { action: bare(o.label), screen: o.screen, writer: writerName, flag: o.flag, value: String(o.value), at: o.at },
+              [o.action, mv.by], { bizKey: 'switch.biz.tour.off', bizVars: { action: bare(o.label), screen: o.screen } }));
+          }
           if (mv.creates) cl.push(clause('check', 'tour.handoff.creates', { record: rec }, [mv.table, mv.by]));
           else if (mv.checked) cl.push(clause('check', 'tour.handoff.checked', { record: rec, from: from ?? '' }, [mv.by], { bizKey: 'tour.biz.handoff.checked', bizVars: { record: rec, from: fromWords(index, table, from, persona) } }));
           else cl.push(clause('check', 'tour.handoff.unchecked', { record: rec, writer: writerName }, [mv.by], { warn: true, bizKey: 'tour.biz.handoff.unchecked', bizVars: { record: rec } }));
@@ -472,6 +528,24 @@ export function tourOf(
           stops.push(stop);
         }
       }
+      // what the design says somebody does on this screen outside the code: a stop of its own, never a gate or a
+      // verdict — the walk says who does it and that no test can reach it (the 2026-10-13 outsider round, F8)
+      for (const st of sum.segments[sg.index]?.offPlatform ?? []) {
+        if (seenOff.has(`${st.screen}|${st.id}`)) continue;
+        seenOff.add(`${st.screen}|${st.id}`);
+        const who = st.party?.name ?? st.who ?? t(`offPlatform.by.${st.by}`);
+        const ocl: TourClause[] = [
+          clause('who', st.where ? 'tour.off.whoWhere' : 'tour.off.who', { who, where: st.where ?? '', screen: sc.name }, [sc.id, st.party?.id]),
+          ...(st.party ? [clause('who', st.party.role ? 'tour.off.partyRole' : 'tour.off.party', { party: st.party.name, role: bare(st.party.role ?? '') }, [st.party.id])] : []),
+          clause('verdict', 'tour.off.noTest', {}, [sc.id]),
+        ];
+        const off = makeStop(stops.length + 1, 'offPlatform',
+          { text: st.name, biz: st.name },
+          { text: fill('tour.off.sub', { screen: sc.name }), biz: fill('tour.off.sub', { screen: sc.name }) },
+          journeyRef, screenRef, persona, ocl, { flowId: leg.row.nodeId, screen: ordinal });
+        off.offPlatform = st;
+        stops.push(off);
+      }
     });
   }
   stops.forEach((s, i) => { s.prev = i ? i : null; s.next = i < stops.length - 1 ? i + 2 : null; });
@@ -479,6 +553,7 @@ export function tourOf(
   const nodes: Record<string, TourNodeRef> = {};
   for (const s of stops) for (const id of s.referenced) nodes[id] ??= nodeRef(index, id);
   const screensN = stops.filter((s) => s.kind === 'screen').length;
+  const offN = stops.filter((s) => s.kind === 'offPlatform').length;
   const scope = head.kind === 'storyline' ? 'count.scope.storyline' as const : 'journey.scopeAll' as const;
   return {
     target: head,
@@ -488,7 +563,10 @@ export function tourOf(
     counted: {
       stops: counted(stops.length, 'count.unit.tourStops', scope, `${SRC} → stops (screens each once, then a stop per move)`, {
         bizUnit: 'count.unit.tourStops',
-        breakdown: [{ key: 'count.part.tourScreens', n: screensN }, { key: 'count.part.tourHandoffs', n: stops.length - screensN }],
+        breakdown: [
+          { key: 'count.part.tourScreens', n: screensN }, { key: 'count.part.tourHandoffs', n: stops.length - screensN - offN },
+          ...(offN ? [{ key: 'count.part.tourOffPlatform', n: offN }] : []),
+        ],
       }),
     },
     derived: true,

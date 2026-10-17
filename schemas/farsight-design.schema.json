@@ -146,6 +146,13 @@
           }
         }
       }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "decisions the team made or left open, in its own words: joined to the code by DECISION(<id>) comments and printed as declarations, never as evidence. An id two manifests declare with different titles is a note; the first manifest read keeps it.",
+      "items": {
+        "$ref": "#/$defs/decision"
+      }
     }
   },
   "$defs": {
@@ -168,6 +175,20 @@
         "description": {
           "type": "string",
           "description": "One sentence on them."
+        },
+        "routes": {
+          "type": "array",
+          "description": "route globs this persona's screens live under (/ops/**): a screen whose route matches is drawn in this persona's lane unless its own row names a persona; the most specific glob wins",
+          "items": {
+            "type": "string"
+          }
+        },
+        "signsInWith": {
+          "type": "array",
+          "description": "the guards that sign this persona in, by name or node id: a screen whose code meets only these is this persona's",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -249,7 +270,7 @@
         },
         "steps": {
           "type": "array",
-          "description": "The numbered steps a screen's spec and its tests refer to — `SCR-07.2`.",
+          "description": "The numbered steps a screen's spec and its tests refer to — `SCR-07.2`. A step with `by` is done outside the code.",
           "items": {
             "type": "object",
             "required": [
@@ -269,6 +290,22 @@
               "operation": {
                 "type": "string",
                 "description": "The operationId the step uses."
+              },
+              "by": {
+                "enum": [
+                  "person",
+                  "partner",
+                  "external"
+                ],
+                "description": "Done outside the code, on purpose: by a person, a partner, or another system the app does not call. Drawn apart from a screen that is designed and not built; never a gate, never a verdict."
+              },
+              "who": {
+                "type": "string",
+                "description": "Who does it, in the team's words — or a persona id, or the name of a party external."
+              },
+              "where": {
+                "type": "string",
+                "description": "Where it happens, in the team's words (by email, in the ERP)."
               }
             }
           }
@@ -279,6 +316,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "persona": {
+          "type": "string",
+          "description": "who uses this screen — a persona id or name from personas[]; it wins over a persona's routes, the sign-in guard its code meets and its journey's persona"
         }
       }
     },
@@ -478,6 +519,57 @@
         "when": {
           "type": "string",
           "description": "A label for the arrow, in words."
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "description": "One decision: the team's own words for a choice it made or left open.",
+      "required": [
+        "id",
+        "title",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The id the team and the code use (`D7`, `OBD-D7`); a `DECISION(<id>)` comment in code names it."
+        },
+        "title": {
+          "type": "string",
+          "description": "The decision as a question or a statement, in the team's words."
+        },
+        "state": {
+          "enum": [
+            "open",
+            "decided"
+          ],
+          "description": "open = not decided yet; decided = made."
+        },
+        "decided": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "description": "The date it was decided (YYYY-MM-DD)."
+        },
+        "owner": {
+          "type": "string",
+          "description": "Who owns the decision."
+        },
+        "summary": {
+          "type": "string",
+          "description": "The team's words on it, quoted as written."
+        },
+        "doc": {
+          "type": "string",
+          "description": "A source-relative markdown document, optionally with #anchor; its heading and first paragraph are quoted."
+        },
+        "affects": {
+          "type": "array",
+          "description": "Node ids, screen ids or flow ids the decision bears on.",
+          "items": {
+            "type": "string"
+          }
         }
       }
     }

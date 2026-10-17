@@ -12,7 +12,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
-  lifecycleLines, lifecycleViews, lifecycleViewLines,
+  lifecycleLines, lifecycleViews, lifecycleViewLines, switchesOf, switchLines, recordSwitchLines,
   GraphStore, buildIndex, setFreshnessMeta, search, trace, rulesFor, isDeclaredOnly, journey, journeySummary, journeyChoices, journeyTransactions, screensFor, resolveEntry, categorizeBranch, businessSummary,
   t,
   readModelHubState, resolveModelHubDir,
@@ -32,6 +32,7 @@ import {
   projectFacets, projectGraph, projectsSummaryLine,
   depsRowOf, counted, gateCard, type GateCard, type ActionPreconditions,
   stateOfPlay, stateOfPlayLines, historyFact,
+  decisionsAnswer, decisionsText, decisionsOverviewLine, decisionsFor,
 } from '@farsight/core';
 
 /** `changed` said as what moved: a working tree that differs from HEAD is not a new commit (the Changes spine agrees). */
@@ -43,6 +44,7 @@ import { registerConfigTools } from './config-tools.js';
 import { registerJourneysTools } from './journeys-tools.js';
 import { registerAffectedTools } from './affected-tools.js';
 import { registerWalkTools } from './walk-tools.js';
+import { registerRolesTools } from './roles-tools.js';
 import { cutToBudget, budgetFor, shortHeading, MIN_BUDGET, DEFAULT_BUDGET, type LeftOutPart } from './budget.js';
 import { resolveTier, inTier, tierOf, tierLine, CORE_TOOLS, type ToolTier } from './tiers.js';
 import { readAgentSettings, contextBlock, sinceOf } from './context.js';
@@ -126,6 +128,9 @@ function nodeDetail(n: GraphNode, full = false): string {
     const personaIds = Object.keys(n.lifecycle.names?.views ?? {});
     const views = lifecycleViews(index, n, { personas: personaIds.map((id) => ({ id, name: id })) });
     lines.push(...lifecycleViewLines(views).map((l) => `  ${l}`));
+    // the moves the code holds under a call a constant switches off (lane moves, 2026-10-13): named, never credited
+    const sw = recordSwitchLines(index, n);
+    if (sw.length) lines.push(`  ${t('switch.section', 'professional')}`, ...sw.map((l) => `  ${l}`));
   }
   // the workspace project the node sits in, its type and its tags by dimension (dependencies-and-nx.md §2.2)
   const projRepo = n.loc?.repo ?? n.id.split('::')[0]!;
@@ -556,6 +561,8 @@ const journeysTools = registerJourneysTools({ server, index: () => index, meta: 
 registerAffectedTools({ server, workspace: dirname(graphPath), index: () => index, meta: () => store.meta, roots: () => store.roots });
 // walk me through it, and ask — the tour (all tier) and a question answered from the graph (core tier) (walk-tools.ts)
 registerWalkTools({ server, index: () => index, meta: () => store.meta });
+// who may do what — the role × action table (core tier, roles-tools.ts)
+registerRolesTools({ server, index: () => index });
 
 server.registerTool('graph_overview', {
   title: 'Graph overview',
@@ -603,10 +610,12 @@ server.registerTool('graph_overview', {
     `kinds: ${Object.entries(byKind).map(([k, v]) => `${k}:${v}`).join('  ')}`,
     `tags: ${topTags.map(([t, c]) => `${t}(${c})`).join(', ')}`,
     ...testsLines(), ...storiesOverviewLines(), ...projectsOverviewLines(), ...configTools.overviewLines(),
+    ...(decisionsOverviewLine(store.meta.decisions) ? [decisionsOverviewLine(store.meta.decisions)] : []),
     '',
     '## what is in it',
     ...journeysTools.overviewLines(),
     ...flowLines(),
+    ...switchOverviewLines(),
     ...routePrefixLines(),
     ...dataLines(),
     ...queueLines(),
@@ -619,6 +628,14 @@ server.registerTool('graph_overview', {
   ];
   return text(lines.join('\n'));
 });
+
+/** One line: the constants that switch a call on or off (core switches.ts), then each one — absent when there are none. */
+function switchOverviewLines(): string[] {
+  const a = switchesOf(index);
+  if (!a.switches.length) return [];
+  const off = a.switches.filter((x) => x.off).length;
+  return [t('switch.overview', 'professional').replace('{count}', countedText(a.counted)).replace('{off}', String(off)), ...switchLines(a.switches)];
+}
 
 /** The tier line: which tier is on, how many tools, and how to get the other (tiers.ts). */
 function toolsTierLine(): string {
@@ -863,6 +880,7 @@ server.registerTool('describe_node', {
     const card = gateCard(index, n.id);
     if (card) lines.push('', ...gateLines(card, { cap: 12 }));
   }
+  lines.push(...nodeDeclaredLines(n));
   if (context !== false) lines.push(...changeContext(n));
   return text(lines.join('\n'));
 });
@@ -949,7 +967,54 @@ server.registerTool('gate', {
   if (!n) return text(`unknown gate: ${node_id}. Use search_graph kind:guard to find ids.`);
   const card = gateCard(index, n.id);
   if (!card) return text(`${ref(n)} is not a gate or a rule — describe_node lists the gates in force on it`);
-  return text(gateLines(card, all ? { cap: Number.MAX_SAFE_INTEGER } : {}).join('\n'));
+  const decided = decisionsFor(index, store.meta.decisions, n.id).length ? ['', '## decisions on this gate', ...decisionsText(store.meta.decisions, { node: n.id, index })] : [];
+  return text([...gateLines(card, all ? { cap: Number.MAX_SAFE_INTEGER } : {}), ...decided].join('\n'));
+});
+
+/**
+ * What a source declares about one node beyond its code (the 2026-10-13 outsider round, F8 + F11): the decisions
+ * that bear on it, a document's quoted heading and first paragraph, a party's role, and a screen's steps done
+ * outside the code. Every line is a declaration with where it came from.
+ */
+function nodeDeclaredLines(n: GraphNode): string[] {
+  const out: string[] = [];
+  if (decisionsFor(index, store.meta.decisions, n.id).length) out.push('', '## decisions', ...decisionsText(store.meta.decisions, { node: n.id, index }));
+  if (n.kind === 'doc' && n.doc) {
+    out.push('', `## document · ${n.doc.path} (quoted as written, nothing summarised)`);
+    if (n.doc.title) out.push(`title: "${n.doc.title}"`);
+    if (n.doc.status) out.push(`status: ${n.doc.status}`);
+    if (n.doc.quote) out.push(`first paragraph: "${n.doc.quote}${n.doc.cut ? ' …' : ''}"`);
+    const citers = (index.in.get(n.id) ?? []).filter((e) => e.kind === 'cites').map((e) => index.byId.get(e.from)).filter((x): x is GraphNode => !!x);
+    if (citers.length) out.push(`cited by: ${citers.map((c) => `${c.name} (${c.id})`).join(' · ')}`);
+  }
+  if (n.kind === 'external' && n.external?.kind === 'party') {
+    out.push('', '## party — declared in farsight.config.json → externals, no code reaches it');
+    if (n.external.role) out.push(`role, in the team's words: "${n.external.role}"`);
+    if (n.external.persona) out.push(`also the persona: ${n.external.persona}`);
+  }
+  const off = (n.design?.steps ?? []).filter((s) => s.by);
+  if (off.length) {
+    out.push('', '## done outside the code (the design says; no gate, no test can reach it)');
+    for (const s of off) out.push(`- ${s.id} · ${s.name} — done by ${s.who ?? `a ${s.by === 'external' ? 'another system' : s.by}`}${s.where ? ` · ${s.where}` : ''}`);
+  }
+  return out;
+}
+
+// ── decisions (the 2026-10-13 outsider round, F8) ──
+server.registerTool('decisions', {
+  title: 'Decisions — what the team decided or left open, and where the code names each',
+  description: 'The decisions the sources declare (a design manifest\'s decisions[], overridden by farsight.config.json → decisions[]) joined to the DECISION(<id>) comments in the code: each with its state (open — not decided yet · decided with its date · named in code but not declared), its owner, the team\'s own words quoted, the document it cites quoted (heading and first paragraph, verbatim), every code line that names it and the node it sits on, and what it bears on; then the notes (one id declared twice with two titles, an id in code nothing declares). Use it to tell "the team has not decided this" from "nothing was found" — before changing code a decision governs, or answering who owns a rule nobody wrote. node_id lists the decisions on one node; id one decision; json:true returns the same answer GET /api/decisions gives.',
+  inputSchema: {
+    repo: z.string().optional().describe('limit to one source/repo name'),
+    id: z.string().optional().describe('one decision id (D7, OBD-D7)'),
+    node_id: z.string().optional().describe('the decisions on one node (a gate, a screen, a function)'),
+    json: z.boolean().optional().describe('true = the decisionsAnswer JSON'),
+  },
+}, async ({ repo, id, node_id, json }) => {
+  if (node_id && !index.byId.has(node_id)) return text(`unknown node id: ${node_id}. Use search_graph to find ids.`);
+  const opts = { ...(repo ? { repo } : {}), ...(id ? { id } : {}), ...(node_id ? { node: node_id } : {}) };
+  if (json) return text(JSON.stringify(decisionsAnswer(index, store.meta.decisions, opts), null, 2));
+  return text(decisionsText(store.meta.decisions, { ...opts, index }).join('\n'));
 });
 
 // ── stories (ADR 9): read from the story files; drawn by a running Storybook, never started here ──
@@ -2152,7 +2217,7 @@ server.registerTool('test_coverage', {
       `verified by ${covers.length} test(s)${step ? ` — e2e ${step.e2e} · unit/integration ${step.unit}${step.observed ? ' · observed by a run' : ' · no run observed it'}` : ''}:`,
       // the one verdict of this node — the word the HUD's chip prints — then its cases by their own runs, a count
       ...(step?.verdict ? [`evidence: ${chipWord({ chip: step.chip ?? 'none', evidenceWord: step.verdict.word, ...(step.observation ? { observation: step.observation } : {}) })}${step.verdict.status ? ` · the run behind it: ${step.verdict.status}` : ''}`,
-        `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})`] : []),
+        `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${step.verdict.projectSplit?.words ? ` · ${step.verdict.projectSplit.words.text}` : ''}`] : []),
       ...(step?.sameLoc?.length ? [`read with ${step.sameLoc.map((id) => `\`${id}\``).join(', ')} — the same file:line`] : []),
       ...covers.map(testLine),
       ...(step?.note ? [step.note] : []),
@@ -2201,8 +2266,10 @@ server.registerTool('test_coverage', {
         : 'observed by: nothing — no run reached this flow',
       // the cases' own runs are a count beside the verdict, never a second verdict (swarm 2026-10-05, finding 1)
       c.verdict?.runs.n
-        ? `their own last runs: ${countedText(c.verdict.runs)} (${breakdownText({ ...c.verdict.runs, breakdown: (c.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${c.run?.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''}`
+        ? `their own last runs: ${countedText(c.verdict.runs)} (${breakdownText({ ...c.verdict.runs, breakdown: (c.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${c.run?.projects.length ? ` · project(s) ${c.run.projects.join(', ')}` : ''}${c.verdict.projectSplit?.words ? ` · ${c.verdict.projectSplit.words.text}` : ''}`
         : 'their own last runs: no case reaches this flow',
+      // the release brief holds it on its own case: said beside the word, never left for the brief alone (F3)
+      ...(c.verdict?.word.held ? [c.verdict.word.held.full ?? c.verdict.word.held.text] : []),
       c.note,
       row.gap,
       '',

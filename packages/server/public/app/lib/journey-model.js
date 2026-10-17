@@ -11,6 +11,29 @@
 const id = (k) => k;
 
 /**
+ * The gates one action meets: a screen's gates placed on a step range (a moment's `from`..`to`) — each gate met
+ * inside the range once, at its first step there, with only the roles the call sites inside the range handed it and
+ * `count` = the meetings inside the range. A gate the screen met only under another action is not here. The same
+ * rule as core `gatesInRange()` (query.ts), over the summary's `gates[].at`; a gate from an older server without `at`
+ * falls back to its one `stepOrder` (outsider round 2026-10-13, F2: the role guard stood only on the first action
+ * that met it, with every action's roles).
+ */
+export function jrnGatesIn(sg, from, to) {
+  const out = [];
+  for (const g of (sg && sg.gates) || []) {
+    const at = ((g.at && g.at.length) ? g.at : [{ stepOrder: g.stepOrder, requires: g.requires }])
+      .filter((o) => o.stepOrder >= from && o.stepOrder <= to);
+    if (!at.length) continue;
+    const roles = [...new Set(at.flatMap((o) => (o.requires ? String(o.requires).split(', ') : [])))];
+    const placed = { ...g, stepOrder: Math.min(...at.map((o) => o.stepOrder)), count: at.length, at };
+    delete placed.requires;
+    if (roles.length) placed.requires = roles.join(', ');
+    out.push(placed);
+  }
+  return out;
+}
+
+/**
  * A segment's actions in the order its screen's manifest lists the operations, with anything the manifest does
  * not list after them in walk order. The array the fold hands out stays in walk order (the markers index into it
  * positionally), so the ordering is a display choice made here and nowhere else.

@@ -25,8 +25,11 @@ import { CONFIG_STRINGS } from './strings-config.js';
 import { JOURNEYS_STRINGS } from './strings-journeys.js';
 import { DOOR_STRINGS } from './strings-doors.js';
 import { LANES_STRINGS } from './strings-lanes.js';
+import { DECISION_STRINGS } from './strings-decisions.js';
 import { FOLD_STRINGS } from './strings-fold.js';
+import { SWITCHES_STRINGS } from './strings-switches.js';
 import { GATE_STRINGS } from './strings-gate.js';
+import { ROLES_STRINGS } from './strings-roles.js';
 import { LIFECYCLE_STRINGS } from './strings-lifecycle.js';
 import { CHROME_STRINGS } from './strings-chrome.js';
 import { EXPORT_STRINGS } from './strings-export.js';
@@ -47,6 +50,7 @@ import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
 import { ASK_STRINGS } from './strings-ask.js';
+import { PLAIN_STRINGS } from './strings-plain.js';
 import { VERDICT_STRINGS } from './strings-verdict.js';
 
 export type Register = 'hud' | 'professional';
@@ -128,8 +132,12 @@ export const STRINGS: Record<string, StringEntry> = {
   ...VERDICT_STRINGS,
   // the storyline as swimlanes (round 2026-10-10 §2) live in strings-lanes.ts (map.layout.*, lanes.*)
   ...LANES_STRINGS,
+  // declared decisions, work done outside the code, parties and cited documents (the 2026-10-13 outsider round, F8 + F11)
+  ...DECISION_STRINGS,
   // the fold's words: a row of chips folded to +n, a path that keeps its two ends, a rail's tabs folded to a menu
   ...FOLD_STRINGS,
+  // a call a constant switches off, and the switches themselves (lane moves, 2026-10-13)
+  ...SWITCHES_STRINGS,
   // compare two syncs on a storyline (round 2026-10-10, proposal 7) live in strings-compare.ts (compare.*, map.biz.compare.*, count.unit.deltas)
   ...COMPARE_STRINGS,
   // a change's affected set and the release readiness brief live in strings-affected.ts
@@ -151,6 +159,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...ECHO_INSTALLATION_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
+  // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)
+  ...ROLES_STRINGS,
   // the status lifecycle's words live in strings-lifecycle.ts (lifecycle.*, its counts and their parts)
   ...LIFECYCLE_STRINGS,
   // the chrome's words live in strings-chrome.ts (the read-only session, the legend's key, Esc on a journey)
@@ -168,6 +178,8 @@ export const STRINGS: Record<string, StringEntry> = {
   // the guided walk and Ask (round 2026-10-10, proposal 8) live in strings-tour.ts and strings-ask.ts (tour.*, ask.*, their counts)
   ...TOUR_STRINGS,
   ...ASK_STRINGS,
+  // the business register's words for what the app wrote (outsider round, F6) live in strings-plain.ts
+  ...PLAIN_STRINGS,
   'nav.stewardship': same('Stewardship', 'The debt queue: ungated entries, unconfirmed names and unresolved edges, with owners and age.'),
   'nav.grammar': same('Grammar Book', 'The canonical symbol and string catalog — every glyph and every word this product may use.'),
 

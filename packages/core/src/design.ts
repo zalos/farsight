@@ -10,7 +10,7 @@
  * location, drift is computed ONCE here and stored. Pure — reading files and
  * talking to Figma lives in parsers/server.
  */
-import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneyStorylineDecl, JourneysMeta } from './graph.js';
+import type { GraphNode, GraphEdge, GraphFragment, DesignRef, DesignDriftKind, Loc, NodeLink, JourneyPersonaDecl, JourneyGroupDecl, JourneyStorylineDecl, JourneysMeta, DesignStep, DecisionDecl } from './graph.js';
 import { t } from './strings.js';
 import { buildIndex, type GraphIndex } from './query.js';
 
@@ -38,9 +38,15 @@ export interface DesignScreen {
    * `@covers SCR-07.2` resolves to this screen and keeps the step on the edge,
    * so a claim about one step of a screen is not an unresolved id (R33).
    */
-  steps?: { id: string; name: string; operation?: string }[];
+  steps?: DesignStep[];
   /** work items this screen is built for (Jira keys, Azure DevOps ids) — a declared `tracks` link (work-items-sync.md §9) */
   work?: string[];
+  /**
+   * who uses this screen — a persona id or name from `personas[]`. It wins over a persona's `routes`, the identity
+   * guard the screen's code meets and the journey's persona, so an operator's screen inside a journey for two kinds
+   * of person is drawn in the operator's lane (core journeys.ts `personaOfScreen`)
+   */
+  persona?: string;
 }
 
 /**
@@ -87,6 +93,11 @@ export interface DesignManifest {
   groups?: JourneyGroupDecl[];
   /** storylines: named chains of journeys across features and personas, each its flow ids in order */
   storylines?: JourneyStorylineDecl[];
+  /**
+   * decisions the team made or left open (`{ id, title, state: open · decided, decided?, owner?, summary?, doc?,
+   * affects? }`): joined to the code by `DECISION(<id>)` comments and printed as the team's words (core decisions.ts)
+   */
+  decisions?: DecisionDecl[];
   figma?: { file?: string; token?: string };
   screens: DesignScreen[];
   flows?: DesignFlow[];
@@ -428,6 +439,7 @@ function refOf(screen: DesignScreen, manifest: DesignManifest, source: DesignSou
     ...(screen.operations?.length ? { operations: screen.operations } : {}),
     ...(screen.phase ? { phase: String(screen.phase) } : {}),
     ...(screen.steps?.length ? { steps: screen.steps } : {}),
+    ...(typeof screen.persona === 'string' && screen.persona.trim() ? { persona: screen.persona.trim() } : {}),
     ...(drift.length ? { drift } : {}),
   };
 }
@@ -530,6 +542,8 @@ export interface ScreenRow {
   freshness?: 'figma' | 'manifest';
   drift: DesignDrift[];
   loc?: Loc;
+  /** the persona the manifest's screen row names (`screens[].persona`); absent when it names none */
+  persona?: string;
 }
 
 export interface DesignSurface {
@@ -594,6 +608,7 @@ function screenRow(n: GraphNode): ScreenRow {
     ...(d.freshness ? { freshness: d.freshness } : {}),
     drift: d.drift ?? [],
     ...(n.loc ? { loc: n.loc } : {}),
+    ...(typeof d.persona === 'string' ? { persona: d.persona } : {}),
   };
 }
 
@@ -794,7 +809,7 @@ The front door, the Portfolio, the Map, GET /api/journeys, the MCP journeys tool
   ]
 }
 
-- personas[] { id, name, description? } — in the order they are shown.
+- personas[] { id, name, description?, routes?, signsInWith? } — in the order they are shown.
 - groups[] { id, name, description?, persona? } — in the order they are shown inside a persona. A group
   with "persona" exists under that persona only; one without exists under every persona that has a
   journey in it (Access under Contractor and Access under Operations are two sections, one word).
@@ -812,10 +827,34 @@ The front door, the Portfolio, the Map, GET /api/journeys, the MCP journeys tool
 - The persona's way in ("start here") is computed: the first journey nothing requires that has
   something built and the most screens.
 
+A journey for two kinds of person still has screens only one of them uses — an operator's review
+screen inside "Create a vendor account". Each screen is placed with the person who uses it, by the
+first of four rules that says something:
+
+1. screens[].persona — the screen row names a persona id or name: { "id": "OPS-04", "route":
+   "/ops/vendor-accounts", "persona": "ops" }.
+2. personas[].routes — route globs the persona's screens live under: { "id": "ops", "name":
+   "Operations", "routes": ["/ops/**"] }. "**" is any number of segments (none included), "*" one
+   segment; the most specific glob wins, two personas tied say nothing (a note). A component screen
+   takes the route of the pages that render it, when they all agree.
+3. The sign-in guard its code meets — an identity guard (a session, a sign-in) that personas[]
+   .signsInWith names (["requireOpsSession"], the guard's name or node id), or whose own @group is a
+   declared persona's id or name. Only when every such guard the screen's code reaches signs in the
+   same persona.
+4. The journey's first persona.
+
+The lanes draw a screen in its persona's lane, the walk (WALK, tour) says who uses each stop, and the
+Map's head reads "For A · with B" when a journey's screens span two people. Every screen in GET
+/api/journey (summary.user[]) and every JourneyRow (screenPersonas[]) carries persona, personaName and
+personaFrom (screen · routes · guard · journey). Where they disagree — a screen row naming A whose
+route matches B's routes, a screen placed with A whose code meets only B's sign-in guard — the
+journeys tool, farsight journeys, GET /api/journeys and the Settings config list print a note; the
+stronger rule is kept.
+
 The same block in farsight.config.json organises across manifests without editing them:
 
 { "journeys": {
-    "personas": [ { "id": "ops" }, { "id": "contractor" } ],
+    "personas": [ { "id": "ops", "routes": ["/ops/**"] }, { "id": "contractor" } ],
     "groups":   [ { "id": "access", "name": "Ways in" } ],
     "flows":    [ { "id": "vendor-account-creation", "group": "access", "order": 3 } ] } }
 
@@ -941,6 +980,60 @@ team declared. To improve it:
   record's status says "not checked by the code" — the fix is in the code, not in the words.
 - Stamp the test runs (tests.e2e results, coverage): each stop and each precondition carries the one verdict with
   its scope; a skipped case is said, never hidden.
+
+## 1⅞++ · Decisions, work done outside the code, parties, and the documents you cite
+
+Say what the team decided or left open, what a person or a partner does by hand, and who those partners are —
+so a reader can tell "the team has not decided this" from "Farsight found nothing". All three are declarations,
+printed as declarations with where they came from; none changes what the code was found to do.
+
+"decisions": [
+  { "id": "D7", "title": "Who verifies a payee's bank-detail change?", "state": "open",
+    "owner": "Finance lead", "summary": "Undecided; the payment partner may own it.",
+    "doc": "docs/product/open-business-decisions.md#d7", "affects": ["OPS-04c"] },
+  { "id": "D5", "title": "Four-eyes on operator-keyed invoices", "state": "decided", "decided": "2026-09-04" }
+]
+
+- decisions[] { id, title, state: open | decided, decided? (YYYY-MM-DD), owner?, summary?, doc?, affects? } in the
+  manifest; farsight.config.json → decisions[] overrides by id, field by field (root file first, the nearest nested
+  file last), and may declare an id no manifest does when it gives a title and a state.
+- The code names a decision with a comment, // DECISION(D7): <what this code does until it is decided>, on a line
+  above the function, the call or the flag constant it governs, or inside the body beside the call. The comment's
+  node carries the decision; above a module-level constant the site keeps the constant's name.
+- Keep one list of ids per source: when two documents number their decisions separately, qualify the ids
+  (OBD-D7, ACP-D7) in the comments and the manifest. Two manifests that declare one id with different titles are a
+  note (the first read is kept); an id the code names that nothing declares is a note and a row of its own, its
+  title unknown.
+- doc names a markdown file inside the source; with #anchor the heading that anchor names. Its heading and first
+  paragraph are quoted on the decision card, verbatim, cut between words near 400 characters.
+- Where it shows: a chip "pending decision D7 · <title>" (or "decided D5 · …") on the gate card, the Map
+  property's Overview, the WALK stop and the lifecycle table row the decision bears on, opening a card with the
+  state, the owner, the team's words quoted, the document quoted and a door to it and to each code line;
+  GET /api/decisions[?id=&node=], MCP decisions, farsight decisions [--json], a decisions line in graph_overview.
+
+A step somebody does on purpose outside the app — a W-9 request by email, the partner's payout, a bank check in the
+ERP — is a step with by:
+
+  "steps": [ { "id": "OPS-08.5", "name": "The payment partner pays out", "by": "partner",
+               "who": "Payment partner", "where": "outside the platform" } ]
+
+- by is person | partner | external (another system the app does not call); who is the team's words, a persona
+  id, or a party's name; where is optional. Such a step is drawn dotted with "done by <who>", counted apart (done
+  outside the code), and is never a gate and never a verdict — no test can reach it. It is not "designed, not
+  built": that means the code is meant to do it and does not yet.
+
+A counterparty no code calls (the payment partner, the client) is a party — an externals[] entry in
+farsight.config.json with kind "party" and no import:
+
+  "externals": [ { "name": "Payment partner", "kind": "party", "role": "Moves the money on the platform's instruction" } ]
+
+- A party is a node no code reaches ("declared, no code reaches it"). The storyline's lanes draw it as a lane of
+  its own when a step's who names it, with its steps in it.
+
+Documents you cite are quoted: a flow's docs[], a decision's doc, and an ADR named in a @business sentence or a
+doc comment ("ADR 0007", when the source keeps its ADRs in a decisions/ or adr/ folder) become doc nodes carrying
+the document's heading, its Status line and its first paragraph verbatim; the citing node gets a cites edge.
+Start each ADR with one plain paragraph saying what was decided — that paragraph is what a reader sees.
 
 ## 2 · What the graph does with it (no code needed yet)
 

@@ -120,6 +120,10 @@ const IDENT = /\b[a-z]+[A-Z][A-Za-z0-9]*\b|\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b
 export function plainWords(text) {
   let s = String(text || '').replace(/\s+/g, ' ').trim();
   if (!s) return '';
+  // a design id the sentence uses as a place (*on CON-03 with business info*) is a screen: its name, never a hole
+  s = screenIdsAsNames(s);
+  // a refusal message with a hole the code fills when it runs (*Vendor account is …, not ACTIVE*): said, not left open
+  if (/…/.test(s) && !/…\s*$/.test(s)) s = filledMessage(s);
   // a backticked word is emphasis (`PAID`); a backticked path or expression is code
   s = s.replace(/`([A-Za-z][A-Za-z ]*)`/g, '$1');
   // references and code inside parentheses are asides: drop the aside, keep the sentence
@@ -141,6 +145,82 @@ export function plainWords(text) {
   s = s.replace(IDENT, (w) => humanize(w).toLowerCase());
   return s.replace(/\s+([,.;:!?])/g, '$1').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ')
     .replace(/\s+—\s*([.,;]|$)/g, '$1').replace(/^[\s,;:—–-]+/, '').trim();
+}
+
+// ── the business register's words for what the app wrote (outsider round 2026-10-13, F6) ──
+
+/** Design ids → the screen's name, once per graph object. */
+let SCREEN_NAMES = null;
+let SCREEN_NAMES_OF = null;
+function screenNames() {
+  const g = S.GRAPH;
+  if (SCREEN_NAMES && SCREEN_NAMES_OF === g) return SCREEN_NAMES;
+  const m = new Map();
+  for (const n of (g && g.nodes) || []) {
+    const d = n.design;
+    if (d && d.id && d.name && !m.has(d.id)) m.set(d.id, d.name);
+  }
+  SCREEN_NAMES = m;
+  SCREEN_NAMES_OF = g;
+  return m;
+}
+const SCREEN_ID = /\b([A-Z]{2,5}-\d+(?:\.\d+)?[a-z]?)(['’]s)?\b/g;
+/**
+ * A design id a sentence uses as a place — after *on*, *in*, *from*, *to*, *at*, *via* or as a possessive — reads as
+ * the screen it names (`on CON-03 with` → *on Create your vendor account with*), else *a page*; an id that is only a
+ * cross-reference is left to `plainWords()`, which drops it. A sentence never keeps a hole where the id stood.
+ * @group Grammar
+ */
+export function screenIdsAsNames(text) {
+  const names = screenNames();
+  return String(text || '').replace(SCREEN_ID, (m, id, poss, at, whole) => {
+    const before = whole.slice(0, at);
+    const place = /\b(?:on|in|from|to|at|via|onto|into|and|or)\s+$/i.test(before) || !!poss;
+    // a range or a list of ids (*CON-01 to CON-08*) is a cross-reference, not a place
+    if (!place || /\(\s*$/.test(before) || /\b[A-Z]{2,5}-\d+\w*\s+(?:to|and|or)\s+$/.test(before)) return m;
+    const name = names.get(id);
+    return (name || t('plain.aPage')) + (poss || '');
+  });
+}
+
+/**
+ * A refusal message the code builds, as a reader may read it: a hole the parser could not fill (`…`, a value the code
+ * only knows when it runs) says *(a value)*, and a status constant (`ACTIVE`) reads as a word. Hybrid and code keep
+ * the message as the parser read it.
+ * @group Grammar
+ */
+export function filledMessage(text) {
+  const v = t('plain.aValue');
+  return String(text || '')
+    .replace(/\(\s*…\s*\)/g, v).replace(/…/g, v)
+    .replace(/\b[A-Z]{4,}(?:_[A-Z]+)*\b/g, (w) => (/^ADR/.test(w) ? w : w.replace(/_/g, ' ').toLowerCase()));
+}
+
+/**
+ * What the code does when a check fails, in the lens's words: an HTTP refusal (`409 conflict`) is *the request is
+ * refused* in business and *refused (409 conflict)* elsewhere; anything else is printed as written.
+ * @group Grammar
+ */
+export function refusalWords(text, lens) {
+  const s = String(text || '').trim();
+  if (!/\b[45]\d\d\b/.test(s)) return s;
+  return (lens || currentLens()) === 'business' ? t('plain.refused') : t('plain.refusedCode').replace('{code}', s);
+}
+
+/**
+ * A gate or rule named by its code, as the business register may name it: a schema (`opsVendorAccountApproveSchema`)
+ * is *the ops vendor account approve form's rules*; a precondition's code form (`fn: table.field = VALUE`) is
+ * *table field must be value*; any other name is returned as it is (the caller's humanize applies).
+ * @group Grammar
+ */
+export function schemaWords(name) {
+  const s = String(name || '').trim();
+  const words = (x) => x.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();
+  const sm = /^([A-Za-z][A-Za-z0-9]*?)Schema$/.exec(s);
+  if (sm) return t('plain.schema').replace('{name}', words(sm[1]));
+  const pm = /^[\w.$]+:\s*(\w+)\.(\w+)\s*(?:=|∈)\s*\{?([^}]+)\}?$/.exec(s);
+  if (pm) return t('plain.mustBe').replace('{record}', words(pm[1])).replace('{field}', words(pm[2])).replace('{value}', pm[3].split(/\s*,\s*/).map((x) => words(x)).join(' or '));
+  return s;
 }
 
 /**

@@ -34,6 +34,8 @@ import { doorsFor, doorsHtml, leadDoorHtml, codeSlotHtml, fillCode, storylineLin
 import { gateAttrs } from '../lib/gate-card.js';
 import { lifecycleStripHtml, screenLifecycles } from '../lib/lifecycle-strip.js';
 import { propertyModel } from '../lib/map-property-model.js';
+import { loadDecisions, decisionChipsHtml } from '../lib/decisions.js';
+import { offPlatformListHtml } from '../lib/parties.js';
 import { storeShownName } from '../lib/map-model.js';
 import { affectedOn, affectedSpec, affectedTabHtml, affectedTabCount, journeyChipReach, pickAffected, affectedSummaryHtml } from './map-affected.js';
 
@@ -365,6 +367,12 @@ function gateList(rows, key) {
       + esc(t('map.prop.gates.mute').replace('{n}', shown.mute)) + '</span></div>' : '');
 }
 
+/** The nodes a decision on this screen may name: the page, its components and handlers, its gates and its calls. */
+function decisionIdsOf(pm) {
+  const o = pm.tabs.overview;
+  return [pm.node && pm.node.id].concat(pm.changeIds || [], (o.gates || []).map((g) => g.id), (o.calls || []).map((c) => c.nodeId || c.id)).filter(Boolean);
+}
+
 function overviewHtml(pm, st) {
   const o = pm.tabs.overview;
   // the tests count is one chip with its scope and word (lib/test-chip.js); the rest are plain counts
@@ -372,12 +380,40 @@ function overviewHtml(pm, st) {
     + (pm.hero.planned ? '<span class="api-chip stub"' + defAttrs('design.status.designOnly') + '>' + esc(t('design.status.designOnly')) + '</span>' : '');
   const calls = o.calls.length ? capRows('ov-calls', o.calls.map((c) => callRow(c, true))) : (pm.tabs.apis.planned ? absentRow('notBuilt') : absentRow('noneIndexed'));
   COUNTED_GATES = pm.counts.gates;
-  return sec('map.prop.ov.what', '<div class="mp-biz">' + clampHtml('ov-what', o.business) + '</div>')
+  // a decision the team made or left open on this screen, its gates, its calls or the code behind them (lib/decisions.js)
+  const decs = decisionChipsHtml(decisionIdsOf(pm));
+  return sec('map.prop.ov.what', '<div class="mp-biz">' + clampHtml('ov-what', o.business) + '</div>' + (decs ? '<div class="mp-decs">' + decs + '</div>' : ''))
+    + (o.offPlatform && o.offPlatform.length ? sec('offPlatform.chip', offPlatformListHtml(o.offPlatform)) : '')
     + (glance ? sec('map.prop.ov.glance', '<div class="mp-chips">' + glance + '</div>') : '')
     + sec('map.prop.ov.calls', calls)
     + sec('map.prop.ov.gates', gateList(o.gates, 'ov-gates'))
     + propLifecycleHtml(pm, st)
+    + propSwitchesHtml(pm, st)
     + sec('map.prop.ov.work', workRowsHtml(pm, st, true));
+}
+
+/**
+ * The Overview's switches (lane moves, 2026-10-13, F9): each call this screen's actions hold under a constant whose value
+ * switches it off — the constant, its value, where it is declared and the action that holds the call. Read from the
+ * journey answer's moments (`switchedOff`); `''` when the screen holds none. The business register says it in words.
+ * @group Map
+ */
+function propSwitchesHtml(pm, st) {
+  const data = st.ctx && st.ctx.data;
+  const seg = data && data.summary && pm.screen && pm.screen.segment ? (data.summary.segments || [])[pm.screen.segment.index] : null;
+  const rows = [];
+  for (const mo of (seg && seg.moments) || []) {
+    for (const so of mo.switchedOff || []) {
+      if (rows.some((r) => r.flag === so.flag && r.nodeId === so.nodeId)) continue;
+      rows.push({ ...so, action: mo.label });
+    }
+  }
+  if (!rows.length) return '';
+  const fill = (k, v) => Object.entries(v).reduce((x, [a, b]) => x.split('{' + a + '}').join(String(b)), t(k));
+  const biz = currentLens() === 'business';
+  return sec('switch.section', rows.map((r) => '<div class="mp-row"' + defAttrs('switch.word') + '>' + sym('warning') + ' <span>'
+    + esc(biz ? fill('lifecycle.biz.switchedOffMover', { action: r.action }) : fill('lifecycle.switchedOffMover', { action: r.action, flag: r.flag, value: r.value }) + ' · ' + r.name + ' · ' + r.at)
+    + '</span></div>').join(''));
 }
 
 /**
@@ -878,6 +914,9 @@ export function mountMapProperty(host, ctx) {
     drawBody();
     wireHero(host);
     fetchLazy();
+    // the decisions are read once per graph; the Overview draws again when one bears on this screen
+    const dk = st.key;
+    loadDecisions().then(() => { if (st.key === dk && st.tab === 'overview' && st.pm && decisionChipsHtml(decisionIdsOf(st.pm)) && !host.querySelector('.mp-decs')) drawBody(); });
   }
   function setTab(tab, focus) {
     if (!tabsNow().includes(tab)) return;

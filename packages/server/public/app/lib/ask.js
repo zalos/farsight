@@ -140,7 +140,11 @@ export function askCardHtml(a, o = {}) {
   let html = '<div class="ask-card" data-shape="' + esc(a.shape) + '">'
     + '<div class="ask-chips"><span class="ask-derived"' + defAttrs('ask.derived') + '>' + esc(t('ask.derived')) + '</span>'
     + (a.phrased ? '<span class="ask-phrased"' + defAttrs('ask.phrased') + '>' + esc(t('ask.phrased')) + '</span>' : '') + '</div>';
-  for (const c of a.lead || []) html += '<p class="ask-lead r-' + esc(c.role) + (c.warn ? ' warn' : '') + '">' + line(c) + '</p>';
+  // the reading comes first, set apart (outsider round, F7): the question Ask answered when yours was not one of its shapes
+  for (const c of a.lead || []) {
+    const read = /^ask\.reworded/.test(c.key);
+    html += '<p class="ask-lead r-' + esc(c.role) + (c.warn ? ' warn' : '') + (read ? ' ask-read' : '') + '"' + (read ? defAttrs(c.key) : '') + '>' + line(c) + '</p>';
+  }
   // did you mean: the nearest shapes filled with the question's own nouns — a click asks it (swarm round 3)
   if (a.suggest && a.suggest.length) {
     html += '<div class="ask-suggest"><span class="hud-label"' + defAttrs('ask.didYouMean') + '>' + esc(t('ask.didYouMean')) + '</span>'

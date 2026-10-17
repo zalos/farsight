@@ -14,6 +14,8 @@
 
 /** The kinds of marker a store lane reads its writes from. */
 const DATA_KINDS = new Set(['record', 'external']);
+import { offPlatformStages, partyLanes, partyLaneCount, offPlatformCounted } from './parties-model.js';
+
 const SRC = 'laneLayout ← /api/journeys storyline + /api/journey per journey (segments · markers · lifecycles · coverage)'; // str:ok a Counted's source: where the number was read, for the tip's from line
 
 function lookup(byId) {
@@ -78,6 +80,16 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   const personaRows = ((tree && tree.personas) || []).filter((p) => p && !p.key);
   const personaOrder = personaRows.map((p) => p.id);
 
+  // who uses a screen (core journeys.ts personaOfScreen): the journey answer's screen once it is read, else the tree
+  // row's list — its own row, a persona's routes or the sign-in guard its code meets place it in that persona's lane;
+  // a screen only its journey places stays in the journey's lane (a branch's lane rule included)
+  const personaNames = new Map(personaRows.map((p) => [p.id, p.name]));
+  function screenPersonaOf(row, sc, screen) {
+    if (screen && screen.persona) return { persona: screen.persona, personaName: screen.personaName || '', personaFrom: screen.personaFrom || 'journey' };
+    const list = (row && row.screenPersonas) || [];
+    return list.find((x) => x && (x.designId === sc.key || x.screen === sc.key)) || (sc.seg ? null : list[sc.index]) || null;
+  }
+
   // the screens a design names, by design id — a stage's name and words before its journey is read
   const designScreens = new Map();
   for (const d of Array.isArray(designs) ? designs : []) {
@@ -133,9 +145,13 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     journeyStages.set(b.nodeId, list);
   }
 
-  function newStage(sc, row, lane, c, extra) {
+  function newStage(sc, row, journeyLane, c, extra) {
     const seg = sc.seg;
     const screen = seg ? seg.screen : null;
+    const sp = screenPersonaOf(row, sc, screen);
+    const placed = sp && sp.personaFrom && sp.personaFrom !== 'journey';
+    const lane = placed ? 'p:' + sp.persona : journeyLane;
+    if (sp && sp.personaName && !personaNames.has(sp.persona)) personaNames.set(sp.persona, sp.personaName);
     const ds = designScreens.get(sc.key) || null;
     const node = screen ? get(screen.id) : ds && ds.nodeId ? get(ds.nodeId) : null;
     const words = (screen && screen.business) || (node && (node.bizDescription || node.docs)) || (ds && ds.description) || '';
@@ -148,10 +164,15 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
       words, sub: firstSentence(words),
       state: planned ? 'planned' : 'built',
       read: !!seg,
+      persona: lane.slice(2), personaFrom: placed ? sp.personaFrom : 'journey',
       segs: seg ? [{ seg, a: sc.a }] : [],
       ...extra,
     };
   }
+
+  // work done outside the code (lib/parties.js): a card per declared step, in a party's lane or under its screen
+  const offs = offPlatformStages(stages);
+  stages.push(...offs);
 
   // the facts each stage's segments carry: its tests (the first segment's, the street's chip), its decisions, what it
   // writes and reads, and the code it runs
@@ -201,6 +222,15 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     for (const lc of (a && a.lifecycles) || []) if (lc && lc.lifecycle && !lifeOf.has(lc.nodeId)) lifeOf.set(lc.nodeId, lc);
   }
 
+  /** the live moves a stage's actions make of one record into one status by one writer */
+  function movesAt(st, recordId, to, by) {
+    const out = [];
+    for (const { seg } of st.segs) for (const mo of seg.moments || []) {
+      for (const mv of (mo && mo.preconditions && mo.preconditions.moves) || []) if (mv.table === recordId && mv.to === to && mv.by === by) out.push({ mv, mo });
+    }
+    return out;
+  }
+
   // ── the pills: in each store lane a row per record it writes — a record whose statuses the code declares gets one
   // pill per status the storyline moves it into, in the lifecycle's order; any other record one *written* pill
   const pills = [];
@@ -217,7 +247,10 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
         const life = lc.lifecycle;
         const byTo = new Map();
         life.transitions.forEach((tr) => {
-          const makers = stages.filter((s) => s.runs.has(tr.by));
+          // the stages whose actions make this move on a live path (lane moves, 2026-10-13: the actions' own moves, so a
+          // call a constant switches off never places a pill), else the stages whose walk runs the writer
+          const own = stages.filter((s) => movesAt(s, r.id, tr.to, tr.by).length);
+          const makers = own.length ? own : stages.filter((s) => s.runs.has(tr.by));
           if (!makers.length) return;
           if (!byTo.has(tr.to)) byTo.set(tr.to, { to: tr.to, moves: [], stages: [] });
           const p = byTo.get(tr.to);
@@ -241,13 +274,15 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
 
   // ── the lanes, in order: persona lanes in the tree's order, then store lanes; a lane the config names takes its id,
   // its word and its second line, and the lanes it names come first in its order
-  const usedPersonas = [...new Set([...laneOfJourney.values()])].map((x) => x.slice(2));
+  // the persona lanes the stages sit in, and the lane of a journey with no screen to draw
+  const staged = new Set(stages.map((st) => st.flowId));
+  const usedPersonas = [...new Set([...stages.filter((st) => !st.off).map((st) => st.lane), ...[...laneOfJourney].filter(([id]) => !staged.has(id)).map(([, l]) => l)])].map((x) => x.slice(2));
   const personaIndex = (p) => { const i = personaOrder.indexOf(p); return i < 0 ? personaOrder.length : i; };
   usedPersonas.sort((a, b) => personaIndex(a) - personaIndex(b));
   const lanes = [];
   for (const p of usedPersonas) {
     const row = personaRows.find((x) => x.id === p);
-    lanes.push({ id: p || 'nobody', ref: 'p:' + p, kind: 'persona', persona: p, name: row ? row.name : '', description: row && row.description ? row.description : '', surface: '', declared: null });
+    lanes.push({ id: p || 'nobody', ref: 'p:' + p, kind: 'persona', persona: p, name: row ? row.name : personaNames.get(p) || '', description: row && row.description ? row.description : '', surface: '', declared: null });
   }
   for (const sl of lanesStore) lanes.push({ id: 'store:' + sl.store.name, ref: 'st:' + storeKey(sl.store), kind: 'store', store: sl.store, name: sl.store.name, description: '', surface: '', declared: null, rows: sl.rows, folded: sl.folded });
   laneDecls.forEach((d, i) => {
@@ -264,8 +299,10 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   });
   const rank = (l) => (l.declared == null ? 1e6 : l.declared);
   const pl = lanes.filter((l) => l.kind === 'persona').map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l);
+  // a party's lane sits between the people's and the stores'
+  const parties = partyLanes(offs);
   const sl2 = lanes.filter((l) => l.kind === 'store').map((l, i) => ({ l, i })).sort((a, b) => rank(a.l) - rank(b.l) || a.i - b.i).map((x) => x.l);
-  const ordered = pl.concat(sl2);
+  const ordered = pl.concat(parties, sl2);
   const laneByRef = new Map(ordered.map((l) => [l.ref, l]));
   for (const st of stages) st.lane = laneByRef.get(st.lane) ? laneByRef.get(st.lane).id : st.lane;
 
@@ -297,25 +334,42 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     });
     l.rowCount = l.rows.length;
   }
-  for (const l of pl) l.rowCount = Math.max(1, ...stages.filter((s) => s.lane === l.id).map((s) => s.row + 1));
+  for (const l of pl.concat(parties)) l.rowCount = Math.max(1, ...stages.filter((s) => s.lane === l.id).map((s) => s.row + 1));
 
-  // ── what each move needs (lane G's `moments[k].preconditions`): read from the first screen that makes the move — the
-  // action's checks in tier order, and whether the code checks the status it moves from
+  // ── what each move needs (lane G's `moments[k].preconditions`): read from the action that makes the move most directly
+  // (fewest calls under its own call), first screen on a tie — never simply the first place the walk met (lane moves,
+  // 2026-10-13) — the action's checks in tier order, and whether the code checks the status it moves from. The other
+  // live actions fold into *also reached from n*; an action that holds the move under a constant that switches it off
+  // is named apart, never as the mover
   const stageObj = new Map(stages.map((s) => [s.key, s]));
   for (const p of pills) {
     if (p.kind === 'written') continue;
-    const first = [...p.stages].map((k) => stageObj.get(k)).filter(Boolean).sort((a, b) => a.col - b.col)[0];
-    if (!first) continue;
-    let found = null;
-    for (const { seg } of first.segs) {
-      for (const mo of seg.moments || []) {
-        const pre = mo && mo.preconditions;
-        const mv = pre && (pre.moves || []).find((x) => (x.table === p.record.id || x.record === p.record.name) && x.to === p.status);
-        if (mv) { found = { pre, mv }; break; }
+    const ordered = [...p.stages].map((k) => stageObj.get(k)).filter(Boolean).sort((a, b) => a.col - b.col);
+    const cands = [];
+    for (const st of ordered) {
+      for (const { seg } of st.segs) {
+        for (const mo of seg.moments || []) {
+          const pre = mo && mo.preconditions;
+          const mv = pre && (pre.moves || []).find((x) => (x.table === p.record.id || x.record === p.record.name) && x.to === p.status);
+          if (mv) cands.push({ pre, mv, mo, st });
+        }
       }
-      if (found) break;
     }
+    const offs = [];
+    for (const st of stages) {
+      for (const { seg } of st.segs) {
+        for (const mo of seg.moments || []) {
+          const so = mo && mo.preconditions && (mo.preconditions.switchedOff || []).find((x) => (x.table === p.record.id || x.record === p.record.name) && x.to === p.status);
+          if (so && !offs.some((o) => o.label === mo.label)) offs.push({ label: mo.label, screen: st.name, flag: so.flag, value: so.value, at: so.at });
+        }
+      }
+    }
+    if (offs.length) p.switchedOff = offs;
+    const found = cands.slice().sort((a, b) => (a.mv.hops || 0) - (b.mv.hops || 0) || a.st.col - b.st.col)[0];
     if (!found) continue;
+    p.action = found.mo.label;
+    const labels = [...new Set(cands.map((c) => c.mo.label))].filter((x) => x !== found.mo.label);
+    if (labels.length) p.also = labels;
     const list = found.pre.preconditions || [];
     const lc = lifeOf.get(p.record.id);
     const statuses = lc ? lc.lifecycle.statuses : [];
@@ -327,6 +381,8 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
       counted: found.pre.counted || null,
       shown: list.filter((x) => x.tier !== 'technical').map((x) => ({ words: x.words, wordsFrom: x.wordsFrom, tier: x.tier, class: x.class, role: x.role || null, evidence: x.evidence || null, loc: x.loc || '', planned: !!x.planned })),
       technical: list.filter((x) => x.tier === 'technical').length,
+      // every one of the N, technical included, so the chip's tip can list what it counts (gap log S2)
+      all: list.map((x) => ({ words: x.words, tier: x.tier, role: x.role || null, evidence: x.evidence || null, loc: x.loc || '' })),
       notChecked: unchecked ? { record: p.record.name, status: at > 0 ? statuses[at - 1] : (found.mv.fromAny || [])[0] || null } : null,
     };
   }
@@ -341,7 +397,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
   }
   const stageByKey = new Map(stages.map((s) => [s.key, s]));
   // then: a stage to the next one in its lane, on the main path and inside each branch
-  const mainOrder = stages.filter((s) => !s.branch).sort((a, b) => a.col - b.col);
+  const mainOrder = stages.filter((s) => !s.branch && !s.off).sort((a, b) => a.col - b.col);
   for (let i = 1; i < mainOrder.length; i++) {
     if (mainOrder[i].lane === mainOrder[i - 1].lane) arrows.push({ kind: 'then', from: mainOrder[i - 1].key, to: mainOrder[i].key });
   }
@@ -386,8 +442,9 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
 
   // ── the counts: lanes' own, and the footer's — every one with the scope it counts over
   for (const l of ordered) {
+    if (l.kind === 'party') { l.count = partyLaneCount(l, stages, scopeAll); continue; }
     if (l.kind === 'persona') {
-      const mine = stages.filter((s) => s.lane === l.id);
+      const mine = stages.filter((s) => s.lane === l.id && !s.off);
       const branchN = mine.filter((s) => s.branch).length;
       l.count = { n: mine.length, unit: 'lanes.count.screens', bizUnit: 'lanes.count.screens', scope: 'lanes.scope.lane', source: SRC + ' → stages in this lane', // str:ok a Counted's source: where the number was read, for the tip's from line
         breakdown: [{ key: 'lanes.part.mainPath', n: mine.length - branchN }, { key: 'lanes.part.branch', n: branchN }] };
@@ -400,7 +457,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
     }
   }
   const distinct = new Map();
-  for (const s of stages) if (!distinct.has(s.designId)) distinct.set(s.designId, s);
+  for (const s of stages) if (!s.off && !distinct.has(s.designId)) distinct.set(s.designId, s);
   const built = [...distinct.values()].filter((s) => s.state === 'built').length;
   const counts = {
     journeys: (!single && story.counts && story.counts.journeys) || { n: steps.length + branches.length, unit: 'map.band.journeys', scope: scopeAll, source: SRC },
@@ -408,6 +465,7 @@ export function laneLayout(storyline, designs, tree, summaries, config = {}) {
       breakdown: [{ key: 'lanes.part.built', n: built }, { key: 'lanes.part.notBuilt', n: distinct.size - built }] },
     built: { n: built, of: distinct.size, unit: 'lanes.count.built', bizUnit: 'lanes.count.built', scope: scopeAll, source: SRC + ' → stages by screen · state' }, // str:ok a Counted's source: where the number was read, for the tip's from line
     branches: { n: branches.length, unit: 'lanes.count.branches', bizUnit: 'lanes.count.branches', scope: scopeAll, source: 'laneLayout ← /api/journeys storyline.branches' },
+    ...(offs.length ? { offPlatform: offPlatformCounted(offs, scopeAll) } : {}),
   };
   const read = [...steps, ...branches].filter((j) => answerOf(summaries, j.nodeId)).length;
 
@@ -439,6 +497,8 @@ export const LANE_GEOM = Object.freeze({
   // beneath (a pill that needs more lays the lanes out again with it, surfaces/map-lanes.js fitLaneText)
   head: 150, col: 248, cardW: 236, cardH: 96, rowGap: 10, pad: 8, pillH: 44, pillRow: 50,
   laneGap: 6, segGap: 28, top: 36, margin: 16, storeMinH: 66,
+  // a card done outside the code is a name, who does it and two chips: shorter than a screen's, so a party's lane costs little height
+  offH: 64,
 });
 
 /**
@@ -451,7 +511,8 @@ export function laneGeometry(model, opts = {}) {
   const cols = Math.max(1, model.columns || 1);
   const laneH = model.lanes.map((l) => (l.kind === 'store'
     ? Math.max(g.storeMinH, g.pad * 2 + Math.max(1, l.rowCount || 1) * g.pillRow - (g.pillRow - g.pillH))
-    : g.pad * 2 + Math.max(1, l.rowCount || 1) * (g.cardH + g.rowGap) - g.rowGap));
+    : l.kind === 'party' ? g.pad * 2 + Math.max(1, l.rowCount || 1) * (g.offH + g.rowGap) - g.rowGap
+      : g.pad * 2 + Math.max(1, l.rowCount || 1) * (g.cardH + g.rowGap) - g.rowGap));
   const lanesH = laneH.reduce((a, b) => a + b, 0) + g.laneGap * Math.max(0, laneH.length - 1);
   const extraH = opts.extraH || 0;
   const aspect = opts.aspect > 0 ? opts.aspect : 1.6;
@@ -484,7 +545,10 @@ export function laneGeometry(model, opts = {}) {
   const rects = new Map();
   for (const s of model.stages) {
     const p = at(s.lane, s.col);
-    rects.set(s.key, { x: p.x, y: p.y + s.row * (g.cardH + g.rowGap), w: g.cardW, h: g.cardH, segment: p.sg.index });
+    const party = s.off && String(s.lane).startsWith('party:');
+    rects.set(s.key, party
+      ? { x: p.x, y: p.y + s.row * (g.offH + g.rowGap), w: g.cardW, h: g.offH, segment: p.sg.index }
+      : { x: p.x, y: p.y + s.row * (g.cardH + g.rowGap), w: g.cardW, h: g.cardH, segment: p.sg.index });
   }
   for (const p of model.pills) {
     const a = at(p.lane, p.col);
