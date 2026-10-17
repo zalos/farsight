@@ -5,6 +5,8 @@ import { ECHO_PORTAL_STRINGS } from '@farsight/core/dist/strings-echo-portal.js'
 import { contextFingerprint } from './sessions.js';
 import { PortalFailure, validatePortalAsk, validatePortalBrowse, validatePortalExpand } from './portal.js';
 import type { PortalCallbacks } from './portal-types.js';
+import { discoverSetupModels, ModelSetupFailure, modelSetupMessage, testSetupModel } from './model-setup.js';
+import type { ModelSetupDependencies } from './model-setup-types.js';
 import { ECHO_UI_STRINGS } from '@farsight/core/dist/strings-echo-ui.js';
 import { submindSettings, updateConfig, validateConfig } from './config.js';
 import { requireFileTrust } from './trust.js';
@@ -31,13 +33,13 @@ function publicConfig(config: EchoConfig): EchoConfig {
     profiles[id] = {
       identity: { individual: p.identity.individual, team: p.identity.team, project: p.identity.project },
       backend: { mode: p.backend.mode, url: p.backend.url, secretRef: p.backend.secretRef },
-      model: { provider: p.model.provider, baseUrl: p.model.baseUrl, model: p.model.model, secretRef: p.model.secretRef, ...(p.model.allowInsecureHttp === undefined ? {} : { allowInsecureHttp: p.model.allowInsecureHttp }) },
+      model: { provider: p.model.provider, baseUrl: p.model.baseUrl, model: p.model.model, secretRef: p.model.secretRef, ...(p.model.allowInsecureHttp === undefined ? {} : { allowInsecureHttp: p.model.allowInsecureHttp }), ...(p.model.ollama === undefined ? {} : { ollama: { contextTokens: p.model.ollama.contextTokens, keepAliveSeconds: p.model.ollama.keepAliveSeconds } }) },
       web: { port: p.web.port, farsightOrigin: p.web.farsightOrigin },
       hooks: { claude: p.hooks.claude, codex: p.hooks.codex, vscode: p.hooks.vscode ?? false },
       skills: { directories: [...p.skills.directories] },
       budget: { briefMaxChars: p.budget.briefMaxChars, modelMaxTokens: p.budget.modelMaxTokens, timeoutMs: p.budget.timeoutMs },
       ...(p.submind ? { submind: {
-        mode: p.submind.mode, maxSteps: p.submind.maxSteps, maxSearches: p.submind.maxSearches,
+        mode: p.submind.mode, hookResearch: p.submind.hookResearch, hookWaitMs: p.submind.hookWaitMs, maxSteps: p.submind.maxSteps, maxSearches: p.submind.maxSearches,
         maxCandidates: p.submind.maxCandidates, evidenceMaxChars: p.submind.evidenceMaxChars,
         inputMaxChars: p.submind.inputMaxChars, lookbackDays: p.submind.lookbackDays,
         timeoutMs: p.submind.timeoutMs, expandedMaxChars: p.submind.expandedMaxChars,
@@ -103,7 +105,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 /** Settings and read-only memory access retain the process startup configuration. */
-export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Promise<CheckResult[]>; installation?: WebInstallation; portal?: PortalCallbacks; demo?: boolean } = {}): Promise<{ url: string; close(): Promise<void> }> {
+export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Promise<CheckResult[]>; installation?: WebInstallation; portal?: PortalCallbacks; demo?: boolean; modelSetup?: ModelSetupDependencies } = {}): Promise<{ url: string; close(): Promise<void> }> {
   const startup = structuredClone(ctx);
   const fingerprint = contextFingerprint(startup);
   const requests = new Set<AbortController>();
@@ -122,6 +124,12 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
   };
   let port = ctx.profile.web.port;
   let writes: Promise<void> = Promise.resolve();
+  let modelOperationInFlight = false;
+  const restartRequired = (config: EchoConfig): boolean => {
+    const profile = config.profiles[startup.profileId];
+    return !profile || contextFingerprint({ ...startup, config, profile }) !== fingerprint
+      || JSON.stringify(profile.web) !== JSON.stringify(startup.config.profiles[startup.profileId]?.web);
+  };
   const server = createServer((req, res) => { void handle(req, res); });
   server.requestTimeout = 20_000;
   server.headersTimeout = 15_000;
@@ -143,7 +151,7 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
       if (req.method === 'GET' && path === '/api/settings') {
         try {
           const current = await snapshot(ctx.configPath);
-          json(res, 200, { ...current, installation, defaults, readOnly: callbacks.demo === true, portal: { available: !!callbacks.portal, synthetic: callbacks.demo === true }, running: { profileId: activeProfile, identity: activeIdentity, dataDirectory: activeDataDirectory, submindMode: activeSubmindMode } }, current.revision);
+          json(res, 200, { ...current, installation, defaults, restartRequired: restartRequired(current.config), modelSetup: { available: callbacks.demo !== true }, readOnly: callbacks.demo === true, portal: { available: !!callbacks.portal, synthetic: callbacks.demo === true }, running: { profileId: activeProfile, identity: activeIdentity, dataDirectory: activeDataDirectory, submindMode: activeSubmindMode, model: { provider: startup.profile.model.provider, baseUrl: startup.profile.model.baseUrl, model: startup.profile.model.model } } }, current.revision);
         } catch { fail(res, 503, 'unavailable'); }
         return;
       }
@@ -163,10 +171,63 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
             return config;
           });
           const saved = await snapshot(ctx.configPath);
-          json(res, 200, { ...saved, restartRequired: true }, saved.revision);
+          json(res, 200, { ...saved, restartRequired: restartRequired(saved.config) }, saved.revision);
         });
         writes = save.catch(() => {});
         await save;
+        return;
+      }
+      if (req.method === 'POST' && ['/api/model/models', '/api/model/test'].includes(path ?? '')) {
+        if (callbacks.demo) throw new RequestError(403, 'refused');
+        if (req.url !== path) throw new RequestError(400, 'invalid');
+        const revision = req.headers['if-match'];
+        if (typeof revision !== 'string') throw new RequestError(428, 'revisionRequired');
+        const input = await readJson(req);
+        if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length !== 1
+          || !Object.hasOwn(input, 'profileId') || typeof (input as Record<string, unknown>).profileId !== 'string') throw new RequestError(400, 'invalid');
+        const profileId = (input as { profileId: string }).profileId;
+        const current = await snapshot(startup.configPath).catch(() => { throw new ModelSetupFailure('failed'); });
+        if (current.revision !== revision) throw new RequestError(409, 'conflict');
+        if (!Object.hasOwn(current.config.profiles, profileId)) throw new RequestError(400, 'invalid');
+        const profile = current.config.profiles[profileId]!;
+        const generation = path === '/api/model/test';
+        if (generation && modelOperationInFlight) throw new ModelSetupFailure('busy');
+        if (generation) modelOperationInFlight = true;
+        const controller = new AbortController();
+        requests.add(controller);
+        const disconnected = () => { if (!res.writableEnded) controller.abort(); };
+        const deadline = Math.min(profile.budget.timeoutMs, submindSettings(profile).timeoutMs) + 1000;
+        const timer = setTimeout(() => controller.abort(new ModelSetupFailure('timeout')), deadline);
+        timer.unref();
+        req.once('aborted', disconnected);
+        res.once('close', disconnected);
+        if (req.aborted || res.destroyed) controller.abort();
+        let aborted: (() => void) | undefined;
+        const operation = (async () => {
+          controller.signal.throwIfAborted();
+          const value = generation
+            ? await testSetupModel(profileId, profile, controller.signal, callbacks.modelSetup)
+            : await discoverSetupModels(profileId, profile, controller.signal, callbacks.modelSetup);
+          const latest = await snapshot(startup.configPath).catch(() => { throw new ModelSetupFailure('failed'); });
+          if (latest.revision !== revision) throw new RequestError(409, 'conflict');
+          return value;
+        })().finally(() => { if (generation) modelOperationInFlight = false; });
+        try {
+          const result = await Promise.race([
+            operation,
+            new Promise<never>((_, reject) => { aborted = () => reject(controller.signal.reason); controller.signal.addEventListener('abort', aborted, { once: true }); }),
+          ]);
+          if (!controller.signal.aborted && !res.destroyed) json(res, 200, result);
+        } catch (error) {
+          if (error instanceof ModelSetupFailure || error instanceof RequestError) throw error;
+          throw new ModelSetupFailure('failed');
+        } finally {
+          clearTimeout(timer);
+          if (aborted) controller.signal.removeEventListener('abort', aborted);
+          req.off('aborted', disconnected);
+          res.off('close', disconnected);
+          requests.delete(controller);
+        }
         return;
       }
       if (req.method === 'GET' && path === '/api/checks') {
@@ -186,6 +247,9 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
       if (req.method === 'POST' && ['/api/memory/browse', '/api/memory/expand', '/api/memory/ask'].includes(path ?? '')) {
         if (!callbacks.portal) throw new PortalFailure('unavailable');
         const input = await readJson(req);
+        const generation = path === '/api/memory/ask';
+        if (generation && modelOperationInFlight) throw new ModelSetupFailure('busy');
+        if (generation) modelOperationInFlight = true;
         const action = path === '/api/memory/browse' ? () => callbacks.portal!.browse(validatePortalBrowse(input), controller.signal)
           : path === '/api/memory/expand' ? () => callbacks.portal!.expand(validatePortalExpand(input), controller.signal)
           : () => callbacks.portal!.ask(validatePortalAsk(input), controller.signal);
@@ -206,10 +270,11 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
         timer.unref();
         req.once('aborted', disconnected);
         res.once('close', disconnected);
+        if (req.aborted || res.destroyed) controller.abort();
         let aborted: (() => void) | undefined;
         try {
           const result = await Promise.race([
-            (async () => { await checkSelection(); if (controller.signal.aborted) throw controller.signal.reason; const value = await action(); await checkSelection(); return value; })(),
+            (async () => { await checkSelection(); if (controller.signal.aborted) throw controller.signal.reason; const value = await action(); await checkSelection(); return value; })().finally(() => { if (generation) modelOperationInFlight = false; }),
             new Promise<never>((_, reject) => { aborted = () => reject(controller.signal.reason); controller.signal.addEventListener('abort', aborted, { once: true }); }),
           ]);
           if (!controller.signal.aborted && !res.destroyed) json(res, 200, result);
@@ -242,6 +307,10 @@ export async function startWeb(ctx: EchoContext, callbacks: { checks?: () => Pro
     } catch (error) {
       req.resume();
       if (res.destroyed) return;
+      if (error instanceof ModelSetupFailure) {
+        json(res, error.code === 'busy' ? 409 : error.code === 'timeout' ? 504 : 503, { error: modelSetupMessage(error), code: error.code });
+        return;
+      }
       if (error instanceof PortalFailure) { json(res, error.code === 'invalid' ? 400 : error.code === 'stale' ? 409 : error.code === 'timeout' ? 504 : 503, { error: ECHO_PORTAL_STRINGS[`echo.portal.${error.code}`]!.professional }); return; }
       if (!res.headersSent) fail(res, error instanceof RequestError ? error.status : 500, error instanceof RequestError ? error.key : 'failed');
       else res.end();

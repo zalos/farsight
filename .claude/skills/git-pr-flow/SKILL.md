@@ -1,6 +1,6 @@
 ---
 name: git-pr-flow
-description: How a change reaches Farsight's main — a branch, Conventional Commits along the way, a pull request whose title is the one commit that lands (PRs are squash-merged; title = subject, body = message), CI's four required checks (validate · e2e · secrets · commits), and `gh pr merge --squash`. Loads when committing, writing a PR title or body, merging a PR, opening a release PR, or when a merge or a check is refused.
+description: How a change reaches Farsight's main — a branch, Conventional Commits along the way, a pull request whose title is the one commit that lands (PRs are squash-merged; title = subject, body = message), CI's six required checks (affected checks · validate · e2e · echo-package · secrets · commits), and `gh pr merge --squash`. Loads when committing, writing a PR title or body, merging a PR, opening a release PR, or when a merge or a check is refused.
 allowed-tools: Bash Read Grep
 ---
 
@@ -19,7 +19,7 @@ pnpm build && pnpm typecheck && pnpm -r test && pnpm lint:strings && pnpm e2e   
 pnpm lint:commits --message 'feat(server): the title you will give the PR'      # the title is the commit
 git push -u origin HEAD
 gh pr create --base main --title 'feat(server): …' --body-file <body.md>        # body = .github/PULL_REQUEST_TEMPLATE.md
-gh pr checks <n> --watch                        # validate · e2e · secrets · commits, all required
+gh pr checks <n> --watch                        # affected checks · validate · e2e · echo-package · secrets · commits, all required
 gh pr merge <n> --squash                        # keep the PR title; the branch is deleted on merge
 ```
 

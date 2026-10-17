@@ -2,7 +2,7 @@
 
 Echo is an optional, independently running memory companion for Farsight. It has its own package, settings, model connection, and memory stores. The regular Farsight CLI does not need Echo or agentmemory.
 
-**This iteration supports explicit memory storage, scoped recall, a read-only memory portal, and an optional sub-mind for memory research.** With `serve` running, you can save a memory, retrieve it from the CLI, or ask the sub-mind for a concise sourced brief with programmatic follow-up actions. The sub-mind can use a local model, a remote Ollama desktop, or a hosted OpenAI-compatible endpoint. It defaults to off; mock mode exercises the research flow without model inference. Host hooks continue to return bounded raw excerpts. The portal searches saved records and shows their source evidence. Automatic conversation capture and memory editing come later.
+**This iteration supports explicit memory storage, scoped recall, a read-only memory portal, and an optional sub-mind for memory research.** With `serve` running, you can save a memory, retrieve it from the CLI, or ask the sub-mind for a concise sourced brief with programmatic follow-up actions. The sub-mind can use a local model, a remote Ollama desktop, or a hosted OpenAI-compatible endpoint. It defaults to off; mock mode exercises the research flow without model inference. Host hooks support manual lookup or explicitly enabled background sub-mind research. Background hooks return a session-bound handle rather than raw evidence. The portal searches saved records and shows their source evidence. Automatic conversation capture and memory editing come later.
 
 Choose a **workspace store** for memories kept with one project, or a **global store** for your own memories shared across selected workspaces. Each workspace connects to one profile at a time. Two workspaces connected to the same global configuration and profile read and write the same memory store.
 
@@ -31,7 +31,7 @@ To research your existing store without model inference, set **Sub-mind → Rese
 farsight-echo ask --query "What did we learn about cold shipping?"
 ```
 
-This searches the running profile's backend, so it requires that backend, but it never invokes a model. Opening settings or saving a mode never sends a generation request. Leave the mode off when no research should be allowed. Raw `recall` and installed hooks remain available in all modes.
+This searches the running profile's backend, so it requires that backend, but it never invokes a model. Opening settings or saving a mode never sends a generation request. Leave the mode off when no research should be allowed. Raw `recall` remains available in all modes. Background prompt research requires both a research mode and its separate opt-in; off mode never generates.
 
 ## Explore the portal without a backend or model
 
@@ -222,11 +222,34 @@ farsight-echo install-runtime --scope workspace
 | Skill directories | Save explicit future discovery locations. Echo does not yet read, install, or execute these skills. |
 | Farsight address for embedding | Optionally allow an exact local Farsight origin to frame the view. Farsight navigation integration is not built yet. |
 
-Use service origins without paths or credentials in URLs. The compatible adapter adds `/v1/chat/completions` itself; do not put `/v1` in the configured origin. Prefer HTTPS or a localhost SSH tunnel for remote endpoints. Private-network HTTP requires the explicit exception described below. Current remote request handling is verified with synthetic protocol fixtures; each real deployment still needs its own connection check when inference is appropriate. `doctor` in model mode checks only the model selection for compatible endpoints; the managed `smoke --with-model` path exercises an actual call.
+Use service origins without paths or credentials in URLs. The compatible adapter adds `/v1/chat/completions` itself; do not put `/v1` in the configured origin. Prefer HTTPS or a localhost SSH tunnel for remote endpoints. Private-network HTTP requires the explicit exception described below. Current remote request handling is verified with synthetic protocol fixtures; each real deployment still needs its own connection check when inference is appropriate. `doctor` in model mode checks only the model selection for compatible endpoints; `model-test` verifies a structured generation without starting the memory backend; `smoke --with-model` additionally exercises disposable memory storage.
 
 Personal and work have separate local stores. Within one configuration directory, a host session is bound to its chosen profile, identity, backend, and model settings. Start a **new host session** when changing those boundaries. Keep personal and work in the same configuration file so their session bindings are checked against the same registry. This is local isolation, not multi-user team authorization.
 
 Global means a store owned by the current operating-system user. New global profiles start with `identity.project` set to `shared`; connected workspaces keep that configured namespace instead of substituting their folder names. Global setup does not create a hosted team service, install hooks in every workspace, merge local and global results, or copy existing memories. Connecting a workspace changes which profile it uses; any existing local store stays in place. Select it explicitly with `--scope workspace` or reconnect the workspace to it.
+
+## Find and test a model
+
+In **Settings**, save the selected profile before using **Find installed models** or **Test model**. Discovery lists models from the saved Ollama address without loading or downloading one. Choose a result and save again before testing it. Compatible APIs keep a manually entered model name.
+
+The model test sends fixed synthetic evidence and checks structured output. It makes one generation request, even when research is off or mock, and never reads saved memories or starts the memory backend. Cancel stops the request. Editing settings, switching profiles, or leaving Settings cancels and discards pending results. The synthetic portal preview disables these actions.
+
+The same checks work without a running Echo service:
+
+```sh
+farsight-echo models --scope global --profile personal
+farsight-echo model-test --scope global --profile personal
+```
+
+Settings shows the **running** provider, address, model, and research mode separately from the saved profile. A successful test verifies the saved endpoint; it does not switch the running memory service. When **Restart Echo to use the saved settings.** is shown, stop and restart that profile's `serve`, then open Memories and explicitly ask the sub-mind. Browse and Read more remain model-free.
+
+Native Ollama has two optional resource controls:
+
+```json
+"ollama": { "contextTokens": 4096, "keepAliveSeconds": 0 }
+```
+
+Place this object inside the profile's `model` object. Context size accepts 2,048–131,072 tokens; retention accepts 0–3,600 seconds. Omitted settings use 4,096 and zero: each completed request unloads the model. Longer retention keeps it warm for subsequent requests and uses memory between requests. These settings apply to local or remote native Ollama; compatible APIs control their own context and residency. Character allowances and the provider's context window are separate limits, not an exact token conversion. See Ollama's [context settings](https://docs.ollama.com/faq#how-can-i-specify-the-context-window-size) and [chat API](https://docs.ollama.com/api/chat).
 
 ## Configure the sub-mind and its remote model
 
@@ -305,6 +328,39 @@ For a hosted or custom compatible gateway, configure its HTTPS origin:
 Echo adds `/v1/chat/completions`; do not append `/v1` to the configured address. The custom gateway must implement that request/response contract; an arbitrary inference API requires a separate adapter. Keep the credential in the operating system keychain. Credential references remain pinned to the approved service origin. Echo never silently falls back from one endpoint to another. Connection failures return a bounded failure result rather than starting a local model.
 
 Use the settings view to save these fields, or edit the local JSON and explicitly trust the reviewed configuration as described below. A page load, settings save, and service start never perform sub-mind generation. `doctor` and the connection-check button inspect model endpoint availability only in model mode; `smoke --with-model` explicitly requests real inference. Do not use that option during a model-free test round.
+
+## Let the sub-mind handle prompt memory research
+
+Echo separates three responsibilities: agentmemory stores and searches records; the sub-mind researches those records using the selected model; the main agent receives a small sourced brief with typed follow-up actions. Research evidence stays inside Echo’s bounded request context rather than being added to the main agent’s conversation.
+
+In Settings, select **Configured model** (or **Mock** for a model-free check), then choose **Prompt memory research**:
+
+- **Prepare a brief in the background** (`submind.hookResearch: "background"`): the agent starts immediately with a retrieval handle.
+- **Wait for a brief, then continue** (`"wait"`): include a compact sourced brief if it finishes within **Wait limit (seconds)** and fits the context allowance. Otherwise return the same retrieval handle while research continues. The default limit is 20 seconds; configure 0.1–60 seconds with `submind.hookWaitMs`.
+- **Manual research** (`"manual"`): preserve the existing explicit research and raw-recall hook behavior. This remains the default for omitted settings.
+
+Save, restart Echo, and start a fresh host session. Loading or saving settings never starts inference. The CLI can change these settings for just one selected profile:
+
+```sh
+farsight-echo configure --scope global --profile personal --hook-research wait --hook-wait-ms 20000
+farsight-echo configure --scope global --profile personal --hook-research background
+```
+
+Use `--scope workspace` or `--config PATH` for another installation. New hook definitions accommodate the full wait; refresh older definitions once with `connect --host all --workspace /absolute/path/to/workspace` using the same profile selection. Until refreshed, older hooks fall back to a handle within their original short deadline. Subsequent wait-setting changes need a service restart and fresh host session, but no hook rewrite.
+
+A background prompt hook returns immediately with `echo-hook-brief/v1` and an engine-created `memory.brief` action. Follow its `requestId`, `workspace`, `host` and `sessionId` exactly using the pinned Echo command from SessionStart:
+
+```sh
+farsight-echo brief --request REQUEST_ID --workspace /absolute/path/to/workspace --host claude --session-id SESSION_ID
+```
+
+A `pending` result means work is still running; continue useful work before checking again. Polling never starts another generation. Add `--wait-ms 20000` to `brief` to wait for completion without repeated polling (maximum 60000). Disconnecting or reaching that wait limit ends only the wait, not the accepted research. A `ready` result contains the usual problem/fix/why findings and checked `memory.expand` actions. `cancel-brief` accepts the same arguments. Waiting hooks include only complete findings, compact citations and checked expansion actions. If even one finding cannot fit, the complete polling handle remains available. No model-provided shell command or URL is executed.
+
+Transient jobs belong to one profile, canonical workspace, host and session. They expire after five minutes and disappear on restart. Identical submissions within that session reuse the retained job. A newer prompt cancels still-running research for that session; while the provider is settling, Echo reports `busy` and does not queue more work. Competing sessions also receive `busy` rather than an unbounded queue. Explicit `ask --query TEXT` remains available for fresh research. Shared saved memories remain accessible across connected workspaces; transient research contexts are not shared.
+
+Every job uses the configured model, search, candidate, evidence, input, output, history and time limits. When searching is exhausted or repeats a query, a remaining model decision can synthesize already inspected evidence with an answer-only schema. Hard input and deadline limits still stop work; they are never silently raised. Background research can incur provider costs per new prompt. There are no daily currency caps yet.
+
+Memory management remains explicit in this iteration: `remember` saves supplied content and topic labels. Background research does not capture conversations, alter memories, or grant the model write/delete tools. Model-assisted capture and editing are separate follow-up capabilities.
 
 ## Trust an existing configuration
 
@@ -411,7 +467,7 @@ The installed lifecycle points are `SessionStart` and `UserPromptSubmit`:
 - `SessionStart` binds the session and supplies brief instructions for memory access.
 - `UserPromptSubmit` searches the selected memory scope and adds bounded relevant context to the request.
 
-The hook lookup does not call the configured model. It provides bounded search results rather than an autonomous agent-generated summary. The total injected text, including historical provenance, stays within the profile's brief-character limit. Omitted or shortened results carry “More matched; not shown.” Session start supplies the full command; prompt callbacks reference it briefly. If Echo is unavailable, hooks let the host continue without memory context. Explicit `remember` with a managed profile is the way to store a memory in this iteration.
+Manual hook lookup does not call the configured model. When **Prompt memory research** is set to **Prepare a brief in the background**, the hook submits bounded sub-mind research and returns a small follow-up handle instead of raw records. The total injected text, including historical provenance, stays within the profile's brief-character limit. Omitted or shortened results carry “More matched; not shown.” Session start supplies the full command; prompt callbacks reference it briefly. If Echo is unavailable, hooks let the host continue without memory context. Explicit `remember` with a managed profile is the way to store a memory in this iteration.
 
 Enable one Echo profile per host session. Disabling its hook preference stops Echo processing future callbacks; disable the host definition or plugin to stop launching the runner. Reinstall or reprepare hooks after moving Echo or its configuration because generated runners use absolute paths.
 

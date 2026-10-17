@@ -43,7 +43,8 @@ test('all workspace hosts install once, preserve unrelated settings and back up 
     for (const event of HOOK_EVENTS) {
       const last = doc.hooks[event].at(-1);
       const hook = host === 'vscode' ? last : last.hooks[0];
-      assert.equal(hook.timeout, 5);
+      assert.equal(hook.timeout, 65);
+      assert.match(hook.command, /'--hook-timeout-ms' '65000'/);
       assert.match(hook.command, new RegExp(`farsight-echo-workspace-v1:${host}$`));
     }
     assert.equal((await stat(paths[host])).mode & 0o777, 0o600);
@@ -87,7 +88,7 @@ test('workspace hooks preserve literal paths, input and additional context for e
     const result = spawnSync('/bin/sh', ['-c', hook.command], { cwd: workspace, input, encoding: 'utf8', env: { ...process.env, ECHO_TEST_OUTPUT: output } });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout).hookSpecificOutput.additionalContext, 'saved-memory');
-    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { input, args: ['hook', '--config', ctx.configPath, '--profile', 'personal', '--host', host, '--workspace', workspace] });
+    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { input, args: ['hook', '--config', ctx.configPath, '--profile', 'personal', '--host', host, '--workspace', workspace, '--hook-timeout-ms', '65000'] });
     await assert.rejects(access(join(workspace, 'ECHO_MUST_NOT_EXIST')));
   }
 });
@@ -132,6 +133,10 @@ test('VS Code preparation remains review-only and emits its flat native format',
   const doc = JSON.parse(await readFile(join(result.directory, 'echo.json'), 'utf8'));
   assert.deepEqual(Object.keys(doc.hooks), [...HOOK_EVENTS]);
   assert.equal(doc.hooks.UserPromptSubmit[0].type, 'command');
+  for (const event of HOOK_EVENTS) {
+    assert.equal(doc.hooks[event][0].timeout, 65);
+    assert.match(doc.hooks[event][0].command, /'--hook-timeout-ms' '65000'/);
+  }
   await assert.rejects(access(paths.vscode));
 });
 

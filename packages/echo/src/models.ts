@@ -1,6 +1,6 @@
 import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { resolveSecret } from './secrets.js';
-import { submindSettings, validateModelSettings } from './config.js';
+import { ollamaSettings, submindSettings, validateModelSettings } from './config.js';
 import type { SubmindModelRequest, SubmindModelResponse } from './submind-types.js';
 import type { EchoProfile } from './types.js';
 
@@ -74,9 +74,9 @@ async function request(profile: EchoProfile, path: string, body?: unknown, optio
   } finally { clearTimeout(timer); reader?.releaseLock(); }
 }
 
-export async function listModels(profile: EchoProfile): Promise<string[]> {
+export async function listModels(profile: EchoProfile, options: { signal?: AbortSignal } = {}): Promise<string[]> {
   if (profile.model.provider !== 'ollama') fail('echo.model.list');
-  const payload = object(await request(profile, '/api/tags'));
+  const payload = object(await request(profile, '/api/tags', undefined, options));
   if (!Array.isArray(payload.models)) fail('echo.model.response');
   const names = payload.models.map(model => {
     const value = object(model).name;
@@ -96,13 +96,15 @@ export async function summarize(profile: EchoProfile, text: string): Promise<str
   ];
   let content: unknown;
   if (profile.model.provider === 'ollama') {
+    const resources = ollamaSettings(profile.model);
     const response = object(await request(profile, '/api/chat', {
-      model: profile.model.model, messages, stream: false, think: false,
+      model: profile.model.model, messages, stream: false, think: false, keep_alive: resources.keepAliveSeconds,
       format: {
-        type: 'object', properties: { summary: { type: 'string', minLength: 1, maxLength: profile.budget.briefMaxChars } },
+        // Keep length enforcement below: large grammar repetitions fail on some Ollama versions.
+        type: 'object', properties: { summary: { type: 'string', minLength: 1 } },
         required: ['summary'], additionalProperties: false,
       },
-      options: { num_predict: profile.budget.modelMaxTokens, temperature: 0 },
+      options: { num_predict: profile.budget.modelMaxTokens, temperature: 0, num_ctx: resources.contextTokens },
     }));
     if (response.done_reason === 'length' || response.done === false) fail('echo.model.incomplete');
     const raw = object(response.message).content;
@@ -151,9 +153,10 @@ function submindBody(profile: EchoProfile, input: SubmindModelRequest) {
   const budgetTokens = profile.budget.modelMaxTokens;
   const outputTokens = input.maxOutputTokens ?? budgetTokens;
   if (!Number.isSafeInteger(budgetTokens) || budgetTokens < 32 || budgetTokens > 4096 || !Number.isSafeInteger(outputTokens) || outputTokens < 1 || outputTokens > budgetTokens) fail('echo.model.input');
+  const resources = ollamaSettings(model);
   const body = model.provider === 'ollama' ? {
-    model: model.model, messages, stream: false, think: false, format: schema,
-    options: { num_predict: outputTokens, temperature: 0 },
+    model: model.model, messages, stream: false, think: false, format: schema, keep_alive: resources.keepAliveSeconds,
+    options: { num_predict: outputTokens, temperature: 0, num_ctx: resources.contextTokens },
   } : {
     model: model.model,
     messages: [{ role: 'system', content: `${echoConfigWord('echo.model.jsonPrompt')}\n${schemaText}` }, ...messages],

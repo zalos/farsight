@@ -34,19 +34,29 @@ export function validateExpansion(value: unknown): { id: string; revision: strin
   return { id: value.id, revision: value.revision };
 }
 
-const actionSchema: Record<string, unknown> = {
-  type: 'object', additionalProperties: false, required: ['kind'],
+// Large string maxLength values become unsupported repetitions in some Ollama grammars.
+// Validate the 4000-character limits below; generation and transport remain independently capped.
+const answerSchema: Record<string, unknown> = {
+  type: 'object', additionalProperties: false, required: ['kind', 'findings'],
   properties: {
-    kind: { type: 'string', enum: ['search', 'answer'] },
-    query: { type: 'string', maxLength: 4000 },
+    kind: { type: 'string', enum: ['answer'] },
     findings: { type: 'array', maxItems: 5, items: {
       type: 'object', additionalProperties: false, required: ['problem', 'fix', 'why', 'citations'],
       properties: {
-        problem: { type: 'string', maxLength: 4000 }, fix: { type: 'string', maxLength: 4000 }, why: { type: ['string', 'null'], maxLength: 4000 },
+        problem: { type: 'string' }, fix: { type: 'string' }, why: { type: ['string', 'null'] },
         citations: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'object', additionalProperties: false, required: ['id', 'revision'], properties: { id: { type: 'string' }, revision: { type: 'string' } } } },
       },
     } },
   },
+};
+const actionSchema: Record<string, unknown> = {
+  anyOf: [
+    {
+      type: 'object', additionalProperties: false, required: ['kind', 'query'],
+      properties: { kind: { type: 'string', enum: ['search'] }, query: { type: 'string' } },
+    },
+    answerSchema,
+  ],
 };
 function findingsFrom(value: unknown, evidence: Map<string, ResearchMemory>): SubmindFinding[] | undefined {
   if (!Array.isArray(value) || value.length > 5) return;
@@ -147,13 +157,23 @@ export async function research(profile: EchoProfile, store: ResearchStore, input
     return finish(evidence.size ? fitted.truncated ? 'budget' : 'complete' : 'no_matches', fitted.truncated ? 'partial' : result.findings.length ? 'ready' : 'empty');
   }
   // Empty search can be rephrased by the model; never widen identity or time scope.
+  let answerOnly = false;
   for (let step = 0; step < settings.maxSteps; step++) {
     if (signal.aborted) return finish('timeout', 'unavailable');
+    const remaining = {
+      modelCalls: settings.maxSteps - result.usage.modelCalls,
+      searches: settings.maxSearches - result.usage.searches,
+      candidates: settings.maxCandidates - result.coverage.inspected,
+      evidenceChars: settings.evidenceMaxChars - result.usage.evidenceChars,
+      inputChars: settings.inputMaxChars - result.usage.inputChars,
+    };
+    // Leave the last permitted call for synthesis, even if more lookups would fit.
+    const canSearch = !answerOnly && remaining.modelCalls > 1 && remaining.searches > 0 && remaining.candidates > 0 && remaining.evidenceChars > 0;
     const request: SubmindModelRequest = {
       messages: [
-        { role: 'system', content: echoSubmindWord('prompt') },
-        { role: 'user', content: JSON.stringify({ question: query, since, searchesRemaining: settings.maxSearches - result.usage.searches, previousQueries: [...searched], evidence: [...evidence.values()] }) },
-      ], schema: actionSchema, signal, maxOutputTokens: profile.budget.modelMaxTokens,
+        { role: 'system', content: canSearch ? echoSubmindWord('prompt') : `${echoSubmindWord('prompt')}\n${echoSubmindWord('finalPrompt')}` },
+        { role: 'user', content: JSON.stringify({ question: query, since, canSearch, remaining, previousQueries: [...searched], evidence: [...evidence.values()] }) },
+      ], schema: canSearch ? actionSchema : answerSchema, signal, maxOutputTokens: profile.budget.modelMaxTokens,
     };
     const inputSize = submindInputChars(profile, request);
     if (result.usage.inputChars + inputSize > settings.inputMaxChars) return finish('budget', 'partial');
@@ -176,11 +196,12 @@ export async function research(profile: EchoProfile, store: ResearchStore, input
       result.findings = fitted.findings; result.actions = fitted.actions; result.coverage.truncated ||= fitted.truncated;
       return finish(fitted.truncated ? 'budget' : findings.length ? 'complete' : 'no_matches', fitted.truncated ? 'partial' : findings.length ? 'ready' : 'empty');
     }
-    if (action.kind !== 'search' || !only(action, ['kind', 'query'])) return finish('invalid_response', 'unavailable');
+    if (!canSearch || action.kind !== 'search' || !only(action, ['kind', 'query'])) return finish('invalid_response', 'unavailable');
     let next: string;
     try { next = validateResearchQuery(action.query); } catch { return finish('invalid_response', 'unavailable'); }
-    if (step + 1 >= settings.maxSteps) return finish('budget', 'partial');
-    try { if (!await lookup(next)) return finish('budget', 'partial'); }
+    // A repeated/disallowed lookup must not discard already gathered evidence.
+    // The next call can only synthesize; it still spends the remaining request budget.
+    try { if (!await lookup(next)) answerOnly = true; }
     catch { return finish(signal.aborted ? 'timeout' : 'store_unavailable', 'unavailable'); }
   }
   return finish('budget', 'partial');

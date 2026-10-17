@@ -36,6 +36,8 @@ a host session cannot switch identity or store mid-chat. These controls prevent 
 authentication and permission enforcement are not built. Keep managed ports local rather than publishing them
 as a shared team service.
 
+**Model setup is explicit and uses saved settings.** `POST /api/model/models` and `/api/model/test` accept only a profile ID and the current `If-Match` settings revision. The server loads and verifies the saved configuration, applies the existing address and credential-origin policies, and rechecks the revision before returning. Requests cannot supply arbitrary prompts, endpoints, headers or credentials. Discovery reads model metadata; testing sends fixed synthetic evidence once and validates a strict reply. Neither reads user memory or starts the memory engine. The synthetic preview refuses both operations. Disconnects and deadlines cancel work, and responses contain only allowlisted identity/status/usage fields or catalog errors. A process-owned gate prevents a setup test from overlapping model research in that service; separate CLI processes and independently started services still rely on the provider's own concurrency controls.
+
 **A checkout cannot approve its own configuration.** Echo records configuration, connection and credential-origin
 receipts under `${XDG_STATE_HOME:-~/.local/state}/farsight-echo/`, outside the workspace. The directories are
 owner-only (0700) and receipts are owner-only regular files (0600), with symbolic links refused. A configuration
@@ -71,8 +73,9 @@ permits canonical private IPv4 literals in RFC1918 ranges; public HTTP and remot
 The exception refuses credentials on remote plaintext transport, but questions and evidence are still unencrypted.
 It does not change backend endpoint policy, expose the local bridge, or manage the remote model service.
 Settings loads and provider dispatch both enforce this policy. Research policy and all budgets are included in
-session fingerprints, so upgrading or changing them requires a fresh session and service restart. Existing hooks
-remain bounded raw recall and never automatically invoke the sub-mind in this milestone.
+session fingerprints, so upgrading or changing them requires a fresh session and service restart. Legacy hooks remain bounded raw recall. The separate `submind.hookResearch` opt-in offers background or wait behavior. Background hooks return a small engine-created handle; wait hooks may include complete sourced findings and checked expansion actions, bounded by the context allowance. Waiting is capped at sixty seconds and falls back to that handle. Saved settings alone never generate.
+
+Background work uses a server-owned cancellation controller rather than the submission socket. Jobs require a trusted workspace connection and an immutable host/session binding in addition to the startup fingerprint. Polling and cancellation require that same binding and an opaque request identifier; polling never runs inference. Results expire after five minutes, are capped at sixteen retained jobs and 256 KiB, and are discarded on restart. A newer prompt cancels active work in its own session; competing work receives busy rather than queuing. Cancellation retains the model operation gate until the provider actually settles. Changed configuration/connection refuses stale results. No background job saves a transcript or acquires write authority. Brief waits retain at most 31 listeners, revalidate trust after waiting, and never initiate inference. A wait disconnect or deadline removes only the waiter; job cancellation remains explicit. Installed runners advertise their timeout capacity, while older runners keep their original short deadline.
 
 **The memory portal reads only the running scope.** The local `POST /api/memory/browse`,
 `POST /api/memory/expand`, and `POST /api/memory/ask` routes share the host/origin/fetch-site guard and require

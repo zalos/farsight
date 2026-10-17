@@ -8,7 +8,7 @@ import { echoConfigWord } from '@farsight/core/dist/strings-echo-config.js';
 import { parseKeychainRef } from './secrets.js';
 import { withSettingsLock } from './settings-lock.js';
 import { withConfigCredentialPins, recordFileTrust, requireFileTrust } from './trust.js';
-import type { EchoConfig, EchoContext, EchoProfile } from './types.js';
+import type { EchoConfig, EchoContext, EchoProfile, OllamaSettings } from './types.js';
 
 function fail(key = 'echo.config.shape'): never { throw new Error(echoConfigWord(key)); }
 function record(value: unknown, fields?: readonly string[]): Record<string, unknown> {
@@ -59,9 +59,19 @@ function origin(value: unknown, localOnly = false, allowPrivateHttp = false): { 
   return { url: parsed.origin, exactUrl, local, port: Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80)) };
 }
 
+/** Effective native Ollama resource limits without adding fields to legacy settings. */
+export function ollamaSettings(model: Pick<EchoProfile['model'], 'ollama'>): OllamaSettings {
+  if (model.ollama === undefined) return { contextTokens: 4096, keepAliveSeconds: 0 };
+  const settings = record(model.ollama, ['contextTokens', 'keepAliveSeconds']);
+  return {
+    contextTokens: integer(settings.contextTokens, 2048, 131_072),
+    keepAliveSeconds: integer(settings.keepAliveSeconds, 0, 3600),
+  };
+}
+
 /** Validate at dispatch as well as settings load; exported adapters cannot bypass transport policy. */
 export function validateModelSettings(value: unknown): EchoProfile['model'] {
-  const model = record(value, ['provider', 'baseUrl', 'model', 'secretRef', 'allowInsecureHttp']);
+  const model = record(value, ['provider', 'baseUrl', 'model', 'secretRef', 'allowInsecureHttp', 'ollama']);
   if (model.provider !== 'ollama' && model.provider !== 'openai-compatible') fail();
   const allowInsecureHttp = model.allowInsecureHttp === undefined ? false : bool(model.allowInsecureHttp);
   const address = origin(model.baseUrl, false, allowInsecureHttp);
@@ -71,11 +81,12 @@ export function validateModelSettings(value: unknown): EchoProfile['model'] {
     provider: model.provider, baseUrl: address.exactUrl, model: label(model.model, 'echo.config.shape', true),
     ...(modelSecret === undefined ? {} : { secretRef: modelSecret }),
     ...(model.allowInsecureHttp === undefined ? {} : { allowInsecureHttp }),
+    ...(model.ollama === undefined ? {} : { ollama: ollamaSettings({ ollama: model.ollama as OllamaSettings }) }),
   };
 }
 
 const SUBMIND_DEFAULTS: Readonly<SubmindSettings> = Object.freeze({
-  mode: 'off', maxSteps: 3, maxSearches: 3, maxCandidates: 12,
+  mode: 'off', hookResearch: 'manual', hookWaitMs: 20_000, maxSteps: 3, maxSearches: 3, maxCandidates: 12,
   evidenceMaxChars: 12_000, inputMaxChars: 48_000, lookbackDays: 90,
   timeoutMs: 30_000, expandedMaxChars: 12_000,
 });
@@ -85,10 +96,12 @@ export function submindSettings(profile: Pick<EchoProfile, 'submind'>): SubmindS
   const settings = profile.submind === undefined ? {} : record(profile.submind, Object.keys(SUBMIND_DEFAULTS));
   const mode = settings.mode === undefined ? SUBMIND_DEFAULTS.mode : settings.mode;
   if (mode !== 'off' && mode !== 'mock' && mode !== 'model') fail('echo.config.submind');
-  const limit = (key: Exclude<keyof SubmindSettings, 'mode'>, min: number, max: number) =>
+  const hookResearch = settings.hookResearch === undefined ? SUBMIND_DEFAULTS.hookResearch : settings.hookResearch;
+  if (hookResearch !== 'manual' && hookResearch !== 'background' && hookResearch !== 'wait') fail('echo.config.submind');
+  const limit = (key: Exclude<keyof SubmindSettings, 'mode' | 'hookResearch'>, min: number, max: number) =>
     integer(settings[key] === undefined ? SUBMIND_DEFAULTS[key] : settings[key], min, max, 'echo.config.submind');
   return {
-    mode, maxSteps: limit('maxSteps', 1, 8), maxSearches: limit('maxSearches', 1, 8),
+    mode, hookResearch, hookWaitMs: limit('hookWaitMs', 100, 60_000), maxSteps: limit('maxSteps', 1, 8), maxSearches: limit('maxSearches', 1, 8),
     maxCandidates: limit('maxCandidates', 1, 50), evidenceMaxChars: limit('evidenceMaxChars', 128, 64_000),
     inputMaxChars: limit('inputMaxChars', 1024, 256_000), lookbackDays: limit('lookbackDays', 1, 3650),
     timeoutMs: limit('timeoutMs', 100, 300_000), expandedMaxChars: limit('expandedMaxChars', 128, 64_000),

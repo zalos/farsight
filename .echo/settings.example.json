@@ -14,7 +14,11 @@
       "model": {
         "provider": "ollama",
         "baseUrl": "http://127.0.0.1:11434",
-        "model": ""
+        "model": "",
+        "ollama": {
+          "contextTokens": 4096,
+          "keepAliveSeconds": 0
+        }
       },
       "web": {
         "port": 4480
@@ -34,6 +38,8 @@
       },
       "submind": {
         "mode": "off",
+        "hookResearch": "manual",
+        "hookWaitMs": 20000,
         "maxSteps": 3,
         "maxSearches": 3,
         "maxCandidates": 12,
@@ -57,7 +63,11 @@
       "model": {
         "provider": "ollama",
         "baseUrl": "http://127.0.0.1:11434",
-        "model": ""
+        "model": "",
+        "ollama": {
+          "contextTokens": 4096,
+          "keepAliveSeconds": 0
+        }
       },
       "web": {
         "port": 4481
@@ -77,6 +87,8 @@
       },
       "submind": {
         "mode": "off",
+        "hookResearch": "manual",
+        "hookWaitMs": 20000,
         "maxSteps": 3,
         "maxSearches": 3,
         "maxCandidates": 12,

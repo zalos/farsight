@@ -7,18 +7,21 @@ access and no secrets beyond the run's own `GITHUB_TOKEN`.
 
 ## What runs
 
-The four required check names remain **validate · e2e · secrets · commits**. A small `changes` job tests and runs
+The six required check names are **affected checks · validate · e2e · echo-package · secrets · commits**.
+Branch protection requires them from GitHub Actions, requires the branch to be up to date, and applies to admins.
+A small `changes` job (displayed as **affected checks**) tests and runs
 `scripts/ci-changes.mjs`, then the affected runtime jobs run in parallel on `ubuntu-latest`. No dependency install
 or browser download is needed to select checks. The selection appears in the run summary. Build jobs use Node
 from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store cached on the lockfile.
 
 | job | steps | timeout |
 |---|---|---|
+| **affected checks** | test `scripts/ci-changes.mjs` and select suites from the changed paths | 5 min |
 | **validate** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm -r typecheck` → `pnpm -r test` → `pnpm test:scripts` → `pnpm lint:strings`; includes Echo's unit tests | 20 min |
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
-| **echo-package** (non-required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
+| **echo-package** | when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
 
 ### Which changes select which checks
 
@@ -60,7 +63,7 @@ Workspace installs allow dependency build scripts only for `esbuild` (`pnpm.only
 `package.json`). Echo remains part of the workspace dependency resolution; the allowlist prevents its other
 transitive dependencies from running install scripts. The explicit engine installation is tested separately.
 
-Echo's optional package job follows the selection table above. An unrelated change skips the whole job, including
+Echo's required package job follows the selection table above. An unrelated change skips the whole job, including
 checkout and install. The required `validate` job retains all Echo unit tests, whose
 runner gives each run a temporary `XDG_STATE_HOME` so tests never approve files in the developer's real trust state.
 
@@ -69,7 +72,7 @@ downloads the checksum-pinned iii engine, and verifies synthetic save/recall, re
 It also installs all three workspace hook formats into a temporary fixture and invokes their exact commands against
 the running memory bridge, including sharing one profile between two workspaces. It makes no model calls and uses
 no real memories or host sessions. This check needs npm and GitHub release downloads; a failure is reported in
-`echo-package` rather than blocking the four required checks.
+`echo-package` and blocks merging when that check runs. An unaffected package job is explicitly skipped.
 
 The **secrets** job runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
 how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in-ci).

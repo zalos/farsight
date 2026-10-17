@@ -121,6 +121,7 @@ test('session fingerprints include normalized sub-mind policies and all request 
   for (const key of Object.keys(context.profile.submind!) as (keyof NonNullable<typeof context.profile.submind>)[]) {
     const changed = structuredClone(context);
     if (key === 'mode') changed.profile.submind!.mode = 'mock';
+    else if (key === 'hookResearch') changed.profile.submind!.hookResearch = 'background';
     else changed.profile.submind![key]++;
     await assert.rejects(bindSession(changed, 'claude', 'policy-session'), /already bound/);
   }
