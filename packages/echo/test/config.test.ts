@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, realpath, rm, stat, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { defaultConfig, initConfig, loadContext, saveConfig, updateConfig, validateConfig } from '../dist/config.js';
+import { defaultConfig, initConfig, loadContext, saveConfig, updateConfig, validateConfig, ollamaSettings, validateModelSettings } from '../dist/config.js';
+import { contextFingerprint } from '../dist/sessions.js';
+import type { EchoContext } from '../dist/types.js';
 import { pinCredentialOrigin } from '../dist/trust.js';
 import { parseKeychainRef, resolveSecret } from '../dist/secrets.js';
 
@@ -162,15 +164,15 @@ test('sub-mind defaults keep legacy profiles off and normalize bounded partial p
   assert.equal(submindSettings(legacy).mode, 'off');
   (profile as any).submind = { mode: 'mock', maxSteps: 2 };
   assert.deepEqual(validateConfig(config).profiles.personal!.submind, {
-    mode: 'mock', maxSteps: 2, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12_000,
+    mode: 'mock', hookResearch: 'manual', hookWaitMs: 20000, maxSteps: 2, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12_000,
     inputMaxChars: 48_000, lookbackDays: 90, timeoutMs: 30_000, expandedMaxChars: 12_000,
   });
-  for (const [key, value] of Object.entries({ mode: 'unknown', maxSteps: 9, maxSearches: 0, maxCandidates: 51,
+  for (const [key, value] of Object.entries({ mode: 'unknown', hookResearch: 'unknown', hookWaitMs: 60001, maxSteps: 9, maxSearches: 0, maxCandidates: 51,
     evidenceMaxChars: 127, inputMaxChars: 256_001, lookbackDays: 3651, timeoutMs: 99, expandedMaxChars: 64_001 })) {
     (profile as any).submind = { [key]: value };
     assert.throws(() => validateConfig(config));
   }
-  for (const submind of [null, [], { mode: null }, { maxSteps: 1.5 }, { unexpected: true }]) {
+  for (const submind of [null, [], { mode: null }, { hookResearch: null }, { maxSteps: 1.5 }, { unexpected: true }]) {
     (profile as any).submind = submind;
     assert.throws(() => validateConfig(config));
   }
@@ -200,4 +202,74 @@ test('private network model transport requires explicit opt-in, literal private 
   assert.equal(validateConfig(config).profiles.personal!.model.baseUrl, 'https://desktop.example.com');
   config.profiles.personal!.backend = { mode: 'external', url: 'http://192.168.1.25:4611' };
   assert.throws(() => validateConfig(config), /service address/, 'model exception never changes backend transport');
+});
+
+
+test('native Ollama resources are bounded and effective defaults leave legacy configuration unchanged', () => {
+  const config = defaultConfig();
+  const original = JSON.stringify(config);
+  const normalized = validateConfig(config);
+  assert.deepEqual(ollamaSettings(normalized.profiles.personal!.model), { contextTokens: 4096, keepAliveSeconds: 0 });
+  assert.equal(normalized.profiles.personal!.model.ollama, undefined);
+  assert.equal(JSON.stringify(config), original);
+  for (const settings of [
+    { contextTokens: 2048, keepAliveSeconds: 0 },
+    { contextTokens: 131_072, keepAliveSeconds: 3600 },
+  ]) {
+    config.profiles.personal!.model.ollama = settings;
+    assert.deepEqual(validateConfig(config).profiles.personal!.model.ollama, settings);
+    config.profiles.personal!.model.provider = 'openai-compatible';
+    assert.deepEqual(validateConfig(config).profiles.personal!.model.ollama, settings, 'preserves inactive settings when switching providers');
+  }
+  for (const settings of [
+    null, [], {}, { contextTokens: 4096 }, { keepAliveSeconds: 0 },
+    { contextTokens: 2047, keepAliveSeconds: 0 }, { contextTokens: 131_073, keepAliveSeconds: 0 },
+    { contextTokens: 4096.5, keepAliveSeconds: 0 }, { contextTokens: '4096', keepAliveSeconds: 0 },
+    { contextTokens: 4096, keepAliveSeconds: -1 }, { contextTokens: 4096, keepAliveSeconds: 3601 },
+    { contextTokens: 4096, keepAliveSeconds: 0.5 }, { contextTokens: 4096, keepAliveSeconds: '0' },
+    { contextTokens: 4096, keepAliveSeconds: 0, extra: 'private-invalid-setting' },
+  ]) {
+    (config.profiles.personal!.model as any).ollama = settings;
+    assert.throws(() => validateConfig(config), error => error instanceof Error && !error.message.includes('private-invalid-setting'));
+    assert.throws(() => validateModelSettings(config.profiles.personal!.model), 'dispatch validation matches settings validation');
+  }
+});
+
+test('session fingerprint treats omitted Ollama resources as defaults and detects resource changes', () => {
+  const config = defaultConfig();
+  const ctx: EchoContext = {
+    config, profileId: 'personal', profile: config.profiles.personal!, configPath: '/example/.echo/settings.json',
+    directory: '/example/.echo', dataDirectory: '/example/.echo/profiles/personal',
+  };
+  const legacy = contextFingerprint(ctx);
+  ctx.profile.model.ollama = { contextTokens: 4096, keepAliveSeconds: 0 };
+  assert.equal(contextFingerprint(ctx), legacy);
+  ctx.profile.model.ollama.contextTokens = 8192;
+  assert.notEqual(contextFingerprint(ctx), legacy);
+  ctx.profile.model.ollama = { contextTokens: 4096, keepAliveSeconds: 60 };
+  assert.notEqual(contextFingerprint(ctx), legacy);
+});
+
+
+test('background prompt research requires a saved explicit policy', async () => {
+  const { submindSettings } = await import('../dist/config.js');
+  const config = defaultConfig();
+  assert.equal(submindSettings(config.profiles.personal!).hookResearch, 'manual');
+  config.profiles.personal!.submind!.hookResearch = 'background';
+  assert.equal(validateConfig(config).profiles.personal!.submind!.hookResearch, 'background');
+  assert.equal(submindSettings(config.profiles.work!).hookResearch, 'manual');
+});
+
+
+test('prompt wait policy has a bounded limit independent of the model deadline', async () => {
+  const { submindSettings } = await import('../dist/config.js');
+  const config = defaultConfig();
+  const profile = config.profiles.personal!;
+  assert.equal(submindSettings(profile).hookWaitMs, 20000);
+  profile.submind!.hookResearch = 'wait'; profile.submind!.hookWaitMs = 60000;
+  assert.equal(validateConfig(config).profiles.personal!.submind!.hookWaitMs, 60000);
+  for (const limit of [0, 99, 60001, 1.5, '20000', null]) {
+    (profile.submind as any).hookWaitMs = limit;
+    assert.throws(() => validateConfig(config));
+  }
 });

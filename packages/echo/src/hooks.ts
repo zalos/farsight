@@ -9,6 +9,10 @@ export type HookHost = 'claude' | 'codex' | 'vscode';
 /** Only events that currently contribute memory context. Capture events are deferred. */
 export const HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit'] as const;
 
+// Reserve time around the configured wait for startup and receipt delivery.
+export const HOOK_TIMEOUT_MS = 65_000;
+const PREPARED_HOOK_TIMEOUT_MS = 64_000;
+
 function words(key: string, values: Record<string, string> = {}): string {
   return ECHO_HOOK_STRINGS[key]!.professional.replace(/\{(\w+)\}/g, (match, name: string) => values[name] ?? match);
 }
@@ -36,8 +40,8 @@ export async function prepareHooks(ctx: EchoContext, host: HookHost, executable:
   const directory = join(ctx.directory, 'plugins', ctx.profileId, host);
   if (host === 'vscode') {
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    const command = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host].map(shellQuote).join(' ');
-    await save(join(directory, 'echo.json'), { hooks: Object.fromEntries(HOOK_EVENTS.map(event => [event, [{ type: 'command', command, timeout: 5 }]])) });
+    const command = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host, '--hook-timeout-ms', String(HOOK_TIMEOUT_MS)].map(shellQuote).join(' ');
+    await save(join(directory, 'echo.json'), { hooks: Object.fromEntries(HOOK_EVENTS.map(event => [event, [{ type: 'command', command, timeout: HOOK_TIMEOUT_MS / 1000 }]])) });
     const instructions = [words('echo.hooks.prepared'), words('echo.hooks.vscode'), words('echo.hooks.behavior'), words('echo.hooks.singleProfile'), words('echo.hooks.keepPaths')].join('\n\n');
     await save(join(directory, 'README.txt'), `${instructions}\n`);
     return { directory, instructions };
@@ -52,7 +56,7 @@ export async function prepareHooks(ctx: EchoContext, host: HookHost, executable:
   const rootVariable = host === 'claude' ? 'CLAUDE_PLUGIN_ROOT' : 'PLUGIN_ROOT';
   const launcher = `const root=process.env.${rootVariable};if(!root)process.exit(1);import(require('node:url').pathToFileURL(require('node:path').join(root,'scripts','echo-hook.mjs')).href).catch(()=>process.exit(1));`;
   const command = `${shellQuote(process.execPath)} -e ${shellQuote(launcher)}`;
-  const hooks = Object.fromEntries(HOOK_EVENTS.map(event => [event, [{ hooks: [{ type: 'command', command, timeout: 5 }] }]]));
+  const hooks = Object.fromEntries(HOOK_EVENTS.map(event => [event, [{ hooks: [{ type: 'command', command, timeout: HOOK_TIMEOUT_MS / 1000 }] }]]));
   const name = `echo-${ctx.profileId.toLowerCase().replaceAll('_', '-')}-${createHash('sha256').update(ctx.profileId).digest('hex').slice(0, 8)}`;
   await save(join(manifestDirectory, 'plugin.json'), {
     name, version: '0.0.1', description: words('echo.hooks.description'), author: { name: 'Farsight' },
@@ -61,8 +65,8 @@ export async function prepareHooks(ctx: EchoContext, host: HookHost, executable:
     ...(host === 'codex' ? { hooks: './hooks/hooks.json' } : {}),
   });
   await save(join(directory, 'hooks', 'hooks.json'), { hooks });
-  const args = [executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host];
-  await save(join(directory, 'scripts', 'echo-hook.mjs'), `#!/usr/bin/env node\nimport { spawnSync } from 'node:child_process';\nconst result = spawnSync(process.execPath, ${JSON.stringify(args)}, { stdio: 'inherit', timeout: 4000, windowsHide: true });\nprocess.exit(result.status ?? 1);\n`, true);
+  const args = [executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host, '--hook-timeout-ms', String(PREPARED_HOOK_TIMEOUT_MS)];
+  await save(join(directory, 'scripts', 'echo-hook.mjs'), `#!/usr/bin/env node\nimport { spawnSync } from 'node:child_process';\nconst result = spawnSync(process.execPath, ${JSON.stringify(args)}, { stdio: 'inherit', timeout: ${PREPARED_HOOK_TIMEOUT_MS}, windowsHide: true });\nprocess.exit(result.status ?? 1);\n`, true);
 
   if (host === 'codex') {
     const catalogDirectory = join(directory, '.agents', 'plugins');

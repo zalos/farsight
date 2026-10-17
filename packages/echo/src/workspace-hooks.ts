@@ -4,7 +4,7 @@ import { lstat, mkdir, open, readFile, readdir, realpath, rename, unlink } from 
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { ECHO_HOOK_STRINGS } from '@farsight/core/dist/strings-echo-hooks.js';
-import { HOOK_EVENTS, shellQuote, type HookHost } from './hooks.js';
+import { HOOK_EVENTS, HOOK_TIMEOUT_MS, shellQuote, type HookHost } from './hooks.js';
 import { withSettingsLock } from './settings-lock.js';
 import type { EchoContext } from './types.js';
 
@@ -31,8 +31,8 @@ function owned(value: unknown, host: HookHost): boolean {
   return hook.type === 'command' && typeof hook.command === 'string' && hook.command.endsWith(marker(host));
 }
 function command(ctx: EchoContext, host: HookHost, executable: string, workspace: string): ObjectValue {
-  const args = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host, '--workspace', workspace];
-  return { type: 'command', command: args.map(shellQuote).join(' ') + marker(host), timeout: 5 };
+  const args = [process.execPath, executable, 'hook', '--config', ctx.configPath, '--profile', ctx.profileId, '--host', host, '--workspace', workspace, '--hook-timeout-ms', String(HOOK_TIMEOUT_MS)];
+  return { type: 'command', command: args.map(shellQuote).join(' ') + marker(host), timeout: HOOK_TIMEOUT_MS / 1000 };
 }
 
 function parseObject(text: string): ObjectValue {

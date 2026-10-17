@@ -198,7 +198,7 @@ test('legacy settings expose off defaults without adding a policy on read', asyn
   assert.equal(state.config.profiles.personal.submind, undefined);
   assert.equal(state.running.submindMode, 'off');
   assert.deepEqual(state.defaults.submind, {
-    mode: 'off', maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000,
+    mode: 'off', hookResearch: 'manual', hookWaitMs: 20000, maxSteps: 3, maxSearches: 3, maxCandidates: 12, evidenceMaxChars: 12000,
     inputMaxChars: 48000, lookbackDays: 90, timeoutMs: 30000, expandedMaxChars: 12000,
   });
   assert.equal(await readFile(view.configPath, 'utf8'), before);

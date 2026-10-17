@@ -92,7 +92,7 @@ jobs:
       - run: pnpm test:scripts
       - run: pnpm lint:strings
 
-  # Optional network integration evidence, outside the four required checks.
+  # Required when selected; unrelated changes explicitly skip this integration check.
   echo-package:
     name: echo-package
     needs: changes

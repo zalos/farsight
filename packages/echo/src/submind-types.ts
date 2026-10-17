@@ -3,6 +3,10 @@ import type { MemoryProvenance } from './memory-provenance.js';
 /** Read-only, request-bounded research. Absent settings retain the existing raw-recall behavior. */
 export interface SubmindSettings {
   mode: 'off' | 'mock' | 'model';
+  /** Explicit opt-in to research after each host prompt; old profiles keep manual lookup. */
+  hookResearch: 'manual' | 'background' | 'wait';
+  /** Maximum prompt-hook wait; a timeout returns the same background handle. */
+  hookWaitMs: number;
   maxSteps: number;
   maxSearches: number;
   maxCandidates: number;

@@ -13,7 +13,7 @@ The intended workflow is a small brief before each agent request, with source li
 | Managed local or explicitly configured external agentmemory | Shared hosted deployment and synchronization |
 | Configurable sub-mind through local/remote Ollama or a hosted compatible API; deterministic mock mode | Additional native providers, endpoint-specific live acceptance checks, and automatic provider selection |
 | Standalone read-only memory portal with timeline cards, search, evidence detail, explicit research, and a settings tab; allowed Farsight embedding origin | Memory editing/deletion and a Farsight navigation entry |
-| Explicit managed-memory saves, scoped recall, bounded prompt context, and explicit sub-mind research with follow-up evidence reads | Automatic capture, proactive hook curation, and memory edits |
+| Explicit managed-memory saves, scoped recall, bounded prompt context, and explicit or opted-in background sub-mind research with follow-up evidence reads | Automatic capture and memory edits |
 | Workspace hooks for Claude Code, Codex, and VS Code Local; optional Claude/Codex plugin preparation | Copilot Agent Host integration and automatic host trust |
 | Configured skill directories | Skill discovery, installation, and execution |
 | Synthetic save, search, restart, and isolation verification; isolated model-free portal preview | Production retention, daily/topic rollups, and memory mutation workflows |
@@ -186,9 +186,17 @@ farsight-echo portal-demo --port 0
 
 The default is port `4491`; `--port 0` asks the operating system for an available port. Open the URL printed by the command. This uses the real portal and private memory bridge with synthetic in-memory records and mock research. It starts no model, agentmemory worker, or engine, and does not read an existing Echo configuration or memory store. Configuration and trust state are temporary, the **Synthetic preview** banner is visible, and settings are read-only. Ctrl-C closes both listeners and removes temporary state. It provides a low-resource interaction preview, not a persistence or model-quality test.
 
+## Saved model setup and live operation
+
+Settings can discover installed models from a saved Ollama endpoint and run one explicit synthetic structured-generation test. These actions read the selected saved profile, require its current settings revision, and do not depend on the memory backend. Discovery never generates or downloads. A test runs even when research is off or mock because it is an explicit request to use the model. Compatible endpoints use a manually entered model name. CLI equivalents are `models` and `model-test` with the ordinary scope/profile selectors.
+
+The running model identity and a restart indicator distinguish a successful test of saved settings from the currently running service. Saving does not start generation or hot-switch an active profile. Restart that profile's `serve` to apply runtime changes, then use the real Memories view and explicit sub-mind question. `portal-demo` always remains synthetic and disables live setup actions.
+
+Optional `model.ollama` settings contain `contextTokens` (2,048–131,072) and `keepAliveSeconds` (0–3,600), both required when the object is present. Effective defaults are 4,096 tokens and zero retention; legacy configuration files need no rewrite. Native Ollama requests include those values, while compatible requests omit them. Context capacity, serialized-input character allowance, and output allowance are distinct controls. Changing resource settings changes the session selection and requires a new service/host session.
+
 ## Sub-mind research and remote inference
 
-The sub-mind is an optional read-only curator invoked by `ask --query TEXT` or the portal’s explicit **Ask sub-mind** action; installed hooks retain raw recall.
+The sub-mind is an optional read-only curator invoked by `ask --query TEXT`, the portal’s **Ask sub-mind** action, or opted-in background prompt research. In Settings, **Prompt memory research** supports **Prepare a brief in the background** (`submind.hookResearch: "background"`) or **Wait for a brief, then continue** (`"wait"`). Waiting includes a compact sourced brief when ready, with a handle as fallback; its separate `hookWaitMs` limit defaults to 20000 and is bounded to 100–60000. The CLI exposes the same choice through `configure --hook-research wait --hook-wait-ms 20000`. Restart Echo and start a fresh host session after saving. Refresh pre-upgrade workspace hooks once with `connect --host all` for longer waits; otherwise they safely retain their original short deadline. `brief` fetches the curated result without further inference and accepts `--wait-ms` for a bounded wait. Raw evidence stays inside Echo. See the [background research walkthrough](../packages/echo/README.md#let-the-sub-mind-handle-prompt-memory-research) for polling, cancellation and limits. Missing policies keep manual lookup for compatibility.
 It defaults to off, so an existing installation does not begin making model requests after upgrade. Mock mode
 searches the selected memory store and produces labeled deterministic excerpts without model calls. Model mode
 uses the profile's configured endpoint to research and summarize evidence. There is no fallback to another endpoint.
@@ -198,8 +206,9 @@ are independent: the memory backend can remain local while a desktop Ollama serv
 performs inference. This milestone does not host the full Echo service remotely or expose the localhost portal.
 
 The settings view edits mode and limits without inference. It displays the running mode separately from saved
-configuration. Saving and restarting applies the mode; generation occurs only on explicit research or the optional
-`smoke --with-model` check. The latter is a real model call even when research mode is off or mock.
+configuration. Saving and restarting applies the mode. Generation occurs on explicit research, opted-in background prompt research, **Test model**
+in Settings, `model-test`, or the optional `smoke --with-model` check. These explicit model checks make a real model
+call even when research mode is off or mock.
 
 The policy defaults are `mode: off`, `maxSteps: 3`, `maxSearches: 3`, `maxCandidates: 12`,
 `evidenceMaxChars: 12000`, `inputMaxChars: 48000`, `lookbackDays: 90`, `timeoutMs: 30000`, and
@@ -253,7 +262,7 @@ Search ranking remains an upstream limitation: the pinned backend ranks up to 50
 before applying the exact identity filters. A crowded shared backend can therefore omit a matching scoped memory.
 Use dedicated instances for this preview; bounded excerpts and exact filtering do not establish exhaustive recall.
 
-Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo’s selected model handles explicit sub-mind research in model mode and the optional synthetic summary check. Prompt-time hooks still make no model call. Engine/package installation requires downloads. Local model inference does not require a hosted model API. Research spends sidecar compute, and the brief delivered to the main agent consumes its context. Mock research performs no inference.
+Agentmemory can store and search without an external model API. The backend handles storage and recall; Echo’s selected model handles sub-mind research in model mode and the optional synthetic summary check. Manual prompt lookup makes no model call; opted-in background research can use the configured model once per new prompt, within its request limits. Engine/package installation requires downloads. Local model inference does not require a hosted model API. Research spends sidecar compute, and the brief delivered to the main agent consumes its context. Mock research performs no inference.
 
 ## Memory access and isolation
 
@@ -328,8 +337,7 @@ workspace trust and `chat.useHooks` enabled, not Copilot Agent Host. The install
 editor preferences. See [VS Code's hook guide](https://code.visualstudio.com/docs/agent-customization/hooks).
 
 `SessionStart` establishes the session binding and supplies bounded memory-access instructions. `UserPromptSubmit`
-uses the prompt as a scoped recall query and returns bounded results through additional context. Neither calls the
-configured model. Prompt callbacks reference the session access command without repeating absolute paths. If the service is unavailable, hooks fail
+uses the prompt as a scoped lookup. Manual mode returns bounded excerpts without a model call. Background mode submits bounded sub-mind research and returns a complete follow-up handle instead of raw evidence; if the handle cannot fit, research is skipped before any model work. Prompt callbacks reference the session access command without repeating absolute paths. If the service is unavailable, hooks fail
 open and the host continues without memory context. They do not automatically save the prompt or the response.
 The complete injected context, including instructions and record metadata, is capped at `budget.briefMaxChars`.
 Omitted or shortened results print “More matched; not shown.”
