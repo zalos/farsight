@@ -85,6 +85,22 @@ edit reran only commit conventions and left the original CI run uninterrupted. T
 follow-up is checked with the commit/title linter and `git diff --check`; the PR's cumulative workflow changes
 still select the full CI checks on GitHub.
 
+## PR #115 review (parser library extraction) — 2026-10-17
+
+Claude reviewed `b074600` on a detached worktree under Node 24 beside a `main` build: build, typecheck, schema drift
+check, 1,566 unit tests (two live-tracker skips), 20 script tests, 345 e2e, string lint and the tarball consumer
+test all passed. Ingesting this repository with both builds from scratch directories gave byte-identical nodes
+(6,332) and edges (13,510) apart from the new `occurrences`, the same `sourceDigest`, and zero page errors on five
+viewer surfaces. Nothing blocks the merge; the review on the PR lists seven non-blocking findings, the two that
+deserve follow-up issues first: Farsight's own `graph.json` does not validate as a `farsight-graph v1` document
+(no `repo`, application-only `meta` keys), and occurrence evidence is stored and served with no consumer yet
+(`graph.json` 18.0 → 26.9 MB, `/graph` +43 %, `farsight.db` +33 % on this repo). Process: the work was done in the
+primary checkout, which rebuilt the dogfood workspace's `dist/` on the branch (4478 now reports RESTART into
+`1044d4d`) and left it checked out on the branch; `AGENTS.md` now requires a worktree, a real-ingest comparison
+against `main` for parser/core/store changes, an assistant trailer on every commit and an ADR per new boundary.
+After the merge: check `main` out in the primary checkout, rebuild, pack, reinstall under both prefixes, restart
+4477 and 4478 and re-sync, as for any pass.
+
 ## Echo model setup and configurable prompt research — 2026-10-13
 
 - Work remains on `codex/echo-live-model`, PR #104, building on merged PRs #102 and #103.
