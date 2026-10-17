@@ -41,6 +41,38 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Parser library review follow-up — 2026-10-17
+
+PR #115 remains on `codex/parser-package-extraction`, now including main at `2ca7f2b` (PR #116).
+The follow-up adds `GraphStore.toDocument()` and `farsight export` for saved, merged graphs: a validated
+portable envelope preserves the named sources and their enrichment without application bookkeeping.
+Both library READMEs distinguish this from the application's `graph.json`; ADR 11 records the boundary.
+Portable parsing retains call-site occurrences, while application ingestion now requires
+`ingestRepo(root, { occurrences: true })` to store them. Diagnostics identify truncated declarations by
+path, line and node; exactly-at-limit is complete, omitted branches are not. Symlinks report one boundary
+diagnostic, and cancellation does not masquerade as an adapter or read failure. The ESM-only contract and
+the published declaration dependency on `@types/node` are explicit. Real export also exposed and fixed a
+generated-schema error for nested test-project status literals, pinned by a regression test.
+
+Verified under Node 24: build and package/e2e typechecks; 1,572 unit tests passed, with two opt-in live
+tracker tests skipped; 20 script tests; string lint (3,480 entries); schema drift check; isolated parser
+tarball installation on macOS/arm64; 345 browser/MCP tests; 11 small-preset performance checks. The full
+unit/e2e run precedes only commit-trailer and documentation changes. After incorporating PR #116, the
+rebuilt PR at `64397a3` and a separate main build ingested the same repository from scratch directories:
+all 6,343 nodes and 13,536 edges were equal without removing fields, and both source digests were
+`7895bca53311`. Saved graph / actual `/graph` response bytes: main 18,007,211, PR 18,007,207; compact JSON:
+14,594,980 / 14,594,976; SQLite: 24,317,952 / 24,317,952. No occurrence fields were stored by default.
+The real exported document validated with all nodes and edges. The front door, Map and code map rendered
+with zero page, console or unexpected HTTP errors; known missing example design-image 404s remain.
+
+Process correction: the original extraction built and tested in the primary checkout. Review work now
+lives in its own managed worktree, with another worktree for the main baseline. The primary checkout is
+back on main at `2ca7f2b` and rebuilt from main. This task's old feature-stamped e2e report was archived
+outside the checkout and removed from the primary report location. The existing editor-settings change
+is untouched. Follow-up commits carry the Codex co-author trailer. Running dogfood services, global
+installations and the multi-source graph were not changed; their normal refresh follows merge. Final
+GitHub checks and re-review belong to PR #115; registry publication remains separate.
+
 ## Parser library extraction — 2026-10-17
 
 Branch `codex/parser-package-extraction`, including main at `056b9a6`, implements
@@ -49,7 +81,8 @@ Branch `codex/parser-package-extraction`, including main at `056b9a6`, implement
 core re-exports them. Farsight's parser composes the same Oxc 0.138.0 and Tree-sitter WASM 0.3.1 adapters and
 retains configuration/enrichment ordering. Four pre-extraction fixtures pin TS/JS, Java, mixed and workspace
 structure, resolution evidence and enrichment. New occurrence evidence survives relationship deduplication
-and storage. See `docs/PARSER-LIBRARIES.md` for API, boundaries, tarballs and release instructions.
+and portable storage; application storage is opt-in after the review follow-up above. See
+`docs/PARSER-LIBRARIES.md` for API, boundaries, tarballs and release instructions.
 
 The portable instance API adds explicit selection, per-file outcomes, diagnostics, bounded local reads,
 cooperative cancellation, immutable artifacts, and fingerprints of the bytes actually analyzed and resolution
