@@ -221,3 +221,13 @@ test('invalid resolution configuration and bounded branch inspection are visible
     assert.ok(bounded.analysis.diagnostics.some(d => d.code === 'resource-limit'));
   });
 });
+
+test('portable output keeps dependency and store extraction evidence', async () => {
+  await fixture({ 'main.ts': 'import pg from "pg"; import fs from "node:fs"; export function connect() { return pg.connect(); }', 'package.json': '{"dependencies":{"pg":"8.0.0"}}' }, async root => {
+    const result = await parser.parseRepository({ root, sourceId: 'sample' });
+    assert.deepEqual(result.graph.meta?.stores?.drivers, [{ spec: 'pg', files: 1 }]);
+    assert.ok(result.graph.meta?.packages);
+    assert.equal(result.graph.meta?.files, 1);
+    assert.ok(!('sourceHash' in result.graph.meta!));
+  });
+});

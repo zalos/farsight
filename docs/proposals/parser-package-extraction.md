@@ -1,6 +1,10 @@
 # Publishable code parser and shared graph
 
-Status: proposed; implementation has not started.
+Status: implemented for PR review on `codex/parser-package-extraction`; registry publication remains a separate release step.
+
+Implementation and release instructions: [Parser libraries](../PARSER-LIBRARIES.md). The two MIT-licensed
+libraries start at 0.1.0 and retain the existing Oxc and Tree-sitter engines. The historical review evidence below
+remains the pre-extraction baseline; current validation is recorded in `docs/AI-HANDOFF.md` and the PR.
 
 Date: 2026-10-17. Code review baseline: `2bc655b`.
 
