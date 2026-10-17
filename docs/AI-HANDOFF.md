@@ -41,6 +41,24 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## PR #104 review and main refresh — 2026-10-17
+
+PR #104 remains open on `codex/echo-live-model`. The review branch `codex/pr-104-review` merged main
+at `4bb662a` in `8eea360`; the only conflict was this handoff, resolved by retaining both sets of notes.
+Review covered the model setup routes, saved/running selection, hook session and workspace isolation,
+cancellation, retention limits, and model ownership through cancellation. No blocking code findings remained.
+
+Local validation on the merged runtime: `pnpm build`, `pnpm typecheck`, `FARSIGHT_LIVE=0 pnpm test`
+(1,539 unit tests and 19 script tests passed; two opt-in tracker tests skipped), `pnpm lint:strings`, and
+`pnpm e2e --workers=2` (345 passed). Desktop and narrow Settings screenshots were inspected. The subsequent
+changes only document required checks and this review; `actionlint`, title lint and `git diff --check` passed.
+The final pushed tip must pass GitHub checks before merge. Live model acceptance below is earlier evidence,
+not a rerun during this review. No deployed services, global installations or dogfood graphs were changed.
+
+Main already required validate, e2e, secrets and commits, an up-to-date branch, and admin enforcement.
+The review added affected checks and echo-package to branch protection and pinned all six checks to GitHub
+Actions. `docs/CI.md` describes the resulting requirements; unaffected runtime jobs still skip explicitly.
+
 ## Affected CI checks — 2026-10-17
 
 Follow-up on the same branch: Codex and Claude must use Conventional Commits, Conventional Comments for PR/review
