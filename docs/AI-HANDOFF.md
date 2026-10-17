@@ -46,7 +46,8 @@ Codex project instruction and MCP conventions were checked against [official AGE
 Follow-up on the same branch: Codex and Claude must use Conventional Commits, Conventional Comments for PR/review
 feedback, and a validated PR title preserved as the squash-commit subject. `AGENTS.md` is the canonical project
 rule, imported by `CLAUDE.md`; the PR template reinforces it. Both providers' global instructions and shared memory
-also record the user's preference. PR #114's title is `ci: run only checks affected by changed paths`.
+also record the user's preference. Scope remains optional, matching the spec; guidance is deliberately concise. PR #114's title is
+`ci: run only checks affected by changed paths`.
 
 Branch `codex/ci-affected-checks` adds a small path selector for validation, e2e and Echo packaging. Ordinary
 Markdown changes skip runtime checks; packaged Echo docs still check packaging, and fixture Markdown remains
