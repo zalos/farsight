@@ -12,8 +12,8 @@
 //
 // Only the root package.json carries the release version: scripts/pack.mjs
 // gives it to the farsight-cli tarball and core's buildInfo() reads it in a
-// workspace build. The packages/*/package.json versions are private workspace
-// versions (linked with workspace:*), never published, so they are left alone.
+// workspace build. The independently published graph/code-parser versions are
+// managed by library-version.mjs; application releases leave them alone.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';

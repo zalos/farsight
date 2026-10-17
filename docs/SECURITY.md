@@ -4,6 +4,17 @@ Farsight is a local developer tool. It reads code on your machine. It serves wha
 agents and to your shell. With your own credential, it reads and writes the trackers you configure. This page
 covers what it trusts, what it refuses, and how to report a problem.
 
+## Independently packaged parser
+
+`@farsight/code-parser`'s `parseRepository` API runs the existing Oxc and Tree-sitter adapters under a bounded,
+per-call read context. It refuses symlink components and paths outside the explicit source root, caches the bytes
+it parses, and fingerprints configuration/resolution inputs. It neither executes the source nor enables external
+Farsight enrichment. Resource-limit, parse, unsupported-input and cancellation diagnostics remain in the artifact.
+Time limits/cancellation are cooperative between synchronous operations, not process isolation; custom adapters
+are trusted code. Analyze a stable checkout: this is not an atomic filesystem snapshot or a security verdict.
+The compatibility `extractRepository` API retains the application's legacy IO semantics. See
+[PARSER-LIBRARIES.md](PARSER-LIBRARIES.md) and the parser README for the API boundary and defaults.
+
 ## Threat model
 
 | part | who can reach it | what guards it |

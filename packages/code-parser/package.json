@@ -1,0 +1,56 @@
+{
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zalos/farsight.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "name": "@farsight/code-parser",
+  "description": "Repository code analysis with Oxc and Tree-sitter",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./adapters/tsjs": {
+      "types": "./dist/tsjs.d.ts",
+      "import": "./dist/tsjs.js"
+    },
+    "./adapters/java": {
+      "types": "./dist/java/index.d.ts",
+      "import": "./dist/java/index.js"
+    },
+    "./support": {
+      "types": "./dist/support.d.ts",
+      "import": "./dist/support.js"
+    }
+  },
+  "dependencies": {
+    "@farsight/graph": "workspace:^",
+    "@types/node": "26.1.0",
+    "oxc-parser": "0.138.0",
+    "@vscode/tree-sitter-wasm": "0.3.1"
+  }
+}

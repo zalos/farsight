@@ -163,21 +163,8 @@ export interface StorybookConfig {
 }
 
 /** One declared third-party system: the client the calls go through, what to call it, and what kind of system it is. */
-export interface ExternalDecl {
-  /**
-   * a bare package specifier, or `<repo-relative path>::<Class>` — the client class the external is reached through.
-   * Absent only on `kind: 'party'`: a counterparty no code reaches (a payment partner, the client)
-   */
-  import?: string;
-  name: string;
-  kind: ExternalKind;
-  /** this external is (true) or is not (false) used as a data store — overrides the default from the kind (`erp` · `db` · `files` are) */
-  store?: boolean;
-  /** `kind: 'party'` only: what it does, in the team's words (*pays the vendor on our instruction*) */
-  role?: string;
-  /** `kind: 'party'` only: a declared persona id it also is (the client who uses a portal) */
-  persona?: string;
-}
+export type { ExternalDecl } from '@farsight/graph';
+import type { ExternalDecl } from '@farsight/graph';
 
 /**
  * One declared data store (`farsight.config.json → stores[]`). Without `tables` it names the store of every

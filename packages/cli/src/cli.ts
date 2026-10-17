@@ -56,6 +56,8 @@ usage:
                                                                OpenAPI file or URL is ingested as a spec-only source
                                                                (also records a snapshot in .farsight/farsight.db)
   farsight serve [graph.json] [--port 4477] [--as-of sync:N] [--read-only]   explore the graph in the HUD (--read-only, and every --as-of, refuses settings, syncs and work writes)
+  farsight export [--graph graph.json] [--out portable-graph.json] [--source-id workspace]
+                                                               ${word('export.graph.help', 'professional')}
   farsight mcp [--graph graph.json] [--as-of sync:N]           feed the graph to LLM agents (MCP/stdio)
   farsight snapshots [--limit 20] [--pin sync:N] [--prune 10]  list snapshot history (pin / prune retention)
   farsight history [--repo name] [<path>] [--since <date>] [--max 2000] [--releases] [--agents] [--json]
@@ -598,6 +600,20 @@ switch (command) {
     console.log('');
     a.steps.forEach((st, i) => console.log(`  ${i + 1}. ${st}`));
     process.exit(a.ok ? 0 : 1);
+  }
+  case 'export': {
+    const graphFile = resolve(flag('graph', 'graph.json')!);
+    if (!existsSync(graphFile)) fail(word('export.graph.missing', 'professional').replace('{path}', graphFile));
+    const out = flag('out');
+    if (out && existsSync(resolve(out))) {
+      const input = statSync(graphFile), output = statSync(resolve(out));
+      if (input.dev === output.dev && input.ino === output.ino) fail(word('export.graph.sameFile', 'professional'));
+    }
+    const document = GraphStore.load(graphFile).toDocument(flag('source-id', 'workspace'));
+    const json = JSON.stringify(document, null, 2) + '\n';
+    if (out) writeFileSync(resolve(out), json);
+    else process.stdout.write(json);
+    break;
   }
   case 'ingest': {
     const dirs = positional.length ? positional : ['.'];

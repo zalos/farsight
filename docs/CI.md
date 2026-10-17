@@ -21,6 +21,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | **e2e** | `pnpm install --frozen-lockfile` → `pnpm build` → `pnpm e2e:typecheck` → chromium (cached in `~/.cache/ms-playwright`, keyed on the `@playwright/test` version) → `pnpm e2e` → `pnpm e2e:perf` on the small preset (`FARSIGHT_PERF_PRESET=small`; the table is the `e2e-perf-results` artifact) | 30 min |
 | **secrets** | gitleaks over the pushed or PR commits (below) | 10 min |
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
+| **parser-package (Linux/macOS)** (non-required) | parser package/workflow/dependency changes: actual tarballs installed outside the workspace, public types, native/WASM parsing, saved-graph query | 15 min |
 | **echo-package** | when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
 
 ### Which changes select which checks
@@ -34,10 +35,10 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 | `docs/ECHO.md`, `packages/echo/README.md`, Echo packaging scripts or example connection/settings | `echo-package` |
 | `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs`, `scripts/synth-graph.mjs` | `e2e` (including its typecheck and small perf suite) |
 | Package `test/` folders, `scripts/test/`, changelog/release/hook-install/commit-lint scripts | `validate` |
-| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; core and Echo changes also select `echo-package` |
+| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package` |
 | Everything else, including dependencies, build config, workflows and the selector itself | all |
 
-Markdown inside fixtures is test input, not automatically documentation. Core is an Echo build dependency, so its
+Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
 whole package is watched, not just a few currently imported helpers. PRs compare merge-base → head, excluding
 unrelated changes on the base branch; pushes compare before → after across every pushed commit. Deleted paths and
 both sides of renames count. An unavailable range or failed selector runs all checks.

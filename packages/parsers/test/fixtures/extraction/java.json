@@ -1,0 +1,2763 @@
+{
+  "repo": "compat",
+  "nodes": [
+    {
+      "id": "compat::src/main/java/com/acme/invoices/InvoiceApiApplication.java::InvoiceApiApplication",
+      "kind": "class",
+      "name": "InvoiceApiApplication",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/InvoiceApiApplication.java",
+        "line": 16,
+        "endLine": 24
+      },
+      "docs": "Boots the invoice API — the Java backend of the same invoice system the invoice-app example serves from TypeScript. Method security is on because the send and cancel endpoints are guarded with @PreAuthorize; scheduling is on for the nightly overdue sweep. Since 1.0.",
+      "tags": [
+        "invoice",
+        "demo"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice service",
+          "description": "The Java backend that runs invoicing."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/InvoiceApiApplication.java::InvoiceApiApplication.main",
+      "kind": "function",
+      "name": "InvoiceApiApplication.main",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/InvoiceApiApplication.java",
+        "line": 21,
+        "endLine": 23
+      },
+      "snippet": "public static void main(String[] args) {\n    SpringApplication.run(InvoiceApiApplication.class, args);\n  }",
+      "group": "InvoiceApiApplication",
+      "tags": [
+        "invoice",
+        "entrypoint"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice service: main"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController",
+      "kind": "class",
+      "name": "InvoiceController",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 23,
+        "endLine": 101
+      },
+      "docs": "HTTP surface for the invoice lifecycle. Everything here delegates to InvoiceService; the controller only turns HTTP into calls. Since 1.0.",
+      "tags": [
+        "invoice",
+        "billing",
+        "controller",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice endpoints",
+          "description": "The web address the billing screens call to work with invoices."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.list",
+      "kind": "function",
+      "name": "InvoiceController.list",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 39,
+        "endLine": 42
+      },
+      "docs": "Lists invoices for the billing dashboard.",
+      "snippet": "@GetMapping\n  public List<Invoice> list(@RequestParam(required = false) Invoice.Status status) {\n    return invoices.list(status);\n  }",
+      "group": "Invoice API",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "description": "The list of invoices a billing user can act on today, optionally narrowed to one status such as sent or overdue.",
+          "label": "Invoice endpoints: list"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::GET /api/invoices",
+      "kind": "route",
+      "name": "GET /api/invoices",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 39
+      },
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "List invoices",
+          "description": "The invoices a billing user can act on today."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.get",
+      "kind": "function",
+      "name": "InvoiceController.get",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 49,
+        "endLine": 52
+      },
+      "docs": "Fetches a single invoice by id. See: InvoiceService#get(Long).",
+      "snippet": "@GetMapping(\"/{id}\")\n  public Invoice get(@PathVariable Long id) {\n    return invoices.get(id);\n  }",
+      "group": "Invoice API",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice endpoints: get"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::GET /api/invoices/:param",
+      "kind": "route",
+      "name": "GET /api/invoices/:param",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 49
+      },
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Open an invoice",
+          "description": "Everything about one invoice."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.create",
+      "kind": "function",
+      "name": "InvoiceController.create",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 60,
+        "endLine": 64
+      },
+      "docs": "Drafts a new invoice from the submitted customer, amount and due date.",
+      "snippet": "@PostMapping\n  @ResponseStatus(HttpStatus.CREATED)\n  public Invoice create(@Valid @RequestBody CreateInvoiceRequest request) {\n    return invoices.create(request);\n  }",
+      "group": "Invoice API",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "description": "Raises a new draft invoice for a customer. Nothing reaches the customer until it is sent.",
+          "label": "Invoice endpoints: create"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::POST /api/invoices",
+      "kind": "route",
+      "name": "POST /api/invoices",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 60
+      },
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Raise an invoice",
+          "description": "Creates a new draft invoice for a customer."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.update",
+      "kind": "function",
+      "name": "InvoiceController.update",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 71,
+        "endLine": 74
+      },
+      "docs": "Replaces the editable fields of a draft and re-prices it.",
+      "snippet": "@PutMapping(\"/{id}\")\n  public Invoice update(@PathVariable Long id, @Valid @RequestBody CreateInvoiceRequest request) {\n    return invoices.update(id, request);\n  }",
+      "group": "Invoice API",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "description": "Corrects a draft invoice before it goes out to the customer.",
+          "label": "Invoice endpoints: update"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::PUT /api/invoices/:param",
+      "kind": "route",
+      "name": "PUT /api/invoices/:param",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 71
+      },
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Correct an invoice",
+          "description": "Saves changes to a draft before it is sent."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.send",
+      "kind": "function",
+      "name": "InvoiceController.send",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 83,
+        "endLine": 87
+      },
+      "docs": "Sends the invoice to the customer and announces it on the message bus.",
+      "snippet": "@PostMapping(\"/{id}/send\")\n  @PreAuthorize(\"hasAuthority('billing:admin')\")\n  public Invoice send(@PathVariable Long id, Authentication caller) {\n    return invoices.send(id, caller.getName());\n  }",
+      "group": "Invoice API",
+      "tags": [
+        "invoice",
+        "billing",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "description": "Sends the invoice to the customer and emails them the PDF. Only billing administrators may do this.",
+          "label": "Invoice endpoints: send"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::POST /api/invoices/:param/send",
+      "kind": "route",
+      "name": "POST /api/invoices/:param/send",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 83
+      },
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Send an invoice",
+          "description": "Sends the invoice to the customer and emails them the PDF."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::guard::PreAuthorize(hasAuthority('billing:admin'))",
+      "kind": "guard",
+      "name": "PreAuthorize: hasAuthority('billing:admin')",
+      "lang": "java",
+      "tags": [
+        "auth",
+        "http-api"
+      ],
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 84
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.delete",
+      "kind": "function",
+      "name": "InvoiceController.delete",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 95,
+        "endLine": 100
+      },
+      "docs": "Cancels an invoice that should never have been raised.",
+      "snippet": "@DeleteMapping(\"/{id}\")\n  @PreAuthorize(\"hasAuthority('billing:admin')\")\n  public ResponseEntity<Void> delete(@PathVariable Long id, Authentication caller) {\n    invoices.delete(id, caller.getName());\n    return ResponseEntity.noContent().build();\n  }",
+      "group": "Invoice API",
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "description": "Cancels an invoice raised by mistake, so it stops counting towards what the customer owes.",
+          "label": "Invoice endpoints: delete"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::route::DELETE /api/invoices/:param",
+      "kind": "route",
+      "name": "DELETE /api/invoices/:param",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/InvoiceController.java",
+        "line": 95
+      },
+      "tags": [
+        "invoice",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "label": "Cancel an invoice",
+          "description": "Withdraws an invoice that should never have been raised."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java::CreateInvoiceRequest",
+      "kind": "rule",
+      "name": "CreateInvoiceRequest",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java",
+        "line": 19,
+        "endLine": 35
+      },
+      "docs": "Body of POST /api/invoices and PUT /api/invoices/{id}. See: com.acme.invoices.service.InvoiceService#create(CreateInvoiceRequest). Since 1.0.",
+      "signature": "customer: NotBlank, Size(max = 120); amountCents: Positive; dueDate: NotNull, Future; country: NotBlank, Size(min = 2, m",
+      "tags": [
+        "invoice",
+        "billing",
+        "http-api"
+      ],
+      "facets": {
+        "business": {
+          "description": "What a billing user must supply to raise an invoice.",
+          "label": "New invoice details"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::table::invoices",
+      "kind": "table",
+      "name": "invoices",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 15,
+        "endLine": 88
+      },
+      "docs": "One invoice raised against a billing account. Since 1.0.",
+      "tags": [
+        "invoice",
+        "data",
+        "billing",
+        "persistence"
+      ],
+      "signature": "columns: id, customer, amount_cents, tax_cents, status, due_date, sent_at, memo",
+      "facets": {
+        "business": {
+          "description": "Every invoice the business has raised.",
+          "label": "Invoice records"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.totalCents",
+      "kind": "function",
+      "name": "Invoice.totalCents",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 61,
+        "endLine": 63
+      },
+      "docs": "Total the customer owes, tax included.",
+      "snippet": "public long totalCents() {\n    return amountCents + taxCents;\n  }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "description": "What the customer actually has to pay.",
+          "label": "Invoice: total cents"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getId",
+      "kind": "function",
+      "name": "Invoice.getId",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 65,
+        "endLine": 65
+      },
+      "snippet": "public Long getId() { return id; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get id"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getCustomer",
+      "kind": "function",
+      "name": "Invoice.getCustomer",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 66,
+        "endLine": 66
+      },
+      "snippet": "public String getCustomer() { return customer; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "customer",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get customer"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getAmountCents",
+      "kind": "function",
+      "name": "Invoice.getAmountCents",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 67,
+        "endLine": 67
+      },
+      "snippet": "public long getAmountCents() { return amountCents; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get amount cents"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.setAmountCents",
+      "kind": "function",
+      "name": "Invoice.setAmountCents",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 68,
+        "endLine": 68
+      },
+      "snippet": "public void setAmountCents(long amountCents) { this.amountCents = amountCents; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: set amount cents"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getTaxCents",
+      "kind": "function",
+      "name": "Invoice.getTaxCents",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 69,
+        "endLine": 69
+      },
+      "snippet": "public long getTaxCents() { return taxCents; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "tax",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get tax cents"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.setTaxCents",
+      "kind": "function",
+      "name": "Invoice.setTaxCents",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 70,
+        "endLine": 70
+      },
+      "snippet": "public void setTaxCents(long taxCents) { this.taxCents = taxCents; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "tax",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: set tax cents"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getStatus",
+      "kind": "function",
+      "name": "Invoice.getStatus",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 71,
+        "endLine": 71
+      },
+      "snippet": "public Status getStatus() { return status; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get status"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.setStatus",
+      "kind": "function",
+      "name": "Invoice.setStatus",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 72,
+        "endLine": 72
+      },
+      "snippet": "public void setStatus(Status status) { this.status = status; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: set status"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getDueDate",
+      "kind": "function",
+      "name": "Invoice.getDueDate",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 73,
+        "endLine": 73
+      },
+      "snippet": "public LocalDate getDueDate() { return dueDate; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get due date"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.setDueDate",
+      "kind": "function",
+      "name": "Invoice.setDueDate",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 74,
+        "endLine": 74
+      },
+      "snippet": "public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: set due date"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getSentAt",
+      "kind": "function",
+      "name": "Invoice.getSentAt",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 75,
+        "endLine": 75
+      },
+      "snippet": "public Instant getSentAt() { return sentAt; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get sent at"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.setSentAt",
+      "kind": "function",
+      "name": "Invoice.setSentAt",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 76,
+        "endLine": 76
+      },
+      "snippet": "public void setSentAt(Instant sentAt) { this.sentAt = sentAt; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: set sent at"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.getMemo",
+      "kind": "function",
+      "name": "Invoice.getMemo",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 77,
+        "endLine": 77
+      },
+      "snippet": "public String getMemo() { return memo; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: get memo"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Invoice.setMemo",
+      "kind": "function",
+      "name": "Invoice.setMemo",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 78,
+        "endLine": 78
+      },
+      "snippet": "public void setMemo(String memo) { this.memo = memo; }",
+      "group": "Invoice",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice: set memo"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/Invoice.java::Status",
+      "kind": "class",
+      "name": "Status",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/Invoice.java",
+        "line": 85,
+        "endLine": 87
+      },
+      "docs": "Where an invoice has got to in its life.",
+      "tags": [
+        "invoice",
+        "enum",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "description": "Draft is not yet with the customer, sent is awaiting payment, overdue is past its due date, paid is settled, void was withdrawn."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository",
+      "kind": "class",
+      "name": "InvoiceRepository",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/InvoiceRepository.java",
+        "line": 19,
+        "endLine": 50
+      },
+      "docs": "Persistence for Invoice. Derived queries cover the dashboard and the nightly sweep; the two hand-written statements exist for the cases Spring Data cannot express. Since 1.0.",
+      "tags": [
+        "invoice",
+        "billing",
+        "repository",
+        "interface",
+        "repository",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice records",
+          "description": "Reads and writes invoices in the billing database."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatus",
+      "kind": "function",
+      "name": "InvoiceRepository.findByStatus",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/InvoiceRepository.java",
+        "line": 23,
+        "endLine": 23
+      },
+      "docs": "Every invoice in one status, for the dashboard filters.",
+      "group": "InvoiceRepository",
+      "signature": "List<Invoice> findByStatus(Invoice.Status status);",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice records: find by status"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatusAndDueDateBefore",
+      "kind": "function",
+      "name": "InvoiceRepository.findByStatusAndDueDateBefore",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/InvoiceRepository.java",
+        "line": 30,
+        "endLine": 30
+      },
+      "docs": "Invoices in a status whose due date has already passed. See: com.acme.invoices.jobs.OverdueInvoiceJob.",
+      "group": "InvoiceRepository",
+      "signature": "List<Invoice> findByStatusAndDueDateBefore(Invoice.Status status, LocalDate cutoff);",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "description": "The unpaid invoices that are now late.",
+          "label": "Invoice records: find by status and due date before"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.outstandingCentsFor",
+      "kind": "function",
+      "name": "InvoiceRepository.outstandingCentsFor",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/InvoiceRepository.java",
+        "line": 37,
+        "endLine": 39
+      },
+      "docs": "Everything a customer still owes, tax included. Since 1.1.",
+      "group": "InvoiceRepository",
+      "signature": "@Query(\"select coalesce(sum(i.amountCents + i.taxCents), 0) from Invoice i \" + \"where i.customer = :customer and i.statu",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "description": "How much money is outstanding for one customer right now.",
+          "label": "Invoice records: outstanding cents for"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.markOverdue",
+      "kind": "function",
+      "name": "InvoiceRepository.markOverdue",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/domain/InvoiceRepository.java",
+        "line": 47,
+        "endLine": 49
+      },
+      "docs": "Bulk-marks the given invoices overdue in a single statement. Since 1.2.",
+      "group": "InvoiceRepository",
+      "signature": "@Modifying(clearAutomatically = true) @Query(\"update Invoice i set i.status = :status where i.id in :ids\") int markOverd",
+      "tags": [
+        "invoice",
+        "persistence"
+      ],
+      "facets": {
+        "business": {
+          "description": "Flags a batch of late invoices in one go, so the nightly sweep does not touch them one at a time.",
+          "label": "Invoice records: mark overdue"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher",
+      "kind": "class",
+      "name": "InvoiceEventPublisher",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java",
+        "line": 18,
+        "endLine": 55
+      },
+      "docs": "Kafka adapter for the invoice module: announces invoice lifecycle events and consumes settlements from the payments service. Since 1.0.",
+      "tags": [
+        "invoice",
+        "messaging",
+        "component"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice announcements",
+          "description": "Tells other systems when an invoice goes out, and hears back when it is paid."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.publishInvoiceSent",
+      "kind": "function",
+      "name": "InvoiceEventPublisher.publishInvoiceSent",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java",
+        "line": 35,
+        "endLine": 39
+      },
+      "docs": "Publishes invoice.sent so the notifier can email the PDF.",
+      "snippet": "public void publishInvoiceSent(Invoice invoice) {\n    String payload = \"{\\\"invoiceId\\\":%d,\\\"customer\\\":\\\"%s\\\",\\\"totalCents\\\":%d}\"\n        .formatted(invoice.getId(), invoice.getCustomer(), invoice.totalCents());\n    kafka.send(\"invoice.sent\", invoice.getId().toString(), payload);\n  }",
+      "group": "InvoiceEventPublisher",
+      "tags": [
+        "invoice",
+        "messaging"
+      ],
+      "facets": {
+        "business": {
+          "description": "Tells the rest of the business an invoice has gone out.",
+          "label": "Announce the send"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::queue::invoice.sent",
+      "kind": "queue",
+      "name": "invoice.sent",
+      "lang": "java",
+      "tags": [
+        "invoice",
+        "data"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice sent",
+          "description": "Announced whenever an invoice goes out to a customer."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
+      "kind": "function",
+      "name": "InvoiceEventPublisher.onPaymentSettled",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java",
+        "line": 47,
+        "endLine": 54
+      },
+      "docs": "Marks an invoice paid when the payments service settles it.",
+      "snippet": "@KafkaListener(topics = \"payment.settled\", groupId = \"invoices\")\n  public void onPaymentSettled(String invoiceId) {\n    invoices.findById(Long.valueOf(invoiceId)).ifPresent(invoice -> {\n      invoice.setStatus(Invoice.Status.PAID);\n      invoices.save(invoice);\n      log.info(\"invoice {} settled\", invoiceId);\n    });\n  }",
+      "group": "InvoiceEventPublisher",
+      "tags": [
+        "invoice",
+        "payment",
+        "messaging",
+        "entrypoint",
+        "consumer"
+      ],
+      "facets": {
+        "business": {
+          "description": "Marks the invoice paid once the payment service confirms the money.",
+          "label": "Record a payment"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::queue::payment.settled",
+      "kind": "queue",
+      "name": "payment.settled",
+      "lang": "java",
+      "tags": [
+        "payment",
+        "data"
+      ],
+      "facets": {
+        "business": {
+          "label": "Payment received",
+          "description": "Heard from the payments service when a customer pays."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob",
+      "kind": "class",
+      "name": "OverdueInvoiceJob",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java",
+        "line": 20,
+        "endLine": 50
+      },
+      "docs": "Nightly sweep that flags sent invoices whose due date has passed. Since 1.2.",
+      "tags": [
+        "invoice",
+        "billing",
+        "component",
+        "scheduled"
+      ],
+      "facets": {
+        "business": {
+          "label": "Overdue sweep",
+          "description": "The nightly check that flags invoices the customer has not paid in time."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob.markOverdueInvoices",
+      "kind": "function",
+      "name": "OverdueInvoiceJob.markOverdueInvoices",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java",
+        "line": 39,
+        "endLine": 49
+      },
+      "docs": "Finds every sent invoice past its due date and marks it overdue. See: com.acme.invoices.domain.InvoiceRepository#markOverdue(List, Invoice.Status).",
+      "snippet": "@Scheduled(cron = \"0 15 2 * * *\")\n  @Transactional\n  public void markOverdueInvoices() {\n    List<Invoice> late = invoices.findByStatusAndDueDateBefore(Invoice.Status.SENT, LocalDate.now());\n    // @business Nothing to do when every sent invoice is still within its terms\n    if (late.isEmpty()) {\n      return;\n    }\n    int updated = invoices.markOverdue(late.stream().map(Invoice::getId).toList(), Invoice.Status.OVERDUE);\n    log.info(\"marked {} invoice(s) overdue\", updated);\n  }",
+      "branches": [
+        {
+          "kind": "if",
+          "line": 44,
+          "condition": "late.isEmpty()",
+          "exits": true,
+          "business": "Nothing to do when every sent invoice is still within its terms",
+          "arms": [
+            {
+              "label": "then",
+              "requires": "late.isEmpty()",
+              "line": 44,
+              "endLine": 46
+            }
+          ]
+        }
+      ],
+      "group": "Overdue sweep",
+      "tags": [
+        "invoice",
+        "entrypoint",
+        "cron",
+        "overdue-check",
+        "scheduled"
+      ],
+      "facets": {
+        "business": {
+          "description": "Marks unpaid invoices past their due date so collections can chase them.",
+          "label": "Flag late invoices"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService",
+      "kind": "class",
+      "name": "InvoiceService",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 25,
+        "endLine": 169
+      },
+      "docs": "Invoice lifecycle: drafting, editing, sending and cancelling. The rules that decide whether an invoice may change are all here — the controller never inspects status itself. Since 1.0.",
+      "tags": [
+        "invoice",
+        "billing",
+        "service"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice operations",
+          "description": "The rules for drafting, editing, sending and cancelling an invoice."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
+      "kind": "function",
+      "name": "InvoiceService.list",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 44,
+        "endLine": 48
+      },
+      "docs": "Lists invoices, optionally narrowed to one status.",
+      "snippet": "@Transactional(readOnly = true)\n  public List<Invoice> list(Invoice.Status status) {\n    // @business Show every invoice unless the caller asked for one status\n    return status == null ? invoices.findAll() : invoices.findByStatus(status);\n  }",
+      "branches": [
+        {
+          "kind": "ternary",
+          "line": 47,
+          "condition": "status == null",
+          "arms": [
+            {
+              "label": "then",
+              "requires": "status == null",
+              "line": 47,
+              "endLine": 47
+            },
+            {
+              "label": "else",
+              "requires": "status != null",
+              "line": 47,
+              "endLine": 47
+            }
+          ]
+        }
+      ],
+      "group": "Invoice operations",
+      "tags": [
+        "invoice"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice operations: list"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "kind": "function",
+      "name": "InvoiceService.get",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 55,
+        "endLine": 59
+      },
+      "docs": "Fetches one invoice, or fails with 404 when it does not exist. See: #list(Invoice.Status).",
+      "snippet": "@Transactional(readOnly = true)\n  public Invoice get(Long id) {\n    return invoices.findById(id)\n        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, \"no such invoice\"));\n  }",
+      "group": "Invoice operations",
+      "tags": [
+        "invoice"
+      ],
+      "facets": {
+        "business": {
+          "label": "Invoice operations: get"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
+      "kind": "function",
+      "name": "InvoiceService.create",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 68,
+        "endLine": 78
+      },
+      "docs": "Drafts an invoice and computes its tax from the customer's country. Since 1.0.",
+      "snippet": "@Transactional\n  public Invoice create(CreateInvoiceRequest request) {\n    // @business An invoice must be for a real amount before we will draft it\n    if (request.amountCents() <= 0) {\n      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, \"invoice amount must be positive\");\n    }\n    long taxCents = taxCalculator.taxFor(request.country(), request.amountCents());\n    Invoice invoice = new Invoice(request.customer(), request.amountCents(), taxCents, request.dueDate());\n    invoice.setMemo(request.memo());\n    return invoices.save(invoice);\n  }",
+      "branches": [
+        {
+          "kind": "if",
+          "line": 71,
+          "condition": "request.amountCents() <= 0",
+          "exits": true,
+          "business": "An invoice must be for a real amount before we will draft it",
+          "arms": [
+            {
+              "label": "then",
+              "requires": "request.amountCents() <= 0",
+              "line": 71,
+              "endLine": 73
+            }
+          ]
+        }
+      ],
+      "group": "Invoice operations",
+      "tags": [
+        "invoice"
+      ],
+      "facets": {
+        "business": {
+          "description": "Raises a new invoice for a customer, with tax worked out.",
+          "label": "Draft an invoice"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
+      "kind": "function",
+      "name": "InvoiceService.update",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 86,
+        "endLine": 99
+      },
+      "docs": "Saves edits to a draft; refuses once the invoice has left draft.",
+      "snippet": "@Transactional\n  public Invoice update(Long id, CreateInvoiceRequest request) {\n    Invoice invoice = get(id);\n    // @business Reject edits once the invoice has left draft\n    if (invoice.getStatus() != Invoice.Status.DRAFT) {\n      throw new ResponseStatusException(HttpStatus.CONFLICT, \"invoice is no longer editable\");\n    } else { // @business Still a draft: re-price it with the current tax rules\n      invoice.setAmountCents(request.amountCents());\n      invoice.setTaxCents(taxCalculator.taxFor(request.country(), request.amountCents()));\n      invoice.setDueDate(request.dueDate());\n      invoice.setMemo(request.memo());\n    }\n    return invoices.save(invoice);\n  }",
+      "branches": [
+        {
+          "kind": "if",
+          "line": 90,
+          "condition": "invoice.getStatus() != Invoice.Status.DRAFT",
+          "exits": true,
+          "business": "Reject edits once the invoice has left draft",
+          "arms": [
+            {
+              "label": "then",
+              "requires": "invoice.getStatus() != Invoice.Status.DRAFT",
+              "line": 90,
+              "endLine": 92
+            },
+            {
+              "label": "else",
+              "requires": "invoice.getStatus() == Invoice.Status.DRAFT",
+              "line": 92,
+              "endLine": 97,
+              "business": "Still a draft: re-price it with the current tax rules"
+            }
+          ]
+        }
+      ],
+      "group": "Invoice operations",
+      "tags": [
+        "invoice"
+      ],
+      "facets": {
+        "business": {
+          "description": "Changes a draft invoice before it reaches the customer.",
+          "label": "Correct a draft"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
+      "kind": "function",
+      "name": "InvoiceService.send",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 112,
+        "endLine": 141
+      },
+      "docs": "Sends an invoice: status check, send stamp, then invoice.sent on the bus for the notifier to email the PDF. See: TaxCalculator#treatmentFor(String). Since 1.0.",
+      "snippet": "@Transactional\n  public Invoice send(Long id, String actorAccount) {\n    Invoice invoice = get(id);\n    requireBillingOwner(invoice, actorAccount);\n\n    // @business Only a draft or an already-late invoice may be sent —\n    // a paid or cancelled invoice must never reach the customer again.\n    switch (invoice.getStatus()) {\n      // @business Never sent before: this is the first time it goes out\n      case DRAFT:\n        break;\n      case OVERDUE: // @business Already late: sending again is a payment reminder\n        break;\n      case PAID: // @business Nothing left to chase — the customer has already paid\n  …",
+      "branches": [
+        {
+          "kind": "switch",
+          "line": 119,
+          "condition": "invoice.getStatus()",
+          "business": "Only a draft or an already-late invoice may be sent — a paid or cancelled invoice must never reach the customer again.",
+          "arms": [
+            {
+              "label": "case DRAFT",
+              "requires": "invoice.getStatus() == DRAFT",
+              "line": 121,
+              "endLine": 122,
+              "business": "Never sent before: this is the first time it goes out"
+            },
+            {
+              "label": "case OVERDUE",
+              "requires": "invoice.getStatus() == OVERDUE",
+              "line": 123,
+              "endLine": 124,
+              "business": "Already late: sending again is a payment reminder"
+            },
+            {
+              "label": "case PAID",
+              "requires": "invoice.getStatus() == PAID",
+              "line": 125,
+              "endLine": 125,
+              "business": "Nothing left to chase — the customer has already paid"
+            },
+            {
+              "label": "case VOID",
+              "requires": "invoice.getStatus() == VOID",
+              "line": 126,
+              "endLine": 126
+            },
+            {
+              "label": "default",
+              "requires": "no case matched",
+              "line": 127,
+              "endLine": 128
+            }
+          ]
+        },
+        {
+          "kind": "catch",
+          "line": 135,
+          "condition": "exception in try",
+          "arms": [
+            {
+              "label": "try",
+              "requires": "no exception thrown",
+              "line": 135,
+              "endLine": 137,
+              "business": "Announce the send so the notifier can email the customer"
+            },
+            {
+              "label": "catch",
+              "requires": "exception thrown",
+              "line": 137,
+              "endLine": 139,
+              "business": "If the message bus is down the invoice still counts as sent; the nightly sweep re-announces it"
+            }
+          ]
+        }
+      ],
+      "group": "Invoice operations",
+      "tags": [
+        "invoice",
+        "billing"
+      ],
+      "facets": {
+        "business": {
+          "description": "Locks the amounts, records the send date, and emails the invoice.",
+          "label": "Send to customer"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
+      "kind": "function",
+      "name": "InvoiceService.delete",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 149,
+        "endLine": 154
+      },
+      "docs": "Cancels an invoice and removes the row.",
+      "snippet": "@Transactional\n  public void delete(Long id, String actorAccount) {\n    Invoice invoice = get(id);\n    requireBillingOwner(invoice, actorAccount);\n    invoices.delete(invoice);\n  }",
+      "group": "Invoice operations",
+      "tags": [
+        "invoice"
+      ],
+      "facets": {
+        "business": {
+          "description": "Withdraws an invoice raised by mistake.",
+          "label": "Cancel an invoice"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.requireBillingOwner",
+      "kind": "guard",
+      "name": "InvoiceService.requireBillingOwner: billing-owner",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/InvoiceService.java",
+        "line": 163,
+        "endLine": 168
+      },
+      "docs": "Fails the request unless the caller acts for the invoice's billing account.",
+      "snippet": "void requireBillingOwner(Invoice invoice, String actorAccount) {\n    // @business Refuse the action when the caller belongs to another account\n    if (!invoice.getCustomer().equalsIgnoreCase(actorAccount)) {\n      throw new ResponseStatusException(HttpStatus.FORBIDDEN, \"invoice belongs to another account\");\n    }\n  }",
+      "group": "Invoice operations",
+      "tags": [
+        "invoice",
+        "auth"
+      ],
+      "facets": {
+        "business": {
+          "description": "Only the account an invoice belongs to may send or cancel it.",
+          "label": "Account check"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator",
+      "kind": "class",
+      "name": "TaxCalculator",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/TaxCalculator.java",
+        "line": 16,
+        "endLine": 76
+      },
+      "docs": "Region-based tax lookup keyed by the customer's billing country. Rates are held in memory here; the production service refreshes them nightly from the tax provider. Since 1.0.",
+      "tags": [
+        "invoice",
+        "tax",
+        "tax",
+        "component"
+      ],
+      "facets": {
+        "business": {
+          "description": "Works out what tax a customer owes based on the country they are billed in.",
+          "label": "Tax rules"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
+      "kind": "function",
+      "name": "TaxCalculator.taxFor",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/TaxCalculator.java",
+        "line": 30,
+        "endLine": 32
+      },
+      "docs": "Tax owed on netCents for a customer in country. Rounds to the nearest cent, matching what the invoice PDF prints. See: #treatmentFor(String). Since 1.0.",
+      "snippet": "public long taxFor(String country, long netCents) {\n    return Math.round(netCents * RATES.getOrDefault(iso(country), 0.0));\n  }",
+      "group": "TaxCalculator",
+      "tags": [
+        "invoice",
+        "tax"
+      ],
+      "facets": {
+        "business": {
+          "label": "Work out the tax",
+          "description": "The tax owed on an amount for the customer's country."
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.treatmentFor",
+      "kind": "function",
+      "name": "TaxCalculator.treatmentFor",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/TaxCalculator.java",
+        "line": 43,
+        "endLine": 53
+      },
+      "docs": "Human-readable tax treatment for a country — printed on the invoice PDF and written to the audit log. See: #taxFor(String, long). Since 1.2.",
+      "snippet": "public String treatmentFor(String country) {\n    String iso = iso(country);\n    // @business Pick the wording that matches the customer's tax region —\n    // EU VAT, UK VAT, or none charged here.\n    return switch (iso) {\n      // @business EU member states: VAT at the local rate\n      case \"DE\", \"FR\" -> \"VAT \" + percent(iso);\n      case \"GB\" -> \"UK VAT 20%\"; // @business United Kingdom: standard-rate VAT\n      default -> \"no VAT (handled downstream)\"; // @business US and the rest of the world: no VAT charged here\n    };\n  }",
+      "branches": [
+        {
+          "kind": "switch",
+          "line": 47,
+          "condition": "iso",
+          "arms": [
+            {
+              "label": "case \"DE\", \"FR\"",
+              "requires": "iso == \"DE\" || iso == \"FR\"",
+              "line": 49,
+              "endLine": 49,
+              "business": "EU member states: VAT at the local rate"
+            },
+            {
+              "label": "case \"GB\"",
+              "requires": "iso == \"GB\"",
+              "line": 50,
+              "endLine": 50,
+              "business": "United Kingdom: standard-rate VAT"
+            },
+            {
+              "label": "default",
+              "requires": "no case matched",
+              "line": 51,
+              "endLine": 51,
+              "business": "US and the rest of the world: no VAT charged here"
+            }
+          ]
+        }
+      ],
+      "group": "TaxCalculator",
+      "tags": [
+        "invoice",
+        "tax"
+      ],
+      "facets": {
+        "business": {
+          "description": "How tax is handled for this customer, in plain English.",
+          "label": "Explain the tax"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.rateFor",
+      "kind": "function",
+      "name": "TaxCalculator.rateFor",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/TaxCalculator.java",
+        "line": 64,
+        "endLine": 67
+      },
+      "docs": "Raw decimal tax rate for a country. Deprecated: Prefer treatmentFor(String) for display and taxFor(String, long) for amounts; direct rate access is slated for removal in 2.0. Since 0.9.",
+      "snippet": "@Deprecated(since = \"1.2\", forRemoval = true)\n  public double rateFor(String country) {\n    return RATES.getOrDefault(iso(country), 0.0);\n  }",
+      "group": "TaxCalculator",
+      "tags": [
+        "invoice",
+        "tax",
+        "deprecated"
+      ],
+      "facets": {
+        "business": {
+          "label": "Tax rules: rate for"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.percent",
+      "kind": "function",
+      "name": "TaxCalculator.percent",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/TaxCalculator.java",
+        "line": 69,
+        "endLine": 71
+      },
+      "snippet": "private String percent(String iso) {\n    return Math.round(rateFor(iso) * 100) + \"%\";\n  }",
+      "group": "TaxCalculator",
+      "tags": [
+        "invoice",
+        "tax"
+      ],
+      "facets": {
+        "business": {
+          "label": "Tax rules: percent"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    },
+    {
+      "id": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
+      "kind": "function",
+      "name": "TaxCalculator.iso",
+      "lang": "java",
+      "loc": {
+        "repo": "compat",
+        "path": "src/main/java/com/acme/invoices/service/TaxCalculator.java",
+        "line": 73,
+        "endLine": 75
+      },
+      "snippet": "private static String iso(String country) {\n    return country == null ? \"US\" : country.toUpperCase();\n  }",
+      "branches": [
+        {
+          "kind": "ternary",
+          "line": 74,
+          "condition": "country == null",
+          "arms": [
+            {
+              "label": "then",
+              "requires": "country == null",
+              "line": 74,
+              "endLine": 74
+            },
+            {
+              "label": "else",
+              "requires": "country != null",
+              "line": 74,
+              "endLine": 74
+            }
+          ]
+        }
+      ],
+      "group": "TaxCalculator",
+      "tags": [
+        "invoice",
+        "tax"
+      ],
+      "facets": {
+        "business": {
+          "label": "Tax rules: iso"
+        }
+      },
+      "project": {
+        "name": "compat",
+        "root": "."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "kind": "calls",
+      "from": "compat::route::GET /api/invoices",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.list",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "the mapping annotation on list"
+      }
+    },
+    {
+      "id": "e1",
+      "kind": "calls",
+      "from": "compat::route::GET /api/invoices/:param",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.get",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "the mapping annotation on get"
+      }
+    },
+    {
+      "id": "e2",
+      "kind": "calls",
+      "from": "compat::route::POST /api/invoices",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.create",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "the mapping annotation on create"
+      }
+    },
+    {
+      "id": "e3",
+      "kind": "calls",
+      "from": "compat::route::PUT /api/invoices/:param",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.update",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "the mapping annotation on update"
+      }
+    },
+    {
+      "id": "e4",
+      "kind": "calls",
+      "from": "compat::route::POST /api/invoices/:param/send",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.send",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "the mapping annotation on send"
+      }
+    },
+    {
+      "id": "e5",
+      "kind": "guards",
+      "from": "compat::guard::PreAuthorize(hasAuthority('billing:admin'))",
+      "to": "compat::route::POST /api/invoices/:param/send",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@PreAuthorize on send"
+      }
+    },
+    {
+      "id": "e6",
+      "kind": "calls",
+      "from": "compat::route::DELETE /api/invoices/:param",
+      "to": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.delete",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "the mapping annotation on delete"
+      }
+    },
+    {
+      "id": "e7",
+      "kind": "guards",
+      "from": "compat::guard::PreAuthorize(hasAuthority('billing:admin'))",
+      "to": "compat::route::DELETE /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@PreAuthorize on delete"
+      }
+    },
+    {
+      "id": "e8",
+      "kind": "publishes",
+      "from": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.publishInvoiceSent",
+      "to": "compat::queue::invoice.sent"
+    },
+    {
+      "id": "e9",
+      "kind": "consumes",
+      "from": "compat::queue::payment.settled",
+      "to": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "a listener annotation naming payment.settled"
+      }
+    },
+    {
+      "id": "e10",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.list",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
+      "meta": {
+        "line": 41
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e11",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.get",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 51
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e12",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.create",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
+      "meta": {
+        "line": 63
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e13",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.update",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
+      "meta": {
+        "line": 73
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e14",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.send",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
+      "meta": {
+        "line": 86
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e15",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/api/InvoiceController.java::InvoiceController.delete",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
+      "meta": {
+        "line": 98
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceService"
+      }
+    },
+    {
+      "id": "e16",
+      "kind": "reads",
+      "from": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "findById",
+        "code": "invoices.findById(Long.valueOf(invoiceId)).ifPresent(invoice -> { invoice.setStatus(Invoice.Status.PAID); invoices.save(",
+        "line": 49
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "findById on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e17",
+      "kind": "writes",
+      "from": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.onPaymentSettled",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "save",
+        "code": "invoices.save(invoice);",
+        "line": 51
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "save on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e18",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob.markOverdueInvoices",
+      "to": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatusAndDueDateBefore",
+      "meta": {
+        "line": 42
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceRepository"
+      }
+    },
+    {
+      "id": "e19",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/jobs/OverdueInvoiceJob.java::OverdueInvoiceJob.markOverdueInvoices",
+      "to": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.markOverdue",
+      "meta": {
+        "line": 47
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceRepository"
+      }
+    },
+    {
+      "id": "e20",
+      "kind": "reads",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "findAll",
+        "code": "return status == null ? invoices.findAll() : invoices.findByStatus(status);",
+        "line": 47
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "findAll on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e21",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.list",
+      "to": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatus",
+      "meta": {
+        "line": 47
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field invoices is declared InvoiceRepository"
+      }
+    },
+    {
+      "id": "e22",
+      "kind": "reads",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "findById",
+        "code": "return invoices.findById(id) .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, \"no such invoice\"));",
+        "line": 57
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "findById on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e23",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
+      "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
+      "meta": {
+        "line": 74
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field taxCalculator is declared TaxCalculator"
+      }
+    },
+    {
+      "id": "e24",
+      "kind": "writes",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.create",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "save",
+        "code": "return invoices.save(invoice);",
+        "line": 77
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "save on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e25",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 88
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "get is declared by InvoiceService itself"
+      }
+    },
+    {
+      "id": "e26",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
+      "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
+      "meta": {
+        "line": 94
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field taxCalculator is declared TaxCalculator"
+      }
+    },
+    {
+      "id": "e27",
+      "kind": "writes",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.update",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "save",
+        "code": "return invoices.save(invoice);",
+        "line": 98
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "save on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e28",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 114
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "get is declared by InvoiceService itself"
+      }
+    },
+    {
+      "id": "e29",
+      "kind": "guards",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.requireBillingOwner",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "InvoiceService.requireBillingOwner: billing-owner is a declared guard"
+      }
+    },
+    {
+      "id": "e30",
+      "kind": "writes",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "save",
+        "code": "Invoice sent = invoices.save(invoice);",
+        "line": 133
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "save on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e31",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.send",
+      "to": "compat::src/main/java/com/acme/invoices/events/InvoiceEventPublisher.java::InvoiceEventPublisher.publishInvoiceSent",
+      "meta": {
+        "line": 136
+      },
+      "resolution": {
+        "status": "heuristic",
+        "technique": "DI-binding",
+        "confidence": "MEDIUM",
+        "note": "the field events is declared InvoiceEventPublisher"
+      }
+    },
+    {
+      "id": "e32",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.get",
+      "meta": {
+        "line": 151
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "get is declared by InvoiceService itself"
+      }
+    },
+    {
+      "id": "e33",
+      "kind": "guards",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.requireBillingOwner",
+      "to": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "InvoiceService.requireBillingOwner: billing-owner is a declared guard"
+      }
+    },
+    {
+      "id": "e34",
+      "kind": "writes",
+      "from": "compat::src/main/java/com/acme/invoices/service/InvoiceService.java::InvoiceService.delete",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "delete",
+        "code": "invoices.delete(invoice);",
+        "line": 153
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "delete on a Spring Data repository of Invoice"
+      }
+    },
+    {
+      "id": "e35",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.taxFor",
+      "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
+      "meta": {
+        "line": 31
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "iso is declared by TaxCalculator itself"
+      }
+    },
+    {
+      "id": "e36",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.treatmentFor",
+      "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
+      "meta": {
+        "line": 44
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "iso is declared by TaxCalculator itself"
+      }
+    },
+    {
+      "id": "e37",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.treatmentFor",
+      "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.percent",
+      "meta": {
+        "line": 49
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "percent is declared by TaxCalculator itself"
+      }
+    },
+    {
+      "id": "e38",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.rateFor",
+      "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.iso",
+      "meta": {
+        "line": 66
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "iso is declared by TaxCalculator itself"
+      }
+    },
+    {
+      "id": "e39",
+      "kind": "calls",
+      "from": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.percent",
+      "to": "compat::src/main/java/com/acme/invoices/service/TaxCalculator.java::TaxCalculator.rateFor",
+      "meta": {
+        "line": 70
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "same-file",
+        "confidence": "HIGH",
+        "note": "rateFor is declared by TaxCalculator itself"
+      }
+    },
+    {
+      "id": "e40",
+      "kind": "validates",
+      "from": "compat::src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java::CreateInvoiceRequest",
+      "to": "compat::route::POST /api/invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@Valid CreateInvoiceRequest on the handler's parameters"
+      }
+    },
+    {
+      "id": "e41",
+      "kind": "validates",
+      "from": "compat::src/main/java/com/acme/invoices/api/dto/CreateInvoiceRequest.java::CreateInvoiceRequest",
+      "to": "compat::route::PUT /api/invoices/:param",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH",
+        "note": "@Valid CreateInvoiceRequest on the handler's parameters"
+      }
+    },
+    {
+      "id": "e42",
+      "kind": "reads",
+      "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatus",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "findByStatus",
+        "code": "findByStatus",
+        "line": 23
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "a repository method on Invoice"
+      }
+    },
+    {
+      "id": "e43",
+      "kind": "reads",
+      "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.findByStatusAndDueDateBefore",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "findByStatusAndDueDateBefore",
+        "code": "findByStatusAndDueDateBefore",
+        "line": 30
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "a repository method on Invoice"
+      }
+    },
+    {
+      "id": "e44",
+      "kind": "reads",
+      "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.outstandingCentsFor",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "outstandingCentsFor",
+        "code": "select coalesce(sum(i.amountCents + i.taxCents), 0) from Invoice i",
+        "line": 37
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "a repository method on Invoice"
+      }
+    },
+    {
+      "id": "e45",
+      "kind": "writes",
+      "from": "compat::src/main/java/com/acme/invoices/domain/InvoiceRepository.java::InvoiceRepository.markOverdue",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "markOverdue",
+        "code": "update Invoice i set i.status = :status where i.id in :ids",
+        "line": 47
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "a repository method on Invoice"
+      }
+    }
+  ],
+  "meta": {
+    "files": 9,
+    "sourceDigest": "119efaec39e1",
+    "stores": {
+      "unnamed": 1
+    },
+    "config": {
+      "files": [
+        {
+          "path": "farsight.config.json",
+          "dir": ".",
+          "root": true,
+          "fields": [
+            "tags",
+            "glossary"
+          ],
+          "ignored": []
+        }
+      ],
+      "conflicts": [],
+      "notes": [],
+      "glossary": [
+        {
+          "key": "InvoiceController",
+          "label": "Invoice endpoints",
+          "description": "The web address the billing screens call to work with invoices.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceService",
+          "label": "Invoice operations",
+          "description": "The rules for drafting, editing, sending and cancelling an invoice.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "TaxCalculator",
+          "label": "Tax rules",
+          "description": "Works out what tax a customer owes based on the country they are billed in.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "Invoice",
+          "label": "Invoice",
+          "description": "A bill sent to a customer: who owes it, how much, when it is due, and where it has got to.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceRepository",
+          "label": "Invoice records",
+          "description": "Reads and writes invoices in the billing database.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceEventPublisher",
+          "label": "Invoice announcements",
+          "description": "Tells other systems when an invoice goes out, and hears back when it is paid.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "OverdueInvoiceJob",
+          "label": "Overdue sweep",
+          "description": "The nightly check that flags invoices the customer has not paid in time.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "CreateInvoiceRequest",
+          "label": "New invoice details",
+          "description": "What a billing user must supply to raise an invoice.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceApiApplication",
+          "label": "Invoice service",
+          "description": "The Java backend that runs invoicing.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "invoices",
+          "label": "Invoice records",
+          "description": "Every invoice the business has raised.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceService.create",
+          "label": "Draft an invoice",
+          "description": "Raises a new invoice for a customer, with tax worked out.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceService.update",
+          "label": "Correct a draft",
+          "description": "Changes a draft invoice before it reaches the customer.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceService.send",
+          "label": "Send to customer",
+          "description": "Locks the amounts, records the send date, and emails the invoice.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceService.delete",
+          "label": "Cancel an invoice",
+          "description": "Withdraws an invoice raised by mistake.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceService.requireBillingOwner",
+          "label": "Account check",
+          "description": "Only the account an invoice belongs to may send or cancel it.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "TaxCalculator.taxFor",
+          "label": "Work out the tax",
+          "description": "The tax owed on an amount for the customer's country.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "TaxCalculator.treatmentFor",
+          "label": "Explain the tax",
+          "description": "How tax is handled for this customer, in plain English.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "OverdueInvoiceJob.markOverdueInvoices",
+          "label": "Flag late invoices",
+          "description": "Marks unpaid invoices past their due date so collections can chase them.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceEventPublisher.publishInvoiceSent",
+          "label": "Announce the send",
+          "description": "Tells the rest of the business an invoice has gone out.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoiceEventPublisher.onPaymentSettled",
+          "label": "Record a payment",
+          "description": "Marks the invoice paid once the payment service confirms the money.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "GET /api/invoices",
+          "label": "List invoices",
+          "description": "The invoices a billing user can act on today.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "GET /api/invoices/:param",
+          "label": "Open an invoice",
+          "description": "Everything about one invoice.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "POST /api/invoices",
+          "label": "Raise an invoice",
+          "description": "Creates a new draft invoice for a customer.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "PUT /api/invoices/:param",
+          "label": "Correct an invoice",
+          "description": "Saves changes to a draft before it is sent.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "POST /api/invoices/:param/send",
+          "label": "Send an invoice",
+          "description": "Sends the invoice to the customer and emails them the PDF.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "DELETE /api/invoices/:param",
+          "label": "Cancel an invoice",
+          "description": "Withdraws an invoice that should never have been raised.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "invoice.sent",
+          "label": "Invoice sent",
+          "description": "Announced whenever an invoice goes out to a customer.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "payment.settled",
+          "label": "Payment received",
+          "description": "Heard from the payments service when a customer pays.",
+          "file": "farsight.config.json"
+        }
+      ]
+    },
+    "tests": {
+      "files": 0,
+      "cases": 0,
+      "edges": {
+        "declared": 0,
+        "static": 0,
+        "observed": 0
+      },
+      "runs": 0,
+      "reports": [],
+      "gaps": [
+        {
+          "kind": "no-config",
+          "paths": [],
+          "text": "No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)"
+        }
+      ],
+      "blindSpots": [
+        "No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)"
+      ],
+      "sourceDigest": "119efaec39e1"
+    },
+    "projects": {
+      "tool": "none",
+      "projects": [
+        {
+          "name": "compat",
+          "root": ".",
+          "tags": [],
+          "via": "source"
+        }
+      ],
+      "tagDimensions": [
+        {
+          "key": "domain",
+          "prefix": "scope:",
+          "label": "Domain"
+        },
+        {
+          "key": "type",
+          "prefix": "type:",
+          "label": "Type"
+        },
+        {
+          "key": "platform",
+          "prefix": "platform:",
+          "label": "Platform"
+        }
+      ]
+    }
+  },
+  "configApplied": true
+}

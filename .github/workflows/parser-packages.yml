@@ -1,0 +1,58 @@
+name: parser-packages
+
+on:
+  pull_request:
+    paths:
+      - 'packages/graph/**'
+      - 'packages/code-parser/**'
+      - 'packages/parsers/**'
+      - 'scripts/*parser*.mjs'
+      - 'scripts/library-version.mjs'
+      - 'scripts/graph-schema.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - '.nvmrc'
+      - '.github/workflows/parser-packages.yml'
+      - '.github/workflows/publish-parser.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/graph/**'
+      - 'packages/code-parser/**'
+      - 'packages/parsers/**'
+      - 'scripts/*parser*.mjs'
+      - 'scripts/library-version.mjs'
+      - 'scripts/graph-schema.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - '.nvmrc'
+      - '.github/workflows/parser-packages.yml'
+      - '.github/workflows/publish-parser.yml'
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: parser-package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:parser:package
+      - run: pnpm --filter @farsight/graph --filter @farsight/code-parser test

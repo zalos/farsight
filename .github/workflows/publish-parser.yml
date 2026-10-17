@@ -1,0 +1,55 @@
+# Paired library release, independent of the application release workflow.
+# The version bump is a normal reviewed PR using scripts/library-version.mjs.
+name: publish-parser
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact reviewed library version on main (X.Y.Z)
+        type: string
+        required: true
+      dry_run:
+        description: Build and verify the tarballs without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-parser
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/parser-packages.yml
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: parser-libraries
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      LIBRARY_VERSION: ${{ inputs.version }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Require main for publication
+        if: ${{ github.ref != 'refs/heads/main' && !inputs.dry_run }}
+        run: exit 1
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:parser:package
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@11.15.0
+      - name: Publish the verified pair with OIDC and provenance
+        run: node scripts/publish-parser.mjs

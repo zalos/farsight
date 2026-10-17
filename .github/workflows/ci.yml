@@ -84,6 +84,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Verify the generated graph contract
+        run: node scripts/graph-schema.mjs --check
       - name: Typecheck packages (e2e types are checked by the e2e job)
         run: pnpm -r typecheck
       - run: pnpm -r test

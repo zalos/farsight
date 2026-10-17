@@ -12,6 +12,9 @@ function same(word: string, define?: string): StringEntry {
 }
 
 export const EXPORT_STRINGS: Record<string, StringEntry> = {
+  'export.graph.help': same('save a portable document for other tools; writes to standard output unless --out is given', 'Exports the saved analysis without local checkout paths or application bookkeeping. Source names, relationships and their evidence remain together.'),
+  'export.graph.missing': same('No saved analysis at {path}. Run farsight ingest first.', 'The portable export reads an existing saved analysis and does not start a new analysis.'),
+  'export.graph.sameFile': same('Choose an output file different from the saved application graph.', 'The portable document is a separate format. Export cannot overwrite the application snapshot it reads.'),
   // the control on each surface, and its menu
   'export.tool': same('Save', 'Saves what this view shows, whole, as a picture or a PDF, with where and when it was true written under it: the source, the sync, its commit, the day and the lens. The file is drawn in this browser; nothing is sent anywhere.'),
   'export.menu': same('Save this view', 'The ways this view can be saved. Each file carries the same footer: what it shows, the sync it was read at, and the day.'),

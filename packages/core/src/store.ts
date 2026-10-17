@@ -1,3 +1,4 @@
+import { graphDocument, mergeOccurrences, retargetOccurrences, type GraphDocument, type GraphSource } from '@farsight/graph';
 import { buildInfo } from './version.js';
 import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -65,7 +66,8 @@ export class GraphStore {
     for (const e of fragment.edges) {
       // re-key edges so fragments can't collide
       const key = `${e.kind}|${e.from}|${e.to}`;
-      this.edges.set(key, { ...e, id: key });
+      const occurrences = mergeOccurrences(this.edges.get(key)?.occurrences, retargetOccurrences(e));
+      this.edges.set(key, { ...e, id: key, ...(occurrences ? { occurrences } : {}) });
     }
     if (fragment.meta?.tests) {
       this.meta.tests = { ...this.meta.tests, [fragment.repo]: fragment.meta.tests };
@@ -143,7 +145,8 @@ export class GraphStore {
   replaceEdge(oldKey: string, edge: GraphEdge): void {
     this.edges.delete(oldKey);
     const key = `${edge.kind}|${edge.from}|${edge.to}`;
-    this.edges.set(key, { ...edge, id: key });
+    const occurrences = mergeOccurrences(this.edges.get(key)?.occurrences, retargetOccurrences(edge));
+    this.edges.set(key, { ...edge, id: key, ...(occurrences ? { occurrences } : {}) });
   }
 
   stats() {
@@ -154,6 +157,29 @@ export class GraphStore {
 
   toJSON() {
     return { meta: this.meta, roots: this.roots, nodes: [...this.nodes.values()], edges: [...this.edges.values()] };
+  }
+
+  /** Export the merged graph without local paths, build stamps or snapshot bookkeeping. */
+  toDocument(sourceId = 'workspace'): GraphDocument {
+    const nodes = this.allNodes();
+    const repos = new Set([...Object.keys(this.roots), ...Object.keys(this.meta.repos ?? {}),
+      ...nodes.map(node => node.loc?.repo ?? (node.id.includes('::') ? node.id.split('::')[0]! : '')).filter(Boolean)]);
+    const fields = ['tests', 'stories', 'stores', 'packages', 'projects', 'config', 'journeys', 'decisions'] as const;
+    for (const field of fields) for (const repo of Object.keys(this.meta[field] ?? {})) repos.add(repo);
+    const sources: GraphSource[] = [...repos].map(repo => {
+      const freshness = this.repoMeta(repo);
+      const meta: NonNullable<GraphSource['meta']> = { ...(freshness?.files != null ? { files: freshness.files } : {}),
+        ...(freshness?.sourceDigest ? { sourceDigest: freshness.sourceDigest } : {}) };
+      for (const field of fields) {
+        const value = this.meta[field]?.[repo];
+        if (value) Object.assign(meta, { [field]: value });
+      }
+      return { repo, meta };
+    });
+    return graphDocument({ repo: sourceId, nodes, edges: this.allEdges(), ...(this.meta.files != null ? { meta: {
+      files: this.meta.files,
+      ...(this.meta.sourceDigest ? { sourceDigest: this.meta.sourceDigest } : {}),
+    } } : {}) }, sources);
   }
 
   save(path: string): void {

@@ -11,5 +11,8 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "dependencies": {
+    "@farsight/graph": "workspace:*"
   }
 }

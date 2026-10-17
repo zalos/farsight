@@ -22,7 +22,7 @@ export function selectChecks(paths) {
       checks.validate = true;
     } else if (/^(?:packages|examples|schemas)\//.test(path)) {
       checks.validate = checks.e2e = true;
-      if (/^packages\/(?:core|echo)\//.test(path)) checks.echo = true;
+      if (/^packages\/(?:graph|core|echo)\//.test(path)) checks.echo = true;
     } else {
       return all(); // includes build/config/dependencies, workflows and this selector
     }

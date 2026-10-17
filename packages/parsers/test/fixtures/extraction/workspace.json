@@ -1,0 +1,2133 @@
+{
+  "repo": "compat",
+  "nodes": [
+    {
+      "id": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "kind": "component",
+      "name": "InvoicesPage",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web/src/app/invoices-page.tsx",
+        "line": 6,
+        "endLine": 13
+      },
+      "docs": "Lists the customer's invoices with the amount still owed.",
+      "snippet": "function InvoicesPage() {\n  return (\n    <PageShell title=\"Invoices\">\n      <p>Owed: {formatMoney(0)}</p>\n      <InvoiceList />\n    </PageShell>\n  );\n}",
+      "tags": [
+        "invoice",
+        "ux"
+      ],
+      "facets": {
+        "business": {
+          "label": "Open invoices",
+          "description": "The customer's open invoices, with the amount still owed."
+        }
+      },
+      "project": {
+        "name": "billing-web",
+        "root": "apps/billing-web",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:billing"
+        ]
+      }
+    },
+    {
+      "id": "compat::apps/billing-web/src/app/sign-in-page.tsx::SignInPage",
+      "kind": "component",
+      "name": "SignInPage",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web/src/app/sign-in-page.tsx",
+        "line": 2,
+        "endLine": 10
+      },
+      "docs": "Signs a billing user in with the email address their invoices go to.",
+      "snippet": "function SignInPage() {\n  return (\n    <form>\n      <label>\n        Email <input type=\"email\" name=\"email\" />\n      </label>\n    </form>\n  );\n}",
+      "tags": [
+        "ux"
+      ],
+      "project": {
+        "name": "billing-web",
+        "root": "apps/billing-web",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:billing"
+        ]
+      }
+    },
+    {
+      "id": "compat::page::/sign-in",
+      "kind": "page",
+      "name": "/sign-in",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web/src/main.tsx",
+        "line": 7
+      },
+      "tags": [
+        "ux",
+        "design:bw-01"
+      ],
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::apps/billing-web/docs/design/screens.json",
+        "id": "BW-01",
+        "name": "Sign in",
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Sign in",
+          "description": "Sign in with the email address the invoices go to."
+        }
+      },
+      "project": {
+        "name": "billing-web",
+        "root": "apps/billing-web",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:billing"
+        ]
+      }
+    },
+    {
+      "id": "compat::page::/invoices",
+      "kind": "page",
+      "name": "/invoices",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web/src/main.tsx",
+        "line": 8
+      },
+      "tags": [
+        "invoice",
+        "ux",
+        "design:bil-01"
+      ],
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::docs/design/screens.json",
+        "id": "BIL-01",
+        "name": "Open invoices",
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Open invoices",
+          "description": "The open invoices of the billing domain, with their amounts."
+        }
+      },
+      "project": {
+        "name": "billing-web",
+        "root": "apps/billing-web",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:billing"
+        ]
+      }
+    },
+    {
+      "id": "compat::apps/ops-admin/src/main.tsx::RunReport",
+      "kind": "component",
+      "name": "RunReport",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/ops-admin/src/main.tsx",
+        "line": 6,
+        "endLine": 8
+      },
+      "docs": "The overnight run: how much was collected today.",
+      "snippet": "function RunReport({ collected }: { collected: number }) {\n  return <PageShell title=\"Overnight run\">Collected {formatMoney(collected)}</PageShell>;\n}",
+      "tags": [
+        "ux"
+      ],
+      "facets": {
+        "business": {
+          "label": "Overnight run report",
+          "description": "How much the overnight run collected today."
+        }
+      },
+      "project": {
+        "name": "ops-admin",
+        "root": "apps/ops-admin",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:ops"
+        ]
+      }
+    },
+    {
+      "id": "compat::apps/ops-admin/src/main.tsx::DirectorySignIn",
+      "kind": "component",
+      "name": "DirectorySignIn",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/ops-admin/src/main.tsx",
+        "line": 11,
+        "endLine": 13
+      },
+      "docs": "Signs an operations user in through the company directory.",
+      "snippet": "function DirectorySignIn() {\n  return <PageShell title=\"Sign in with the directory\">Continue with the directory</PageShell>;\n}",
+      "tags": [
+        "ux"
+      ],
+      "project": {
+        "name": "ops-admin",
+        "root": "apps/ops-admin",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:ops"
+        ]
+      }
+    },
+    {
+      "id": "compat::page::/sign-in/directory",
+      "kind": "page",
+      "name": "/sign-in/directory",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/ops-admin/src/main.tsx",
+        "line": 17
+      },
+      "tags": [
+        "ux",
+        "design:oa-01"
+      ],
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::apps/ops-admin/docs/design/screens.json",
+        "id": "OA-01",
+        "name": "Sign in with the directory",
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Sign in with the directory",
+          "description": "Sign in through the company directory."
+        }
+      },
+      "project": {
+        "name": "ops-admin",
+        "root": "apps/ops-admin",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:ops"
+        ]
+      }
+    },
+    {
+      "id": "compat::page::/runs",
+      "kind": "page",
+      "name": "/runs",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/ops-admin/src/main.tsx",
+        "line": 18
+      },
+      "tags": [
+        "ux",
+        "design:ops-01"
+      ],
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::docs/design/screens.json",
+        "id": "OPS-01",
+        "name": "Overnight run",
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Overnight run",
+          "description": "The overnight run: how much was collected today."
+        }
+      },
+      "project": {
+        "name": "ops-admin",
+        "root": "apps/ops-admin",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:ops"
+        ]
+      }
+    },
+    {
+      "id": "compat::libs/billing/data-access/src/lib/db.ts::table",
+      "kind": "function",
+      "name": "table",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/billing/data-access/src/lib/db.ts",
+        "line": 6,
+        "endLine": 11
+      },
+      "snippet": "function table(name: string) {\n  return {\n    name,\n    findMany: (_q?: unknown): any[] => [],\n  };\n}",
+      "tags": [],
+      "project": {
+        "name": "billing-data-access",
+        "root": "libs/billing/data-access",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:data-access"
+        ]
+      }
+    },
+    {
+      "id": "compat::libs/billing/data-access/src/lib/db.ts::table.findMany",
+      "kind": "function",
+      "name": "findMany",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/billing/data-access/src/lib/db.ts",
+        "line": 9,
+        "endLine": 9
+      },
+      "snippet": "(_q?: unknown): any[] => []",
+      "tags": [
+        "callback"
+      ],
+      "project": {
+        "name": "billing-data-access",
+        "root": "libs/billing/data-access",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:data-access"
+        ]
+      }
+    },
+    {
+      "id": "compat::libs/billing/data-access/src/lib/invoices.ts::listOpenInvoices",
+      "kind": "function",
+      "name": "listOpenInvoices",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/billing/data-access/src/lib/invoices.ts",
+        "line": 11,
+        "endLine": 13
+      },
+      "docs": "Invoices the customer still has to pay.",
+      "snippet": "function listOpenInvoices(): Invoice[] {\n  return db.invoices.findMany({ where: { status: 'open' } });\n}",
+      "tags": [
+        "invoice"
+      ],
+      "project": {
+        "name": "billing-data-access",
+        "root": "libs/billing/data-access",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:data-access"
+        ]
+      }
+    },
+    {
+      "id": "compat::table::invoices",
+      "kind": "table",
+      "name": "invoices",
+      "tags": [
+        "invoice",
+        "data"
+      ],
+      "store": {
+        "name": "Billing DB",
+        "kind": "sql",
+        "engine": "postgres",
+        "via": "config",
+        "ref": "libs/billing/data-access/farsight.config.json stores: Billing DB"
+      },
+      "project": {
+        "name": "billing-data-access",
+        "root": "libs/billing/data-access",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:data-access"
+        ]
+      }
+    },
+    {
+      "id": "compat::libs/billing/feature-invoices/src/lib/invoice-list.tsx::InvoiceList",
+      "kind": "component",
+      "name": "InvoiceList",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+        "line": 6,
+        "endLine": 16
+      },
+      "docs": "The open invoices, newest first, with their due date and amount.",
+      "snippet": "function InvoiceList({ invoices = listOpenInvoices() }: { invoices?: Invoice[] }) {\n  return (\n    <ul>\n      {invoices.map((inv) => (\n        <li key={inv.id}>\n          {inv.number} · due {format(inv.dueAt, 'd MMM yyyy')} · <AmountCell cents={inv.totalCents} />\n        </li>\n      ))}\n    </ul>\n  );\n}",
+      "tags": [
+        "invoice",
+        "ux"
+      ],
+      "project": {
+        "name": "billing-feature-invoices",
+        "root": "libs/billing/feature-invoices",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:feature"
+        ]
+      }
+    },
+    {
+      "id": "compat::libs/billing/ui/src/lib/amount-cell.tsx::AmountCell",
+      "kind": "component",
+      "name": "AmountCell",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/billing/ui/src/lib/amount-cell.tsx",
+        "line": 4,
+        "endLine": 6
+      },
+      "docs": "One amount, right-aligned, in the account's currency.",
+      "snippet": "function AmountCell({ cents }: { cents: number }) {\n  return <span style={{ textAlign: 'right' }}>{formatMoney(cents / 100)}</span>;\n}",
+      "tags": [
+        "ux"
+      ],
+      "project": {
+        "name": "billing-ui",
+        "root": "libs/billing/ui",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:ui"
+        ]
+      }
+    },
+    {
+      "id": "compat::libs/shared/ui/src/lib/page-shell.tsx::PageShell",
+      "kind": "component",
+      "name": "PageShell",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/shared/ui/src/lib/page-shell.tsx",
+        "line": 4,
+        "endLine": 11
+      },
+      "docs": "The frame every screen sits in: a title and its content.",
+      "snippet": "function PageShell({ title, children }: { title: string; children?: ReactNode }) {\n  return (\n    <main>\n      <h1>{title}</h1>\n      {children}\n    </main>\n  );\n}",
+      "tags": [
+        "ux"
+      ],
+      "project": {
+        "name": "@nxw/shared-ui",
+        "root": "libs/shared/ui",
+        "type": "library",
+        "tags": [
+          "scope:shared",
+          "type:ui"
+        ]
+      }
+    },
+    {
+      "id": "compat::libs/shared/util/src/lib/format-money.ts::formatMoney",
+      "kind": "function",
+      "name": "formatMoney",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/shared/util/src/lib/format-money.ts",
+        "line": 2,
+        "endLine": 4
+      },
+      "docs": "An amount as money in words a person reads: 1234.5 → \"$1,234.50\".",
+      "snippet": "function formatMoney(amount: number, currency = 'USD'): string {\n  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);\n}",
+      "tags": [],
+      "facets": {
+        "business": {
+          "label": "Format an amount",
+          "description": "Writes an amount of money the way the business reads it."
+        }
+      },
+      "project": {
+        "name": "shared-util",
+        "root": "libs/shared/util",
+        "type": "library",
+        "tags": [
+          "scope:shared",
+          "type:util"
+        ]
+      }
+    },
+    {
+      "id": "compat::package::@nxw/billing/data-access",
+      "kind": "package",
+      "name": "@nxw/billing/data-access",
+      "tags": [],
+      "package": {
+        "scope": "workspace",
+        "project": "billing-data-access",
+        "root": "libs/billing/data-access/src"
+      }
+    },
+    {
+      "id": "compat::package::@nxw/billing/feature-invoices",
+      "kind": "package",
+      "name": "@nxw/billing/feature-invoices",
+      "tags": [],
+      "package": {
+        "scope": "workspace",
+        "project": "billing-feature-invoices",
+        "root": "libs/billing/feature-invoices/src"
+      }
+    },
+    {
+      "id": "compat::package::@nxw/billing/ui",
+      "kind": "package",
+      "name": "@nxw/billing/ui",
+      "tags": [],
+      "package": {
+        "scope": "workspace",
+        "project": "billing-ui",
+        "root": "libs/billing/ui/src"
+      }
+    },
+    {
+      "id": "compat::package::@nxw/shared/ui",
+      "kind": "package",
+      "name": "@nxw/shared/ui",
+      "tags": [],
+      "package": {
+        "scope": "workspace",
+        "project": "@nxw/shared-ui",
+        "root": "libs/shared/ui/src"
+      }
+    },
+    {
+      "id": "compat::package::@nxw/shared/util",
+      "kind": "package",
+      "name": "@nxw/shared/util",
+      "tags": [],
+      "package": {
+        "scope": "workspace",
+        "project": "shared-util",
+        "root": "libs/shared/util/src"
+      }
+    },
+    {
+      "id": "compat::package::date-fns",
+      "kind": "package",
+      "name": "date-fns",
+      "tags": [],
+      "package": {
+        "scope": "third-party",
+        "version": "^3.6.0",
+        "declaredIn": [
+          "package.json"
+        ],
+        "declarations": [
+          {
+            "path": "package.json",
+            "range": "^3.6.0",
+            "field": "dependencies"
+          }
+        ]
+      }
+    },
+    {
+      "id": "compat::package::react",
+      "kind": "package",
+      "name": "react",
+      "tags": [],
+      "package": {
+        "scope": "third-party",
+        "version": "^18.3.1",
+        "declaredIn": [
+          "package.json"
+        ],
+        "declarations": [
+          {
+            "path": "package.json",
+            "range": "^18.3.1",
+            "field": "dependencies"
+          }
+        ]
+      }
+    },
+    {
+      "id": "compat::package::react-router-dom",
+      "kind": "package",
+      "name": "react-router-dom",
+      "tags": [],
+      "package": {
+        "scope": "third-party",
+        "version": "^6.26.0",
+        "declaredIn": [
+          "package.json"
+        ],
+        "declarations": [
+          {
+            "path": "package.json",
+            "range": "^6.26.0",
+            "field": "dependencies"
+          }
+        ]
+      }
+    },
+    {
+      "id": "compat::module::apps/billing-web/src/app/invoices-page.tsx",
+      "kind": "module",
+      "name": "apps/billing-web/src/app/invoices-page.tsx",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web/src/app/invoices-page.tsx",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "billing-web",
+        "root": "apps/billing-web",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:billing"
+        ]
+      }
+    },
+    {
+      "id": "compat::module::apps/billing-web/src/main.tsx",
+      "kind": "module",
+      "name": "apps/billing-web/src/main.tsx",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web/src/main.tsx",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "billing-web",
+        "root": "apps/billing-web",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:billing"
+        ]
+      }
+    },
+    {
+      "id": "compat::module::apps/ops-admin/src/main.tsx",
+      "kind": "module",
+      "name": "apps/ops-admin/src/main.tsx",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/ops-admin/src/main.tsx",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "ops-admin",
+        "root": "apps/ops-admin",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:ops"
+        ]
+      }
+    },
+    {
+      "id": "compat::module::libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+      "kind": "module",
+      "name": "libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "billing-feature-invoices",
+        "root": "libs/billing/feature-invoices",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:feature"
+        ]
+      }
+    },
+    {
+      "id": "compat::module::libs/billing/ui/src/lib/amount-cell.tsx",
+      "kind": "module",
+      "name": "libs/billing/ui/src/lib/amount-cell.tsx",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/billing/ui/src/lib/amount-cell.tsx",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "billing-ui",
+        "root": "libs/billing/ui",
+        "type": "library",
+        "tags": [
+          "scope:billing",
+          "type:ui"
+        ]
+      }
+    },
+    {
+      "id": "compat::module::libs/shared/ui/src/lib/page-shell.tsx",
+      "kind": "module",
+      "name": "libs/shared/ui/src/lib/page-shell.tsx",
+      "loc": {
+        "repo": "compat",
+        "path": "libs/shared/ui/src/lib/page-shell.tsx",
+        "line": 1
+      },
+      "tags": [],
+      "project": {
+        "name": "@nxw/shared-ui",
+        "root": "libs/shared/ui",
+        "type": "library",
+        "tags": [
+          "scope:shared",
+          "type:ui"
+        ]
+      }
+    },
+    {
+      "id": "compat::design::apps/ops-admin/docs/design/screens.json",
+      "kind": "design",
+      "name": "Operations console",
+      "tags": [
+        "design"
+      ],
+      "signature": "1 screen · modified 2000-01-01T00:00:00.000Z (manifest)",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/ops-admin/docs/design/screens.json",
+        "line": 1
+      },
+      "facets": {
+        "business": {
+          "label": "Operations console"
+        }
+      },
+      "project": {
+        "name": "ops-admin",
+        "root": "apps/ops-admin",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:ops"
+        ]
+      }
+    },
+    {
+      "id": "compat::flow::ops-sign-in",
+      "kind": "flow",
+      "name": "Sign in with the directory",
+      "tags": [
+        "entrypoint",
+        "flow",
+        "design:ops-sign-in"
+      ],
+      "docs": "An operations user signs in before checking the overnight run.",
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::apps/ops-admin/docs/design/screens.json",
+        "id": "ops-sign-in",
+        "name": "Sign in with the directory",
+        "persona": "ops",
+        "group": "access",
+        "order": 1,
+        "position": 0,
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Sign in with the directory",
+          "description": "An operations user signs in before checking the overnight run."
+        }
+      }
+    },
+    {
+      "id": "compat::design::apps/billing-web/docs/design/screens.json",
+      "kind": "design",
+      "name": "Billing web — screens",
+      "tags": [
+        "design"
+      ],
+      "signature": "1 screen · modified 2000-01-01T00:00:00.000Z (manifest)",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web/docs/design/screens.json",
+        "line": 1
+      },
+      "facets": {
+        "business": {
+          "label": "Billing web — screens"
+        }
+      },
+      "project": {
+        "name": "billing-web",
+        "root": "apps/billing-web",
+        "type": "application",
+        "tags": [
+          "type:app",
+          "scope:billing"
+        ]
+      }
+    },
+    {
+      "id": "compat::flow::billing-sign-in",
+      "kind": "flow",
+      "name": "Sign in with email",
+      "tags": [
+        "entrypoint",
+        "flow",
+        "design:billing-sign-in"
+      ],
+      "docs": "A billing user signs in before reading their invoices.",
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::apps/billing-web/docs/design/screens.json",
+        "id": "billing-sign-in",
+        "name": "Sign in with email",
+        "persona": "billing",
+        "group": "access",
+        "order": 1,
+        "position": 0,
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Sign in with email",
+          "description": "A billing user signs in before reading their invoices."
+        }
+      }
+    },
+    {
+      "id": "compat::design::docs/design/screens.json",
+      "kind": "design",
+      "name": "NX example — screens",
+      "tags": [
+        "design"
+      ],
+      "signature": "2 screens · modified 2000-01-01T00:00:00.000Z (manifest)",
+      "loc": {
+        "repo": "compat",
+        "path": "docs/design/screens.json",
+        "line": 1
+      },
+      "facets": {
+        "business": {
+          "label": "NX example — screens"
+        }
+      }
+    },
+    {
+      "id": "compat::flow::review-open-invoices",
+      "kind": "flow",
+      "name": "Review open invoices",
+      "tags": [
+        "entrypoint",
+        "flow",
+        "design:review-open-invoices"
+      ],
+      "docs": "A billing user opens the list of open invoices and reads what is owed.",
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::docs/design/screens.json",
+        "id": "review-open-invoices",
+        "name": "Review open invoices",
+        "persona": "billing",
+        "group": "invoices",
+        "position": 0,
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Review open invoices",
+          "description": "A billing user opens the list of open invoices and reads what is owed."
+        }
+      }
+    },
+    {
+      "id": "compat::flow::check-report-runs",
+      "kind": "flow",
+      "name": "Check the overnight run",
+      "tags": [
+        "entrypoint",
+        "flow",
+        "design:check-report-runs"
+      ],
+      "docs": "An operations user checks how much the overnight run collected.",
+      "design": {
+        "status": "both",
+        "origin": "manifest",
+        "designId": "compat::design::docs/design/screens.json",
+        "id": "check-report-runs",
+        "name": "Check the overnight run",
+        "persona": "ops",
+        "group": "runs",
+        "position": 1,
+        "lastModified": "2000-01-01T00:00:00.000Z",
+        "freshness": "manifest"
+      },
+      "facets": {
+        "business": {
+          "label": "Check the overnight run",
+          "description": "An operations user checks how much the overnight run collected."
+        }
+      }
+    },
+    {
+      "id": "compat::test::apps/billing-web-e2e/src/invoices.spec.ts::the invoices page lists invoices",
+      "kind": "test",
+      "name": "the invoices page lists invoices",
+      "lang": "ts",
+      "loc": {
+        "repo": "compat",
+        "path": "apps/billing-web-e2e/src/invoices.spec.ts",
+        "line": 3,
+        "endLine": 6
+      },
+      "group": "apps/billing-web-e2e/src/invoices.spec.ts",
+      "tags": [
+        "test",
+        "test:e2e",
+        "runner:playwright"
+      ],
+      "test": {
+        "level": "e2e",
+        "runner": "playwright",
+        "suite": [],
+        "file": "apps/billing-web-e2e/src/invoices.spec.ts"
+      },
+      "project": {
+        "name": "billing-web-e2e",
+        "root": "apps/billing-web-e2e",
+        "type": "e2e",
+        "tags": [
+          "scope:billing"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e0",
+      "kind": "calls",
+      "from": "compat::libs/billing/data-access/src/lib/db.ts::table",
+      "to": "compat::libs/billing/data-access/src/lib/db.ts::table.findMany",
+      "meta": {
+        "deferred": true,
+        "line": 9
+      }
+    },
+    {
+      "id": "e1",
+      "kind": "reads",
+      "from": "compat::libs/billing/data-access/src/lib/invoices.ts::listOpenInvoices",
+      "to": "compat::table::invoices",
+      "meta": {
+        "op": "findMany",
+        "code": "db.invoices.findMany({ where: { status: 'open' } })",
+        "line": 12
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "db-builder",
+        "confidence": "HIGH",
+        "note": "a builder chain names the table"
+      }
+    },
+    {
+      "id": "e2",
+      "kind": "calls",
+      "from": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "to": "compat::libs/shared/util/src/lib/format-money.ts::formatMoney",
+      "meta": {
+        "line": 9
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import resolved on disk"
+      }
+    },
+    {
+      "id": "e3",
+      "kind": "calls",
+      "from": "compat::apps/ops-admin/src/main.tsx::RunReport",
+      "to": "compat::libs/shared/util/src/lib/format-money.ts::formatMoney",
+      "meta": {
+        "line": 7
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import resolved on disk"
+      }
+    },
+    {
+      "id": "e4",
+      "kind": "calls",
+      "from": "compat::libs/billing/ui/src/lib/amount-cell.tsx::AmountCell",
+      "to": "compat::libs/shared/util/src/lib/format-money.ts::formatMoney",
+      "meta": {
+        "line": 5
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import resolved on disk"
+      }
+    },
+    {
+      "id": "e5",
+      "kind": "renders",
+      "from": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "to": "compat::libs/shared/ui/src/lib/page-shell.tsx::PageShell",
+      "meta": {
+        "line": 8
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "jsx-render",
+        "confidence": "HIGH",
+        "note": "<PageShell> is written in this body"
+      }
+    },
+    {
+      "id": "e6",
+      "kind": "renders",
+      "from": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "to": "compat::libs/billing/feature-invoices/src/lib/invoice-list.tsx::InvoiceList",
+      "meta": {
+        "line": 10
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "jsx-render",
+        "confidence": "HIGH",
+        "note": "<InvoiceList> is written in this body"
+      }
+    },
+    {
+      "id": "e7",
+      "kind": "renders",
+      "from": "compat::page::/sign-in",
+      "to": "compat::apps/billing-web/src/app/sign-in-page.tsx::SignInPage",
+      "meta": {
+        "line": 7
+      }
+    },
+    {
+      "id": "e8",
+      "kind": "renders",
+      "from": "compat::page::/invoices",
+      "to": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "meta": {
+        "line": 8
+      }
+    },
+    {
+      "id": "e9",
+      "kind": "renders",
+      "from": "compat::apps/ops-admin/src/main.tsx::RunReport",
+      "to": "compat::libs/shared/ui/src/lib/page-shell.tsx::PageShell",
+      "meta": {
+        "line": 7
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "jsx-render",
+        "confidence": "HIGH",
+        "note": "<PageShell> is written in this body"
+      }
+    },
+    {
+      "id": "e10",
+      "kind": "renders",
+      "from": "compat::apps/ops-admin/src/main.tsx::DirectorySignIn",
+      "to": "compat::libs/shared/ui/src/lib/page-shell.tsx::PageShell",
+      "meta": {
+        "line": 12
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "jsx-render",
+        "confidence": "HIGH",
+        "note": "<PageShell> is written in this body"
+      }
+    },
+    {
+      "id": "e11",
+      "kind": "renders",
+      "from": "compat::page::/sign-in/directory",
+      "to": "compat::apps/ops-admin/src/main.tsx::DirectorySignIn",
+      "meta": {
+        "line": 17
+      }
+    },
+    {
+      "id": "e12",
+      "kind": "renders",
+      "from": "compat::page::/runs",
+      "to": "compat::apps/ops-admin/src/main.tsx::RunReport",
+      "meta": {
+        "line": 18
+      }
+    },
+    {
+      "id": "e13",
+      "kind": "renders",
+      "from": "compat::libs/billing/feature-invoices/src/lib/invoice-list.tsx::InvoiceList",
+      "to": "compat::libs/billing/ui/src/lib/amount-cell.tsx::AmountCell",
+      "meta": {
+        "line": 11
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "jsx-render",
+        "confidence": "HIGH",
+        "note": "<AmountCell> is written in this body"
+      }
+    },
+    {
+      "id": "e14",
+      "kind": "imports",
+      "from": "compat::module::apps/billing-web/src/app/invoices-page.tsx",
+      "to": "compat::package::@nxw/billing/feature-invoices",
+      "meta": {
+        "specifier": "@nxw/billing/feature-invoices",
+        "line": 1,
+        "form": "import",
+        "names": "InvoiceList"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e15",
+      "kind": "imports",
+      "from": "compat::module::apps/billing-web/src/app/invoices-page.tsx",
+      "to": "compat::package::@nxw/shared/util",
+      "meta": {
+        "specifier": "@nxw/shared/util",
+        "line": 2,
+        "form": "import",
+        "names": "formatMoney"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e16",
+      "kind": "imports",
+      "from": "compat::module::apps/billing-web/src/app/invoices-page.tsx",
+      "to": "compat::package::@nxw/shared/ui",
+      "meta": {
+        "specifier": "@nxw/shared/ui",
+        "line": 3,
+        "form": "import",
+        "names": "PageShell"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e17",
+      "kind": "imports",
+      "from": "compat::module::apps/billing-web/src/main.tsx",
+      "to": "compat::package::react-router-dom",
+      "meta": {
+        "specifier": "react-router-dom",
+        "line": 1,
+        "form": "import",
+        "names": "createBrowserRouter"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e18",
+      "kind": "imports",
+      "from": "compat::module::apps/ops-admin/src/main.tsx",
+      "to": "compat::package::react-router-dom",
+      "meta": {
+        "specifier": "react-router-dom",
+        "line": 1,
+        "form": "import",
+        "names": "createBrowserRouter"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e19",
+      "kind": "imports",
+      "from": "compat::module::apps/ops-admin/src/main.tsx",
+      "to": "compat::package::@nxw/shared/util",
+      "meta": {
+        "specifier": "@nxw/shared/util",
+        "line": 2,
+        "form": "import",
+        "names": "formatMoney"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e20",
+      "kind": "imports",
+      "from": "compat::module::apps/ops-admin/src/main.tsx",
+      "to": "compat::package::@nxw/shared/ui",
+      "meta": {
+        "specifier": "@nxw/shared/ui",
+        "line": 3,
+        "form": "import",
+        "names": "PageShell"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e21",
+      "kind": "imports",
+      "from": "compat::module::libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+      "to": "compat::package::date-fns",
+      "meta": {
+        "specifier": "date-fns",
+        "line": 1,
+        "form": "import",
+        "names": "format"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e22",
+      "kind": "imports",
+      "from": "compat::module::libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+      "to": "compat::package::@nxw/billing/data-access",
+      "meta": {
+        "specifier": "@nxw/billing/data-access",
+        "line": 2,
+        "form": "import",
+        "names": "listOpenInvoices,Invoice"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e23",
+      "kind": "imports",
+      "from": "compat::module::libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+      "to": "compat::package::@nxw/billing/ui",
+      "meta": {
+        "specifier": "@nxw/billing/ui",
+        "line": 3,
+        "form": "import",
+        "names": "AmountCell"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e24",
+      "kind": "imports",
+      "from": "compat::module::libs/billing/ui/src/lib/amount-cell.tsx",
+      "to": "compat::package::@nxw/shared/util",
+      "meta": {
+        "specifier": "@nxw/shared/util",
+        "line": 1,
+        "form": "import",
+        "names": "formatMoney"
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e25",
+      "kind": "imports",
+      "from": "compat::module::libs/shared/ui/src/lib/page-shell.tsx",
+      "to": "compat::package::react",
+      "meta": {
+        "specifier": "react",
+        "line": 1,
+        "form": "import",
+        "names": "ReactNode",
+        "typeOnly": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the import names the package"
+      }
+    },
+    {
+      "id": "e26",
+      "kind": "imports",
+      "from": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "to": "compat::package::@nxw/shared/ui",
+      "meta": {
+        "specifier": "@nxw/shared/ui",
+        "line": 8,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e27",
+      "kind": "imports",
+      "from": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "to": "compat::package::@nxw/shared/util",
+      "meta": {
+        "specifier": "@nxw/shared/util",
+        "line": 9,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e28",
+      "kind": "imports",
+      "from": "compat::apps/billing-web/src/app/invoices-page.tsx::InvoicesPage",
+      "to": "compat::package::@nxw/billing/feature-invoices",
+      "meta": {
+        "specifier": "@nxw/billing/feature-invoices",
+        "line": 10,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e29",
+      "kind": "imports",
+      "from": "compat::apps/ops-admin/src/main.tsx::RunReport",
+      "to": "compat::package::@nxw/shared/ui",
+      "meta": {
+        "specifier": "@nxw/shared/ui",
+        "line": 7,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e30",
+      "kind": "imports",
+      "from": "compat::apps/ops-admin/src/main.tsx::RunReport",
+      "to": "compat::package::@nxw/shared/util",
+      "meta": {
+        "specifier": "@nxw/shared/util",
+        "line": 7,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e31",
+      "kind": "imports",
+      "from": "compat::apps/ops-admin/src/main.tsx::DirectorySignIn",
+      "to": "compat::package::@nxw/shared/ui",
+      "meta": {
+        "specifier": "@nxw/shared/ui",
+        "line": 12,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e32",
+      "kind": "imports",
+      "from": "compat::libs/billing/feature-invoices/src/lib/invoice-list.tsx::InvoiceList",
+      "to": "compat::package::date-fns",
+      "meta": {
+        "specifier": "date-fns",
+        "line": 11,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e33",
+      "kind": "imports",
+      "from": "compat::libs/billing/feature-invoices/src/lib/invoice-list.tsx::InvoiceList",
+      "to": "compat::package::@nxw/billing/ui",
+      "meta": {
+        "specifier": "@nxw/billing/ui",
+        "line": 11,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "e34",
+      "kind": "imports",
+      "from": "compat::libs/billing/ui/src/lib/amount-cell.tsx::AmountCell",
+      "to": "compat::package::@nxw/shared/util",
+      "meta": {
+        "specifier": "@nxw/shared/util",
+        "line": 5,
+        "use": true
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "static-import",
+        "confidence": "HIGH",
+        "note": "the body uses a binding imported from the package"
+      }
+    },
+    {
+      "id": "d35",
+      "kind": "contains",
+      "from": "compat::design::apps/ops-admin/docs/design/screens.json",
+      "to": "compat::page::/sign-in/directory",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d39",
+      "kind": "contains",
+      "from": "compat::design::apps/ops-admin/docs/design/screens.json",
+      "to": "compat::flow::ops-sign-in",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d40",
+      "kind": "renders",
+      "from": "compat::flow::ops-sign-in",
+      "to": "compat::page::/sign-in/directory",
+      "meta": {
+        "line": 1
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d41",
+      "kind": "contains",
+      "from": "compat::design::apps/billing-web/docs/design/screens.json",
+      "to": "compat::page::/sign-in",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d44",
+      "kind": "contains",
+      "from": "compat::design::apps/billing-web/docs/design/screens.json",
+      "to": "compat::flow::billing-sign-in",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d45",
+      "kind": "renders",
+      "from": "compat::flow::billing-sign-in",
+      "to": "compat::page::/sign-in",
+      "meta": {
+        "line": 1
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d45",
+      "kind": "contains",
+      "from": "compat::design::docs/design/screens.json",
+      "to": "compat::page::/invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d46",
+      "kind": "contains",
+      "from": "compat::design::docs/design/screens.json",
+      "to": "compat::page::/runs",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d47",
+      "kind": "contains",
+      "from": "compat::design::docs/design/screens.json",
+      "to": "compat::flow::review-open-invoices",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d48",
+      "kind": "renders",
+      "from": "compat::flow::review-open-invoices",
+      "to": "compat::page::/invoices",
+      "meta": {
+        "line": 1
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d49",
+      "kind": "contains",
+      "from": "compat::design::docs/design/screens.json",
+      "to": "compat::flow::check-report-runs",
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "d50",
+      "kind": "renders",
+      "from": "compat::flow::check-report-runs",
+      "to": "compat::page::/runs",
+      "meta": {
+        "line": 1
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "annotation-scan",
+        "confidence": "HIGH"
+      }
+    },
+    {
+      "id": "test-e0",
+      "kind": "covers",
+      "from": "compat::test::apps/billing-web-e2e/src/invoices.spec.ts::the invoices page lists invoices",
+      "to": "compat::page::/invoices",
+      "meta": {
+        "evidence": "static",
+        "signal": "goto",
+        "line": 4
+      },
+      "resolution": {
+        "status": "resolved",
+        "technique": "route-literal",
+        "confidence": "MEDIUM",
+        "note": "a URL literal in the test"
+      }
+    }
+  ],
+  "meta": {
+    "files": 19,
+    "journeys": {
+      "personas": [
+        {
+          "id": "billing",
+          "name": "Billing",
+          "declared": true,
+          "from": "farsight.config.json",
+          "description": "A customer's billing user, who reads what is owed."
+        },
+        {
+          "id": "ops",
+          "name": "Operations",
+          "declared": true,
+          "from": "farsight.config.json",
+          "description": "The team that runs the overnight collection."
+        }
+      ],
+      "groups": [
+        {
+          "id": "access",
+          "name": "Access",
+          "description": "Ways in and out.",
+          "declared": true,
+          "from": "apps/ops-admin/docs/design/screens.json"
+        },
+        {
+          "id": "invoices",
+          "name": "Invoices",
+          "description": "Reading what is owed.",
+          "persona": "billing",
+          "declared": true,
+          "from": "docs/design/screens.json"
+        },
+        {
+          "id": "runs",
+          "name": "Overnight runs",
+          "description": "Checking what the overnight run collected.",
+          "persona": "ops",
+          "declared": true,
+          "from": "docs/design/screens.json"
+        }
+      ],
+      "flows": {},
+      "storylines": [
+        {
+          "id": "billing-day",
+          "name": "A billing day",
+          "description": "Billing signs in and reads what is owed; Operations signs in and checks what the overnight run collected.",
+          "journeys": [
+            "billing-sign-in",
+            "review-open-invoices",
+            "ops-sign-in",
+            "check-report-runs"
+          ],
+          "declared": true,
+          "from": "docs/design/screens.json"
+        }
+      ],
+      "notes": []
+    },
+    "sourceDigest": "f07a2c04dfba",
+    "stores": {
+      "named": {
+        "config": 1
+      },
+      "unnamed": 0
+    },
+    "config": {
+      "files": [
+        {
+          "path": "farsight.config.json",
+          "dir": ".",
+          "root": true,
+          "fields": [
+            "projects",
+            "glossary",
+            "journeys"
+          ],
+          "ignored": []
+        },
+        {
+          "path": "apps/billing-web/farsight.config.json",
+          "dir": "apps/billing-web",
+          "root": false,
+          "fields": [
+            "glossary",
+            "plumbing"
+          ],
+          "ignored": []
+        },
+        {
+          "path": "apps/ops-admin/farsight.config.json",
+          "dir": "apps/ops-admin",
+          "root": false,
+          "fields": [
+            "design",
+            "glossary"
+          ],
+          "ignored": [
+            "tooling"
+          ]
+        },
+        {
+          "path": "libs/billing/data-access/farsight.config.json",
+          "dir": "libs/billing/data-access",
+          "root": false,
+          "fields": [
+            "stores"
+          ],
+          "ignored": []
+        }
+      ],
+      "conflicts": [
+        {
+          "kind": "glossary",
+          "key": "InvoicesPage",
+          "files": [
+            "farsight.config.json",
+            "apps/billing-web/farsight.config.json"
+          ],
+          "kept": "apps/billing-web/farsight.config.json"
+        }
+      ],
+      "notes": [
+        "tooling is root-only; apps/ops-admin/farsight.config.json's was ignored."
+      ],
+      "glossary": [
+        {
+          "key": "formatMoney",
+          "label": "Format an amount",
+          "description": "Writes an amount of money the way the business reads it.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "InvoicesPage",
+          "label": "Invoices",
+          "description": "A list of invoices.",
+          "file": "farsight.config.json"
+        },
+        {
+          "key": "RunReport",
+          "label": "Overnight run report",
+          "description": "How much the overnight run collected today.",
+          "file": "apps/ops-admin/farsight.config.json"
+        }
+      ]
+    },
+    "tests": {
+      "files": 1,
+      "cases": 1,
+      "edges": {
+        "declared": 0,
+        "static": 1,
+        "observed": 0
+      },
+      "runs": 0,
+      "reports": [],
+      "gaps": [
+        {
+          "kind": "no-config",
+          "paths": [],
+          "text": "No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)"
+        }
+      ],
+      "blindSpots": [
+        "No `tests` block in farsight.config.json; declared and static evidence only (docs/proposals/tests-surface.md §3.2)"
+      ],
+      "sourceDigest": "f07a2c04dfba"
+    },
+    "projects": {
+      "tool": "nx",
+      "projects": [
+        {
+          "name": "billing-web",
+          "root": "apps/billing-web",
+          "type": "application",
+          "tags": [
+            "type:app",
+            "scope:billing"
+          ],
+          "sourceRoot": "apps/billing-web/src",
+          "via": "project.json"
+        },
+        {
+          "name": "billing-web-e2e",
+          "root": "apps/billing-web-e2e",
+          "type": "e2e",
+          "tags": [
+            "scope:billing"
+          ],
+          "implicitDependencies": [
+            "billing-web"
+          ],
+          "sourceRoot": "apps/billing-web-e2e/src",
+          "via": "project.json"
+        },
+        {
+          "name": "ops-admin",
+          "root": "apps/ops-admin",
+          "type": "application",
+          "tags": [
+            "type:app",
+            "scope:ops"
+          ],
+          "implicitDependencies": [
+            "billing-data-access"
+          ],
+          "sourceRoot": "apps/ops-admin/src",
+          "via": "project.json"
+        },
+        {
+          "name": "billing-data-access",
+          "root": "libs/billing/data-access",
+          "type": "library",
+          "tags": [
+            "scope:billing",
+            "type:data-access"
+          ],
+          "sourceRoot": "libs/billing/data-access/src",
+          "via": "project.json"
+        },
+        {
+          "name": "billing-feature-invoices",
+          "root": "libs/billing/feature-invoices",
+          "type": "library",
+          "tags": [
+            "scope:billing",
+            "type:feature"
+          ],
+          "sourceRoot": "libs/billing/feature-invoices/src",
+          "via": "project.json"
+        },
+        {
+          "name": "billing-ui",
+          "root": "libs/billing/ui",
+          "type": "library",
+          "tags": [
+            "scope:billing",
+            "type:ui"
+          ],
+          "sourceRoot": "libs/billing/ui/src",
+          "via": "project.json"
+        },
+        {
+          "name": "@nxw/shared-ui",
+          "root": "libs/shared/ui",
+          "type": "library",
+          "tags": [
+            "scope:shared",
+            "type:ui"
+          ],
+          "via": "package.json"
+        },
+        {
+          "name": "shared-util",
+          "root": "libs/shared/util",
+          "type": "library",
+          "tags": [
+            "scope:shared",
+            "type:util"
+          ],
+          "sourceRoot": "libs/shared/util/src",
+          "via": "project.json"
+        }
+      ],
+      "tagDimensions": [
+        {
+          "key": "domain",
+          "prefix": "scope:",
+          "label": "Domain"
+        },
+        {
+          "key": "type",
+          "prefix": "type:",
+          "label": "Type"
+        },
+        {
+          "key": "platform",
+          "prefix": "platform:",
+          "label": "Platform"
+        }
+      ],
+      "tagValues": {
+        "type": {
+          "app": "Application",
+          "feature": "Feature",
+          "ui": "UI",
+          "util": "Utility",
+          "data-access": "Data access"
+        },
+        "domain": {
+          "ops": "Operations"
+        }
+      },
+      "imports": [
+        {
+          "from": "billing-feature-invoices",
+          "to": "billing-data-access",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+              "imports": 1
+            }
+          ]
+        },
+        {
+          "from": "billing-feature-invoices",
+          "to": "billing-ui",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "libs/billing/feature-invoices/src/lib/invoice-list.tsx",
+              "imports": 1
+            }
+          ]
+        },
+        {
+          "from": "billing-ui",
+          "to": "shared-util",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "libs/billing/ui/src/lib/amount-cell.tsx",
+              "imports": 1
+            }
+          ]
+        },
+        {
+          "from": "billing-web",
+          "to": "@nxw/shared-ui",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "apps/billing-web/src/app/invoices-page.tsx",
+              "imports": 1
+            }
+          ]
+        },
+        {
+          "from": "billing-web",
+          "to": "billing-feature-invoices",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "apps/billing-web/src/app/invoices-page.tsx",
+              "imports": 1
+            }
+          ]
+        },
+        {
+          "from": "billing-web",
+          "to": "shared-util",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "apps/billing-web/src/app/invoices-page.tsx",
+              "imports": 1
+            }
+          ]
+        },
+        {
+          "from": "ops-admin",
+          "to": "@nxw/shared-ui",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "apps/ops-admin/src/main.tsx",
+              "imports": 1
+            }
+          ]
+        },
+        {
+          "from": "ops-admin",
+          "to": "shared-util",
+          "imports": 1,
+          "files": 1,
+          "top": [
+            {
+              "path": "apps/ops-admin/src/main.tsx",
+              "imports": 1
+            }
+          ]
+        }
+      ],
+      "dependencies": [
+        {
+          "from": "billing-feature-invoices",
+          "to": "billing-data-access",
+          "type": "static",
+          "via": "nx-graph"
+        },
+        {
+          "from": "billing-feature-invoices",
+          "to": "billing-ui",
+          "type": "static",
+          "via": "nx-graph"
+        },
+        {
+          "from": "billing-ui",
+          "to": "shared-util",
+          "type": "static",
+          "via": "nx-graph"
+        },
+        {
+          "from": "billing-web",
+          "to": "@nxw/shared-ui",
+          "type": "static",
+          "via": "nx-graph"
+        },
+        {
+          "from": "billing-web",
+          "to": "billing-feature-invoices",
+          "type": "static",
+          "via": "nx-graph"
+        },
+        {
+          "from": "billing-web",
+          "to": "shared-util",
+          "type": "static",
+          "via": "nx-graph"
+        },
+        {
+          "from": "billing-web-e2e",
+          "to": "billing-web",
+          "type": "implicit",
+          "via": "nx-graph"
+        },
+        {
+          "from": "billing-web-e2e",
+          "to": "shared-util",
+          "type": "dynamic",
+          "via": "nx-graph"
+        },
+        {
+          "from": "ops-admin",
+          "to": "@nxw/shared-ui",
+          "type": "static",
+          "via": "nx-graph"
+        },
+        {
+          "from": "ops-admin",
+          "to": "billing-data-access",
+          "type": "implicit",
+          "via": "nx-graph"
+        },
+        {
+          "from": "ops-admin",
+          "to": "shared-util",
+          "type": "static",
+          "via": "nx-graph"
+        }
+      ],
+      "graphFile": {
+        "path": "nx-project-graph.json",
+        "projects": 8,
+        "dependencies": 11
+      }
+    }
+  },
+  "configApplied": true
+}
