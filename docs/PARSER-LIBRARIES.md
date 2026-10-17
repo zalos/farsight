@@ -9,6 +9,13 @@ schema is `packages/graph/schemas/graph-v1.schema.json`. The graph library suppl
 serialization, occurrence identity/merging and pure structural indexing/traversal. It does not include
 Farsight's storage, test refolding, readiness or presentation modules.
 
+The application's `graph.json` remains its local snapshot container, not the portable document. Run
+`farsight export --graph graph.json --out portable-graph.json --source-id my-workspace` to convert a saved
+single- or multi-source graph. `GraphStore.toDocument(sourceId)` is the same conversion for application code.
+The document names the merged source set and preserves its per-source enrichment and content digests, nodes,
+edges and resolution evidence. Machine roots, snapshot/build bookkeeping and mtime hashes are omitted.
+Export leaves both the input file and snapshot history unchanged; overwriting the input is refused.
+
 The code-parser library owns the existing Oxc TS/JS and Tree-sitter Java implementations and their extraction
 helpers. Adapter entry points are explicit and registration is per instance. The parser's root import does not
 load native or WASM engines. `packages/parsers` retains configuration and all application enrichment passes;
@@ -39,13 +46,21 @@ install scripts are disabled, optional native dependencies are retained. CI runs
 
 Compatibility fixtures were captured from the pre-extraction implementation for TS/JS, Java/Spring, mixed
 languages and the NX/workspace example. Input mtimes are fixed for file-derived design/report dates; only the
-legacy `sourceHash` and the separately tested additive occurrences are omitted from comparisons. Nodes, edges,
-resolution evidence, enrichment and source digests remain compared in full.
+legacy `sourceHash` is omitted from comparisons. Default application ingestion is asserted to carry no
+occurrences; the opt-in evidence is tested separately. Nodes, edges, resolution evidence, enrichment and source
+digests remain compared in full.
 
 Intentional behavior changes are tested separately: `include` is honored; recursive glob matching is fixed;
 new direct parsing reports malformed and incomplete inputs; adapter registration is immutable; call occurrences
 survive relationship deduplication, flag folding, GraphStore save/load and portable serialization. Tree-sitter
 parsers and trees are released after file extraction.
+
+`parseRepository()` always retains call sites. Application ingestion defaults to relationships without sites;
+`ingestRepo(root, { occurrences: true })` is an explicit opt-in until an application surface needs them. This
+keeps unused detail out of new application snapshots, browser payloads and MCP responses. Existing detailed
+snapshots keep their evidence. Branch truncation still makes `complete` false, but its diagnostic identifies the
+file and declaration; exactly reaching the cap is not truncation. Cancellation and refused symlinks each retain
+their own diagnostic and file reason rather than being relabelled as adapter or IO failures.
 
 ## Release the pair
 

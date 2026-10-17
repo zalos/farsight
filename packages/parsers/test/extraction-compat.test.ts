@@ -31,7 +31,7 @@ for (const [name, example] of [['tsjs', 'invoice-app'], ['java', 'spring-invoice
       const graph = await ingestRepo(temp, { repoName: 'compat', stories: false });
       const actual = JSON.parse(JSON.stringify(graph));
       delete actual.meta.sourceHash;
-      for (const edge of actual.edges) delete edge.occurrences;
+      assert.ok(actual.edges.every((edge: Record<string, unknown>) => !('occurrences' in edge)));
       const expected = JSON.parse(readFileSync(new URL(`./fixtures/extraction/${name}.json`, import.meta.url), 'utf8'));
       assert.deepEqual(actual, expected);
     } finally { rmSync(temp, { recursive: true, force: true }); }

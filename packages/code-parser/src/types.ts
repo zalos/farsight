@@ -2,6 +2,8 @@ import type { ExternalDecl, GraphFragment, GraphDocument, PortableGraph } from '
 
 /** Options for syntax extraction. Farsight's enrichment switches are deliberately separate. */
 export interface AdapterOptions {
+  /** Low-level extraction defaults on; Farsight's composition layer opts in explicitly. */
+  occurrences?: boolean;
   repoName?: string;
   include?: string[];
   exclude?: string[];
@@ -29,7 +31,7 @@ export interface ParserLimits {
   maxDurationMs?: number;
 }
 
-export interface ParseRepositoryOptions extends Omit<AdapterOptions, 'repoName'> {
+export interface ParseRepositoryOptions extends Omit<AdapterOptions, 'repoName' | 'occurrences'> {
   root: string;
   sourceId: string;
   signal?: AbortSignal;
@@ -45,6 +47,9 @@ export interface Diagnostic {
   path?: string;
   adapter?: string;
   line?: number;
+  /** The affected graph declaration, when a limit applies to one declaration rather than the run. */
+  nodeId?: string;
+  reason?: string;
 }
 
 export interface FileAnalysis {

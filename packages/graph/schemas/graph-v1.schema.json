@@ -15,6 +15,13 @@
         },
         "graph": {
           "$ref": "#/definitions/PortableGraph"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GraphSource"
+          },
+          "description": "Named source set and its portable enrichment, when exporting a merged application graph."
         }
       },
       "required": [
@@ -2180,14 +2187,7 @@
           "description": "ISO timestamp the report recorded"
         },
         "status": {
-          "type": "string",
-          "enum": [
-            "passed",
-            "failed",
-            "skipped",
-            "flaky",
-            "unknown"
-          ],
+          "$ref": "#/definitions/TestRunStatus",
           "description": "`flaky` = the reporter retried and the case ended green; it is not `passed` and never prints as one"
         },
         "durationMs": {
@@ -2268,6 +2268,17 @@
       "additionalProperties": false,
       "description": "What one test run said about one test — joined to the graph by node id + a source digest."
     },
+    "TestRunStatus": {
+      "type": "string",
+      "enum": [
+        "passed",
+        "failed",
+        "skipped",
+        "flaky",
+        "unknown"
+      ],
+      "description": "Shared literal type also keeps recursive test-run schema generation unambiguous."
+    },
     "TestRunProject": {
       "type": "object",
       "properties": {
@@ -2275,7 +2286,7 @@
           "type": "string"
         },
         "status": {
-          "$ref": "#/definitions/TestRun"
+          "$ref": "#/definitions/TestRunStatus"
         },
         "reason": {
           "type": "string"
@@ -3113,6 +3124,54 @@
       ],
       "additionalProperties": false,
       "description": "Additive source evidence; identity is stable for a source, span and relationship."
+    },
+    "GraphSource": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "number"
+            },
+            "sourceDigest": {
+              "type": "string"
+            },
+            "tests": {
+              "$ref": "#/definitions/TestsMeta"
+            },
+            "stories": {
+              "$ref": "#/definitions/StoriesMeta"
+            },
+            "stores": {
+              "$ref": "#/definitions/StoresMeta"
+            },
+            "packages": {
+              "$ref": "#/definitions/PackagesMeta"
+            },
+            "projects": {
+              "$ref": "#/definitions/ProjectsMeta"
+            },
+            "config": {
+              "$ref": "#/definitions/ConfigMeta"
+            },
+            "journeys": {
+              "$ref": "#/definitions/JourneysMeta"
+            },
+            "decisions": {
+              "$ref": "#/definitions/DecisionsMeta"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "repo"
+      ],
+      "additionalProperties": false
     }
   },
   "$id": "https://github.com/zalos/farsight/schemas/graph-v1.schema.json"

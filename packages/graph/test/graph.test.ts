@@ -52,3 +52,25 @@ test('occurrence identities depend on source span and relationship and merges re
   assert.notEqual(first.id, second.id);
   assert.equal(mergeOccurrences([first], [first, second])?.length, 2);
 });
+
+test('merged document source names are canonical and unique, with validated per-source metadata', () => {
+  const sources = [{ repo: 'z', meta: { stores: { drivers: [{ spec: 'pg', files: 1 }] } } }, { repo: 'a' }];
+  const document = graphDocument(graph(), sources);
+  assert.deepEqual(document.sources?.map(source => source.repo), ['a', 'z']);
+  assert.deepEqual(deserializeGraph(JSON.stringify(document)), document);
+  assert.deepEqual(sources.map(source => source.repo), ['z', 'a']);
+  assert.throws(() => graphDocument(graph(), [sources[0]!, sources[0]!]), /Duplicate source/);
+  assert.throws(() => graphDocument(graph(), [{ repo: 'r', meta: { graphPath: '/private/checkout' } as any }]), /additional properties/);
+});
+
+test('multi-project test evidence validates status literals inside recursive run metadata', () => {
+  const value = graph();
+  value.nodes[0]!.test = { level: 'unit', runner: 'node:test', suite: [], file: 'test/a.test.ts',
+    run: { id: 'run', at: '2026-01-01T00:00:00Z', status: 'passed', freshness: 'unknown', stale: false,
+      projects: [{ project: 'desktop', status: 'passed' }, { project: 'mobile', status: 'skipped', reason: 'Desktop only' }] } };
+  const document = graphDocument(value);
+  assert.deepEqual(deserializeGraph(JSON.stringify(document)), document);
+  const run = document.graph.nodes.find(node => node.test)?.test?.run!;
+  (run.projects![0] as any).status = {};
+  assert.equal(validateGraph(document).valid, false);
+});

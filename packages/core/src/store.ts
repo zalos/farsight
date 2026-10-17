@@ -1,4 +1,4 @@
-import { mergeOccurrences, retargetOccurrences } from '@farsight/graph';
+import { graphDocument, mergeOccurrences, retargetOccurrences, type GraphDocument, type GraphSource } from '@farsight/graph';
 import { buildInfo } from './version.js';
 import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -157,6 +157,29 @@ export class GraphStore {
 
   toJSON() {
     return { meta: this.meta, roots: this.roots, nodes: [...this.nodes.values()], edges: [...this.edges.values()] };
+  }
+
+  /** Export the merged graph without local paths, build stamps or snapshot bookkeeping. */
+  toDocument(sourceId = 'workspace'): GraphDocument {
+    const nodes = this.allNodes();
+    const repos = new Set([...Object.keys(this.roots), ...Object.keys(this.meta.repos ?? {}),
+      ...nodes.map(node => node.loc?.repo ?? (node.id.includes('::') ? node.id.split('::')[0]! : '')).filter(Boolean)]);
+    const fields = ['tests', 'stories', 'stores', 'packages', 'projects', 'config', 'journeys', 'decisions'] as const;
+    for (const field of fields) for (const repo of Object.keys(this.meta[field] ?? {})) repos.add(repo);
+    const sources: GraphSource[] = [...repos].map(repo => {
+      const freshness = this.repoMeta(repo);
+      const meta: NonNullable<GraphSource['meta']> = { ...(freshness?.files != null ? { files: freshness.files } : {}),
+        ...(freshness?.sourceDigest ? { sourceDigest: freshness.sourceDigest } : {}) };
+      for (const field of fields) {
+        const value = this.meta[field]?.[repo];
+        if (value) Object.assign(meta, { [field]: value });
+      }
+      return { repo, meta };
+    });
+    return graphDocument({ repo: sourceId, nodes, edges: this.allEdges(), ...(this.meta.files != null ? { meta: {
+      files: this.meta.files,
+      ...(this.meta.sourceDigest ? { sourceDigest: this.meta.sourceDigest } : {}),
+    } } : {}) }, sources);
   }
 
   save(path: string): void {

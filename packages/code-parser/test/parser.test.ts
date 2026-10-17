@@ -208,7 +208,46 @@ test('timer cancellation is observed between source files', async () => {
       const result = await pending;
       assert.equal(result.analysis.complete, false);
       assert.ok(result.analysis.diagnostics.some(d => d.code === 'cancelled'));
+      assert.ok(result.analysis.diagnostics.every(d => d.code === 'cancelled'), canonicalJson(result.analysis.diagnostics));
+      assert.ok(!result.analysis.files.some(file => file.reason === 'read-error' || file.reason === 'adapter-error'));
     } finally { clearTimeout(timer); }
+  });
+});
+
+test('a pre-aborted run reports cancellation once without invoking an adapter', async () => {
+  let calls = 0;
+  const cancelledParser = createParser({ adapters: [{ id: 'spy', version: '1', extensions: ['.ts'], async ingest() {
+    calls++; return { repo: 'sample', nodes: [], edges: [] };
+  } }, javaAdapter] });
+  await fixture(sample, async root => {
+    const result = await cancelledParser.parseRepository({ root, sourceId: 'sample', signal: AbortSignal.abort() });
+    assert.equal(calls, 0);
+    assert.deepEqual(result.analysis.diagnostics.map(d => d.code), ['cancelled']);
+    assert.equal(result.analysis.complete, false);
+    assert.ok(!result.analysis.files.some(file => file.status === 'failed'));
+  });
+});
+
+test('a symlink has one boundary diagnostic and a matching skipped-file reason', async () => {
+  await fixture(sample, async root => {
+    symlinkSync(join(root, 'src/save.ts'), join(root, 'linked.ts'));
+    const result = await parser.parseRepository({ root, sourceId: 'sample' });
+    assert.deepEqual(result.analysis.diagnostics, [{ code: 'read-boundary', severity: 'warning', path: 'linked.ts', reason: 'symlink', message: 'Symbolic links are not followed.' }]);
+    assert.deepEqual(result.analysis.files.find(f => f.path === 'linked.ts'), { path: 'linked.ts', status: 'skipped', reason: 'symlink' });
+    assert.equal(result.analysis.complete, false);
+  });
+});
+
+test('branch truncation names its declaration and does not confuse exactly-at-limit with omitted evidence', async () => {
+  for (const count of [24, 25]) await fixture({ 'branches.ts': 'export function many(x: number) {\n' +
+    Array.from({ length: count }, (_, i) => `if(x===${i}) return ${i};`).join('\n') + '\n}' }, async root => {
+    const result = await parser.parseRepository({ root, sourceId: 'sample' });
+    const node = result.graph.nodes.find(n => n.name === 'many')!;
+    assert.equal(node.branches?.length, 24);
+    assert.equal(result.analysis.files[0]?.status, 'analyzed');
+    assert.equal(result.analysis.complete, count === 24);
+    assert.deepEqual(result.analysis.diagnostics.map(d => ({ code: d.code, path: d.path, line: d.line, nodeId: d.nodeId, reason: d.reason })),
+      count === 24 ? [] : [{ code: 'resource-limit', path: 'branches.ts', line: 1, nodeId: node.id, reason: 'branch-points' }]);
   });
 });
 

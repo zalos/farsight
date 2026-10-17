@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import schema from './schema.js';
 import { Ajv } from 'ajv';
 import type { EdgeOccurrence, GraphEdge, GraphFragment } from './graph.js';
-import type { GraphDocument, PortableGraph } from './document.js';
+import type { GraphDocument, GraphSource, PortableGraph } from './document.js';
 
 export const GRAPH_SCHEMA_VERSION = 1 as const;
 export const graphSchema = schema;
@@ -43,6 +43,11 @@ export function validateGraph(value: unknown): { valid: boolean; errors: string[
   if (!validate(value)) return { valid: false, errors: (validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`) };
   const document = value as GraphDocument;
   const errors: string[] = [];
+  const sources = new Set<string>();
+  for (const source of document.sources ?? []) {
+    if (sources.has(source.repo)) errors.push(`Duplicate source: ${source.repo}`);
+    sources.add(source.repo);
+  }
   const nodes = new Set<string>();
   for (const node of document.graph.nodes) {
     if (nodes.has(node.id)) errors.push(`Duplicate node: ${node.id}`);
@@ -70,13 +75,15 @@ export function assertGraph(value: unknown): asserts value is GraphDocument {
   if (!result.valid) throw new TypeError(`Invalid farsight-graph v1: ${result.errors.join('; ')}`);
 }
 
-export function graphDocument(graph: GraphFragment | PortableGraph): GraphDocument {
+export function graphDocument(graph: GraphFragment | PortableGraph, sources?: readonly GraphSource[]): GraphDocument {
   const copy = JSON.parse(JSON.stringify(graph)) as GraphFragment;
   if (copy.meta) delete (copy.meta as Partial<NonNullable<GraphFragment['meta']>>).sourceHash;
   copy.nodes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   copy.edges.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   for (const edge of copy.edges) if (edge.occurrences) edge.occurrences = retargetOccurrences(edge);
   const doc: GraphDocument = { format: 'farsight-graph', schemaVersion: GRAPH_SCHEMA_VERSION, graph: copy };
+  if (sources) doc.sources = (JSON.parse(JSON.stringify(sources)) as GraphSource[])
+    .sort((a, b) => a.repo < b.repo ? -1 : a.repo > b.repo ? 1 : 0);
   assertGraph(doc);
   return doc;
 }

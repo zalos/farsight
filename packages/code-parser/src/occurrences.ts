@@ -9,6 +9,7 @@ export interface SyntaxSite {
 
 /** Capture before relationship deduplication; add evidence without adding relationship edges. */
 export class OccurrenceCollector {
+  constructor(private readonly enabled = true) {}
   private readonly facts = new Map<string, EdgeOccurrence[]>();
   private key(edge: Pick<GraphEdge, 'kind' | 'from' | 'to' | 'meta'>): string {
     return `${edge.kind}|${edge.from}|${edge.to}|${edge.meta?.whenRef ?? ''}`;
@@ -16,7 +17,7 @@ export class OccurrenceCollector {
 
   record(edge: Pick<GraphEdge, 'kind' | 'from' | 'to' | 'meta'>, repo: string, path: string,
     line: number | undefined, site?: SyntaxSite): void {
-    if (!site || !line || line < 1) return;
+    if (!this.enabled || !site || !line || line < 1) return;
     const value: Omit<EdgeOccurrence, 'id'> = {
       loc: { repo, path: path.replaceAll('\\', '/'), line, col: site.col },
       span: { start: site.start, end: site.end },

@@ -301,6 +301,9 @@ export type DesignDriftKind =
 //   match    : 'name+line' | 'name' | 'line±1'     — observed edges: how the coverage hit met the node
 //   signal · helper · line · hits                  — how a static/observed edge was found
 
+/** Shared literal type also keeps recursive test-run schema generation unambiguous. */
+export type TestRunStatus = 'passed' | 'failed' | 'skipped' | 'flaky' | 'unknown';
+
 /** What one test run said about one test — joined to the graph by node id + a source digest. */
 export interface TestRun {
   /** report file digest or the reporter's run id */
@@ -308,7 +311,7 @@ export interface TestRun {
   /** ISO timestamp the report recorded */
   at: string;
   /** `flaky` = the reporter retried and the case ended green; it is not `passed` and never prints as one */
-  status: 'passed' | 'failed' | 'skipped' | 'flaky' | 'unknown';
+  status: TestRunStatus;
   durationMs?: number;
   /** retries the reporter recorded (Playwright: results.length - 1) */
   retries?: number;
@@ -359,7 +362,7 @@ export interface TestRun {
 /** One project's run of a case, as the fold keeps it. */
 export interface TestRunProject {
   project: string;
-  status: TestRun['status'];
+  status: TestRunStatus;
   reason?: string;
 }
 

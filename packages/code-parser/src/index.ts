@@ -1,6 +1,6 @@
 import { canonicalJson, graphDocument, GRAPH_SCHEMA_VERSION, type GraphFragment } from '@farsight/graph';
 import { collectFiles } from './shared/files.js';
-import { RepositoryRead, sha256, readFileSync } from './repository.js';
+import { RepositoryRead, ReportedReadError, sha256, readFileSync } from './repository.js';
 import { PARSER_VERSION } from './version.js';
 import { basename } from 'node:path';
 import { parseJsonc } from './aliases.js';
@@ -40,7 +40,7 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
     const scope = new RepositoryRead(request.root, request.signal, request.limits);
     return scope.run(async () => {
       const { root: _root, sourceId, signal: _signal, limits: _limits, inputs, ...selection } = request;
-      const opts: AdapterOptions = { ...selection, repoName: sourceId };
+      const opts: AdapterOptions = { ...selection, repoName: sourceId, occurrences: true };
       const exts = [...new Set(adapters.flatMap(a => [...a.extensions]))];
       // Pin dependency and resolution declarations even when this run has no bare import.
       // Relative tsconfig extends are additionally captured when the resolver reads them.
@@ -54,12 +54,15 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
             const value = basename(file).startsWith('tsconfig') ? parseJsonc(bytes.toString('utf8')) : JSON.parse(bytes.toString('utf8'));
             if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid resolution declaration');
           }
-        } catch {
+        } catch (error) {
+          if (scope.stopped) break;
+          if (error instanceof ReportedReadError) continue;
           scope.report({ code: 'read-error', severity: 'error', path: scope.path(file), message: 'Resolution input could not be read as a configuration object.' });
         }
       }
       scope.discoveringSources = true;
       const files = collectFiles(scope.root, exts, opts, name => name.endsWith('.d.ts')).sort();
+      for (const file of files) scope.files.set(scope.path(file), { path: scope.path(file), status: 'skipped', reason: 'not-analyzed' });
       for (const file of files) {
         if (scope.selected.size % 100 === 0) await yieldToEventLoop();
         const path = scope.path(file);
@@ -72,7 +75,12 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
           const body = readFileSync(file);
           scope.selected.add(file);
           scope.files.set(path, { path, status: 'skipped', reason: 'not-analyzed', digest: sha256(body) });
-        } catch {
+        } catch (error) {
+          if (scope.stopped) break;
+          if (error instanceof ReportedReadError) {
+            scope.files.set(path, { path, status: 'skipped', reason: error.reason });
+            continue;
+          }
           scope.files.set(path, { path, status: 'failed', reason: 'read-error' });
           scope.report({ code: 'read-error', severity: 'error', path, message: 'Source bytes could not be read.' });
         }
@@ -80,6 +88,7 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
       scope.selectionReady = true;
       const fragments: GraphFragment[] = [];
       for (const adapter of adapters) {
+        if (scope.stopped) break;
         try {
           scope.checkpoint();
           const fragment = await adapter.ingest(scope.root, opts);
@@ -88,11 +97,15 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
           fragments.push(fragment);
           scope.checkpoint();
         } catch {
+          if (scope.stopped) break;
           scope.report({ code: 'adapter-error', severity: 'error', adapter: adapter.id, message: 'Adapter did not finish successfully.' });
           for (const [path, file] of scope.files) if (adapter.extensions.some(ext => path.endsWith(ext)) && file.reason === 'not-analyzed') {
             scope.files.set(path, { ...file, status: 'failed', reason: 'adapter-error', adapter: adapter.id });
           }
         }
+      }
+      if (scope.stopped) for (const [path, file] of scope.files) if (file.reason === 'not-analyzed') {
+        scope.files.set(path, { ...file, status: 'skipped', reason: scope.stopReason });
       }
       const nodes = new Map(fragments.flatMap(f => f.nodes).map(n => [n.id, n]));
       // Stable ids describe relationship content rather than an adapter's sequence counter.

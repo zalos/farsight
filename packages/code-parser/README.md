@@ -21,7 +21,7 @@ const result = await parser.parseRepository({
   limits: { maxFiles: 10_000, maxFileBytes: 4 * 1024 * 1024 },
 });
 writeFileSync('analysis.json', JSON.stringify(result));
-writeFileSync('graph.json', serializeGraph(result.graph));
+writeFileSync('portable-graph.json', serializeGraph(result.graph));
 if (!result.analysis.complete) console.error(result.analysis.diagnostics);
 ```
 
@@ -31,6 +31,8 @@ analysis fingerprint. The root directory and wall-clock dates are excluded. Iden
 explicit `sourceId` produce identical canonical artifacts after relocation or mtime-only changes. Use
 `canonicalJson(result)` from `@farsight/graph` for canonical artifact JSON. A second process can load the saved
 graph with `deserializeGraph()` and run structural analysis without loading this parser.
+Farsight's application `graph.json` is not this portable envelope. Convert it with
+`farsight export --graph graph.json --out portable-graph.json`; see `@farsight/graph`'s README for the boundary.
 
 The fingerprint covers the bytes actually read, successful and missing resolution probes, directory entries,
 dependency manifests/lockfiles, TS configuration, explicit extraction options, resource limits, adapter order
@@ -49,6 +51,9 @@ Default limits are 10,000 source files, 4 MiB per input, 128 MiB total input byt
 are cooperative between operations; a synchronous native parse is not preempted. Oversized, failed, unsupported,
 unreadable and cancelled inputs remain explicit. `complete` means the selected supported file analysis finished
 without reported gaps. It does **not** prove exhaustive call resolution, control flow, data flow or security.
+An omitted branch point still counts as a gap even if its source file was parsed: the `branch-points` diagnostic
+names the relative file, declaration `nodeId` and line. Exactly reaching the cap without omitting a point is
+complete. Cancellation reports `cancelled`; a refused symlink reports one `read-boundary` with reason `symlink`.
 
 Built-in reads stay beneath the source root, refuse symlink components (including in-root links), cache source
 bytes, and never execute code, package scripts, NX, Git, a network request or an enrichment service. Out-of-root
@@ -59,6 +64,9 @@ TS/JS extracts symbols, call/render/HTTP/data relationships, annotations, and ex
 Java retains the existing Spring/JPA/security heuristics. Repeated resolved call sites retain their positions and
 available conditions in `edge.occurrences`; Farsight keeps its relationship-level view. Evidence is syntax-based;
 unresolved alternatives and confidence remain meaningful. Cross-source host matching is not provided here.
+Portable parsing always retains call-site evidence. Farsight's `ingestRepo()` omits it by default to avoid
+growing application snapshots and browser/MCP payloads with unused detail; `ingestRepo(root, { occurrences: true })`
+explicitly opts in. Existing saved graphs retain their evidence.
 
 Farsight uses the same installed adapter implementation through the instance's `extractRepository(root,
 options)` composition API. That low-level API returns the original fragments and deliberately retains legacy IO,
@@ -72,6 +80,12 @@ version, extensions and asynchronous `ingest`. Inside `parseRepository`, the `su
 `readFileSync`, `statSync`, `readdirSync`, `checkpoint`, `fileStatus` and `parseError` use the current isolated read
 context. A custom adapter must use them to honor bounds and account for its files; direct filesystem/network
 access bypasses that contract. Explicit external inputs must be immutable and identified in `inputs`.
+
+JavaScript entry points are ESM-only: use `import` or dynamic `import()` from CommonJS. Synchronous `require()`
+is intentionally not exported, including under Node 24's `require(esm)` support. `@types/node` stays in
+`dependencies` because the published helper declarations expose Node types such as `Buffer` and `Stats`;
+consumers need those declarations even when installing without development dependencies. This follows
+[TypeScript's declaration publishing guidance](https://www.typescriptlang.org/docs/handbook/declaration-files/publishing.html#dependencies).
 
 Install optional dependencies: Oxc needs the platform's native binding. Java's runtime/grammar loads from the
 installed dependency, without a compiler or download at parse time. The package test matrix targets Linux x64

@@ -84,6 +84,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   const opts: IngestOptions = {
     ...options,
     repoName: repo,
+    occurrences: options.occurrences === true,
     testFiles: options.testFiles ?? (options.tests === false ? 'include' : 'exclude'),
     testGlobs: { ...testGlobsOf(config?.tests), ...options.testGlobs },
     externals: merge(config?.externals, options.externals),

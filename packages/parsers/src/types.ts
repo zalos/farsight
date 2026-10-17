@@ -2,6 +2,8 @@ import type { AdapterOptions } from '@farsight/code-parser';
 export type { LanguageAdapter } from '@farsight/code-parser';
 
 export interface IngestOptions extends AdapterOptions {
+  /** Include individual call sites in the application graph; defaults off until a surface consumes them. */
+  occurrences?: boolean;
   /** false = skip the OpenAPI post-pass (spec discovery + reconcile); default on */
   openapi?: boolean;
   /** false = do not apply the repo's farsight.config.json (tags, glossary, guards, entrypoints); default on */

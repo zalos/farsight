@@ -1,7 +1,7 @@
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { OccurrenceCollector, type SyntaxSite } from './occurrences.js';
 import { PARSER_VERSION } from './version.js';
-import { readFileSync, checkpoint, fileStatus, parseError, currentRead } from './repository.js';
+import { readFileSync, checkpoint, fileStatus, fileReadError, parseError, currentRead } from './repository.js';
 import { relative as platformRelative, dirname, resolve as resolvePath } from 'node:path';
 import { parseSync } from 'oxc-parser';
 import { configCheckOf, paramsText, CONFIG_CHECK_TAG } from '@farsight/graph/semantics';
@@ -274,7 +274,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // flag gates (lane moves, 2026-10-13): the file pass 1 is reading, and each file's module-level boolean constants
   let curFile = '';
   let curSource = '';
-  const occurrences = new OccurrenceCollector();
+  const occurrences = new OccurrenceCollector(options.occurrences !== false);
   const recordSite = (kind: GraphEdge['kind'], from: string, to: string, call: { file?: string; line?: number; site?: SyntaxSite } & SiteFlags) => {
     occurrences.record({ kind, from, to, meta: withFlags(undefined, call) }, repo, call.file ?? nodes.get(from)?.loc?.path ?? '', call.line, call.site);
   };
@@ -376,7 +376,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const file = relative(repoRoot, abs);
     curFile = file;
     let source: string;
-    try { checkpoint(); source = readFileSync(abs, 'utf8'); } catch { fileStatus(abs, 'failed', 'ts-js', 'read-error'); if (currentRead()?.stopped) break; continue; }
+    try { checkpoint(); source = readFileSync(abs, 'utf8'); } catch (error) { if (fileReadError(abs, 'ts-js', error)) break; continue; }
     if (claimsTests && isTestFile(file, source, options.testGlobs ?? {})) { fileStatus(abs, 'skipped', 'ts-js', 'test-file'); continue; }
     const line = lineIndex(source);
     let program: AstNode;
@@ -714,7 +714,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       // surface them as routes so trace_flow/overview treat them as entry points
       const isServerAction = kind === 'function' && (fileUseServer || hasDirective(d.body, 'use server'));
       if (isServerAction) kind = 'route';
-      const branches = kind === 'guard' ? [] : extractBranches(d.body, source, line);
+      const branches = kind === 'guard' ? [] : extractBranches(d.body, source, line, { path: file, nodeId: id, line: line(d.node.start ?? 0) });
       addNode({
         id, kind, name: isGuard && doc.guard ? `${d.name}: ${doc.guard}` : d.name, lang: langOf(file),
         loc: { repo, path: file, line: line(d.node.start ?? 0), endLine: line(d.node.end ?? 0) },
@@ -1024,7 +1024,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         if (walkedCallbacks.has(cbId)) return true;
         walkedCallbacks.add(cbId);
         const cbDoc = parseDoc(leadingComment(source, prop.start ?? 0));
-        const cbBranches = extractBranches(cbBody, source, line);
+        const cbBranches = extractBranches(cbBody, source, line, { path: file, nodeId: cbId, line: line(fn.start ?? 0) });
         addNode({
           id: cbId, kind: 'function', name: cbName, lang: langOf(file),
           loc: { repo, path: file, line: line(fn.start ?? 0), endLine: line(fn.end ?? 0) },
@@ -1232,10 +1232,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         // handler body: calls + schema validates from inside the route handler
         if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') {
           // inline handler forks belong to the route node (it has no function node of its own)
-          const handlerBranches = extractBranches((arg.body as AstNode) ?? null, source, line);
+          const context = { path: file, nodeId: routeId, line: line(arg.start ?? 0) };
+          const handlerBranches = extractBranches((arg.body as AstNode) ?? null, source, line, context);
           if (handlerBranches.length) {
             const rn = nodes.get(routeId)!;
-            rn.branches = [...(rn.branches ?? []), ...handlerBranches].slice(0, MAX_BRANCH_POINTS);
+            const combined = [...(rn.branches ?? []), ...handlerBranches];
+            if (combined.length > MAX_BRANCH_POINTS) reportBranchLimit(context);
+            rn.branches = combined.slice(0, MAX_BRANCH_POINTS);
           }
           // its refusals and the constants it hands a guard belong to the route too (preconditions.ts)
           collectPreconditionFacts((arg.body as AstNode) ?? null, routeId, file, source, line, preFacts);
@@ -2592,7 +2595,13 @@ function armExits(arm: AstNode): boolean {
  * arrows/callbacks are walked too: line containment attributes their branches
  * to the right call sites downstream. Static conditions only.
  */
-function extractBranches(body: AstNode | null, source: string, line: (offset: number) => number): BranchPoint[] {
+function reportBranchLimit(context: { path: string; nodeId: string; line: number }): void {
+  currentRead()?.report({ code: 'resource-limit', severity: 'warning', adapter: 'ts-js', ...context,
+    reason: 'branch-points', message: 'Branch inspection omitted points beyond this declaration’s limit.' });
+}
+
+function extractBranches(body: AstNode | null, source: string, line: (offset: number) => number,
+  context: { path: string; nodeId: string; line: number }): BranchPoint[] {
   const out: BranchPoint[] = [];
   const span = (n: AstNode) => ({ line: line(n.start ?? 0), endLine: line(n.end ?? 0) });
   // fork/arm labels from `// @business …` directives — only present the key when found
@@ -2607,10 +2616,8 @@ function extractBranches(body: AstNode | null, source: string, line: (offset: nu
     return b ? { business: b } : {};
   };
   walk(body, (n) => {
-    if (out.length >= MAX_BRANCH_POINTS) {
-      currentRead()?.report({ code: 'resource-limit', severity: 'warning', adapter: 'ts-js', message: 'Branch inspection reached its per-declaration limit.' });
-      return false;
-    }
+    // Look for one excess point: exactly the limit is complete, not truncation.
+    if (out.length > MAX_BRANCH_POINTS) return false;
 
     if (n.type === 'IfStatement' && isNode(n.test) && isNode(n.consequent)) {
       const test = n.test as AstNode;
@@ -2691,7 +2698,8 @@ function extractBranches(body: AstNode | null, source: string, line: (offset: nu
       return;
     }
   });
-  return out;
+  if (out.length > MAX_BRANCH_POINTS) reportBranchLimit(context);
+  return out.slice(0, MAX_BRANCH_POINTS);
 }
 
 /** First lines of an implementation, capped for inspector preview. */

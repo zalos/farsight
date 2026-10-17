@@ -59,6 +59,10 @@ importers:
       '@farsight/work-jira':
         specifier: workspace:*
         version: link:../work-jira
+    devDependencies:
+      '@farsight/graph':
+        specifier: workspace:*
+        version: link:../graph
 
   packages/code-parser:
     dependencies:

@@ -10,7 +10,7 @@ import { PARSER_VERSION } from '../version.js';
  * Validation DTOs, Javadoc via the shared doc harvest, Journey branches with
  * `// @business` labels.
  */
-import { readFileSync, checkpoint, fileStatus, parseError, currentRead } from '../repository.js';
+import { readFileSync, checkpoint, fileStatus, fileReadError, parseError, currentRead } from '../repository.js';
 import { relative as platformRelative, resolve as resolvePath } from 'node:path';
 import type { GraphFragment, GraphNode, GraphEdge, NodeKind } from '@farsight/graph';
 import type { LanguageAdapter, IngestOptions } from '../types.js';
@@ -74,7 +74,7 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
 
   const parse = await grammarParser('java');
   let edgeSeq = 0;
-  const occurrences = new OccurrenceCollector();
+  const occurrences = new OccurrenceCollector(options.occurrences !== false);
   const addNode = (n: GraphNode) => {
     if (!nodes.has(n.id)) nodes.set(n.id, n);
     return nodes.get(n.id)!;
@@ -101,7 +101,7 @@ export async function ingestJava(repoPath: string, options: IngestOptions = {}):
       await yieldToEventLoop();
       const file = relative(repoRoot, abs);
       let source: string;
-      try { checkpoint(); source = readFileSync(abs, 'utf8'); } catch { fileStatus(abs, 'failed', 'java', 'read-error'); if (currentRead()?.stopped) break; continue; }
+      try { checkpoint(); source = readFileSync(abs, 'utf8'); } catch (error) { if (fileReadError(abs, 'java', error)) break; continue; }
       const root = parse(source);
       if (!root || root.hasError) {
         parseError(abs, 'java', 'Tree-sitter reported invalid Java syntax.');

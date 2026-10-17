@@ -13,6 +13,11 @@ export const DEFAULT_LIMITS: Required<ParserLimits> = {
 const context = new AsyncLocalStorage<RepositoryRead>();
 export const sha256 = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex');
 
+/** This failure already has a structured diagnostic; callers must not relabel it as an IO failure. */
+export class ReportedReadError extends Error {
+  constructor(readonly reason: string) { super(reason); }
+}
+
 export class RepositoryRead {
   readonly root: string;
   readonly limits: Required<ParserLimits>;
@@ -25,12 +30,13 @@ export class RepositoryRead {
   discoveryExtensions: readonly string[] = [];
   private readonly started = performance.now();
   private readonly bodies = new Map<string, Buffer>();
-  private readonly stats = new Map<string, fs.Stats | null>();
+  private readonly stats = new Map<string, fs.Stats | Error>();
   private readonly directories = new Map<string, string[]>();
   private readonly diagnosticKeys = new Set<string>();
   private bytes = 0;
   private entries = 0;
   private halted = false;
+  stopReason?: 'cancelled' | 'resource-limit';
   get stopped(): boolean { return this.halted; }
 
   constructor(root: string, readonly signal?: AbortSignal, limits: ParserLimits = {}) {
@@ -46,7 +52,7 @@ export class RepositoryRead {
     const path = relative(this.root, resolve(file)).split(sep).join('/');
     if (path === '..' || path.startsWith('../') || isAbsolute(path)) {
       this.report({ code: 'read-boundary', severity: 'error', message: 'An input resolves outside the source root.' });
-      throw new Error('Read outside source root');
+      throw new ReportedReadError('outside-root');
     }
     return path || '.';
   }
@@ -60,11 +66,13 @@ export class RepositoryRead {
     if (this.signal?.aborted) {
       this.report({ code: 'cancelled', severity: 'warning', message: 'Analysis was cancelled.' });
       this.halted = true;
+      this.stopReason = 'cancelled';
     } else if (!this.halted && performance.now() - this.started > this.limits.maxDurationMs) {
       this.report({ code: 'resource-limit', severity: 'warning', message: 'Analysis reached maxDurationMs.' });
       this.halted = true;
+      this.stopReason = 'resource-limit';
     }
-    if (this.halted) throw new Error('Analysis stopped');
+    if (this.halted) throw new ReportedReadError(this.stopReason!);
   }
 
   private guard(file: string): string {
@@ -75,8 +83,8 @@ export class RepositoryRead {
     for (const part of path === '.' ? [] : path.split('/')) {
       current = resolve(current, part);
       if (fs.lstatSync(current).isSymbolicLink()) {
-        this.report({ code: 'read-boundary', severity: 'warning', path, message: 'Symbolic links are not followed.' });
-        throw new Error('Symbolic link input');
+        this.report({ code: 'read-boundary', severity: 'warning', path, reason: 'symlink', message: 'Symbolic links are not followed.' });
+        throw new ReportedReadError('symlink');
       }
     }
     return path;
@@ -91,14 +99,14 @@ export class RepositoryRead {
         const stat = fs.statSync(file);
         this.stats.set(path, stat);
         this.record(path, 'metadata', stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'special');
-      } catch {
-        this.stats.set(path, null);
+      } catch (error) {
+        this.stats.set(path, error instanceof Error ? error : new Error('Input unavailable'));
         this.record(path, 'missing', 'unavailable');
       }
     }
     const stat = this.stats.get(path);
-    if (!stat) throw new Error('Input unavailable');
-    return stat;
+    if (stat instanceof Error) throw stat;
+    return stat!;
   }
 
   directory(file: string): string[] {
@@ -111,7 +119,8 @@ export class RepositoryRead {
       if (this.entries > this.limits.maxEntries) {
         this.report({ code: 'resource-limit', severity: 'warning', path, message: 'Discovery reached maxEntries.' });
         this.halted = true;
-        throw new Error('Discovery stopped');
+        this.stopReason = 'resource-limit';
+        throw new ReportedReadError('resource-limit');
       }
       this.directories.set(path, entries);
       this.record(path, 'directory', canonicalJson(entries));
@@ -128,7 +137,7 @@ export class RepositoryRead {
     if (!stat.isFile()) throw new Error('Input is not a regular file');
     if (stat.size > this.limits.maxFileBytes || this.bytes + stat.size > this.limits.maxTotalBytes) {
       this.report({ code: 'resource-limit', severity: 'warning', path, message: 'Input exceeds maxFileBytes or maxTotalBytes.' });
-      throw new Error('Input byte limit');
+      throw new ReportedReadError('resource-limit');
     }
     this.guard(file);
     // Bound the actual read as well as the preceding stat (a file can grow between the two).
@@ -144,7 +153,7 @@ export class RepositoryRead {
         length += count;
         if (length > cap) {
           this.report({ code: 'resource-limit', severity: 'warning', path, message: 'Input grew beyond the byte limit.' });
-          throw new Error('Input byte limit');
+          throw new ReportedReadError('resource-limit');
         }
         chunks.push(chunk.subarray(0, count));
       }
@@ -172,6 +181,15 @@ export const statSync = (file: string): fs.Stats => context.getStore()?.stat(fil
 export const readdirSync = (file: string): string[] => context.getStore()?.directory(file) ?? fs.readdirSync(file);
 export const currentRead = (): RepositoryRead | undefined => context.getStore();
 export const checkpoint = (): void => context.getStore()?.checkpoint();
+export function fileReadError(file: string, adapter: string, error: unknown): boolean {
+  const scope = context.getStore();
+  const reason = scope?.stopReason ?? (error instanceof ReportedReadError ? error.reason : 'read-error');
+  fileStatus(file, scope?.stopped || error instanceof ReportedReadError ? 'skipped' : 'failed', adapter, reason);
+  if (scope && !scope.stopped && !(error instanceof ReportedReadError)) {
+    scope.report({ code: 'read-error', severity: 'error', path: scope.path(file), adapter, message: 'Source bytes could not be read.' });
+  }
+  return scope?.stopped ?? false;
+}
 export function fileStatus(file: string, status: FileAnalysis['status'], adapter: string, reason?: string): void {
   const scope = context.getStore();
   if (!scope) return;

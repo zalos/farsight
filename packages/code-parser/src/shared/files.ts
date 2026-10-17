@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from '../repository.js';
 import { createHash } from 'node:crypto';
 import { join, relative as platformRelative } from 'node:path';
-import { currentRead } from '../repository.js';
+import { currentRead, ReportedReadError } from '../repository.js';
 import { testGlobToRegExp } from './file-kinds.js';
 import type { IngestOptions } from '../types.js';
 
@@ -32,8 +32,9 @@ export function collectFiles(
   const out: string[] = [];
   const visit = (dir: string) => {
     let entries: string[];
-    try { entries = readdirSync(dir); } catch {
+    try { entries = readdirSync(dir); } catch (error) {
       if (!scope) throw new Error('Unable to read directory');
+      if (scope.stopped || error instanceof ReportedReadError) return;
       scope.report({ code: 'read-error', severity: 'error', path: scope.path(dir), message: 'Directory could not be read.' });
       return;
     }
@@ -42,9 +43,11 @@ export function collectFiles(
       const rel = relative(root, abs).replaceAll('\\', '/');
       if (excludes.some((re) => re.test(rel))) continue;
       let st;
-      try { st = statSync(abs); } catch {
+      try { st = statSync(abs); } catch (error) {
         if (!scope) continue;
-        scope.files.set(rel, { path: rel, status: 'skipped', reason: 'unreadable' });
+        if (scope.stopped) return;
+        scope.files.set(rel, { path: rel, status: 'skipped', reason: error instanceof ReportedReadError ? error.reason : 'unreadable' });
+        if (error instanceof ReportedReadError) continue;
         scope.report({ code: 'read-error', severity: 'error', path: rel, message: 'Input could not be inspected.' });
         continue;
       }
