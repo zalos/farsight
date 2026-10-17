@@ -11,8 +11,9 @@
   },
   "dependencies": {
     "@farsight/core": "workspace:*",
-    "@vscode/tree-sitter-wasm": "^0.3.1",
     "oxc-parser": "^0.138.0",
-    "yaml": "2.9.0"
+    "yaml": "2.9.0",
+    "@farsight/graph": "workspace:*",
+    "@farsight/code-parser": "workspace:*"
   }
 }

@@ -27,13 +27,12 @@ import { createAliasResolver, resolveFileish } from '../aliases.js';
 import type { IngestOptions } from '../types.js';
 import { loadWorkspaceConfig, type WorkspaceConfig } from '../shared/config-files.js';
 
-const STORY_FILE = /\.(stories|story)\.[cm]?[jt]sx?$/;
+
 const EXTS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
 
 /** A CSF file by name: `button.stories.tsx`, `x.story.js`. */
-export function isStoryFile(rel: string): boolean {
-  return STORY_FILE.test(rel);
-}
+export { isStoryFile } from '@farsight/code-parser/support';
+import { isStoryFile } from '@farsight/code-parser/support';
 
 function parse(abs: string, source: string): AstNode | null {
   try {

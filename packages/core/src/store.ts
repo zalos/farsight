@@ -1,3 +1,4 @@
+import { mergeOccurrences, retargetOccurrences } from '@farsight/graph';
 import { buildInfo } from './version.js';
 import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -65,7 +66,8 @@ export class GraphStore {
     for (const e of fragment.edges) {
       // re-key edges so fragments can't collide
       const key = `${e.kind}|${e.from}|${e.to}`;
-      this.edges.set(key, { ...e, id: key });
+      const occurrences = mergeOccurrences(this.edges.get(key)?.occurrences, retargetOccurrences(e));
+      this.edges.set(key, { ...e, id: key, ...(occurrences ? { occurrences } : {}) });
     }
     if (fragment.meta?.tests) {
       this.meta.tests = { ...this.meta.tests, [fragment.repo]: fragment.meta.tests };
@@ -143,7 +145,8 @@ export class GraphStore {
   replaceEdge(oldKey: string, edge: GraphEdge): void {
     this.edges.delete(oldKey);
     const key = `${edge.kind}|${edge.from}|${edge.to}`;
-    this.edges.set(key, { ...edge, id: key });
+    const occurrences = mergeOccurrences(this.edges.get(key)?.occurrences, retargetOccurrences(edge));
+    this.edges.set(key, { ...edge, id: key, ...(occurrences ? { occurrences } : {}) });
   }
 
   stats() {

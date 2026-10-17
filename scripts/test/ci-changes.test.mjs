@@ -26,7 +26,7 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     'examples/invoice-app/docs/flow.md', 'schemas/farsight-affected-v1.schema.json']) {
     assert.deepEqual(selectChecks([path]), { validate: true, e2e: true, echo: false }, path);
   }
-  for (const path of ['packages/core/src/graph.ts', 'packages/core/package.json', 'packages/echo/src/cli.ts',
+  for (const path of ['packages/graph/src/graph.ts', 'packages/core/src/graph.ts', 'packages/core/package.json', 'packages/echo/src/cli.ts',
     'pnpm-lock.yaml', 'package.json', 'pnpm-workspace.yaml', '.nvmrc', '.github/workflows/ci.yml',
     'scripts/ci-changes.mjs', 'new-build-input.json', 'docs/fixture.json']) {
     assert.deepEqual(selectChecks([path]), full, path);

@@ -8,7 +8,7 @@
     "url": "git+https://github.com/zalos/farsight.git"
   },
   "scripts": {
-    "pack:echo": "pnpm --filter @farsight/core build && pnpm --filter @farsight/echo build && node scripts/pack-echo.mjs",
+    "pack:echo": "pnpm --filter @farsight/echo... build && node scripts/pack-echo.mjs",
     "test:echo:package": "pnpm pack:echo && node scripts/test-echo-package.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck && pnpm e2e:typecheck",
@@ -19,17 +19,24 @@
     "e2e:perf": "node scripts/e2e-perf.mjs",
     "e2e:typecheck": "tsc -p e2e/tsconfig.json",
     "lint:commits": "node scripts/lint-commits.mjs",
-    "prepare": "node scripts/install-hooks.mjs"
+    "prepare": "node scripts/install-hooks.mjs",
+    "pack:parser": "pnpm --filter @farsight/code-parser... build && node scripts/pack-parser.mjs",
+    "test:parser:package": "pnpm pack:parser && node scripts/test-parser-package.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@playwright/test": "1.62.1",
     "@types/node": "^26.1.0",
     "esbuild": "^0.28.1",
+    "ts-json-schema-generator": "2.9.0",
     "typescript": "^5.5.0"
   },
   "packageManager": "pnpm@9.0.0",
-  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
   "engines": {
     "node": ">=24"
   }

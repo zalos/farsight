@@ -1,0 +1,50 @@
+{
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zalos/farsight.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "schemas",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "name": "@farsight/graph",
+  "description": "Portable semantic graph contract, validation and traversal",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./semantics": {
+      "types": "./dist/config-check.d.ts",
+      "import": "./dist/config-check.js"
+    },
+    "./schema": "./schemas/graph-v1.schema.json",
+    "./types": {
+      "types": "./dist/graph.d.ts",
+      "import": "./dist/graph.js"
+    }
+  },
+  "dependencies": {
+    "ajv": "8.20.0"
+  }
+}

@@ -1,3 +1,4 @@
+import { createParser } from '@farsight/code-parser';
 import { createHash } from 'node:crypto';
 import { resolve as resolvePath } from 'node:path';
 import type { GraphFragment, GraphEdge } from '@farsight/core';
@@ -48,7 +49,8 @@ export { applyStories, parseStoryFile, isStoryFile, findStorybookDirs, storiesGl
 export type { ParsedStoryFile } from './stories/index.js';
 
 /** Adding a language = one adapter directory + one entry here. */
-export const adapters: LanguageAdapter[] = [tsJsAdapter, javaAdapter];
+export const adapters: readonly LanguageAdapter[] = Object.freeze([tsJsAdapter, javaAdapter]);
+const codeParser = createParser({ adapters });
 
 /**
  * The one ingest entry point every consumer (CLI, server /api/sync, MCP
@@ -82,16 +84,13 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   const opts: IngestOptions = {
     ...options,
     repoName: repo,
+    testFiles: options.testFiles ?? (options.tests === false ? 'include' : 'exclude'),
     testGlobs: { ...testGlobsOf(config?.tests), ...options.testGlobs },
     externals: merge(config?.externals, options.externals),
     plumbing: merge(config?.plumbing, options.plumbing),
     setup: merge(config?.setup, options.setup),
   };
-  const fragments: GraphFragment[] = [];
-  for (const adapter of adapters) {
-    const fragment = await adapter.ingest(repoRoot, opts);
-    if ((fragment.meta?.files ?? 0) > 0 || fragment.nodes.length > 0) fragments.push(fragment);
-  }
+  const fragments = await codeParser.extractRepository(repoRoot, opts);
   // the SQL drivers the adapters saw — read now, because the spec and design passes rebuild meta
   const drivers = fragments.flatMap((f) => f.meta?.stores?.drivers ?? []);
   // what the import pass set aside (builtins, alias misses) — read now for the same reason
