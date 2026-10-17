@@ -102,6 +102,31 @@ and configure their trusted publisher and `parser-libraries` environment before 
 workflow can publish. No npm publication, global install, deployed service or dogfood graph was changed.
 Complete execution/taint analysis and an agent-stage scheduler remain later work.
 
+## Farsight Sentinel proposal — 2026-10-17
+
+Branch `codex/farsight-sentinel-proposal` adds a [security-scanning proposal](proposals/farsight-sentinel.md)
+with execution/data contracts, scanner research, workflow research and repository-fit notes under
+`docs/proposals/farsight-sentinel/`. Scope is documentation only; Sentinel is not
+implemented. The first-release requirements are TS/JS and Java/Spring Boot, local parsing/storage and opt-in
+model providers. Recommended architecture: optional extension, durable SQLite execution ledger, immutable
+compressed source/evidence bundles, versioned rules, specialist scanner adapters and bounded agent review.
+
+PR #115 merged at `4fce1c8` on 2026-10-17; the proposal and branch are re-pinned to that revision and consume
+its `parseRepository()` artifact. The [independent review](proposals/farsight-sentinel/claude-review.md) is
+preserved byte-for-byte; the [response](proposals/farsight-sentinel/codex-response.md) addresses findings
+2.1–2.11 and records verified corrections. Revision covers parser/enrichment provenance, honest coverage,
+licenses/offline effects, framework invalidation, deployment assertions, worker recovery and report identity.
+Owner questions remain verbatim in proposal §9; experiments E1–E8 and the codec comparison belong to increment A
+and were not run. Engine choice, resource budgets and retention defaults still need evidence.
+
+Validation: relative document links and JSON examples checked; `git diff --check` clean; the six authored
+proposal/response files and this added section contain no private names, prohibited site strings or absolute
+home paths; review SHA-256 unchanged. Primary sources and code at `4fce1c8` were inspected, with a read-only
+Node/SQLite version probe. No runtime checks are needed for these ordinary Markdown changes: no build, unit
+tests, e2e, ingest, server restart or global installation ran. Work was isolated in the proposal worktree;
+the primary checkout and dogfood runtime were untouched.
+
+
 ## PR #104 review and main refresh — 2026-10-17
 
 PR #104 remains open on `codex/echo-live-model`. The review branch `codex/pr-104-review` merged main
