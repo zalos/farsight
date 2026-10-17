@@ -8,13 +8,17 @@ Read in order when context is needed: [docs/VISION.md](docs/VISION.md) (why + pe
 
 This file is the canonical project guidance for Codex/GPT and Claude Code. `CLAUDE.md` imports it; update this file instead of maintaining two copies. Read [docs/AI-HANDOFF.md](docs/AI-HANDOFF.md) at session start for the verified setup, latest validation, and handoff notes. Keep durable project facts here and dated results there. Provider-private memories are historical hints; current code and repository docs take precedence.
 
-Use Node 24+ (`.nvmrc`) and pnpm 9.0.0. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. For concurrent implementation use separate worktrees, and record branch, changes, checks, and unresolved issues in the handoff before switching providers. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
+Use Node 24+ (`.nvmrc`) and pnpm 9.0.0. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. Record branch, changes, checks, and unresolved issues in the handoff before switching providers. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
+
+**Work in a worktree, never in the primary checkout** (learned 2026-10-17, PR #115). The primary checkout is the dogfood server's workspace: `pnpm build` there rewrites the `dist/` the 4478 server restarts into (`farsight status` and the HUD chip then say RESTART into a feature build), `pnpm e2e` there stamps `e2e/test-results/results.json`, which the dogfood graph reads as its own e2e run, and a branch left checked out there is what the next session's `git status` starts from. Every implementation, Codex or Claude, concurrent or not, happens in its own worktree (`git worktree add ../farsight-wt/<name> -b <branch>`; Codex's live under `~/.codex/worktrees/`); the primary checkout stays on `main` with a `main` build. If you did build or test in the primary checkout, say so in the handoff, check `main` out again and rebuild before handing off.
 
 **Validate affected work only.** Use the change-to-check table in [docs/CI.md](docs/CI.md) for local checks too.
 Ordinary Markdown documentation edits need no build, unit tests or e2e; packaged docs and test fixtures are the
 exceptions. CI uses `scripts/ci-changes.mjs` to select suites, with full checks for shared or unknown inputs.
 
 **Preserve the dogfood graph:** bare CLI ingest replaces `graph.json` with a single source and does not apply workspace source excludes. Refresh the existing multi-source graph using the restarted workspace server's `POST /api/sync`. For isolated validation, run the absolute CLI path from a temporary directory with an explicit `--out`; snapshots are written relative to cwd too. Restart MCP connections after rebuilding or changing tools.
+
+**A parser, core or store change is measured on a real ingest, against a `main` build** (2026-10-17): fixtures prove the code moved intact, not what the product now ships. Build `main` in a second worktree, ingest this repository with both builds from scratch directories, and compare node and edge sets, `meta.sourceDigest`, `graph.json` bytes and the `.farsight/farsight.db` size; serve the new graph and collect page errors on the front door, the Map and the code map. Put the before/after numbers in the PR body. A new field on every node or edge grows `/graph`, the payload the handoff names as the ceiling, so it ships with a consumer or stays out of the application graph until one exists.
 
 ## Core principles (do not violate)
 
@@ -37,6 +41,12 @@ Every change is a branch (`feat/…`, `fix/…`, `docs/…`, `chore/…`) and a 
 - PR/review feedback uses [Conventional Comments](https://conventionalcomments.org/): `label (blocking|non-blocking):
   subject`, with a reason and requested action where useful. Notes/nitpicks are non-blocking. Correct your own
   noncompliant material; preserve others' work. These labels do not apply to source-code comments or ordinary chat.
+- Every commit an assistant authors ends with a `Co-Authored-By: <assistant> <address>` trailer, the one its tool
+  emits. Farsight's own *commits made with an agent* fact (`core/agent-trailer.ts`) reads that trailer and nothing
+  else, so a branch without it under-counts the dogfood graph. Never a session link or a transcript id (the repo is
+  public).
+- A new package, public contract or package boundary gets an ADR in `docs/ARCHITECTURE.md` in the same PR, beside
+  the `docs/MAP-PACKAGES.md` entry; the proposal argues it, the ADR records what was decided.
 
 ## Commands
 
