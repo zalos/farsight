@@ -10,6 +10,10 @@ This file is the canonical project guidance for Codex/GPT and Claude Code. `CLAU
 
 Use Node 24+ (`.nvmrc`) and pnpm 9.0.0. Build before tests, which import `dist/`. Put a Node 24 on PATH (`nvm use`) before building. Before changing work, inspect `git status`; preserve another provider's uncommitted edits. For concurrent implementation use separate worktrees, and record branch, changes, checks, and unresolved issues in the handoff before switching providers. Shared instructions do not imply shared permissions, authentication, or live MCP connections.
 
+**Validate affected work only.** Use the change-to-check table in [docs/CI.md](docs/CI.md) for local checks too.
+Ordinary Markdown documentation edits need no build, unit tests or e2e; packaged docs and test fixtures are the
+exceptions. CI uses `scripts/ci-changes.mjs` to select suites, with full checks for shared or unknown inputs.
+
 **Preserve the dogfood graph:** bare CLI ingest replaces `graph.json` with a single source and does not apply workspace source excludes. Refresh the existing multi-source graph using the restarted workspace server's `POST /api/sync`. For isolated validation, run the absolute CLI path from a temporary directory with an explicit `--out`; snapshots are written relative to cwd too. Restart MCP connections after rebuilding or changing tools.
 
 ## Core principles (do not violate)

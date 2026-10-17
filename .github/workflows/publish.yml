@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          lfs: true
+          # Detection reads commit messages and package.json only; no binary assets.
 
       # The push is a release when it brings in the commit `chore(release): vX.Y.Z`
       # for the version the root package.json now carries. A squash merge (the way

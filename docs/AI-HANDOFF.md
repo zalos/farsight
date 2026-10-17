@@ -41,6 +41,21 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Affected CI checks — 2026-10-17
+
+Branch `codex/ci-affected-checks` adds a small path selector for validation, e2e and Echo packaging. Ordinary
+Markdown changes skip runtime checks; packaged Echo docs still check packaging, and fixture Markdown remains
+test input. Unit-test-only and e2e-only edits select their respective suites; shared and unknown inputs run all
+checks. Secret scanning and commit conventions remain independent. PR title edits rerun the separate commit
+workflow without cancelling tests. Publish detection no longer fetches LFS assets.
+
+Local checks: `pnpm test:scripts` (19 passed), `actionlint` on the changed workflows, and `git diff --check`.
+Replaying the docs-only `09bbb8f` push selects no runtime checks. Regression coverage includes PR merge-bases,
+multi-commit pushes, deletions, renames into docs, unusual filenames and unavailable ranges. The workflow changes
+themselves select the full checks on GitHub; individual test selection is deliberately out of scope. No runtime
+build, deployment or live-server refresh is needed for this CI-only change. See `docs/CI.md` for the selection table
+and local validation guidance.
+
 ## Echo sub-mind development round — 2026-10-13
 
 Branch `codex/echo-submind`, based on `d6ff0c6`, implements the first bounded, read-only research path. This is
