@@ -43,6 +43,11 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Affected CI checks — 2026-10-17
 
+Follow-up on the same branch: Codex and Claude must use Conventional Commits, Conventional Comments for PR/review
+feedback, and a validated PR title preserved as the squash-commit subject. `AGENTS.md` is the canonical project
+rule, imported by `CLAUDE.md`; the PR template reinforces it. Both providers' global instructions and shared memory
+also record the user's preference. PR #114's title is `ci: run only checks affected by changed paths`.
+
 Branch `codex/ci-affected-checks` adds a small path selector for validation, e2e and Echo packaging. Ordinary
 Markdown changes skip runtime checks; packaged Echo docs still check packaging, and fixture Markdown remains
 test input. Unit-test-only and e2e-only edits select their respective suites; shared and unknown inputs run all
@@ -55,6 +60,11 @@ multi-commit pushes, deletions, renames into docs, unusual filenames and unavail
 themselves select the full checks on GitHub; individual test selection is deliberately out of scope. No runtime
 build, deployment or live-server refresh is needed for this CI-only change. See `docs/CI.md` for the selection table
 and local validation guidance.
+
+The initial implementation at `f77fe86` passed all GitHub checks, including e2e and Echo packaging. A live PR-title
+edit reran only commit conventions and left the original CI run uninterrupted. The subsequent instruction-only
+follow-up is checked with the commit/title linter and `git diff --check`; the PR's cumulative workflow changes
+still select the full CI checks on GitHub.
 
 ## Echo sub-mind development round — 2026-10-13
 

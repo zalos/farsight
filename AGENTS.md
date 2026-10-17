@@ -27,6 +27,22 @@ exceptions. CI uses `scripts/ci-changes.mjs` to select suites, with full checks 
 
 Every change is a branch (`feat/…`, `fix/…`, `docs/…`, `chore/…`) and a pull request into `main`; nothing is committed or merged on `main` locally. **PRs are squash-merged** (`gh pr merge --squash`, the only kind `main` accepts), so one PR = one commit on `main` = one line in the changelog. That makes **the PR title the commit that matters**: it must be a [Conventional Commit](https://www.conventionalcommits.org/), `type(scope): what changed` with the scope a package name (`feat(parsers): …`, `fix(cli): …`, `docs: …`; the full type and scope lists live in `scripts/lint-commits.mjs`), and the PR body — the template `.github/PULL_REQUEST_TEMPLATE.md`: *what changed · why · how it was checked · left open* — becomes that commit's message. Commits on the branch are conventional too (the `commit-msg` hook that `pnpm install` installs and CI's required `commits` check both run `scripts/lint-commits.mjs`; `pnpm lint:commits --message '…'` tries a subject), but they are working notes: commit often and leave them as they are, the squash folds them. Never `--admin`, never a local merge into `main`, never `git stash` (see *Dispatching subagents*). History before July 2026 predates the convention; history before 2026-10-04 has merge commits — don't imitate either.
 
+**Required for both Codex and Claude:**
+
+- Every authored commit and PR title uses `type(scope): summary` (scope optional; when present, use a registered
+  package or surface scope). Before creating or changing a PR title, and again before a squash merge, validate the
+  exact title with `pnpm lint:commits --message '…'`. The PR title must be the intended squash-commit subject;
+  preserve it at merge, apart from GitHub's appended PR number. Branch commit subjects need not equal the PR title.
+- PR discussion and review comments use [Conventional Comments](https://conventionalcomments.org/):
+  `label (decoration): subject`, then supporting context when needed. Use labels such as `issue`, `suggestion`,
+  `question`, `todo`, `chore`, `note`, `nitpick`, `thought`, or `praise`. Mark actionable feedback explicitly
+  `(blocking)` or `(non-blocking)` and explain the reason and requested change; notes and nitpicks are non-blocking.
+  For example: `issue (blocking): Preserve both paths when a file is renamed`. This governs review feedback, not
+  source-code comments or ordinary chat replies.
+- Before opening or updating a PR, check its title, template-based body, branch commit subjects and any comments
+  authored for it against these rules. Correct noncompliant material you authored; do not rewrite others' comments.
+  Commit/title syntax has automated enforcement; comment format is an agent responsibility.
+
 ## Commands
 
 ```sh
