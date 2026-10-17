@@ -12,6 +12,10 @@
 
 Everything hinges on one contract: **language adapters emit a language-agnostic Semantic Graph**, and **every visual is a lens (a query + layout + labeling strategy) over that graph**.
 
+Related research: [analysis core options — extracted Farsight, GitNexus, and Tree-sitter](research/analysis-core-options-2026-10-17.md)
+compares the implemented baselines, integration tradeoffs, and evaluation needed for a reusable analysis platform.
+It is a research recommendation, not an adopted replacement architecture.
+
 ## Speed strategy
 
 Requirement: "fast" — parsing monorepos in seconds, 60fps navigation of large graphs.
