@@ -43,8 +43,8 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Farsight Sentinel implementation planning — 2026-10-17
 
-Branch `docs/sentinel-implementation-plan` prepares PR 00 against proposal PR #117 (`04c3c63`, authored as
-`354a184`; application baseline `4fce1c8`). The review draft is
+Branch `docs/sentinel-implementation-plan` has PR 00 open as [#118](https://github.com/zalos/farsight/pull/118),
+against proposal PR #117 (`04c3c63`, authored as `354a184`; application baseline `4fce1c8`). The review draft is
 `docs/proposals/farsight-sentinel/implementation-plan.md`, with PR backlog, code examples and implementation
 review/response beside it. Both Claude reviews are preserved unchanged. The response traces every review
 finding to a change and acceptance gate. PRs 01–20/23a/24–26 reach a deterministic CLI/MCP/GUI release;
@@ -62,8 +62,10 @@ The original SQL probe tested duplicate publication and integrity only; it misse
 The corrected composite-key example was executed under Node 24.19.0 / SQLite 3.53.3: nine behavior checks,
 two work revisions/two publications, duplicate and cross-revision references rejected, foreign keys valid and
 integrity `ok`. Documentation checks passed for 50 local links, one JSON block and 13 TypeScript blocks' syntax,
-plus whitespace and unchanged review hashes. These are not full typechecking
-or Sentinel runtime behavior. No Sentinel runtime, scanner, model trial, application build/test, ingest,
+plus whitespace and unchanged review hashes. The initial plan commit `81d265a` passed CI's affected-check,
+commit and secret gates; validate/e2e/echo-package were correctly skipped for ordinary Markdown.
+These checks are not full TypeScript typechecking or Sentinel runtime validation.
+No Sentinel runtime, scanner, model trial, application build/test, ingest,
 installation or live-server change is part of this planning work. Implementation awaits review of PR 00;
 the primary checkout and its existing editor-settings change are untouched.
 

@@ -1,6 +1,7 @@
 # Farsight Sentinel PR build plan
 
-**Status:** proposed backlog for review, 2026-10-17. All rows are **planned**; no implementation PR has started.
+**Status:** proposed backlog for review, 2026-10-17. PR 00 is open as [#118](https://github.com/zalos/farsight/pull/118).
+All implementation rows are **planned**; no implementation PR has started.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
 
