@@ -56,6 +56,15 @@ one exception, instead of ignoring the parent directory and then trying to re-in
 Fixture naming also has an explicit discovery check; a renamed JSON file is not assumed sufficient for every
 ecosystem. These are implementation acceptance requirements, not configuration changes made by PR 00.
 
+## Owner clarification: standalone delivery
+
+The report must be independently deliverable as well as integrated into Farsight. PR 19 now owns
+self-contained offline HTML/Markdown/JSON from the same pinned
+report document, including readable application labels, explanations and permitted evidence. Withheld evidence
+is explicit and cannot erase a finding. PR 25 adds integrated-view parity and optional navigation/actions;
+PR 26 tests a clean recipient with no product installation, source checkout or network. These are planned
+acceptance gates; this documentation update does not claim the report renderer has been implemented.
+
 ## Validation performed for this revision
 
 The SQL example was executed under **Node 24.19.0 / SQLite 3.53.3**. Nine behavior checks passed: parent/child
@@ -76,7 +85,8 @@ container, model, ingest or dogfood-server operation is needed for these ordinar
 ## Next action
 
 Review PR 00 and the [execution-readiness table](implementation-prs.md#4-execution-readiness-and-decision-record).
-The three confirmed owner choices remain unchanged: local first with a hosted option, source-only first,
-Ollama plus a configurable hosted endpoint. Record the container-prerequisite answer and agree the revised
+Confirmed owner choices are local first with a hosted option, source-only first, Ollama plus a configurable
+hosted endpoint, and standalone report delivery alongside Farsight integration. Record the container-prerequisite
+answer and agree the revised
 plan before dispatching PR 01. PR 01 then produces the capability/decision manifest and measurements needed
 to select exact engines, framework releases and thresholds. No planned support is advertised as shipped.

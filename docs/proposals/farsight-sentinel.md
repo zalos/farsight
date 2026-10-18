@@ -48,6 +48,7 @@ no finding, unsupported checks, failures, reused results and unfinished work.
 | Explain a false flag | Retain the original observation and the scoped, evidenced decision that changes its treatment |
 | Understand the application consequence | Place a finding or gap on known screens, journeys and personas through the same canonical graph, with a business-register sentence and pinned evidence; show an explicit limitation when context is unavailable |
 | Use CLI, Copilot or GUI | Submit, inspect and resume the same durable run, independent of the client session |
+| Deliver an assessment independently | Share a self-contained report with readable findings, evidence, gaps, decisions and application context; recipients need no Farsight installation, service or source checkout |
 
 There is no universal “secure” score. A successful scan means its declared plan completed under stated limits.
 Static reachability is not proof that a path executes, and an unresolved call is not proof that it cannot.
@@ -369,6 +370,12 @@ Comparability requires the same rule revision, engine digest and relevant capabi
 compatibility mapping; otherwise show `changed detection`, retaining the historical finding for review.
 
 ## 6. Clients and report experience
+
+The report is both a standalone deliverable and part of Farsight. Use one pinned report document for both:
+self-contained offline HTML, readable Markdown and structured JSON carry the assessment, scope, captured
+application labels, permitted evidence and limitations. Farsight adds Map/gate/code navigation and authorized
+actions to the same facts. Essential explanations cannot depend on those links, a running service or the
+original checkout. A shareable report is distinct from the private bundle needed to replay analysis.
 
 The CLI provides plan, run, status, pause, resume, retry, compare, report and rule-management operations.
 Long work runs in a coordinator process independent of GUI/MCP connections; foreground CLI execution can also

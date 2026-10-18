@@ -58,6 +58,13 @@ for external scanners is awaiting the owner's answer; parsing/planning need none
 screen/journey/persona placement, deterministic MCP/UI ahead of model gates, shared grant-policy semantics,
 trusted settings/example/ignore conventions, safe fixture names and opt-in expensive suites with early CI wiring.
 
+The owner also confirmed that the report must be independently deliverable while fitting into Farsight.
+The plan now requires self-contained offline HTML and readable Markdown/JSON from the same pinned report
+document, including captured application labels, explanations, permitted evidence and explicit omissions.
+PR 19 delivers this before the GUI; PR 25 checks integrated-view parity; PR 26 tests a recipient with no
+product installation, source checkout or network. Standalone delivery is a confirmed requirement, not an
+optional later export or a replay-bundle prerequisite. Renderer behavior remains planned, not implemented.
+
 The original SQL probe tested duplicate publication and integrity only; it missed the second-revision defect.
 The corrected composite-key example was executed under Node 24.19.0 / SQLite 3.53.3: nine behavior checks,
 two work revisions/two publications, duplicate and cross-revision references rejected, foreign keys valid and

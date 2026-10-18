@@ -124,6 +124,8 @@ The helper must verify source/parse/enrichment identities, not just a matching c
 ```ts
 import type { Counted } from '@farsight/core';
 
+type PlaceLabel = { business: string; code: string };
+
 type FindingPlace = {
   context?: {
     artifact: ArtifactId;
@@ -134,12 +136,14 @@ type FindingPlace = {
   nodeIds: string[]; // Canonical IDs, including the source/repository identity.
   screens: Array<{
     id: string;
+    label: PlaceLabel; // Captured from pinned context, not resolved by the recipient.
     via: 'direct-use' | 'potential-impact';
     evidenceArtifact: ArtifactId;
   }>;
-  journeys: Array<{ id: string; screenIds: string[] }>;
+  journeys: Array<{ id: string; label: PlaceLabel; screenIds: string[] }>;
   personas: Array<{
     id: string;
+    label: PlaceLabel;
     screenIds: string[];
     declared: boolean;
     evidenceArtifact: ArtifactId;
@@ -155,6 +159,9 @@ additive screen breakdown. Empty placement is valid for a workflow/dependency fi
 The business register can say “Invoice submission needs review: the approval check is not known to cover
 this action.” The code register adds route, rule, producer and weakness details. Both reference the same
 finding and limitations; neither says reachability establishes exploitability. Apply the same shape to gaps.
+Persist the labels, rendered explanations/definitions and permitted evidence with the report document so a
+standalone renderer needs no graph or API lookup. Canonical IDs remain useful in Farsight; the delivered
+report also carries readable context and explicit disclosure/placement limitations. Escape labels as data.
 
 ## 3. Define a rule and its applicability before its worker
 
@@ -608,6 +615,18 @@ and real isolated storage/process boundaries where the behavior depends on them.
 ```ts
 const acceptanceCases = [
   {
+    name: 'a delivered report is readable without either product',
+    arrange: 'self-contained HTML from a pinned report; copy only the file to a clean recipient',
+    act: 'remove service and checkout access; open offline with JavaScript disabled',
+    expect: 'readable summary, issues, gaps, decisions and permitted evidence; internal links work; no requests',
+  },
+  {
+    name: 'sharing less evidence cannot erase a finding',
+    arrange: 'one report revision with source evidence excluded by the shareable profile',
+    act: 'render standalone and integrated views of the same report and scope',
+    expect: 'same findings, coverage and decisions; omitted evidence explicitly withheld; captured labels preserved',
+  },
+  {
     name: 'a child work revision has its own publication',
     arrange: 'one logical work ID in parent revision 1 and child revision 2',
     act: 'publish each revision; retry revision 1; attempt a cross-revision reference',
@@ -702,7 +721,12 @@ farsight-sentinel rerun --from run-id --model review-provider --stage agent-revi
 
 # These use retained evidence; report generation does not rescan.
 farsight-sentinel compare --from run-id --to child-run-id
-farsight-sentinel report --run child-run-id --format sarif --out sentinel.sarif
+# Deliver one HTML file; its essential content needs no service, checkout or network.
+farsight-sentinel report --run child-run-id --format html --profile shareable --out sentinel-report.html
+# Reuse the returned immutable report ID for other formats at the same evaluation time.
+farsight-sentinel report --report report-id --format markdown --profile shareable --out sentinel-report.md
+farsight-sentinel report --report report-id --format sarif --profile shareable --out sentinel.sarif
+# Replay retains private analysis inputs and is a separate delivery choice.
 farsight-sentinel bundle --run child-run-id --profile private-replay --out scan-bundle.tar.gz
 farsight-sentinel restore --bundle scan-bundle.tar.gz --into restored-scan
 ```

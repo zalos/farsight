@@ -35,6 +35,10 @@ not silent amendments or claims that Sentinel already exists.
 - **Ollama and a configurable hosted endpoint.** Ship an Ollama adapter and a capability-tested
   OpenAI-compatible HTTP adapter. Compatibility is verified per endpoint; it does not imply support for
   every vendor feature. Both are optional, and hosted disclosure requires trusted local configuration.
+- **Standalone delivery and Farsight integration.** A recipient can understand a delivered report without
+  Farsight, Sentinel, the original checkout or a running service. Farsight presents that same report with
+  application navigation and authorized follow-up actions. Placement enriches the report when known; missing
+  journey context does not prevent standalone reporting.
 
 ### Proposed defaults to review
 
@@ -94,6 +98,7 @@ the remaining clarifications needed to make implementation unambiguous:
 | Native processes | Trusted parser workers are bounded subprocesses over captured inputs. External tools run behind real isolation. A stripped environment or Node child alone is not a sandbox. |
 | Recovery ownership | Coordinator ownership and worker lifetime are separate. SQLite prevents two coordinators; verified container identity permits orphan cleanup. Late results are fenced even after cleanup. |
 | Product placement | Findings and gaps carry a report-side place on known screens, journeys and personas from pinned context; route reachability is not proof of exploitation |
+| Report delivery | One versioned report document supports standalone HTML/Markdown/JSON and the Farsight UI. Captured labels, explanations and permitted evidence travel with it; service links are optional enhancements |
 | Independent delivery | PR 23a/24/25/26 deliver deterministic interfaces and packaging; PR 21/22/23b/25b add model review without delaying that checkpoint |
 
 ## 3. System architecture
@@ -126,6 +131,9 @@ flowchart TB
   LEDGER --> FOLD[Shared report and comparison folds]
   CAS --> FOLD
   FOLD --> IPC
+  FOLD --> DOC[Versioned report document]
+  DOC --> EXPORT[Standalone HTML, Markdown and JSON]
+  DOC --> BRIDGE
 ```
 
 The application graph remains canonical for code entities and relationships. Sentinel's execution graph
@@ -567,6 +575,43 @@ gap and decision has an application sentence and an evidence link, even when no 
 
 All views use one report fold pinned to ledger sequence and evaluation time. HTML/Markdown show findings,
 coverage gaps, decisions, every planned check, producer/model inventory, usage certainty and replay availability.
+
+### Standalone delivery contract
+
+Standalone delivery is a first-class PR 19 outcome, before the Farsight bridge or GUI. The canonical report
+document records report/schema/catalog versions, run/snapshot identity, source/configuration scope, ledger
+sequence and evaluation time. It contains findings, coverage, decisions, comparison reasons, counts and their
+definitions, producer provenance, limitations, and the pinned application context needed to explain them.
+Retain readable screen/journey/persona labels in both registers alongside canonical IDs; exporting must not
+need to look up a label or explanation from today's graph. Decision validity is explicitly **as of** the report's
+evaluation time, with expiry dates shown; opening an old report does not silently recalculate its verdicts.
+
+| Delivery | Required behavior |
+|---|---|
+| Standalone HTML | One self-contained, readable file with embedded styles and permitted evidence excerpts, contents/internal anchors, accessible headings and print styling. Core content works with JavaScript disabled. No CDN, remote fonts/images, API fetch, localhost, login or application installation is needed to read it |
+| Markdown and JSON | The same pinned report scope, findings, gaps, decisions and provenance; Markdown carries its readable explanations/evidence inline, while JSON carries the versioned structured document |
+| Farsight view | Read the same report identity and folds, then add validated Map/gate/code links, filters and authorized actions. Navigation failure or graph mismatch cannot hide the report's findings or explanations |
+
+Lead with an application summary: what was checked, what needs attention, business consequence, known gaps
+and decisions. Each issue includes its technical detail, reason/limitations, location, available supporting
+evidence and recommended next investigation or change. Do not invent ownership, a confirmed exploit or a
+tested repair. Known screens/journeys/personas appear as readable context; missing context has a plain
+explanation. The report must remain understandable when every optional “Open in Farsight” link is unavailable.
+
+Rendering consumes the retained report document and an explicit disclosure profile, not live graph/service
+callbacks. A shareable profile excludes full source bundles, credentials and raw prompts; permitted excerpts
+are embedded and redacted. An omitted excerpt is marked withheld with its reason and original evidence
+identity, rather than leaving a broken file/API link or silently removing the issue. Export metadata records
+the disclosure profile, included scope and omissions. Redaction never changes finding/coverage verdicts or
+their scoped counts. If size limits require a narrower report, label that scope and its relation to the full
+run; refuse an oversize delivery rather than silently truncating it.
+
+The delivered report is a static assessment; the private replay bundle remains the separate artifact for
+rerunning analysis. Report generation itself uses standalone Sentinel without requiring Farsight's server.
+PR 19 tests offline file opening after source/service removal, both registers, redacted/missing evidence,
+internal anchors, no network requests, print layout and parity with the canonical document. PR 25 adds
+integrated-view parity, and PR 26 repeats delivery on a clean recipient environment without either product.
+
 SARIF is a findings projection; stable rule family and namespaced Sentinel fingerprints remain separate from
 GitHub's source-line fingerprint. Split or refuse oversized exports explicitly; do not silently drop findings.
 Validate against the standard and the target consumer's current limits. [GitHub SARIF support](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support)
@@ -651,7 +696,7 @@ mark a milestone done from a fixture alone when it requires a real ingest, UI re
 Before PR 01, agree the architecture refinements in section 2 and record the container-prerequisite choice
 before external-scanner probes. PR 01 supplies the exact framework matrix/rule list, measured supported hosts,
 accepted E3/E5 thresholds, required-coverage policy and proposed retention/budgets before their dependent lanes
-are dispatched. The three owner choices above are settled and need not be asked again.
+are dispatched. The confirmed owner choices above are settled and need not be asked again.
 The backlog's execution-readiness table records which decisions block dispatch, which PR supplies evidence
 and what counts as acceptance. No model gate blocks the deterministic checkpoint.
 

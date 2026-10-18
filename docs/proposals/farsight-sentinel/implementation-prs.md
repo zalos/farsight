@@ -18,6 +18,7 @@ and frameworks are not considered supported merely because an adapter class exis
 | Real deterministic scanning | 10–13 | Installed scanners produce attributed findings and gaps from the frozen snapshot |
 | Framework and path analysis | 14–18 | Supported TS/JS and Spring control semantics, bounded paths and optional deep evidence |
 | Assessment | 19–20 | Full-run comparison, placed findings, dispositions and imported runtime evidence |
+| Standalone report delivery | 19, extended by 20 | A self-contained report can be read without Farsight, Sentinel or the repository; later decisions use the same document |
 | Deterministic release | 23a, 24–26 plus 01–20 | CLI/MCP/GUI parity, independent coordinator, replay bundle and installable package; no model gate on this path |
 | Optional model release | 21–22, 23b, 25b | Ollama/hosted review and external claims, with their own quality, cost and disclosure gates |
 | Differential scanning | 27–28 | Audited conservative reuse matching full scans |
@@ -100,6 +101,7 @@ map and shared handoff. Preserve both Claude reviews byte-for-byte.
 Review the architecture refinements, scope, PR order and acceptance gates. Record the confirmed owner choices:
 local first with a hosted option, source-only v1, Ollama plus a configurable hosted endpoint. Keep exact
 framework versions and thresholds as named decisions for PR 01. Do not install scanners or run model trials.
+Also record standalone report delivery alongside Farsight integration as a confirmed requirement.
 
 **Done when:** owner review has resolved or explicitly deferred the choices that affect PR 01. Documentation
 links, examples and whitespace are valid. **Demo:** walkthrough of one scan, one interruption and one changed rule.
@@ -443,8 +445,8 @@ beside stronger engine evidence, or the explicit unavailable-engine gap.
 
 **Suggested title:** `feat: correlate Sentinel evidence and compare complete assessments`
 
-**Files:** `src/findings/{normalize,correlate,match,compare}.ts`, `src/reports/{context,place}.ts`,
-report renderers, placement/SARIF fixtures, `docs/COUNTS.md` and catalog definitions.
+**Files:** `src/findings/{normalize,correlate,match,compare}.ts`, `src/reports/{context,place,document,html,markdown}.ts`,
+report renderers, placement/offline-delivery/SARIF fixtures, `docs/COUNTS.md` and catalog definitions.
 **Depends on:** 10–18; can start contract work against fixtures earlier.
 
 Preserve observations, version correlation, distinguish exact/probable/ambiguous matches and implement full-run
@@ -457,12 +459,21 @@ Missing/mismatched context yields an empty place plus a reason, not a guessed cu
 Project finding and gap `place` through cached core `flowWalks`/`affectedReach`, `journeyTree` and
 `personaOfScreen`: canonical nodes, screens, journeys and persona provenance. State direct use versus possible
 impact. Deduplicate screens, preserve overlapping personas and bounds, and emit both registers from the same fold.
+Retain readable labels, definitions, issue explanations and permitted evidence in the versioned report document.
+Deliver self-contained HTML with inline styles/evidence, internal navigation and print styling; core content
+works offline with JavaScript disabled. Markdown/JSON carry the same scope and facts. Standalone generation
+requires no Farsight server or bridge, and reading the delivered report requires neither product. Missing
+journey context is a disclosed limitation, not a dependency that blocks a report. Apply a named disclosure
+profile; withheld evidence remains explicit without hiding the finding or changing coverage. Optional Farsight
+links supplement local explanations. PR 20 adds dispositions/imported evidence to this same document/renderers.
 
 **Done when:** line movement, duplicate symbol names, same-sink distinct issues, narrowed rules, missing engines
 and removed routes cannot falsely resolve findings; SARIF validates; all projections share counts; one route
 appears on its reaching screen/journey with a business sentence; artifact-only inputs and mismatched context
-remain honestly unplaced. **Demo:** compare full scans and explain the affected invoice journey, its personas
-and a changed detection separately from a repaired issue, without requiring the reader to decode a route ID.
+remain honestly unplaced; offline delivery needs no source tree/service/network and no broken local links;
+redacted and print views remain readable; counts/verdicts match the pinned document. **Demo:** hand the HTML
+report to a reader without Farsight, explain the affected invoice journey and a changed detection, then open
+that same report in the integrated view once PR 25 lands.
 
 ### PR 20 — dispositions, deployment assertions and runtime-evidence import
 
@@ -586,11 +597,16 @@ Use PR 19's place for business-register sentences on known screens, journeys and
 Sentinel chip on the gate card and Map property's Gates & rules tab, linking to the same finding/gap detail;
 there is no new journey surface or per-card graph scan. Evidence reads pinned bytes. Links validate snapshot/source
 identity; when the current graph differs, show historical evidence instead of silently opening current code.
+Render the same report document delivered standalone. Farsight adds navigation and authorized actions; it
+must not own essential report explanations or compute alternate verdicts. Export/read parity uses the same
+report ID, evaluation time and scope; unrelated current-graph labels cannot rewrite a delivered report.
 
 **Done when:** CLI/MCP/GUI counts and outcomes agree; keyboard/narrow/light-theme/error/empty states work;
 read-only controls match server enforcement; screenshots inspected and page/console errors collected; the
 same route issue is understandable from both the Map and Sentinel. **Demo:** a business reader names the
 screen/journey and action affected, sees what is uncertain and follows the existing gate card to evidence.
+Compare that explanation, its counts and its evidence limits with the standalone report, including a report
+whose application graph is unavailable or has changed.
 Run the review swarm at this checkpoint once authorized, before model-specific UI work is required.
 
 ### PR 25b — model review and disclosure in the GUI
@@ -627,6 +643,9 @@ first selection until this PR. Keep every existing required job and its path-sel
 malicious archives cannot escape or execute; GC cannot remove retained evidence; full release stories pass;
 disabling/uninstalling Sentinel preserves data and Farsight startup. **Demo:** clean install → scan → interrupt →
 resume → compare → export → restore. State any unavailable deep capability in the release notes.
+Separately copy only the shareable HTML report to a clean recipient environment with network disabled and
+neither Farsight nor Sentinel installed: all essential content/internal anchors/print views still work. Opening
+a report must not require restoring a replay bundle or reconnecting to the originating machine.
 Label this release's capabilities precisely. The optional model release additionally requires 21/22/23b/25b,
 accepted E5/model E8, claim-recovery E4 and tarball/restore tests that rerun a selected model on retained source.
 Do not advertise model support from placeholder contracts or hold the deterministic checkpoint for those gates.
@@ -697,6 +716,7 @@ choice recorded; it does not authorize a scanner installation, paid experiment o
 | Local first; hosted option retained | Owner | Confirmed | Settled for this plan |
 | Source-only; isolated builds later | Owner | Confirmed | Settled for PRs 01–28 |
 | Ollama and configurable hosted endpoint | Owner | Confirmed; disclosure/budgets remain configured per run | Settled provider scope; actual calls at 01/21/22 need configured grants |
+| Standalone report delivery plus Farsight integration | Owner | Confirmed; one report document with offline delivery and optional integrated navigation/actions | Contracts in 02; standalone acceptance in 19, parity in 25, clean-recipient gate in 26 |
 | Required container runtime for external scanners | Owner | Proposed; owner answer pending. Docker Desktop terms and Colima alternative are described in the architecture | External-scanner probes in 01; no host fallback |
 | Exact host/runtime/framework/engine pins | Feasibility lead | Not measured; candidate matrix only | 01 exit, before advertising support or dispatching corresponding adapter lane |
 | E3/E5 thresholds and labeled corpus | Feasibility lead + owner | Proposed gates in architecture; no results claimed | 01 decision record, then production gates at 18/22 |
