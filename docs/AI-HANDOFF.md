@@ -41,6 +41,32 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Farsight Sentinel implementation planning — 2026-10-17
+
+Branch `docs/sentinel-implementation-plan` prepares PR 00 against proposal PR #117 (`04c3c63`, authored as
+`354a184`; application baseline `4fce1c8`). The review draft is
+`docs/proposals/farsight-sentinel/implementation-plan.md`, with PR backlog, code examples and implementation
+review/response beside it. Both Claude reviews are preserved unchanged. The response traces every review
+finding to a change and acceptance gate. PRs 01–20/23a/24–26 reach a deterministic CLI/MCP/GUI release;
+21/22/23b/25b add model review independently; 27–30 cover differential selection/audit, isolated Java builds
+and managed runtime analysis. The wave table assigns shared contracts/catalogs/CI to one integration owner.
+
+Owner decisions for this draft: local first while preserving a hosted option; source-only first release with
+isolated builds later; Ollama plus a configurable hosted endpoint. Exact framework releases, quality thresholds,
+isolation/platform defaults and required-coverage policy remain review items. The proposed container prerequisite
+for external scanners is awaiting the owner's answer; parsing/planning need none. The updated plan adds pinned
+screen/journey/persona placement, deterministic MCP/UI ahead of model gates, shared grant-policy semantics,
+trusted settings/example/ignore conventions, safe fixture names and opt-in expensive suites with early CI wiring.
+
+The original SQL probe tested duplicate publication and integrity only; it missed the second-revision defect.
+The corrected composite-key example was executed under Node 24.19.0 / SQLite 3.53.3: nine behavior checks,
+two work revisions/two publications, duplicate and cross-revision references rejected, foreign keys valid and
+integrity `ok`. Documentation checks passed for 50 local links, one JSON block and 13 TypeScript blocks' syntax,
+plus whitespace and unchanged review hashes. These are not full typechecking
+or Sentinel runtime behavior. No Sentinel runtime, scanner, model trial, application build/test, ingest,
+installation or live-server change is part of this planning work. Implementation awaits review of PR 00;
+the primary checkout and its existing editor-settings change are untouched.
+
 ## Parser library review follow-up — 2026-10-17
 
 PR #115 remains on `codex/parser-package-extraction`, now including main at `2ca7f2b` (PR #116).

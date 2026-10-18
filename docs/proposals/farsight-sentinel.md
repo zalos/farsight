@@ -29,6 +29,7 @@ evidence with provenance; add managed runtime scanning after the static executio
 | [Workflow research](farsight-sentinel/research-workflows.md) | SQLite, Temporal, LangGraph, SARIF, VEX and VS Code integration |
 | [Repository fit and research notes](farsight-sentinel/repository-fit.md) | Verified Farsight seams, limitations and additional primary sources |
 | [Independent review](farsight-sentinel/claude-review.md) · [Response](farsight-sentinel/codex-response.md) | Preserved review, disposition of each finding, and corrections to the review |
+| [Implementation plan](farsight-sentinel/implementation-plan.md) · [PR build plan](farsight-sentinel/implementation-prs.md) · [Code examples](farsight-sentinel/implementation-examples.md) | Draft technical architecture, dependency-ordered delivery and acceptance gates for review before implementation; [independent review of the plan](farsight-sentinel/claude-review-implementation.md) · [response and execution gates](farsight-sentinel/implementation-review-response.md) |
 
 ## 1. What Sentinel promises
 
@@ -45,10 +46,13 @@ no finding, unsupported checks, failures, reused results and unfinished work.
 | Follow code changes | Save a new snapshot, calculate affected analysis, and disclose why each result ran or was reused |
 | Compare over time | Separate code change, rule change, model change, database change and disposition change |
 | Explain a false flag | Retain the original observation and the scoped, evidenced decision that changes its treatment |
+| Understand the application consequence | Place a finding or gap on known screens, journeys and personas through the same canonical graph, with a business-register sentence and pinned evidence; show an explicit limitation when context is unavailable |
 | Use CLI, Copilot or GUI | Submit, inspect and resume the same durable run, independent of the client session |
 
 There is no universal “secure” score. A successful scan means its declared plan completed under stated limits.
 Static reachability is not proof that a path executes, and an unresolved call is not proof that it cannot.
+The deterministic CLI/MCP/GUI checkpoint is independently releasable; optional model review has separate
+quality, disclosure and cost gates, as sequenced in the implementation backlog.
 The first release does not promise exhaustive path enumeration, all CWE detection, arbitrary plugin execution,
 automatic remediation, or a shared multi-user service.
 
@@ -443,21 +447,23 @@ an owner from rewriting a local database. Signed manifests/external attestation 
 
 ## 8. Delivery plan and release gates
 
-This is a dependency-ordered plan, not a calendar estimate. Run the feasibility work before committing to
-deep-analysis coverage or performance targets. The first usable release includes both language families.
+These are delivery increments, not a calendar estimate. The implementation backlog specifies their dependency
+order: deterministic interfaces can ship before optional model review. Run feasibility work before committing
+to deep-analysis coverage or performance targets. The first usable release includes both language families.
 
 | Increment | Deliverable | Exit evidence |
 |---|---|---|
 | A. Feasibility and contracts | TS/Express/Nest/Next and Java/Spring fixture corpus; engine comparison; snapshot/worker contracts; package ADR | E1 inventory honesty, E2 chain semantics, E7 offline coverage; named capabilities and gaps; license/installation matrix; measured engine/resource behavior |
 | B. Durable deterministic vertical slice | Phase 0 locks; frozen bundles; ledger; CLI; local detectors, secrets, dependencies and CI/IaC adapters; report | E4 crash safety on the simplified protocol; exact inputs recover; all checks recorded; no silent remote calls |
 | C. Shared layers and entry points | TS/JS and Spring layer packs; entry inventory; cross-file evidence integration; per-surface planning | Known-good/bad controls, matcher/order/bypass fixtures, unresolved dispatch and missing-engine cases produce correct findings or explicit gaps |
-| D. Agent reviews and adjudication | Opt-in provider adapter; guided and general review lanes; evidence validation; disposition dependencies | E5 labeled repeated trials, canaries, attribution and agreement; invalid citations rejected; authority stays bounded; changed middleware reopens mitigation |
-| E. First release interfaces | MCP/Copilot flow, Farsight GUI, JSON/HTML/Markdown/SARIF export, full-run comparisons | CLI, MCP and GUI show identical results and scope; client disconnect preserves jobs; source bundle restores in an isolated directory |
+| D. Optional agent reviews | Opt-in provider adapter; guided and general review lanes; evidence validation; model-specific interfaces | E5 labeled repeated trials, canaries, attribution and agreement; invalid citations rejected; authority stays bounded; model rerun from retained source |
+| E. Deterministic release interfaces and decisions | MCP flow, Farsight GUI, placed findings/gaps, scoped dispositions, JSON/HTML/Markdown/SARIF export, full-run comparisons; independent of D | CLI, MCP and GUI show identical results and scope; client disconnect preserves jobs; source bundle restores; changed controls reopen affected mitigations |
 | F. Differential acceleration | Dependency invalidation, explicit reuse, baseline comparison and full-scan audit | E6 incremental/full equivalence on controlled edits; global controls and new surfaces trigger all required work; missing evidence broadens scope |
 | G. Managed runtime analysis | ZAP adapter, authenticated test environments, passive traffic analysis followed by scoped active testing | Approved target/environment, state-reset strategy, request provenance, rate/time limits and cancellation; no production default |
 
-Increment F can ship after the initial release; saved snapshots, rule/model reruns and full comparisons are
-required in E. The worker protocol permits imported runtime evidence before G, without launching requests.
+Increment F can ship after the deterministic release. Saved snapshots, rule reruns and full comparisons are
+required in E; model reruns ship with D. The worker protocol permits imported runtime evidence before G,
+without launching requests.
 Experiments [E1–E8](farsight-sentinel/claude-review.md#6-experiments-prioritised-with-acceptance-criteria) all belong
 to increment A's feasibility work; later increments rerun the relevant checks as release gates. None was run
 for this proposal. E3/E5 thresholds remain owner questions; the response records qualifications to the review's
@@ -488,7 +494,12 @@ choose a model based on unmeasured vendor claims.
 
 ## 9. Decisions and remaining implementation choices
 
-**Questions for the owner, copied verbatim from the review; unanswered by this proposal:**
+The later [implementation plan](farsight-sentinel/implementation-plan.md#1-decisions-and-release-boundary)
+records the owner's answers to questions 1–3: local first while preserving a hosted option, source-only first
+release with isolated builds later, and Ollama plus a configurable hosted endpoint. Questions 4–5 remain
+review decisions. The original questions below are retained verbatim for traceability.
+
+**Questions for the owner, copied verbatim from the review:**
 
 1. Will Sentinel ever be offered as a hosted or managed service? This decides Bearer (ELv2), the Semgrep rules
    licence posture and the CodeQL terms in one go.
