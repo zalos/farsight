@@ -24,3 +24,14 @@ export function snippetRange(source: string, start: number, end: number, maxLine
   const clipped = lines.slice(0, maxLines).join('\n');
   return lines.length > maxLines ? clipped + '\n  …' : clipped;
 }
+
+/**
+ * A class-level base and a method-level path as one route path: `api/v1/orders` + `:id/approve`
+ * → `/api/v1/orders/:id/approve`; empty parts, doubled and trailing slashes fold away, and the
+ * result always starts with `/`. Spring's `@RequestMapping` + `@GetMapping` and Nest's
+ * `@Controller` + `@Get` join the same way, so both adapters share this one.
+ */
+export function joinPaths(base: string, path: string): string {
+  const joined = `${base}/${path}`.replace(/\/+/g, '/').replace(/\/$/, '');
+  return joined.startsWith('/') ? joined : `/${joined}`;
+}

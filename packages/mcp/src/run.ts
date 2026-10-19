@@ -609,7 +609,7 @@ server.registerTool('graph_overview', {
     `repos: ${[...repos].join(', ')}`,
     `kinds: ${Object.entries(byKind).map(([k, v]) => `${k}:${v}`).join('  ')}`,
     `tags: ${topTags.map(([t, c]) => `${t}(${c})`).join(', ')}`,
-    ...testsLines(), ...storiesOverviewLines(), ...projectsOverviewLines(), ...configTools.overviewLines(),
+    ...testsLines(), ...storiesOverviewLines(), ...routesOverviewLines(), ...projectsOverviewLines(), ...configTools.overviewLines(),
     ...(decisionsOverviewLine(store.meta.decisions) ? [decisionsOverviewLine(store.meta.decisions)] : []),
     '',
     '## what is in it',
@@ -828,6 +828,13 @@ function testsLines(): string[] {
 function storiesOverviewLines(): string[] {
   return Object.entries(store.meta.stories ?? {}).map(([repo, m]) =>
     `stories: ${repo} — ${m.stories} stories over ${m.components} components from ${m.files} story file(s)${m.storybooks.length ? ` · Storybook ${m.storybooks.map((b) => b.url ?? b.configDir).join(', ')}` : ''} — the stories tool says whether it is running`);
+}
+
+/** Route declarations the adapters recognised and did not read (a Nest path from a constant, `@All`, a global prefix) — each named, so a missing route is an absence with a reason, never a silent one. */
+function routesOverviewLines(): string[] {
+  return Object.entries(store.meta.routes ?? {}).flatMap(([repo, m]) => m.gaps.length
+    ? [`routes not read: ${repo} — ${m.gaps.length} declaration(s) set aside: ${m.gaps.slice(0, 3).map((g) => `${g.name} (${g.kind}, ${g.path}:${g.line})`).join('; ')}${m.gaps.length > 3 ? '; …' : ''}`]
+    : []);
 }
 
 /** "keeping current": is a newer build installed than this MCP runs, does the graph match it, and the steps to fix either — the same recipe the CLI and the HUD print. */
@@ -2219,6 +2226,7 @@ server.registerTool('test_coverage', {
       ...(step?.verdict ? [`evidence: ${chipWord({ chip: step.chip ?? 'none', evidenceWord: step.verdict.word, ...(step.observation ? { observation: step.observation } : {}) })}${step.verdict.status ? ` · the run behind it: ${step.verdict.status}` : ''}`,
         `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${step.verdict.projectSplit?.words ? ` · ${step.verdict.projectSplit.words.text}` : ''}`] : []),
       ...(step?.sameLoc?.length ? [`read with ${step.sameLoc.map((id) => `\`${id}\``).join(', ')} — the same file:line`] : []),
+      ...(step?.delegates?.length ? [`read with ${step.delegates.map((id) => `\`${id}\``).join(', ')} — the controller method and the handler it hands its body to are one place`] : []),
       ...covers.map(testLine),
       ...(step?.note ? [step.note] : []),
     ].join('\n'));

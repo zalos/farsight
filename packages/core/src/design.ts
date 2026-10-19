@@ -1058,6 +1058,14 @@ Start each ADR with one plain paragraph saying what was decided — that paragra
   jobs, \`// @business\` on the decisions the design cares about.
 - Capability URLs OpenAPI cannot gate: farsight.config.json → guards: { "tracking token":
   ["GET /api/v1/track/{token}"] } declares the gate on the route.
+- An HTTP host written as NestJS controllers: @Controller('api/v1/orders') + @Post(':orderId/approve')
+  is the same route as app/api/v1/orders/[orderId]/approve/route.ts exporting POST — one id, so a port
+  from one host to the other is a moved location in farsight diff, not a removed and an added route.
+  Literal paths only (no setGlobalPrefix, RouterModule, versioning or path constants — each is recorded
+  as a gap, never guessed); one method per operationId, named after it (api drift notes a different
+  name); the method body one \`return handler(req, ctx)\` to an imported function that keeps the @guard
+  calls and the schema.parse — the route reads them, and the handler's tests, as its own. @business and
+  @group stay on the handler; @entrypoint http:VERB /path may sit on the method (the decorators win).
 
 ## 4 · Verify as you go (MCP tools, same facts as the HUD)
 

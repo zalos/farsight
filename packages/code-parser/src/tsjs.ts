@@ -8,7 +8,7 @@ import { configCheckOf, paramsText, CONFIG_CHECK_TAG } from '@farsight/graph/sem
 
 /** A parameter typed as a fetch `Response`: the function reads what a server answered. */
 const READS_RESPONSE = /:\s*Response\b/;
-import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta } from '@farsight/graph';
+import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta, RouteGap } from '@farsight/graph';
 import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
 import { createAliasClassifier, resolveFileish } from './aliases.js';
 import { isBuiltin, packageOf, workspacePackageOf, PackageJsonIndex } from './shared/packages.js';
@@ -16,7 +16,8 @@ import type { LanguageAdapter, IngestOptions } from './types.js';
 import { collectFiles, freshnessMeta } from './shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields } from './shared/docs.js';
 import { capLabel, leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/labels.js';
-import { autoTags, normalizePath, snippetRange } from './shared/tags.js';
+import { autoTags, joinPaths, normalizePath, snippetRange } from './shared/tags.js';
+import { readNestFile, controllerOf, methodRoutes, useGuardsOf, delegateOf, entrypointRouteKey, nestSetupGaps, type ControllerDecl, type GuardRef } from './nest.js';
 import { isTestFile } from './shared/file-kinds.js';
 import { isStoryFile } from './shared/file-kinds.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
@@ -265,6 +266,12 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   const middlewares: { file: string; prefix: string }[] = [];
   // a route that delegates its body to a named function: the handler *is* the route's body
   const routeHandlers: { routeId: string; file: string; handler: string }[] = [];
+  // NestJS controllers (nest.ts): a controller method whose body is one `return handler(…)` — its call
+  // to the handler is stamped `via: 'delegate'` in pass 2 so core reads route, method and handler as
+  // one place; the `@UseGuards` classes to join to their `canActivate`; and every declaration set aside
+  const nestDelegates: { fnId: string; file: string; callee: string }[] = [];
+  const nestGuards: { guardId: string; routeId: string; file: string; className: string }[] = [];
+  const routeGaps: RouteGap[] = [];
   // every JSX-bearing function's props: the ones it runs, hands on, decides on, and what it hands its children
   const propFacts = new Map<string, PropFacts & { file: string }>();
   // the record lifecycle's facts (lifecycle.ts): enums declared, status fields, writes, compares, SQL CHECK lists
@@ -287,6 +294,17 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   };
   const addEdge = (kind: GraphEdge['kind'], from: string, to: string, meta?: GraphEdge['meta'], resolution?: GraphEdge['resolution']) => {
     edges.push({ id: `e${edgeSeq++}`, kind, from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
+  };
+  /**
+   * A route declaration recognised and not read (nest.ts): on the fragment's `meta.routes` for every
+   * consumer, and — for the unread declarations, not for a doc tag that merely disagrees — a library
+   * diagnostic too, so `parseRepository` says the analysis is incomplete while a declared route is missing.
+   */
+  const routeGap = (gap: RouteGap, nodeId?: string) => {
+    routeGaps.push(gap);
+    if (gap.kind === 'entrypoint-mismatch') return;
+    currentRead()?.report({ code: 'unsupported', severity: 'warning', adapter: 'ts-js', path: gap.path, line: gap.line,
+      ...(nodeId ? { nodeId } : {}), reason: gap.kind, message: gap.text });
   };
   /**
    * How a symbol reference was resolved, as an EdgeResolution. `same-file` and
@@ -527,6 +545,70 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     { const en = collectEnums(program, file, line); lifeFacts.decls.push(...en.decls); lifeFacts.uses.push(...en.uses); }
     preFacts.tables.push(...constTables(program, file, line));
     (preFacts.namedLists ??= []).push(...constLists(program, file, line));
+    // NestJS (nest.ts): the file's `@nestjs/common` bindings, read once; the boot-time prefixes and
+    // versions this reader does not fold into the routes are recorded as gaps with a name
+    const nestFile = readNestFile(program);
+    for (const g of nestSetupGaps(program, nestFile)) routeGap({ kind: g.kind, path: file, line: line(g.at.start ?? 0), name: g.name, text: g.text });
+    /**
+     * One controller method: a `route` node per prefix × path with the id App Router gives the same
+     * endpoint (`app/api/v1/orders/[orderId]/approve/route.ts` exporting POST ≡ `@Controller('api/v1/orders')`
+     * + `@Post(':orderId/approve')`), so a port from one host to the other is a changed location in
+     * `farsight diff`, not a removed and an added route. The method is the route's body (`calls`, HIGH, by
+     * the decorator); when that body is one `return handler(…)`, the handler is too — both mirror their
+     * guards and rules onto the route through `routeHandlers` (one hop, as today). `@UseGuards` on the
+     * class or the method is a guard node per argument. Anything not read is a gap, never a guess.
+     */
+    const readNestMethod = (m: AstNode, cls: string, mname: string, controller: ControllerDecl, classGuards: (GuardRef & { on: string })[]): void => {
+      const full = `${cls}.${mname}`;
+      const fnId = symbolId(file, full);
+      const at = line(m.start ?? 0);
+      const { routes, gaps } = methodRoutes(m, nestFile);
+      for (const g of gaps) {
+        routeGap({ kind: g.kind, path: file, line: line(g.at.start ?? 0), name: full, text:
+          g.kind === 'all-verb' ? `@All on ${full} answers every verb; no route is read for it`
+          : g.kind === 'versioning' ? `@Version on ${full} is not applied; its routes are recorded without a version segment`
+          : `@${g.decorator} on ${full} takes a path that is not a literal; that route is not read` }, fnId);
+      }
+      if (!controller.prefixes || !routes.length) return;
+      const candidate = delegateOf(m);
+      const params = ((m.value as AstNode).params as AstNode[]) ?? [];
+      const delegate = candidate && importMap.has(candidate) && !params.flatMap(bindingNames).includes(candidate)
+        ? candidate : undefined;
+      const guards = [...useGuardsOf(m.decorators, nestFile).map((g) => ({ ...g, on: full })), ...classGuards];
+      const made: string[] = [];
+      for (const prefix of controller.prefixes) {
+        for (const r of routes) {
+          const path = normalizePath(joinPaths(prefix, r.path));
+          const key = `${r.verb} ${path}`;
+          const routeId = `${repo}::route::${key}`;
+          made.push(key);
+          addNode({
+            id: routeId, kind: 'route', name: key, lang: langOf(file),
+            loc: { repo, path: file, line: at },
+            tags: autoTags(file, path, 'route'),
+          });
+          addEdge('calls', routeId, fnId, undefined, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `the @${r.decorator} decorator on ${full}` });
+          routeHandlers.push({ routeId, file, handler: full });
+          if (delegate) routeHandlers.push({ routeId, file, handler: delegate });
+          for (const g of guards) {
+            // The decorator's declaration owns the gate. Equal labels in other modules (or factory
+            // calls with different arguments) must not combine unrelated canActivate bodies.
+            const guardId = `${repo}::${file}::guard::UseGuards(${g.label})@${g.on}:${g.at.start}:${g.argument}`;
+            addNode({ id: guardId, kind: 'guard', name: `UseGuards: ${g.label}`, lang: langOf(file), tags: ['auth'], loc: { repo, path: file, line: line(g.at.start ?? 0) } });
+            addEdge('guards', guardId, routeId, undefined, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `@UseGuards(${g.label}) on ${g.on}` });
+            if (g.className) nestGuards.push({ guardId, routeId, file, className: g.className });
+          }
+        }
+      }
+      if (delegate) nestDelegates.push({ fnId, file, callee: delegate });
+      // `@entrypoint http:VERB /path` on the method is a claim; the decorators are the code — when they
+      // disagree the route keeps the decorators' id and the disagreement is recorded with a name
+      const claimed = entrypointRouteKey(parseDoc(leadingComment(source, m.start ?? 0)).entrypoint);
+      if (claimed && !made.includes(claimed)) {
+        routeGap({ kind: 'entrypoint-mismatch', path: file, line: at, name: full,
+          text: `@entrypoint on ${full} names ${claimed}; its decorators declare ${made.join(', ')} — the decorators win` }, fnId);
+      }
+    };
     // declared functions & components & zod schemas
     const declared: { name: string; node: AstNode; body: AstNode | null; kind: NodeKind; cls?: string; clsGroup?: string }[] = [];
     walk(program, (n, parents) => {
@@ -534,7 +616,26 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       if (n.type === 'ClassDeclaration' && isNode(n.id)) {
         const cls = String((n.id as AstNode).name);
         classDecls.add(`${file}::${cls}`);
-        const clsDoc = parseDoc(leadingComment(source, n.start ?? 0));
+        // the class's doc comment sits above whatever comes first — its decorators (`@Controller`
+        // before `export class`), the `export`, or the `class` keyword; oxc starts the ClassDeclaration
+        // at `class`, after decorators that precede `export`, so reading from there would miss it
+        const exportDecl = parents[parents.length - 1];
+        const clsStart = Math.min(n.start ?? 0,
+          exportDecl && (exportDecl.type === 'ExportNamedDeclaration' || exportDecl.type === 'ExportDefaultDeclaration') && exportDecl.declaration === n ? (exportDecl.start ?? Infinity) : Infinity,
+          ...((n.decorators as AstNode[]) ?? []).map((d) => (isNode(d) ? d.start ?? Infinity : Infinity)));
+        const clsDoc = parseDoc(leadingComment(source, clsStart));
+        // a class decorated with `@nestjs/common`'s `@Controller` is a controller: each `@Get`/`@Post`…
+        // method is a route per prefix × path (nest.ts; readNestMethod below)
+        const controller = nestFile.bindings.size ? controllerOf(n, nestFile) : undefined;
+        const classGuards = controller ? useGuardsOf(n.decorators, nestFile).map((g) => ({ ...g, on: cls })) : [];
+        if (controller?.versioned) {
+          routeGap({ kind: 'versioning', path: file, line: line(controller.at.start ?? 0), name: cls,
+            text: `@Controller on ${cls} declares a version that is not applied; its routes are recorded without a version segment` });
+        }
+        if (controller && !controller.prefixes) {
+          routeGap({ kind: 'non-literal-path', path: file, line: line(controller.at.start ?? 0), name: cls,
+            text: `@Controller on ${cls} takes a path that is not a literal; none of its routes is read` });
+        }
         for (const m of (((n.body as AstNode | undefined)?.body as AstNode[]) ?? [])) {
           if (m.type !== 'MethodDefinition' || m.kind === 'constructor' || !isNode(m.key) || !isNode(m.value)) continue;
           const key = m.key as AstNode;
@@ -544,6 +645,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           const isPrivate = m.accessibility === 'private' || m.accessibility === 'protected' || key.type === 'PrivateIdentifier';
           const ck = `${file}::${cls}`;
           classMethods.set(ck, [...(classMethods.get(ck) ?? []), { name: mname, id: symbolId(file, `${cls}.${mname}`), private: isPrivate }]);
+          if (controller) readNestMethod(m, cls, mname, controller, classGuards);
         }
         // the class's own base URL — `this.baseUrl = `${BC_API_HOST}/v2.0`` in the
         // constructor, or the same shape as a field initializer. A `fetch` in one of its
@@ -1099,7 +1201,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
 
     // app routes (UI pages): React Router / Angular-style route configs
     walk(program, (n) => {
-      // {path: '/invoices', element: <InvoiceListPage/>} or {path: 'x', component: XComponent}
+      // {path: '/invoices', element: <InvoiceListPage/>}, {path: 'x', component: XComponent}, or React Router's
+      // data-mode default `{path: 'x', Component: XPage}`
       if (n.type === 'ObjectExpression') {
         const props: Record<string, AstNode> = {};
         for (const prop of (n.properties as AstNode[]) ?? []) {
@@ -1110,7 +1213,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         const pathVal = props.path ? stringValue(props.path) : null;
         const target =
           (props.element && jsxName(props.element)) ||
-          (props.component && props.component.type === 'Identifier' ? String(props.component.name) : null);
+          (props.component && props.component.type === 'Identifier' ? String(props.component.name) : null) ||
+          (props.Component && props.Component.type === 'Identifier' ? String(props.Component.name) : null);
         if (pathVal !== null && target) {
           addPage(pathVal, target, line(n.start ?? 0));
         }
@@ -1562,10 +1666,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // method reaches the function expression bound at `new BcOutboxWorker({ hooks: { … } })`.
   // Heuristic and always deferred — the constructor stored it, the method runs it later.
   // An unmatched hook call stays an honest absence rather than an invented edge.
-  const lookupClass = (file: string, name: string, seen: Set<string>): string | undefined => {
+  const lookupClass = (file: string, name: string, seen: Set<string>): { file: string; name: string } | undefined => {
     if (seen.has(file)) return undefined;
     seen.add(file);
-    if (classDecls.has(`${file}::${name}`)) return file;
+    if (classDecls.has(`${file}::${name}`)) return { file, name };
     const re = reexportsByFile.get(file);
     if (!re) return undefined;
     const named = re.named.get(name);
@@ -1573,6 +1677,29 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     for (const star of re.stars) { const hit = lookupClass(star, name, seen); if (hit) return hit; }
     return undefined;
   };
+  // a controller method whose body is one `return handler(…)` (nest.ts): the call it makes to the handler
+  // is the delegation, stamped so core reads route, method and handler as one place (coverage.ts)
+  const delegateCalls = new Map(nestDelegates.length ? edges.filter(e => e.kind === 'calls').map(e => [`${e.from}|${e.to}`, e]) : []);
+  for (const d of nestDelegates) {
+    const delegateId = resolveTarget(d.file, d.callee);
+    if (!delegateId || delegateId === d.fnId) continue;
+    const e = delegateCalls.get(`${d.fnId}|${delegateId}`);
+    if (e) e.meta = { ...e.meta, via: 'delegate' };
+  }
+  // `@UseGuards(A)` where A is a class of the repo with a `canActivate`: the guard runs that method. The
+  // route calls the guard (`via: 'guard'`, the shape a bodied `@guard` already has) and the guard calls
+  // `A.canActivate`, so a journey descends into what the gate checks instead of stopping at a badge.
+  for (const g of nestGuards) {
+    const imp = importsByFile.get(g.file)?.get(g.className) ?? { file: g.file, name: g.className };
+    const cls = lookupClass(imp.file, imp.name, new Set());
+    const method = cls ? classMethods.get(`${cls.file}::${cls.name}`)?.find((m) => m.name === 'canActivate') : undefined;
+    if (!method) continue;
+    const res = (note: string): GraphEdge['resolution'] => ({ status: 'resolved', technique: imp.file === g.file ? 'same-file' : 'static-import', confidence: 'HIGH', note });
+    const toGuard = `calls|${g.routeId}|${g.guardId}`;
+    if (!seenEdge.has(toGuard)) { seenEdge.add(toGuard); addEdge('calls', g.routeId, g.guardId, { via: 'guard' }, res(`@UseGuards(${g.className}) runs ${g.className}.canActivate before the handler`)); }
+    const toCheck = `calls|${g.guardId}|${method.id}`;
+    if (!seenEdge.has(toCheck)) { seenEdge.add(toCheck); addEdge('calls', g.guardId, method.id, undefined, res(`${g.className}.canActivate is the check @UseGuards names`)); }
+  }
   for (const hk of pendingHookCalls) {
     let bound = false;
     const full = hk.path.join('.');
@@ -1581,7 +1708,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     for (const b of hookBindings) {
       if (b.classRef.name !== hk.cls) continue;
       if (b.path !== full && b.path !== dropped) continue;
-      if (lookupClass(b.classRef.file, b.classRef.name, new Set()) !== hk.file) continue;
+      if (lookupClass(b.classRef.file, b.classRef.name, new Set())?.file !== hk.file) continue;
       recordSite('calls', hk.fromId, b.fnId, { ...hk, when: undefined, deferred: true });
       const key = `calls|${hk.fromId}|${b.fnId}`;
       if (seenEdge.has(key)) continue;
@@ -1918,7 +2045,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   const drivers = [...sqlDrivers].sort(([a], [b]) => a.localeCompare(b)).map(([spec, files]) => ({ spec, files: files.length }));
   return {
     repo, nodes: [...nodes.values()], edges,
-    meta: { ...meta, ...(drivers.length ? { stores: { drivers } } : {}), ...(packagesMeta ? { packages: packagesMeta } : {}) },
+    meta: {
+      ...meta, ...(drivers.length ? { stores: { drivers } } : {}), ...(packagesMeta ? { packages: packagesMeta } : {}),
+      ...(routeGaps.length ? { routes: { gaps: routeGaps } } : {}),
+    },
   };
 
   /**

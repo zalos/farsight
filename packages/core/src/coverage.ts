@@ -16,7 +16,7 @@
  * Nothing below the third rung may wear the word *verified*, and no surface
  * may invent a fourth rung.
  */
-import type { ConfidenceTier, GraphNode, ResolutionTechnique, TestRef, TestRunProject, Loc } from './graph.js';
+import type { ConfidenceTier, GraphEdge, GraphNode, ResolutionTechnique, TestRef, TestRunProject, Loc } from './graph.js';
 import type { GraphIndex, Journey, JourneySummary } from './query.js';
 import { flowScreenIds, isDeclaredOnly, journey } from './query.js';
 import { computeMetric, testsCovering, EVIDENCE_RANK, type MetricValue, type MetricScope, type CoveringTest } from './metrics.js';
@@ -460,6 +460,13 @@ export interface StepCoverage {
    * *reached by tests* on the route and *no test reaches this step* on its handler).
    */
   sameLoc?: string[];
+  /**
+   * The handler a controller method hands its whole body to — the `calls` edge the TS/JS adapter
+   * stamps `via: 'delegate'` (a NestJS method that is one `return handler(…)`) — read with this
+   * node's own tests the way a same-line twin is, in both directions: the route's specs import the
+   * handler, not the controller, and route, method and handler are one place in the code.
+   */
+  delegates?: string[];
   /** observed evidence exists for this node: the only class allowed to colour lines */
   observed: boolean;
   note: string;
@@ -1050,15 +1057,45 @@ export function sameLocTwins(index: GraphIndex, node: GraphNode): string[] {
   return [...new Set(out)];
 }
 
+/**
+ * The nodes whose tests are read with this node's own because the code makes them one place:
+ * `sameLocTwins` (a route and the handler it calls at the same file:line), and through such a twin
+ * the handler a method hands its whole body to — the `calls` edge the TS/JS adapter stamps
+ * `via: 'delegate'` for a controller method that is one `return handler(…)`. From the handler's
+ * side the same relation is walked backwards (the method, then the method's route), so the three
+ * carry one verdict whichever of them a surface asks about. Nothing deeper: a function the handler
+ * calls is its own cell, as today.
+ */
+export function cellTwins(index: GraphIndex, node: GraphNode): { sameLoc: string[]; delegates: string[] } {
+  const sameLoc = sameLocTwins(index, node);
+  const isDelegate = (e: GraphEdge) => e.kind === 'calls' && e.meta?.via === 'delegate';
+  const delegates = new Set<string>();
+  for (const id of [node.id, ...sameLoc]) {
+    for (const e of index.out.get(id) ?? []) if (isDelegate(e) && index.byId.get(e.to)?.kind === 'function') delegates.add(e.to);
+  }
+  if (node.kind === 'function') {
+    for (const e of index.in.get(node.id) ?? []) {
+      if (!isDelegate(e)) continue;
+      const method = index.byId.get(e.from);
+      if (method?.kind !== 'function') continue;
+      delegates.add(method.id);
+      for (const twin of sameLocTwins(index, method)) delegates.add(twin);
+    }
+  }
+  for (const id of [node.id, ...sameLoc]) delegates.delete(id);
+  return { sameLoc, delegates: [...delegates] };
+}
+
 /** One step's coverage — what the journey band's foot and the code gutter read. */
 export function stepCoverage(index: GraphIndex, nodeId: string): StepCoverage | undefined {
   const node = index.byId.get(nodeId);
   if (!node || isDeclaredOnly(node)) return undefined;
-  // one place in the code, one verdict: a route and the handler it calls at the
-  // same file and line read their tests together, each ref once at its strongest
-  const twins = sameLocTwins(index, node);
+  // one place in the code, one verdict: a route and the handler it calls at the same file and
+  // line — and the handler that method only delegates to — read their tests together, each ref
+  // once at its strongest
+  const { sameLoc: twins, delegates } = cellTwins(index, node);
   const byTest = new Map<string, CoverageTestRef>();
-  for (const id of [nodeId, ...twins]) {
+  for (const id of [nodeId, ...twins, ...delegates]) {
     const at = index.byId.get(id);
     for (const t of testsCovering(index, id)) {
       const ref = toCoverageRef(index, t, at);
@@ -1074,6 +1111,7 @@ export function stepCoverage(index: GraphIndex, nodeId: string): StepCoverage | 
     ...(facts.observation ? { observation: facts.observation } : {}),
     ...(facts.freshness.state !== 'none' ? { freshness: facts.freshness } : {}),
     ...(twins.length ? { sameLoc: twins } : {}),
+    ...(delegates.length ? { delegates } : {}),
   };
   // nothing reaches it: the chip and the word say so, and six zero counts would only weigh the payload
   if (!tests.length) return { unit: 0, e2e: 0, tests: [], observed: false, note: 'No test reaches this step.', chip: facts.chip, evidenceWord: facts.evidenceWord, verdict: facts.verdict };

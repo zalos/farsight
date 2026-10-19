@@ -124,9 +124,11 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
       const fileRows = [...scope.files.values()].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
       const packages = fragments.map(fragment => fragment.meta?.packages).find(meta => meta);
       const drivers = fragments.flatMap(fragment => fragment.meta?.stores?.drivers ?? []);
+      const routeGaps = fragments.flatMap(fragment => fragment.meta?.routes?.gaps ?? []);
       const graph = graphDocument({ repo: sourceId, nodes: [...nodes.values()], edges: [...unique.values()], meta: {
         files: fileRows.filter(file => file.status === 'analyzed').length,
         ...(packages ? { packages } : {}), ...(drivers.length ? { stores: { drivers } } : {}),
+        ...(routeGaps.length ? { routes: { gaps: routeGaps } } : {}),
       } }).graph;
       const inputRows = [...scope.inputs.values()].sort((a, b) => `${a.path}:${a.kind}` < `${b.path}:${b.kind}` ? -1 : 1);
       const diagnostics = [...scope.diagnostics].sort((a, b) => canonicalJson(a) < canonicalJson(b) ? -1 : 1);

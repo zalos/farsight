@@ -1784,11 +1784,20 @@ function buildJourneySummary(index: GraphIndex, j: Journey, screens: GraphNode[]
     const parentNode = parent >= 0 ? nodeAt(parent) : undefined;
     const routeWords = ROUTE_VERBS.has(n.name) && parentNode?.kind === 'route'
       ? (parentNode.contract?.summary?.trim() || parentNode.name) : undefined;
-    const title = n.facets?.business?.label ?? routeWords ?? businessSummary(n);
+    // a controller method that only hands its body to a handler (the `calls` edge the adapter stamps
+    // `via: 'delegate'`) has no words of its own by design — the team writes them on the handler; it
+    // borrows them the way a verb-named handler borrows its route's, with the handler's provenance
+    const ownWords = n.facets?.business?.label ?? routeWords ?? businessSummary(n);
+    const delegate = ownWords === undefined && n.kind === 'function'
+      ? (index.out.get(n.id) ?? []).filter((e) => e.kind === 'calls' && e.meta?.via === 'delegate').map((e) => index.byId.get(e.to)).find((d): d is GraphNode => d?.kind === 'function')
+      : undefined;
+    const delegateWords = delegate ? (delegate.facets?.business?.label ?? businessSummary(delegate)) : undefined;
+    const title = ownWords ?? delegateWords;
     // which of the three it is — a short authored name, the route's words standing
     // in for a meaningless identifier, or a sentence out of the docs
     const titleFrom: SegmentMarker['titleFrom'] | undefined = title === undefined ? undefined
-      : n.facets?.business?.label !== undefined ? 'label' : routeWords !== undefined ? 'route' : 'docs';
+      : n.facets?.business?.label !== undefined ? 'label' : routeWords !== undefined ? 'route'
+      : ownWords !== undefined ? 'docs' : delegate?.facets?.business?.label !== undefined ? 'label' : 'docs';
     const choice = choiceAt.get(row.stepOrder);
     // a choice is drawn as the call the source writes, never as one implementation's
     // name; the authored words survive only where every candidate says the same thing

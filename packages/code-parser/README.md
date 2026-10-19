@@ -61,6 +61,11 @@ TS configuration is refused with a diagnostic. On-disk config changes cannot ena
 source languages are reported. Arbitrary custom adapters are trusted JavaScript, not sandboxed plugins.
 
 TS/JS extracts symbols, call/render/HTTP/data relationships, annotations, and existing resolution evidence.
+HTTP routes come from Express-style `app.get()` calls, Next.js App Router `route.ts` files, raw `createServer`
+handlers and NestJS controllers (`@Controller` + `@Get`/`@Post`… imported from `@nestjs/common`, literal paths
+only; a path from a constant, `@All`, `setGlobalPrefix`, versioning and `RouterModule` are named gaps on the
+graph's `meta.routes` and `unsupported` diagnostics, never guesses). A Nest route and the App Router file for the
+same endpoint share one id, so a port between the two hosts is a moved location, not a removed and an added route.
 Java retains the existing Spring/JPA/security heuristics. Repeated resolved call sites retain their positions and
 available conditions in `edge.occurrences`; Farsight keeps its relationship-level view. Evidence is syntax-based;
 unresolved alternatives and confidence remain meaningful. Cross-source host matching is not provided here.

@@ -4,7 +4,7 @@ import type { BuildInfo } from './version.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta, ConfigMeta, JourneysMeta, DecisionsMeta } from './graph.js';
+import type { GraphFragment, GraphNode, GraphEdge, TestsMeta, StoriesMeta, StoresMeta, PackagesMeta, ProjectsMeta, ConfigMeta, JourneysMeta, DecisionsMeta, RoutesMeta } from './graph.js';
 
 /** Freshness signals persisted with the snapshot — lets consumers (MCP agents
  * especially) detect a stale graph instead of getting confidently old answers. */
@@ -46,6 +46,8 @@ export interface GraphMeta {
   journeys?: Record<string, JourneysMeta>;
   /** per-repo decisions: what the manifests and the config declare and where the code names each (core decisions.ts) */
   decisions?: Record<string, DecisionsMeta>;
+  /** per-repo route gaps: framework route declarations the adapters recognised and did not read, each with a name (code-parser nest.ts) */
+  routes?: Record<string, RoutesMeta>;
 }
 
 /**
@@ -92,6 +94,9 @@ export class GraphStore {
     }
     if (fragment.meta?.decisions) {
       this.meta.decisions = { ...this.meta.decisions, [fragment.repo]: fragment.meta.decisions };
+    }
+    if (fragment.meta?.routes) {
+      this.meta.routes = { ...this.meta.routes, [fragment.repo]: fragment.meta.routes };
     }
     if (fragment.meta) {
       // a fragment with no content digest but the same sourceHash as the row already
@@ -164,7 +169,7 @@ export class GraphStore {
     const nodes = this.allNodes();
     const repos = new Set([...Object.keys(this.roots), ...Object.keys(this.meta.repos ?? {}),
       ...nodes.map(node => node.loc?.repo ?? (node.id.includes('::') ? node.id.split('::')[0]! : '')).filter(Boolean)]);
-    const fields = ['tests', 'stories', 'stores', 'packages', 'projects', 'config', 'journeys', 'decisions'] as const;
+    const fields = ['tests', 'stories', 'stores', 'packages', 'projects', 'config', 'journeys', 'decisions', 'routes'] as const;
     for (const field of fields) for (const repo of Object.keys(this.meta[field] ?? {})) repos.add(repo);
     const sources: GraphSource[] = [...repos].map(repo => {
       const freshness = this.repoMeta(repo);

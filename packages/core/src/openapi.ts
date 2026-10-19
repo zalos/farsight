@@ -281,6 +281,13 @@ export interface ReconcileResult {
   /** repos the spec was matched against (the ones `codeOnly` is computed for) */
   repos: string[];
   counts: { declared: number; implemented: number; matched: number; specOnly: number; codeOnly: number; mismatched: number; drift: number };
+  /**
+   * Observations that are not drift and never fail `--strict`: a matched operation whose handler is
+   * a class method (`OrdersController.approveOrder`, a NestJS or Spring controller) named differently
+   * from the spec's `operationId`. Matching is by method and path, so the names are free to differ;
+   * teams that name the method after the operation want to hear when one does not. Absent when empty.
+   */
+  notes?: { routeId: string; op: string; kind: 'operationId-name'; message: string }[];
 }
 
 export interface ReconcileOptions {
@@ -351,6 +358,20 @@ function operationDrift(op: SpecOperation, route: GraphNode, index: GraphIndex, 
 }
 
 /**
+ * The class method a route hands its request to — `OrdersController.approveOrder` — when the route's
+ * handler is one (a `calls` edge from the route to a function named `Class.method`); undefined for an
+ * App Router verb export, an Express handler or an inline body.
+ */
+function controllerMethodOf(index: GraphIndex, routeId: string): string | undefined {
+  for (const e of index.out.get(routeId) ?? []) {
+    if (e.kind !== 'calls') continue;
+    const fn = index.byId.get(e.to);
+    if (fn?.kind === 'function' && /^[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*$/.test(fn.name)) return fn.name;
+  }
+  return undefined;
+}
+
+/**
  * Square a spec with the indexed code. Matching is method + normalized path
  * (`{id}` · `:id` → `:param`), exact first, then with each server base path
  * added or removed (reported as `basePath`); never fuzzier than that.
@@ -375,6 +396,7 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
 
   const matched: ReconcileResult['matched'] = [];
   const specOnly: ReconcileResult['specOnly'] = [];
+  const notes: NonNullable<ReconcileResult['notes']> = [];
   const claimed = new Set<string>();
   const reposHit = new Set<string>();
   let mismatched = 0;
@@ -401,6 +423,12 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
       driftTotal += drift.length;
       const contract: OperationContract = { status: 'both', apiId, ...op.contract, ...(basePaths.length ? { servers: basePaths } : {}), ...(drift.length ? { drift } : {}) };
       matched.push({ routeId: hit.id, op: `${op.method} ${op.path}`, matchedBy, contract, loc: hit.loc });
+      // the controller method behind the route (`Class.method`) against the spec's operationId — a note, not drift
+      const operationId = op.contract.spec?.operationId;
+      const method = operationId ? controllerMethodOf(index, hit.id) : undefined;
+      if (operationId && method && method.split('.').pop() !== operationId) {
+        notes.push({ routeId: hit.id, op: `${op.method} ${op.path}`, kind: 'operationId-name', message: `the handler is ${method}; the spec names the operation ${operationId}` });
+      }
     } else {
       const drift: DriftEntry[] = [{ kind: 'spec-only', message: 'declared in the spec; no implementation found in the indexed code' }];
       driftTotal++;
@@ -422,6 +450,7 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
   return {
     api: { id: apiId, name: source.name ?? doc.info?.title ?? source.path, ...(doc.info?.version ? { version: String(doc.info.version) } : {}), path: source.path, basePaths },
     matched, specOnly, codeOnly, repos,
+    ...(notes.length ? { notes } : {}),
     counts: {
       declared: ops.length,
       implemented: codeRoutes.filter((r) => repos.includes(r.repo)).length,
@@ -562,11 +591,17 @@ export function graphToSpec(index: GraphIndex, opts: GenerateOptions): OpenApiDo
     const c = route.contract;
 
     op.operationId = c?.spec?.operationId ?? operationIdOf(method, oasPath);
-    // summary: authored @business / docs / spec summary on the route, else the handler's own summary
+    // summary: authored @business / docs / spec summary on the route, else the handler's own summary,
+    // else — when the handler only hands its body on (`via: 'delegate'`, a controller method) — the
+    // summary of the function it hands it to
     let summary = businessSummary(route);
     if (!summary) {
       const callee = (index.out.get(route.id) ?? []).filter((e) => e.kind === 'calls').map((e) => index.byId.get(e.to)).find((n) => n && n.kind === 'function');
       if (callee) summary = businessSummary(callee);
+      if (!summary && callee) {
+        const delegate = (index.out.get(callee.id) ?? []).filter((e) => e.kind === 'calls' && e.meta?.via === 'delegate').map((e) => index.byId.get(e.to)).find((n) => n && n.kind === 'function');
+        if (delegate) summary = businessSummary(delegate);
+      }
     }
     if (summary) op.summary = summary;
     if (c?.description) op.description = c.description;
@@ -873,6 +908,10 @@ export function driftMarkdown(r: ReconcileResult): string {
     lines.push('');
   }
   if (!r.specOnly.length && !r.codeOnly.length && !mism.length) lines.push('no drift — the spec and the code agree.');
+  if (r.notes?.length) {
+    lines.push('', '## notes — not drift, never fails --strict');
+    for (const n of r.notes) lines.push(`- ${n.op}: ${n.message}`);
+  }
   return lines.join('\n');
 }
 
