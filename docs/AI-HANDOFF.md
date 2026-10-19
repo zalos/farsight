@@ -41,7 +41,84 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Farsight Sentinel merge review — 2026-10-19
+
+The owner requested review, fixes and merge of the remaining PRs, including planning PR 00
+[#118](https://github.com/zalos/farsight/pull/118). The final review removes model acceptance from the
+deterministic first-release/PR 01 gate and corrects parser reconciliation: the `missing` fingerprint can
+represent a refused read, not only absence; missing candidates need captured directory/refusal evidence.
+Both original Claude reviews remain unchanged. Outstanding container, version and threshold decisions stay
+at their stated gates. This task merges the plan; it does not launch Sentinel implementation or scanner/model
+trials. Validation: 61 local links/three anchors, one JSON and 13 TypeScript syntax blocks, nine SQLite
+behavior checks and a real parser-reader probe passed; review files are byte-for-byte unchanged. No application
+build or e2e is selected for this Markdown-only change. The earlier entries retain their dated pre-review state.
+
+## Farsight Sentinel execution handoff — 2026-10-19
+
+The owner requested updated memories and a kickoff prompt, not an agent launch. The shared entry point is
+[Sentinel implementation kickoff](proposals/farsight-sentinel/execution-kickoff.md), linked from the plan and
+backlog. This handoff is the canonical project memory for both providers; no cross-project preference or
+provider-private memory change is needed for these Sentinel-specific facts.
+
+Verified on 2026-10-19: proposal PR #117 is merged at `04c3c63`; PR 00
+[#118](https://github.com/zalos/farsight/pull/118) remains open on `docs/sentinel-implementation-plan`.
+The latest implementation-plan change before this handoff is `6a1d6d4`, including standalone delivery.
+Its affected-check, commit and secrets gates passed; runtime jobs were skipped as appropriate for Markdown.
+These checks do not establish implementation approval. No Sentinel implementation PR or execution agent has
+started, and no merge, scanner/provider trial, application build, ingest or live-service change was performed.
+
+Confirmed decisions: local first with a future hosted option; source-only TS/JS and Java/Spring first release;
+optional Ollama plus a configurable hosted endpoint; standalone reports and Farsight integration over the same
+pinned report document. Standalone reports carry readable application context, explanations and permitted
+evidence and work without either product or the source checkout. Deterministic delivery stays independent
+of model gates. Both Claude reviews remain unchanged.
+
+Next eligible implementation is PR 01 after PR 00 agreement/dependency gates: the feasibility harness,
+synthetic fixtures, capability/corpus decision manifest and measured results. The container requirement for
+external scanners is still unanswered; ask before those probes, with no automatic host fallback. Exact
+engine/framework/runtime pins, E3/E5 thresholds and resource defaults require PR 01 evidence. Continue
+independent authorized work when one decision is pending; do not infer agreement from elapsed time or green CI.
+The kickoff preserves these boundaries, the PR sequence, worktree isolation and affected-only validation.
+The primary checkout and its existing editor-settings change remain untouched.
+
+## Farsight Sentinel implementation planning — 2026-10-17
+
+Branch `docs/sentinel-implementation-plan` has PR 00 open as [#118](https://github.com/zalos/farsight/pull/118),
+against proposal PR #117 (`04c3c63`, authored as `354a184`; application baseline `4fce1c8`). The review draft is
+`docs/proposals/farsight-sentinel/implementation-plan.md`, with PR backlog, code examples and implementation
+review/response beside it. Both Claude reviews are preserved unchanged. The response traces every review
+finding to a change and acceptance gate. PRs 01–20/23a/24–26 reach a deterministic CLI/MCP/GUI release;
+21/22/23b/25b add model review independently; 27–30 cover differential selection/audit, isolated Java builds
+and managed runtime analysis. The wave table assigns shared contracts/catalogs/CI to one integration owner.
+
+Owner decisions for this draft: local first while preserving a hosted option; source-only first release with
+isolated builds later; Ollama plus a configurable hosted endpoint. Exact framework releases, quality thresholds,
+isolation/platform defaults and required-coverage policy remain review items. The proposed container prerequisite
+for external scanners is awaiting the owner's answer; parsing/planning need none. The updated plan adds pinned
+screen/journey/persona placement, deterministic MCP/UI ahead of model gates, shared grant-policy semantics,
+trusted settings/example/ignore conventions, safe fixture names and opt-in expensive suites with early CI wiring.
+
+The owner also confirmed that the report must be independently deliverable while fitting into Farsight.
+The plan now requires self-contained offline HTML and readable Markdown/JSON from the same pinned report
+document, including captured application labels, explanations, permitted evidence and explicit omissions.
+PR 19 delivers this before the GUI; PR 25 checks integrated-view parity; PR 26 tests a recipient with no
+product installation, source checkout or network. Standalone delivery is a confirmed requirement, not an
+optional later export or a replay-bundle prerequisite. Renderer behavior remains planned, not implemented.
+
+The original SQL probe tested duplicate publication and integrity only; it missed the second-revision defect.
+The corrected composite-key example was executed under Node 24.19.0 / SQLite 3.53.3: nine behavior checks,
+two work revisions/two publications, duplicate and cross-revision references rejected, foreign keys valid and
+integrity `ok`. Documentation checks passed for 50 local links, one JSON block and 13 TypeScript blocks' syntax,
+plus whitespace and unchanged review hashes. The initial plan commit `81d265a` passed CI's affected-check,
+commit and secret gates; validate/e2e/echo-package were correctly skipped for ordinary Markdown.
+These checks are not full TypeScript typechecking or Sentinel runtime validation.
+No Sentinel runtime, scanner, model trial, application build/test, ingest,
+installation or live-server change is part of this planning work. Implementation awaits review of PR 00;
+the primary checkout and its existing editor-settings change are untouched.
+
 ## PR #119 review — 2026-10-19
+
+Merged as `320ca5d` on 2026-10-19 after all required GitHub checks and both parser-package checks passed.
 
 Review fixes on `codex/pr-119-review`, pushed to `feat/nest-routes`: Nest guard nodes are scoped to their
 decorator declaration and argument, so equal names in different modules and factory calls cannot combine
@@ -60,8 +137,8 @@ excluding examples and prototypes: both produced 6,126 nodes and 13,200 edges, w
 and source digest `96158ffec1b4`. Saved graph bytes: 17,691,608 / 17,691,603 (main / PR); SQLite bytes:
 23,834,624 / 23,834,624. Fresh browser pages on the front door, Map and code map had zero page, console or HTTP
 errors; screenshots were inspected. This source has no design manifest, so the Map correctly shows its empty
-state; the e2e suite exercises populated journeys. Final GitHub checks must pass before squash merge. The primary
-checkout, deployed servers, global installs and dogfood graphs were untouched. Registry publication and acceptance
+state; the e2e suite exercises populated journeys. The primary checkout, deployed servers, global installs and
+dogfood graphs were untouched. Registry publication and acceptance
 in the reference application's new host remain separate follow-ups.
 
 ## NestJS controllers as HTTP routes — 2026-10-19
