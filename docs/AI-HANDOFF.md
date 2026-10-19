@@ -41,6 +41,43 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## NestJS controllers as HTTP routes — 2026-10-19
+
+Branch `feat/nest-routes` (worktree `.claude/worktrees/nest-routes-7f776a`; a detached `main` baseline worktree at
+`../farsight-wt/nest-main-baseline` for the measurement, to be removed after the merge), PR title
+`feat(parsers): read NestJS controllers as HTTP routes`. The reference app is moving its HTTP API from App Router
+`route.ts` files into a NestJS host; Farsight read no TypeScript decorator, so every one of its handlers would have
+left the route map, the drift gate, the journeys and the design status. The brief stays outside the repo.
+
+`packages/code-parser/src/nest.ts` holds the framework semantics (the Spring `spring.ts` ↔ `index.ts` split);
+`tsjs.ts` assembles: a class decorated with `@nestjs/common`'s `@Controller` gives one route per prefix × verb path
+with **the id App Router gives the same endpoint** (a port is a moved location in `farsight diff`); `calls` route →
+`Class.method` HIGH by the decorator; a body that is one `return handler(…)` makes the handler a route handler too
+(guards and rules mirror, one hop) and stamps the method → handler call `via: 'delegate'`, which core `cellTwins()`
+reads as one coverage cell, `graphToSpec` as one summary and `journeySummary` as one set of words; `@UseGuards` →
+guard nodes, walked into `canActivate` when the class is in the repo; class docs read from the earliest of
+decorators, `export` and `class`. Not read, each a named `meta.routes.gaps` entry (a new optional graph-contract field,
+schema version 1 unchanged) and an `unsupported` library diagnostic: a non-literal path, `@All`, `@Version`,
+`setGlobalPrefix`, `enableVersioning`, `RouterModule.register`; an `@entrypoint` that disagrees with the decorators is
+recorded too (the decorators win). `reconcile().notes` says when a controller method is not named after its
+`operationId` — never drift. React Router data mode's `Component:` key is read (second commit). The paired libraries
+are 0.2.0.
+
+Verified under Node 24: build, `pnpm -r typecheck`, **1,584 unit tests — 1,582 passed, 2 live-tracker skips** (ten new
+in `parsers/test/nest.test.ts`), 20 script tests, string lint (3,480 entries), schema regenerated. Real ingest of this
+repository with the `main` build (`04c3c63`) and this branch from scratch directories: 6,121 nodes · 13,199 edges on
+both, 0 node ids or edge keys on one side only, 0 nodes changed, `sourceDigest` `1dd89463f21a` on both, `graph.json`
+17,423,143 vs 17,423,144 bytes (the build stamp), `farsight.db` 23,556,096 on both; the branch graph served read-only
+gave 0 page and 0 console errors on the front door, the Map and the code map. Nothing was installed globally and no
+dogfood or reference-app graph was re-ingested: the reference-app session does that from its brief after the merge
+(pack → install under both prefixes → restart → MCP reconnect), then checks that the dark-launch pair of ingests
+agree on route ids, `contract.status`, guard and rule counts.
+
+Left open, the owner's calls: `@Body({ schema })` → `validates` (not read); a non-literal path stays a gap rather than
+a heuristic route by `operationId`; publishing `@farsight/code-parser` (`docs/PARSER-LIBRARIES.md`). Smaller: no
+`examples/` fixture for a Nest host; mirrored handler guards carry no `resolution` (pre-existing); `@Controller({ host })`
+is the empty prefix; optional and wildcard segments stay literal.
+
 ## Parser library review follow-up — 2026-10-17
 
 PR #115 remains on `codex/parser-package-extraction`, now including main at `2ca7f2b` (PR #116).
