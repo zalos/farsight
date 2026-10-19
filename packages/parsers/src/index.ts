@@ -96,6 +96,8 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   const drivers = fragments.flatMap((f) => f.meta?.stores?.drivers ?? []);
   // what the import pass set aside (builtins, alias misses) — read now for the same reason
   const packagesMeta = fragments.map((f) => f.meta?.packages).find((p) => p);
+  // the route declarations the adapters recognised and did not read (a Nest path from a constant, `@All`…)
+  const routeGaps = fragments.flatMap((f) => f.meta?.routes?.gaps ?? []);
   const merged = mergeFragments(repo, fragments);
   // each file over its own folder: the root first, then the nested ones by depth, so the nearer word wins
   if (applyWorkspaceConfig(merged.nodes, merged.edges, workspace)) merged.configApplied = true;
@@ -134,6 +136,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
   if (Object.keys(storesMeta).length) merged.meta.stores = storesMeta;
   else delete merged.meta.stores;
   if (packagesMeta) merged.meta.packages = packagesMeta;
+  if (routeGaps.length) merged.meta.routes = { gaps: routeGaps };
   // decisions the manifests and the config declare, joined to the code's DECISION(<id>) comments, and the documents
   // the flows, the decisions and the team's sentences cite, quoted (decisions.ts, cited-docs.ts) — after the design
   // pass (its manifests, its screen nodes) and after meta was rebuilt

@@ -14,7 +14,8 @@ test('saved multi-source application graphs export without local bookkeeping or 
       store.roots[repo] = join(dir, repo);
       store.addFragment({ repo, nodes: [{ id: `${repo}::save`, kind: 'function', name: 'save', tags: [],
         loc: { repo, path: 'src/save.ts', line: 1 } }], edges: [],
-      meta: { files: 1, sourceHash: 'mtime', sourceDigest: `${repo}-digest`, stores: { drivers: [{ spec: 'pg', files: 1 }] } } });
+      meta: { files: 1, sourceHash: 'mtime', sourceDigest: `${repo}-digest`, stores: { drivers: [{ spec: 'pg', files: 1 }] },
+        routes: { gaps: [{ kind: 'non-literal-path', path: 'src/controller.ts', line: 1, name: 'Controller', text: `${repo} has an unread route.` }] } } });
     }
     store.addFragment({ repo: 'alpha', nodes: [], edges: [{ id: 'cross', from: 'alpha::save', to: 'beta::save', kind: 'calls',
       resolution: { status: 'heuristic', technique: 'detected', confidence: 'MEDIUM', note: 'Retain the uncertainty.' } }] });
@@ -28,6 +29,7 @@ test('saved multi-source application graphs export without local bookkeeping or 
     assert.deepEqual(document.sources?.map(source => source.meta?.sourceDigest), ['alpha-digest', 'beta-digest']);
     assert.deepEqual(document.sources?.[0]?.meta?.stores, { drivers: [{ spec: 'pg', files: 1 }] });
     assert.equal(document.graph.meta?.sourceDigest, loaded.meta.sourceDigest);
+    for (const source of document.sources ?? []) assert.deepEqual(source.meta?.routes, loaded.meta.routes?.[source.repo]);
     assert.deepEqual(document.graph.edges, loaded.allEdges());
     const json = JSON.stringify(document);
     for (const field of ['sourceHash', 'generatedAt', 'graphPath', 'workspace', 'roots', 'farsight', 'sync']) assert.ok(!json.includes(`"${field}":`), field);

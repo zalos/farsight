@@ -67,6 +67,9 @@
             },
             "decisions": {
               "$ref": "#/definitions/DecisionsMeta"
+            },
+            "routes": {
+              "$ref": "#/definitions/RoutesMeta"
             }
           },
           "required": [
@@ -1343,6 +1346,62 @@
       ],
       "additionalProperties": false,
       "description": "One place the code names a decision: a `DECISION(<id>)` comment, on or above the node it sits in."
+    },
+    "RoutesMeta": {
+      "type": "object",
+      "properties": {
+        "gaps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RouteGap"
+          }
+        }
+      },
+      "required": [
+        "gaps"
+      ],
+      "additionalProperties": false,
+      "description": "What the route readers set aside, per repo — present only when something was."
+    },
+    "RouteGap": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "non-literal-path",
+            "all-verb",
+            "global-prefix",
+            "router-module",
+            "versioning",
+            "entrypoint-mismatch"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "description": "repo-relative file of the decorator or call"
+        },
+        "line": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string",
+          "description": "the declaration it is about: `OrdersController.approveOrder`, or the call (`app.setGlobalPrefix`)"
+        },
+        "text": {
+          "type": "string",
+          "description": "one sentence saying what was not read and what the recorded routes therefore lack"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "line",
+        "name",
+        "text"
+      ],
+      "additionalProperties": false,
+      "description": "A route declaration the TS/JS adapter recognised and did not turn into a route, or a declared entry point that disagrees with the decorators beside it — named, never guessed (code-parser/src/nest.ts). `non-literal-path`: a `@Controller` / `@Get` path from a constant or a template with a hole; `all-verb`: `@All`; `global-prefix` / `versioning` / `router-module`: a prefix or version the app applies at boot that the recorded routes do not carry; `entrypoint-mismatch`: an `@entrypoint http:VERB /path` naming a route the decorators do not (the decorators win)."
     },
     "GraphNode": {
       "type": "object",
@@ -3163,6 +3222,9 @@
             },
             "decisions": {
               "$ref": "#/definitions/DecisionsMeta"
+            },
+            "routes": {
+              "$ref": "#/definitions/RoutesMeta"
             }
           },
           "additionalProperties": false
