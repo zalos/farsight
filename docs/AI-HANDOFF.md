@@ -41,6 +41,34 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Farsight Sentinel execution handoff — 2026-10-19
+
+The owner requested updated memories and a kickoff prompt, not an agent launch. The shared entry point is
+[Sentinel implementation kickoff](proposals/farsight-sentinel/execution-kickoff.md), linked from the plan and
+backlog. This handoff is the canonical project memory for both providers; no cross-project preference or
+provider-private memory change is needed for these Sentinel-specific facts.
+
+Verified on 2026-10-19: proposal PR #117 is merged at `04c3c63`; PR 00
+[#118](https://github.com/zalos/farsight/pull/118) remains open on `docs/sentinel-implementation-plan`.
+The latest implementation-plan change before this handoff is `6a1d6d4`, including standalone delivery.
+Its affected-check, commit and secrets gates passed; runtime jobs were skipped as appropriate for Markdown.
+These checks do not establish implementation approval. No Sentinel implementation PR or execution agent has
+started, and no merge, scanner/provider trial, application build, ingest or live-service change was performed.
+
+Confirmed decisions: local first with a future hosted option; source-only TS/JS and Java/Spring first release;
+optional Ollama plus a configurable hosted endpoint; standalone reports and Farsight integration over the same
+pinned report document. Standalone reports carry readable application context, explanations and permitted
+evidence and work without either product or the source checkout. Deterministic delivery stays independent
+of model gates. Both Claude reviews remain unchanged.
+
+Next eligible implementation is PR 01 after PR 00 agreement/dependency gates: the feasibility harness,
+synthetic fixtures, capability/corpus decision manifest and measured results. The container requirement for
+external scanners is still unanswered; ask before those probes, with no automatic host fallback. Exact
+engine/framework/runtime pins, E3/E5 thresholds and resource defaults require PR 01 evidence. Continue
+independent authorized work when one decision is pending; do not infer agreement from elapsed time or green CI.
+The kickoff preserves these boundaries, the PR sequence, worktree isolation and affected-only validation.
+The primary checkout and its existing editor-settings change remain untouched.
+
 ## Farsight Sentinel implementation planning — 2026-10-17
 
 Branch `docs/sentinel-implementation-plan` has PR 00 open as [#118](https://github.com/zalos/farsight/pull/118),

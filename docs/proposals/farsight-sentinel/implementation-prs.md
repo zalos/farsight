@@ -5,6 +5,9 @@ All implementation rows are **planned**; no implementation PR has started.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
 
+Use the [execution kickoff](execution-kickoff.md) when dispatching the implementation agent. It carries the
+confirmed decisions, open gates and first bounded deliverable; preparing it does not dispatch or approve work.
+
 Each PR is a mergeable change behind the optional Sentinel boundary. If a measured change is too large for
 one review, split it at the stated contract boundary without dropping its acceptance gate. Scanners, models
 and frameworks are not considered supported merely because an adapter class exists.

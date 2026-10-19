@@ -18,6 +18,7 @@ not silent amendments or claims that Sentinel already exists.
 |---|---|
 | This file | Complete architecture, decisions, trust boundaries, lifecycle and release gates |
 | [PR build plan](implementation-prs.md) | Ordered PRs, dependencies, owned files, acceptance evidence and demonstrations |
+| [Execution kickoff](execution-kickoff.md) | Ready-to-use agent prompt, current handoff, first deliverable and review/authorization boundaries |
 | [Implementation examples](implementation-examples.md) | Parser integration, contracts, SQL, publication, rules, model review and invalidation |
 | [Implementation review](claude-review-implementation.md) · [Response](implementation-review-response.md) | Preserved feedback and the disposition, correction and execution gate for every finding |
 | [Existing research](research-scanners.md) · [workflow research](research-workflows.md) | Scanner and platform evidence, licensing qualifications and alternatives |
