@@ -324,3 +324,26 @@ test('same id: an App Router route.ts and a controller for the same endpoint pro
   const a = appRouter.nodes.find((n) => n.id === ROUTE)!, b = nest.nodes.find((n) => n.id === ROUTE)!;
   assert.deepEqual({ ...a, loc: undefined }, { ...b, loc: undefined }, 'only the location differs');
 });
+
+test('React Router data mode: `{ path, Component }` is a page rendering the component, beside `element` and `component`', async () => {
+  const f = await ingest(tempRepo({
+    'src/pages.tsx': [
+      'export function OrdersPage() { return <main>orders</main>; }',
+      'export function OrderPage() { return <main>order</main>; }',
+      'export function LegacyPage() { return <main>legacy</main>; }',
+    ].join('\n'),
+    'src/routes.tsx': [
+      "import { OrdersPage, OrderPage, LegacyPage } from './pages';",
+      'export const routes = [',
+      "  { path: '/orders', Component: OrdersPage },",
+      "  { path: '/orders/:id', element: <OrderPage /> },",
+      "  { path: '/legacy', component: LegacyPage },",
+      "  { path: '/no-page', Component: someFactory() },",
+      '];',
+    ].join('\n'),
+  }));
+  const pages = f.nodes.filter((n) => n.kind === 'page').map((n) => n.id).sort();
+  assert.deepEqual(pages, ['svc::page::/legacy', 'svc::page::/orders', 'svc::page::/orders/:id']);
+  const renders = f.edges.filter((e) => e.kind === 'renders' && e.from === 'svc::page::/orders').map((e) => e.to);
+  assert.deepEqual(renders, ['svc::src/pages.tsx::OrdersPage']);
+});

@@ -1192,7 +1192,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
 
     // app routes (UI pages): React Router / Angular-style route configs
     walk(program, (n) => {
-      // {path: '/invoices', element: <InvoiceListPage/>} or {path: 'x', component: XComponent}
+      // {path: '/invoices', element: <InvoiceListPage/>}, {path: 'x', component: XComponent}, or React Router's
+      // data-mode default `{path: 'x', Component: XPage}`
       if (n.type === 'ObjectExpression') {
         const props: Record<string, AstNode> = {};
         for (const prop of (n.properties as AstNode[]) ?? []) {
@@ -1203,7 +1204,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         const pathVal = props.path ? stringValue(props.path) : null;
         const target =
           (props.element && jsxName(props.element)) ||
-          (props.component && props.component.type === 'Identifier' ? String(props.component.name) : null);
+          (props.component && props.component.type === 'Identifier' ? String(props.component.name) : null) ||
+          (props.Component && props.Component.type === 'Identifier' ? String(props.Component.name) : null);
         if (pathVal !== null && target) {
           addPage(pathVal, target, line(n.start ?? 0));
         }
