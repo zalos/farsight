@@ -17,7 +17,7 @@ import type { LanguageAdapter, IngestOptions } from '../types.js';
 import { collectFiles, freshnessMeta } from '../shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields, type ParsedDoc } from '../shared/docs.js';
 import { capLabel } from '../shared/labels.js';
-import { autoTags, normalizePath, snippetRange } from '../shared/tags.js';
+import { autoTags, joinPaths, normalizePath, snippetRange } from '../shared/tags.js';
 import { grammarParser, walkTS, childrenOfType, findFirst, type TSNode } from '../treesitter/harness.js';
 import { extractJavaBranches } from './branches.js';
 import {
@@ -462,11 +462,6 @@ function simpleTypeName(typeNode: TSNode | null): string | null {
 function annLabel(a: Ann): string {
   const args = [...a.pairs.entries()].map(([k, v]) => `${k} = ${v}`).join(', ');
   return args ? `${a.name}(${args})` : a.strings.length ? `${a.name}(${a.strings.join(', ')})` : a.name;
-}
-
-function joinPaths(base: string, path: string): string {
-  const joined = `${base}/${path}`.replace(/\/+/g, '/').replace(/\/$/, '');
-  return joined.startsWith('/') ? joined : `/${joined}`;
 }
 
 export const javaAdapter: LanguageAdapter = {

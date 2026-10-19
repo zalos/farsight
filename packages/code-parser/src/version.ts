@@ -1,2 +1,2 @@
 // Kept in sync by scripts/library-version.mjs; package tests verify the stamp.
-export const PARSER_VERSION = '0.1.0';
+export const PARSER_VERSION = '0.2.0';

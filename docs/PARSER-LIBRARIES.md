@@ -1,7 +1,8 @@
 # Parser libraries
 
-`@farsight/graph` and `@farsight/code-parser` are paired Node 24+ ESM libraries at version **0.1.0**, independent
-of the application's root version. Both are MIT licensed. They are packaged by this repository; registry
+`@farsight/graph` and `@farsight/code-parser` are paired Node 24+ ESM libraries at version **0.2.0**, independent
+of the application's root version (0.1.0 was the extraction; 0.2.0 reads NestJS controllers as routes and records
+route gaps on `meta.routes`, an optional addition to the graph contract — schema version stays 1). Both are MIT licensed. They are packaged by this repository; registry
 publication is a separate owner-controlled release step. Package names do not establish npm scope ownership.
 
 The canonical graph contract lives in `packages/graph/src/graph.ts`; core re-exports it. Its generated JSON

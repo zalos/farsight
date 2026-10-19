@@ -602,6 +602,30 @@ export interface StoresMeta {
   notes?: string[];
 }
 
+/**
+ * A route declaration the TS/JS adapter recognised and did not turn into a route, or a declared
+ * entry point that disagrees with the decorators beside it — named, never guessed
+ * (code-parser/src/nest.ts). `non-literal-path`: a `@Controller` / `@Get` path from a constant or a
+ * template with a hole; `all-verb`: `@All`; `global-prefix` / `versioning` / `router-module`: a prefix
+ * or version the app applies at boot that the recorded routes do not carry; `entrypoint-mismatch`:
+ * an `@entrypoint http:VERB /path` naming a route the decorators do not (the decorators win).
+ */
+export interface RouteGap {
+  kind: 'non-literal-path' | 'all-verb' | 'global-prefix' | 'router-module' | 'versioning' | 'entrypoint-mismatch';
+  /** repo-relative file of the decorator or call */
+  path: string;
+  line: number;
+  /** the declaration it is about: `OrdersController.approveOrder`, or the call (`app.setGlobalPrefix`) */
+  name: string;
+  /** one sentence saying what was not read and what the recorded routes therefore lack */
+  text: string;
+}
+
+/** What the route readers set aside, per repo — present only when something was. */
+export interface RoutesMeta {
+  gaps: RouteGap[];
+}
+
 // ── dependencies: packages as nodes (docs/proposals/dependencies-and-nx.md §2.1) ──
 // A `package` node is one dependency of one source: a third-party package (`zod`, `@scope/pkg`)
 // or a workspace library a path alias / workspace package name resolves to. The edges into it are
@@ -1104,7 +1128,7 @@ export interface GraphFragment {
    * (`sourceHash`), and a hash over their contents (`sourceDigest`) — the digest is what a
    * reporter must stamp for "unchanged since the run" to be provable (files.ts contentDigest).
    */
-  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta; journeys?: JourneysMeta; decisions?: DecisionsMeta };
+  meta?: { files: number; sourceHash: string; sourceDigest?: string; tests?: TestsMeta; stories?: StoriesMeta; stores?: StoresMeta; packages?: PackagesMeta; projects?: ProjectsMeta; config?: ConfigMeta; journeys?: JourneysMeta; decisions?: DecisionsMeta; routes?: RoutesMeta };
   /** OpenAPI documents that were found but could not be read — reported, never fatal. */
   specErrors?: string[];
   /** true when a farsight.config.json (at the root or nested) was applied by ingestRepo */
