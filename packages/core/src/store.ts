@@ -169,7 +169,7 @@ export class GraphStore {
     const nodes = this.allNodes();
     const repos = new Set([...Object.keys(this.roots), ...Object.keys(this.meta.repos ?? {}),
       ...nodes.map(node => node.loc?.repo ?? (node.id.includes('::') ? node.id.split('::')[0]! : '')).filter(Boolean)]);
-    const fields = ['tests', 'stories', 'stores', 'packages', 'projects', 'config', 'journeys', 'decisions'] as const;
+    const fields = ['tests', 'stories', 'stores', 'packages', 'projects', 'config', 'journeys', 'decisions', 'routes'] as const;
     for (const field of fields) for (const repo of Object.keys(this.meta[field] ?? {})) repos.add(repo);
     const sources: GraphSource[] = [...repos].map(repo => {
       const freshness = this.repoMeta(repo);

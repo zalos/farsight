@@ -41,6 +41,29 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## PR #119 review — 2026-10-19
+
+Review fixes on `codex/pr-119-review`, pushed to `feat/nest-routes`: Nest guard nodes are scoped to their
+decorator declaration and argument, so equal names in different modules and factory calls cannot combine
+unrelated checks. Guard resolution follows renamed barrel exports. Computed controller options are gaps;
+controller version options and aliased/namespaced RouterModule mounts are reported. A method parameter that
+shadows an imported handler no longer borrows its gates or coverage. Portable analysis and application exports
+retain `meta.routes.gaps`. ADR 12 records the additive contract and its consumers.
+
+Verified in isolated worktrees under Node 24: build and all typechecks; 1,587 unit tests passed, two opt-in live
+tracker tests skipped; 20 script tests; catalog lint; schema drift check; actual parser tarballs installed and
+exercised outside the workspace; 345 browser/MCP tests. The Nest suite now has 15 cases, including reproduced
+review regressions; the portable-export test also retains each source's route gaps.
+
+A separate `main` build at `04c3c63` and the reviewed build ingested the same repository from scratch directories,
+excluding examples and prototypes: both produced 6,126 nodes and 13,200 edges, with identical node/edge fields
+and source digest `96158ffec1b4`. Saved graph bytes: 17,691,608 / 17,691,603 (main / PR); SQLite bytes:
+23,834,624 / 23,834,624. Fresh browser pages on the front door, Map and code map had zero page, console or HTTP
+errors; screenshots were inspected. This source has no design manifest, so the Map correctly shows its empty
+state; the e2e suite exercises populated journeys. Final GitHub checks must pass before squash merge. The primary
+checkout, deployed servers, global installs and dogfood graphs were untouched. Registry publication and acceptance
+in the reference application's new host remain separate follow-ups.
+
 ## NestJS controllers as HTTP routes — 2026-10-19
 
 Branch `feat/nest-routes` (worktree `.claude/worktrees/nest-routes-7f776a`; a detached `main` baseline worktree at

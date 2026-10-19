@@ -2,7 +2,7 @@
 // App Router gives the same endpoints, the method as the route's body, the handler it delegates to
 // mirrored onto the route, @UseGuards as guards, docs, gaps, the spec join and the coverage cell.
 // Runs against the built packages: `pnpm build` first.
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,9 +13,12 @@ import type { GraphFragment } from '@farsight/core';
 import { createParser } from '@farsight/code-parser';
 import { tsJsAdapter } from '@farsight/code-parser/adapters/tsjs';
 
+const tempRepos: string[] = [];
+after(() => { for (const dir of tempRepos) rmSync(dir, { recursive: true, force: true }); });
+
 function tempRepo(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'farsight-nest-'));
-  process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
+  tempRepos.push(dir);
   for (const [rel, text] of Object.entries(files)) {
     mkdirSync(join(dir, rel, '..'), { recursive: true });
     writeFileSync(join(dir, rel), text);
@@ -146,6 +149,7 @@ test('gaps: a constant or template path, @All, setGlobalPrefix each produce no r
   // the library path says the same, and says the analysis is incomplete while a declared route went unread
   const r = await createParser({ adapters: [tsJsAdapter] }).parseRepository({ root: dir, sourceId: 'svc' });
   assert.equal(r.analysis.complete, false);
+  assert.deepEqual(r.graph.meta?.routes, f.meta?.routes, 'portable analysis retains the route gaps');
   assert.deepEqual(r.analysis.diagnostics.filter((d) => d.code === 'unsupported').map((d) => [d.reason, d.path, d.line]).sort(), [
     ['all-verb', 'src/gaps.controller.ts', 8], ['global-prefix', 'src/main.ts', 4],
     ['non-literal-path', 'src/gaps.controller.ts', 6], ['non-literal-path', 'src/gaps.controller.ts', 7],
@@ -197,7 +201,8 @@ test('@UseGuards: class-level guards every route, method-level its own; a repo c
     ].join('\n'),
   }));
   const LIST = 'svc::route::GET /orders', APPROVE = 'svc::route::POST /orders/approve';
-  const SESSION = 'svc::guard::UseGuards(SessionGuard)', ROLES = 'svc::guard::UseGuards(RolesGuard)', JWT = 'svc::guard::UseGuards(AuthGuard(jwt))';
+  const guardId = (label: string) => f.nodes.find(n => n.kind === 'guard' && n.name === `UseGuards: ${label}`)!.id;
+  const SESSION = guardId('SessionGuard'), ROLES = guardId('RolesGuard'), JWT = guardId('AuthGuard(jwt)');
   const nodes = byId(f);
   assert.equal(nodes.get(SESSION)!.name, 'UseGuards: SessionGuard');
   assert.deepEqual(nodes.get(SESSION)!.tags, ['auth']);
@@ -346,4 +351,77 @@ test('React Router data mode: `{ path, Component }` is a page rendering the comp
   assert.deepEqual(pages, ['svc::page::/legacy', 'svc::page::/orders', 'svc::page::/orders/:id']);
   const renders = f.edges.filter((e) => e.kind === 'renders' && e.from === 'svc::page::/orders').map((e) => e.to);
   assert.deepEqual(renders, ['svc::src/pages.tsx::OrdersPage']);
+});
+
+
+test('guard declarations keep same-named classes in different modules separate', async () => {
+  const f = await ingest(tempRepo(Object.fromEntries(['admin', 'public'].flatMap(area => [
+    [`src/${area}/guard.ts`, `export class SessionGuard { canActivate() { return ${area === 'admin'}; } }`],
+    [`src/${area}/controller.ts`, `import { Controller, Get, UseGuards } from '@nestjs/common';
+import { SessionGuard } from './guard';
+@Controller('${area}') @UseGuards(SessionGuard)
+export class AreaController { @Get() list() { return 1; } }`],
+  ]))));
+  const guards = ['admin', 'public'].map(area => edgesOf(f, 'guards', `svc::route::GET /${area}`)[0]!.from);
+  assert.notEqual(guards[0], guards[1], 'distinct guard classes must not share a node');
+  for (const [i, area] of ['admin', 'public'].entries()) {
+    assert.deepEqual(f.edges.filter(e => e.kind === 'calls' && e.from === guards[i]).map(e => e.to),
+      [`svc::src/${area}/guard.ts::SessionGuard.canActivate`]);
+  }
+});
+
+test('guard class resolution follows renamed barrel exports', async () => {
+  const f = await ingest(tempRepo({
+    'src/guard.ts': 'export class SessionGuard { canActivate() { return true; } }',
+    'src/index.ts': "export { SessionGuard as Gate } from './guard';",
+    'src/controller.ts': `import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Gate as Auth } from './index';
+@Controller('orders') @UseGuards(Auth)
+export class OrdersController { @Get() list() { return 1; } }`,
+  }));
+  const guard = edgesOf(f, 'guards', 'svc::route::GET /orders')[0]!.from;
+  assert.deepEqual(f.edges.filter(e => e.kind === 'calls' && e.from === guard).map(e => e.to),
+    ['svc::src/guard.ts::SessionGuard.canActivate']);
+});
+
+test('computed controller options are gaps, and controller versions and RouterModule aliases are reported', async () => {
+  const dir = tempRepo({
+    'src/controllers.ts': `import { Controller, Get } from '@nestjs/common';
+const key = 'path';
+@Controller({ [key]: 'hidden' })
+export class Computed { @Get('item') item() { return 1; } }
+@Controller({ path: 'known', [key]: 'override' })
+export class Overridden { @Get('item') item() { return 1; } }
+@Controller({ path: 'cats', version: '1' })
+export class Versioned { @Get() cats() { return 1; } }`,
+    'src/main.ts': `import { RouterModule as Router } from '@nestjs/core';
+import * as core from '@nestjs/core';
+Router.register([{ path: 'api', module: ApiModule }]);
+core.RouterModule.register([{ path: 'v2', module: OtherModule }]);`,
+  });
+  const f = await ingest(dir);
+  assert.deepEqual(routeIds(f), ['svc::route::GET /cats'], 'computed keys must not invent a root or ignore an override');
+  assert.deepEqual(f.meta?.routes?.gaps.map(g => g.kind).sort(),
+    ['non-literal-path', 'non-literal-path', 'router-module', 'router-module', 'versioning']);
+  const r = await createParser({ adapters: [tsJsAdapter] }).parseRepository({ root: dir, sourceId: 'svc' });
+  assert.equal(r.analysis.complete, false);
+  assert.equal(r.analysis.diagnostics.filter(d => d.code === 'unsupported').length, 5);
+});
+
+
+test('factory guard arguments stay separate even when their labels omit non-literal options', async () => {
+  const f = await ingest(tempRepo({
+    'src/controller.ts': `import { Controller, Get, UseGuards } from '@nestjs/common';
+@Controller('orders') @UseGuards(AuthGuard(ADMIN), AuthGuard(USER))
+export class OrdersController { @Get() list() { return 1; } }`,
+  }));
+  assert.equal(new Set(edgesOf(f, 'guards', 'svc::route::GET /orders').map(e => e.from)).size, 2);
+});
+
+test('a parameter shadowing an imported handler does not inherit that handler’s gates or coverage', async () => {
+  const file = controllerFile().replace('approveOrder(req: Request, ctx: Ctx)', 'approveOrder(req: Request, ctx: Ctx, approveOrder: Function)');
+  const f = await ingest(tempRepo({ ...handlerFiles, [CONTROLLER]: file }));
+  assert.deepEqual(edgesOf(f, 'guards', ROUTE), []);
+  assert.deepEqual(edgesOf(f, 'validates', ROUTE), []);
+  assert.ok(!f.edges.some(e => e.from === METHOD && e.meta?.via === 'delegate'));
 });

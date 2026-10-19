@@ -570,7 +570,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           : `@${g.decorator} on ${full} takes a path that is not a literal; that route is not read` }, fnId);
       }
       if (!controller.prefixes || !routes.length) return;
-      const delegate = delegateOf(m);
+      const candidate = delegateOf(m);
+      const params = ((m.value as AstNode).params as AstNode[]) ?? [];
+      const delegate = candidate && importMap.has(candidate) && !params.flatMap(bindingNames).includes(candidate)
+        ? candidate : undefined;
       const guards = [...useGuardsOf(m.decorators, nestFile).map((g) => ({ ...g, on: full })), ...classGuards];
       const made: string[] = [];
       for (const prefix of controller.prefixes) {
@@ -588,7 +591,9 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           routeHandlers.push({ routeId, file, handler: full });
           if (delegate) routeHandlers.push({ routeId, file, handler: delegate });
           for (const g of guards) {
-            const guardId = `${repo}::guard::UseGuards(${g.label})`;
+            // The decorator's declaration owns the gate. Equal labels in other modules (or factory
+            // calls with different arguments) must not combine unrelated canActivate bodies.
+            const guardId = `${repo}::${file}::guard::UseGuards(${g.label})@${g.on}:${g.at.start}:${g.argument}`;
             addNode({ id: guardId, kind: 'guard', name: `UseGuards: ${g.label}`, lang: langOf(file), tags: ['auth'], loc: { repo, path: file, line: line(g.at.start ?? 0) } });
             addEdge('guards', guardId, routeId, undefined, { status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH', note: `@UseGuards(${g.label}) on ${g.on}` });
             if (g.className) nestGuards.push({ guardId, routeId, file, className: g.className });
@@ -623,6 +628,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
         // method is a route per prefix × path (nest.ts; readNestMethod below)
         const controller = nestFile.bindings.size ? controllerOf(n, nestFile) : undefined;
         const classGuards = controller ? useGuardsOf(n.decorators, nestFile).map((g) => ({ ...g, on: cls })) : [];
+        if (controller?.versioned) {
+          routeGap({ kind: 'versioning', path: file, line: line(controller.at.start ?? 0), name: cls,
+            text: `@Controller on ${cls} declares a version that is not applied; its routes are recorded without a version segment` });
+        }
         if (controller && !controller.prefixes) {
           routeGap({ kind: 'non-literal-path', path: file, line: line(controller.at.start ?? 0), name: cls,
             text: `@Controller on ${cls} takes a path that is not a literal; none of its routes is read` });
@@ -1657,10 +1666,10 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // method reaches the function expression bound at `new BcOutboxWorker({ hooks: { … } })`.
   // Heuristic and always deferred — the constructor stored it, the method runs it later.
   // An unmatched hook call stays an honest absence rather than an invented edge.
-  const lookupClass = (file: string, name: string, seen: Set<string>): string | undefined => {
+  const lookupClass = (file: string, name: string, seen: Set<string>): { file: string; name: string } | undefined => {
     if (seen.has(file)) return undefined;
     seen.add(file);
-    if (classDecls.has(`${file}::${name}`)) return file;
+    if (classDecls.has(`${file}::${name}`)) return { file, name };
     const re = reexportsByFile.get(file);
     if (!re) return undefined;
     const named = re.named.get(name);
@@ -1670,10 +1679,11 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   };
   // a controller method whose body is one `return handler(…)` (nest.ts): the call it makes to the handler
   // is the delegation, stamped so core reads route, method and handler as one place (coverage.ts)
+  const delegateCalls = new Map(nestDelegates.length ? edges.filter(e => e.kind === 'calls').map(e => [`${e.from}|${e.to}`, e]) : []);
   for (const d of nestDelegates) {
     const delegateId = resolveTarget(d.file, d.callee);
     if (!delegateId || delegateId === d.fnId) continue;
-    const e = edges.find((x) => x.kind === 'calls' && x.from === d.fnId && x.to === delegateId);
+    const e = delegateCalls.get(`${d.fnId}|${delegateId}`);
     if (e) e.meta = { ...e.meta, via: 'delegate' };
   }
   // `@UseGuards(A)` where A is a class of the repo with a `canActivate`: the guard runs that method. The
@@ -1681,8 +1691,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // `A.canActivate`, so a journey descends into what the gate checks instead of stopping at a badge.
   for (const g of nestGuards) {
     const imp = importsByFile.get(g.file)?.get(g.className) ?? { file: g.file, name: g.className };
-    const clsFile = lookupClass(imp.file, imp.name, new Set());
-    const method = clsFile ? classMethods.get(`${clsFile}::${imp.name}`)?.find((m) => m.name === 'canActivate') : undefined;
+    const cls = lookupClass(imp.file, imp.name, new Set());
+    const method = cls ? classMethods.get(`${cls.file}::${cls.name}`)?.find((m) => m.name === 'canActivate') : undefined;
     if (!method) continue;
     const res = (note: string): GraphEdge['resolution'] => ({ status: 'resolved', technique: imp.file === g.file ? 'same-file' : 'static-import', confidence: 'HIGH', note });
     const toGuard = `calls|${g.routeId}|${g.guardId}`;
@@ -1698,7 +1708,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     for (const b of hookBindings) {
       if (b.classRef.name !== hk.cls) continue;
       if (b.path !== full && b.path !== dropped) continue;
-      if (lookupClass(b.classRef.file, b.classRef.name, new Set()) !== hk.file) continue;
+      if (lookupClass(b.classRef.file, b.classRef.name, new Set())?.file !== hk.file) continue;
       recordSite('calls', hk.fromId, b.fnId, { ...hk, when: undefined, deferred: true });
       const key = `calls|${hk.fromId}|${b.fnId}`;
       if (seenEdge.has(key)) continue;

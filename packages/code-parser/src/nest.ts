@@ -28,19 +28,23 @@ export interface NestFile {
    * Value imports only — a `type` import decorates nothing.
    */
   bindings: Map<string, string>;
+  /** Value imports from @nestjs/core, including RouterModule aliases and namespace imports. */
+  coreBindings: Map<string, string>;
   /** the file imports from some `@nestjs/*` package — the precondition for reading `app.setGlobalPrefix(…)` as Nest's */
   nest: boolean;
 }
 
 export function readNestFile(program: AstNode): NestFile {
   const bindings = new Map<string, string>();
+  const coreBindings = new Map<string, string>();
   let nest = false;
   for (const stmt of ((program.body as AstNode[]) ?? [])) {
     if (!isNode(stmt) || stmt.type !== 'ImportDeclaration' || stmt.importKind === 'type') continue;
     const src = (stmt.source as AstNode | undefined)?.value;
     if (typeof src !== 'string' || !src.startsWith('@nestjs/')) continue;
     nest = true;
-    if (src !== NEST_COMMON) continue;
+    const target = src === NEST_COMMON ? bindings : src === '@nestjs/core' ? coreBindings : undefined;
+    if (!target) continue;
     for (const spec of ((stmt.specifiers as AstNode[]) ?? [])) {
       if (!isNode(spec) || spec.importKind === 'type') continue;
       const local = (spec.local as AstNode | undefined)?.name;
@@ -48,13 +52,13 @@ export function readNestFile(program: AstNode): NestFile {
       if (spec.type === 'ImportSpecifier') {
         const imp = spec.imported as AstNode | undefined;
         const imported = imp && (typeof imp.name === 'string' ? imp.name : typeof imp.value === 'string' ? imp.value : undefined);
-        bindings.set(local, imported ?? local);
+        target.set(local, imported ?? local);
       } else if (spec.type === 'ImportNamespaceSpecifier') {
-        bindings.set(local, '*');
+        target.set(local, '*');
       }
     }
   }
-  return { bindings, nest };
+  return { bindings, coreBindings, nest };
 }
 
 /** A decorator read as `@Name(args)` or `@ns.Name(args)`, where the name is a `@nestjs/common` binding of this file. */
@@ -111,8 +115,8 @@ export function pathsOf(args: AstNode[]): string[] | undefined {
   if (!isNode(arg)) return undefined;
   if (arg.type === 'ObjectExpression') {
     const props = ((arg.properties as AstNode[]) ?? []).filter(isNode);
-    if (props.some((p) => p.type === 'SpreadElement')) return undefined;
-    const path = props.find((p) => (p.type === 'Property' || p.type === 'ObjectProperty') && !p.computed
+    if (props.some((p) => p.type === 'SpreadElement' || p.computed)) return undefined;
+    const path = [...props].reverse().find((p) => (p.type === 'Property' || p.type === 'ObjectProperty') && !p.computed
       && String((p.key as AstNode | undefined)?.name ?? (p.key as AstNode | undefined)?.value) === 'path');
     return path && isNode(path.value) ? pathList(path.value as AstNode) : [''];
   }
@@ -120,13 +124,18 @@ export function pathsOf(args: AstNode[]): string[] | undefined {
 }
 
 /** `@Controller(…)` on a class: its prefixes (undefined = not literal, a gap) and the decorator node. */
-export interface ControllerDecl { prefixes: string[] | undefined; at: AstNode }
+export interface ControllerDecl { prefixes: string[] | undefined; versioned: boolean; at: AstNode }
 
 export function controllerOf(cls: AstNode, file: NestFile): ControllerDecl | undefined {
   for (const dec of ((cls.decorators as AstNode[]) ?? [])) {
     if (!isNode(dec)) continue;
     const d = nestDecorator(dec, file);
-    if (d?.name === 'Controller') return { prefixes: pathsOf(d.args), at: dec };
+    if (d?.name === 'Controller') {
+      const arg = d.args[0];
+      const versioned = arg?.type === 'ObjectExpression' && ((arg.properties as AstNode[]) ?? []).some(p =>
+        isNode(p) && !p.computed && String((p.key as AstNode | undefined)?.name ?? (p.key as AstNode | undefined)?.value) === 'version');
+      return { prefixes: pathsOf(d.args), versioned, at: dec };
+    }
   }
   return undefined;
 }
@@ -154,7 +163,7 @@ export function methodRoutes(m: AstNode, file: NestFile): { routes: MethodRoute[
 }
 
 /** One argument of `@UseGuards(…)`: the word for it, and the class it names when it is a plain class reference. */
-export interface GuardRef { label: string; className?: string; at: AstNode }
+export interface GuardRef { label: string; className?: string; argument: number; at: AstNode }
 
 export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
   const out: GuardRef[] = [];
@@ -162,13 +171,13 @@ export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
     if (!isNode(dec)) continue;
     const d = nestDecorator(dec, file);
     if (d?.name !== 'UseGuards') continue;
-    for (const arg of d.args) {
+    for (const [argument, arg] of d.args.entries()) {
       if (!isNode(arg)) continue;
-      if (arg.type === 'Identifier' && typeof arg.name === 'string') { out.push({ label: arg.name, className: arg.name, at: dec }); continue; }
+      if (arg.type === 'Identifier' && typeof arg.name === 'string') { out.push({ label: arg.name, className: arg.name, argument, at: dec }); continue; }
       // `new RolesGuard()` — the class, constructed here
       if (arg.type === 'NewExpression' && isNode(arg.callee) && (arg.callee as AstNode).type === 'Identifier') {
         const name = String((arg.callee as AstNode).name);
-        out.push({ label: name, className: name, at: dec });
+        out.push({ label: name, className: name, argument, at: dec });
         continue;
       }
       // `AuthGuard('jwt')` — a factory: the class it returns is not in this file, so it names no method
@@ -176,11 +185,11 @@ export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
         const chain = memberChain(arg.callee);
         if (!chain.length) continue;
         const lits = ((arg.arguments as AstNode[]) ?? []).map(literalString).filter((s): s is string => s !== undefined);
-        out.push({ label: `${chain.join('.')}(${lits.join(', ')})`, at: dec });
+        out.push({ label: `${chain.join('.')}(${lits.join(', ')})`, argument, at: dec });
         continue;
       }
       const chain = memberChain(arg);
-      if (chain.length) out.push({ label: chain.join('.'), at: dec });
+      if (chain.length) out.push({ label: chain.join('.'), argument, at: dec });
     }
   }
   return out;
@@ -235,7 +244,10 @@ export function nestSetupGaps(program: AstNode, file: NestFile): { kind: RouteGa
       out.push({ kind: 'global-prefix', name: chain.join('.'), at: n, text: `${chain.join('.')}(${arg !== undefined ? `'${arg}'` : '…'}) is not applied: the routes read from controllers are recorded without the global prefix` });
     } else if (tail === 'enableVersioning' && chain.length === 2) {
       out.push({ kind: 'versioning', name: chain.join('.'), at: n, text: `${chain.join('.')}(…) is not applied: the routes read from controllers are recorded without a version segment` });
-    } else if (chain.length === 2 && chain[0] === 'RouterModule' && tail === 'register') {
+    } else if (tail === 'register' && (
+      chain.length === 2 && file.coreBindings.get(chain[0]!) === 'RouterModule'
+      || chain.length === 3 && file.coreBindings.get(chain[0]!) === '*' && chain[1] === 'RouterModule'
+    )) {
       out.push({ kind: 'router-module', name: 'RouterModule.register', at: n, text: 'RouterModule.register(…) is not read: a module path it mounts controllers under is missing from their routes' });
     }
   });
