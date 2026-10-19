@@ -1,6 +1,7 @@
 # Farsight Sentinel PR build plan
 
-**Status:** proposed backlog for review, 2026-10-17. PR 00 is open as [#118](https://github.com/zalos/farsight/pull/118).
+**Status:** reviewed for PR 00 merge, 2026-10-19: [#118](https://github.com/zalos/farsight/pull/118).
+Outstanding decisions remain deferred to their named gates; this merge does not dispatch implementation.
 All implementation rows are **planned**; no implementation PR has started.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
@@ -131,7 +132,9 @@ resource requirements. Parsing/planning can proceed without a container. A missi
 host-execution fallback. Keep fixture secrets inert and manifests under fixture-only names from the first commit.
 
 **Done when:** every support claim has a named fixture/version; every rejected capability has a reason; owners
-accept the version matrix and thresholds. **Demo:** the same vulnerable/safe pair, a skipped file and an offline
+accept the deterministic version matrix and thresholds. Record E5/model trials and thresholds as deferred
+when their prerequisites are unavailable; their acceptance gates apply to the model track, not PR 02 or the
+deterministic release. **Demo:** the same vulnerable/safe pair, a skipped file and an offline
 failure across candidates. **Risk:** benchmark labels can be wrong; retain the evidence and review labels.
 
 ### PR 02 — optional package, contracts and architecture decision
@@ -212,7 +215,9 @@ Unrecorded/escaping paths and mismatched fingerprints fail integrity. Built-in r
 and symlinks; these checks do not claim OS-level read auditing for arbitrary native code or third-party adapters.
 
 **Done when:** TS and Java malformed files, unsupported files, parser limits and omitted diagnostic lines all
-report accurately; a recorded input outside the materialization manifest fails; graph evidence stays out of application `/graph`.
+report accurately; content/directory/metadata inputs reconcile to captured entries; missing resolution
+candidates reconcile to the captured directory inventory or a recorded refusal without reading the original
+checkout; escaping or otherwise unexplained inputs fail integrity; graph evidence stays out of application `/graph`.
 **Demo:** a failed Java file and successful TS file alongside an unparsed workflow file. Any parser/core
 correction discovered here becomes a separately measured change under the real-ingest rule.
 
@@ -722,8 +727,9 @@ choice recorded; it does not authorize a scanner installation, paid experiment o
 | Standalone report delivery plus Farsight integration | Owner | Confirmed; one report document with offline delivery and optional integrated navigation/actions | Contracts in 02; standalone acceptance in 19, parity in 25, clean-recipient gate in 26 |
 | Required container runtime for external scanners | Owner | Proposed; owner answer pending. Docker Desktop terms and Colima alternative are described in the architecture | External-scanner probes in 01; no host fallback |
 | Exact host/runtime/framework/engine pins | Feasibility lead | Not measured; candidate matrix only | 01 exit, before advertising support or dispatching corresponding adapter lane |
-| E3/E5 thresholds and labeled corpus | Feasibility lead + owner | Proposed gates in architecture; no results claimed | 01 decision record, then production gates at 18/22 |
-| Plan revisions and four material review fixes | Owner/reviewer | Incorporated for PR 00 review; review response traces all findings | Agreement before 01 |
+| E3 thresholds and deterministic labeled corpus | Feasibility lead + owner | Proposed gates in architecture; no results claimed | 01 decision record, then production gate at 18 |
+| E5 thresholds, model trials and resource choices | Feasibility lead + owner | May be explicitly deferred in 01; no deterministic release dependency | Set thresholds before live evaluation/required-review enablement; production gate at 22 |
+| Plan revisions and review fixes | Owner/reviewer | Reviewed for merge at the owner’s request; response traces the original findings and final corrections | PR 00 merge; implementation dispatch remains a separate task |
 | Ledger/parser/isolation proof | Foundation lead | SQL example validation only; no runtime guarantee | Relevant 03/05/07 acceptance gate before 08/09 |
 | Package, catalog, settings and fixture conventions | Integration lead | Assigned to PRs 01–09; no application edits in PR 00 | Respective first implementation PR, not final packaging |
 

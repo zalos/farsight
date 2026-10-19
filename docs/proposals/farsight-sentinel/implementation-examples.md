@@ -52,10 +52,13 @@ without inventing line numbers. `analysis.complete` remains parser completeness 
 There is no injected reader in this API. PR 05 privately materializes and enumerates only captured inputs,
 checks its entry set/bytes before and after parsing, and validates each recorded input against that tree:
 content = raw-byte SHA-256; directory = SHA-256 of canonical JSON of sorted entry names; metadata = SHA-256
-of the parser's `file`/`directory`/`special` kind; missing = SHA-256 of `unavailable`, after checking the path
-is in scope and absent. Pin this codec to the parser version with conformance fixtures. Missing-input checks
-must respect refused boundaries rather than probing the original checkout. The built-in repository reader
-also refuses traversal/symlink escapes. This verifies the materialization and recorded reads; it is not a
+of the parser's `file`/`directory`/`special` kind; missing = SHA-256 of `unavailable`. That last marker covers
+failed `stat` calls, including absent paths and refused symlinks, so its digest alone does not establish absence.
+Reconcile the path against captured directory membership and recorded refusals/diagnostics in the private
+materialization; unexplained unavailability fails integrity. Resolution candidates may be absent from captured
+file entries while still lying within a captured directory. Pin this codec to the parser version with
+conformance fixtures for absent, refused and interrupted reads; never probe the original checkout. The built-in
+repository reader also refuses traversal/symlink escapes. This verifies the materialization and recorded reads; it is not a
 claim that every OS read by arbitrary native or third-party code has been intercepted.
 
 ## 2. Capture facts and analysis outcomes are different records

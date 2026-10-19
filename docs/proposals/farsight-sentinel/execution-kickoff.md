@@ -59,7 +59,9 @@ inspection or evidence preparation. Do not silently merge PR 00 or claim its pro
 The owner has **not yet answered whether external scanners must require a local container runtime**. Ask that
 specific question before external-scanner probes if it remains unanswered. The proposed policy has no host
 fallback. Exact runtime/engine/framework versions, rule inventory, E3/E5 thresholds and resource defaults are
-PR 01 decisions based on measurements, not facts to invent. Keep these separate from the confirmed choices.
+PR 01 decisions based on measurements, not facts to invent. E5/model trials and thresholds may be explicitly
+deferred to the model track; they do not block deterministic foundation work or release. Keep these separate
+from the confirmed choices.
 
 ### First bounded deliverable
 

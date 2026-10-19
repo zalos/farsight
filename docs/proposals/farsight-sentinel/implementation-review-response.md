@@ -82,11 +82,32 @@ one JSON block and 13 TypeScript blocks' syntax. Whitespace checks passed and bo
 their pre-edit values. Mermaid blocks were counted, not rendered. No application build, scanner,
 container, model, ingest or dogfood-server operation is needed for these ordinary Markdown edits.
 
+## Final merge review — 2026-10-19
+
+The owner requested review, fixes and merge of the remaining PRs. Two further inconsistencies were corrected:
+
+- issue (blocking): the first-release summary and PR 01 exit criteria still included model acceptance despite
+  the independent deterministic delivery path. The summary, backlog and kickoff now explicitly permit E5/model
+  trials and thresholds to be deferred to their own track, preserving their later acceptance gates.
+- issue (blocking): the parser reconciliation example equated `missing` with absence. The existing reader
+  records the same `unavailable` hash for failed stat calls, including a refused symlink. Reconciliation now
+  uses captured directory membership and refusal evidence, allows explained missing resolution candidates,
+  and rejects unexplained inputs without consulting the original checkout.
+
+Both original Claude reviews remain unchanged. The plan is reviewed for merge with the container decision
+and measured support/threshold choices still deferred to their stated implementation gates. This review
+starts no implementation, scanner installation or model trial.
+
+Final documentation validation passed 61 local links (three anchors), one JSON block, 13 TypeScript blocks’
+syntax, balanced fences and whitespace. The nine SQL behavior checks passed again under Node 24.19.0 /
+SQLite 3.53.3. A real reader probe confirmed that absence and symlink refusal share the missing fingerprint,
+while the refusal retains its diagnostic. These are documentation/example checks, not Sentinel runtime proof.
+
 ## Next action
 
-Review PR 00 and the [execution-readiness table](implementation-prs.md#4-execution-readiness-and-decision-record).
+After PR 00 merges, use the [execution-readiness table](implementation-prs.md#4-execution-readiness-and-decision-record)
+when implementation is authorized.
 Confirmed owner choices are local first with a hosted option, source-only first, Ollama plus a configurable
 hosted endpoint, and standalone report delivery alongside Farsight integration. Record the container-prerequisite
-answer and agree the revised
-plan before dispatching PR 01. PR 01 then produces the capability/decision manifest and measurements needed
+answer before external-scanner probes; it does not block independent authorized fixture/harness work. PR 01 then produces the capability/decision manifest and measurements needed
 to select exact engines, framework releases and thresholds. No planned support is advertised as shipped.

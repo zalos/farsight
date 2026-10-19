@@ -41,6 +41,18 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Farsight Sentinel merge review — 2026-10-19
+
+The owner requested review, fixes and merge of the remaining PRs, including planning PR 00
+[#118](https://github.com/zalos/farsight/pull/118). The final review removes model acceptance from the
+deterministic first-release/PR 01 gate and corrects parser reconciliation: the `missing` fingerprint can
+represent a refused read, not only absence; missing candidates need captured directory/refusal evidence.
+Both original Claude reviews remain unchanged. Outstanding container, version and threshold decisions stay
+at their stated gates. This task merges the plan; it does not launch Sentinel implementation or scanner/model
+trials. Validation: 61 local links/three anchors, one JSON and 13 TypeScript syntax blocks, nine SQLite
+behavior checks and a real parser-reader probe passed; review files are byte-for-byte unchanged. No application
+build or e2e is selected for this Markdown-only change. The earlier entries retain their dated pre-review state.
+
 ## Farsight Sentinel execution handoff — 2026-10-19
 
 The owner requested updated memories and a kickoff prompt, not an agent launch. The shared entry point is

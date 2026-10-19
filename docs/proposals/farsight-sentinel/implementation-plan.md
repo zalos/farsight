@@ -1,6 +1,8 @@
 # Farsight Sentinel implementation plan
 
-**Status:** draft for owner review, 2026-10-17. Implementation has not started.
+**Status:** reviewed for PR 00 merge at the owner’s request, 2026-10-19. Implementation has not started.
+Outstanding choices remain explicitly deferred to the gates below; merging the plan does not approve scanner
+installation, provider calls or implementation dispatch.
 **Baseline:** application `4fce1c8`; proposal merged in PR #117 at `04c3c63` (authored as `354a184`).
 
 Build Sentinel as an optional local security-analysis service with one durable execution ledger, immutable
@@ -70,13 +72,17 @@ for each selected runtime; no Docker Desktop license is bundled or presumed. Sou
 [Docker Desktop terms](https://docs.docker.com/subscription-billing/desktop-license/),
 [Colima project](https://github.com/abiosoft/colima).
 
-### What the first release must do
+### What the deterministic first release must do
 
 Capture TS/JS and Java sources plus CI/configuration inputs; retain the original source; run pinned local
-detectors, secret, dependency, IaC and CI checks; resolve the supported framework control subsets; run optional
-guided/general model review; preserve observations and evidence-bound dispositions; survive interruption;
-rerun rules or models against saved snapshots; compare full runs; export readable reports and SARIF; restore
-a private bundle; and operate through CLI, MCP and the Farsight GUI.
+detectors, secret, dependency, IaC and CI checks; resolve the supported framework control subsets; preserve
+observations and evidence-bound dispositions; survive interruption; rerun rules against saved snapshots;
+compare full runs; export readable reports and SARIF; restore a private bundle; and operate through CLI, MCP
+and the Farsight GUI.
+
+The optional model release adds guided/general review and model reruns over retained source after its own
+E5 and model-specific E8 gates. Neither live model trials nor acceptance of model thresholds blocks the
+deterministic release; PR 01 may record those decisions as deferred to the model track.
 
 Explicitly later: safe incremental selection, project builds, managed ZAP, arbitrary third-party worker code,
 remote teams, multi-host scheduling, automatic remediation and a bespoke VS Code extension. Imported runtime
@@ -696,8 +702,10 @@ mark a milestone done from a fixture alone when it requires a real ingest, UI re
 
 Before PR 01, agree the architecture refinements in section 2 and record the container-prerequisite choice
 before external-scanner probes. PR 01 supplies the exact framework matrix/rule list, measured supported hosts,
-accepted E3/E5 thresholds, required-coverage policy and proposed retention/budgets before their dependent lanes
-are dispatched. The confirmed owner choices above are settled and need not be asked again.
+accepted E3 thresholds, required-coverage policy and proposed retention/budgets before their dependent lanes
+are dispatched. E5 thresholds, live model trials and model-specific resource choices may remain explicitly
+deferred in PR 01; settle them before the corresponding model lane or required-review profile is enabled.
+The confirmed owner choices above are settled and need not be asked again.
 The backlog's execution-readiness table records which decisions block dispatch, which PR supplies evidence
 and what counts as acceptance. No model gate blocks the deterministic checkpoint.
 
