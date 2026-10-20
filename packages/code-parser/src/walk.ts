@@ -68,3 +68,29 @@ export function memberChain(n: unknown): string[] {
   }
   return [];
 }
+
+/**
+ * The callee of a function whose whole body is one `return handler(…)` or `return await handler(…)`
+ * — or, for an arrow, the bare expression `handler(…)` — → `'handler'`. Any other shape (two
+ * statements, a member call, an inline function, a wrapper around the handler) is undefined. The
+ * shape a NestJS controller method and a Next.js App Router verb share when they hand their whole
+ * body to a handler declared elsewhere; `tsjs.ts` reads it as a delegation only when the name is
+ * an import and no parameter shadows it.
+ */
+export function singleReturnCallee(fn: unknown): string | undefined {
+  if (!isNode(fn) || !isNode(fn.body)) return undefined;
+  let expr = fn.body as AstNode;
+  if (expr.type === 'BlockStatement') {
+    const stmts = (expr.body as AstNode[]) ?? [];
+    if (stmts.length !== 1) return undefined;
+    const ret = stmts[0]!;
+    if (!isNode(ret) || ret.type !== 'ReturnStatement' || !isNode(ret.argument)) return undefined;
+    expr = ret.argument as AstNode;
+  }
+  while (expr.type === 'ParenthesizedExpression' && isNode(expr.expression)) expr = expr.expression as AstNode;
+  if (expr.type === 'AwaitExpression' && isNode(expr.argument)) expr = expr.argument as AstNode;
+  while (expr.type === 'ParenthesizedExpression' && isNode(expr.expression)) expr = expr.expression as AstNode;
+  if (expr.type !== 'CallExpression' || !isNode(expr.callee)) return undefined;
+  const callee = expr.callee as AstNode;
+  return callee.type === 'Identifier' && typeof callee.name === 'string' ? callee.name : undefined;
+}

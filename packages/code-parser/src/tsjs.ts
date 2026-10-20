@@ -9,7 +9,7 @@ import { configCheckOf, paramsText, CONFIG_CHECK_TAG } from '@farsight/graph/sem
 /** A parameter typed as a fetch `Response`: the function reads what a server answered. */
 const READS_RESPONSE = /:\s*Response\b/;
 import type { GraphFragment, GraphNode, GraphEdge, NodeKind, BranchPoint, BranchArm, ExternalDecl, ExternalKind, ExternalRef, StoreKind, StoreRef, PackageRef, PackageDeclaration, PackagesMeta, RouteGap } from '@farsight/graph';
-import { walk, isNode, lineIndex, stringValue, memberChain, type AstNode } from './walk.js';
+import { walk, isNode, lineIndex, stringValue, memberChain, singleReturnCallee, type AstNode } from './walk.js';
 import { createAliasClassifier, resolveFileish } from './aliases.js';
 import { isBuiltin, packageOf, workspacePackageOf, PackageJsonIndex } from './shared/packages.js';
 import type { LanguageAdapter, IngestOptions } from './types.js';
@@ -17,7 +17,7 @@ import { collectFiles, freshnessMeta } from './shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields } from './shared/docs.js';
 import { capLabel, leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/labels.js';
 import { autoTags, joinPaths, normalizePath, snippetRange } from './shared/tags.js';
-import { readNestFile, controllerOf, methodRoutes, useGuardsOf, bodySchemasOf, delegateOf, entrypointRouteKey, nestSetupGaps, type ControllerDecl, type GuardRef } from './nest.js';
+import { readNestFile, controllerOf, methodRoutes, useGuardsOf, bodySchemasOf, entrypointRouteKey, nestSetupGaps, type ControllerDecl, type GuardRef } from './nest.js';
 import { isTestFile } from './shared/file-kinds.js';
 import { isStoryFile } from './shared/file-kinds.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
@@ -266,10 +266,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   const middlewares: { file: string; prefix: string }[] = [];
   // a route that delegates its body to a named function: the handler *is* the route's body
   const routeHandlers: { routeId: string; file: string; handler: string }[] = [];
-  // NestJS controllers (nest.ts): a controller method whose body is one `return handler(…)` — its call
-  // to the handler is stamped `via: 'delegate'` in pass 2 so core reads route, method and handler as
-  // one place; the `@UseGuards` classes to join to their `canActivate`; and every declaration set aside
-  const nestDelegates: { fnId: string; file: string; callee: string }[] = [];
+  // a route's method whose body is one `return handler(…)` of an imported function — a NestJS
+  // controller method (nest.ts) or a Next.js App Router verb — hands its whole body on: its call to
+  // the handler is stamped `via: 'delegate'` in pass 2 so core reads route, method and handler as one
+  // place (coverage.ts cellTwins, the summary query.ts and openapi.ts borrow)
+  const delegations: { fnId: string; file: string; callee: string }[] = [];
+  // NestJS (nest.ts): the `@UseGuards` classes to join to their `canActivate`, the `@Body` schemas,
+  // and every route declaration set aside
   const nestGuards: { guardId: string; routeId: string; file: string; className: string }[] = [];
   const nestBodies: { fnId: string; file: string; name: string; line: number }[] = [];
   const routeGaps: RouteGap[] = [];
@@ -552,6 +555,19 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const nestFile = readNestFile(program);
     for (const g of nestSetupGaps(program, nestFile)) routeGap({ kind: g.kind, path: file, line: line(g.at.start ?? 0), name: g.name, text: g.text });
     /**
+     * The imported function a route's method hands its whole body to: one `return handler(…)` /
+     * `return await handler(…)` (walk.ts `singleReturnCallee`) whose name this file imports and no
+     * parameter shadows. A same-file callee is not a delegation — the one-hop rule stays where it
+     * was — and any other body shape is undefined: the method's own calls are then walked as any
+     * function's are. `n` is the declaration: a method definition, a function declaration or a
+     * `const x = …` declarator. Shared by a NestJS controller method and a Next.js App Router verb.
+     */
+    const delegateOfNode = (n: AstNode): string | undefined => {
+      const fn = n.type === 'VariableDeclarator' ? (n.init as AstNode | undefined) : n.type === 'MethodDefinition' ? (n.value as AstNode | undefined) : n;
+      const candidate = singleReturnCallee(fn);
+      return candidate && importMap.has(candidate) && !paramsOf(n).flatMap(bindingNames).includes(candidate) ? candidate : undefined;
+    };
+    /**
      * One controller method: a `route` node per prefix × path with the id App Router gives the same
      * endpoint (`app/api/v1/orders/[orderId]/approve/route.ts` exporting POST ≡ `@Controller('api/v1/orders')`
      * + `@Post(':orderId/approve')`), so a port from one host to the other is a changed location in
@@ -575,10 +591,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       for (const schema of bodySchemasOf(m, nestFile)) {
         nestBodies.push({ fnId, file, name: schema.name, line: line(schema.at.start ?? 0) });
       }
-      const candidate = delegateOf(m);
-      const params = ((m.value as AstNode).params as AstNode[]) ?? [];
-      const delegate = candidate && importMap.has(candidate) && !params.flatMap(bindingNames).includes(candidate)
-        ? candidate : undefined;
+      const delegate = delegateOfNode(m);
       const guards = [...useGuardsOf(m.decorators, nestFile).map((g) => ({ ...g, on: full })), ...classGuards];
       const made: string[] = [];
       for (const prefix of controller.prefixes) {
@@ -605,7 +618,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           }
         }
       }
-      if (delegate) nestDelegates.push({ fnId, file, callee: delegate });
+      if (delegate) delegations.push({ fnId, file, callee: delegate });
       // `@entrypoint http:VERB /path` on the method is a claim; the decorators are the code — when they
       // disagree the route keeps the decorators' id and the disagreement is recorded with a name
       const claimed = entrypointRouteKey(parseDoc(leadingComment(source, m.start ?? 0)).entrypoint);
@@ -1206,6 +1219,16 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           });
           addEdge('calls', routeId, symbolId(file, d.name), undefined, bySymbol('same-file'));
           routeHandlers.push({ routeId, file, handler: d.name });
+          // a verb that is one `return handler(req, ctx)` over an imported function — the shape a
+          // controller method gets the same treatment for (readNestMethod): the handler is the
+          // route's body too, so its guards and rules mirror onto the route (one hop, as today) and
+          // the verb → handler call is the delegation core reads as one place. The route's id, its
+          // location and the verb's own hop are untouched: a wrapped route is the same route.
+          const delegate = delegateOfNode(d.node);
+          if (delegate) {
+            routeHandlers.push({ routeId, file, handler: delegate });
+            delegations.push({ fnId: symbolId(file, d.name), file, callee: delegate });
+          }
           appApiRoutes.push({ nodeId: routeId, appRoot, dir });
         }
       } else if (/^layout\.(tsx|jsx)$/.test(base)) {
@@ -1709,10 +1732,11 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     for (const star of re.stars) { const hit = lookupClass(star, name, seen); if (hit) return hit; }
     return undefined;
   };
-  // a controller method whose body is one `return handler(…)` (nest.ts): the call it makes to the handler
-  // is the delegation, stamped so core reads route, method and handler as one place (coverage.ts)
-  const delegateCalls = new Map(nestDelegates.length ? edges.filter(e => e.kind === 'calls').map(e => [`${e.from}|${e.to}`, e]) : []);
-  for (const d of nestDelegates) {
+  // a controller method or an App Router verb whose body is one `return handler(…)`: the call it
+  // makes to the handler is the delegation, stamped so core reads route, method and handler as one
+  // place (coverage.ts cellTwins; the method borrows the handler's words in query.ts and openapi.ts)
+  const delegateCalls = new Map(delegations.length ? edges.filter(e => e.kind === 'calls').map(e => [`${e.from}|${e.to}`, e]) : []);
+  for (const d of delegations) {
     const delegateId = resolveTarget(d.file, d.callee);
     if (!delegateId || delegateId === d.fnId) continue;
     const e = delegateCalls.get(`${d.fnId}|${delegateId}`);

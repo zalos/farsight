@@ -2226,7 +2226,7 @@ server.registerTool('test_coverage', {
       ...(step?.verdict ? [`evidence: ${chipWord({ chip: step.chip ?? 'none', evidenceWord: step.verdict.word, ...(step.observation ? { observation: step.observation } : {}) })}${step.verdict.status ? ` · the run behind it: ${step.verdict.status}` : ''}`,
         `their own last runs: ${countedText(step.verdict.runs)} (${breakdownText({ ...step.verdict.runs, breakdown: (step.verdict.runs.breakdown ?? []).filter((p) => p.n) })})${step.verdict.projectSplit?.words ? ` · ${step.verdict.projectSplit.words.text}` : ''}`] : []),
       ...(step?.sameLoc?.length ? [`read with ${step.sameLoc.map((id) => `\`${id}\``).join(', ')} — the same file:line`] : []),
-      ...(step?.delegates?.length ? [`read with ${step.delegates.map((id) => `\`${id}\``).join(', ')} — the controller method and the handler it hands its body to are one place`] : []),
+      ...(step?.delegates?.length ? [`read with ${step.delegates.map((id) => `\`${id}\``).join(', ')} — the route's method and the handler it hands its whole body to are one place`] : []),
       ...covers.map(testLine),
       ...(step?.note ? [step.note] : []),
     ].join('\n'));
