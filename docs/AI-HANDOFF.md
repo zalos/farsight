@@ -41,6 +41,46 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## App Router verbs that wrap a handler — 2026-10-20
+
+Branch `feat/app-router-delegates` (worktree `.claude/worktrees/app-router-delegates-d3eeb1`; a detached `main`
+baseline worktree at `../farsight-wt/app-router-main-baseline` for the measurement, to be removed after the merge), PR
+title `feat(parsers): mirror a delegated handler's guards onto App Router routes`. The reference app is reducing every
+App Router `route.ts` verb to a one-line wrapper over a handler that lives in a library and carries the guards and the
+zod `safeParse` inline. A route's guards are read one hop from the route, so each wrapped route lost its gate in the
+drift gate (`security-missing-in-code`, and `body-unvalidated` where the spec has a body) although the guard still
+runs one call away: 14 → 18 mismatched notes after the first five routes, with about sixty to follow.
+
+What landed: the one-`return handler(…)` reader moved from `nest.ts` to `walk.ts` (`singleReturnCallee` — a block
+with one `return` or `return await`, or an arrow's bare expression, parentheses unwrapped); `tsjs.ts` `delegateOfNode`
+applies it to a controller method and an App Router verb alike: the callee must be an import of the file and no
+parameter may shadow it; a same-file callee or any other body shape is not a delegation. A wrapped verb pushes the
+handler as a second `routeHandlers` entry — the existing loop mirrors its `guards` / `validates` onto the route with
+`meta.via: 'handler'` — and the verb → handler call is stamped `via: 'delegate'`, which core `cellTwins()` already
+follows (route, verb and handler read one set of tests) and `graphToSpec` already borrows the summary from. The
+route's id, its location and the verb's own `calls` hop are untouched, so an application's snapshot history stays
+continuous through the port. `journeySummary` keeps a verb-named handler's route words (R7c); the handler's own step
+carries its sentence. MCP `test_coverage`'s twin line no longer says *controller method*. The paired libraries are 0.4.0.
+
+Verified under Node 24: build, `pnpm -r typecheck`, **1,601 unit tests — 1,599 passed, 2 live-tracker skips** (seven new
+in `parsers/test/app-router-delegates.test.ts`: the four wrapper forms, the wrapped route byte-equal to the inline
+route, four non-delegating shapes, a barrel-renamed import, the spec summary, the coverage cell, and the drift gate with
+a control verb that still reports both notes), 20 script tests, string lint (3,480 entries), schema drift, library
+version check. Real ingest of the clean `main` tree (`282aa16`, the baseline worktree) with the `main` build and this
+branch from scratch directories: 6,136 nodes · 13,217 edges on both, 0 node ids or edge keys on one side only, 0 nodes
+changed, `sourceDigest` `5ec2c23dfc70` on both, `graph.json` 17,459,541 vs 17,459,538 bytes (the build stamp),
+`farsight.db` 23,605,248 on both — this repository has no wrapped App Router verb, so its graph is unchanged by
+construction. e2e was not run locally; CI runs it on the PR. The global `farsight` under all three Node prefixes was
+installed from this branch's pack before the merge, by the brief, so the reference app can be re-measured (its
+acceptance: after a re-ingest, `farsight api diff` drops the notes the wrappers introduced and reports the same
+routes as before); `farsight status` on a running server therefore says RESTART into the branch build until it is
+restarted. No dogfood or reference-app graph was re-ingested and no server was restarted.
+
+Left open: `export const POST = approveOrder` (an alias, no call) makes no route today and still makes none; a verb
+that wraps the handler in a helper (`return withLogging(approveOrder)(req)`) is not a delegation; a same-file delegate
+stays one hop away by design (the Nest rule — the owner's call to widen); the viewer's words for the twin line are
+unchanged; publishing the 0.4.0 pair (`docs/PARSER-LIBRARIES.md`).
+
 ## Declared paths and parser release preparation — 2026-10-19
 
 Branch `codex/declared-paths-ingest` adds ingest warnings for unresolved external class imports,
