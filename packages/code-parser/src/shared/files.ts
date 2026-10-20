@@ -4,6 +4,7 @@ import { join, relative as platformRelative } from 'node:path';
 import { currentRead, ReportedReadError } from '../repository.js';
 import { testGlobToRegExp } from './file-kinds.js';
 import type { IngestOptions } from '../types.js';
+import ignore, { type Ignore } from 'ignore';
 
 const relative = (from: string, to: string): string => platformRelative(from, to).replaceAll('\\', '/');
 
@@ -30,13 +31,26 @@ export function collectFiles(
   const scope = currentRead();
   const excludes = (options.exclude ?? []).map(globToRegExp);
   const out: string[] = [];
-  const visit = (dir: string) => {
+  const visit = (dir: string, parents: { dir: string; rules: Ignore }[] = []) => {
     let entries: string[];
     try { entries = readdirSync(dir); } catch (error) {
       if (!scope) throw new Error('Unable to read directory');
       if (scope.stopped || error instanceof ReportedReadError) return;
       scope.report({ code: 'read-error', severity: 'error', path: scope.path(dir), message: 'Directory could not be read.' });
       return;
+    }
+    let rules = parents;
+    if (options.gitignore !== false && entries.includes('.gitignore')) {
+      try {
+        rules = [...parents, { dir, rules: ignore({ ignorecase: false }).add(readFileSync(join(dir, '.gitignore'), 'utf8')) }];
+      } catch (error) {
+        if (!scope) throw new Error(`Unable to read ${relative(root, dir) || '.'}/.gitignore`);
+        if (!(error instanceof ReportedReadError) && !scope.stopped) {
+          scope.report({ code: 'read-error', severity: 'error', path: scope.path(join(dir, '.gitignore')), message: 'Git ignore rules could not be read.' });
+        }
+        // An unreadable rule file cannot safely select this subtree.
+        return;
+      }
     }
     for (const entry of entries) {
       const abs = join(dir, entry);
@@ -51,8 +65,15 @@ export function collectFiles(
         scope.report({ code: 'read-error', severity: 'error', path: rel, message: 'Input could not be inspected.' });
         continue;
       }
+      let ignored = false;
+      for (const layer of rules) {
+        const result = layer.rules.test(relative(layer.dir, abs) + (st.isDirectory() ? '/' : ''));
+        if (result.ignored) ignored = true;
+        else if (result.unignored) ignored = false;
+      }
+      if (ignored) continue;
       if (st.isDirectory()) {
-        if (!SKIP_DIRS.has(entry) && !entry.startsWith('.')) visit(abs);
+        if (!SKIP_DIRS.has(entry) && !entry.startsWith('.')) visit(abs, rules);
       } else if (st.isFile() && exts.some((e) => entry.endsWith(e))) {
         if (scope?.selectionReady && !scope.selected.has(abs)) continue;
         if (skip?.(entry) || (includes && !includes.some(re => re.test(rel)))) {

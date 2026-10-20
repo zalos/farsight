@@ -17,7 +17,7 @@ import { collectFiles, freshnessMeta } from './shared/files.js';
 import { parseDoc, docCommentAbove, docLinkFields } from './shared/docs.js';
 import { capLabel, leadingBranchLabel, trailingBranchLabel, NEGATE_FLIP } from './shared/labels.js';
 import { autoTags, joinPaths, normalizePath, snippetRange } from './shared/tags.js';
-import { readNestFile, controllerOf, methodRoutes, useGuardsOf, delegateOf, entrypointRouteKey, nestSetupGaps, type ControllerDecl, type GuardRef } from './nest.js';
+import { readNestFile, controllerOf, methodRoutes, useGuardsOf, bodySchemasOf, delegateOf, entrypointRouteKey, nestSetupGaps, type ControllerDecl, type GuardRef } from './nest.js';
 import { isTestFile } from './shared/file-kinds.js';
 import { isStoryFile } from './shared/file-kinds.js';
 import { sqlTables, sqlOps, looksLikeSql } from './shared/sql.js';
@@ -271,6 +271,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
   // one place; the `@UseGuards` classes to join to their `canActivate`; and every declaration set aside
   const nestDelegates: { fnId: string; file: string; callee: string }[] = [];
   const nestGuards: { guardId: string; routeId: string; file: string; className: string }[] = [];
+  const nestBodies: { fnId: string; file: string; name: string; line: number }[] = [];
   const routeGaps: RouteGap[] = [];
   // every JSX-bearing function's props: the ones it runs, hands on, decides on, and what it hands its children
   const propFacts = new Map<string, PropFacts & { file: string }>();
@@ -449,6 +450,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     };
     // class name -> the UPPER_SNAKE constant its base URL starts with
     const classHosts = new Map<string, { constName: string }>();
+    const classFetchFields = new Map<string, Set<string>>();
     const reexports = { stars: [] as string[], named: new Map<string, { file: string; name: string }>() };
     // the types this file declares, and the typed fields of each class it declares
     const types = new Map<string, TypeDecl>();
@@ -570,6 +572,9 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           : `@${g.decorator} on ${full} takes a path that is not a literal; that route is not read` }, fnId);
       }
       if (!controller.prefixes || !routes.length) return;
+      for (const schema of bodySchemasOf(m, nestFile)) {
+        nestBodies.push({ fnId, file, name: schema.name, line: line(schema.at.start ?? 0) });
+      }
       const candidate = delegateOf(m);
       const params = ((m.value as AstNode).params as AstNode[]) ?? [];
       const delegate = candidate && importMap.has(candidate) && !params.flatMap(bindingNames).includes(candidate)
@@ -674,6 +679,13 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             const mname = key && typeof key.name === 'string' ? String(key.name) : undefined;
             const ref = typeRefOf(m.typeAnnotation);
             if (mname && ref) props.set(mname, ref);
+            const annotation = (m.typeAnnotation as AstNode | undefined)?.typeAnnotation as AstNode | undefined;
+            const queried = annotation?.exprName as AstNode | undefined;
+            if (mname && annotation?.type === 'TSTypeQuery' && queried?.type === 'Identifier' && queried.name === 'fetch') {
+              const fields = classFetchFields.get(cls) ?? new Set<string>();
+              fields.add(mname);
+              classFetchFields.set(cls, fields);
+            }
             continue;
           }
           // … or declared by the constructor: oxc wraps exactly those parameters that
@@ -956,7 +968,12 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
           };
 
           // fetch('/x', {method:'POST'})
-          if (chain.length === 1 && chain[0] === 'fetch') {
+          // A declared external can inject its transport for tests. Require the actual `typeof fetch`
+          // field contract, not a method/property name that happens to sound like HTTP.
+          const declaredFetch = d.cls && declaredClassExternals.has(`${file}::${d.cls}`)
+            && chain.length === 2 && chain[0] === 'this' && classFetchFields.get(d.cls)?.has(chain[1]!)
+            && !declaredHere.has('fetch') && !importMap.has('fetch') && !pkgLocals.has('fetch');
+          if (chain.length === 1 && chain[0] === 'fetch' || declaredFetch) {
             const url = stringValue(args[0]);
             const at = line(b.start ?? 0);
             const verb = fetchMethod(args[1]);
@@ -968,7 +985,9 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
             if (urlInfo?.url && isWrapperUrl(urlInfo.url, url) && !hostBound) {
               if (!fetchWrappers.has(fromId)) fetchWrappers.set(fromId, { url: urlInfo.url, method: isNode(args[1]) && args[1].type === 'CallExpression' ? initCallSpec(args[1], pm) : fetchMethodSpec(argInfoOf(args[1], pm), args.length > 1) });
             }
-            else if (url) httpCalls.push({ fromId, method: verb, path: normalizePath(url), line: at, ...f });
+            else if (url && !(declaredFetch && url.startsWith(':param'))) {
+              httpCalls.push({ fromId, method: verb, path: normalizePath(url), line: at, ...f });
+            }
             // a class that keeps its base URL in a constant is talking to that host even
             // when the URL itself is assembled somewhere else (01 §2.3.4 R4b)
             else if (d.cls && classHosts.has(d.cls)) {
@@ -1474,6 +1493,18 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       if (!seenEdge.has(ck)) { seenEdge.add(ck); addEdge('calls', call.fromId, targetId, withFlags({ via: 'guard', ...(call.line != null ? { line: call.line } : {}) }, call), byName); }
     }
   }
+  // Resolve named body schemas before route-handler mirroring; the edge retains its declaration evidence.
+  for (const body of nestBodies) {
+    const hit = resolveVia(body.file, body.name);
+    if (!hit || nodes.get(hit.id)?.kind !== 'rule') continue;
+    const key = `validates|${body.fnId}|${hit.id}`;
+    if (seenEdge.has(key)) continue;
+    seenEdge.add(key);
+    addEdge('validates', hit.id, body.fnId, { via: 'body-schema', line: body.line }, {
+      status: 'resolved', technique: 'annotation-scan', confidence: 'HIGH',
+      note: `@Body declares schema ${body.name}, resolved by ${hit.via}; runtime validation-pipe registration is not verified`,
+    });
+  }
   // a route that delegates to a named handler inherits the handler's gates and rules —
   // exactly one hop, so a guard two calls deep inside a shared service stays off the route
   for (const rh of routeHandlers) {
@@ -1483,7 +1514,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       const key = `${e.kind}|${e.from}|${rh.routeId}`;
       if (seenEdge.has(key)) continue;
       seenEdge.add(key);
-      addEdge(e.kind, e.from, rh.routeId, { via: 'handler', handler: handlerId });
+      addEdge(e.kind, e.from, rh.routeId, { via: 'handler', handler: handlerId },
+        e.meta?.via === 'body-schema' ? e.resolution : undefined);
     }
   }
   for (const r of pendingRenders) {

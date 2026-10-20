@@ -69,7 +69,7 @@ test('describe_node prints the project, its type and root, and its tags in words
 test('graph_overview says how many config files a source holds when there is more than the root one', async () => {
   const out = await call('graph_overview');
   const line = out.split('\n').find((l) => l.startsWith('config: '));
-  assert.equal(line, 'config: nx-workspace — 4 config files (1 for the whole source · 3 for one folder) · 1 conflict · 1 note(s) — config_files lists them');
+  assert.equal(line, 'config: nx-workspace — 4 config files (1 for the whole source · 3 for one folder) · 1 conflict · 2 note(s) — config_files lists them');
 });
 
 test('config_files prints one line per file, then the conflicts and the notes', async () => {

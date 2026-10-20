@@ -7,6 +7,8 @@ export interface AdapterOptions {
   repoName?: string;
   include?: string[];
   exclude?: string[];
+  /** Honor root and nested .gitignore files during discovery (default true). Explicit excludes still win. */
+  gitignore?: boolean;
   testFiles?: 'include' | 'exclude';
   testGlobs?: { include?: string[]; exclude?: string[] };
   externals?: ExternalDecl[];

@@ -165,6 +165,29 @@ export function methodRoutes(m: AstNode, file: NestFile): { routes: MethodRoute[
 /** One argument of `@UseGuards(…)`: the word for it, and the class it names when it is a plain class reference. */
 export interface GuardRef { label: string; className?: string; argument: number; at: AstNode }
 
+/** Named schemas on Nest's body parameters; type annotations and other decorators are not schemas. */
+export function bodySchemasOf(method: AstNode, file: NestFile): { name: string; at: AstNode }[] {
+  const fn = method.value as AstNode | undefined;
+  const out: { name: string; at: AstNode }[] = [];
+  for (const parameter of ((fn?.params as AstNode[]) ?? [])) {
+    for (const dec of ((parameter.decorators as AstNode[]) ?? [])) {
+      const decorator = nestDecorator(dec, file);
+      if (decorator?.name !== 'Body') continue;
+      const options = decorator.args[0];
+      if (options?.type !== 'ObjectExpression') continue;
+      const props = (options.properties as AstNode[]) ?? [];
+      // A spread or computed key could replace schema; do not credit an uncertain binding.
+      if (props.some(p => p.type !== 'Property' || p.computed)) continue;
+      const schema = props.filter(p => {
+        const key = p.key as AstNode;
+        return (key.name ?? key.value) === 'schema';
+      }).at(-1)?.value as AstNode | undefined;
+      if (schema?.type === 'Identifier' && typeof schema.name === 'string') out.push({ name: schema.name, at: dec });
+    }
+  }
+  return out;
+}
+
 export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
   const out: GuardRef[] = [];
   for (const dec of ((decorators as AstNode[]) ?? [])) {

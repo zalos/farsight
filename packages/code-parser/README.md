@@ -1,6 +1,7 @@
 # @farsight/code-parser
 
 Repository code extraction for Node 24+ ESM, with TypeScript declarations. MIT licensed.
+Version 0.3.0, released as a pair with `@farsight/graph`.
 Uses the existing Oxc 0.138.0 native TS/JS parser and the ABI-matched Java grammar/runtime from Microsoft's
 `@vscode/tree-sitter-wasm` 0.3.1. It does not depend on Farsight's application packages.
 
@@ -45,6 +46,17 @@ when filenames change. It is not an atomic filesystem snapshot: analyze a stable
 their directories. Empty `include` selects nothing. Build/vendor/hidden directories and declaration files are
 excluded. Test files are ordinary source by default; `testFiles: 'exclude'` applies the existing path/import
 classifier, with optional `testGlobs`. These options do not enable test reports or other enrichment.
+
+Root and nested `.gitignore` files apply by default, including negation and directory-relative rules.
+Explicit excludes and the built-in directory skips still win. Set `gitignore: false` to opt out;
+an `include` does not override an ignore. Rule bytes and directory listings enter the portable fingerprint.
+No Git process, global ignore file or parent repository configuration is read.
+
+Nest `@Body({ schema: namedSchema })` declarations resolve a named Zod rule in the same file or through
+imports and re-exports, adding `validates` relationships to the controller method and its route.
+Aliases of Nest's `Body` decorator work. Type annotations, `Query`/`Param` schemas, inline schemas,
+computed options and spreads do not establish this relationship. The evidence names a schema declaration;
+it does not verify registration or execution of the runtime validation pipe.
 
 Default limits are 10,000 source files, 4 MiB per input, 128 MiB total input bytes, 100,000 directory entries and
 60 seconds. They are configurable positive integers. `signal` accepts an AbortSignal. Cancellation/time limits

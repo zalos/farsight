@@ -1,5 +1,10 @@
 # Package map — what lives where
 
+Ingest declaration health lives in `packages/parsers/src/shared/declared-paths.ts`: config import/setup/plumbing
+bindings and unresolved decision affects become ingest warnings using existing metadata. Source selection,
+including nested `.gitignore` rules, lives in `packages/code-parser/src/shared/files.ts`. Nest body-schema
+declarations are read in `packages/code-parser/src/nest.ts` and resolved to rules in `tsjs.ts`.
+
 > Moved out of `AGENTS.md` so it is not read at the start of every session. This is the reference: open it when
 > you need to find something, not to orient. `AGENTS.md` keeps the contract, the commands and the gotchas.
 

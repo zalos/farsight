@@ -45,7 +45,7 @@ export function createParser(options: { adapters: readonly LanguageAdapter[] }) 
       // Pin dependency and resolution declarations even when this run has no bare import.
       // Relative tsconfig extends are additionally captured when the resolver reads them.
       scope.discoveryExtensions = exts;
-      const declarations = collectFiles(scope.root, ['.json', '.yaml', '.yml', '.lock'], { exclude: opts.exclude });
+      const declarations = collectFiles(scope.root, ['.json', '.yaml', '.yml', '.lock'], { exclude: opts.exclude, gitignore: opts.gitignore });
       for (const file of declarations) {
         if (!/^(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|tsconfig(?:\.[^.]+)*\.json|pnpm-(?:workspace|lock)\.yaml|yarn\.lock)$/.test(basename(file))) continue;
         try {

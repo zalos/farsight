@@ -39,6 +39,31 @@ const METHOD = `svc::${CONTROLLER}::OrdersController.approveOrder`;
 const ROUTE = 'svc::route::POST /api/v1/orders/:param/approve';
 const HANDLER = 'svc::src/handlers/approve-order.ts::approveOrder';
 
+test('Body schema declarations resolve aliases and barrels into rule edges on method and route', async () => {
+  const f = await ingest(tempRepo({
+    'src/schema.ts': "import { z } from 'zod'; export const orderSchema = z.object({ title: z.string() });",
+    'src/barrel.ts': "export { orderSchema as inputSchema } from './schema';",
+    'src/controller.ts': [
+      "import { Controller as C, Post, Body as B, Query } from '@nestjs/common';",
+      "import { inputSchema as bodySchema } from './barrel';",
+      "@C('orders') export class Orders {",
+      '  @Post() create(@B({ schema: bodySchema }) body: unknown) { return body; }',
+      "  @Post('query') query(@Query({ schema: bodySchema }) body: unknown) { return body; }",
+      "  @Post('type') type(@B() body: bodySchema) { return body; }",
+      "  @Post('spread') spread(@B({ schema: bodySchema, ...options }) body: unknown) { return body; }",
+      '}',
+    ].join('\n'),
+  }));
+  const schema = 'svc::src/schema.ts::orderSchema';
+  const method = edgesOf(f, 'validates', 'svc::src/controller.ts::Orders.create');
+  assert.equal(method.length, 1);
+  assert.equal(method[0]!.from, schema);
+  assert.match(method[0]!.resolution!.note!, /runtime validation-pipe registration is not verified/);
+  assert.equal(edgesOf(f, 'validates', 'svc::route::POST /orders')[0]?.from, schema);
+  assert.match(edgesOf(f, 'validates', 'svc::route::POST /orders')[0]!.resolution!.note!, /runtime validation-pipe registration is not verified/);
+  for (const path of ['query', 'type', 'spread']) assert.equal(edgesOf(f, 'validates', `svc::route::POST /orders/${path}`).length, 0);
+});
+
 /** The brief's §2 shape: a controller whose method is one `return handler(req, ctx)`, guards and the schema inline in the handler. */
 const handlerFiles = {
   'src/handlers/approve-order.ts': [

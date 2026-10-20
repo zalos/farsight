@@ -1,9 +1,21 @@
 # Parser libraries
 
-`@farsight/graph` and `@farsight/code-parser` are paired Node 24+ ESM libraries at version **0.2.0**, independent
+`@farsight/graph` and `@farsight/code-parser` are paired Node 24+ ESM libraries at version **0.3.0**, independent
 of the application's root version (0.1.0 was the extraction; 0.2.0 reads NestJS controllers as routes and records
 route gaps on `meta.routes`, an optional addition to the graph contract — schema version stays 1). Both are MIT licensed. They are packaged by this repository; registry
 publication is a separate owner-controlled release step. Package names do not establish npm scope ownership.
+
+Version 0.3.0 honors source-root and nested `.gitignore` files by default and reads named Nest body-schema
+declarations as `validates` relationships. `gitignore: false` opts out in the library; application CLI ingest
+also offers `--no-gitignore`. Explicit excludes still apply. Ignore bytes are portable analysis inputs.
+The application reports unresolved `externals[].import`, `setup`, `plumbing` and decision `affects`
+declarations during ingest; config and decision metadata retain those notes for subsequent inspection.
+An ignored or excluded file is described as not indexed, without claiming that it does not exist.
+Declared external clients also bind through class fields typed as the global `fetch` function, so an
+injected test transport does not hide the production dependency. A fetch-like field name alone is insufficient.
+
+The 0.3.0 pair is prepared for release; registry publication is pending npm scope ownership/access and
+trusted-publisher setup. A successful package smoke test or publish dry run does not mean it is on npm.
 
 The canonical graph contract lives in `packages/graph/src/graph.ts`; core re-exports it. Its generated JSON
 schema is `packages/graph/schemas/graph-v1.schema.json`. The graph library supplies validation, canonical
