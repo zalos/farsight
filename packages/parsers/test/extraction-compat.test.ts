@@ -33,6 +33,13 @@ for (const [name, example] of [['tsjs', 'invoice-app'], ['java', 'spring-invoice
       delete actual.meta.sourceHash;
       assert.ok(actual.edges.every((edge: Record<string, unknown>) => !('occurrences' in edge)));
       const expected = JSON.parse(readFileSync(new URL(`./fixtures/extraction/${name}.json`, import.meta.url), 'utf8'));
+      // This fixture intentionally declares a plumbing folder it does not contain. Keep the historical
+      // graph baseline intact, but require the new diagnostic in both retained metadata and ingest output.
+      if (name === 'workspace') {
+        const warning = 'apps/billing-web/farsight.config.json → plumbing: "src/plumbing/**" matches no indexed source file (missing, ignored, excluded or unsupported).';
+        expected.meta.config.notes.push(warning);
+        expected.specErrors = [warning];
+      }
       assert.deepEqual(actual, expected);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   });

@@ -41,6 +41,28 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Declared paths and parser release preparation — 2026-10-19
+
+Branch `codex/declared-paths-ingest` adds ingest warnings for unresolved external class imports,
+setup/plumbing declarations and decision affects. The shared collector honors source-root and nested
+`.gitignore` files by default; explicit excludes still win and `--no-gitignore` / `gitignore: false` opts out.
+Nest named body schemas now produce declared `validates` edges to methods and routes, with an explicit
+note that runtime validation-pipe registration is unverified. Declared external classes also recognize
+injected fields typed as the global `fetch`; a similar property name alone earns no binding.
+
+The paired parser libraries are prepared at 0.3.0 with graph schema version 1 unchanged. External tarball
+installation (native Oxc, Java WASM, public types, serialization and traversal) and publication dry runs
+passed. **npm publication remains pending by owner direction**: scope access, initial publication and
+trusted-publisher setup are still required. See [Parser libraries](PARSER-LIBRARIES.md).
+
+Validation used Node 24 in isolated worktrees: build, all typechecks, full unit suites (1,592 passed,
+two live tests skipped), targeted suites again after the final refinements, 20 script tests, string lint,
+345 browser/MCP tests, 11 small performance tests, and the packaged Echo smoke. Against main `0c8c747`,
+fresh ingests of the same source produced identical 6,126 nodes and 13,200 edge sets, with source digest
+`96158ffec1b4`; graph bytes were 17,429,937 before / 17,429,932 after, and both SQLite files were
+23,564,288 bytes. Fresh front-door, Map and code-map pages had no page or console errors; screenshots
+were inspected. Existing primary-checkout editor settings were preserved. No npm publication occurred.
+
 ## Farsight Sentinel merge review — 2026-10-19
 
 The owner requested review, fixes and merge of the remaining PRs, including planning PR 00

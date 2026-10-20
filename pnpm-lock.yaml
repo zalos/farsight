@@ -75,6 +75,9 @@ importers:
       '@vscode/tree-sitter-wasm':
         specifier: 0.3.1
         version: 0.3.1
+      ignore:
+        specifier: 7.0.5
+        version: 7.0.5
       oxc-parser:
         specifier: 0.138.0
         version: 0.138.0
@@ -1222,6 +1225,10 @@ packages:
   iconv-lite@0.7.3:
     resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
     engines: {node: '>=0.10.0'}
+
+  ignore@7.0.5:
+    resolution: {integrity: sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg==}
+    engines: {node: '>= 4'}
 
   iii-sdk@0.22.1:
     resolution: {integrity: sha512-xgOtrmoTEBCBY7KFRfQse6EHlyK+qCVBA3QG+WiG0cHxpBamrqpkY3L+l14SbdLZR5ZoTtyrwiAUVZNHPNaY3w==}
@@ -2532,6 +2539,8 @@ snapshots:
   iconv-lite@0.7.3:
     dependencies:
       safer-buffer: 2.1.2
+
+  ignore@7.0.5: {}
 
   iii-sdk@0.22.1:
     dependencies:

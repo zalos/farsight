@@ -1,7 +1,7 @@
 # @farsight/graph
 
 An importable Node 24+ ESM library for Farsight's canonical semantic graph. MIT licensed.
-Version 0.2.0; serialized graph format `farsight-graph`, schema version `1`.
+Version 0.3.0; serialized graph format `farsight-graph`, schema version `1`.
 
 ```js
 import { readFileSync } from 'node:fs';
@@ -48,5 +48,5 @@ paths are not exported. The schema is generated from the canonical TypeScript ty
 JavaScript entry points are ESM-only: use `import` or dynamic `import()` from CommonJS. Synchronous `require()`
 is intentionally not exported, including under Node 24's `require(esm)` support.
 
-The libraries release as a pair (0.2.0 now; the first release was 0.1.0), independently of Farsight's app version.
+The libraries release as a pair (0.3.0 now; the first packaged version was 0.1.0), independently of Farsight's app version.
 See the repository's `docs/PARSER-LIBRARIES.md` for packaging, validation and release instructions.

@@ -51,7 +51,7 @@ usage:
   farsight status [--port 4477] [--graph graph.json]           is anything out of date: the installed build vs the server on
                                                                the port vs the build that wrote the graph, with the steps to
                                                                check / update / restart / re-ingest; exit 1 when action is needed
-  farsight ingest [dirs|specs...] [--repo name] [--out graph.json] [--exclude "examples/**,**/*.test.ts"]
+  farsight ingest [dirs|specs...] [--repo name] [--out graph.json] [--exclude "examples/**,**/*.test.ts"] [--no-gitignore]
                                                                parse repo(s) into a semantic graph; a positional that is an
                                                                OpenAPI file or URL is ingested as a spec-only source
                                                                (also records a snapshot in .farsight/farsight.db)
@@ -639,6 +639,7 @@ switch (command) {
       const fragment = await ingestRepo(repoPath, {
         repoName: dirs.length === 1 ? flag('repo') : undefined,
         exclude: flag('exclude')?.split(',').map((s) => s.trim()).filter(Boolean),
+        gitignore: !rest.includes('--no-gitignore'),
       });
       store.roots[fragment.repo] = repoPath;
       store.addFragment(fragment);

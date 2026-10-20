@@ -17,6 +17,7 @@ import { loadWorkspaceConfig, applyWorkspaceConfig, applyWorkspaceRouteGuards, r
 import { applyLifecycleConfig } from './shared/lifecycle-config.js';
 import { applyDecisions, applyParties } from './decisions.js';
 import type { ParsedManifest } from './design/index.js';
+import { declaredPathWarnings } from './shared/declared-paths.js';
 
 export type { LanguageAdapter, IngestOptions } from './types.js';
 export { tsJsAdapter, ingestTsJs, SQL_DRIVERS, storeLike } from './tsjs.js';
@@ -167,6 +168,8 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
       if (p && p.root !== '.') n.package.project = p.name;
     }
   }
+  const warnings = declaredPathWarnings(merged, repoRoot, opts, workspace);
+  if (warnings.length) merged.specErrors = [...(merged.specErrors ?? []), ...warnings];
   return merged;
 }
 
