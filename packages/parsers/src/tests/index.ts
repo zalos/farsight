@@ -478,7 +478,7 @@ export function importReports(
   // report of that level has had its chance (03 §3.1)
   for (const node of eachNodes) {
     const level = node.test!.level;
-    if (!levelsWithResults.has(level) || eachJoinedAnywhere.has(node)) continue;
+    if (!levelsWithResults.has(level) || eachJoinedAnywhere.has(node) || node.test!.runs?.length) continue;
     const at = `${node.test!.file}:${node.loc?.line ?? 0}`;
     gaps.push({
       kind: 'unjoined-each', level, reportKind: 'results', paths: [at],

@@ -1129,3 +1129,16 @@ test('a results import cannot attach to or clear another repository with matchin
   assert.equal(original.test!.run!.status, 'passed');
   assert.equal(foreign.test!.run, undefined);
 });
+
+test('another results file preserves known parameter rows without inventing an unjoined-template gap', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('other case', () => {});\n",
+    'coverage/one.json': '{}', 'coverage/two.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  writeFileSync(join(dir, 'coverage/one.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]));
+  importReports(f, dir, { unit: { results: 'coverage/one.json' } });
+  writeFileSync(join(dir, 'coverage/two.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'other case', status: 'passed' }]));
+  const second = importReports(f, dir, { unit: { results: 'coverage/two.json' } });
+  assert.equal(second.gaps.some((g) => g.kind === 'unjoined-each'), false);
+});
