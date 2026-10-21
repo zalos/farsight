@@ -1115,3 +1115,17 @@ test('ambiguous parameter templates in one file join nothing without a unique lo
   assert.equal(imported.runs, 0);
   assert.equal(imported.reports[0]!.unjoined, 1);
 });
+
+test('a results import cannot attach to or clear another repository with matching file and case names', async () => {
+  const dir = tempRepo({ 'test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n", 'coverage/results.json': '{}' });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const original = f.nodes.find((n: GraphNode) => n.kind === 'test')!;
+  const foreign: GraphNode = JSON.parse(JSON.stringify(original));
+  foreign.id = foreign.id.replace('sample::', 'other::');
+  foreign.loc!.repo = 'other';
+  f.nodes.push(foreign);
+  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'works', status: 'passed' }]));
+  importReports(f, dir, { unit: { results: 'coverage/results.json' } });
+  assert.equal(original.test!.run!.status, 'passed');
+  assert.equal(foreign.test!.run, undefined);
+});

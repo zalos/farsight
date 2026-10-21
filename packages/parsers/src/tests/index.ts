@@ -387,14 +387,14 @@ export function importReports(
   const eachNodes: GraphNode[] = [];
   const nodesByPath = new Map<string, GraphNode[]>();
   for (const n of fragment.nodes) {
-    if (n.kind === 'test' && n.test && !n.test.runLevel) {
+    if (n.kind === 'test' && n.test && !n.test.runLevel && n.loc?.repo === fragment.repo) {
       const key = [...n.test.suite, n.name].join(' ');
       if (!byFullName.has(key)) byFullName.set(key, []);
       byFullName.get(key)!.push(n);
       if (n.tags.includes('test:each')) eachNodes.push(n);
       continue;
     }
-    if (n.kind === 'test' || !n.loc) continue;
+    if (n.kind === 'test' || !n.loc || n.loc.repo !== fragment.repo) continue;
     if (!nodesByPath.has(n.loc.path)) nodesByPath.set(n.loc.path, []);
     nodesByPath.get(n.loc.path)!.push(n);
   }
