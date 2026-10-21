@@ -8,7 +8,7 @@
  *   npm install -g ./build/farsight-cli-*.tgz
  */
 import { build } from 'esbuild';
-import { cpSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +22,21 @@ const workspaceVersion = workspacePkg.version;
 // so a server run from the workspace and this tarball, built from one clean
 // commit, are one build to `farsight status` however many seconds apart they were
 // compiled. Needs `pnpm build` first, as the usage above says.
-const { gitIdentity } = await import(join(root, 'packages', 'core', 'dist', 'version.js'));
+const versionModule = join(root, 'packages', 'core', 'dist', 'version.js');
+const compiledEntries = [versionModule];
+const packagesDir = join(root, 'packages');
+if (existsSync(packagesDir)) for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue;
+  const manifest = join(packagesDir, entry.name, 'package.json');
+  if (!existsSync(manifest)) continue;
+  const pkg = JSON.parse(readFileSync(manifest, 'utf8'));
+  if (typeof pkg.main === 'string') compiledEntries.push(join(packagesDir, entry.name, pkg.main));
+}
+if (compiledEntries.some((path) => !existsSync(path))) {
+  console.error('pack: compiled packages are missing. Run `pnpm build && node scripts/pack.mjs` from the repository root.');
+  process.exit(1);
+}
+const { gitIdentity } = await import(versionModule);
 const git = gitIdentity(root);
 const commit = git.commit;
 // the build identity every consumer can read back: `farsight --version`, MCP graph_overview, /api/version, the HUD sync chip
