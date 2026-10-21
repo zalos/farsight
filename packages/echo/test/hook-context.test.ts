@@ -101,7 +101,7 @@ test('background hooks return bounded follow-ups without raw evidence or model o
   }
   const ctx = context(); ctx.profile.submind!.hookResearch = 'background';
   const start = hookContext(ctx, '/fixture/echo.mjs', 'SessionStart') as { hookSpecificOutput: { additionalContext: string } };
-  assert.match(start.hookSpecificOutput.additionalContext, /brief --request ID --workspace PATH --host HOST --session-id SESSION/);
+  assert.match(start.hookSpecificOutput.additionalContext, /brief --request=ID --workspace PATH --host HOST --session-id SESSION/);
   assert.match(start.hookSpecificOutput.additionalContext, /expand --id ID --revision HASH/);
   assert.doesNotMatch(start.hookSpecificOutput.additionalContext, /recall --query/);
 });
