@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile, readFile, symlink, stat } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile, symlink, stat, cp, rename, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { CANDIDATES, parseArgs, preview, containerArgs, verifyBinary, execute,
-  runContainer, cleanupOwned, materialize, scanCommand, assessScan, runProbe } from '../sentinel-feasibility-scanners.mjs';
+  runContainer, cleanupOwned, materialize, scanCommand, assessScan, runProbe, scenarioControl, evaluateControls, scriptProvenance } from '../sentinel-feasibility-scanners.mjs';
 
 const script = resolve('scripts/sentinel-feasibility-scanners.mjs');
 const corpus = resolve('packages/sentinel/test/fixtures/feasibility');
@@ -173,4 +173,111 @@ test('subprocess bounds and literal arguments do not use a shell', async () => {
   assert.ok(Buffer.byteLength(tooMuch.stdout) <= 64);
   const timeout = await execute(process.execPath, ['-e', 'setTimeout(()=>{},10000)'], { timeout: 50 });
   assert.equal(timeout.timedOut, true);
+});
+
+function passingTrial(scenario, candidate = CANDIDATES[0]) {
+  const trial = { candidate: candidate.id, scenario, expectedImage: candidate.image,
+    isolation: { id: 'a'.repeat(64), image: candidate.image, networkMode: 'none' }, cleanup: { state: 'removed-owned-container' },
+    execution: ok(''), versionMatches: true, denialObserved: true, socketAttempt: { connected: false },
+    assessment: { parseableJson: true, errors: [], positiveSymbols: Array.from({ length: 3 }, () => ({ matched: true })),
+      negativeSymbols: Array.from({ length: 3 }, () => ({ matched: false })), coverage: { scanned: [] }, oversizedNotScanned: true } };
+  if (scenario === 'missing-rules') trial.execution.exitCode = 7;
+  return trial;
+}
+
+test('baseline control requires execution, valid JSON, every positive and every safe sibling', () => {
+  assert.equal(scenarioControl(passingTrial('paired-baseline')).passed, true);
+  for (const mutate of [
+    t => { t.execution.exitCode = 1; }, t => { t.execution.timedOut = true; },
+    t => { t.assessment.parseableJson = false; }, t => { t.assessment.positiveSymbols[0].matched = false; },
+    t => { t.assessment.positiveSymbols.pop(); }, t => { t.assessment.negativeSymbols[0].matched = true; },
+    t => { t.assessment.negativeSymbols.pop(); }, t => { t.assessment.errors.push({ type: 'ParseError' }); },
+  ]) {
+    const trial = passingTrial('paired-baseline'); mutate(trial);
+    assert.equal(scenarioControl(trial).passed, false);
+  }
+});
+
+test('malformed engine JSON shapes retain a failed assessment instead of discarding raw trial evidence', () => {
+  for (const stdout of ['null', '[]', '{"results":{}}', '{"errors":{}}']) {
+    const trial = passingTrial('paired-baseline');
+    trial.execution.stdout = stdout;
+    trial.assessment = assessScan(trial, [], {});
+    assert.ok(trial.assessment.gaps.includes('invalid-engine-output-shape'));
+    assert.equal(scenarioControl(trial).passed, false);
+    assert.equal(trial.execution.stdout, stdout);
+  }
+});
+
+test('oversize control cannot pass on failed execution or unavailable omission evidence', () => {
+  assert.equal(scenarioControl(passingTrial('oversized')).passed, true);
+  for (const mutate of [
+    t => { t.execution.exitCode = 1; }, t => { t.assessment.parseableJson = false; },
+    t => { t.assessment.coverage.scanned = null; }, t => { t.assessment.oversizedNotScanned = false; },
+  ]) {
+    const trial = passingTrial('oversized'); mutate(trial);
+    assert.equal(scenarioControl(trial).passed, false);
+  }
+});
+
+test('missing rule control requires an actual nonzero completion, not a timeout or launch failure', () => {
+  assert.equal(scenarioControl(passingTrial('missing-rules')).passed, true);
+  for (const mutate of [
+    t => { t.execution.exitCode = 0; }, t => { t.execution.exitCode = null; },
+    t => { t.execution.timedOut = true; }, t => { t.execution.cancelled = true; },
+    t => { t.execution.spawnError = 'ENOENT'; }, t => { t.execution.outputExceeded = true; },
+    t => { t.execution.exitSignal = 'SIGKILL'; },
+  ]) {
+    const trial = passingTrial('missing-rules'); mutate(trial);
+    assert.equal(scenarioControl(trial).passed, false);
+  }
+});
+
+test('overall control verdict includes all scenarios, versions, network, cleanup and immutable input identity', () => {
+  const fresh = () => ({ trials: [...CANDIDATES.flatMap(c => ['version', 'paired-baseline', 'oversized', 'missing-rules'].map(s => passingTrial(s, c))), passingTrial('network-denial')],
+    inputIntegrity: Array.from({ length: 7 }, () => ({ unchanged: true })), inputManifestHash: 'b'.repeat(64),
+    provenance: { sha256: 'c'.repeat(64), revision: 'd'.repeat(40), dirty: false } });
+  assert.equal(evaluateControls(fresh()).passed, true);
+  for (const mutate of [
+    r => { r.trials.pop(); }, r => { r.trials[0].versionMatches = false; },
+    r => { r.trials[1].cleanup.state = 'refused'; }, r => { r.trials[8].denialObserved = false; },
+    r => { r.trials[8].isolation.networkMode = 'bridge'; }, r => { r.trials[8].socketAttempt.connected = true; },
+    r => { r.trials[0].isolation.image = 'other-image'; }, r => { r.inputIntegrity[0].unchanged = false; },
+    r => { r.inputIntegrity = []; }, r => { r.provenance.dirty = null; }, r => { r.provenance.sha256 = null; },
+  ]) {
+    const result = fresh(); mutate(result);
+    assert.equal(evaluateControls(result).passed, false);
+  }
+});
+
+test('provenance records current script bytes, revision and scoped dirty state without Docker', async () => {
+  const calls = [];
+  const result = await scriptProvenance(async (program, args) => {
+    calls.push({ program, args });
+    return ok(args.includes('rev-parse') ? 'e'.repeat(40) + '\n' : ' M scripts/sentinel-feasibility-scanners.mjs\n');
+  });
+  assert.equal(result.sha256, sha(await readFile(script)));
+  assert.equal(result.revision, 'e'.repeat(40));
+  assert.equal(result.dirty, true);
+  assert.ok(calls.every(c => c.program === 'git'));
+});
+
+test('materialization refuses symbolic output root, corpus root, index, source and source parent', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sentinel-no-links-test-'));
+  try {
+    const actualRoot = join(root, 'actual-root'); await mkdir(actualRoot);
+    const outputLink = join(root, 'output-link'); await symlink(actualRoot, outputLink);
+    await assert.rejects(materialize(outputLink), /symbolic link/);
+    const corpusLink = join(root, 'corpus-link'); await symlink(corpus, corpusLink);
+    await assert.rejects(materialize(actualRoot, corpusLink), /symbolic link/);
+    for (const kind of ['index', 'source', 'parent']) {
+      const fixture = join(root, `fixture-${kind}`); await cp(corpus, fixture, { recursive: true });
+      const output = join(root, `out-${kind}`); await mkdir(output);
+      const index = JSON.parse(await readFile(join(fixture, 'cases.json')));
+      const source = index.cases.find(c => c.id === 'ts-injection-pair').files[0].source;
+      const target = kind === 'index' ? join(fixture, 'cases.json') : kind === 'source' ? join(fixture, source) : join(fixture, 'sources');
+      await rename(target, `${target}.original`); await symlink(`${target}.original`, target);
+      await assert.rejects(materialize(output, fixture), /symbolic link/);
+    }
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

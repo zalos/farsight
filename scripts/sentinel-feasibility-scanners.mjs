@@ -2,7 +2,8 @@
 // PR 01 experiment only. This is not a production scanner adapter or isolation service.
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readFile, writeFile, mkdir, lstat, realpath, chmod } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, lstat, realpath, chmod, open } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { dirname, join, resolve, isAbsolute, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -17,6 +18,35 @@ const MAX_OUTPUT = 4 * 1024 * 1024;
 const TIMEOUT = 120_000;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const selectedCases = ['ts-injection-pair', 'java-injection-pair'];
+
+async function plainDirectory(path) {
+  const info = await lstat(path);
+  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Fixture root/parent must be a plain directory, not a symbolic link');
+}
+
+async function readFixture(root, path) {
+  const target = safePath(root, path);
+  for (let directory = dirname(target); directory !== root; directory = dirname(directory)) await plainDirectory(directory);
+  const info = await lstat(target);
+  if (!info.isFile() || info.isSymbolicLink()) throw new Error('Fixture index/source must be a regular file, not a symbolic link');
+  const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const opened = await file.stat();
+    if (opened.ino !== info.ino || opened.dev !== info.dev || opened.size > 2 * 1024 * 1024) throw new Error('Fixture identity changed or file exceeds the 2 MiB read bound');
+    return await file.readFile();
+  } finally { await file.close(); }
+}
+
+export async function scriptProvenance(runner = execute) {
+  const path = fileURLToPath(import.meta.url), root = resolve(dirname(path), '..');
+  const bytes = await readFixture(dirname(path), 'sentinel-feasibility-scanners.mjs');
+  const revision = await runner('git', ['-C', root, 'rev-parse', 'HEAD'], { timeout: 30_000 });
+  const status = await runner('git', ['-C', root, 'status', '--porcelain=v1', '--untracked-files=all', '--', 'scripts/sentinel-feasibility-scanners.mjs'], { timeout: 30_000 });
+  return { script: 'scripts/sentinel-feasibility-scanners.mjs', sha256: digest(bytes),
+    revision: commandOK(revision) && /^[a-f0-9]{40}$/.test(revision.stdout.trim()) ? revision.stdout.trim() : null,
+    dirty: commandOK(status) ? status.stdout.trim().length > 0 : null,
+    revisionEvidence: revision, statusEvidence: status };
+}
 
 export function parseArgs(args) {
   const options = { run: false };
@@ -161,7 +191,9 @@ function safePath(root, path) {
 }
 
 export async function materialize(root, corpusRoot = CORPUS) {
-  const indexBytes = await readFile(join(corpusRoot, 'cases.json'));
+  root = resolve(root); corpusRoot = resolve(corpusRoot);
+  await plainDirectory(root); await plainDirectory(corpusRoot);
+  const indexBytes = await readFixture(corpusRoot, 'cases.json');
   const index = JSON.parse(indexBytes);
   if (index.schemaVersion !== 'sentinel-feasibility-corpus-v1') throw new Error('Unsupported corpus index');
   const inputs = [];
@@ -171,7 +203,7 @@ export async function materialize(root, corpusRoot = CORPUS) {
     const entry = index.cases.find(c => c.id === id);
     if (!entry) throw new Error('Required paired case missing');
     for (const file of entry.files) {
-      const bytes = await readFile(safePath(corpusRoot, file.source));
+      const bytes = await readFixture(corpusRoot, file.source);
       if (digest(bytes) !== file.sha256) throw new Error('Fixture source hash mismatch');
       const path = `${id}/${file.path}`, target = safePath(source, path);
       await mkdir(dirname(target), { recursive: true });
@@ -183,7 +215,7 @@ export async function materialize(root, corpusRoot = CORPUS) {
   const expectedRules = ['sentinel-fixture-sql-concat-tsjs', 'sentinel-fixture-sql-concat-java'];
   if (!Array.isArray(index.rules) || index.rules.length !== 2 || expectedRules.some(id => !index.rules.some(rule => rule.id === id))) throw new Error('Unexpected rule inventory');
   for (const rule of index.rules) {
-    const bytes = await readFile(safePath(corpusRoot, rule.source));
+    const bytes = await readFixture(corpusRoot, rule.source);
     if (digest(bytes) !== rule.sha256) throw new Error('Rule source hash mismatch');
     await writeFile(join(rules, `${rule.id}.yaml`), bytes, { flag: 'wx', mode: 0o644 });
     await chmod(join(rules, `${rule.id}.yaml`), 0o644);
@@ -211,6 +243,9 @@ export function assessScan(record, expectations, sourceTexts) {
   let output;
   try { output = JSON.parse(record.execution?.stdout ?? ''); result.parseableJson = true; }
   catch { result.gaps.push('missing-or-invalid-json'); return result; }
+  if (!output || typeof output !== 'object' || Array.isArray(output) || (output.results !== undefined && !Array.isArray(output.results)) || (output.errors !== undefined && !Array.isArray(output.errors))) {
+    result.gaps.push('invalid-engine-output-shape'); return result;
+  }
   result.errors = output.errors ?? [];
   result.coverage = { scanned: output.paths?.scanned ?? null, skipped: output.paths?.skipped ?? null,
     granularity: output.paths ? 'engine-reported-paths' : 'unavailable' };
@@ -244,19 +279,63 @@ export function assessScan(record, expectations, sourceTexts) {
   return result;
 }
 
+export function scenarioControl(trial) {
+  const checks = [];
+  const check = (name, passed) => checks.push({ name, passed: passed === true });
+  check('owned-container-removed', trial.cleanup?.state === 'removed-owned-container');
+  check('pinned-container-identity', /^[a-f0-9]{64}$/.test(trial.isolation?.id ?? '') && trial.isolation?.image === trial.expectedImage);
+  check('network-none-inspected', trial.isolation?.networkMode === 'none');
+  const execution = trial.execution;
+  const finished = execution && !execution.timedOut && !execution.cancelled && !execution.outputExceeded && !execution.spawnError && !execution.exitSignal;
+  if (trial.scenario === 'missing-rules') {
+    check('expected-process-failure', !!finished && Number.isInteger(execution.exitCode) && execution.exitCode !== 0);
+  } else check('execution-completed-zero', !!execution && commandOK(execution));
+  const assessment = trial.assessment;
+  if (trial.scenario === 'version') check('version-pin-matches', trial.versionMatches);
+  else if (trial.scenario === 'paired-baseline') {
+    check('valid-json', assessment?.parseableJson);
+    check('three-positive-symbols-found', assessment?.positiveSymbols?.length === 3 && assessment.positiveSymbols.every(s => s.matched === true));
+    check('three-safe-symbols-unmatched', assessment?.negativeSymbols?.length === 3 && assessment.negativeSymbols.every(s => s.matched === false));
+    check('no-engine-errors', Array.isArray(assessment?.errors) && assessment.errors.length === 0);
+  } else if (trial.scenario === 'oversized') {
+    check('valid-json', assessment?.parseableJson);
+    check('explicit-size-omission', Array.isArray(assessment?.coverage?.scanned) && assessment.oversizedNotScanned === true);
+    check('no-engine-errors', Array.isArray(assessment?.errors) && assessment.errors.length === 0);
+  } else if (trial.scenario === 'network-denial') {
+    check('socket-attempt-denied', trial.denialObserved === true && trial.socketAttempt?.connected === false);
+  } else if (trial.scenario !== 'missing-rules') check('known-scenario', false);
+  return { candidate: trial.candidate, scenario: trial.scenario, passed: checks.every(c => c.passed), checks };
+}
+
+export function evaluateControls(result) {
+  const controls = result.trials.map(scenarioControl);
+  const required = CANDIDATES.flatMap(c => ['version', 'paired-baseline', 'oversized', 'missing-rules'].map(s => `${c.id}:${s}`));
+  required.push('semgrep:network-denial');
+  const keys = controls.map(c => `${c.candidate}:${c.scenario}`);
+  const complete = keys.length === required.length && new Set(keys).size === keys.length && required.every(k => keys.includes(k));
+  const identity = Array.isArray(result.inputIntegrity) && result.inputIntegrity.length === 7 && result.inputIntegrity.every(input => input.unchanged === true);
+  const manifest = /^[a-f0-9]{64}$/.test(result.inputManifestHash ?? '');
+  const provenance = /^[a-f0-9]{64}$/.test(result.provenance?.sha256 ?? '') && /^[a-f0-9]{40}$/.test(result.provenance?.revision ?? '') && typeof result.provenance?.dirty === 'boolean';
+  const checks = [{ name: 'all-nine-controls-present-once', passed: complete }, { name: 'all-input-identities-unchanged', passed: identity },
+    { name: 'corpus-index-identified', passed: manifest }, { name: 'script-revision-hash-and-dirty-recorded', passed: provenance }];
+  return { passed: checks.every(c => c.passed) && controls.every(c => c.passed), checks, scenarios: controls,
+    decision: 'measurement-controls-only; capability acceptance and ranking remain separate' };
+}
+
 export function preview(options = {}) {
   return { schemaVersion: 'sentinel-feasibility-scanners-v1', mode: options.run ? 'run' : 'preview',
     candidates: CANDIDATES, cases: selectedCases, scenarios: ['version', 'paired-baseline', 'oversized', 'missing-rules', 'network-denial'],
     effects: { acquisition: false, hostScannerExecution: false, providerCalls: false, network: 'none inside each container',
       localWrites: options.run ? 'fresh --out directory; synthetic inputs and retained evidence' : 'none',
       programs: options.run ? ['docker; scanners and network control only inside owned containers'] : [] },
-    limitations: ['Narrow synthetic rules only; labels await independent review.', 'Container flags and a denied socket trial do not prove hostile-code isolation.',
+    limitations: ['Narrow synthetic rules only; label review and capability acceptance are recorded separately.', 'Container flags and a denied socket trial do not prove hostile-code isolation.',
       'No support ranking, production orphan recovery, deep-flow or dependency coverage claim.'] };
 }
 
 export async function runProbe(options, { runner = execute, corpusRoot = CORPUS, signal } = {}) {
   // Verify every immutable prerequisite before creating output or a container.
   const binary = await verifyBinary(options.binary);
+  const provenance = await scriptProvenance(runner);
   if (options.out.includes(',') || binary.path.includes(',')) throw new Error('Docker mount paths cannot contain commas');
   const dockerVersion = await runner('docker', ['version', '--format', '{{json .}}'], { timeout: 30_000, signal });
   if (!commandOK(dockerVersion)) throw new Error('Docker unavailable; no host fallback');
@@ -278,7 +357,7 @@ export async function runProbe(options, { runner = execute, corpusRoot = CORPUS,
   const sourceTexts = {};
   for (const input of materialized.inputs.filter(x => !x.path.startsWith('rules/'))) sourceTexts[input.path] = await readFile(join(materialized.source, input.path), 'utf8');
   const result = { ...preview(options), startedAt: new Date().toISOString(), nodeVersion: process.version,
-    platform: process.platform, arch: process.arch, dockerVersion, images, binary: { sha256: binary.sha256, bytes: binary.bytes },
+    platform: process.platform, arch: process.arch, provenance, dockerVersion, images, binary: { sha256: binary.sha256, bytes: binary.bytes },
     inputManifestHash: materialized.indexHash, inputs: materialized.inputs, oversize: materialized.oversize, trials: [] };
   const persist = async () => {
     const bytes = JSON.stringify(result, null, 2) + '\n';
@@ -319,17 +398,24 @@ export async function runProbe(options, { runner = execute, corpusRoot = CORPUS,
     try { network.socketAttempt = JSON.parse(network.execution?.stdout); } catch { network.socketAttempt = null; }
     network.denialObserved = network.isolation?.networkMode === 'none' && network.socketAttempt?.connected === false && network.execution?.exitCode === 0;
     result.trials.push(network);
-    result.state = result.trials.every(t => t.cleanup?.state === 'removed-owned-container') && network.denialObserved ? 'measured-with-explicit-gaps' : 'failed';
   } catch (error) { result.state = 'failed'; result.reason = scrub(error.message); }
   finally {
     result.inputIntegrity = [];
+    const integrity = async (path, relativePath, expected) => {
+      try { result.inputIntegrity.push({ path: relativePath, unchanged: digest(await readFixture(dirname(path), path.slice(dirname(path).length + 1))) === expected }); }
+      catch (error) { result.inputIntegrity.push({ path: relativePath, unchanged: false, reason: scrub(error.message) }); }
+    };
     for (const input of materialized.inputs) {
       const path = input.path.startsWith('rules/') ? join(options.out, input.path) : join(materialized.source, input.path);
-      result.inputIntegrity.push({ path: input.path, unchanged: digest(await readFile(path)) === input.sha256 });
+      await integrity(path, input.path, input.sha256);
     }
-    result.inputIntegrity.push({ path: 'oversized.ts', unchanged: digest(await readFile(join(materialized.oversizeSource, 'oversized.ts'))) === materialized.oversize.sha256 });
-    result.inputIntegrity.push({ path: 'tools/opengrep', unchanged: digest(await readFile(copiedBinary)) === binary.sha256 });
-    if (result.inputIntegrity.some(input => !input.unchanged)) { result.state = 'failed'; result.reason = 'Materialized input changed during the probe'; }
+    await integrity(join(materialized.oversizeSource, 'oversized.ts'), 'oversized.ts', materialized.oversize.sha256);
+    // The acquired executable is larger than the bounded source-file reader permits.
+    try { const info = await lstat(copiedBinary); result.inputIntegrity.push({ path: 'tools/opengrep', unchanged: info.isFile() && !info.isSymbolicLink() && digest(await readFile(copiedBinary)) === binary.sha256 }); }
+    catch (error) { result.inputIntegrity.push({ path: 'tools/opengrep', unchanged: false, reason: scrub(error.message) }); }
+    result.controls = evaluateControls(result);
+    if (result.state !== 'failed') result.state = result.controls.passed ? 'measured-with-explicit-gaps' : 'failed';
+    if (!result.controls.passed && !result.reason) result.reason = 'One or more required measurement controls failed; inspect controls and raw evidence';
     result.endedAt = new Date().toISOString(); await persist();
   }
   return result;
