@@ -185,3 +185,20 @@ publish.yml already has the step; it prints *npm publish skipped: no NPM_TOKEN* 
 3. The next release publishes `build/farsight-cli-X.Y.Z.tgz` with `--access public --provenance` (publish.yml has
    `id-token: write`, and the packed `package.json` names the repository, which provenance requires), on the
    `latest` dist-tag, or `next` for a prerelease. Consumers can then `npm install -g farsight-cli`.
+
+## Install a selected release in CI
+
+Each published GitHub Release carries `farsight-cli-X.Y.Z.tgz`. A CI job can install a pinned release directly:
+
+```sh
+npm install -g https://github.com/zalos/farsight/releases/download/v0.3.0/farsight-cli-0.3.0.tgz
+farsight --version
+```
+
+Choose the release containing the fixes the job requires; a tarball reflects its release commit, not later
+commits on `main`. To package a checkout instead, run `pnpm install --frozen-lockfile`, then
+`pnpm build && node scripts/pack.mjs`. Packaging without the compiled packages prints that prerequisite.
+
+A running MCP process keeps the build it started with. Reconnect it after installing another build.
+`graph_overview` reports build identity, and `refresh_graph` re-ingests the recorded sources and reloads the graph; refreshing the graph does
+not replace the running process's compiled code.

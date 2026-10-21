@@ -1515,3 +1515,11 @@ separate results file says a route case passed. Generic regression fixtures cove
 
 Validated with Node 24 / pnpm 9: complete build, workspace typecheck, string catalog lint, and focused parser
 test-evidence suite. The integrating lead owns combined CI checks and real-application ingest comparison.
+
+## Packaging prerequisite follow-up (2026-10-21)
+
+Packaging now prints `pnpm build && node scripts/pack.mjs` when the compiled core version module is missing,
+before touching prior build artifacts. The regression test uses a disposable unbuilt checkout. Release docs
+show a pinned GitHub tarball install for CI and distinguish a release commit from subsequent `main` changes.
+MCP already reports its running build in `graph_overview`; `refresh_graph` already re-ingests and reloads,
+so upgrading the process still requires reconnecting it.
