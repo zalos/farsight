@@ -1468,7 +1468,7 @@ against enforced guard names/ids and existing config `guards` labels/matchers. M
 missing enforcement remain distinct differences. Reconciliation reads direct handler guards and then
 only proven delegate links; route-only declarations do not prove enforcement. Root `validators` lists
 exact multipart-reader names/ids and requires an actual same-source calls path for a multipart body.
-No new graph field or speculative validation edge is emitted. ADR 14 records the contract.
+No new graph field or speculative validation edge is emitted. ADR 15 records the contract.
 
 Focused core/parser/CLI API suites (31 tests), affected builds/typechecks and catalog/title lint passed.
 The real application's contract/config declarations remain an owner follow-up; this branch contains

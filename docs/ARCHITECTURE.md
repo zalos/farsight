@@ -159,7 +159,7 @@ with `x-internal: true` still matches normally and must be implemented when due.
 No policy fields are added to application graph nodes. Config is read from the selected source's recorded checkout (or configured local source); absent a recorded
 checkout, ad-hoc comparisons use the current directory.
 
-## ADR 14 — Contract guard vocabulary and multipart readers
+15. **Contract guard vocabulary and multipart readers (2026-10-21).**
 
 Operation-level `x-guards: [name]` documents gates that have no OpenAPI security-scheme equivalent.
 A name matches an enforced guard's exact name/id, its configured label, or that label's existing
