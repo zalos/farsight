@@ -1454,7 +1454,7 @@ start of every session.
 Branch `codex/gap-api-policy` adds a separate reconciliation `policy` without changing raw operation
 lists, counts or graph node contracts. API diff supports `--phase` and selective
 `--strict=missing,undocumented,notes`; config supplies `openapi[].phase`, `phaseOrder` and root-only
-`internalRoutes`. Unknown phases remain missing. ADR 13 and the walkthrough describe the public contract.
+`internalRoutes`. Unknown phases remain missing. ADR 14 and the walkthrough describe the public contract.
 
 Checked in an isolated worktree with Node 24/pnpm 9: workspace build; affected CLI/parser typechecks;
 32 focused core/count/CLI tests; 12 parser OpenAPI tests; catalog lint and commit-title lint passed.
