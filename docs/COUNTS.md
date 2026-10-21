@@ -962,3 +962,5 @@ undocumented and notes. The report's operation lists retain all raw evidence.
 
 Policy planned/internal metrics use the existing catalog scope `surf.scope.api` (registered in COUNT_SCOPES):
 one reconciled API, restricted to the sources the diff compares. Each metric carries its source fold.
+
+Design reconciliation’s `codeOnly` count and `drift` exclude unclaimed pages tagged `fallback`. Those pages are listed in `fallbacks` without introducing a new displayed count; a manifest-declared fallback participates in the ordinary built-screen and drift counts.

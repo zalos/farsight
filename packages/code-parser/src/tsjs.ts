@@ -1262,7 +1262,7 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
       addNode({
         id: pageId, kind: 'page', name, lang: langOf(file),
         loc: { repo, path: file, line: atLine },
-        tags: autoTags(file, name, 'page'),
+        tags: [...autoTags(file, name, 'page'), ...(pagePath === '*' || pagePath.endsWith('/*') ? ['fallback'] : [])],
       });
       pendingRenders.push({ fromId: pageId, file, callee: componentName, line: atLine, ...NO_FLAGS });
     }
