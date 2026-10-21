@@ -168,7 +168,7 @@ export async function ingestRepo(repoPath: string, options: IngestOptions = {}):
       if (p && p.root !== '.') n.package.project = p.name;
     }
   }
-  const warnings = declaredPathWarnings(merged, repoRoot, opts, workspace);
+  const warnings = declaredPathWarnings(merged, repoRoot, opts, workspace, manifests);
   if (warnings.length) merged.specErrors = [...(merged.specErrors ?? []), ...warnings];
   return merged;
 }

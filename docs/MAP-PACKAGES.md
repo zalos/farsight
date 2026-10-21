@@ -121,3 +121,5 @@ whose `@business` sentence or doc comment names it by path or as *ADR NNNN*).
 
 
 Design reconciliation (`core/src/design.ts`) separates unclaimed pages tagged `fallback` into `DesignReconcile.fallbacks`; declared wildcard screens still match normally. `strings-design.ts` supplies the heading and definition.
+
+Declaration health also audits scoped glossary keys with the same class/member name lookup used to label nodes, gate tier matchers against indexed gates, and each manifest flow’s local docs references through the existing bounded document reader. New diagnostics include declaration file/line; remote document URLs are not fetched.

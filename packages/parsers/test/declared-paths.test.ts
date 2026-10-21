@@ -81,3 +81,33 @@ test('moved files and missing symbols warn without manufacturing bindings; neste
     assert.ok(graph.nodes.find(n => n.id === 'demo::src/client.ts::build')?.tags.includes('setup'));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('stale glossary, gate tiers and flow documents warn once with their declaration location', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'farsight-stale-'));
+  const files: Record<string, string | object> = {
+    'src/service.ts': `export class Queue { public claimNext() { return 1; } }
+/** @guard */
+export function requireSession() { return true; }`,
+    'docs/guide.md': '# Guide\n',
+    'docs/design/screens.json': { screens: [{ id: 'S1', route: '/' }], flows: [{ id: 'F1', name: 'A flow', docs: ['docs/guide.md#heading', 'docs/moved.md', 'docs/moved.md', 'https://example.com/guide'] }] },
+    'farsight.config.json': {
+      glossary: { Queue: { label: 'Queue' }, claimNext: { label: 'Claim next' }, 'Queue.claimNext': { label: 'Claim' }, Missing: { label: 'Missing' } },
+      gateTiers: { requireSession: 'policy', 'deleted gate': 'technical' },
+    },
+    'nested/farsight.config.json': { glossary: { Queue: { label: 'Out of scope' } } },
+  };
+  try {
+    for (const [path, body] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+    }
+    const graph = await ingestRepo(root, { repoName: 'demo', tests: false, stories: false, projects: false });
+    const warnings = graph.specErrors ?? [];
+    assert.equal(warnings.length, 4, warnings.join('\n'));
+    assert.ok(warnings.some(w => /farsight.config.json:\d+ → glossary: "Missing"/.test(w)));
+    assert.ok(warnings.some(w => w.includes('nested/farsight.config.json:') && w.includes('"Queue"')));
+    assert.ok(warnings.some(w => /farsight.config.json:\d+ → gateTiers: "deleted gate"/.test(w)));
+    assert.equal(warnings.filter(w => w.includes('docs/moved.md')).length, 1, warnings.join('\n'));
+    assert.ok(warnings.some(w => /docs\/design\/screens.json:\d+ → flows.F1.docs/.test(w)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -40,6 +40,20 @@ for (const [name, example] of [['tsjs', 'invoice-app'], ['java', 'spring-invoice
         expected.meta.config.notes.push(warning);
         expected.specErrors = [warning];
       }
+      if (name === 'mixed') {
+        // Copied nested examples retain their original source-root document paths, and the
+        // Java glossary contains three names that applyConfig does not bind to any node.
+        const warnings = [
+          'service/farsight.config.json:18 → glossary: "invoices" matches no indexed symbol name.',
+          'service/farsight.config.json:38 → glossary: "invoice.sent" matches no indexed symbol name.',
+          'service/farsight.config.json:39 → glossary: "payment.settled" matches no indexed symbol name.',
+          'web/docs/design/screens.json:139 → flows.billing-cycle.docs: "docs/design/flows.md" names no readable source document.',
+          'web/docs/design/screens.json:139 → flows.draft-and-send.docs: "docs/design/flows.md" names no readable source document.',
+          'web/docs/design/screens.json:57 → flows.draft-and-send.docs: "docs/decisions/0001-approval-limits.md" names no readable source document.',
+        ];
+        expected.meta.config.notes.push(...warnings);
+        expected.specErrors = warnings;
+      }
       assert.deepEqual(actual, expected);
     } finally { rmSync(temp, { recursive: true, force: true }); }
   });

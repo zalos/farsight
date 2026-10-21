@@ -41,6 +41,20 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Stale glossary, gate tiers and flow documents — 2026-10-21
+
+Branch `codex/gap-stale-declarations` (dependent on the wildcard-route branch) extends existing ingest
+warnings to unbound glossary names, unmatched gate tier keys and unreadable local flow document paths.
+Glossary auditing uses the same class/member fallback and folder scope as label application; it does
+not invent node-id matching. Remote document URLs are skipped. Local document paths retain their
+source-root semantics; duplicate references within one flow produce one warning. Diagnostics name the
+file and line (the first matching literal in the declaration file).
+
+The parser build, parser typecheck and all 256 parser tests passed on Node 24. The mixed example
+compatibility check explicitly expects its newly visible stale glossary and copied document references;
+its baseline graph is preserved. Integration owns real-app measurement, the paired parser version
+update and clean final browser checks. No installation or publication occurred.
+
 ## Raw test servers and wildcard UI pages — 2026-10-21
 
 Branches `codex/gap-test-servers` and dependent `codex/gap-router-fallbacks` exclude raw HTTP route inference
