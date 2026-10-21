@@ -325,3 +325,18 @@ test("tsjs: a 'use server' action route has no method/path — an unmatched fetc
   assert.ok(stub, 'the unmatched fetch still becomes a ? stub');
   assert.equal(stub!.name, 'GET /api/claims');
 });
+
+test('ingest config maps x-guards and proves configured multipart reader calls', async () => {
+  const dir = tempRepo({
+    'farsight.config.json': JSON.stringify({ guards: { 'same-origin': ['assertSameOrigin'] }, validators: ['readMultipart'] }),
+    'lib/readers.ts': 'export function assertSameOrigin(req: Request) { if (!req.headers.get("origin")) throw new Error("origin"); }\nexport function readMultipart(req: Request) { return req.formData(); }',
+    'app/api/upload/route.ts': 'import { assertSameOrigin, readMultipart } from "../../../lib/readers";\nexport async function POST(req: Request) { assertSameOrigin(req); return readMultipart(req); }',
+    'openapi.json': JSON.stringify({ openapi: '3.1.0', paths: { '/api/upload': { post: { 'x-guards': ['same-origin'], requestBody: { required: true, content: { 'multipart/form-data': {} } } } } } }),
+  });
+  const fragment = await ingestRepo(dir, { repoName: 'app' });
+  const route = fragment.nodes.find((node) => node.kind === 'route' && node.name === 'POST /api/upload');
+  assert.ok(route);
+  assert.equal(route.contract?.status, 'both');
+  assert.deepEqual(route.contract?.drift ?? [], []);
+  assert.ok(fragment.edges.some((edge) => edge.kind === 'calls' && edge.to.endsWith('::readMultipart')));
+});

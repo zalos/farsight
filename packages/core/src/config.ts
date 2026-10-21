@@ -38,6 +38,8 @@ export interface FarsightConfig {
   openapi?: { path?: string; url?: string; name?: string; phase?: string; phaseOrder?: string[] }[];
   /** Exact internal METHOD /path declarations, excluded from undocumented-policy failures only. */
   internalRoutes?: string[];
+  /** Multipart readers: exact function names or ids; reconciliation requires a real call path. */
+  validators?: string[];
   /** Design manifests (docs/design/screens.json) describing this repo's screens — see docs/proposals/design-source.md. Discovery by filename still runs. */
   design?: { manifest?: string; path?: string; url?: string; name?: string }[];
   /** Test suites and the reports that observed them — see docs/proposals/tests-surface.md §3.2. Discovery by glob still runs; this adds report locations and extra spec globs. */
@@ -87,11 +89,11 @@ export type DecisionConfigEntry = Partial<Omit<DecisionDecl, 'id'>> & { id: stri
 /** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
 export const CONFIG_FIELDS = [
   'tags', 'glossary', 'guards', 'gateTiers', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
-  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle', 'decisions', 'internalRoutes',
+  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle', 'decisions', 'internalRoutes', 'validators',
 ] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
-export const ROOT_ONLY_CONFIG_FIELDS = ['projects', 'tooling', 'internalRoutes'] as const satisfies readonly (keyof FarsightConfig)[];
+export const ROOT_ONLY_CONFIG_FIELDS = ['projects', 'tooling', 'internalRoutes', 'validators'] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** `farsight.config.json → journeys`: the same shapes as a manifest's, every field but the id optional (an override gives only what it changes). */
 export interface JourneysConfig {
