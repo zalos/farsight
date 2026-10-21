@@ -156,5 +156,5 @@ no globs). These remain code-only evidence but do not fail undocumented policy. 
 with `x-internal: true` still matches normally and must be implemented when due.
 `--strict` checks all policy categories; `--strict=missing,undocumented,notes` selects categories.
 `notes` means matched contract drift entries; existing operationId naming observations stay advisory.
-No policy fields are added to application graph nodes. Config is read from the current working directory
-for an ad-hoc diff; callers comparing another source must run from that source root.
+No policy fields are added to application graph nodes. Config is read from the selected source's recorded checkout (or configured local source); absent a recorded
+checkout, ad-hoc comparisons use the current directory.

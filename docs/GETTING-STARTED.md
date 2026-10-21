@@ -478,7 +478,8 @@ Farsight's own e2e suite shows up the same way a product's would: `pnpm build &&
 
 ### Gate API delivery by phase
 
-Run an ad-hoc diff from the source root so it reads that source's `farsight.config.json`:
+API diff reads the selected source's recorded checkout configuration, falling back to the current directory
+when no checkout is recorded:
 
 ```json
 {

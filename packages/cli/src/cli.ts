@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { resolve, join, basename } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, statSync, realpathSync } from 'node:fs';
 import {
   GraphStore, buildIndex, setFreshnessMeta,
   SnapshotDb, SnapshotUnavailable, diffGraphs, parsePolicy, applyPolicy, toSarif, toMarkdown, changeSentence,
@@ -1046,11 +1046,12 @@ switch (command) {
       if (!specRef) fail('api diff needs --spec <path|url>');
       const parsed = await readSpecSource(specRef);
       const repo = flag('repo');
-      const config = loadConfig(resolve('farsight.config.json'));
-      const policy = config?.openapi?.find((entry) => entry.path === specRef || entry.url === specRef);
+      const policyRoot = repo && store.roots[repo] ? store.roots[repo]! : repo && workspaceSource(repo) ? resolve(workspaceSource(repo)!.path) : process.cwd();
+      const config = loadConfig(resolve(policyRoot, 'farsight.config.json'));
+      const policy = config?.openapi?.find((entry) => entry.url === specRef || (entry.path && existsSync(resolve(policyRoot, entry.path)) && !isSpecUrl(specRef) && realpathSync(resolve(policyRoot, entry.path)) === realpathSync(resolve(specRef))));
       const strictArg = rest.find((arg) => arg === '--strict' || arg.startsWith('--strict='));
       const categories = strictArg === '--strict' ? ['missing', 'undocumented', 'notes'] : strictArg?.slice('--strict='.length).split(',');
-      if (categories?.some((kind) => !['missing', 'undocumented', 'notes'].includes(kind))) fail(word('api.policy.strictError', 'professional'));
+      if (categories && (new Set(categories).size !== categories.length || categories.some((kind) => !['missing', 'undocumented', 'notes'].includes(kind)))) fail(word('api.policy.strictError', 'professional'));
       const result = reconcile(parsed.doc, index, { repo: repo ?? 'proposed', path: specRef, lineOf: parsed.lineOf }, {
         ...(repo ? { repo } : {}), phase: flag('phase') ?? policy?.phase,
         phaseOrder: policy?.phaseOrder, internalRoutes: config?.internalRoutes,
