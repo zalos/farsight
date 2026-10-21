@@ -76,8 +76,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Distinguish SQL interpolation from bound parameters for the same user-controlled value; neither label covers database authorization."
       }
@@ -134,8 +134,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Retain a cross-file request-to-command lesson and safe sibling; a pattern-only miss must not imply cross-file support."
       }
@@ -184,8 +184,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Compare JDBC SQL concatenation and a PreparedStatement bound value using only synthetic Java source."
       }
@@ -269,8 +269,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Order, unresolved middleware and a conditional bypass must remain distinct; no runtime framework proof is claimed."
       }
@@ -341,8 +341,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "A decorated DTO declaration and multipart parsing are negative controls for enforced validation."
       }
@@ -406,16 +406,16 @@
             "id": "next.excluded",
             "subject": "/public",
             "value": "matcher-excluded",
-            "reason": "/public is not selected by this middleware matcher; never inherit its check.",
-            "label": "vulnerable-pattern"
+            "reason": "/public is not selected by this middleware matcher; never inherit its check. No required-access policy is declared, so this does not establish a vulnerability.",
+            "label": "unknown-enforcement"
           }
         ],
         "outcomes": []
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Matcher exclusion must defeat a global-protection claim even if middleware contains an authentication check."
       }
@@ -471,8 +471,8 @@
             "id": "spring.overlap",
             "subject": "/api/public/report",
             "value": "earlier-permit-all-chain",
-            "reason": "Both matchers overlap; explicit order selects permitAll before authenticated.",
-            "label": "vulnerable-pattern"
+            "reason": "Both matchers overlap; explicit order selects permitAll before authenticated. No required-access policy is declared, so this does not establish a vulnerability.",
+            "label": "unknown-enforcement"
           },
           {
             "id": "spring.missing",
@@ -486,8 +486,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Retain explicit ordered-chain, overlap and missing-chain cases; source labels do not certify Spring runtime enforcement."
       }
@@ -569,8 +569,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Independent inventory includes hidden security inputs, inert credential placeholders and workflow configuration without executing them."
       }
@@ -681,8 +681,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Ignored tracked-intent and generated-intent source remains in the independent inventory; nested negation is retained."
       },
@@ -751,8 +751,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Syntax failures and unsupported languages must remain visible separately from files the parser selects."
       }
@@ -812,8 +812,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "A generated source exceeds the pinned probe maxFileBytes=4096 without storing a bulky artifact."
       }
@@ -885,8 +885,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Missing and symbolic boundary entries require explicit inventory outcomes; unreadable ignore is a host-dependent probe."
       }
@@ -950,8 +950,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Prepare paired clean/hostile evidence and invalid replies without calling a model; output labels are validation controls."
       }
@@ -1017,8 +1017,8 @@
       },
       "labels": {
         "author": "Codex corpus lane",
-        "reviewer": null,
-        "status": "needs-independent-review",
+        "reviewer": "Codex integration reviewer",
+        "status": "reviewed-static-scope",
         "scope": "synthetic-static",
         "rationale": "Define future full-scan comparison inputs; this corpus does not implement or measure incremental equivalence."
       }

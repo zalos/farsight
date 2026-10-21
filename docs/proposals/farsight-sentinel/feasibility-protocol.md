@@ -12,9 +12,11 @@ The corpus index is
 [`cases.json`](../../../packages/sentinel/test/fixtures/feasibility/cases.json). Its draft schema is
 `sentinel-feasibility-corpus-v1`, separate from graph contracts and their closed vocabularies. The corpus
 lane authors input expectations and security lessons independently of the harness implementation. Labels
-remain `needs-independent-review` with a null reviewer until a reviewer examines both source and expected
-facts; passing tests do not fill that field. The lead records review/acceptance separately before ranking
-engines. The corpus is original synthetic material under the repository license; no private application
+start as `needs-independent-review` with a null reviewer. The integration reviewer examined all source and
+expected facts on 2026-10-21 and set `reviewed-static-scope`; passing tests do not fill that field. The review
+changed Next matcher exclusion and Spring permit-all overlap to `unknown-enforcement`: neither declares a
+required-access policy that would establish a vulnerability. This static review does not accept runtime
+framework support or engine thresholds. The lead records acceptance separately before ranking engines. The corpus is original synthetic material under the repository license; no private application
 code, external benchmark code, real credential, or provider transcript is included.
 
 Each case declares its purpose, E1–E8 gates, source-to-temporary-path mapping, exact SHA-256 of each source,

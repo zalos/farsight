@@ -11,7 +11,7 @@ disposable repository; the harness must retain evidence rather than infer tracki
 Real manifests, lockfiles, ignore files and workflows are stored under fixture-only names. Materialize
 ecosystem names only in temporary trees. The candidate dependency declarations are incomplete and uninstalled;
 their versions carry no support or advisory claim. Rule blobs are original narrow syntax locators. Labels
-await independent review and do not certify runtime protection.
+received independent static-scope review; they do not certify runtime protection.
 
 See the [protocol](../../../../../docs/proposals/farsight-sentinel/feasibility-protocol.md) for the E1–E8
 controls, hash scheme, denominator and measurement/demo procedure. The lead's results record distinguishes
