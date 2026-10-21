@@ -41,6 +41,36 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Parser and CLI gap delivery — 2026-10-21
+
+Seven independently reviewed changes close the parser and CLI gaps: API delivery policy, raw test-server
+exclusion, explicit guard and multipart vocabulary, wildcard design fallbacks, stale configuration
+declarations, retained project test evidence, and packaging prerequisites. The raw route/contract evidence
+remains inspectable. Paired parser libraries are prepared at 0.3.1. Public class methods were already
+supported; optional interface graph nodes remain deferred. MCP build reporting, graph refresh and tagged
+release artifacts were already delivered.
+
+Validation on the final combined runtime in isolated worktrees under Node 24/pnpm 9: build and all
+typechecks passed; 1,617 unit tests completed with 1,615 passed and two opt-in live tests skipped;
+345 browser/MCP tests, 22 script tests and all 11 small-preset performance checks passed. Catalog lint
+checked 3,490 entries. Echo package smoke and actual parser tarballs installed outside the workspace
+passed. Independent re-review covered the reporter path, dynamic-suite identity and source-level fixes.
+
+Fresh main/gap ingests of the same Farsight source retained 6,136 nodes, 13,216 edges and source digest
+`5ec2c23dfc70`, with unchanged node/edge content. Graph bytes were 17,458,002 before and 17,457,996 after;
+the six-byte difference is workspace/build metadata, not semantic growth. SQLite was 23,601,152 bytes
+in both builds.
+
+The reference validation retained sequential projects and joined all supported default-project cases.
+Three report rows with unsupported dynamic case names remain unjoined; identity is never guessed.
+
+Owners still declare source phases, internal routes, guard vocabulary and multipart readers. Unknown
+phases stay missing; declared-only and inactive paths prove no enforcement. Aggregate run coverage never
+becomes per-case observed coverage because another report says a case passed. Fresh ingest reads reports
+on disk; separate result files preserve sequential projects across a fresh ingest. Registry publication
+remains separate. Installing the CLI under all three runtime prefixes and restarting servers/reconnecting
+MCP follows the final merge.
+
 ## Stale glossary, gate tiers and flow documents — 2026-10-21
 
 Branch `codex/gap-stale-declarations` (dependent on the wildcard-route branch) extends existing ingest
@@ -1523,28 +1553,3 @@ before touching prior build artifacts. The regression test uses a disposable unb
 show a pinned GitHub tarball install for CI and distinguish a release commit from subsequent `main` changes.
 MCP already reports its running build in `graph_overview`; `refresh_graph` already re-ingests and reloads,
 so upgrading the process still requires reconnecting it.
-## Parser and CLI gap delivery — 2026-10-21
-
-Six independently reviewed changes close the parser and CLI gaps: API delivery policy, explicit guard and
-multipart vocabulary, wildcard design fallbacks, stale configuration declarations, retained project test evidence,
-and packaging prerequisites. The raw route/contract evidence remains inspectable. Paired parser libraries are
-prepared at 0.3.1. Public class methods were already supported; optional interface graph nodes remain deferred. MCP build reporting, graph refresh and tagged release artifacts were already delivered.
-
-Validation on the final combined runtime in isolated worktrees under Node 24/pnpm 9: build and all
-typechecks passed; 1,617 unit tests completed with 1,615 passed and two opt-in live tests skipped;
-345 browser/MCP tests, 22 script tests and all 11 small-preset performance checks passed. Catalog lint
-checked 3,490 entries. Echo package smoke and actual parser tarballs installed outside the workspace
-passed. Independent re-review covered the reporter path, dynamic-suite identity and source-level fixes.
-
-Fresh main/gap ingests of the same Farsight source retained 6,136 nodes, 13,216 edges and source digest
-`5ec2c23dfc70`, with unchanged node/edge content. The final combined graph was exactly 17,458,002 bytes in both builds; SQLite was 23,601,152 bytes
-in both builds.
-
-The reference validation retained sequential projects and joined all supported default-project cases.
-Three report rows with unsupported dynamic case names remain unjoined; identity is never guessed.
-
-Owners still declare source phases, internal routes, guard vocabulary and multipart readers. Unknown phases
-stay missing; declared-only and inactive paths prove no enforcement. Aggregate run coverage never becomes
-per-case observed coverage because another report says a case passed. Fresh ingest reads reports on disk;
-separate result files are needed to preserve sequential projects across a fresh ingest. Registry publication remains separate. Installing the CLI under all three runtime prefixes and restarting
-servers/reconnecting MCP follows the final merge.
