@@ -1,7 +1,8 @@
 # Farsight Sentinel implementation kickoff
 
-Prepared 2026-10-19 for the agent that will execute the plan. Preparing this prompt has not started an agent,
-approved the outstanding decisions or authorized a merge. Give the prompt below to the implementation agent
+Prepared 2026-10-19 and refreshed 2026-10-21 for the agent that will execute the plan. Review agents have
+checked readiness; implementation has not started. Preparing this prompt does not approve unmeasured support
+choices or authorize a merge. Give the prompt below to the implementation agent
 when ready; it begins by checking the actual review and dependency state.
 
 ## Prompt
@@ -17,12 +18,11 @@ Do not replace this task with another general plan or combine the backlog into o
 Read `AGENTS.md`, `docs/AI-HANDOFF.md` and the project's applicable memory/skills before editing. Inspect
 the branch, working tree, active worktrees and live PR state; preserve other people's edits.
 
-Proposal [PR #117](https://github.com/zalos/farsight/pull/117) merged at `04c3c63`. Planning PR 00 is
-[PR #118](https://github.com/zalos/farsight/pull/118), branch `docs/sentinel-implementation-plan`.
-On 2026-10-19 it was still open, with no Sentinel implementation started. The last verified plan changes
-before this kickoff were `6a1d6d4`; that is a historical checkpoint, not a pin to ignore later updates.
-Recheck the current PR head and owner instructions. If the plan is not on main, read it from the planning
-worktree/PR branch without changing the primary checkout.
+Proposal [PR #117](https://github.com/zalos/farsight/pull/117) merged at `04c3c63`. Planning PR 00,
+[PR #118](https://github.com/zalos/farsight/pull/118), merged on 2026-10-19 at `0c8c747`.
+The execution-preparation baseline is main `46018cb`, verified on 2026-10-21, with no Sentinel implementation
+started. Recheck the current main and owner instructions; these are historical checkpoints, not pins to ignore
+later updates. Read the [execution readiness packet](execution-readiness.md) for the prepared lanes and gates.
 
 Read these documents in order:
 
@@ -34,11 +34,11 @@ Read these documents in order:
 6. [Draft contracts](contracts.md) and the earlier [review response](codex-response.md); consult linked research
    and package/security/CI maps as the selected work package requires.
 
-Verify PR 00 agreement and the predecessor merges before dispatching dependent implementation. An open PR,
-passing documentation checks, or this saved prompt is not evidence of prior approval. Direct owner
-instructions in the new session may provide approval or authorize a stacked PR; honor them without asking
-again. If the gate is unresolved, identify the exact decision/review needed and continue independent read-only
-inspection or evidence preparation. Do not silently merge PR 00 or claim its proposed defaults are accepted.
+PR 00 is accepted and merged; do not reopen that agreement. Before dependent implementation, recheck actual
+successor prerequisites and the explicitly named outstanding decisions. An open successor PR, passing checks
+or this saved prompt is not evidence that its acceptance gate cleared. Direct owner instructions may authorize
+implementation or a stacked PR; honor them without asking again. If a specific gate remains unresolved,
+identify it and continue independent authorized work without treating unmeasured defaults as accepted.
 
 ### Preserve the confirmed decisions
 
@@ -56,9 +56,8 @@ inspection or evidence preparation. Do not silently merge PR 00 or claim its pro
 - Deliver deterministic interfaces through 23a/24/25/26 without waiting for 21/22/23b/25b model gates.
   Standalone reporting lands at 19, with integrated parity at 25 and clean-recipient delivery checks at 26.
 
-The owner has **not yet answered whether external scanners must require a local container runtime**. Ask that
-specific question before external-scanner probes if it remains unanswered. The proposed policy has no host
-fallback. Exact runtime/engine/framework versions, rule inventory, E3/E5 thresholds and resource defaults are
+The owner **confirmed on 2026-10-21 that external scanners require Linux containers with no host fallback**.
+Do not ask that policy question again. Exact runtime/engine/framework versions, rule inventory, E3/E5 thresholds and resource defaults are
 PR 01 decisions based on measurements, not facts to invent. E5/model trials and thresholds may be explicitly
 deferred to the model track; they do not block deterministic foundation work or release. Keep these separate
 from the confirmed choices.
@@ -77,6 +76,9 @@ no production Sentinel runtime or package scaffolding in this PR; that begins at
 2. Add positive/negative TS/Java, hidden-configuration and middleware-order fixtures. Use inert secret values
    with narrowly justified line exceptions; store vulnerable manifests/locks under fixture-only names and
    materialize real names only in temporary trees. Never install intentionally vulnerable fixture dependencies.
+   Include ignored tracked/generated source and nested/unreadable ignore rules; pin parser selection options
+   and fingerprints. `analysis.complete` is not independent inventory completeness, and application-enriched
+   policy/guard/test facts are not automatically present in public parser artifacts or proof of enforcement.
 3. Build the E1–E8 harness and metrics schemas. Run the eligible local parser/inventory, SQLite ownership,
    codec and resource probes against actual APIs. Define future E4/E6 cases without claiming the full coordinator
    recovery or differential-equivalence gates have run before those implementations exist.
@@ -86,6 +88,7 @@ no production Sentinel runtime or package scaffolding in this PR; that begins at
    or a host fallback. Continue independent fixture/harness work while a decision is pending.
 5. Produce a decision record with exact measured support, failures and remaining choices. PR 01 is complete
    only when its acceptance evidence and owner decisions meet the backlog; a harness alone is not completion.
+   Use separate evidence-preparation and measured-decision milestones. Do not dispatch PR 02 from the first.
 
 ### Working rules and validation
 
@@ -96,6 +99,9 @@ PR 02, so PR 01 uses the unscoped title from the backlog. Never use `git stash` 
 command pattern; stop only your recorded PIDs/containers or assigned ports.
 
 Use Node 24+ and pnpm 9.0.0; build before tests that import `dist/`. Select checks from `docs/CI.md`.
+The new feasibility script currently selects all existing CI checks as an unknown path; this preparation is
+Markdown-only, but PR 01 will not be. PR 02 must also preserve Farsight packaging with Sentinel absent/unbuilt
+when adjusting the current all-workspace compiled-entry preflight.
 Parser/core/store changes require the prescribed main-versus-feature real-ingest measurements and viewer
 page-error checks. Keep temporary ingests, ownership state, test results and ports isolated. Document new
 public boundaries with their ADR/package-map entries; preserve frozen contracts and count/catalog conventions.

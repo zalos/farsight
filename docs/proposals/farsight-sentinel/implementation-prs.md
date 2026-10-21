@@ -1,13 +1,16 @@
 # Farsight Sentinel PR build plan
 
-**Status:** reviewed for PR 00 merge, 2026-10-19: [#118](https://github.com/zalos/farsight/pull/118).
-Outstanding decisions remain deferred to their named gates; this merge does not dispatch implementation.
+**Status:** PR 00 merged on 2026-10-19: [#118](https://github.com/zalos/farsight/pull/118), `0c8c747`.
+Execution preparation checked against main `46018cb` on 2026-10-21; container-only external scanning is confirmed.
+Outstanding measured decisions remain deferred to their named gates; this preparation does not dispatch implementation.
 All implementation rows are **planned**; no implementation PR has started.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
 
 Use the [execution kickoff](execution-kickoff.md) when dispatching the implementation agent. It carries the
 confirmed decisions, open gates and first bounded deliverable; preparing it does not dispatch or approve work.
+The [execution readiness packet](execution-readiness.md) assigns PR 01 lanes and separates evidence preparation
+from its complete measured-decision gate.
 
 Each PR is a mergeable change behind the optional Sentinel boundary. If a measured change is too large for
 one review, split it at the stated contract boundary without dropping its acceptance gate. Scanners, models
@@ -122,20 +125,31 @@ Create positive/negative TS, Java, hidden-config and middleware-order fixtures; 
 acquisition manifest; E1–E8 runners and metrics schemas. Probe actual parser artifacts, engine output/skip
 granularity, offline behavior, container ownership/cleanup, SQLite ownership and codec/resource costs. Evaluate
 source-only behavior explicitly. External acquisitions and model calls are opt-in, with costs/rights recorded.
+Include ignored tracked/generated source, nested ignore rules and unreadable `.gitignore` cases. Pin parser
+options/read fingerprints and compare against independent inventory, including cases where `analysis.complete`
+is true but selected files omit captured inputs. Separate public parser evidence from application enrichment.
 
 Select exact candidate framework releases, a minimal original rule inventory and pattern engine. Record
 deep-engine results as qualified capabilities. Run prototype E5 only under configured budgets; the production
 evaluation is still PR 22. Define E6 edits now, without claiming differential equivalence before implementation.
-Record the container-prerequisite decision before external-scanner probes. Test the selected Docker Engine,
+The owner confirmed container-only external scanners with no host fallback on 2026-10-21. Test the selected Docker Engine,
 Docker Desktop and/or Colima-with-Docker versions on the proposed hosts; include installation/terms and VM
 resource requirements. Parsing/planning can proceed without a container. A missing runtime cannot enable a
 host-execution fallback. Keep fixture secrets inert and manifests under fixture-only names from the first commit.
 
 **Done when:** every support claim has a named fixture/version; every rejected capability has a reason; owners
-accept the deterministic version matrix and thresholds. Record E5/model trials and thresholds as deferred
+accept the deterministic version matrix and thresholds. The decision manifest names
+`core/openapi.ts`'s `guardsOf()`/`matchesGuard()` as reconciliation heuristics, never an enforcement oracle.
+Record E5/model trials and thresholds as deferred
 when their prerequisites are unavailable; their acceptance gates apply to the model track, not PR 02 or the
 deterministic release. **Demo:** the same vulnerable/safe pair, a skipped file and an offline
 failure across candidates. **Risk:** benchmark labels can be wrong; retain the evidence and review labels.
+
+Track evidence preparation and measured decisions separately inside PR 01. Fixtures, draft schemas and local
+probes may be reviewable while scanner prerequisites remain pending, but they do not complete PR 01 or unblock
+PR 02. Preserve the full acceptance gate when splitting review-sized changes. The new feasibility script is
+currently an unknown path to `scripts/ci-changes.mjs`, so the full PR selects all existing checks; do not label
+it documentation-only or assume the later PR 02 selector changes already exist.
 
 ### PR 02 — optional package, contracts and architecture decision
 
@@ -143,7 +157,7 @@ failure across candidates. **Risk:** benchmark labels can be wrong; retain the e
 
 **Files:** `packages/sentinel/{package.json,tsconfig.json,src/index.ts,src/contracts/,schemas/,test/}`;
 workspace build references; `scripts/lint-commits.mjs` and its tests; `scripts/ci-changes.mjs`, workflow/selector
-tests, initial `scripts/pack-sentinel.mjs`; `docs/ARCHITECTURE.md`, `docs/MAP-PACKAGES.md`, `docs/CI.md` and security notes.
+tests, `scripts/pack.mjs` and packaging tests, initial `scripts/pack-sentinel.mjs`; `docs/ARCHITECTURE.md`, `docs/MAP-PACKAGES.md`, `docs/CI.md` and security notes.
 **Depends on:** 01.
 
 Define snapshot, run, work, attempt, observation, coverage, disposition, report and protocol envelopes.
@@ -154,9 +168,14 @@ Register the `sentinel` commit scope before scoped follow-on PRs. Select Sentine
 including shared inputs that affect it; add a lightweight `sentinel-package` install/import/help smoke job.
 Fast schemas/storage/projection tests join `pnpm -r test` from this PR. Container tests and the full kill matrix
 are explicit opt-ins with skip reasons; selected dedicated CI jobs fail if their prerequisites are missing.
+The current Farsight pack preflight checks every workspace manifest's `main`, including a future optional
+Sentinel package. Scope that preflight to Farsight's actual build dependencies while preserving failure before
+artifact deletion. Prove ordinary Farsight packing/install/startup works with Sentinel absent or unbuilt;
+Sentinel's own packaging smoke separately checks its required build artifacts.
 
 **Done when:** valid/invalid fixtures exercise schema bounds and unknown versions; Farsight's default package
-does not import/initialize Sentinel; existing frozen schemas remain unchanged. **Demo:** schema validation and
+does not import/initialize Sentinel; the preflight fix and packaging smoke prove Farsight still packs with
+Sentinel absent/unbuilt; existing frozen schemas remain unchanged. **Demo:** schema validation and
 an explicit unavailable capability. **Rollback:** remove optional package registration, preserving user data.
 
 ### PR 03 — ledger, object store and coordinator ownership
@@ -209,6 +228,9 @@ Register `tsJsAdapter` and `javaAdapter` through the public package. Parse a pri
 explicit limits and retain the complete `AnalysisArtifact`, including occurrences. Verify input digests and
 map file outcomes without changing the capture. Index canonical node/span references for later evidence tools.
 Do not call application ingestion for coverage or enable remote enrichment.
+Pin selection/ignore behavior explicitly and reconcile ignored captured inputs as limitations or planned
+work, never silently remove them from security scope. Public parser tests must demonstrate the boundary from
+enriched API policy, configuration guards, body readers and test evidence; those facts alone clear no check.
 There is no parser reader hook: enumerate/hash the private materialized tree before and after, then reconcile
 recorded `analysis.inputs` by kind (bytes, sorted-entry canonical JSON, metadata kind, verified missing path).
 Unrecorded/escaping paths and mismatched fingerprints fail integrity. Built-in reader guards reject escapes
@@ -414,6 +436,9 @@ evidence or unknown; existing structural graph is unchanged. **Demo:** late midd
 Resolve supported global/controller/method guard application, provider bindings and pipe/interceptor scope.
 Keep validation, authorization and transformation separate properties. Preserve unknown factories, dynamic
 modules and custom decorator semantics; do not infer protection from class names.
+E2 includes a declared body schema with no registered validation pipe and a configured multipart reader that
+only parses input. Preserve the declared/unverified provenance of parser edges: a clean API delivery-drift
+result, high-confidence annotation match or reachable reader alone cannot establish Sentinel protection.
 
 **Done when:** direct providers and selected decorators pass fixtures while dynamic/unresolved variants stay
 unknown. **Demo:** a globally registered guard with one unsupported binding shows both the known scope and gap.
@@ -467,6 +492,8 @@ Missing/mismatched context yields an empty place plus a reason, not a guessed cu
 Project finding and gap `place` through cached core `flowWalks`/`affectedReach`, `journeyTree` and
 `personaOfScreen`: canonical nodes, screens, journeys and persona provenance. State direct use versus possible
 impact. Deduplicate screens, preserve overlapping personas and bounds, and emit both registers from the same fold.
+Recheck those helpers' actual signatures and pinned-input assumptions in `core/journeys.ts` and `affected.ts`
+at implementation time; the named helpers describe reuse intent, not a frozen API contract.
 Retain readable labels, definitions, issue explanations and permitted evidence in the versioned report document.
 Deliver self-contained HTML with inline styles/evidence, internal navigation and print styling; core content
 works offline with JavaScript disabled. Markdown/JSON carry the same scope and facts. Standalone generation
@@ -725,11 +752,11 @@ choice recorded; it does not authorize a scanner installation, paid experiment o
 | Source-only; isolated builds later | Owner | Confirmed | Settled for PRs 01–28 |
 | Ollama and configurable hosted endpoint | Owner | Confirmed; disclosure/budgets remain configured per run | Settled provider scope; actual calls at 01/21/22 need configured grants |
 | Standalone report delivery plus Farsight integration | Owner | Confirmed; one report document with offline delivery and optional integrated navigation/actions | Contracts in 02; standalone acceptance in 19, parity in 25, clean-recipient gate in 26 |
-| Required container runtime for external scanners | Owner | Proposed; owner answer pending. Docker Desktop terms and Colima alternative are described in the architecture | External-scanner probes in 01; no host fallback |
+| Required container runtime for external scanners | Owner | Confirmed 2026-10-21: Linux containers required; no host fallback. Exact backend/version support remains unmeasured | Policy settled; acquisition, runtime and isolation evidence before corresponding probes/support claims |
 | Exact host/runtime/framework/engine pins | Feasibility lead | Not measured; candidate matrix only | 01 exit, before advertising support or dispatching corresponding adapter lane |
 | E3 thresholds and deterministic labeled corpus | Feasibility lead + owner | Proposed gates in architecture; no results claimed | 01 decision record, then production gate at 18 |
 | E5 thresholds, model trials and resource choices | Feasibility lead + owner | May be explicitly deferred in 01; no deterministic release dependency | Set thresholds before live evaluation/required-review enablement; production gate at 22 |
-| Plan revisions and review fixes | Owner/reviewer | Reviewed for merge at the owner’s request; response traces the original findings and final corrections | PR 00 merge; implementation dispatch remains a separate task |
+| Plan revisions and review fixes | Owner/reviewer | PR 00 merged at `0c8c747`; current preparation incorporates recent-code review | Implementation dispatch remains a separate task; PR 02 still requires full PR 01 acceptance |
 | Ledger/parser/isolation proof | Foundation lead | SQL example validation only; no runtime guarantee | Relevant 03/05/07 acceptance gate before 08/09 |
 | Package, catalog, settings and fixture conventions | Integration lead | Assigned to PRs 01–09; no application edits in PR 00 | Respective first implementation PR, not final packaging |
 

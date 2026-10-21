@@ -1,9 +1,10 @@
 # Farsight Sentinel implementation plan
 
-**Status:** reviewed for PR 00 merge at the owner’s request, 2026-10-19. Implementation has not started.
-Outstanding choices remain explicitly deferred to the gates below; merging the plan does not approve scanner
-installation, provider calls or implementation dispatch.
-**Baseline:** application `4fce1c8`; proposal merged in PR #117 at `04c3c63` (authored as `354a184`).
+**Status:** PR 00 merged as [#118](https://github.com/zalos/farsight/pull/118) at `0c8c747`, 2026-10-19.
+Execution preparation reviewed against main `46018cb` on 2026-10-21; implementation has not started.
+The owner confirmed container-only external scanners with no host fallback. Exact capabilities remain subject
+to the gates below; preparation does not approve scanner installation, provider calls or implementation dispatch.
+**Original baseline:** application `4fce1c8`; proposal merged in PR #117 at `04c3c63` (authored as `354a184`).
 
 Build Sentinel as an optional local security-analysis service with one durable execution ledger, immutable
 source/evidence artifacts, replaceable scanners, and bounded model reviews. Deliver a complete deterministic
@@ -21,6 +22,7 @@ not silent amendments or claims that Sentinel already exists.
 | This file | Complete architecture, decisions, trust boundaries, lifecycle and release gates |
 | [PR build plan](implementation-prs.md) | Ordered PRs, dependencies, owned files, acceptance evidence and demonstrations |
 | [Execution kickoff](execution-kickoff.md) | Ready-to-use agent prompt, current handoff, first deliverable and review/authorization boundaries |
+| [Execution readiness](execution-readiness.md) | Current baseline, PR 01 lane ownership, evidence milestones and definition of done |
 | [Implementation examples](implementation-examples.md) | Parser integration, contracts, SQL, publication, rules, model review and invalidation |
 | [Implementation review](claude-review-implementation.md) · [Response](implementation-review-response.md) | Preserved feedback and the disposition, correction and execution gate for every finding |
 | [Existing research](research-scanners.md) · [workflow research](research-workflows.md) | Scanner and platform evidence, licensing qualifications and alternatives |
@@ -35,6 +37,9 @@ not silent amendments or claims that Sentinel already exists.
 - **Source-only first release.** Do not execute Maven, Gradle, npm scripts or target-supplied plugins.
   Existing generated source can be captured as source. Producing missing generated code, build-derived
   bytecode and analyzers that invoke project tooling require the later isolated-build track.
+- **Container-only external scanners, confirmed 2026-10-21.** External scanners require Linux containers;
+  there is no automatic host-execution fallback. Parsing/planning with trusted built-in adapters needs no
+  container. Runtime selection, acquisition and measured support remain separate PR 01/07 gates.
 - **Ollama and a configurable hosted endpoint.** Ship an Ollama adapter and a capability-tested
   OpenAI-compatible HTTP adapter. Compatibility is verified per endpoint; it does not imply support for
   every vendor feature. Both are optional, and hosted disclosure requires trusted local configuration.
@@ -48,7 +53,7 @@ not silent amendments or claims that Sentinel already exists.
 | Decision | Proposed choice | When it must be settled |
 |---|---|---|
 | Supported hosts | macOS and Linux; no Windows support claim in v1 | PR 01 platform probes |
-| Scanner isolation | Proposed: Linux containers for external scanners, no automatic host fallback. PR 01 tests Docker Engine on Linux and Docker Desktop plus Colima with Docker on macOS; exact versions/results determine support | Owner decision before external-scanner probes; PR 01/07 |
+| Container backend | Container-only policy is confirmed. PR 01 evaluates Docker Engine on Linux and Docker Desktop and/or Colima with Docker on macOS; exact versions/results determine support | PR 01/07 runtime evidence before claiming support |
 | Required local installation | Node 24 with verified SQLite runtime; container runtime for external scanners; no scanner download during a scan | PR 01/26 |
 | Default pattern engine | Evaluate Opengrep first, compare Semgrep CE on identical original rules; select from measured results | PR 01/10 |
 | Deep analysis | Optional capability; original cross-file fixtures decide whether any engine qualifies; unsupported checks stay visible | PR 01/18 |
@@ -65,7 +70,7 @@ commitment. A missing deep engine must not prevent a useful baseline scan, but a
 coverage must fail its coverage gate.
 
 Parsing/planning with trusted built-in adapters needs no container runtime. An external secret or pattern scan
-does under the proposed policy; on macOS the runtime's Linux VM also consumes memory. Docker Desktop has its
+does under the confirmed policy; on macOS the runtime's Linux VM also consumes memory. Docker Desktop has its
 own subscription terms, including paid use outside its free categories. Colima is an MIT-licensed runtime
 candidate, not an already tested Sentinel backend. PR 01 records installation, versions, VM limits and terms
 for each selected runtime; no Docker Desktop license is bundled or presumed. Sources checked 2026-10-17:
@@ -218,6 +223,13 @@ consumer tests. Do not preemptively split the scheduler, rules and reports into 
 | `packages/mcp/src/tiers.ts`, `run.ts` | Tool registration conventions | Sentinel writes/costs do not enter the default read-only tool tier |
 
 No initial dependency on `ingestRepo()`: consume the public parser and explicit local configuration adapters.
+The reviewed source baseline contains graph/code-parser 0.3.1; this is not a registry-publication claim.
+API delivery policy, explicit configuration guards, multipart readers, stale-declaration warnings and retained
+test reports belong to application enrichment. They do not automatically appear in public parser artifacts
+or establish security enforcement. PR 01/05 compare public parser output with fixture expectations; later
+framework packs prove order, applicability and runtime registration for their supported semantics.
+In particular, `core/openapi.ts`'s `guardsOf()`/`matchesGuard()` are API reconciliation heuristics, not
+security-enforcement oracles; do not reuse their name/substring matching as a protected verdict.
 PR 19 owns a separately attributed application-context input: a retained enriched portable graph with a
 capture receipt binding its generating code, design manifests and configuration to the scan snapshot.
 Standalone parser artifacts contain no journey metadata. A legacy graph's commit, shortened source digest or
@@ -319,6 +331,13 @@ cannot be reconciled fails integrity; do not compare every kind as a source-file
 tree, not arbitrary OS syscalls by an untrusted custom adapter; custom adapters are unavailable in v1.
 Its dot-directory/build/dependency skips remain parser coverage limits covered by the wider inventory.
 Retain the parser artifact and join file outcomes separately. Do not invent a missing diagnostic line.
+
+The public parser now honors root/nested `.gitignore` by default. Ignored inputs can be absent from
+`analysis.files` while `analysis.complete` is true; that flag describes parser selection, not security scope.
+PR 01/05 must pin the `gitignore` option and `.gitignore` read fingerprints, and exercise ignored tracked source,
+captured generated source, nested negation and unreadable ignore rules. Independent capture inventory remains
+authoritative: owner-required inputs cannot disappear because repository ignore rules request it. Using
+`gitignore: false` broadens parser selection but does not remove its hard-coded directory or hidden-file limits.
 
 The proposal's primary inventory classes become a reproducible projection: exclusion/refusal/size boundaries
 take precedence; parser failure and success follow; remaining generated/binary/unsupported inputs retain their
@@ -633,7 +652,7 @@ baseline and do not create protection against the local OS account itself.
 
 | Experiment | Early feasibility work | Required product gate |
 |---|---|---|
-| E1 inventory honesty | Public parser plus independent inventory over synthetic TS/Java/hidden config cases | PR 04/05: every enumerated entry reconciled; inaccessible boundaries explicit; no fabricated diagnostic line |
+| E1 inventory honesty | Public parser plus independent inventory over synthetic TS/Java/hidden config and ignored-source cases; pin selection and ignore inputs | PR 04/05: every enumerated entry reconciled; inaccessible boundaries explicit; no fabricated diagnostic line or completeness inferred from parser selection |
 | E2 framework semantics | Small Next/order and Spring-chain prototype with positive/negative cases | PRs 14–17: no false protected verdict in supported fixtures; unknowns counted; versions pinned |
 | E3 engine comparison | Same immutable corpus/rules/budget for candidates; record license and actual effects | PR 10/18: selected engine's measured capability matrix; no deep promise if none qualifies |
 | E4 crash recovery | Probe owner lock, publication and orphan container cleanup | PR 08/26: kill at each deterministic publication boundary 20 times; no duplicate/lost accepted result; integrity checks pass. PR 23b separately adds claim expiry/takeover |
@@ -700,8 +719,9 @@ Each PR must have a visible demonstration, explicit unsupported scope, acceptanc
 rollback story. Update this plan's status row with the actual PR link and evidence when work begins. Do not
 mark a milestone done from a fixture alone when it requires a real ingest, UI review or actual scanner run.
 
-Before PR 01, agree the architecture refinements in section 2 and record the container-prerequisite choice
-before external-scanner probes. PR 01 supplies the exact framework matrix/rule list, measured supported hosts,
+PR 00 is merged and the container-prerequisite choice is confirmed. Use the
+[execution readiness packet](execution-readiness.md) to distinguish PR 01 evidence preparation from its
+measured acceptance gate; a harness-only milestone cannot unblock PR 02. PR 01 supplies the exact framework matrix/rule list, measured supported hosts,
 accepted E3 thresholds, required-coverage policy and proposed retention/budgets before their dependent lanes
 are dispatched. E5 thresholds, live model trials and model-specific resource choices may remain explicitly
 deferred in PR 01; settle them before the corresponding model lane or required-review profile is enabled.

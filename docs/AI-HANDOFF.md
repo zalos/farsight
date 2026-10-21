@@ -41,6 +41,31 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel review and execution preparation — 2026-10-21
+
+Branch `codex/sentinel-readiness`, [PR #131](https://github.com/zalos/farsight/pull/131), prepares the next bounded implementation after reviewing recent main
+`46018cb` with Claude CLI and SOL reviewers. Planning PR #118 is verified merged at `0c8c747`; no Sentinel
+implementation has started. The owner confirmed Linux containers for external scanners with no host fallback.
+This settles that policy question; exact runtime/engine/framework support and deterministic thresholds still
+require measured PR 01 evidence. Models remain an independent track.
+
+The [execution readiness packet](proposals/farsight-sentinel/execution-readiness.md) assigns three SOL lanes:
+corpus/protocol, harness/parser, and storage/resources. The lead owns shared formats, integration, review and
+the definition of done. Evidence preparation alone cannot complete PR 01 or release PR 02. Next implementation,
+when dispatched, starts with the bounded feasibility work and proceeds only through its applicable gates.
+
+Plan adjustments cover parser ignore selection versus independent security inventory, declared validators and
+API reconciliation versus runtime enforcement, optional-package preflight, actual PR 01 CI selection, and
+rechecking placement helpers at PR 19. Both original Claude reviews are preserved. Current changes are ordinary
+Markdown; validation covers links, fences, whitespace, title conventions and affected-check selection, not
+Sentinel runtime behavior. No build, scanner/provider trial, package publication, merge or dogfood refresh is
+part of this preparation. The primary checkout and its existing editor-settings change remain untouched.
+Validation passed 38 local links/one anchor across the five current Sentinel documents, balanced fences,
+whitespace and the exact PR-title lint. The selector chooses no runtime suites for these six Markdown files;
+it selects all runtime suites for the future feasibility script. The original review files match the baseline
+byte-for-byte. Claude's source review and SOL re-review support preparation; PR 02's concrete preflight fix
+is an explicit acceptance requirement, not a claim that optional Sentinel packaging already works.
+
 ## Parser and CLI gap delivery — 2026-10-21
 
 Seven independently reviewed changes close the parser and CLI gaps: API delivery policy, raw test-server
