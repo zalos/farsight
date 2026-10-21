@@ -517,3 +517,18 @@ execution. Existing OpenAPI security schemes continue to describe authentication
 `multipart/form-data` body, a real call path from the route to the configured reader provides body
 validation evidence. The reader list uses exact function names or full node ids, is read from the root
 config only, and does not suppress missing validation for other media types.
+
+To attach separate project runs written to the same results file, import each after it finishes:
+
+```sh
+farsight tests import --results test-results/results.json --level e2e --repo example
+```
+
+The import replaces the projects named in that report and retains other projects' previous runs. Use
+`--replace` to discard every prior project from those results paths instead. A fresh ingest reads only the
+reports currently on disk; keep separate report files when those projects must survive a fresh ingest.
+Coverage remains evidence of what the run reached, without attributing it to an individual passing case.
+
+A passing end-to-end case credits the screens and journeys its own declarations name. A separate journey
+variant remains reached when it has only static references, even if a related case passed; coverage from a
+unit run supplies no evidence that the end-to-end case observed that variant.

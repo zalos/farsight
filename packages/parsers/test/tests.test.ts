@@ -1035,3 +1035,181 @@ test('a changed report: the stamp\'s commit, or HEAD\'s commit time, says whethe
   assert.equal(changedByOf(old, undefined), undefined);
   assert.equal(changedByOf(old, { sha: 'beef00' }), undefined);
 });
+
+test('a reused results file replaces only incoming projects; replace explicitly clears prior projects', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n",
+    'coverage/coverage-final.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const config = { unit: { results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } };
+  const write = (project: string, status = 'passed') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({
+    testResults: [{ name: join(dir, 'test/service.spec.ts'), projectName: project,
+      assertionResults: [{ title: 'works', fullName: 'works', ancestorTitles: [], status }] }],
+  }));
+  write('browser');
+  const first = importReports(f, dir, config);
+  assert.equal(first.gaps.some((g) => g.kind === 'empty'), false, 'empty coverage is recorded without a warning');
+  write('identity');
+  importReports(f, dir, config);
+  const node = f.nodes.find((n: GraphNode) => n.name === 'works')!;
+  assert.deepEqual(node.test!.runs!.map((r) => r.project).sort(), ['browser', 'identity']);
+  write('identity', 'failed');
+  importReports(f, dir, config);
+  assert.equal(node.test!.runs!.length, 2);
+  assert.equal(node.test!.run!.status, 'failed');
+  importReports(f, dir, config, undefined, { replace: true });
+  assert.deepEqual(node.test!.runs!.map((r) => r.project), ['identity']);
+});
+
+test('reporter location joins only a unique parameter template; mismatched files never claim exact names', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('works', () => {});\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ testResults: [
+    { name: join(dir, 'test/service.spec.ts'), assertionResults: [
+      { title: 'runner formatted value', ancestorTitles: [], status: 'passed', location: { line: 2 } },
+    ] },
+    { name: join(dir, 'test/other.spec.ts'), assertionResults: [
+      { title: 'works', ancestorTitles: [], status: 'passed' },
+    ] },
+  ] }));
+  const imported = importReports(f, dir, { unit: { results: 'coverage/results.json' } });
+  assert.equal(imported.runs, 1);
+  assert.equal(imported.reports[0]!.unjoined, 1);
+  assert.equal(f.nodes.find((n: GraphNode) => n.name === 'value %s')!.test!.run!.status, 'passed');
+  assert.equal(f.nodes.find((n: GraphNode) => n.name === 'works')!.test!.run, undefined);
+});
+
+test('passing route case and Istanbul coverage retain distinct case and run evidence', async () => {
+  const dir = tempRepo({
+    'app/api/health/route.ts': "export function GET() { return new Response('ok'); }\n",
+    'test/health.spec.ts': "import { it } from 'vitest';\nimport { GET } from '../app/api/health/route';\nit('health responds', () => { GET(); });\n",
+    'coverage/results.json': '{}',
+    'farsight.config.json': JSON.stringify({ tests: { unit: { results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } } }),
+  });
+  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/health.spec.ts'), [{ title: 'health responds', status: 'passed' }]));
+  writeFileSync(join(dir, 'coverage/coverage-final.json'), istanbulReport(join(dir, 'app/api/health/route.ts'), [{ name: 'GET', line: 1 }]));
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const testCase = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'health responds')!;
+  assert.equal(testCase.test!.run!.status, 'passed');
+  const run = f.nodes.find((n: GraphNode) => n.test?.runLevel)!;
+  assert.ok(run);
+  const observed = f.edges.filter((e: GraphEdge) => e.kind === 'covers' && e.meta?.evidence === 'observed');
+  assert.ok(observed.length > 0);
+  assert.ok(observed.every((e: GraphEdge) => e.from === run.id));
+  assert.ok(coversOf(f.edges, testCase.id).some((e: GraphEdge) => e.meta?.evidence === 'static'));
+  assert.equal(observed.some((e: GraphEdge) => e.from === testCase.id), false);
+});
+
+test('ambiguous parameter templates in one file join nothing without a unique location', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit.each([2])('value %d', () => {});\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]));
+  const imported = importReports(f, dir, { unit: { results: 'coverage/results.json' } });
+  assert.equal(imported.runs, 0);
+  assert.equal(imported.reports[0]!.unjoined, 1);
+});
+
+test('a results import cannot attach to or clear another repository with matching file and case names', async () => {
+  const dir = tempRepo({ 'test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n", 'coverage/results.json': '{}' });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const original = f.nodes.find((n: GraphNode) => n.kind === 'test')!;
+  const foreign: GraphNode = JSON.parse(JSON.stringify(original));
+  foreign.id = foreign.id.replace('sample::', 'other::');
+  foreign.loc!.repo = 'other';
+  f.nodes.push(foreign);
+  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'works', status: 'passed' }]));
+  importReports(f, dir, { unit: { results: 'coverage/results.json' } });
+  assert.equal(original.test!.run!.status, 'passed');
+  assert.equal(foreign.test!.run, undefined);
+});
+
+test('another results file preserves known parameter rows without inventing an unjoined-template gap', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('other case', () => {});\n",
+    'coverage/one.json': '{}', 'coverage/two.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  writeFileSync(join(dir, 'coverage/one.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]));
+  importReports(f, dir, { unit: { results: 'coverage/one.json' } });
+  writeFileSync(join(dir, 'coverage/two.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'other case', status: 'passed' }]));
+  const second = importReports(f, dir, { unit: { results: 'coverage/two.json' } });
+  assert.equal(second.gaps.some((g) => g.kind === 'unjoined-each'), false);
+});
+
+test('relative reporter files join a nested source project without resolving against the process cwd', async () => {
+  const dir = tempRepo({
+    'web/test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n",
+    'web/coverage/results.json': JSON.stringify({ testResults: [{ name: 'test/service.spec.ts', assertionResults: [{ title: 'works', ancestorTitles: [], status: 'passed' }] }] }),
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const imported = importReports(f, dir, { unit: { results: 'web/coverage/results.json' } });
+  assert.equal(imported.runs, 1);
+  assert.equal(imported.reports[0]!.unjoined, 0);
+  assert.equal(f.nodes.find((n: GraphNode) => n.name === 'works')!.test!.run!.status, 'passed');
+});
+
+test('a dynamic suite joins by unique reporter file, exact declaration line and literal leaf title only', async () => {
+  const dir = tempRepo({
+    'e2e/a/shared.pw.spec.ts': "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
+    'e2e/b/shared.pw.spec.ts': "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
+    'e2e/duplicate.pw.spec.ts': "import { test } from '@playwright/test'; const mode = 'mock'; test.describe(`pipeline (${mode})`, () => { test('uploads a file', () => {}); test('uploads a file', () => {}); });\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const write = (file: string, line?: number, title = 'uploads a file') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ config: {}, suites: [{ title: 'pipeline (mock)', file, specs: [{ title, ...(line != null ? { line } : {}), tests: [{ projectName: 'pipeline', status: 'expected' }] }] }] }));
+  const importOne = () => importReports(f, dir, { e2e: { results: 'coverage/results.json' } });
+  write('e2e/a/shared.pw.spec.ts', 4);
+  assert.equal(importOne().runs, 1);
+  write('shared.pw.spec.ts', 4);
+  assert.equal(importOne().runs, 0, 'basename and location are ambiguous across files');
+  write('e2e/duplicate.pw.spec.ts', 1);
+  assert.equal(importOne().runs, 0, 'duplicate case declarations at the same location never join');
+  write('e2e/missing.pw.spec.ts', 4);
+  assert.equal(importOne().runs, 0, 'mismatched file never joins');
+  write('e2e/a/shared.pw.spec.ts');
+  assert.equal(importOne().runs, 0, 'leaf title without location never ignores the suite');
+  write('e2e/a/shared.pw.spec.ts', 5);
+  assert.equal(importOne().runs, 0, 'nearby location never joins');
+  write('e2e/a/shared.pw.spec.ts', 4, 'another leaf');
+  assert.equal(importOne().runs, 0, 'location alone never joins a different leaf');
+});
+
+test('a broad unit report preserves matched case levels and replaces projects across those levels', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { test } from 'node:test';\ntest('unit case', () => {});\n",
+    'integration/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('integration %s', () => {});\n",
+    'e2e/service.spec.ts': "import { it } from 'vitest';\nit('e2e case', () => {});\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const config = { unit: { results: 'coverage/results.json' } };
+  const write = (project: string, all = true, status = 'passed') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ testResults: [
+    { name: 'test/service.spec.ts', projectName: project, assertionResults: [{ title: 'unit case', ancestorTitles: [], status }] },
+    ...(all ? [
+      { name: 'integration/service.spec.ts', projectName: project, assertionResults: [{ title: 'integration 1', ancestorTitles: [], status }] },
+      { name: 'e2e/service.spec.ts', projectName: project, assertionResults: [{ title: 'e2e case', ancestorTitles: [], status }] },
+    ] : []),
+  ] }));
+  const cases = f.nodes.filter((n: GraphNode) => n.kind === 'test');
+  const foreign: GraphNode = JSON.parse(JSON.stringify(cases.find((n: GraphNode) => n.test!.level === 'integration')));
+  foreign.id = foreign.id.replace('sample::', 'foreign::'); foreign.loc!.repo = 'foreign';
+  f.nodes.push(foreign);
+  write('one'); assert.equal(importReports(f, dir, config).runs, 3);
+  write('two'); assert.equal(importReports(f, dir, config).runs, 3);
+  assert.deepEqual(cases.map((n: GraphNode) => n.test!.level).sort(), ['e2e', 'integration', 'unit']);
+  assert.ok(cases.every((n: GraphNode) => n.test!.runs!.length === 2));
+  write('one', false, 'failed');
+  importReports(f, dir, config);
+  assert.deepEqual(cases.filter((n: GraphNode) => n.test!.level !== 'unit').map((n: GraphNode) => n.test!.runs!.map((r) => r.project)), [['two'], ['two']]);
+  const snapshot = JSON.stringify(cases.map((n: GraphNode) => n.test));
+  importReports(f, dir, config);
+  assert.equal(JSON.stringify(cases.map((n: GraphNode) => n.test)), snapshot, 'reimport is idempotent');
+  assert.equal(foreign.test!.runs, undefined, 'foreign repository is never attached or cleared');
+});

@@ -9,7 +9,7 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, relative } from 'node:path';
+import { join, relative, isAbsolute } from 'node:path';
 import type { TestRun } from '@farsight/core';
 import { testGlobToRegExp } from './cases.js';
 
@@ -39,6 +39,8 @@ export function findReports(repoRoot: string, glob: string): string[] {
 
 /** One case as a report recorded it. `fullName` is what joins it to a `test` node. */
 export interface ObservedCase {
+  /** Reporter-recorded declaration line; never inferred from row order. */
+  line?: number;
   file?: string;
   suite: string[];
   title: string;
@@ -175,7 +177,10 @@ function readVitestJson(doc: Record<string, unknown>, repoRoot: string): { cases
   const cases: ObservedCase[] = [];
   const files = (doc['testResults'] as Record<string, unknown>[]) ?? [];
   for (const f of files) {
-    const file = typeof f['name'] === 'string' ? relative(repoRoot, f['name'] as string) : undefined;
+    const namedFile = typeof f['name'] === 'string' ? f['name'] as string : undefined;
+    // A reporter-relative path is already relative to its project's root. Resolving
+    // it against Farsight's cwd invents a prefix and breaks nested source projects.
+    const file = namedFile ? (isAbsolute(namedFile) ? relative(repoRoot, namedFile) : namedFile.replace(/^\.\//, '')) : undefined;
     for (const a of (f['assertionResults'] as Record<string, unknown>[]) ?? []) {
       const suite = ((a['ancestorTitles'] as string[]) ?? []).filter((x) => typeof x === 'string');
       const title = String(a['title'] ?? '');
@@ -183,6 +188,7 @@ function readVitestJson(doc: Record<string, unknown>, repoRoot: string): { cases
       // a skipped/todo row is kept: the case ran nowhere, which is a fact about it
       cases.push({
         ...(file ? { file } : {}),
+        ...(typeof (a['location'] as Record<string, unknown> | undefined)?.['line'] === 'number' ? { line: (a['location'] as { line: number }).line } : {}),
         suite, title,
         fullName: typeof a['fullName'] === 'string' ? (a['fullName'] as string) : [...suite, title].join(' '),
         status: statusOf(a['status']),
@@ -240,6 +246,7 @@ function readPlaywrightJson(doc: Record<string, unknown>): { cases: ObservedCase
         const reason = status === 'skipped' ? skipReasonOf(t['annotations'], last?.['annotations'], spec['annotations']) : undefined;
         cases.push({
           ...(file || spec['file'] ? { file: String(spec['file'] ?? file) } : {}),
+          ...(typeof spec['line'] === 'number' ? { line: spec['line'] as number } : {}),
           suite: here, title,
           fullName: [...here, title].join(' '),
           status,

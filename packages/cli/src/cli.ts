@@ -90,7 +90,7 @@ usage:
   farsight tests list [--level unit|e2e] [--scope a,b]         every test suite in the graph with its last run and freshness
   farsight tests matrix [--format table|csv|json]              journeys x tests: declared / reached / observed, coverage, gaps
                                                                (json|csv = farsight-tests-matrix v1, one row per flow/node/test)
-  farsight tests import --results <file> [--coverage <file>] [--repo name] [--level unit|integration|e2e]
+  farsight tests import --results <file> [--coverage <file>] [--repo name] [--level unit|integration|e2e] [--replace]
                         [--stamp [digest]] [--force-stamp] [--strict]
                                                                attach a report produced elsewhere (CI) to the existing graph;
                                                                --stamp writes the checkout's content digest into each JSON report
@@ -1460,7 +1460,7 @@ switch (command) {
         fragment.edges.push({ id: `test-import-e${seq++}`, kind: 'covers', from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
         matches.push(String(meta?.match ?? ''));
       };
-      const runImport = () => { matches.length = 0; seq = null; return importReports(fragment, root, config, addEdge); };
+      const runImport = () => { matches.length = 0; seq = null; return importReports(fragment, root, config, addEdge, { replace: rest.includes('--replace') }); };
 
       let imported = runImport();
       const stamped = stamp ? stampReports(root, imported.reports, stamp, repo) : [];
@@ -1481,12 +1481,19 @@ switch (command) {
       // an import speaks only for the level it read: the e2e report that is still
       // missing, and a claim that still resolves to nothing, are facts about this graph
       // that this run did not look at and must not erase
-      const aboutThisLevel = (g: NonNullable<TestsMeta['gaps']>[number]) => g.reportKind != null && g.level === level;
+      const importedPaths = new Set(imported.reports.flatMap((r) => r.path ? [r.path] : []));
+      const aboutThisReport = (r: NonNullable<TestsMeta['reports']>[number]) => imported.reports.some((n) =>
+        n.level === r.level && n.kind === r.kind && (r.path ? n.path === r.path : n.glob === r.glob));
+      const aboutThisLevel = (g: NonNullable<TestsMeta['gaps']>[number]) => g.reportKind != null && g.level === level &&
+        (g.paths.some((p) => importedPaths.has(p)) || imported.reports.some((r) => r.kind === g.reportKind && r.glob === g.glob));
       const dropped = (prior?.gaps ?? []).filter(aboutThisLevel);
-      const keptGaps = (prior?.gaps ?? []).filter((g) => !aboutThisLevel(g));
+      const resolvedEach = (g: NonNullable<TestsMeta['gaps']>[number]) => g.kind === 'unjoined-each' && fragment.nodes.some((n) =>
+        n.loc?.repo === repo && n.test?.runs?.length && g.paths.includes(`${n.test.file}:${n.loc?.line ?? 0}`));
+      const keptGaps = (prior?.gaps ?? []).filter((g) => !aboutThisLevel(g) && !resolvedEach(g));
       // a folded sentence begins with its group's first gap text, so a dropped gap takes
       // its sentence with it; an older graph with no `gaps` cannot be filtered, and its
       // sentences give way to what was just read rather than being doubled up
+      dropped.push(...(prior?.gaps ?? []).filter((g) => !aboutThisLevel(g) && resolvedEach(g)));
       const keptBlind = prior?.gaps ? (prior.blindSpots ?? []).filter((b) => !dropped.some((g) => b.startsWith(g.text))) : [];
       out.meta.tests = {
         ...out.meta.tests,
@@ -1495,7 +1502,7 @@ switch (command) {
           cases: counted.cases,
           edges: counted.edges,
           runs: counted.runs,
-          reports: [...(prior?.reports ?? []).filter((r) => r.level !== level), ...imported.reports],
+          reports: [...(prior?.reports ?? []).filter((r) => !aboutThisReport(r)), ...imported.reports],
           gaps: [...keptGaps, ...imported.gaps],
           blindSpots: [...keptBlind, ...imported.blindSpots],
           ...(fragment.meta.sourceDigest ? { sourceDigest: fragment.meta.sourceDigest } : {}),
@@ -1514,6 +1521,7 @@ switch (command) {
       if (strict) {
         const bad: string[] = [];
         for (const r of imported.reports) {
+          if (r.kind === 'coverage' && r.reason === 'empty') continue;
           if (r.reason === 'no-match') bad.push(`\`${r.glob}\` matched 0 files — no ${r.level} ${r.kind} report`);
           else if (r.reason === 'unreadable') bad.push(`\`${r.path}\` is not a report format this build reads`);
           else if ((r.joined ?? 0) === 0 && (r.edges ?? 0) === 0) bad.push(`\`${r.path}\` joined 0 cases and produced 0 covers edges`);

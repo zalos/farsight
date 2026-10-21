@@ -354,6 +354,7 @@ export function importReports(
   repoRoot: string,
   config: TestsConfigBlock,
   addEdge?: (from: string, to: string, meta: GraphEdge['meta'], resolution: GraphEdge['resolution']) => void,
+  options: { replace?: boolean } = {},
 ): { reports: TestsMeta['reports']; edges: number; runs: number; gaps: TestsGap[]; blindSpots: string[]; errors: string[]; head?: { sha: string; at?: string } } {
   const reports: ReportEntry[] = [];
   const gaps: TestsGap[] = [];
@@ -373,8 +374,8 @@ export function importReports(
   }
   // re-importing the same reports must not double anything up: drop the run-level
   // nodes and observed edges these files produced last time, and the `runs[]` rows
-  // they wrote, before reading them again (03 §3.6)
-  clearPriorImport(fragment, repoRoot, planned);
+  // for incoming projects, before reading them again (03 §3.6)
+  clearPriorImport(fragment, repoRoot, planned, options.replace);
 
   let seq = fragment.edges.length;
   const add = addEdge ?? ((from, to, meta, resolution) => {
@@ -386,14 +387,14 @@ export function importReports(
   const eachNodes: GraphNode[] = [];
   const nodesByPath = new Map<string, GraphNode[]>();
   for (const n of fragment.nodes) {
-    if (n.kind === 'test' && n.test && !n.test.runLevel) {
+    if (n.kind === 'test' && n.test && !n.test.runLevel && n.loc?.repo === fragment.repo) {
       const key = [...n.test.suite, n.name].join(' ');
       if (!byFullName.has(key)) byFullName.set(key, []);
       byFullName.get(key)!.push(n);
       if (n.tags.includes('test:each')) eachNodes.push(n);
       continue;
     }
-    if (n.kind === 'test' || !n.loc) continue;
+    if (n.kind === 'test' || !n.loc || n.loc.repo !== fragment.repo) continue;
     if (!nodesByPath.has(n.loc.path)) nodesByPath.set(n.loc.path, []);
     nodesByPath.get(n.loc.path)!.push(n);
   }
@@ -425,9 +426,9 @@ export function importReports(
         let empty = false;
         try { empty = /^\s*(\{\s*\}|\[\s*\])\s*$/.test(readFileSync(abs, 'utf8')); } catch { /* unreadable: the generic message below */ }
         reports.push({ path, kind, runner, level, glob, matched: files.length, reason: empty ? 'empty' : 'unreadable', freshness: 'unknown' });
-        if (empty) {
+        if (empty && kind !== 'coverage') {
           gaps.push({ kind: 'empty', level, reportKind: kind, glob, paths: [path], text: `\`${path}\` is an empty report — the run recorded nothing there, so it adds no observed evidence` });
-        } else {
+        } else if (!empty) {
           gaps.push({ kind: 'unreadable', level, reportKind: kind, glob, paths: [path], text: `\`${path}\` is not a report format this build reads, so nothing in it became evidence` });
           errors.push(`tests ${path}: not a report format this build reads`);
         }
@@ -477,7 +478,7 @@ export function importReports(
   // report of that level has had its chance (03 §3.1)
   for (const node of eachNodes) {
     const level = node.test!.level;
-    if (!levelsWithResults.has(level) || eachJoinedAnywhere.has(node)) continue;
+    if (!levelsWithResults.has(level) || eachJoinedAnywhere.has(node) || node.test!.runs?.length) continue;
     const at = `${node.test!.file}:${node.loc?.line ?? 0}`;
     gaps.push({
       kind: 'unjoined-each', level, reportKind: 'results', paths: [at],
@@ -500,7 +501,7 @@ function runNodeId(repo: string, level: TestRef['level'], reportPath: string): s
 
 /**
  * Idempotent re-import (03 §3.6): before a report is read again, everything the
- * *same* report wrote last time goes — the run-level node of that level and
+ * same report and incoming project wrote last time goes — the run-level node of that level and
  * project with its observed edges, and the `runs[]` rows whose `report` names one
  * of the files about to be read. Evidence from any other report is untouched, so
  * importing twice leaves identical node and edge counts.
@@ -509,15 +510,27 @@ function clearPriorImport(
   fragment: GraphFragment,
   repoRoot: string,
   planned: { level: TestRef['level']; kind: 'results' | 'coverage'; block: TestReportConfig; files: string[] }[],
+  replace = false,
 ): void {
   const runIds = new Set<string>();
   const reportPaths = new Set<string>();
+  const projectsByReport = new Map<string, Set<string>>();
   for (const { level, kind, block, files } of planned) {
-    if (kind === 'results') for (const r of stringList(block.report)) reportPaths.add(r);
+    if (kind === 'results') {
+      for (const r of stringList(block.report)) reportPaths.add(r);
+    }
     for (const abs of files) {
       const path = relative(repoRoot, abs);
       if (kind === 'coverage') runIds.add(runNodeId(fragment.repo, level, path));
-      else reportPaths.add(path);
+      else {
+        const projects = new Set((readReport(repoRoot, abs)?.cases ?? []).map((c) => c.project ?? 'default'));
+        for (const key of [path, ...stringList(block.report)]) {
+          reportPaths.add(key);
+          const prior = projectsByReport.get(key) ?? new Set<string>();
+          for (const project of projects) prior.add(project);
+          projectsByReport.set(key, prior);
+        }
+      }
     }
   }
   if (runIds.size) {
@@ -532,8 +545,8 @@ function clearPriorImport(
   if (!reportPaths.size) return;
   for (const node of fragment.nodes) {
     const ref = node.test;
-    if (node.kind !== 'test' || !ref?.runs?.length) continue;
-    const kept = ref.runs.filter((r) => !(r.report && reportPaths.has(r.report)));
+    if (node.kind !== 'test' || node.loc?.repo !== fragment.repo || !ref?.runs?.length) continue;
+    const kept = ref.runs.filter((r) => !(r.report && reportPaths.has(r.report) && (replace || projectsByReport.get(r.report)?.has(r.project ?? 'default'))));
     if (kept.length === ref.runs.length) continue;
     if (kept.length) { ref.runs = kept; ref.run = foldRuns(kept); }
     else { delete ref.runs; delete ref.run; }
@@ -569,24 +582,43 @@ function attachRuns(
   let skippedJoined = 0;
   const gaps: TestsGap[] = [];
   const sameFile = (node: GraphNode, c: ObservedCase): boolean =>
-    !c.file || node.test!.file.endsWith(c.file) || c.file.endsWith(node.test!.file);
+    !c.file || node.test!.file === c.file || node.test!.file.endsWith(`/${c.file}`) || c.file.endsWith(`/${node.test!.file}`);
+  // Literal leaf titles with an exact reporter location can survive a runtime
+  // describe title. Keep all candidates so a suffix-only file name never picks
+  // one of two matching source files or duplicate declarations.
+  const byLocation = new Map<string, GraphNode[]>();
+  for (const nodes of byFullName.values()) for (const node of nodes) {
+    if (!node.loc || node.tags.includes('test:title-heuristic')) continue;
+    const key = `${node.loc.line}\0${node.name}`;
+    const located = byLocation.get(key) ?? [];
+    located.push(node);
+    byLocation.set(key, located);
+  }
   const match = (c: ObservedCase): GraphNode[] => {
-    const hits = byFullName.get(c.fullName) ?? byFullName.get([...c.suite, c.title].join(' ')) ?? [];
+    const hits = (byFullName.get(c.fullName) ?? byFullName.get([...c.suite, c.title].join(' ')) ?? []);
     // a JUnit row carries no file: it may only join when exactly one node has that
     // full name — attaching it to every hit would invent evidence (03 §3.1)
     if (!c.file) return hits.length === 1 ? hits : [];
-    if (hits.length <= 1) return hits;
     // same title in two spec files: the report names the file, so use it
     const narrowed = hits.filter((n) => sameFile(n, c));
-    return narrowed.length ? narrowed : hits;
+    if (narrowed.length === 1) return narrowed;
+    if (narrowed.length > 1 || c.line == null) return [];
+    const located = (byLocation.get(`${c.line}\0${c.title}`) ?? []).filter((n) => sameFile(n, c));
+    return located.length === 1 ? located : [];
   };
   // a row no exact name claimed may be one row of a `.each` template in the same
   // file and describe path — the reporter expanded the title, the node still holds it
   const template = (c: ObservedCase): GraphNode | undefined => {
-    const hits = eachNodes.filter((n) => sameFile(n, c) && n.test!.suite.join(' ') === c.suite.join(' ') && eachTitleMatches(n.name, c.title));
+    const candidates = eachNodes.filter((n) => sameFile(n, c));
+    if (c.file && c.line != null) {
+      const located = candidates.filter((n) => n.loc?.line === c.line);
+      if (located.length === 1) return located[0];
+      if (located.length > 1) return undefined;
+    }
+    const hits = candidates.filter((n) => sameFile(n, c) && n.test!.suite.join(' ') === c.suite.join(' ') && eachTitleMatches(n.name, c.title));
     // without a file the pattern is all there is, so only a single candidate may take the row
     if (!c.file) return hits.length === 1 ? hits[0] : undefined;
-    return hits[0];
+    return hits.length === 1 ? hits[0] : undefined;
   };
 
   const put = (node: GraphNode, run: TestRun, project?: string) => {

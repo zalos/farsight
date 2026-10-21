@@ -151,3 +151,19 @@ describe('farsight tests matrix', () => {
     assert.match(r.out, /\b(observed|reached|declared|none)\b/);
   });
 });
+
+test('empty coverage is informational under strict import, and unrelated report metadata survives', () => {
+  const empty = join(repo, 'coverage/empty.json');
+  writeFileSync(empty, '{}');
+  const skipped = run(['tests', 'import', '--repo', 'invoice-app', '--graph', graph, '--coverage', empty, '--strict']);
+  assert.equal(skipped.status, 0, skipped.err);
+  assert.doesNotMatch(skipped.err, /⚠/);
+  const before = JSON.parse(readFileSync(graph, 'utf8')).meta.tests['invoice-app'];
+  const report = join(repo, 'coverage/another-results.json');
+  writeFileSync(report, JSON.stringify({ testResults: [{ name: join(repo, 'test/unknown.spec.ts'), assertionResults: [{ title: 'new row', status: 'passed' }] }] }));
+  const imported = run(['tests', 'import', '--repo', 'invoice-app', '--graph', graph, '--results', report]);
+  assert.equal(imported.status, 0, imported.err);
+  const after = JSON.parse(readFileSync(graph, 'utf8')).meta.tests['invoice-app'];
+  for (const prior of before.reports) assert.ok(after.reports.some((r: { path?: string; glob?: string }) => r.path === prior.path && r.glob === prior.glob));
+  for (const prior of before.gaps) assert.ok(after.gaps.some((g: { text: string }) => g.text === prior.text));
+});

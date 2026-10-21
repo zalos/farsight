@@ -5792,7 +5792,35 @@
         "suite": [
           "tax rates"
         ],
-        "file": "web/test/rates.spec.ts"
+        "file": "web/test/rates.spec.ts",
+        "runs": [
+          {
+            "id": "051008f1facf",
+            "at": "2025-09-10T00:00:00.000Z",
+            "sourceDigest": "08f46f22a395",
+            "freshness": "changed",
+            "stale": true,
+            "report": "web/coverage/vitest-results.json",
+            "status": "passed",
+            "durationMs": 7,
+            "project": "default",
+            "join": "each-template",
+            "rows": 3
+          }
+        ],
+        "run": {
+          "id": "051008f1facf",
+          "at": "2025-09-10T00:00:00.000Z",
+          "sourceDigest": "08f46f22a395",
+          "freshness": "changed",
+          "stale": true,
+          "report": "web/coverage/vitest-results.json",
+          "status": "passed",
+          "durationMs": 7,
+          "project": "default",
+          "join": "each-template",
+          "rows": 3
+        }
       },
       "project": {
         "name": "compat",
@@ -9486,7 +9514,7 @@
         "static": 6,
         "observed": 0
       },
-      "runs": 13,
+      "runs": 14,
       "reports": [
         {
           "path": "web/coverage/vitest-results.json",
@@ -9499,11 +9527,11 @@
           "glob": "web/coverage/vitest-results.json",
           "matched": 1,
           "reason": "digest-changed",
-          "joined": 5,
+          "joined": 6,
           "rows": 8,
-          "unjoined": 3,
-          "eachJoined": 0,
-          "eachUnjoined": 1
+          "unjoined": 0,
+          "eachJoined": 1,
+          "eachUnjoined": 0
         },
         {
           "path": "web/coverage/coverage-final.json",
@@ -9563,15 +9591,6 @@
           "text": "`web/e2e/billing.pw.spec.ts` declares `CON-99`, which nothing in the graph matches"
         },
         {
-          "kind": "unjoined-each",
-          "level": "unit",
-          "reportKind": "results",
-          "paths": [
-            "web/test/rates.spec.ts:12"
-          ],
-          "text": "`web/test/rates.spec.ts:12` is a parametrised case (`the %s rate is %d`) no row in the unit results report matched — its rows joined nothing"
-        },
-        {
           "kind": "digest-changed",
           "level": "unit",
           "reportKind": "results",
@@ -9605,7 +9624,6 @@
       "blindSpots": [
         "`web/e2e/coverage/coverage-final.json` matched 0 files under compat — no e2e coverage report; declared and static evidence only",
         "`web/e2e/billing.pw.spec.ts` declares `CON-99`, which nothing in the graph matches",
-        "`web/test/rates.spec.ts:12` is a parametrised case (`the %s rate is %d`) no row in the unit results report matched — its rows joined nothing",
         "`web/coverage/vitest-results.json` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now ×2 — `web/coverage/vitest-results.json`, `web/coverage/coverage-final.json`",
         "`web/e2e/results.json` was produced against a different checkout — the code changed since the run, so it is evidence of the past, not of now"
       ],
