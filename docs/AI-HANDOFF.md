@@ -1448,3 +1448,15 @@ and `_workitems/edit/4711` URLs; the same shapes in branch names.
 When you finish a pass, add its summary to *What shipped most recently*, keep this file short, and keep the dated
 detail (measurements on a client app, review evidence, session handoffs) outside the repo. It is read in full at the
 start of every session.
+
+## API delivery policy — 2026-10-21
+
+Branch `codex/gap-api-policy` adds a separate reconciliation `policy` without changing raw operation
+lists, counts or graph node contracts. API diff supports `--phase` and selective
+`--strict=missing,undocumented,notes`; config supplies `openapi[].phase`, `phaseOrder` and root-only
+`internalRoutes`. Unknown phases remain missing. ADR 13 and the walkthrough describe the public contract.
+
+Checked in an isolated worktree with Node 24/pnpm 9: workspace build; affected CLI/parser typechecks;
+32 focused core/count/CLI tests; 12 parser OpenAPI tests; catalog lint and commit-title lint passed.
+Reference-app acceptance, main comparison and browser validation belong to the integration pass;
+no global install, primary build, live-server restart or reference-source edit was performed here.

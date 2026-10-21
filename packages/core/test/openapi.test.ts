@@ -288,3 +288,25 @@ test('apiSurface + consumersOf: spec-backed and implied surfaces, counts, consum
   assert.equal(consumers[0]!.crossRepo, false);
   assert.deepEqual(consumers[0]!.screens.map((s) => s.name), ['CreateInvoiceForm']);
 });
+
+test('delivery policy preserves raw evidence and only plans demonstrably later phases', () => {
+  const doc: OpenApiDoc = { openapi: '3.1.0', paths: {
+    '/now': { get: { 'x-phase': 'preview' } },
+    '/later': { get: { 'x-phase': 'release' } },
+    '/unknown': { get: { 'x-phase': 'unlisted' } },
+    '/internal': { get: { 'x-internal': true } },
+  } };
+  const routes = [node('internal', 'route', 'GET /internal', { loc: loc('routes.ts', 1) }),
+    node('extra', 'route', 'GET /private/:id', { loc: loc('routes.ts', 2) })];
+  const index = buildIndex(routes, []);
+  const opts = { repo: 'app', phase: 'preview', phaseOrder: ['preview', 'release'], internalRoutes: ['GET /private/{id}'] };
+  const result = reconcile(doc, index, { repo: 'app', path: 'api.yaml' }, opts);
+  assert.equal(result.counts.specOnly, 3);
+  assert.equal(result.counts.codeOnly, 1);
+  assert.equal(result.counts.drift, 4);
+  assert.deepEqual(result.policy.counts, { missing: 2, undocumented: 0, notes: 0, planned: 1, internal: 1, drift: 2 });
+  assert.equal(result.matched[0]?.contract.status, 'both');
+  assert.equal(reconcile(doc, index, { repo: 'app', path: 'api.yaml' }, { ...opts, phase: 'unknown' }).policy.counts.planned, 0);
+  assert.equal(reconcile(doc, index, { repo: 'app', path: 'api.yaml' }, { repo: 'app', phase: 'preview' }).policy.counts.planned, 2);
+  assert.match(driftMarkdown(result), /planned 1/);
+});

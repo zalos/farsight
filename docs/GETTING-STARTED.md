@@ -475,3 +475,26 @@ Farsight's own e2e suite shows up the same way a product's would: `pnpm build &&
 - **`Cannot find package 'oxc-parser'` when running the bundle** — you invoked `build/farsight-cli/dist/farsight.mjs` directly. Native/SDK deps are external in the bundle; install the tarball (Options A/B) or run `packages/cli/dist/cli.js` from the workspace (Option C).
 - **The MCP server doesn't show up in the agent session** — MCP config is read at session start; restart the session (or `/mcp` in Claude Code). Also confirm `graph.json` exists at the project root — the server exits if the snapshot is missing.
 - **Reinstalled the tarball but behavior didn't change** — same-version reinstalls can hit npm's cache; `npm i -g --force build/farsight-cli-*.tgz` or bump the root `package.json` version before repacking. Then restart `serve`/MCP sessions.
+
+### Gate API delivery by phase
+
+Run an ad-hoc diff from the source root so it reads that source's `farsight.config.json`:
+
+```json
+{
+  "openapi": [{ "path": "docs/api/openapi.yaml", "phase": "preview", "phaseOrder": ["preview", "release"] }],
+  "internalRoutes": ["GET /healthz"]
+}
+```
+
+```sh
+farsight api diff --spec docs/api/openapi.yaml --repo app --phase preview --strict=missing,undocumented
+```
+
+Operations declared with `x-phase: release` and no implementation are planned at preview, then missing
+at release. Unknown phases remain missing. Without `phaseOrder`, the contract's first use orders phases;
+use an explicit list when document order does not reflect delivery order. Internal declarations use exact
+method/path matching, with equivalent parameter spellings; they suppress undocumented policy failures while
+retaining code-only evidence. `x-internal: true` on a contract operation still requires implementation.
+Plain `--strict` checks missing, undocumented and matched contract notes; naming observations remain advisory.
+JSON keeps the raw `counts` and operation lists alongside the separate `policy` classifications and counts.

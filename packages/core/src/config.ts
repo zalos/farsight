@@ -35,7 +35,9 @@ export interface FarsightConfig {
   /** entrypoint label → matchers. Matching nodes get searchable entrypoint tags so trace_flow can seed from them (cron/queue jobs…). */
   entrypoints?: Record<string, string[]>;
   /** OpenAPI/Swagger documents describing this repo's HTTP surface — a repo-relative path or a URL each. Discovery by filename still runs; this adds specs it would not find (e.g. served by the API itself). */
-  openapi?: { path?: string; url?: string; name?: string }[];
+  openapi?: { path?: string; url?: string; name?: string; phase?: string; phaseOrder?: string[] }[];
+  /** Exact internal METHOD /path declarations, excluded from undocumented-policy failures only. */
+  internalRoutes?: string[];
   /** Design manifests (docs/design/screens.json) describing this repo's screens — see docs/proposals/design-source.md. Discovery by filename still runs. */
   design?: { manifest?: string; path?: string; url?: string; name?: string }[];
   /** Test suites and the reports that observed them — see docs/proposals/tests-surface.md §3.2. Discovery by glob still runs; this adds report locations and extra spec globs. */
@@ -85,11 +87,11 @@ export type DecisionConfigEntry = Partial<Omit<DecisionDecl, 'id'>> & { id: stri
 /** The fields a farsight.config.json may give, in the order the docs list them. Any other key is ignored with a note. */
 export const CONFIG_FIELDS = [
   'tags', 'glossary', 'guards', 'gateTiers', 'entrypoints', 'setup', 'plumbing', 'design', 'openapi', 'tests', 'storybook',
-  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle', 'decisions',
+  'externals', 'stores', 'journeys', 'projects', 'tooling', 'lifecycle', 'decisions', 'internalRoutes',
 ] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** Fields only the source's root farsight.config.json may give; a nested file's value is ignored with a note. */
-export const ROOT_ONLY_CONFIG_FIELDS = ['projects', 'tooling'] as const satisfies readonly (keyof FarsightConfig)[];
+export const ROOT_ONLY_CONFIG_FIELDS = ['projects', 'tooling', 'internalRoutes'] as const satisfies readonly (keyof FarsightConfig)[];
 
 /** `farsight.config.json → journeys`: the same shapes as a manifest's, every field but the id optional (an override gives only what it changes). */
 export interface JourneysConfig {

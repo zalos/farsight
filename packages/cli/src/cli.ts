@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync, statSync } from 'node:fs';
 import {
   GraphStore, buildIndex, setFreshnessMeta,
   SnapshotDb, SnapshotUnavailable, diffGraphs, parsePolicy, applyPolicy, toSarif, toMarkdown, changeSentence,
-  stitchHttp, apiSurface, graphToSpec, reconcile, driftMarkdown,
+  stitchHttp, apiSurface, graphToSpec, reconcile, driftMarkdown, loadConfig,
   storybookLive,
   designSurface, reconcileDesign, designDriftMarkdown, isDesignManifest, buildLine, buildInfo, installState, currencyAdvice,
   testsSurface, formatMetric, testsMatrixV1, testsMatrixRows, testsMatrixCsv, countedLine, breakdownText, countedText, storyCounts, t as word, agentsCounted,
@@ -77,7 +77,7 @@ usage:
   farsight api list [--graph graph.json]                       every API surface in the graph (spec-backed or implied)
   farsight api spec --repo <name> [--out openapi.yaml] [--format yaml|json]
                                                                generate an OpenAPI 3.1 document from the code (inferences marked)
-  farsight api diff --spec <path|url> [--repo <name>] [--format json|md] [--strict]
+  farsight api diff --spec <path|url> [--repo <name>] [--format json|md] [--phase <name>] [--strict[=missing,undocumented,notes]]
                                                                a proposed spec vs the code: not implemented / undocumented /
                                                                mismatched; --strict exits 1 on any drift
   farsight deps list [--repo name] [--project name] [--third-party | --workspace] [--hops N] [--json]
@@ -1046,10 +1046,18 @@ switch (command) {
       if (!specRef) fail('api diff needs --spec <path|url>');
       const parsed = await readSpecSource(specRef);
       const repo = flag('repo');
-      const result = reconcile(parsed.doc, index, { repo: repo ?? 'proposed', path: specRef, lineOf: parsed.lineOf }, repo ? { repo } : {});
+      const config = loadConfig(resolve('farsight.config.json'));
+      const policy = config?.openapi?.find((entry) => entry.path === specRef || entry.url === specRef);
+      const strictArg = rest.find((arg) => arg === '--strict' || arg.startsWith('--strict='));
+      const categories = strictArg === '--strict' ? ['missing', 'undocumented', 'notes'] : strictArg?.slice('--strict='.length).split(',');
+      if (categories?.some((kind) => !['missing', 'undocumented', 'notes'].includes(kind))) fail(word('api.policy.strictError', 'professional'));
+      const result = reconcile(parsed.doc, index, { repo: repo ?? 'proposed', path: specRef, lineOf: parsed.lineOf }, {
+        ...(repo ? { repo } : {}), phase: flag('phase') ?? policy?.phase,
+        phaseOrder: policy?.phaseOrder, internalRoutes: config?.internalRoutes,
+      });
       if (flag('format', 'md') === 'json') console.log(JSON.stringify(result, null, 2));
       else console.log(driftMarkdown(result));
-      if (rest.includes('--strict') && result.counts.drift > 0) process.exit(1);
+      if (categories?.some((kind) => result.policy.counts[kind as 'missing' | 'undocumented' | 'notes'] > 0)) process.exit(1);
       break;
     }
     fail(`unknown api subcommand: ${sub} (list | spec | diff)`);
