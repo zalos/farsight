@@ -11,11 +11,24 @@ export function inside(root, path) {
   if (!relative(resolve(root), full) || relative(resolve(root), full).startsWith(`..${sep}`)) throw new Error('Path escapes root');
   return full;
 }
+async function regularDirectory(root) {
+  const stat=await fs.lstat(root);
+  if(stat.isSymbolicLink()) throw new Error('Fixture directory symlink refused');
+  if(!stat.isDirectory()) throw new Error('Fixture root must be a regular directory');
+}
+export async function resolveFixtureRoot(repoRoot, path) {
+  const full=inside(repoRoot,path);
+  await regularDirectory(repoRoot);
+  let current=resolve(repoRoot);
+  // Fixed local fixtures: refuse existing redirected components; no hostile filesystem race claim.
+  for(const part of path.split('/')) {current=resolve(current,part);await regularDirectory(current);}
+  return full;
+}
 export async function inventory(root) {
+  await regularDirectory(root);
   const rows = [];
   async function walk(dir, prefix = '') {
     for (const name of (await fs.readdir(dir)).sort()) {
-
       const path = prefix ? `${prefix}/${name}` : name;
       const full = resolve(dir, name), stat = await fs.lstat(full);
       if (stat.isSymbolicLink()) rows.push({path, kind:'symlink', digest:sha256(await fs.readlink(full))});
@@ -29,7 +42,11 @@ export async function inventory(root) {
   return rows;
 }
 export async function loadCorpus(fixtureRoot) {
-  const body = await fs.readFile(resolve(fixtureRoot,'cases.json'));
+  await regularDirectory(fixtureRoot);
+  const index=resolve(fixtureRoot,'cases.json'),stat=await fs.lstat(index);
+  if(stat.isSymbolicLink()) throw new Error('Fixture index symlink refused');
+  if(!stat.isFile()) throw new Error('Fixture index must be a regular file');
+  const body = await fs.readFile(index);
   const corpus = JSON.parse(body);
   if (corpus.schemaVersion !== 'sentinel-feasibility-corpus-v1' || !Array.isArray(corpus.cases) || !corpus.cases.length) throw new Error('Invalid fixture corpus');
   const ids = new Set();

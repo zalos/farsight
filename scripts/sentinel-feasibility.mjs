@@ -4,7 +4,7 @@ import { resolve, relative, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { platform, arch, cpus, totalmem } from 'node:os';
-import { sha256, canonical, inside, inventory, loadCorpus } from './sentinel-feasibility/parser.mjs';
+import { sha256, canonical, inside, inventory, loadCorpus, resolveFixtureRoot } from './sentinel-feasibility/parser.mjs';
 
 const REPO=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 export const EXPERIMENTS=Object.freeze(Array.from({length:8},(_,i)=>`E${i+1}`));
@@ -87,7 +87,7 @@ export async function runHarness(options,{repoRoot=REPO}={}) {
   const plan={format:'sentinel-feasibility-plan/draft-1',effects:manifest.effects,manifestSha256:sha256(manifestBytes),experiments:manifest.experiments.map(item=>({id:item.id,selected:options.experiments.includes(item.id),probe:item.probe??null,decision:item.decision,reason:item.reason}))};
   if(!options.run) return plan;
   if(Number(process.versions.node.split('.')[0])<24) throw new Error('Node 24 or newer required');
-  const fixtureRoot=inside(repoRoot,manifest.fixtureRoot);
+  const fixtureRoot=await resolveFixtureRoot(repoRoot,manifest.fixtureRoot);
   const corpus=await loadCorpus(fixtureRoot),fixtureInventory=await inventory(fixtureRoot);
   const out=resolve(options.out);
   const outputScope=relative(fixtureRoot,out);
@@ -98,7 +98,7 @@ export async function runHarness(options,{repoRoot=REPO}={}) {
   let revision='unavailable',dirty=true;
   try {revision=execFileSync('git',['rev-parse','HEAD'],{cwd:repoRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();dirty=Boolean(execFileSync('git',['status','--porcelain'],{cwd:repoRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim());} catch {}
   const envelope={format:'sentinel-feasibility-results/draft-1',revision,dirty,runtime:{node:process.versions.node,sqlite:process.versions.sqlite??null,zstd:process.versions.zstd??null,platform:platform(),arch:arch(),cpus:cpus().length,memoryBytes:totalmem()},startedAt,manifest:{sha256:sha256(manifestBytes)},fixtures:{corpusSha256:corpus.digest,inventorySha256:sha256(canonical(fixtureInventory))},effects:manifest.effects,harness:[],experiments:[]};
-  for(const path of ['scripts/sentinel-feasibility.mjs','scripts/sentinel-feasibility/parser.mjs','scripts/sentinel-feasibility/storage.mjs','scripts/sentinel-feasibility/codec.mjs']) {
+  for(const path of ['scripts/sentinel-feasibility.mjs','scripts/sentinel-feasibility/parser.mjs','scripts/sentinel-feasibility/storage.mjs','scripts/sentinel-feasibility/storage-worker.mjs','scripts/sentinel-feasibility/codec.mjs']) {
     try {const bytes=await fs.readFile(resolve(REPO,path));envelope.harness.push({path,sha256:sha256(bytes),bytes:bytes.length});} catch {}
   }
   await fs.writeFile(resolve(out,'manifest.json'),manifestBytes,{flag:'wx'});

@@ -36,3 +36,15 @@ test('actual public TS and Java probe retains independent inventories and negati
   assert.ok(result.checks.filter(row=>row.id.endsWith(':source-unchanged')).every(row=>row.passed));
   assert.ok(result.checks.filter(row=>row.id.endsWith(':input-digests')).every(row=>row.passed));
 });
+
+test('corpus and inventory refuse a symlinked root before reading outside it',async t=>{
+  const root=await scratch(t),outside=resolve(root,'outside'),alias=resolve(root,'alias');
+  await fs.mkdir(outside);await fs.writeFile(resolve(outside,'cases.json'),'not a corpus');await fs.symlink(outside,alias);
+  await assert.rejects(loadCorpus(alias),/directory symlink refused/);
+  await assert.rejects(inventory(alias),/directory symlink refused/);
+});
+test('corpus refuses a symlinked index before parsing its target',async t=>{
+  const root=await scratch(t),fixtures=resolve(root,'fixtures');await fs.mkdir(fixtures);
+  const outside=resolve(root,'external.json');await fs.writeFile(outside,'not a corpus');await fs.symlink(outside,resolve(fixtures,'cases.json'));
+  await assert.rejects(loadCorpus(fixtures),/index symlink refused/);
+});

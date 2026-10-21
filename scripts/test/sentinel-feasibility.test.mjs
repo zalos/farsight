@@ -64,3 +64,24 @@ test('requesting an unavailable E2 probe returns an actual nonzero CLI status',a
   assert.equal(result.experiments.find(row=>row.experiment==='E2').status,'blocked');
   assert.ok(result.experiments.filter(row=>!row.selected).every(row=>row.status==='deferred'));
 });
+
+test('run refuses a fixture root or intermediate directory symlink before output creation',async t=>{
+  const root=await scratch(t),repoRoot=resolve(root,'repo'),outside=resolve(root,'outside');
+  await fs.mkdir(repoRoot);await fs.mkdir(outside);await fs.mkdir(resolve(outside,'fixtures'));
+  await fs.writeFile(resolve(outside,'fixtures/cases.json'),'not a corpus');
+  await fs.symlink(resolve(outside,'fixtures'),resolve(repoRoot,'redirected-root'));
+  await fs.symlink(outside,resolve(repoRoot,'redirected-parent'));
+  for(const [index,fixtureRoot] of ['redirected-root','redirected-parent/fixtures'].entries()) {
+    const m=manifest();m.fixtureRoot=fixtureRoot;const path=resolve(root,`manifest-${index}.json`),out=resolve(root,`out-${index}`);
+    await fs.writeFile(path,JSON.stringify(m));
+    await assert.rejects(runHarness({manifest:path,run:true,experiments:['E2'],out},{repoRoot}),/directory symlink refused/);
+    await assert.rejects(fs.access(out),/ENOENT/);
+  }
+});
+test('run refuses a symlinked corpus index before output creation',async t=>{
+  const root=await scratch(t),fixtures=resolve(root,'fixtures');await fs.mkdir(fixtures);
+  await fs.writeFile(resolve(root,'outside.json'),'not a corpus');await fs.symlink(resolve(root,'outside.json'),resolve(fixtures,'cases.json'));
+  const path=resolve(root,'manifest.json'),out=resolve(root,'out');await fs.writeFile(path,JSON.stringify(manifest()));
+  await assert.rejects(runHarness({manifest:path,run:true,experiments:['E2'],out},{repoRoot:root}),/index symlink refused/);
+  await assert.rejects(fs.access(out),/ENOENT/);
+});
