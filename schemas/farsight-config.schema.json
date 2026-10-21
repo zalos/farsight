@@ -130,6 +130,11 @@
         }
       }
     },
+    "validators": {
+      "type": "array",
+      "description": "Configured multipart readers, named by exact function name or full node id. Only a real same-source call path from a route with a declared multipart/form-data body supplies validation credit; naming a reader alone proves nothing.",
+      "items": { "type": "string" }
+    },
     "internalRoutes": {
       "type": "array",
       "description": "Exact internal METHOD /path declarations, excluded only from undocumented-policy failures. Parameter spelling is normalized; these are not globs and raw drift remains visible.",
