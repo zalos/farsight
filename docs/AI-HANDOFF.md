@@ -1518,7 +1518,7 @@ test-evidence suite. The integrating lead owns combined CI checks and real-appli
 
 ## Packaging prerequisite follow-up (2026-10-21)
 
-Packaging now prints `pnpm build && node scripts/pack.mjs` when the compiled core version module is missing,
+Packaging now prints `pnpm build && node scripts/pack.mjs` when compiled workspace entries or the core version module are missing,
 before touching prior build artifacts. The regression test uses a disposable unbuilt checkout. Release docs
 show a pinned GitHub tarball install for CI and distinguish a release commit from subsequent `main` changes.
 MCP already reports its running build in `graph_overview`; `refresh_graph` already re-ingests and reloads,
