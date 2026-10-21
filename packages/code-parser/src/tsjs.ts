@@ -1277,6 +1277,8 @@ function* extractTsJs(repoPath: string, options: IngestOptions): Generator<void,
     const urlish = (chain: string[]) => chain.length > 0 && ['url', 'pathname'].includes(chain[chain.length - 1]!);
     walk(program, (n) => {
       if (n.type !== 'CallExpression' || memberChain(n.callee).pop() !== 'createServer') return;
+      // Test support servers are source code, but are not application endpoints.
+      if (/(^|\/)testing\//.test(file) || /\.test-server\.[^/]+$/.test(file)) return false;
       const cb = ((n.arguments as AstNode[]) ?? []).find((a) => a.type === 'ArrowFunctionExpression' || a.type === 'FunctionExpression');
       if (!cb) return false;
       walk(cb.body, (b, parents) => {

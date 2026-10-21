@@ -139,6 +139,23 @@ test('tsjs: raw node:http createServer handlers become routes; a templated-host 
   assert.equal(f.nodes.filter((n) => n.kind === 'unknown').length, 0);
 });
 
+test('tsjs: raw test servers are excluded while production inspection routes remain', async () => {
+  const server = (path: string) => `import { createServer } from 'node:http';
+createServer((req, res) => { const url = new URL(req.url ?? '/', 'http://localhost');
+if (url.pathname === '${path}') res.end('ok'); });`;
+  const dir = tempRepo({
+    'src/testing/provider.ts': server('/'),
+    'testing/nested/provider.ts': server('/favicon.ico'),
+    'src/provider.test-server.ts': server('/fixture'),
+    'src/provider.test-server.js': server('/fixture-js'),
+    'src/inspection.ts': server('/healthz'),
+    'src/testing-tools/inspection.ts': server('/extractions/recent'),
+  });
+  const f = await ingestRepo(dir, { repoName: 'svc' });
+  assert.deepEqual(f.nodes.filter((n) => n.kind === 'route').map((n) => n.name).sort(),
+    ['GET /extractions/recent', 'GET /healthz']);
+});
+
 // route-handler-attribution: a route that delegates to a named handler (App Router's
 // exported verb function, or an Express identifier argument) inherits the handler's
 // guards/validates so the drift check — which reads the route node directly — sees them.
