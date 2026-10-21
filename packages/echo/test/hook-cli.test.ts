@@ -78,6 +78,16 @@ test('prompt hooks return a scoped receipt while the sub-mind works; CLI polls a
     const invoke = (command: string, args: string[] = []) => run(process.execPath, [entry, command, ...common, ...args], { cwd: workspace, env, timeout: 5000, maxBuffer: 128_000 });
     const sessionId = 'synthetic-hook-session';
     const binding = ['--workspace', workspace, '--host', 'claude', '--session-id', sessionId];
+    // Request handles use base64url and can start with '-'. Joined option values
+    // must reach both commands intact rather than being parsed as another flag.
+    const leadingDashId = `-${'a'.repeat(31)}`;
+    for (const command of ['brief', 'cancel-brief']) {
+      const output = await invoke(command, [`--request=${leadingDashId}`, ...binding]);
+      assert.equal(output.stderr, '');
+      const missing = JSON.parse(output.stdout) as HookBriefResult;
+      assert.equal(missing.status, 'expired');
+      assert.equal(missing.requestId, leadingDashId);
+    }
     const hook = async (prompt: string): Promise<HookBriefResult> => {
       const pending = invoke('hook', ['--workspace', workspace, '--host', 'claude']);
       pending.child.stdin!.end(JSON.stringify({ hook_event_name: 'UserPromptSubmit', session_id: sessionId, cwd: workspace, prompt }));
@@ -91,7 +101,7 @@ test('prompt hooks return a scoped receipt while the sub-mind works; CLI polls a
       assert.ok(line, 'the bounded hook must contain a complete receipt document');
       return JSON.parse(line);
     };
-    const poll = async (requestId: string) => JSON.parse((await invoke('brief', ['--request', requestId, ...binding])).stdout) as HookBriefResult;
+    const poll = async (requestId: string) => JSON.parse((await invoke('brief', [`--request=${requestId}`, ...binding])).stdout) as HookBriefResult;
     const receipt = await hook('What did we learn about cold shipping?');
     assert.equal(firstReleased, false, 'the CLI hook must finish before model generation is released');
     assert.equal(receipt.schema, 'echo-hook-brief/v1');
@@ -128,14 +138,14 @@ test('prompt hooks return a scoped receipt while the sub-mind works; CLI polls a
     assert.equal(expanded.status, 'ready');
     assert.equal(expanded.memory.content, memory.content);
     assert.equal(reads, 1); assert.equal(searches, 1); assert.equal(generations, 1);
-    const otherSession = JSON.parse((await invoke('brief', ['--request', receipt.requestId!, '--workspace', workspace, '--host', 'claude', '--session-id', 'another-session'])).stdout);
+    const otherSession = JSON.parse((await invoke('brief', [`--request=${receipt.requestId!}`, '--workspace', workspace, '--host', 'claude', '--session-id', 'another-session'])).stdout);
     assert.equal(otherSession.status, 'expired'); assert.equal(otherSession.result, undefined);
     assert.equal(generations, 1);
 
     const second = await hook('Which container was used in the synthetic shipment?');
     assert.equal(second.status, 'pending');
     await jobs[1]!.entered.promise;
-    const cancelled = JSON.parse((await invoke('cancel-brief', ['--request', second.requestId!, ...binding])).stdout);
+    const cancelled = JSON.parse((await invoke('cancel-brief', [`--request=${second.requestId!}`, ...binding])).stdout);
     assert.equal(cancelled.status, 'cancelled'); assert.equal(cancelled.result, undefined);
     await jobs[1]!.aborted.promise;
     assert.equal((await poll(second.requestId!)).status, 'cancelled');
@@ -269,7 +279,7 @@ for (const scenario of [
       assert.match(receipt.requestId!, /^[A-Za-z0-9_-]{32}$/);
       assert.deepEqual(receipt.actions, [{ rel: 'poll', operation: 'memory.brief', arguments: { workspace, host: 'claude', sessionId, requestId: receipt.requestId } }]);
       assert.equal(generations, 1); assert.equal(searches, 1); assert.equal(reads, 0); assert.equal(aborted, false);
-      const poll = async (waitMs: number) => JSON.parse((await invoke('brief', ['--request', receipt.requestId!, ...binding, '--wait-ms', String(waitMs)])).stdout) as HookBriefResult;
+      const poll = async (waitMs: number) => JSON.parse((await invoke('brief', [`--request=${receipt.requestId!}`, ...binding, '--wait-ms', String(waitMs)])).stdout) as HookBriefResult;
       if (!completesDuringWait) {
         assert.equal(receipt.result, undefined, 'an unfinished hook exposes only the follow-up handle');
         assert.equal((await poll(100)).status, 'pending', 'the held job survives the hook and a bounded CLI wait');
