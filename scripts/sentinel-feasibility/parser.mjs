@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { resolve, relative, isAbsolute, dirname, sep } from 'node:path';
 
+export const CORPUS_LIMITS=Object.freeze({fileBytes:2*1024*1024,totalBytes:16*1024*1024,entries:4096,cases:128});
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const canonical = value => JSON.stringify(value, (_key, item) => item && !Array.isArray(item) && typeof item === 'object' ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 export function inside(root, path) {
@@ -24,21 +25,45 @@ export async function resolveFixtureRoot(repoRoot, path) {
   for(const part of path.split('/')) {current=resolve(current,part);await regularDirectory(current);}
   return full;
 }
+async function boundedFile(path, budget) {
+  const stat=await fs.lstat(path);
+  if(stat.isSymbolicLink()||!stat.isFile()) throw new Error('Fixture input must be a regular file');
+  if(stat.size>CORPUS_LIMITS.fileBytes) throw new Error('Fixture file byte limit exceeded');
+  if(budget.bytes+stat.size>CORPUS_LIMITS.totalBytes) throw new Error('Fixture aggregate byte limit exceeded');
+  const bytes=await fs.readFile(path);
+  if(bytes.length>CORPUS_LIMITS.fileBytes) throw new Error('Fixture file byte limit exceeded');
+  budget.bytes+=bytes.length;
+  if(budget.bytes>CORPUS_LIMITS.totalBytes) throw new Error('Fixture aggregate byte limit exceeded');
+  return bytes;
+}
 export async function inventory(root) {
   await regularDirectory(root);
-  const rows = [];
-  async function walk(dir, prefix = '') {
-    for (const name of (await fs.readdir(dir)).sort()) {
+  const rows = [],budget={bytes:0,entries:0};
+  async function names(dir) {
+    const entries=[];
+    for await(const entry of await fs.opendir(dir)) {
+      if(++budget.entries>CORPUS_LIMITS.entries) throw new Error('Fixture inventory entry limit exceeded');
+      entries.push(entry.name);
+    }
+    return entries.sort();
+  }
+  async function walk(dir, entries, prefix = '') {
+    for (const name of entries) {
       const path = prefix ? `${prefix}/${name}` : name;
       const full = resolve(dir, name), stat = await fs.lstat(full);
       if (stat.isSymbolicLink()) rows.push({path, kind:'symlink', digest:sha256(await fs.readlink(full))});
-      else if (stat.isDirectory()) { rows.push({path,kind:'directory',digest:sha256(canonical((await fs.readdir(full)).sort()))}); if (path!=='.git') await walk(full,path); }
-      else if (stat.isFile()) { const bytes=await fs.readFile(full); rows.push({path,kind:'file',bytes:bytes.length,digest:sha256(bytes)}); }
-      else rows.push({path,kind:'special'});
+      else if (stat.isDirectory()) {
+        const children=await names(full);
+        rows.push({path,kind:'directory',digest:sha256(canonical(children))});
+        if(path!=='.git') await walk(full,children,path);
+      } else if (stat.isFile()) {
+        const bytes=await boundedFile(full,budget); rows.push({path,kind:'file',bytes:bytes.length,digest:sha256(bytes)});
+      } else rows.push({path,kind:'special'});
     }
   }
-  rows.push({path:'.',kind:'directory',digest:sha256(canonical((await fs.readdir(root)).sort()))});
-  await walk(root);
+  const entries=await names(root);
+  rows.push({path:'.',kind:'directory',digest:sha256(canonical(entries))});
+  await walk(root,entries);
   return rows;
 }
 export async function loadCorpus(fixtureRoot) {
@@ -46,9 +71,12 @@ export async function loadCorpus(fixtureRoot) {
   const index=resolve(fixtureRoot,'cases.json'),stat=await fs.lstat(index);
   if(stat.isSymbolicLink()) throw new Error('Fixture index symlink refused');
   if(!stat.isFile()) throw new Error('Fixture index must be a regular file');
-  const body = await fs.readFile(index);
+  const budget={bytes:0};
+  const body = await boundedFile(index,budget);
   const corpus = JSON.parse(body);
   if (corpus.schemaVersion !== 'sentinel-feasibility-corpus-v1' || !Array.isArray(corpus.cases) || !corpus.cases.length) throw new Error('Invalid fixture corpus');
+  if(corpus.cases.length>CORPUS_LIMITS.cases) throw new Error('Fixture case limit exceeded');
+  if(corpus.cases.reduce((sum,item)=>sum+(Array.isArray(item.files)?item.files.length:0)+(Array.isArray(item.generated)?item.generated.length:0),0)>CORPUS_LIMITS.entries) throw new Error('Fixture descriptor entry limit exceeded');
   const ids = new Set();
   for (const item of corpus.cases) {
     if (!/^[A-Za-z0-9_-]+$/.test(item.id) || ids.has(item.id) || !Array.isArray(item.files) || !Array.isArray(item.gates)) throw new Error('Invalid or duplicate fixture id');
@@ -66,21 +94,30 @@ export async function loadCorpus(fixtureRoot) {
         // Corpus inputs are regular files; a source symlink must never redirect a read.
         let current=resolve(fixtureRoot);
         for (const part of file.source.split('/')) { current=resolve(current,part); if ((await fs.lstat(current)).isSymbolicLink()) throw new Error('Fixture source symlink refused'); }
-        if (sha256(await fs.readFile(path))!==file.sha256) throw new Error(`Fixture digest mismatch: ${item.id}/${file.path}`);
+        if (sha256(await boundedFile(path,budget))!==file.sha256) throw new Error(`Fixture digest mismatch: ${item.id}/${file.path}`);
       } else if (file.type==='missing' || file.type==='symlink') {
         if (file.type==='symlink' && (typeof file.target!=='string' || isAbsolute(file.target))) throw new Error('Invalid symlink control');
-      } else if (typeof file.repeat !== 'string' || !Number.isSafeInteger(file.count) || file.count<1 || Buffer.byteLength(file.repeat)*file.count>2*1024*1024 || sha256(file.repeat.repeat(file.count))!==file.sha256) throw new Error('Invalid generated fixture');
+      } else if (typeof file.repeat !== 'string' || !Number.isSafeInteger(file.count) || file.count<1 || Buffer.byteLength(file.repeat)*file.count>CORPUS_LIMITS.fileBytes || sha256(file.repeat.repeat(file.count))!==file.sha256) throw new Error('Invalid generated fixture');
+      if(!file.source&&!['missing','symlink'].includes(file.type)) {
+        budget.bytes+=Buffer.byteLength(file.repeat)*file.count;
+        if(budget.bytes>CORPUS_LIMITS.totalBytes) throw new Error('Fixture aggregate byte limit exceeded');
+      }
     }
   }
   return {corpus,digest:sha256(body)};
 }
 async function materialize(item, fixtureRoot, root) {
   await fs.mkdir(root,{recursive:true});
+  const budget={bytes:0};
   for (const file of [...item.files,...(item.generated??[])]) {
     const path=inside(root,file.path); await fs.mkdir(dirname(path),{recursive:true});
     if (file.type==='missing') continue;
     if (file.type==='symlink') await fs.symlink(file.target,path);
-    else await fs.writeFile(path,file.source?await fs.readFile(inside(fixtureRoot,file.source)):file.repeat.repeat(file.count),{flag:'wx'});
+    else {
+      const bytes=file.source?await boundedFile(inside(fixtureRoot,file.source),budget):Buffer.from(file.repeat.repeat(file.count));
+      if(sha256(bytes)!==file.sha256) throw new Error(`Materialized fixture digest mismatch: ${item.id}/${file.path}`);
+      await fs.writeFile(path,bytes,{flag:'wx'});
+    }
   }
   if(item.gitIndex?.length) {
     const env={PATH:process.env.PATH,HOME:process.env.HOME,LANG:'C',LC_ALL:'C',GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_SYSTEM:'/dev/null',GIT_CONFIG_COUNT:'0',GIT_INDEX_FILE:resolve(root,'.git/index'),GIT_TEMPLATE_DIR:''};

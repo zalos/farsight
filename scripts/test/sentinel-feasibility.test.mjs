@@ -85,3 +85,20 @@ test('run refuses a symlinked corpus index before output creation',async t=>{
   await assert.rejects(runHarness({manifest:path,run:true,experiments:['E2'],out},{repoRoot:root}),/index symlink refused/);
   await assert.rejects(fs.access(out),/ENOENT/);
 });
+
+test('output comparison rejects fixture equality, child names and aliased ancestors but allows an outside sibling',async t=>{
+  const root=await scratch(t),fixtures=resolve(root,'fixtures');await fs.mkdir(fixtures);
+  await fs.writeFile(resolve(fixtures,'cases.json'),JSON.stringify({schemaVersion:'sentinel-feasibility-corpus-v1',cases:[{id:'one',gates:['E1'],files:[]}]}));
+  const path=resolve(root,'manifest.json');await fs.writeFile(path,JSON.stringify(manifest()));
+  await fs.symlink(fixtures,resolve(root,'fixture-alias'));
+  const before=await fs.readdir(fixtures);
+  for(const out of [fixtures,resolve(fixtures,'output'),resolve(fixtures,'..output'),resolve(root,'fixture-alias/output')]) {
+    await assert.rejects(runHarness({manifest:path,run:true,experiments:['E2'],out},{repoRoot:root}),/Output cannot be inside fixture inputs/);
+    assert.deepEqual(await fs.readdir(fixtures),before);
+  }
+  const out=resolve(root,'outside-sibling');
+  const result=await runHarness({manifest:path,run:true,experiments:['E2'],out},{repoRoot:root});
+  assert.equal(result.experiments.find(row=>row.experiment==='E2').status,'blocked');
+  assert.equal(JSON.parse(await fs.readFile(resolve(out,'results.json'))).format,'sentinel-feasibility-results/draft-1');
+  assert.deepEqual(await fs.readdir(fixtures),before);
+});

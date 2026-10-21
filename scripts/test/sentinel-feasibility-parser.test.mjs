@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inventory, loadCorpus, reconcileInputs, runParserProbe, sha256 } from '../sentinel-feasibility/parser.mjs';
+import { inventory, loadCorpus, reconcileInputs, runParserProbe, sha256, CORPUS_LIMITS } from '../sentinel-feasibility/parser.mjs';
 const REPO=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 async function scratch(t) {const root=await fs.mkdtemp(resolve(tmpdir(),'sentinel-parser-test-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));return root;}
 test('independent inventory never follows symbolic links and hashes hidden files',async t=>{
@@ -47,4 +47,45 @@ test('corpus refuses a symlinked index before parsing its target',async t=>{
   const root=await scratch(t),fixtures=resolve(root,'fixtures');await fs.mkdir(fixtures);
   const outside=resolve(root,'external.json');await fs.writeFile(outside,'not a corpus');await fs.symlink(outside,resolve(fixtures,'cases.json'));
   await assert.rejects(loadCorpus(fixtures),/index symlink refused/);
+});
+
+test('materialization verifies the exact reread bytes before writing or parsing them',async t=>{
+  const root=await scratch(t),fixtures=resolve(root,'fixtures');await fs.mkdir(fixtures);
+  const source=resolve(fixtures,'input.fixture'),original=Buffer.from('export const safe = true;\n');await fs.writeFile(source,original);
+  await fs.writeFile(resolve(fixtures,'cases.json'),JSON.stringify({schemaVersion:'sentinel-feasibility-corpus-v1',cases:[{id:'one',gates:['E1'],files:[{path:'a.ts',source:'input.fixture',sha256:sha256(original)}]}]}));
+  const readFile=fs.readFile;let reads=0;
+  t.mock.method(fs,'readFile',async(path,...args)=>{if(path===source&&++reads===2) return Buffer.from('export const swapped = true;\n');return readFile.call(fs,path,...args);});
+  await assert.rejects(runParserProbe({fixtureRoot:fixtures,workDir:resolve(root,'work'),artifactDir:resolve(root,'artifacts')}),/Materialized fixture digest mismatch/);
+  assert.equal(reads,2);
+  await assert.rejects(fs.access(resolve(root,'work/one/a.ts')),/ENOENT/);
+  assert.deepEqual(await fs.readdir(resolve(root,'artifacts')),[]);
+});
+
+test('corpus and inventory enforce file limits before reading oversized source or index bytes',async t=>{
+  const root=await scratch(t),source=resolve(root,'input.fixture');
+  const huge=Buffer.alloc(CORPUS_LIMITS.fileBytes+1,'x');await fs.writeFile(source,huge);
+  const value={schemaVersion:'sentinel-feasibility-corpus-v1',cases:[{id:'one',gates:['E1'],files:[{path:'a.ts',source:'input.fixture',sha256:sha256(huge)}]}]};
+  await fs.writeFile(resolve(root,'cases.json'),JSON.stringify(value));
+  const readFile=fs.readFile;let sourceReads=0;
+  t.mock.method(fs,'readFile',async(path,...args)=>{if(path===source) sourceReads++;return readFile.call(fs,path,...args);});
+  await assert.rejects(loadCorpus(root),/file byte limit/);
+  await assert.rejects(inventory(root),/file byte limit/);assert.equal(sourceReads,0);
+  await fs.writeFile(resolve(root,'cases.json'),huge);
+  await assert.rejects(loadCorpus(root),/file byte limit/);
+});
+test('corpus rejects excessive case/descriptor counts and aggregate source bytes',async t=>{
+  const root=await scratch(t),source=resolve(root,'input.fixture'),body=Buffer.alloc(CORPUS_LIMITS.fileBytes,'x');await fs.writeFile(source,body);
+  const one={id:'one',gates:['E1'],files:[{path:'a.ts',source:'input.fixture',sha256:sha256(body)}]};
+  const path=resolve(root,'cases.json');
+  await fs.writeFile(path,JSON.stringify({schemaVersion:'sentinel-feasibility-corpus-v1',cases:Array.from({length:CORPUS_LIMITS.cases+1},(_,i)=>({...one,id:`case${i}`}))}));
+  await assert.rejects(loadCorpus(root),/case limit/);
+  await fs.writeFile(path,JSON.stringify({schemaVersion:'sentinel-feasibility-corpus-v1',cases:[{...one,files:Array.from({length:CORPUS_LIMITS.entries+1},(_,i)=>({...one.files[0],path:`file${i}.ts`}))}]}));
+  await assert.rejects(loadCorpus(root),/descriptor entry limit/);
+  await fs.writeFile(path,JSON.stringify({schemaVersion:'sentinel-feasibility-corpus-v1',cases:Array.from({length:9},(_,i)=>({...one,id:`case${i}`}))}));
+  await assert.rejects(loadCorpus(root),/aggregate byte limit/);
+});
+test('independent inventory rejects an excessive real directory entry count',async t=>{
+  const root=await scratch(t);
+  for(let i=0;i<CORPUS_LIMITS.entries+1;i+=128) await Promise.all(Array.from({length:Math.min(128,CORPUS_LIMITS.entries+1-i)},(_,j)=>fs.writeFile(resolve(root,`entry${i+j}`),'')));
+  await assert.rejects(inventory(root),/inventory entry limit/);
 });

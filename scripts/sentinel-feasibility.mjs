@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { promises as fs } from 'node:fs';
-import { resolve, relative, dirname } from 'node:path';
+import { resolve, relative, dirname, basename, sep, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { platform, arch, cpus, totalmem } from 'node:os';
@@ -90,8 +90,10 @@ export async function runHarness(options,{repoRoot=REPO}={}) {
   const fixtureRoot=await resolveFixtureRoot(repoRoot,manifest.fixtureRoot);
   const corpus=await loadCorpus(fixtureRoot),fixtureInventory=await inventory(fixtureRoot);
   const out=resolve(options.out);
-  const outputScope=relative(fixtureRoot,out);
-  if(!outputScope||(!outputScope.startsWith('..')&&!outputScope.startsWith('/'))) throw new Error('Output cannot be inside fixture inputs');
+  // The output parent must already exist. Resolve its aliases before comparing directory boundaries.
+  const physicalOut=resolve(await fs.realpath(dirname(out)),basename(out));
+  const outputScope=relative(await fs.realpath(fixtureRoot),physicalOut);
+  if(!outputScope||(!isAbsolute(outputScope)&&outputScope!=='..'&&!outputScope.startsWith(`..${sep}`))) throw new Error('Output cannot be inside fixture inputs');
   // mkdir without recursive refuses an existing folder, file or symlink before any result is written.
   await fs.mkdir(out);
   const startedAt=new Date().toISOString();
