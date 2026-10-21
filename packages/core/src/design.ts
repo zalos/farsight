@@ -236,6 +236,7 @@ export interface DesignReconcile {
   /** a screen row with neither route nor component — listed, flagged, never dropped */
   unmatched: DesignScreen[];
   /** built, not designed: pages in the repo with no design row */
+  fallbacks: { nodeId: string; name: string; loc?: Loc }[];
   codeOnly: { nodeId: string; name: string; loc?: Loc }[];
   counts: { screens: number; built: number; designOnly: number; codeOnly: number; unmatched: number; drift: number };
 }
@@ -341,8 +342,13 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
   }
 
   const codeOnly: DesignReconcile['codeOnly'] = [];
+  const fallbacks: DesignReconcile['fallbacks'] = [];
   for (const n of pagesByRoute.values()) {
     if (claimed.has(n.id)) continue;
+    if (n.tags.includes('fallback')) {
+      fallbacks.push({ nodeId: n.id, name: n.name, ...(n.loc ? { loc: n.loc } : {}) });
+      continue;
+    }
     codeOnly.push({ nodeId: n.id, name: n.name, ...(n.loc ? { loc: n.loc } : {}) });
     driftTotal++;
   }
@@ -375,7 +381,7 @@ export function reconcileDesign(manifest: DesignManifest, index: GraphIndex, sou
 
   return {
     design: { id: designId, name: source.name ?? manifest.name ?? source.path, path: source.path },
-    flows, matched, designOnly, unmatched, codeOnly,
+    flows, matched, designOnly, unmatched, codeOnly, fallbacks,
     counts: { screens: manifest.screens.length, built: matched.length, designOnly: designOnly.length, codeOnly: codeOnly.length, unmatched: unmatched.length, drift: driftTotal },
   };
 }
@@ -704,6 +710,11 @@ export function designDriftMarkdown(r: DesignReconcile): string {
   if (r.designOnly.length) {
     lines.push('## designed, not built');
     for (const d of r.designOnly) lines.push(`- ${d.screen.id}${d.screen.name ? ` ${d.screen.name}` : ''} — ${d.screen.route ?? d.screen.component}${d.screen.operations?.length ? ` · uses ${d.screen.operations.join(', ')}` : ''}`);
+    lines.push('');
+  }
+  if (r.fallbacks.length) {
+    lines.push(`## ${t('design.fallbackPages', 'professional')}`);
+    for (const p of r.fallbacks) lines.push(`- ${p.name}${p.loc ? ` — ${p.loc.path}:${p.loc.line}` : ''}`);
     lines.push('');
   }
   if (r.codeOnly.length) {

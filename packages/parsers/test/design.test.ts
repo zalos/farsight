@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ingestRepo, ingestDesign, discoverManifests, parseManifestText, figmaToken, figmaLastModified } from '../dist/index.js';
-import { buildIndex, designSurface, journey } from '@farsight/core';
+import { buildIndex, designSurface, journey, reconcileDesign, designDriftMarkdown } from '@farsight/core';
 
 const invoiceApp = resolve(import.meta.dirname, '../../../examples/invoice-app');
 
@@ -86,4 +86,25 @@ test('ingestDesign: a manifest alone is a design-only source; declared config ma
   assert.equal(alone.repo, 'design-only');
   assert.equal(alone.nodes.filter((n) => n.kind === 'page').length, 2);
   assert.equal(alone.meta?.files, 1);
+});
+
+test('React Router fallback pages are separate from drift unless designed', async () => {
+  const dir = tempRepo({
+    'src/routes.tsx': `function Home() { return <main />; }
+function NotFound() { return <aside />; }
+export const routes = [{ path: '/', element: <Home /> }, { path: '*', element: <NotFound /> }, { path: '/files/*', Component: NotFound }];`,
+  });
+  const fragment = await ingestRepo(dir, { repoName: 'app' });
+  const index = buildIndex(fragment.nodes, fragment.edges);
+  const source = { repo: 'app', path: 'screens.json' };
+  const result = reconcileDesign({ screens: [{ id: 'home', route: '/' }] }, index, source);
+  assert.ok(fragment.edges.some(e => e.kind === 'renders' && e.from === 'app::page::/files/*' && e.to.endsWith('::NotFound')), 'Component is read like element');
+  assert.deepEqual(result.fallbacks.map(n => n.name).sort(), ['/*', '/files/*']);
+  assert.equal(result.counts.codeOnly, 0);
+  assert.equal(result.counts.drift, 0);
+  assert.match(designDriftMarkdown(result), /## fallback pages/);
+  const declared = reconcileDesign({ screens: [{ id: 'home', route: '/' }, { id: 'missing', route: '*' }, { id: 'files', route: '/files/*' }] }, index, source);
+  assert.equal(declared.matched.length, 3);
+  assert.equal(declared.fallbacks.length, 0);
+  assert.equal(declared.counts.drift, 0);
 });

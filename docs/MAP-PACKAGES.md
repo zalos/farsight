@@ -119,3 +119,5 @@ word near 400 characters; metadata blocks and a leading quoted note passed over;
 and `applyCitedDocs()` (a `doc` node per cited document and a `cites` edge from each flow that lists it and each node
 whose `@business` sentence or doc comment names it by path or as *ADR NNNN*).
 
+
+Design reconciliation (`core/src/design.ts`) separates unclaimed pages tagged `fallback` into `DesignReconcile.fallbacks`; declared wildcard screens still match normally. `strings-design.ts` supplies the heading and definition.

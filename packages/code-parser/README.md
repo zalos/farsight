@@ -110,3 +110,5 @@ and macOS; other Oxc-supported platforms are not a verified support claim for th
 
 See `docs/PARSER-LIBRARIES.md` in the repository for building tarballs, checking a clean external consumer and
 the independent paired library release workflow. Registry names remain subject to the owner's npm access.
+
+React Router object routes support both `element: <Screen />` and `Component: Screen`. A path of `*` or ending in `/*` keeps its page id and is tagged `fallback`. Design reconciliation lists undeclared fallback pages separately from undesigned pages; a manifest can declare them normally. Raw HTTP route inference skips files inside a `testing` directory and files named `*.test-server.*`.

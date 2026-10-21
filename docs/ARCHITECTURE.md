@@ -172,3 +172,5 @@ body counts as validated only when the implemented route has a real calls path t
 in the same source. Merely naming a reader, having it elsewhere in the graph or using it for a JSON body
 provides no evidence. Inactive guard or call edges never supply enforcement or multipart-reader evidence.
 No application graph field or speculative validates edge is added.
+
+16. **Wildcard UI routes remain pages and design fallbacks (2026-10-21).** React Router paths `*` and paths ending in `/*` retain their existing page ids and receive the `fallback` tag. Design reconciliation exposes undeclared fallbacks in an additive `fallbacks` list, rendered under its own heading, outside undesigned-page drift. A manifest that names the route claims it normally. The shared graph stays at schema version 1; both element and Component route declarations use the same page and render-edge contract.

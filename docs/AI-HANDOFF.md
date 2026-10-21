@@ -41,6 +41,20 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Raw test servers and wildcard UI pages — 2026-10-21
+
+Branches `codex/gap-test-servers` and dependent `codex/gap-router-fallbacks` exclude raw HTTP route inference
+in exact `testing` directories and `*.test-server.*` files, and list undeclared wildcard UI pages separately
+from undesigned-page drift. Production inspection endpoints remain indexed. Both React Router `element`
+and `Component` declarations remain supported. Wildcard page ids are unchanged; a manifest may claim them.
+
+Node 24: builds, all typechecks, string lint and 18 targeted parser/design tests passed. The full unit run
+hit an unrelated randomized Echo hook CLI request id beginning with a dash; Node rejected its separate
+argument. The browser run passed 340 and failed five (build freshness, layout and gesture timing); concurrent
+builds changed its build stamps, so a clean combined validation remains required. Real-ingest comparison,
+public parser version update and final browser verification remain with the integration lead. No install
+or publication occurred.
+
 ## Declared paths and parser release preparation — 2026-10-19
 
 Branch `codex/declared-paths-ingest` adds ingest warnings for unresolved external class imports,
