@@ -79,7 +79,7 @@ usage:
                                                                generate an OpenAPI 3.1 document from the code (inferences marked)
   farsight api diff --spec <path|url> [--repo <name>] [--format json|md] [--phase <name>] [--strict[=missing,undocumented,notes]]
                                                                a proposed spec vs the code: not implemented / undocumented /
-                                                               mismatched; --strict exits 1 on any drift
+                                                               mismatched; --strict exits 1 on selected policy drift
   farsight deps list [--repo name] [--project name] [--third-party | --workspace] [--hops N] [--json]
                                                                every package the code imports: third-party or a workspace
                                                                library, the range each package.json declares, the files that

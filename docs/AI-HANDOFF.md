@@ -55,6 +55,8 @@ typechecks passed; 1,617 unit tests completed with 1,615 passed and two opt-in l
 345 browser/MCP tests, 22 script tests and all 11 small-preset performance checks passed. Catalog lint
 checked 3,490 entries. Echo package smoke and actual parser tarballs installed outside the workspace
 passed. Independent re-review covered the reporter path, dynamic-suite identity and source-level fixes.
+A separate Echo follow-up uses joined request arguments so valid handles beginning with a dash reach
+polling and cancellation commands intact; a deterministic regression covers both commands.
 
 Fresh main/gap ingests of the same Farsight source retained 6,136 nodes, 13,216 edges and source digest
 `5ec2c23dfc70`, with unchanged node/edge content. Graph bytes were 17,458,002 before and 17,457,996 after;
