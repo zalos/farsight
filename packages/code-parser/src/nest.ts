@@ -219,25 +219,6 @@ export function useGuardsOf(decorators: unknown, file: NestFile): GuardRef[] {
 }
 
 /**
- * `return handler(req, ctx)` or `return await handler(…)` as the method's whole body → `handler`.
- * Any other shape — two statements, a member call, an inline function, a wrapper around the
- * handler — is undefined: the method's own calls are then walked as any function's are.
- */
-export function delegateOf(m: AstNode): string | undefined {
-  const fn = m.value as AstNode | undefined;
-  const body = fn && isNode(fn) ? (fn.body as AstNode | undefined) : undefined;
-  const stmts = body && isNode(body) ? ((body.body as AstNode[]) ?? []) : [];
-  if (stmts.length !== 1) return undefined;
-  const ret = stmts[0]!;
-  if (!isNode(ret) || ret.type !== 'ReturnStatement' || !isNode(ret.argument)) return undefined;
-  let call = ret.argument as AstNode;
-  if (call.type === 'AwaitExpression' && isNode(call.argument)) call = call.argument as AstNode;
-  if (call.type !== 'CallExpression' || !isNode(call.callee)) return undefined;
-  const callee = call.callee as AstNode;
-  return callee.type === 'Identifier' && typeof callee.name === 'string' ? callee.name : undefined;
-}
-
-/**
  * `@entrypoint http:VERB /path`, as `parseDoc` splits it (`['http', 'VERB', '/path']`) → the
  * route key it names, normalised the way route ids are. Undefined for any other entry point.
  */
