@@ -314,6 +314,10 @@ export interface ReconcileOptions {
   phaseOrder?: string[];
   /** Exact METHOD /path declarations (parameter spelling is normalized); never globs. */
   internalRoutes?: string[];
+  /** Same label-to-function matchers as config.guards, used by x-guards. */
+  guardNames?: Record<string, string[]>;
+  /** Exact function names or ids of multipart readers, requiring a real calls path. */
+  validators?: string[];
 }
 
 function routeMethodPath(node: GraphNode): { method: string; path: string } | null {
@@ -322,10 +326,27 @@ function routeMethodPath(node: GraphNode): { method: string; path: string } | nu
 }
 
 function guardsOf(index: GraphIndex, routeId: string): GraphNode[] {
-  return (index.in.get(routeId) ?? [])
-    .filter((e) => e.kind === 'guards')
-    .map((e) => index.byId.get(e.from))
-    .filter((n): n is GraphNode => !!n);
+  const guards = new Map<string, GraphNode>();
+  const pending = [routeId];
+  const seen = new Set<string>();
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const edge of index.in.get(id) ?? []) {
+      const guard = edge.kind === 'guards' && edge.meta?.inactive !== true ? index.byId.get(edge.from) : undefined;
+      if (guard) guards.set(guard.id, guard);
+    }
+    // Config guards are applied after adapters mirror handler gates onto routes. Read
+    // their direct handler too, then only proven delegate links, never arbitrary helpers.
+    for (const edge of index.out.get(id) ?? []) {
+      if (edge.kind === 'calls' && edge.meta?.inactive !== true && (id === routeId || edge.meta?.via === 'delegate')) {
+        const handler = index.byId.get(edge.to);
+        if (handler?.kind === 'function' && handler.loc?.repo === index.byId.get(routeId)?.loc?.repo) pending.push(handler.id);
+      }
+    }
+  }
+  return [...guards.values()];
 }
 
 function validatorsOf(index: GraphIndex, routeId: string): GraphNode[] {
@@ -335,11 +356,37 @@ function validatorsOf(index: GraphIndex, routeId: string): GraphNode[] {
     .filter((n): n is GraphNode => !!n);
 }
 
+/** A configured reader is evidence only for a declared multipart body and an actual call path. */
+function multipartReaderReached(op: SpecOperation, routeId: string, index: GraphIndex, readers: string[]): boolean {
+  if (op.contract.requestBody?.contentType !== 'multipart/form-data' || !readers.length) return false;
+  const seen = new Set([routeId]);
+  const pending = [routeId];
+  while (pending.length) {
+    const id = pending.pop()!;
+    for (const edge of index.out.get(id) ?? []) {
+      if (edge.kind !== 'calls' || edge.meta?.inactive === true || seen.has(edge.to)) continue;
+      seen.add(edge.to);
+      const target = index.byId.get(edge.to);
+      if (!target || target.loc?.repo !== index.byId.get(routeId)?.loc?.repo) continue;
+      if ((target.kind === 'function' || target.kind === 'rule') && readers.some((name) => target.id === name || target.name === name)) return true;
+      pending.push(target.id);
+    }
+  }
+  return false;
+}
+
 /** Drift between one declared operation and its implemented route. */
-function operationDrift(op: SpecOperation, route: GraphNode, index: GraphIndex, specUsesSecurity: boolean): DriftEntry[] {
+function operationDrift(op: SpecOperation, route: GraphNode, index: GraphIndex, specUsesSecurity: boolean, opts: ReconcileOptions): DriftEntry[] {
   const drift: DriftEntry[] = [];
   const guards = guardsOf(index, route.id);
   const security = op.contract.security ?? [];
+  const declaredGuards = Array.isArray(op.contract.extensions?.['x-guards'])
+    ? op.contract.extensions['x-guards'].filter((name): name is string => typeof name === 'string') : [];
+  const matchesGuard = (name: string, guard: GraphNode): boolean => {
+    if (guard.id === name || guard.name === name || guard.name.endsWith(`: ${name}`)) return true;
+    const hay = `${guard.loc?.path ?? ''} ${guard.name}`.toLowerCase();
+    return (opts.guardNames?.[name] ?? []).some((matcher) => !/^[A-Z]+ \//.test(matcher) && hay.includes(matcher.toLowerCase()));
+  };
   // a gate declared in farsight.config.json is a statement, not a detection: when it is the
   // only gate on an implemented route, say so — the handler enforces nothing the parser can see
   const declaredOnly = guards.filter((g) => g.tags.includes('declared'));
@@ -347,11 +394,14 @@ function operationDrift(op: SpecOperation, route: GraphNode, index: GraphIndex, 
     drift.push({ kind: 'security-declared-only', message: `gate declared in farsight.config.json (${declaredOnly.map((g) => g.name).join(', ')}); no guard detected in the code` });
   }
   const enforced = guards.filter((g) => !g.tags.includes('declared'));
+  const missingGuards = declaredGuards.filter((name) => !enforced.some((guard) => matchesGuard(name, guard)));
+  if (missingGuards.length) drift.push({ kind: 'security-missing-in-code', message: t('api.policy.guardsMissing', 'professional').replace('{names}', missingGuards.join(', ')) });
+  const uncovered = enforced.filter((guard) => !declaredGuards.some((name) => matchesGuard(name, guard)));
   if (security.length && !guards.length) {
     drift.push({ kind: 'security-missing-in-code', message: `spec requires ${security.join(', ')}; no guard is enforced on the route` });
-  } else if (!security.length && enforced.length && specUsesSecurity) {
+  } else if (!security.length && uncovered.length && (specUsesSecurity || declaredGuards.length > 0)) {
     // only gates the parser detected count here: a config-declared gate exists precisely because the spec cannot state it
-    drift.push({ kind: 'security-missing-in-spec', message: `code enforces ${guards.map((g) => g.name).join(', ')}; spec declares no security for this operation` });
+    drift.push({ kind: 'security-missing-in-spec', message: t('api.policy.guardsUndeclared', 'professional').replace('{names}', uncovered.map((g) => g.name).join(', ')) });
   } else if (security.length && guards.length) {
     // scope-level check: every scope the spec names should be mentioned by some guard
     const scopes = security.flatMap((s) => s.split(': ')[1]?.split(' ') ?? []);
@@ -370,7 +420,7 @@ function operationDrift(op: SpecOperation, route: GraphNode, index: GraphIndex, 
   const bodiless = ['GET', 'HEAD', 'DELETE'].includes(op.method);
   if (validators.length && !op.contract.requestBody && !bodiless) {
     drift.push({ kind: 'body-undeclared', message: `code validates the request body with ${validators.map((v) => v.name).join(', ')}; the spec declares no request body` });
-  } else if (op.contract.requestBody?.required && !validators.length && !bodiless) {
+  } else if (op.contract.requestBody?.required && !validators.length && !bodiless && !multipartReaderReached(op, route.id, index, opts.validators ?? [])) {
     drift.push({ kind: 'body-unvalidated', message: `spec requires a ${op.contract.requestBody.schema ?? 'request'} body; no validation rule is attached to the route` });
   }
   return drift;
@@ -437,7 +487,7 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
     if (hit) {
       claimed.add(hit.id);
       reposHit.add(hit.loc!.repo);
-      const drift = operationDrift(op, hit, index, specUsesSecurity);
+      const drift = operationDrift(op, hit, index, specUsesSecurity, opts);
       if (drift.length) mismatched++;
       driftTotal += drift.length;
       const contract: OperationContract = { status: 'both', apiId, ...op.contract, ...(basePaths.length ? { servers: basePaths } : {}), ...(drift.length ? { drift } : {}) };

@@ -158,3 +158,17 @@ with `x-internal: true` still matches normally and must be implemented when due.
 `notes` means matched contract drift entries; existing operationId naming observations stay advisory.
 No policy fields are added to application graph nodes. Config is read from the selected source's recorded checkout (or configured local source); absent a recorded
 checkout, ad-hoc comparisons use the current directory.
+
+15. **Contract guard vocabulary and multipart readers (2026-10-21).**
+
+Operation-level `x-guards: [name]` documents gates that have no OpenAPI security-scheme equivalent.
+A name matches an enforced guard's exact name/id, its configured label, or that label's existing
+`guards` function matchers. Route-only declarations never prove enforcement. An absent declared guard
+reports `security-missing-in-code`; enforced guards without a security scheme or matching vocabulary
+retain `security-missing-in-spec`. Existing scheme and scope checks remain in force.
+
+Root-only `validators` lists exact function names or ids for multipart readers. A required multipart
+body counts as validated only when the implemented route has a real calls path to a configured reader
+in the same source. Merely naming a reader, having it elsewhere in the graph or using it for a JSON body
+provides no evidence. Inactive guard or call edges never supply enforcement or multipart-reader evidence.
+No application graph field or speculative validates edge is added.

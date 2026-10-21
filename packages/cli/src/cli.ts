@@ -1054,7 +1054,7 @@ switch (command) {
       if (categories && (new Set(categories).size !== categories.length || categories.some((kind) => !['missing', 'undocumented', 'notes'].includes(kind)))) fail(word('api.policy.strictError', 'professional'));
       const result = reconcile(parsed.doc, index, { repo: repo ?? 'proposed', path: specRef, lineOf: parsed.lineOf }, {
         ...(repo ? { repo } : {}), phase: flag('phase') ?? policy?.phase,
-        phaseOrder: policy?.phaseOrder, internalRoutes: config?.internalRoutes,
+        phaseOrder: policy?.phaseOrder, internalRoutes: config?.internalRoutes, guardNames: config?.guards, validators: config?.validators,
       });
       if (flag('format', 'md') === 'json') console.log(JSON.stringify(result, null, 2));
       else console.log(driftMarkdown(result));

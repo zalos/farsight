@@ -78,3 +78,11 @@ test('API delivery policy schema accepts phase order and exact internal routes w
     { internalRoutes: [3] }, { internalRoutes: ['get /internal'] }, { internalRoutes: ['/internal'] },
   ]) assert.ok(validate(config, s).length > 0, JSON.stringify(config));
 });
+
+test('multipart reader schema accepts exact reader names and ids and rejects non-list or non-string values', () => {
+  const s = schema('farsight-config.schema.json');
+  assert.deepEqual(validate({ validators: ['readMultipart', 'sample::src/upload.ts::readMultipart'] }, s), []);
+  for (const config of [{ validators: 'readMultipart' }, { validators: [3] }, { validators: { readMultipart: true } }]) {
+    assert.ok(validate(config, s).some((error) => error.includes('$.validators')), JSON.stringify(config));
+  }
+});

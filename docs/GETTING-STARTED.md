@@ -499,3 +499,21 @@ method/path matching, with equivalent parameter spellings; they suppress undocum
 retaining code-only evidence. `x-internal: true` on a contract operation still requires implementation.
 Plain `--strict` checks missing, undocumented and matched contract notes; naming observations remain advisory.
 JSON keeps the raw `counts` and operation lists alongside the separate `policy` classifications and counts.
+
+### Describe guards and multipart readers in an API contract
+
+Use operation-level `x-guards: [same-origin, rate-limit]` for controls that have no OpenAPI security
+scheme. Those names must match enforced guard names or labels mapped through `farsight.config.json`:
+
+```json
+{
+  "guards": { "same-origin": ["assertSameOrigin"], "rate-limit": ["assertRateLimit"] },
+  "validators": ["readMultipart"]
+}
+```
+
+An unmatched declared guard remains a difference; a configured route-only gate does not prove code
+execution. Existing OpenAPI security schemes continue to describe authentication. For a required
+`multipart/form-data` body, a real call path from the route to the configured reader provides body
+validation evidence. The reader list uses exact function names or full node ids, is read from the root
+config only, and does not suppress missing validation for other media types.
