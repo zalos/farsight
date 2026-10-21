@@ -43,7 +43,7 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Sentinel review and execution preparation — 2026-10-21
 
-Branch `codex/sentinel-readiness` prepares the next bounded implementation after reviewing recent main
+Branch `codex/sentinel-readiness`, [PR #131](https://github.com/zalos/farsight/pull/131), prepares the next bounded implementation after reviewing recent main
 `46018cb` with Claude CLI and SOL reviewers. Planning PR #118 is verified merged at `0c8c747`; no Sentinel
 implementation has started. The owner confirmed Linux containers for external scanners with no host fallback.
 This settles that policy question; exact runtime/engine/framework support and deterministic thresholds still
