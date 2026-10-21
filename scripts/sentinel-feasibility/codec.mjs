@@ -76,7 +76,8 @@ export async function runCodecProbe({ artifactDir, maxDecodedBytes = 1_048_576 }
           decoded = decodeArtifact({ codec: codec.id, bytes: encoded, expectedRawHash: hash(input.bytes), expectedEncodedHash: hash(encoded), maxDecodedBytes });
         } catch (error) {
           // Budget exhaustion is an observed gap, not success or an infrastructure failure.
-          if (input.bytes.length <= maxDecodedBytes) throw error;
+          const sizeLimitError = error.message === 'DECODED_SIZE_LIMIT' || error.code === 'ERR_BUFFER_TOO_LARGE';
+          if (input.bytes.length <= maxDecodedBytes || !sizeLimitError) throw error;
           decodeOutcome = 'decoded-size-budget-exhausted';
         }
         const finished = performance.now();

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { gzipSync, zstdCompressSync } from 'node:zlib';
 import { decodeArtifact, runCodecProbe } from '../sentinel-feasibility/codec.mjs';
 
@@ -62,4 +63,21 @@ test('decoder independently enforces content identity, expansion and encoded bou
   assert.throws(() => decodeArtifact({ ...options, bytes: Buffer.alloc(2 * 1024 * 1024 + 1) }), /ENCODED_SIZE_LIMIT/);
   assert.throws(() => decodeArtifact({ ...options, maxDecodedBytes: 0 }), /INVALID_DECODE_LIMIT/);
   assert.throws(() => decodeArtifact({ ...options, codec: 'unknown' }), /CODEC_UNAVAILABLE/);
+});
+
+test('an unexpected decoder failure above the budget remains a probe failure', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sentinel-codec-unexpected-'));
+  const mutableZlib = createRequire(import.meta.url)('node:zlib');
+  const original = mutableZlib.gunzipSync;
+  try {
+    mutableZlib.gunzipSync = () => { throw new Error('UNEXPECTED_DECODER_FAILURE'); };
+    syncBuiltinESMExports();
+    const result = await runCodecProbe({ artifactDir: root, maxDecodedBytes: 32 });
+    assert.equal(result.status, 'failed');
+    assert.equal(result.checks.find(check => check.id === 'probe-completed')?.evidence.reason, 'UNEXPECTED_DECODER_FAILURE');
+    assert.ok(!result.checks.some(check => check.id === 'binary-gzip-roundtrip'));
+  } finally {
+    mutableZlib.gunzipSync = original; syncBuiltinESMExports();
+    await rm(root, { recursive: true, force: true });
+  }
 });

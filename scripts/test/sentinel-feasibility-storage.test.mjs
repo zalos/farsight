@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runStorageProbe } from '../sentinel-feasibility/storage.mjs';
+import { inspectOwnerRollback, runStorageProbe } from '../sentinel-feasibility/storage.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -61,4 +61,23 @@ test('invalid probe limits fail before spawning or opening SQLite', async () => 
   const result = await runStorageProbe({ workDir: 'unused', artifactDir: 'unused', timeoutMs: 0 });
   assert.equal(result.status, 'failed');
   assert.equal(result.checks[0].evidence.reason, 'INVALID_PROBE_OPTIONS');
+});
+
+test('an intact committed owner marker cannot hide a corrupt SQLite catalog', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sentinel-owner-corruption-'));
+  const { DatabaseSync } = await import('node:sqlite');
+  const path = join(root, 'corrupt.sqlite');
+  let db = new DatabaseSync(path);
+  try {
+    db.exec("CREATE TABLE owner_marker(marker TEXT); INSERT INTO owner_marker VALUES('committed'); CREATE TABLE orphaned(value TEXT); INSERT INTO orphaned VALUES('evidence');");
+    assert.equal(inspectOwnerRollback(db).passed, true);
+    db.enableDefensive(false); // Intentional corruption in this disposable negative-control database.
+    // Removing only the schema entry leaves an allocated B-tree page unaccounted for.
+    db.exec("PRAGMA writable_schema=ON; DELETE FROM sqlite_schema WHERE name='orphaned'; PRAGMA writable_schema=OFF;");
+    db.close(); db = new DatabaseSync(path);
+    const check = inspectOwnerRollback(db);
+    assert.equal(check.evidence.committedMarker, 'committed');
+    assert.notEqual(check.evidence.integrity, 'ok');
+    assert.equal(check.passed, false);
+  } finally { db.close(); await rm(root, { recursive: true, force: true }); }
 });

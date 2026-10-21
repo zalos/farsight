@@ -89,6 +89,14 @@ function rejectedTransaction(db, operation) {
   }
 }
 
+// Keep the state verdict coupled to both the committed marker and SQLite's integrity result.
+export function inspectOwnerRollback(db) {
+  const committedMarker = db.prepare('SELECT marker FROM owner_marker').get().marker;
+  const integrity = db.prepare('PRAGMA integrity_check').get().integrity_check;
+  return { id: 'owner-interrupted-rollback', passed: committedMarker === 'committed' && integrity === 'ok',
+    evidence: { committedMarker, integrity } };
+}
+
 /** Run only against caller-owned temporary directories; no application graph or production state. */
 export async function runStorageProbe({ workDir, artifactDir, timeoutMs = 5_000 } = {}) {
   const result = { experiment: 'E4', status: 'measured', checks: [], metrics: { node: process.versions.node, sqlite: process.versions.sqlite ?? null, platform: process.platform, arch: process.arch }, limitations: [
@@ -160,8 +168,7 @@ export async function runStorageProbe({ workDir, artifactDir, timeoutMs = 5_000 
     afterRelease.child.send({ type: 'release' }); await afterRelease.next(); await exitWithin(afterRelease, timeoutMs);
     check('release-takeover', released.type === 'released' && acquiredAfterRelease.type === 'acquired', { release: released.type, takeover: acquiredAfterRelease.type });
     db = new DatabaseSync(ownerPath);
-    const marker = db.prepare('SELECT marker FROM owner_marker').get().marker;
-    check('owner-interrupted-rollback', marker === 'committed', { committedMarker: marker, integrity: db.prepare('PRAGMA integrity_check').get().integrity_check });
+    result.checks.push(inspectOwnerRollback(db));
     db.close(); db = undefined;
 
     const ledgerPath = join(scratch, 'ledger.sqlite');
