@@ -515,10 +515,8 @@ function clearPriorImport(
   const runIds = new Set<string>();
   const reportPaths = new Set<string>();
   const projectsByReport = new Map<string, Set<string>>();
-  const resultLevels = new Set<TestRef['level']>();
   for (const { level, kind, block, files } of planned) {
     if (kind === 'results') {
-      resultLevels.add(level);
       for (const r of stringList(block.report)) reportPaths.add(r);
     }
     for (const abs of files) {
@@ -528,10 +526,9 @@ function clearPriorImport(
         const projects = new Set((readReport(repoRoot, abs)?.cases ?? []).map((c) => c.project ?? 'default'));
         for (const key of [path, ...stringList(block.report)]) {
           reportPaths.add(key);
-          const scoped = `${level}:${key}`;
-          const prior = projectsByReport.get(scoped) ?? new Set<string>();
+          const prior = projectsByReport.get(key) ?? new Set<string>();
           for (const project of projects) prior.add(project);
-          projectsByReport.set(scoped, prior);
+          projectsByReport.set(key, prior);
         }
       }
     }
@@ -548,8 +545,8 @@ function clearPriorImport(
   if (!reportPaths.size) return;
   for (const node of fragment.nodes) {
     const ref = node.test;
-    if (node.kind !== 'test' || node.loc?.repo !== fragment.repo || !ref?.runs?.length || !resultLevels.has(ref.level)) continue;
-    const kept = ref.runs.filter((r) => !(r.report && reportPaths.has(r.report) && (replace || projectsByReport.get(`${ref.level}:${r.report}`)?.has(r.project ?? 'default'))));
+    if (node.kind !== 'test' || node.loc?.repo !== fragment.repo || !ref?.runs?.length) continue;
+    const kept = ref.runs.filter((r) => !(r.report && reportPaths.has(r.report) && (replace || projectsByReport.get(r.report)?.has(r.project ?? 'default'))));
     if (kept.length === ref.runs.length) continue;
     if (kept.length) { ref.runs = kept; ref.run = foldRuns(kept); }
     else { delete ref.runs; delete ref.run; }
@@ -591,14 +588,14 @@ function attachRuns(
   // one of two matching source files or duplicate declarations.
   const byLocation = new Map<string, GraphNode[]>();
   for (const nodes of byFullName.values()) for (const node of nodes) {
-    if (node.test!.level !== level || !node.loc || node.tags.includes('test:title-heuristic')) continue;
+    if (!node.loc || node.tags.includes('test:title-heuristic')) continue;
     const key = `${node.loc.line}\0${node.name}`;
     const located = byLocation.get(key) ?? [];
     located.push(node);
     byLocation.set(key, located);
   }
   const match = (c: ObservedCase): GraphNode[] => {
-    const hits = (byFullName.get(c.fullName) ?? byFullName.get([...c.suite, c.title].join(' ')) ?? []).filter((n) => n.test!.level === level);
+    const hits = (byFullName.get(c.fullName) ?? byFullName.get([...c.suite, c.title].join(' ')) ?? []);
     // a JUnit row carries no file: it may only join when exactly one node has that
     // full name — attaching it to every hit would invent evidence (03 §3.1)
     if (!c.file) return hits.length === 1 ? hits : [];
@@ -612,7 +609,7 @@ function attachRuns(
   // a row no exact name claimed may be one row of a `.each` template in the same
   // file and describe path — the reporter expanded the title, the node still holds it
   const template = (c: ObservedCase): GraphNode | undefined => {
-    const candidates = eachNodes.filter((n) => n.test!.level === level && sameFile(n, c));
+    const candidates = eachNodes.filter((n) => sameFile(n, c));
     if (c.file && c.line != null) {
       const located = candidates.filter((n) => n.loc?.line === c.line);
       if (located.length === 1) return located[0];

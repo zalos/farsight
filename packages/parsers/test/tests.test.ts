@@ -1180,3 +1180,36 @@ test('a dynamic suite joins by unique reporter file, exact declaration line and 
   write('e2e/a/shared.pw.spec.ts', 4, 'another leaf');
   assert.equal(importOne().runs, 0, 'location alone never joins a different leaf');
 });
+
+test('a broad unit report preserves matched case levels and replaces projects across those levels', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { test } from 'node:test';\ntest('unit case', () => {});\n",
+    'integration/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('integration %s', () => {});\n",
+    'e2e/service.spec.ts': "import { it } from 'vitest';\nit('e2e case', () => {});\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const config = { unit: { results: 'coverage/results.json' } };
+  const write = (project: string, all = true, status = 'passed') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ testResults: [
+    { name: 'test/service.spec.ts', projectName: project, assertionResults: [{ title: 'unit case', ancestorTitles: [], status }] },
+    ...(all ? [
+      { name: 'integration/service.spec.ts', projectName: project, assertionResults: [{ title: 'integration 1', ancestorTitles: [], status }] },
+      { name: 'e2e/service.spec.ts', projectName: project, assertionResults: [{ title: 'e2e case', ancestorTitles: [], status }] },
+    ] : []),
+  ] }));
+  const cases = f.nodes.filter((n: GraphNode) => n.kind === 'test');
+  const foreign: GraphNode = JSON.parse(JSON.stringify(cases.find((n: GraphNode) => n.test!.level === 'integration')));
+  foreign.id = foreign.id.replace('sample::', 'foreign::'); foreign.loc!.repo = 'foreign';
+  f.nodes.push(foreign);
+  write('one'); assert.equal(importReports(f, dir, config).runs, 3);
+  write('two'); assert.equal(importReports(f, dir, config).runs, 3);
+  assert.deepEqual(cases.map((n: GraphNode) => n.test!.level).sort(), ['e2e', 'integration', 'unit']);
+  assert.ok(cases.every((n: GraphNode) => n.test!.runs!.length === 2));
+  write('one', false, 'failed');
+  importReports(f, dir, config);
+  assert.deepEqual(cases.filter((n: GraphNode) => n.test!.level !== 'unit').map((n: GraphNode) => n.test!.runs!.map((r) => r.project)), [['two'], ['two']]);
+  const snapshot = JSON.stringify(cases.map((n: GraphNode) => n.test));
+  importReports(f, dir, config);
+  assert.equal(JSON.stringify(cases.map((n: GraphNode) => n.test)), snapshot, 'reimport is idempotent');
+  assert.equal(foreign.test!.runs, undefined, 'foreign repository is never attached or cleared');
+});
