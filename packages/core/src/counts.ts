@@ -61,6 +61,7 @@ export interface Counted {
  * someone typed.
  */
 export const COUNT_SCOPES = [
+  'surf.scope.api',        // declared and implemented operations on one reconciled API surface
   'echo.portal.scope',     // only the bounded page of scoped memory records returned by Echo
 
   'journey.scopeAll',       // the whole journey, each thing once however many screens meet it

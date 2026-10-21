@@ -142,3 +142,19 @@ Query logic lives in `core/query.ts` (pure functions over the graph — shared b
 12. **Nest route declarations share route identity and carry explicit limitations (2026-10-19).** The TS/JS adapter reads `@nestjs/common` controller and verb bindings into the existing method/path route ids. A controller method that only returns an imported handler is linked with `calls` / `meta.via: 'delegate'`; core uses that relation for coverage and authored summaries. `@UseGuards` gates belong to their decorator declaration, including its file and argument, so equal labels cannot merge different guard implementations. Unsupported paths and routing modifiers are optional `meta.routes.gaps` facts in the same graph contract; portable analysis, saved application graphs and exports retain them, and MCP names them. The addition is compatible with graph schema version 1 and ships with paired library version 0.2.0. A routing limitation also makes portable analysis incomplete; an entrypoint documentation mismatch is recorded without making parsing incomplete. Global prefixes, module mounts and versions are not evaluated: the graph records the literal controller paths with a named limitation. See [Parser libraries](PARSER-LIBRARIES.md).
 
 13. **Source selection and declared bindings remain inspectable (2026-10-19).** The shared file collector honors root and nested `.gitignore` rules by default using `ignore`, including directory-relative patterns and negation. Explicit excludes and built-in skips still win; `AdapterOptions.gitignore: false` (CLI ingest `--no-gitignore`) opts out. Only rules inside the source root are read; no Git process or global configuration is consulted. Portable analysis fingerprints rule bytes and directory listings, so selection changes invalidate its result. Configuration import/setup/plumbing declarations are checked against the selected files and symbols, and unresolved decision affects are surfaced at ingest. Existing config/decision notes and the ingest warning channel carry those facts; no field is added to every node. A named Nest body schema resolves to an existing rule and gives a declared `validates` relationship to its method and route; its resolution states that runtime pipe registration was not checked. Types, computed/spread options and unresolved schemas confer no validation credit. This changes selection intentionally while retaining graph schema version 1; the paired libraries advance to 0.3.0. See [Parser libraries](PARSER-LIBRARIES.md) and [Nest schema validation](https://docs.nestjs.com/application/validation).
+
+14. **API delivery policy preserves raw reconciliation evidence (2026-10-21).**
+
+API diff retains its raw operation lists, statuses and counts. A separate `policy` result classifies
+spec-only operations as planned only when their `x-phase` is strictly later than the current phase.
+`openapi[].phaseOrder` lists phases earliest first; absent that list, document first use defines order.
+An unknown current phase or unknown operation phase remains missing. A missing phase is never planned.
+`openapi[].phase` supplies the current phase; `api diff --phase` overrides it.
+
+Root config `internalRoutes` declares exact `METHOD /path` operations (parameter spelling is normalized,
+no globs). These remain code-only evidence but do not fail undocumented policy. A declared operation
+with `x-internal: true` still matches normally and must be implemented when due.
+`--strict` checks all policy categories; `--strict=missing,undocumented,notes` selects categories.
+`notes` means matched contract drift entries; existing operationId naming observations stay advisory.
+No policy fields are added to application graph nodes. Config is read from the selected source's recorded checkout (or configured local source); absent a recorded
+checkout, ad-hoc comparisons use the current directory.

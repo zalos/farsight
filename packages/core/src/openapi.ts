@@ -16,6 +16,8 @@
 import type { GraphNode, GraphEdge, GraphFragment, OperationContract, ContractParam, DriftKind, Loc } from './graph.js';
 import type { GraphIndex } from './query.js';
 import { buildIndex, businessSummary } from './query.js';
+import { t } from './strings.js';
+import { counted, type Counted } from './counts.js';
 import type { GraphMeta } from './store.js';
 
 // ── the slice of an OpenAPI/Swagger document this module reads ────────────
@@ -270,7 +272,18 @@ export function apiNodeOf(doc: OpenApiDoc, source: SpecSource): GraphNode {
 
 export interface DriftEntry { kind: DriftKind; message: string }
 
+export type ApiDriftCategory = 'missing' | 'undocumented' | 'notes';
+
 export interface ReconcileResult {
+  /** Policy classifications never remove evidence from the raw operation lists or counts. */
+  policy: {
+    phase?: string;
+    phaseOrder: string[];
+    planned: string[];
+    metrics: { planned: Counted; internal: Counted };
+    internal: string[];
+    counts: Record<ApiDriftCategory, number> & { planned: number; internal: number; drift: number };
+  };
   api: { id: string; name: string; version?: string; path: string; basePaths: string[] };
   /** declared and implemented */
   matched: { routeId: string; op: string; matchedBy: 'exact' | 'basePath'; contract: OperationContract; loc?: Loc }[];
@@ -295,6 +308,12 @@ export interface ReconcileOptions {
   repo?: string;
   /** stamp this api id instead of the one derived from the source path (implied surfaces) */
   apiId?: string;
+  /** Current delivery phase; only demonstrably later phases are planned. */
+  phase?: string;
+  /** Earliest to latest; omitted means first use of x-phase in the document. */
+  phaseOrder?: string[];
+  /** Exact METHOD /path declarations (parameter spelling is normalized); never globs. */
+  internalRoutes?: string[];
 }
 
 function routeMethodPath(node: GraphNode): { method: string; path: string } | null {
@@ -447,7 +466,33 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
     codeOnly.push({ routeId: r.node.id, name: r.node.name, loc: r.node.loc, contract: { status: 'code-only', apiId, drift } });
   }
 
+  const phaseOrder = opts.phaseOrder ?? [...new Set(ops.flatMap((op) => {
+    const phase = op.contract.extensions?.['x-phase'];
+    return typeof phase === 'string' ? [phase] : [];
+  }))];
+  const current = opts.phase ? phaseOrder.indexOf(opts.phase) : -1;
+  const planned = specOnly.filter((op) => {
+    const phase = op.contract.extensions?.['x-phase'];
+    return current >= 0 && typeof phase === 'string' && phaseOrder.indexOf(phase) > current;
+  }).map((op) => op.routeId);
+  const internalKeys = new Set((opts.internalRoutes ?? []).map((name) => {
+    const mp = name.match(/^([A-Z]+) (\/.*)$/);
+    return mp ? `${mp[1]} ${normalizeRoutePath(mp[2]!)}` : '';
+  }));
+  const internal = codeOnly.filter((op) => {
+    const mp = op.name.match(/^([A-Z]+) (\/.*)$/);
+    return !!mp && internalKeys.has(`${mp[1]} ${normalizeRoutePath(mp[2]!)}`);
+  }).map((op) => op.routeId);
+  const missing = specOnly.length - planned.length;
+  const undocumented = codeOnly.length - internal.length;
+  const policyNotes = driftTotal - specOnly.length - codeOnly.length;
   return {
+    policy: { ...(opts.phase ? { phase: opts.phase } : {}), phaseOrder, planned, internal,
+      metrics: {
+        planned: counted(planned.length, 'apis.count.operations', 'surf.scope.api', 'reconcile: specOnly with a demonstrably later x-phase'),
+        internal: counted(internal.length, 'apis.count.operations', 'surf.scope.api', 'reconcile: codeOnly matching internalRoutes'),
+      },
+      counts: { missing, undocumented, notes: policyNotes, planned: planned.length, internal: internal.length, drift: missing + undocumented + policyNotes } },
     api: { id: apiId, name: source.name ?? doc.info?.title ?? source.path, ...(doc.info?.version ? { version: String(doc.info.version) } : {}), path: source.path, basePaths },
     matched, specOnly, codeOnly, repos,
     ...(notes.length ? { notes } : {}),
@@ -469,9 +514,9 @@ export function reconcile(doc: OpenApiDoc, index: GraphIndex, source: SpecSource
  * (declared, not implemented: no `loc`), code-only routes are stamped, and
  * the `api` node with its `contains` edges is added. Mutates in place.
  */
-export function applySpecToFragment(fragment: GraphFragment, doc: OpenApiDoc, source: SpecSource): ReconcileResult {
+export function applySpecToFragment(fragment: GraphFragment, doc: OpenApiDoc, source: SpecSource, opts: ReconcileOptions = {}): ReconcileResult {
   const index = buildIndex(fragment.nodes, fragment.edges);
-  const result = reconcile(doc, index, source, { repo: fragment.repo });
+  const result = reconcile(doc, index, source, { ...opts, repo: fragment.repo });
   const api = apiNodeOf(doc, source);
   const byId = new Map(fragment.nodes.map((n) => [n.id, n]));
   if (!byId.has(api.id)) { fragment.nodes.push(api); byId.set(api.id, api); }
@@ -884,18 +929,25 @@ export function apiSurface(index: GraphIndex, scope?: Set<string> | null): ApiSu
 export function driftMarkdown(r: ReconcileResult): string {
   const lines = [
     `# API drift — ${r.api.name}${r.api.version ? ` v${r.api.version}` : ''} (${r.api.path})`,
-    `declared ${r.counts.declared} · implemented ${r.counts.implemented} · matched ${r.counts.matched} · not implemented ${r.counts.specOnly} · undocumented ${r.counts.codeOnly} · mismatched ${r.counts.mismatched}`,
+    `declared ${r.counts.declared} · implemented ${r.counts.implemented} · matched ${r.counts.matched} · not implemented ${r.policy.counts.missing} · ${t('api.policy.planned', 'professional')} ${r.policy.counts.planned} · undocumented ${r.policy.counts.undocumented} · ${t('api.policy.internal', 'professional')} ${r.policy.counts.internal} · mismatched ${r.counts.mismatched}`,
+    t('api.policy.raw', 'professional').replace('{missing}', String(r.counts.specOnly)).replace('{undocumented}', String(r.counts.codeOnly)).replace('{drift}', String(r.counts.drift)),
     r.repos.length ? `repos: ${r.repos.join(', ')}` : 'repos: (no route in the graph matched this spec)',
     '',
   ];
-  if (r.specOnly.length) {
+  const missing = r.specOnly.filter((op) => !r.policy.planned.includes(op.routeId));
+  if (r.policy.planned.length) {
+    lines.push(`## ${t('api.policy.plannedHeading', 'professional')}`);
+    for (const op of r.specOnly.filter((op) => r.policy.planned.includes(op.routeId))) lines.push(`- ${op.op}`);
+    lines.push('');
+  }
+  if (missing.length) {
     lines.push('## declared, not implemented');
-    for (const s of r.specOnly) lines.push(`- ${s.op}${s.summary ? ` — ${s.summary}` : ''}`);
+    for (const s of missing) lines.push(`- ${s.op}${s.summary ? ` — ${s.summary}` : ''}`);
     lines.push('');
   }
   if (r.codeOnly.length) {
     lines.push('## implemented, not declared');
-    for (const c of r.codeOnly) lines.push(`- ${c.name}${c.loc ? ` — ${c.loc.path}:${c.loc.line}` : ''}`);
+    for (const c of r.codeOnly) lines.push(`- ${c.name}${r.policy.internal.includes(c.routeId) ? ` (${t('api.policy.internalDeclaration', 'professional')})` : ''}${c.loc ? ` — ${c.loc.path}:${c.loc.line}` : ''}`);
     lines.push('');
   }
   const mism = r.matched.filter((m) => m.contract.drift?.length);
@@ -907,7 +959,7 @@ export function driftMarkdown(r: ReconcileResult): string {
     }
     lines.push('');
   }
-  if (!r.specOnly.length && !r.codeOnly.length && !mism.length) lines.push('no drift — the spec and the code agree.');
+  if (!r.policy.counts.drift) lines.push(t('api.policy.clean', 'professional'));
   if (r.notes?.length) {
     lines.push('', '## notes — not drift, never fails --strict');
     for (const n of r.notes) lines.push(`- ${n.op}: ${n.message}`);

@@ -31,7 +31,8 @@ export async function applySpecs(fragment: GraphFragment, repoRoot: string, opti
   if (!specs.length) return { applied, errors };
   const hash = createHash('sha1').update(fragment.meta?.sourceHash ?? '');
   for (const spec of specs) {
-    const result = applySpecToFragment(fragment, spec.doc, { repo: fragment.repo, path: spec.path, lineOf: spec.lineOf, ...(spec.name ? { name: spec.name } : {}) });
+    const policy = config.openapi?.find((entry) => entry.path === spec.path || entry.url === spec.path);
+    const result = applySpecToFragment(fragment, spec.doc, { repo: fragment.repo, path: spec.path, lineOf: spec.lineOf, ...(spec.name ? { name: spec.name } : {}) }, { phase: policy?.phase, phaseOrder: policy?.phaseOrder, internalRoutes: config.internalRoutes });
     applied.push({ path: spec.path, origin: spec.origin, result });
     hash.update(`\n${spec.path}:`).update(spec.text);
   }

@@ -68,3 +68,13 @@ test('the config schema names exactly the fields the loader reads, and both $ids
     assert.equal(s.$id, `https://farsight.dev/schemas/${name}`);
   }
 });
+
+test('API delivery policy schema accepts phase order and exact internal routes with their declared types', () => {
+  const s = schema('farsight-config.schema.json');
+  assert.deepEqual(validate({ openapi: [{ path: 'docs/api.yaml', phase: 'pilot', phaseOrder: ['pilot', 'release'] }], internalRoutes: ['GET /internal', 'POST /items/{id}'] }, s), []);
+  for (const config of [
+    { openapi: [{ phase: 3 }] }, { openapi: [{ phaseOrder: 'pilot,release' }] },
+    { openapi: [{ phaseOrder: ['pilot', 3] }] }, { internalRoutes: 'GET /internal' },
+    { internalRoutes: [3] }, { internalRoutes: ['get /internal'] }, { internalRoutes: ['/internal'] },
+  ]) assert.ok(validate(config, s).length > 0, JSON.stringify(config));
+});

@@ -951,3 +951,14 @@ business `tests.biz.*`), printed by `lib/test-chip.js projectSplitHtml` and MCP'
 reference app's 2026-10-08 report six cases have this shape; before the fold they read *skipped* and held every
 journey of the invoice storyline.
 
+
+### API diff delivery policy
+
+Raw `ReconcileResult.counts` remains unchanged. `policy.counts.planned` counts spec-only operations
+proven later than the selected phase; `internal` counts code-only operations explicitly declared internal.
+`missing = specOnly - planned`; `undocumented = codeOnly - internal`; `notes` counts matched contract
+drift entries (not operations and not advisory naming observations). Policy `drift` sums missing,
+undocumented and notes. The report's operation lists retain all raw evidence.
+
+Policy planned/internal metrics use the existing catalog scope `surf.scope.api` (registered in COUNT_SCOPES):
+one reconciled API, restricted to the sources the diff compares. Each metric carries its source fold.
