@@ -124,7 +124,9 @@ export function containerArgs({ candidate, name, owner, scenario, source, rules,
   return args;
 }
 
-const commandOK = result => result.exitCode === 0 && !result.spawnError && !result.timedOut && !result.cancelled && !result.outputExceeded;
+const commandCompleted = result => Number.isInteger(result?.exitCode) && !result.spawnError && !result.timedOut && !result.cancelled && !result.outputExceeded && !result.exitSignal;
+const commandOK = result => commandCompleted(result) && result.exitCode === 0;
+const containerAbsent = result => commandCompleted(result) && result.exitCode !== 0 && /^(?:Error(?: response from daemon)?:\s*)?No such (?:object|container):\s*\S+\s*$/im.test(result.stderr ?? '');
 async function inspectOwned(runner, identity, owner) {
   const result = await runner('docker', ['inspect', '--type', 'container', identity], { timeout: 30_000 });
   if (!commandOK(result)) return { result, container: null };
@@ -140,11 +142,11 @@ async function inspectOwned(runner, identity, owner) {
 
 export async function cleanupOwned(runner, identity, owner) {
   const inspected = await inspectOwned(runner, identity, owner);
-  if (!inspected.container) return { state: 'not-found', inspect: inspected.result };
+  if (!inspected.container) return { state: containerAbsent(inspected.result) ? 'not-found' : 'cleanup-failed', reason: containerAbsent(inspected.result) ? 'docker-confirmed-absent' : 'inspection-unavailable-ownership-or-absence-unknown', inspect: inspected.result };
   const removed = await runner('docker', ['rm', '--force', inspected.container.Id], { timeout: 30_000 });
   if (!commandOK(removed)) return { state: 'cleanup-failed', id: inspected.container.Id, result: removed };
   const verification = await runner('docker', ['inspect', '--type', 'container', inspected.container.Id], { timeout: 30_000 });
-  const absent = verification.exitCode !== 0 && /No such (?:object|container)/i.test(verification.stderr);
+  const absent = containerAbsent(verification);
   return { state: absent ? 'removed-owned-container' : 'cleanup-failed', id: inspected.container.Id, result: removed, verification };
 }
 
@@ -173,8 +175,14 @@ export async function runContainer(spec, runner = execute, signal) {
       mounts: container.Mounts?.map(m => ({ destination: m.Destination, readWrite: m.RW, type: m.Type })) };
     record.execution = await runner('docker', ['start', '--attach', id], { signal });
     const after = await inspectOwned(runner, id, owner);
+    record.completionInspect = after.result;
+    record.containerState = after.container?.State ?? null;
     record.containerExit = after.container?.State?.ExitCode ?? null;
-    record.state = commandOK(record.execution) ? 'measured' : 'failed';
+    const state = record.containerState;
+    record.containerCompleted = state?.Status === 'exited' && state?.Running === false && state?.Dead === false && state?.OOMKilled === false;
+    record.containerExitMatchesClient = record.containerCompleted && commandCompleted(record.execution) && Number.isInteger(record.containerExit) && record.containerExit === record.execution.exitCode;
+    record.state = commandOK(record.execution) && record.containerExitMatchesClient ? 'measured' : 'failed';
+    if (!record.containerExitMatchesClient) record.reason = 'Inspected container completion/exit disagrees with the Docker client outcome';
   } catch (error) { record.reason = scrub(error.message); }
   finally {
     try { record.cleanup = await cleanupOwned(runner, identity, owner); }
@@ -230,8 +238,8 @@ export async function materialize(root, corpusRoot = CORPUS) {
   return { source, rules, oversizeSource, inputs, oversize, indexHash: digest(indexBytes), expectations: index.rules.map(r => ({ id: r.id, matches: r.expectedMatches, noMatches: r.expectedNoMatches })) };
 }
 
-export function scanCommand(scenario) {
-  return ['--json', '--verbose', '--metrics=off', '--disable-version-check', '--jobs', '1', '--timeout', '20', '--max-target-bytes', '4096',
+export function scanCommand(scenario, candidate = CANDIDATES[0]) {
+  return ['--json', '--verbose', ...(candidate.id === 'semgrep' ? ['--metrics=off'] : []), '--disable-version-check', '--jobs', '1', '--timeout', '20', '--max-target-bytes', '4096',
     '--config', scenario === 'missing-rules' ? '/rules/not-present.yaml' : '/rules/sentinel-fixture-sql-concat-tsjs.yaml',
     ...(scenario === 'missing-rules' ? [] : ['--config', '/rules/sentinel-fixture-sql-concat-java.yaml']), '/input'];
 }
@@ -247,6 +255,8 @@ export function assessScan(record, expectations, sourceTexts) {
     result.gaps.push('invalid-engine-output-shape'); return result;
   }
   result.errors = output.errors ?? [];
+  const diagnostics = [...result.errors.map(error => typeof error === 'string' ? error : JSON.stringify(error)), record.execution?.stderr ?? ''];
+  result.missingRuleDiagnostic = result.errors.length > 0 && diagnostics.some(text => text.includes('/rules/not-present.yaml') && /\b(unable to find a config|does not exist|not found|no such file|invalid config(?:uration)?(?: file)?|cannot (?:read|find)|failed to (?:read|load))\b/i.test(text));
   result.coverage = { scanned: output.paths?.scanned ?? null, skipped: output.paths?.skipped ?? null,
     granularity: output.paths ? 'engine-reported-paths' : 'unavailable' };
   if (result.coverage.scanned === null) result.gaps.push('scanned-file-inventory-unavailable');
@@ -285,6 +295,7 @@ export function scenarioControl(trial) {
   check('owned-container-removed', trial.cleanup?.state === 'removed-owned-container');
   check('pinned-container-identity', /^[a-f0-9]{64}$/.test(trial.isolation?.id ?? '') && trial.isolation?.image === trial.expectedImage);
   check('network-none-inspected', trial.isolation?.networkMode === 'none');
+  check('container-stopped-and-exit-agrees', trial.containerCompleted === true && trial.containerExitMatchesClient === true && trial.containerExit === trial.execution?.exitCode);
   const execution = trial.execution;
   const finished = execution && !execution.timedOut && !execution.cancelled && !execution.outputExceeded && !execution.spawnError && !execution.exitSignal;
   if (trial.scenario === 'missing-rules') {
@@ -303,7 +314,9 @@ export function scenarioControl(trial) {
     check('no-engine-errors', Array.isArray(assessment?.errors) && assessment.errors.length === 0);
   } else if (trial.scenario === 'network-denial') {
     check('socket-attempt-denied', trial.denialObserved === true && trial.socketAttempt?.connected === false);
-  } else if (trial.scenario !== 'missing-rules') check('known-scenario', false);
+  } else if (trial.scenario === 'missing-rules') {
+    check('valid-json-missing-rule-diagnostic', assessment?.parseableJson === true && assessment.missingRuleDiagnostic === true);
+  } else check('known-scenario', false);
   return { candidate: trial.candidate, scenario: trial.scenario, passed: checks.every(c => c.passed), checks };
 }
 
@@ -369,7 +382,7 @@ export async function runProbe(options, { runner = execute, corpusRoot = CORPUS,
       for (const scenario of ['version', 'paired-baseline', 'oversized', 'missing-rules']) {
         if (signal?.aborted) throw new Error('Probe cancelled');
         const trial = await runContainer({ candidate, scenario, source: scenario === 'oversized' ? materialized.oversizeSource : materialized.source,
-          rules: materialized.rules, binary: copiedBinary, command: scenario === 'version' ? ['--version'] : scanCommand(scenario) }, runner, signal);
+          rules: materialized.rules, binary: copiedBinary, command: scenario === 'version' ? ['--version'] : scanCommand(scenario, candidate) }, runner, signal);
         if (scenario === 'version') {
           trial.observedVersion = trial.execution?.stdout.trim() ?? null;
           trial.versionMatches = new RegExp(`(^|\\s)${candidate.version.replaceAll('.', '\\.')}($|\\s)`).test(trial.observedVersion ?? '');
@@ -382,7 +395,7 @@ export async function runProbe(options, { runner = execute, corpusRoot = CORPUS,
             trial.assessment.gaps.push('oversized-input-not-a-clean-check');
           }
           if (scenario === 'missing-rules') {
-            trial.assessment.expectedFailureObserved = Number.isInteger(trial.execution?.exitCode) && trial.execution.exitCode !== 0;
+            trial.assessment.expectedFailureObserved = commandCompleted(trial.execution) && trial.execution.exitCode !== 0 && trial.containerExitMatchesClient === true && trial.assessment.parseableJson && trial.assessment.missingRuleDiagnostic;
             trial.assessment.gaps.push('required-local-rule-unavailable');
           }
         }

@@ -67,7 +67,7 @@ test('missing or tampered binary is refused before Docker or output creation', a
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-function fakeDocker({ mismatch = false, timeout = false, corruptInspect = false } = {}) {
+function fakeDocker({ mismatch = false, timeout = false, corruptInspect = false, containerExit = 0, clientExit = 0, running = false } = {}) {
   const calls = [], id = 'a'.repeat(64);
   let owner, removed = false;
   const runner = async (program, args) => {
@@ -80,8 +80,8 @@ function fakeDocker({ mismatch = false, timeout = false, corruptInspect = false 
     if (args[0] === 'inspect' && removed) return { ...ok(''), exitCode: 1, stderr: 'Error: No such object: ' + id };
     if (args[0] === 'inspect') return ok(corruptInspect ? '{}' : JSON.stringify([{ Id: id, Image: 'sha256:pinned-image',
       Config: { Image: CANDIDATES[0].image, Labels: { 'org.farsight.sentinel-feasibility.owner': mismatch ? 'someone-else' : owner }, User: '65534:65534' },
-      HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true }, State: { ExitCode: 0 }, Mounts: [] }]));
-    if (args[0] === 'start') return timeout ? { ...ok(''), exitCode: null, timedOut: true } : ok('{"results":[],"paths":{"scanned":[]}}');
+      HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true }, State: { ExitCode: containerExit, Running: running, Status: running ? 'running' : 'exited', Dead: false, OOMKilled: false }, Mounts: [] }]));
+    if (args[0] === 'start') return timeout ? { ...ok(''), exitCode: null, timedOut: true } : { ...ok('{"results":[],"paths":{"scanned":[]}}'), exitCode: clientExit };
     if (args[0] === 'rm') { removed = true; return ok(id); }
     throw new Error('unexpected Docker command');
   };
@@ -111,9 +111,38 @@ test('ownership mismatch refuses both start and cleanup without broad fallback',
 test('unavailable inspect never authorizes removal', async () => {
   const calls = [];
   const result = await cleanupOwned(async (program, args) => { calls.push({ program, args }); return { ...ok(''), exitCode: 1 }; }, 'owned-name', 'owner');
-  assert.equal(result.state, 'not-found');
+  assert.equal(result.state, 'cleanup-failed');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].args[0], 'inspect');
+});
+
+test('cleanup distinguishes explicit absence from daemon failure, timeout and permission denial', async () => {
+  for (const [inspection, expected] of [
+    [{ ...ok(''), exitCode: 1, stderr: 'Error: No such object: owned-name' }, 'not-found'],
+    [{ ...ok(''), exitCode: 1, stderr: 'Cannot connect to the Docker daemon' }, 'cleanup-failed'],
+    [{ ...ok(''), exitCode: 1, timedOut: true, stderr: 'Error: No such object: owned-name' }, 'cleanup-failed'],
+    [{ ...ok(''), exitCode: 1, stderr: 'permission denied on daemon socket' }, 'cleanup-failed'],
+  ]) {
+    const calls = [];
+    const result = await cleanupOwned(async (program, args) => { calls.push({ program, args }); return inspection; }, 'owned-name', 'owner');
+    assert.equal(result.state, expected);
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('container exit and stopped state are authoritative over a successful Docker client', async () => {
+  for (const options of [{ containerExit: 2 }, { running: true }]) {
+    const fake = fakeDocker(options), result = await runContainer(spec(), fake.runner);
+    assert.equal(result.state, 'failed');
+    assert.equal(result.containerExitMatchesClient, false);
+    assert.equal(result.cleanup.state, 'removed-owned-container');
+  }
+  const fake = fakeDocker({ clientExit: 7, containerExit: 7 });
+  const result = await runContainer({ ...spec(), scenario: 'missing-rules' }, fake.runner);
+  assert.equal(result.state, 'failed');
+  assert.equal(result.containerCompleted, true);
+  assert.equal(result.containerExitMatchesClient, true);
+  assert.equal(result.containerExit, 7);
 });
 
 test('materialization preserves exact original bytes and identifies all narrow-rule pairs', async () => {
@@ -143,6 +172,7 @@ test('missing-rule control stays explicit and no registry configuration is used'
   for (const scenario of ['paired-baseline', 'oversized', 'missing-rules']) {
     const args = scanCommand(scenario);
     assert.ok(args.includes('--metrics=off'));
+    assert.ok(!scanCommand(scenario, CANDIDATES[1]).includes('--metrics=off'));
     assert.ok(args.includes('--disable-version-check'));
     assert.ok(!args.some(a => /^https?:|^p\/|^r\//.test(a)));
     assert.equal(args[args.indexOf('--max-target-bytes') + 1], '4096');
@@ -178,10 +208,11 @@ test('subprocess bounds and literal arguments do not use a shell', async () => {
 function passingTrial(scenario, candidate = CANDIDATES[0]) {
   const trial = { candidate: candidate.id, scenario, expectedImage: candidate.image,
     isolation: { id: 'a'.repeat(64), image: candidate.image, networkMode: 'none' }, cleanup: { state: 'removed-owned-container' },
-    execution: ok(''), versionMatches: true, denialObserved: true, socketAttempt: { connected: false },
+    execution: ok(''), containerCompleted: true, containerExitMatchesClient: true, containerExit: 0,
+    versionMatches: true, denialObserved: true, socketAttempt: { connected: false },
     assessment: { parseableJson: true, errors: [], positiveSymbols: Array.from({ length: 3 }, () => ({ matched: true })),
       negativeSymbols: Array.from({ length: 3 }, () => ({ matched: false })), coverage: { scanned: [] }, oversizedNotScanned: true } };
-  if (scenario === 'missing-rules') trial.execution.exitCode = 7;
+  if (scenario === 'missing-rules') { trial.execution.exitCode = 7; trial.containerExit = 7; trial.assessment.missingRuleDiagnostic = true; }
   return trial;
 }
 
@@ -227,10 +258,28 @@ test('missing rule control requires an actual nonzero completion, not a timeout 
     t => { t.execution.timedOut = true; }, t => { t.execution.cancelled = true; },
     t => { t.execution.spawnError = 'ENOENT'; }, t => { t.execution.outputExceeded = true; },
     t => { t.execution.exitSignal = 'SIGKILL'; },
+    t => { t.containerExitMatchesClient = false; }, t => { t.containerCompleted = false; },
   ]) {
     const trial = passingTrial('missing-rules'); mutate(trial);
     assert.equal(scenarioControl(trial).passed, false);
   }
+});
+
+test('unknown scanner option never satisfies the missing-rule negative control', () => {
+  for (const [stdout, stderr] of [
+    ['', "unknown option '--metrics'"],
+    ['{"errors":[{"message":"unknown option --metrics"}]}', ''],
+    ['{"errors":[{"message":"unknown config argument /rules/not-present.yaml"}]}', ''],
+  ]) {
+    const trial = passingTrial('missing-rules');
+    trial.execution = { ...ok(stdout), exitCode: 2, stderr }; trial.containerExit = 2;
+    trial.assessment = assessScan(trial, [], {});
+    assert.equal(scenarioControl(trial).passed, false);
+  }
+  const trial = passingTrial('missing-rules');
+  trial.execution.stdout = JSON.stringify({ errors: [{ message: 'WARNING: unable to find a config; path `/rules/not-present.yaml` does not exist' }] });
+  trial.assessment = assessScan(trial, [], {});
+  assert.equal(scenarioControl(trial).passed, true);
 });
 
 test('overall control verdict includes all scenarios, versions, network, cleanup and immutable input identity', () => {
