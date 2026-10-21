@@ -117,9 +117,23 @@
           "name": {
             "type": "string",
             "description": "What to call the spec."
+          },
+          "phase": {
+            "type": "string",
+            "description": "Current delivery phase. Only an x-phase demonstrably later in phaseOrder is planned; an unknown phase grants no exemption."
+          },
+          "phaseOrder": {
+            "type": "array",
+            "description": "Delivery phases from earliest to latest. If omitted, first use of x-phase in the contract defines the order.",
+            "items": { "type": "string" }
           }
         }
       }
+    },
+    "internalRoutes": {
+      "type": "array",
+      "description": "Exact internal METHOD /path declarations, excluded only from undocumented-policy failures. Parameter spelling is normalized; these are not globs and raw drift remains visible.",
+      "items": { "type": "string", "pattern": "^[A-Z]+ /.*$" }
     },
     "tests": {
       "$ref": "#/$defs/tests"
