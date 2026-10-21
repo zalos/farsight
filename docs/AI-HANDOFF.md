@@ -1473,3 +1473,6 @@ No new graph field or speculative validation edge is emitted. ADR 14 records the
 Focused core/parser/CLI API suites (31 tests), affected builds/typechecks and catalog/title lint passed.
 The real application's contract/config declarations remain an owner follow-up; this branch contains
 only generic fixtures. Parent integration owns real-ingest comparison and browser validation.
+
+G3 review follow-up: inactive guard edges and inactive direct/delegated handler or reader calls no longer
+earn enforcement/body-validation credit. Regressions cover every hop and preserve an alternate active path.

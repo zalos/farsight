@@ -170,4 +170,5 @@ retain `security-missing-in-spec`. Existing scheme and scope checks remain in fo
 Root-only `validators` lists exact function names or ids for multipart readers. A required multipart
 body counts as validated only when the implemented route has a real calls path to a configured reader
 in the same source. Merely naming a reader, having it elsewhere in the graph or using it for a JSON body
-provides no evidence. No application graph field or speculative validates edge is added.
+provides no evidence. Inactive guard or call edges never supply enforcement or multipart-reader evidence.
+No application graph field or speculative validates edge is added.

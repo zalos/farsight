@@ -334,13 +334,13 @@ function guardsOf(index: GraphIndex, routeId: string): GraphNode[] {
     if (seen.has(id)) continue;
     seen.add(id);
     for (const edge of index.in.get(id) ?? []) {
-      const guard = edge.kind === 'guards' ? index.byId.get(edge.from) : undefined;
+      const guard = edge.kind === 'guards' && edge.meta?.inactive !== true ? index.byId.get(edge.from) : undefined;
       if (guard) guards.set(guard.id, guard);
     }
     // Config guards are applied after adapters mirror handler gates onto routes. Read
     // their direct handler too, then only proven delegate links, never arbitrary helpers.
     for (const edge of index.out.get(id) ?? []) {
-      if (edge.kind === 'calls' && (id === routeId || edge.meta?.via === 'delegate')) {
+      if (edge.kind === 'calls' && edge.meta?.inactive !== true && (id === routeId || edge.meta?.via === 'delegate')) {
         const handler = index.byId.get(edge.to);
         if (handler?.kind === 'function' && handler.loc?.repo === index.byId.get(routeId)?.loc?.repo) pending.push(handler.id);
       }
@@ -364,7 +364,7 @@ function multipartReaderReached(op: SpecOperation, routeId: string, index: Graph
   while (pending.length) {
     const id = pending.pop()!;
     for (const edge of index.out.get(id) ?? []) {
-      if (edge.kind !== 'calls' || seen.has(edge.to)) continue;
+      if (edge.kind !== 'calls' || edge.meta?.inactive === true || seen.has(edge.to)) continue;
       seen.add(edge.to);
       const target = index.byId.get(edge.to);
       if (!target || target.loc?.repo !== index.byId.get(routeId)?.loc?.repo) continue;

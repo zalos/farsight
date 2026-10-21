@@ -353,3 +353,43 @@ test('guard vocabulary follows proven delegates and never arbitrary helper calls
   guard.tags.push('declared');
   assert.ok(reconcile(doc, buildIndex([route, handler, helper, guard], edges), source, { repo: 'app' }).matched[0]?.contract.drift?.some((d) => d.kind === 'security-missing-in-code'));
 });
+
+test('inactive guards and handler/delegate calls never satisfy declared guard requirements', () => {
+  const nodes = [
+    node('route', 'route', 'POST /check', { loc: loc('routes.ts', 1) }),
+    node('handler', 'function', 'CheckController.check', { loc: loc('controller.ts', 1) }),
+    node('delegate', 'function', 'checkHandler', { loc: loc('handler.ts', 1) }),
+    node('guard', 'guard', 'same-origin'),
+  ];
+  const doc: OpenApiDoc = { openapi: '3.1.0', paths: { '/check': { post: { 'x-guards': ['same-origin'] } } } };
+  const source = { repo: 'app', path: 'api.yaml' };
+  const paths = [
+    [edge('guards', 'guard', 'route', { inactive: true })],
+    [edge('calls', 'route', 'handler', { inactive: true }), edge('guards', 'guard', 'handler')],
+    [edge('calls', 'route', 'handler'), edge('calls', 'handler', 'delegate', { via: 'delegate', inactive: true }), edge('guards', 'guard', 'delegate')],
+    [edge('calls', 'route', 'handler'), edge('guards', 'guard', 'handler', { inactive: true })],
+  ];
+  for (const edges of paths) {
+    const contract = reconcile(doc, buildIndex(nodes, edges), source, { repo: 'app' }).matched[0]!.contract;
+    assert.ok(contract.drift?.some((d) => d.kind === 'security-missing-in-code'));
+  }
+  assert.equal(reconcile(doc, buildIndex(nodes, [edge('guards', 'guard', 'route', { inactive: false })]), source, { repo: 'app' }).matched[0]!.contract.drift, undefined);
+});
+
+test('inactive multipart-reader call paths never validate a required body; an active alternate path does', () => {
+  const nodes = [
+    node('route', 'route', 'POST /upload', { loc: loc('routes.ts', 1) }),
+    node('handler', 'function', 'uploadHandler', { loc: loc('handler.ts', 1) }),
+    node('reader', 'function', 'readMultipart', { loc: loc('reader.ts', 1) }),
+  ];
+  const doc: OpenApiDoc = { openapi: '3.1.0', paths: { '/upload': { post: { requestBody: { required: true, content: { 'multipart/form-data': {} } } } } } };
+  const source = { repo: 'app', path: 'api.yaml' };
+  const opts = { repo: 'app', validators: ['readMultipart'] };
+  for (const edges of [
+    [edge('calls', 'route', 'reader', { inactive: true })],
+    [edge('calls', 'route', 'handler', { inactive: true }), edge('calls', 'handler', 'reader')],
+    [edge('calls', 'route', 'handler'), edge('calls', 'handler', 'reader', { inactive: true })],
+  ]) assert.ok(reconcile(doc, buildIndex(nodes, edges), source, opts).matched[0]!.contract.drift?.some((d) => d.kind === 'body-unvalidated'));
+  const alternate = [edge('calls', 'route', 'reader', { inactive: true }), edge('calls', 'route', 'handler'), edge('calls', 'handler', 'reader')];
+  assert.equal(reconcile(doc, buildIndex(nodes, alternate), source, opts).matched[0]!.contract.drift, undefined);
+});
