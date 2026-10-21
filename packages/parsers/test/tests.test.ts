@@ -1142,3 +1142,15 @@ test('another results file preserves known parameter rows without inventing an u
   const second = importReports(f, dir, { unit: { results: 'coverage/two.json' } });
   assert.equal(second.gaps.some((g) => g.kind === 'unjoined-each'), false);
 });
+
+test('relative reporter files join a nested source project without resolving against the process cwd', async () => {
+  const dir = tempRepo({
+    'web/test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n",
+    'web/coverage/results.json': JSON.stringify({ testResults: [{ name: 'test/service.spec.ts', assertionResults: [{ title: 'works', ancestorTitles: [], status: 'passed' }] }] }),
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const imported = importReports(f, dir, { unit: { results: 'web/coverage/results.json' } });
+  assert.equal(imported.runs, 1);
+  assert.equal(imported.reports[0]!.unjoined, 0);
+  assert.equal(f.nodes.find((n: GraphNode) => n.name === 'works')!.test!.run!.status, 'passed');
+});

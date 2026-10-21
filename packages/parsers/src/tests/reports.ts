@@ -9,7 +9,7 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, relative } from 'node:path';
+import { join, relative, isAbsolute } from 'node:path';
 import type { TestRun } from '@farsight/core';
 import { testGlobToRegExp } from './cases.js';
 
@@ -177,7 +177,10 @@ function readVitestJson(doc: Record<string, unknown>, repoRoot: string): { cases
   const cases: ObservedCase[] = [];
   const files = (doc['testResults'] as Record<string, unknown>[]) ?? [];
   for (const f of files) {
-    const file = typeof f['name'] === 'string' ? relative(repoRoot, f['name'] as string) : undefined;
+    const namedFile = typeof f['name'] === 'string' ? f['name'] as string : undefined;
+    // A reporter-relative path is already relative to its project's root. Resolving
+    // it against Farsight's cwd invents a prefix and breaks nested source projects.
+    const file = namedFile ? (isAbsolute(namedFile) ? relative(repoRoot, namedFile) : namedFile.replace(/^\.\//, '')) : undefined;
     for (const a of (f['assertionResults'] as Record<string, unknown>[]) ?? []) {
       const suite = ((a['ancestorTitles'] as string[]) ?? []).filter((x) => typeof x === 'string');
       const title = String(a['title'] ?? '');
