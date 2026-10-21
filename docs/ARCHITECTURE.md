@@ -187,5 +187,6 @@ a route. Results and coverage from different files remain independent.
 
 Parameterized titles match the existing printf and named-value templates. A reporter-recorded declaration
 line may identify a unique parameterized case in the named file; ambiguous templates remain unjoined.
+For a runtime describe title, a reporter may also identify a literal leaf case by its named file, exact declaration line and exact leaf title, only when one case matches. Text-only joins still require the full suite title.
 An empty coverage report is retained as `reason: empty` metadata without a gap warning; it proves no
 execution and supplies no coverage edges. Empty results remain a reported gap.

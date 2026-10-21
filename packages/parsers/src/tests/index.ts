@@ -586,15 +586,28 @@ function attachRuns(
   const gaps: TestsGap[] = [];
   const sameFile = (node: GraphNode, c: ObservedCase): boolean =>
     !c.file || node.test!.file === c.file || node.test!.file.endsWith(`/${c.file}`) || c.file.endsWith(`/${node.test!.file}`);
+  // Literal leaf titles with an exact reporter location can survive a runtime
+  // describe title. Keep all candidates so a suffix-only file name never picks
+  // one of two matching source files or duplicate declarations.
+  const byLocation = new Map<string, GraphNode[]>();
+  for (const nodes of byFullName.values()) for (const node of nodes) {
+    if (node.test!.level !== level || !node.loc || node.tags.includes('test:title-heuristic')) continue;
+    const key = `${node.loc.line}\0${node.name}`;
+    const located = byLocation.get(key) ?? [];
+    located.push(node);
+    byLocation.set(key, located);
+  }
   const match = (c: ObservedCase): GraphNode[] => {
     const hits = (byFullName.get(c.fullName) ?? byFullName.get([...c.suite, c.title].join(' ')) ?? []).filter((n) => n.test!.level === level);
     // a JUnit row carries no file: it may only join when exactly one node has that
     // full name — attaching it to every hit would invent evidence (03 §3.1)
     if (!c.file) return hits.length === 1 ? hits : [];
-    if (hits.length <= 1) return hits.filter((n) => sameFile(n, c));
     // same title in two spec files: the report names the file, so use it
     const narrowed = hits.filter((n) => sameFile(n, c));
-    return narrowed.length === 1 ? narrowed : [];
+    if (narrowed.length === 1) return narrowed;
+    if (narrowed.length > 1 || c.line == null) return [];
+    const located = (byLocation.get(`${c.line}\0${c.title}`) ?? []).filter((n) => sameFile(n, c));
+    return located.length === 1 ? located : [];
   };
   // a row no exact name claimed may be one row of a `.each` template in the same
   // file and describe path — the reporter expanded the title, the node still holds it

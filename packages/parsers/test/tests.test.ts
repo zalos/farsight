@@ -1154,3 +1154,29 @@ test('relative reporter files join a nested source project without resolving aga
   assert.equal(imported.reports[0]!.unjoined, 0);
   assert.equal(f.nodes.find((n: GraphNode) => n.name === 'works')!.test!.run!.status, 'passed');
 });
+
+test('a dynamic suite joins by unique reporter file, exact declaration line and literal leaf title only', async () => {
+  const dir = tempRepo({
+    'e2e/a/shared.pw.spec.ts': "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
+    'e2e/b/shared.pw.spec.ts': "import { test } from '@playwright/test';\nconst mode = 'mock';\ntest.describe(`pipeline (${mode})`, () => {\n  test('uploads a file', () => {});\n});\n",
+    'e2e/duplicate.pw.spec.ts': "import { test } from '@playwright/test'; const mode = 'mock'; test.describe(`pipeline (${mode})`, () => { test('uploads a file', () => {}); test('uploads a file', () => {}); });\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const write = (file: string, line?: number, title = 'uploads a file') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ config: {}, suites: [{ title: 'pipeline (mock)', file, specs: [{ title, ...(line != null ? { line } : {}), tests: [{ projectName: 'pipeline', status: 'expected' }] }] }] }));
+  const importOne = () => importReports(f, dir, { e2e: { results: 'coverage/results.json' } });
+  write('e2e/a/shared.pw.spec.ts', 4);
+  assert.equal(importOne().runs, 1);
+  write('shared.pw.spec.ts', 4);
+  assert.equal(importOne().runs, 0, 'basename and location are ambiguous across files');
+  write('e2e/duplicate.pw.spec.ts', 1);
+  assert.equal(importOne().runs, 0, 'duplicate case declarations at the same location never join');
+  write('e2e/missing.pw.spec.ts', 4);
+  assert.equal(importOne().runs, 0, 'mismatched file never joins');
+  write('e2e/a/shared.pw.spec.ts');
+  assert.equal(importOne().runs, 0, 'leaf title without location never ignores the suite');
+  write('e2e/a/shared.pw.spec.ts', 5);
+  assert.equal(importOne().runs, 0, 'nearby location never joins');
+  write('e2e/a/shared.pw.spec.ts', 4, 'another leaf');
+  assert.equal(importOne().runs, 0, 'location alone never joins a different leaf');
+});

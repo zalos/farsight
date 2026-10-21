@@ -528,3 +528,7 @@ The import replaces the projects named in that report and retains other projects
 `--replace` to discard every prior project from those results paths instead. A fresh ingest reads only the
 reports currently on disk; keep separate report files when those projects must survive a fresh ingest.
 Coverage remains evidence of what the run reached, without attributing it to an individual passing case.
+
+A passing end-to-end case credits the screens and journeys its own declarations name. A separate journey
+variant remains reached when it has only static references, even if a related case passed; coverage from a
+unit run supplies no evidence that the end-to-end case observed that variant.
