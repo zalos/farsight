@@ -1,6 +1,7 @@
 # Response to the Sentinel implementation review
 
-**Status:** incorporated into the PR 00 review draft, 2026-10-17. No Sentinel implementation has started.
+**Status:** incorporated into PR 00, merged as #118 at `0c8c747` on 2026-10-19. Execution preparation refreshed
+2026-10-21; no Sentinel implementation has started. Dated review findings below retain their historical context.
 **Baseline:** application `4fce1c8`; proposal PR #117 merged at `04c3c63`.
 
 The [implementation review](claude-review-implementation.md) identified four material gaps: placement in
@@ -27,7 +28,7 @@ acceptance evidence; it does not mean the planned runtime behavior has been impl
 | 2.9 — parser reads outside manifest | Incorporated with an explicit limitation | PR 05 verifies the materialized entry set/bytes and returned `analysis.inputs` using each input kind's codec. Existing reader bounds reject escapes/symlinks. There is no injected reader hook, and the plan does not claim syscall auditing of arbitrary native/custom adapters. |
 | 2.10 — business vocabulary | Incorporated | Architecture section 11 gives code/business twins and definitions for SARIF, CWE, SCC, frontier, epoch, attempt, publication and evidence terms. Catalogs and lint precede PR 09's public commands; placement uses application sentences. |
 | 2.11 — Unix socket limit | Incorporated and source-checked | PR 09 uses a short owner-only runtime directory and a byte-length check with terminator space. Long/multibyte paths, stale sockets, ownership and collisions are acceptance cases. Apple's source declares 104 bytes; it is linked in the architecture. |
-| 2.12 — container prerequisite | Owner decision pending | External scanners require containers under the proposed policy; parsing/planning do not. PR 01 tests exact selected Linux/macOS runtimes and records installation, VM limits and terms. Docker Desktop subscription terms and Colima's project/license were checked; neither is claimed to be a validated Sentinel backend. The owner's answer is needed before external-scanner probes, not before reviewing PR 00. |
+| 2.12 — container prerequisite | Owner confirmed 2026-10-21 | External scanners require Linux containers with no host fallback; parsing/planning do not. PR 01 tests exact selected Linux/macOS runtimes and records installation, VM limits and terms. Docker Desktop and Colima remain candidates, not validated Sentinel backends; the policy decision does not approve acquisition or claim runtime support. |
 | 2.13 — identities, coverage and exit behavior | Preserved | Keep snapshot/run/attempt/report identities and explicit work revisions; applicability/execution/coverage/producer/outcome separation; final exit precedence 3 → 2 → 1 → 0; product-behavior acceptance cases. Confirmation exit 4 is pre-admission, not another completed-scan verdict. |
 
 ## Clarifications made while applying the review
@@ -103,11 +104,32 @@ syntax, balanced fences and whitespace. The nine SQL behavior checks passed agai
 SQLite 3.53.3. A real reader probe confirmed that absence and symlink refusal share the missing fingerprint,
 while the refusal retains its diagnostic. These are documentation/example checks, not Sentinel runtime proof.
 
+## Execution preparation — 2026-10-21
+
+The owner requested another review of recent application changes and preparation for implementation.
+PR #118's merged state was verified against GitHub, and the owner confirmed Linux containers for external
+scanners with no host fallback. These supersede the pending-state descriptions in the dated review above.
+The original Claude reviews remain unchanged; current adjustments are recorded here and in the
+[execution readiness packet](execution-readiness.md), without adding private review transcripts.
+
+| Review adjustment | Plan action and owning gate |
+|---|---|
+| Parser selection now honors `.gitignore`; `analysis.complete` is not security inventory completeness | PR 01/E1 and PR 05 pin selection/read fingerprints and reconcile ignored tracked/generated inputs, nested rules and refusal cases |
+| API delivery reconciliation does not prove runtime security enforcement | PR 01 names `guardsOf()`/`matchesGuard()` as heuristics; PR 16/E2 adds unregistered-pipe and parse-only multipart negatives |
+| The packaging preflight currently requires every workspace package's compiled `main` | PR 02 scopes preflight to actual Farsight dependencies and proves ordinary packaging with Sentinel absent/unbuilt, preserving fail-before-delete behavior |
+| A reviewable harness is not the full feasibility acceptance gate | PR 01 separates evidence preparation from measured decisions; only accepted, merged PR 01 releases PR 02 |
+| The feasibility script selects all current runtime checks | Record actual CI selection for PR 01; current Markdown preparation needs documentation checks only |
+| Placement helpers can change before PR 19 | Recheck actual journey/affected interfaces and pinned-context assumptions when implementing that gate |
+
+Three SOL lanes have explicit ownership for corpus/protocol, harness/parser and storage/resources; the lead
+owns shared formats, integration, independent review and the definition of done. Gated engine/isolation work
+reuses a free lane after local evidence review. This is a prepared dispatch, not production implementation.
+
 ## Next action
 
-After PR 00 merges, use the [execution-readiness table](implementation-prs.md#4-execution-readiness-and-decision-record)
-when implementation is authorized.
+PR 00 merged on 2026-10-19. Use the [execution-readiness table](implementation-prs.md#4-execution-readiness-and-decision-record)
+and [prepared work assignments](execution-readiness.md) when implementation is authorized.
 Confirmed owner choices are local first with a hosted option, source-only first, Ollama plus a configurable
-hosted endpoint, and standalone report delivery alongside Farsight integration. Record the container-prerequisite
-answer before external-scanner probes; it does not block independent authorized fixture/harness work. PR 01 then produces the capability/decision manifest and measurements needed
+hosted endpoint, standalone report delivery alongside Farsight integration, and container-only external scanners
+with no host fallback. PR 01 produces the capability/decision manifest and measurements needed
 to select exact engines, framework releases and thresholds. No planned support is advertised as shipped.
