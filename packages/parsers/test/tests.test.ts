@@ -1035,3 +1035,83 @@ test('a changed report: the stamp\'s commit, or HEAD\'s commit time, says whethe
   assert.equal(changedByOf(old, undefined), undefined);
   assert.equal(changedByOf(old, { sha: 'beef00' }), undefined);
 });
+
+test('a reused results file replaces only incoming projects; replace explicitly clears prior projects', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit('works', () => {});\n",
+    'coverage/coverage-final.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const config = { unit: { results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } };
+  const write = (project: string, status = 'passed') => writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({
+    testResults: [{ name: join(dir, 'test/service.spec.ts'), projectName: project,
+      assertionResults: [{ title: 'works', fullName: 'works', ancestorTitles: [], status }] }],
+  }));
+  write('browser');
+  const first = importReports(f, dir, config);
+  assert.equal(first.gaps.some((g) => g.kind === 'empty'), false, 'empty coverage is recorded without a warning');
+  write('identity');
+  importReports(f, dir, config);
+  const node = f.nodes.find((n: GraphNode) => n.name === 'works')!;
+  assert.deepEqual(node.test!.runs!.map((r) => r.project).sort(), ['browser', 'identity']);
+  write('identity', 'failed');
+  importReports(f, dir, config);
+  assert.equal(node.test!.runs!.length, 2);
+  assert.equal(node.test!.run!.status, 'failed');
+  importReports(f, dir, config, undefined, { replace: true });
+  assert.deepEqual(node.test!.runs!.map((r) => r.project), ['identity']);
+});
+
+test('reporter location joins only a unique parameter template; mismatched files never claim exact names', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit('works', () => {});\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  writeFileSync(join(dir, 'coverage/results.json'), JSON.stringify({ testResults: [
+    { name: join(dir, 'test/service.spec.ts'), assertionResults: [
+      { title: 'runner formatted value', ancestorTitles: [], status: 'passed', location: { line: 2 } },
+    ] },
+    { name: join(dir, 'test/other.spec.ts'), assertionResults: [
+      { title: 'works', ancestorTitles: [], status: 'passed' },
+    ] },
+  ] }));
+  const imported = importReports(f, dir, { unit: { results: 'coverage/results.json' } });
+  assert.equal(imported.runs, 1);
+  assert.equal(imported.reports[0]!.unjoined, 1);
+  assert.equal(f.nodes.find((n: GraphNode) => n.name === 'value %s')!.test!.run!.status, 'passed');
+  assert.equal(f.nodes.find((n: GraphNode) => n.name === 'works')!.test!.run, undefined);
+});
+
+test('passing route case and Istanbul coverage retain distinct case and run evidence', async () => {
+  const dir = tempRepo({
+    'app/api/health/route.ts': "export function GET() { return new Response('ok'); }\n",
+    'test/health.spec.ts': "import { it } from 'vitest';\nimport { GET } from '../app/api/health/route';\nit('health responds', () => { GET(); });\n",
+    'coverage/results.json': '{}',
+    'farsight.config.json': JSON.stringify({ tests: { unit: { results: 'coverage/results.json', coverage: 'coverage/coverage-final.json' } } }),
+  });
+  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/health.spec.ts'), [{ title: 'health responds', status: 'passed' }]));
+  writeFileSync(join(dir, 'coverage/coverage-final.json'), istanbulReport(join(dir, 'app/api/health/route.ts'), [{ name: 'GET', line: 1 }]));
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  const testCase = f.nodes.find((n: GraphNode) => n.kind === 'test' && n.name === 'health responds')!;
+  assert.equal(testCase.test!.run!.status, 'passed');
+  const run = f.nodes.find((n: GraphNode) => n.test?.runLevel)!;
+  assert.ok(run);
+  const observed = f.edges.filter((e: GraphEdge) => e.kind === 'covers' && e.meta?.evidence === 'observed');
+  assert.ok(observed.length > 0);
+  assert.ok(observed.every((e: GraphEdge) => e.from === run.id));
+  assert.ok(coversOf(f.edges, testCase.id).some((e: GraphEdge) => e.meta?.evidence === 'static'));
+  assert.equal(observed.some((e: GraphEdge) => e.from === testCase.id), false);
+});
+
+test('ambiguous parameter templates in one file join nothing without a unique location', async () => {
+  const dir = tempRepo({
+    'test/service.spec.ts': "import { it } from 'vitest';\nit.each([1])('value %s', () => {});\nit.each([2])('value %d', () => {});\n",
+    'coverage/results.json': '{}',
+  });
+  const f = await ingestRepo(dir, { repoName: 'sample' });
+  writeFileSync(join(dir, 'coverage/results.json'), vitestReport(join(dir, 'test/service.spec.ts'), [{ title: 'value 1', status: 'passed' }]));
+  const imported = importReports(f, dir, { unit: { results: 'coverage/results.json' } });
+  assert.equal(imported.runs, 0);
+  assert.equal(imported.reports[0]!.unjoined, 1);
+});

@@ -1504,3 +1504,14 @@ only generic fixtures. Parent integration owns real-ingest comparison and browse
 
 G3 review follow-up: inactive guard edges and inactive direct/delegated handler or reader calls no longer
 earn enforcement/body-validation credit. Regressions cover every hop and preserve an alternate active path.
+
+## Test evidence import follow-up (2026-10-21)
+
+Branch `codex/gap-test-evidence`: sequential results imports preserve other projects when a reporter reuses one
+results path. `--replace` clears all prior projects from those paths. Exact joins respect the report's file;
+ambiguous parameter templates stay unjoined, and a reporter-recorded declaration line may identify one unique
+template. Empty coverage keeps metadata without a warning. Coverage remains run-level evidence, even when a
+separate results file says a route case passed. Generic regression fixtures cover the distinction.
+
+Validated with Node 24 / pnpm 9: complete build, workspace typecheck, string catalog lint, and focused parser
+test-evidence suite. The integrating lead owns combined CI checks and real-application ingest comparison.

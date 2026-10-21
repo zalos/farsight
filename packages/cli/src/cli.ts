@@ -90,7 +90,7 @@ usage:
   farsight tests list [--level unit|e2e] [--scope a,b]         every test suite in the graph with its last run and freshness
   farsight tests matrix [--format table|csv|json]              journeys x tests: declared / reached / observed, coverage, gaps
                                                                (json|csv = farsight-tests-matrix v1, one row per flow/node/test)
-  farsight tests import --results <file> [--coverage <file>] [--repo name] [--level unit|integration|e2e]
+  farsight tests import --results <file> [--coverage <file>] [--repo name] [--level unit|integration|e2e] [--replace]
                         [--stamp [digest]] [--force-stamp] [--strict]
                                                                attach a report produced elsewhere (CI) to the existing graph;
                                                                --stamp writes the checkout's content digest into each JSON report
@@ -1460,7 +1460,7 @@ switch (command) {
         fragment.edges.push({ id: `test-import-e${seq++}`, kind: 'covers', from, to, ...(meta ? { meta } : {}), ...(resolution ? { resolution } : {}) });
         matches.push(String(meta?.match ?? ''));
       };
-      const runImport = () => { matches.length = 0; seq = null; return importReports(fragment, root, config, addEdge); };
+      const runImport = () => { matches.length = 0; seq = null; return importReports(fragment, root, config, addEdge, { replace: rest.includes('--replace') }); };
 
       let imported = runImport();
       const stamped = stamp ? stampReports(root, imported.reports, stamp, repo) : [];

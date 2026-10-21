@@ -174,3 +174,18 @@ provides no evidence. Inactive guard or call edges never supply enforcement or m
 No application graph field or speculative validates edge is added.
 
 16. **Wildcard UI routes remain pages and design fallbacks (2026-10-21).** React Router paths `*` and paths ending in `/*` retain their existing page ids and receive the `fallback` tag. Design reconciliation exposes undeclared fallbacks in an additive `fallbacks` list, rendered under its own heading, outside undesigned-page drift. A manifest that names the route claims it normally. The shared graph stays at schema version 1; both element and Component route declarations use the same page and render-edge contract.
+
+17. **Test report replacement by project (2026-10-21).**
+
+Results imports retain the latest evidence for each project within the same results report. Reusing a
+report path for a second Playwright or Vitest project preserves the first project's case runs; an import
+replaces all prior case runs for projects present in the incoming report, including cases removed from that
+project's run. An unnamed project is `default`. `tests import --replace` restores replacement of all projects
+previously read from the incoming results paths. Coverage reports still replace the whole matching run:
+Istanbul has no per-case attribution, so a passing case plus run coverage never proves that case observed
+a route. Results and coverage from different files remain independent.
+
+Parameterized titles match the existing printf and named-value templates. A reporter-recorded declaration
+line may identify a unique parameterized case in the named file; ambiguous templates remain unjoined.
+An empty coverage report is retained as `reason: empty` metadata without a gap warning; it proves no
+execution and supplies no coverage edges. Empty results remain a reported gap.

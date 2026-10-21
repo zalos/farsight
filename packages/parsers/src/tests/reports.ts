@@ -39,6 +39,8 @@ export function findReports(repoRoot: string, glob: string): string[] {
 
 /** One case as a report recorded it. `fullName` is what joins it to a `test` node. */
 export interface ObservedCase {
+  /** Reporter-recorded declaration line; never inferred from row order. */
+  line?: number;
   file?: string;
   suite: string[];
   title: string;
@@ -183,6 +185,7 @@ function readVitestJson(doc: Record<string, unknown>, repoRoot: string): { cases
       // a skipped/todo row is kept: the case ran nowhere, which is a fact about it
       cases.push({
         ...(file ? { file } : {}),
+        ...(typeof (a['location'] as Record<string, unknown> | undefined)?.['line'] === 'number' ? { line: (a['location'] as { line: number }).line } : {}),
         suite, title,
         fullName: typeof a['fullName'] === 'string' ? (a['fullName'] as string) : [...suite, title].join(' '),
         status: statusOf(a['status']),
@@ -240,6 +243,7 @@ function readPlaywrightJson(doc: Record<string, unknown>): { cases: ObservedCase
         const reason = status === 'skipped' ? skipReasonOf(t['annotations'], last?.['annotations'], spec['annotations']) : undefined;
         cases.push({
           ...(file || spec['file'] ? { file: String(spec['file'] ?? file) } : {}),
+          ...(typeof spec['line'] === 'number' ? { line: spec['line'] as number } : {}),
           suite: here, title,
           fullName: [...here, title].join(' '),
           status,
