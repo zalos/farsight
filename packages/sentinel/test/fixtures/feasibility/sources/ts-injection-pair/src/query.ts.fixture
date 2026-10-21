@@ -1,0 +1,7 @@
+type DB = { query(sql: string, values?: unknown[]): unknown };
+export function interpolated(db: DB, request: { query: { name: string } }) {
+  return db.query("SELECT id FROM accounts WHERE name = '" + request.query.name + "'");
+}
+export function parameterized(db: DB, request: { query: { name: string } }) {
+  return db.query('SELECT id FROM accounts WHERE name = ?', [request.query.name]);
+}

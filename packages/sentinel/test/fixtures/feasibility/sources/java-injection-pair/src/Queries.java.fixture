@@ -1,0 +1,12 @@
+package fixture;
+import java.sql.*;
+public class Queries {
+  public ResultSet interpolated(Connection db, String requestName) throws SQLException {
+    return db.createStatement().executeQuery("SELECT id FROM accounts WHERE name = '" + requestName + "'");
+  }
+  public ResultSet parameterized(Connection db, String requestName) throws SQLException {
+    PreparedStatement statement = db.prepareStatement("SELECT id FROM accounts WHERE name = ?");
+    statement.setString(1, requestName);
+    return statement.executeQuery();
+  }
+}

@@ -1,0 +1,6 @@
+rules:
+  - id: sentinel-fixture-sql-concat-tsjs
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: Synthetic SQL concatenation fixture; narrow syntax match only.
+    pattern: $DB.query($LEFT + $RIGHT)

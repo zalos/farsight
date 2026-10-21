@@ -1,0 +1,9 @@
+import { Body, Controller, Post, Req, UsePipes, ValidationPipe } from '@nestjs/common';
+import { IsEmail } from 'class-validator';
+class Contact { @IsEmail() email!: string; }
+@Controller('contact')
+export class ContactController {
+  @Post('declared') declared(@Body() body: Contact) { return body.email; }
+  @Post('checked') @UsePipes(new ValidationPipe()) checked(@Body() body: Contact) { return body.email; }
+  @Post('upload') async upload(@Req() req) { const fields = await req.parts(); return fields; }
+}

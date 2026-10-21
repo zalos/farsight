@@ -1,0 +1,1 @@
+<project><modelVersion>4.0.0</modelVersion><groupId>example.fixture</groupId><artifactId>spring-chain-fixture</artifactId><version>0.0.0</version><properties><spring-boot.version>3.4.3</spring-boot.version><spring-security.version>6.4.3</spring-security.version></properties></project>
