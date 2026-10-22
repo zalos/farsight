@@ -71,7 +71,8 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   const full = cli('report', first, '--full');
   assert.equal(full.status, 0, JSON.stringify(full.body));
   assert.equal(full.body.outcome, 'answered', 'a report is never a policy result');
-  assert.deepEqual(full.body.facts.limitations, ['sentinel.service.policyNotEvaluated']);
+  // The run has accepted secret matches, so source and context text is withheld, and the report says so.
+  assert.deepEqual(full.body.facts.limitations, ['sentinel.service.policyNotEvaluated', 'sentinel.report.withheld.secretRun']);
   assert.equal(full.body.facts.disclosure, 'shareable', 'shareable unless the owner asks for private');
   assert.equal(full.body.facts.completeness, 'partial');
   assert.ok(full.body.facts.gaps > 0, 'the fixture\'s partial coverage is a gap, not a pass');
@@ -91,8 +92,9 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
     'the pattern finding in the secret-named file keeps its location withheld');
   assert.equal(doc.counts.findings.n, doc.findings.length);
   assert.ok(doc.counts.plannedChecks.n >= doc.gaps.length);
-  assert.ok(doc.findings.every((x: any) => x.evidence.every((e: any) => e.state === 'withheld' && !e.excerpt
-    && (e.reasonCode === 'sentinel.report.withheld.shareable' ? !!e.location : e.reasonCode === 'sentinel.report.withheld.secret' && !e.location))), 'shareable: locations, no excerpts; secret locations not even that');
+  assert.ok(doc.findings.every((x: any) => x.evidence.every((e: any) => e.state === 'withheld' && !e.excerpt && !e.location
+    && ['sentinel.report.withheld.secretRun', 'sentinel.report.withheld.secret'].includes(e.reasonCode))), 'a run with secret matches: no excerpt and no location, in any finding');
+  assert.ok(doc.definitions.some((d: any) => d.key === 'sentinel.report.withheld.secretRun'), 'the limitation is defined in the report');
   assert.ok(doc.findings.every((x: any) => x.place.binding === 'unavailable'), 'no context, no place');
   for (const g of doc.gaps) assert.ok(g.reasonCode && g.explanation.business && g.explanation.code, g.checkId);
   for (const c of Object.values(doc.counts) as any[]) assert.ok(c.unit && c.scope && c.source, JSON.stringify(c));
@@ -114,7 +116,8 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
     assert.doesNotMatch(html, /<script|<link |src="http|href="http|@import/i);
   }
   assert.ok(!sh.includes('SELECT * FROM users WHERE id = '), 'shareable carries no source excerpt');
-  assert.ok(pv.includes('SELECT * FROM users WHERE id = '), 'private carries the cited excerpt');
+  assert.ok(!pv.includes('SELECT * FROM users WHERE id = '), 'private withholds source excerpts too while the run has secret matches');
+  for (const html of [sh, pv]) assert.match(html, /secret scan matched values in this run/);
   assert.ok(raw('report', first, '--full', '--format', 'sarif').stdout.includes('"version": "2.1.0"'));
 
   // An owner graph of the application, built from the tree as captured: shown first, then confirmed.

@@ -60,7 +60,9 @@ try{
  assert.ok(secretFindings.length>=4&&secretFindings.every(x=>x.evidence.every(e=>e.state==='withheld'&&!e.location)),'secret findings are reported, their locations withheld');
  assert.ok(secretFindings.length>new Set(secretFindings.flatMap(x=>x.evidence.map(e=>e.content))).size,'identical bytes in two files stay two findings');
  for(const html of [shareable,priv]){assert.match(html,/Content-Security-Policy/);assert.match(html,/@media print/);assert.doesNotMatch(html,/<script|src="http|href="http|@import/i);}
- assert.ok(!shareable.includes('SELECT * FROM users WHERE id = ')&&priv.includes('SELECT * FROM users WHERE id = '),'only the private report embeds source');
+ // The run has accepted secret matches, so no profile embeds source text, and both say why.
+ assert.ok(!shareable.includes('SELECT * FROM users WHERE id = ')&&!priv.includes('SELECT * FROM users WHERE id = '),'no source excerpt while the run has secret matches');
+ for(const html of [shareable,priv])assert.match(html,/secret scan matched values in this run/);
  if(process.env.SENTINEL_REPORT_DELIVERY)cpSync(delivered,process.env.SENTINEL_REPORT_DELIVERY,{recursive:true});
  console.log('sentinel scanner consumer ok: npm-only init twice, adoption, exact original packs, missing-asset refusal, owner-receipted tool/database adoption, plan, detach/join/wait through five real pinned containers, retained report after service restart and source removal; full report (five engines, secret values and secret-shaped names absent from every output) written once as shareable and private offline HTML and JSON from the installed command alone; incomplete required coverage stays exit 2');
 }finally{await stopOwnService();consumer.cleanup();}

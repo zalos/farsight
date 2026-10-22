@@ -1026,31 +1026,25 @@ else refuses rather than minting a new key, which would change identities), and 
 report, log or the service socket. A report and a bundle together, with the store id, confirm no guessed path. Secret
 findings keep stable identities only while the owner keeps that trust folder: if the key is lost, a new key is created
 and every withheld-location identity changes, so a comparison treats each secret finding as new and lists the earlier
-ones as no longer continued; reports generated before the loss keep the old identities and cannot be continued. Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
-report document in every profile (context labels and ids, paths, symbols, titles, sentences, excerpts), one fixed word
-per candidate so references still match. The pinned worker reports only the rule, the lines and a file reference (its
-template is `RuleID`, `StartLine`, `EndLine`, `File`, with `--redact=100`), so the report sees whole matched lines,
-never the value's position, and candidates are a heuristic over those lines: a matched line yields the whole trimmed
-line, each quoted string, the right-hand side of its first assignment (unquoted values with `:` or padding included),
-its pieces split at whitespace and quotes, at assignment, separator and bracket characters, and at path separators (with
-and without a final extension), and its runs of letters and digits; a value of short pieces joined by punctuation is
-withheld whole. Candidates cut at a value's own boundaries count from 3 characters (a supported detector matches short
-values, such as curl's `user:pass`); runs of letters and digits split out of longer text count from 8; all are held in
-memory only, and a matched value under 3 characters is not withheld. Trust is by position in the report contract, never
-by a key's name or a value's spelling: only positions whose value Sentinel itself generates (the schema, enums, catalog
-keys, digests, content and artifact ids, generated run, check, finding, evidence and report ids, counts' words,
-decisions, catalog definitions) are left as they are, and every position a confirmed graph or captured source can fill
-(context ids, labels and references, node ids, paths, titles, sentences, excerpts, count part labels) is screened however
-it is spelled. A matched line holding ordinary structural words still yields a valid report; the redacted document is
-checked against the contract again and refused if it does not fit. Limitation: this heuristic is not proved complete
-for every supported detector (only the measured shapes are tested, among them curl's 7-character `user:pass`), a match
-spanning several lines is read line by line, and a value under 3 characters is not withheld. The sound replacement is
-an exact value range: the pinned template would emit, as numbers only, the match's start column and the secret's offset
-and length within it (computed inside the container from the unredacted match; Gitleaks fills its match fields with the
-redacted placeholder under `--redact`), retained privately in the publication beside the whole-line citation and read
-over the private snapshot at render time. That changes the pinned template and worker digest, needs Gitleaks
+ones as no longer continued; reports generated before the loss keep the old identities and cannot be continued. The pinned worker reports only the rule, the lines and a file reference (template `RuleID`, `StartLine`, `EndLine`,
+`File`, with `--redact=100`), so a report sees whole matched lines, never the value's position, and cannot prove that any
+text a captured file or a confirmed graph supplied is free of a matched value. A report whose run or baseline has
+accepted secret matches therefore fails closed (`withholdSecretRun`): every finding's title and explanation are rebuilt
+from the rule pack's catalog words only; every evidence item is withheld with no excerpt and no location; every other
+source- or context-controlled string (context ids, labels and references, node ids, count part labels) becomes one
+opaque word per distinct original, so references still match and placement keeps its shape; every place records
+`sentinel.report.withheld.secretRun`, defined in the report, and the command lists it among its limitations. Trust is by
+position in the report contract, never by a key's name or a value's spelling: only positions whose value Sentinel
+generates (schema, enums, catalog keys, digests, content and artifact ids, generated run, check, finding, evidence and
+report ids, counts' words, a decision's and a definition's exact generated fields, a gap's catalog explanation) are
+kept. A run without secret matches reports as before, excerpts and labels included. The cost is availability: in a run
+with any secret match no report shows source excerpts, locations or context names. The precise replacement is an exact
+value range: the pinned template would emit, as numbers only, the match's start column and the secret's offset and
+length within it (computed inside the container from the unredacted match; Gitleaks fills its match fields with the
+redacted placeholder under `--redact`), kept privately in the publication beside the whole-line citation and read over
+the private snapshot at render time. That changes the pinned template and worker digest, needs Gitleaks
 requalification on both measured platforms and a check of the engine's column semantics for multibyte and multiline
-matches, and adds a private field to the publication; it is not part of this change. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+matches, and adds a private publication field; it is not part of this change. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
 attestation limitation above is unchanged.
