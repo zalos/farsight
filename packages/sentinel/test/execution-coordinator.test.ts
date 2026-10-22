@@ -236,13 +236,22 @@ test('an unreadable journal record is kept, reported and makes recovery not clea
     symlinkSync('/etc/hosts', join(dir, 'link.json'));
     mkdirSync(join(dir, 'folder.json'), { mode: 0o700 });
     const { plan, registry } = syntheticPlan(s.root);
-    const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work });
+    const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work, cleanupWaitMs: 0 });
     const reasons = Object.fromEntries(c.recovery.unresolved.map((u: any) => [u.file, u.reason]));
     assert.deepEqual(reasons, { 'garbage.json': 'not JSON', 'big.json': 'too large', 'fields.json': 'missing fields', 'link.json': 'a link', 'folder.json': 'not a regular file' });
     assert.equal(c.recovery.clean, false);
+    // Unconfirmed cleanup blocks admission: a record that cannot be read may describe a worker still running.
+    const blocked = await c.run();
+    assert.equal(blocked.blockedByCleanup.length, 5);
+    assert.equal(blocked.published, 0, 'nothing was admitted');
+    for (const f of ['garbage.json', 'big.json', 'fields.json', 'link.json', 'folder.json']) assert.ok(existsSync(join(dir, f)), `${f} is kept`);
+    // An explicit acknowledgement moves them, byte for byte, to the terminal-unknown journal; admission continues.
+    assert.equal(c.acknowledgeUnknownCleanup().length, 5);
     const summary = await c.run();
-    assert.equal(summary.clean, false, 'the run completes, but recovery is reported not clean');
-    for (const f of ['garbage.json', 'big.json', 'fields.json', 'link.json', 'folder.json']) assert.ok(existsSync(join(dir, f)) || f === 'link.json', `${f} is kept`);
+    assert.equal(summary.published, 4);
+    assert.deepEqual(summary.blockedByCleanup, []);
+    assert.equal(summary.unknownCleanup.length, 5, 'kept for audit');
+    assert.equal(summary.clean, false, 'acknowledged cleanup is never reported clean');
   } finally { store.close(); }
 });
 

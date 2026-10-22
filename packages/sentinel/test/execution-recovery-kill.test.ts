@@ -66,15 +66,14 @@ test(`a worker that outlives its dead coordinator is stopped by verified identit
   for (let rep = 0; rep < repetitions; rep++) {
     const s = scratch('kill-orphan');
     roots.push(s.root);
-    assert.equal(runChild(s.root, 'after-attempt-start', 'work-B', 'linger-ok').signal, 'SIGKILL');
+    // after-spawn: the worker exists and its identity is durable, but no attempt is in the ledger yet.
+    assert.equal(runChild(s.root, rep % 2 ? 'after-attempt-start' : 'after-spawn', 'work-B', 'linger-ok').signal, 'SIGKILL');
     // The orphan is alive before recovery runs.
     const store0 = await storeIn(s.root);
-    const orphan = store0.ledger.listAttempts({ id: 'work-B', revision: 1 }).find((a: any) => a.state === 'running');
-    const worker = orphan && store0.ledger.getAttempt(orphan.id)?.envelope.worker;
     const [journaled] = new WorkerFiles(store0.storePath).list().records;
     store0.close();
-    assert.ok(worker?.kind === 'owned-child', 'the attempt recorded its worker');
-    assert.ok(argumentsOf(worker.pid)?.includes(`--sentinel-token=${journaled.token}`), 'the orphaned worker is running with its token');
+    const worker = { pid: journaled.pid };
+    assert.ok(journaled.pid > 0 && argumentsOf(journaled.pid)?.includes(`--sentinel-token=${journaled.token}`), 'the orphaned worker is running with its token');
     const finished = runChild(s.root, 'none', 'work-B', 'linger-ok');
     assert.equal(finished.status, 0, finished.stderr.slice(0, 500));
     const summary = JSON.parse(finished.stdout.trim().split('\n').at(-1)!);

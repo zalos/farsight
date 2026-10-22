@@ -55,9 +55,11 @@ export class JournalDir<T extends Record<string, string | number>> {
     }
   }
 
+  /** Write (or replace) one record durably: temporary file, sync, rename, folder sync. */
   record(key: string, value: T): void {
     const file = this.#file(key);
     const tmp = `${file}.tmp`;
+    try { unlinkSync(tmp); } catch { /* none left from an earlier write */ }
     const bytes = Buffer.from(`${JSON.stringify(value)}\n`);
     if (bytes.byteLength > MAX_JOURNAL_RECORD_BYTES) throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: 'record too large' });
     const fd = openSync(tmp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
@@ -193,6 +195,35 @@ function readSmall(path: string, limit: number): string | null {
   } catch { return null; } finally { closeSync(fd); }
 }
 
+/**
+ * Every live process whose kernel argument list carries this exact token, read without a shell: /proc on Linux,
+ * `ps -ww -A` on macOS. undefined when the process table cannot be read.
+ */
+export function processesCarrying(token: string): number[] | undefined {
+  const arg = tokenArgument(token);
+  if (process.platform === 'linux') {
+    let dir;
+    try { dir = opendirSync('/proc'); } catch { return undefined; }
+    const found: number[] = [];
+    try {
+      for (let e = dir.readSync(), n = 0; e && n < 1_000_000; e = dir.readSync(), n++) {
+        if (!/^\d+$/.test(e.name)) continue;
+        const cmd = readSmall(`/proc/${e.name}/cmdline`, 256 * 1024);
+        if (cmd !== null && cmd.split('\0').includes(arg)) found.push(Number(e.name));
+      }
+    } finally { dir.closeSync(); }
+    return found;
+  }
+  const r = runBoundedSync('/bin/ps', ['-ww', '-A', '-o', 'pid=,command='], { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeoutMs: 10_000, maxStdoutBytes: 64 * 1024 * 1024, maxStderrBytes: 4096 });
+  if (!succeeded(r)) return undefined;
+  const found: number[] = [];
+  for (const line of r.stdout.toString('utf8').split('\n')) {
+    const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+    if (m && m[2]!.split(/\s+/).includes(arg)) found.push(Number(m[1]));
+  }
+  return found;
+}
+
 export type WorkerVerdict = 'ours' | 'gone' | 'someone-else' | 'unverifiable';
 
 /** Is the process with this pid the recorded worker? Exact where the kernel allows; never a time estimate. */
@@ -240,6 +271,20 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
   report.unresolved.push(...workers.unresolved);
   for (const w of workers.records) {
     if (w.epoch === epoch || w.store !== store.storeId) continue;
+    if (!w.pid) {
+      // Journaled before spawn, never given its pid: find it by its token (twice, so a child between fork and
+      // exec when its parent died has carried the token into its argument list by the second look).
+      const first = processesCarrying(w.token);
+      await new Promise(r => setTimeout(r, 200));
+      const second = processesCarrying(w.token);
+      if (first === undefined || second === undefined) { report.obligations.push({ attempt: w.attempt, pid: 0, reason: 'process table could not be read' }); continue; }
+      const pids = [...new Set([...first, ...second])];
+      for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+      const left = pids.length ? await waitAbsent(w.token) : true;
+      if (left) { report.stoppedWorkers.push(...pids); options.workers.settle(w); }
+      else report.obligations.push({ attempt: w.attempt, pid: 0, reason: 'stop not confirmed' });
+      continue;
+    }
     const verdict = verifyWorker(w);
     if (verdict === 'gone' || verdict === 'someone-else') { options.workers.settle(w); continue; }
     if (verdict === 'unverifiable') { report.obligations.push({ attempt: w.attempt, pid: w.pid, reason: 'identity could not be read' }); continue; }
@@ -277,6 +322,16 @@ export async function recoverStore(store: SentinelStore, options: { intents: Int
   return report;
 }
 
+/** Wait (bounded, up to 2 s) until no process carries the token. */
+async function waitAbsent(token: string): Promise<boolean> {
+  for (let i = 0; i < 20; i++) {
+    const left = processesCarrying(token);
+    if (left !== undefined && left.length === 0) return true;
+    await new Promise(r => setTimeout(r, 100));
+  }
+  return false;
+}
+
 /** Wait (bounded, up to 2 s) for a killed worker to be gone. */
 async function confirmGone(w: WorkerIdentity): Promise<boolean> {
   for (let i = 0; i < 20; i++) {
@@ -285,4 +340,44 @@ async function confirmGone(w: WorkerIdentity): Promise<boolean> {
     await new Promise(r => setTimeout(r, 100));
   }
   return false;
+}
+
+/**
+ * The terminal-unknown journal: records whose cleanup was explicitly acknowledged as unconfirmable. They are moved
+ * here byte for byte (never deleted), listed in every summary, and keep the store from ever reporting clean.
+ */
+export class UnknownCleanup {
+  readonly dir: string;
+
+  constructor(storePath: string) {
+    this.dir = new JournalDir<Record<string, string>>(storePath, 'unknown', []).dir;
+  }
+
+  acknowledge(dirs: readonly string[], report: RecoveryReport): string[] {
+    const wanted = new Set<string>([
+      ...report.pendingIntents.map(i => `intents/${i.owner}.json`),
+      ...report.obligations.map(o => `workers/${o.attempt}.json`),
+      ...report.unresolved.map(u => `${u.journal}/${u.file}`),
+    ]);
+    const moved: string[] = [];
+    for (const dir of dirs) {
+      const journal = dir.slice(dir.lastIndexOf('/') + 1);
+      for (const key of wanted) {
+        if (!key.startsWith(`${journal}/`)) continue;
+        const name = key.slice(journal.length + 1);
+        if (name === '*' || !name || name.includes('/')) continue;
+        try { renameSync(join(dir, name), join(this.dir, `${journal}.${name}`)); moved.push(key); } catch { /* already gone */ }
+      }
+      syncDirectory(dir);
+    }
+    syncDirectory(this.dir);
+    return moved;
+  }
+
+  list(): string[] {
+    const names: string[] = [];
+    const d = opendirSync(this.dir);
+    try { for (let e = d.readSync(), n = 0; e && n < MAX_JOURNAL_RECORDS; e = d.readSync(), n++) names.push(e.name); } finally { d.closeSync(); }
+    return names.sort();
+  }
 }
