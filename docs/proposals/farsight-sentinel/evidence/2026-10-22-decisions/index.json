@@ -108,7 +108,7 @@
       "path": "framework-acquisition-files.tgz",
       "bytes": 37070,
       "sha256": "2ec8042f42e24be4f810a5da70f1f207fdfe27190aacc02da2c9007aac0086af",
-      "note": "Exact32retained acquisition files:19originalsources,8generated Dockerfiles/drivers,5resolved lock/tree/POM evidence files. No installed dependencies or binaries."
+      "note": "Exact 32 retained acquisition files: 19 original sources, eight generated Dockerfiles/drivers, and five resolved lock/tree/POM evidence files. No installed dependencies or binaries."
     },
     {
       "path": "framework-disposal-final.json",

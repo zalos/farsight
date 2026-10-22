@@ -22,11 +22,15 @@ resource defaults. The owner's container-only/no-host-fallback decision remains 
 | Storage/resources | Propose gzip6/raw and the explicit bounded quotas/retention in the manifest | 54 synthetic codec trials; quotas are policy ceilings, not measured capacity guarantees |
 | Advisory DB, crash recovery, models, incremental equivalence | Defer to named later gates | Synthetic absence and normal cleanup are not substitute implementation evidence |
 
-Validation on the integrated changes: all 153 script tests pass. Product build/type checks, graph schema,
+Validation on the integrated changes: all 154 script tests pass. Product build/type checks, graph schema,
 1,615 package tests (two opt-in live skips), catalog lint, Echo package smoke, 345 browser/MCP tests and 11
 small performance checks passed earlier in this branch before the final experiment-only changes. No product
-source changed afterward; the PR's required CI checks validate the submitted revision. Original review files
-and earlier evidence remain byte-identical. Actual experiments ran from committed input revisions identified
+source changed afterward; the PR's required CI checks validate the submitted revision. The initial Linux AMD64 CI run exposed a synthetic-fixture identity mismatch: injected Mac ARM64 platform
+evidence still carried the actual CI process runtime identity. The seven affected test failures were reproduced
+locally with simulated Linux/x64 identity; all 17 focused tests pass after correction under that same
+simulation and normal host identity. The correction is limited to synthetic fixture metadata; real
+platform validation and measured harness bytes remain unchanged. Original review files and earlier evidence
+remain byte-identical. Actual experiments ran from committed input revisions identified
 in [the evidence index](evidence/2026-10-22-decisions/index.json), with final owned-container cleanup verified.
 
 ## Definition of done

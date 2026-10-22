@@ -43,7 +43,7 @@ Codex project instruction and MCP conventions were checked against [official AGE
 
 ## Sentinel PR01 measured decisions — 2026-10-22
 
-Branch `codex/sentinel-decisions` continues merged #132 (`2bd38f6`) with original engine, framework and
+[PR #133](https://github.com/zalos/farsight/pull/133), branch `codex/sentinel-decisions`, continues merged #132 (`2bd38f6`) with original engine, framework and
 runtime/resource experiments. Claude CLI implemented framework apps/drivers; SOL lanes implemented and
 cross-reviewed engine/runtime/acquisition/lifecycle controls; the lead integrated, reviewed and ran final
 measurements. [The acceptance record](proposals/farsight-sentinel/feasibility-acceptance.md) links the proposed
@@ -58,13 +58,15 @@ codec trials; only the actual Mac ARM64/Docker Desktop combination is proposed. 
 full crash recovery, general engine accuracy, production framework packs and other platforms remain open.
 Scan/stage configuration, inspectable I/O, linked reruns and visuals remain PR25; model selection is PR25b.
 
-Validation: 153 integrated script tests pass. Product build/type/schema, 1,615 package tests with two live
+Validation: 154 integrated script tests pass. Product build/type/schema, 1,615 package tests with two live
 skips, catalog lint, Echo smoke, 345 browser/MCP tests and 11 small perf checks passed before the final
 experiment-only changes; required PR CI checks validate the final submitted revision. Claude's independent
 source review and cleanup re-review report no remaining actionable findings. Original reviews/history are
 unchanged; retained failures include a rejected false-success result. All builds/tests used isolated worktrees.
-No primary build/test, dogfood refresh, global install, model/provider trial or production Sentinel package.
-The primary checkout's existing editor-settings edit is preserved.
+The first CI run passed product/browser/package checks but exposed seven Linux AMD64 script-test failures
+from mixed real/simulated host metadata; the follow-up corrects only synthetic fixture identity and keeps the
+measured harness unchanged. No primary build/test, dogfood refresh, global install, model/provider trial or
+production Sentinel package. The primary checkout's existing editor-settings edit is preserved.
 
 ## Sentinel PR 01 first implementation slice — 2026-10-21
 
