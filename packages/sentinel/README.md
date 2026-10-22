@@ -81,7 +81,8 @@ nothing is ever deleted automatically. Every refusal carries a stable reason cod
 words are in the shared catalog.
 
 Qualified, and refused otherwise: SQLite 3.53.3 (Node 24.19.0) on darwin-arm64, a canonical owner-only folder on
-a local file system. Linux is not qualified yet; on any other host `openStore` refuses before creating a file. Durability holds across process death, not physical power loss (see ADR 19 in
+a local file system. linux-x64 is a candidate pending CI evidence, not yet qualified; on any host the release policy
+does not list, `openStore` refuses before creating a file. Durability holds across process death, not physical power loss (see ADR 19 in
 `docs/ARCHITECTURE.md`). A store is a library facility in this draft: the `capabilities` list shows `ledger` as
 `available-draft` and every scan capability as unavailable; there is no store command until the CLI (PR 09).
 
