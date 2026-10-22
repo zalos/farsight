@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.6.0",
+  "id": "SENTINEL-FIXTURE-2026-0003",
+  "modified": "2026-10-03T00:00:00Z",
+  "published": "2026-10-01T00:00:00Z",
+  "aliases": [
+    "SENTINEL-ALIAS-0003"
+  ],
+  "summary": "Synthetic advisory matching only a range's lower bound, which offline reading guesses.",
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "Maven",
+        "name": "org.example.sentinel:fixture-ranged"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "1.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

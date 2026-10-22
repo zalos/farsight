@@ -228,3 +228,28 @@ only as a fixed category and its exit code; no engine text is forwarded. The tar
 `rules/pattern/` and the worker with a digest/rights manifest under `assets/pattern/`; nothing exported invokes the
 adapter, so the package gate is partial until the PR 09 command (ADR 26). Integration still open:
 registering the adapter, the planner supplying the shim, job, rules and targets as inputs, and the scan command (PR 09).
+## Dependency advisories (draft, not registered)
+
+`src/adapters/osv/` matches dependency files against pinned OSV advisory snapshots with OSV-Scanner 2.7.0, fully offline,
+through the PR 07 execution service. Inputs: `package-lock.json`, `pnpm-lock.yaml` (resolved, transitive as locked),
+`pom.xml` (declared directs only; ranges and managed versions unknown; transitives never resolved offline) and
+`*.cdx.json` (as the SBOM lists). Each component keeps its file, artifact, identity, version certainty and transitive
+limit; findings are once per component and advisory group, keyed by the snapshot; coverage is per file (complete,
+partial, database-absent, database-stale, error, empty, not applicable).
+
+**Acquisition is a separate, owner-confirmed step** (the proposed PR 09 command):
+
+```sh
+farsight-sentinel advisories acquire --ecosystem npm --ecosystem Maven --max-bytes 536870912   # preview, then --confirm
+```
+
+It fetches only `https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`, within the bound, checks the
+origin's MD5 and stores the archive by SHA-256 with its provenance. Until that command exists,
+`scripts/qualify-osv-database.mjs --acquire --dir <private folder>` is the owner-run qualification (real archives,
+synthetic fixtures and runtime-only positive controls). Measured on 2026-10-22 (darwin-arm64, Docker Desktop): npm
+218,843,332 bytes and Maven 10,427,762 bytes acquired in about 12.5 s; on the real databases the synthetic fixtures gave
+no finding, `lodash@4.17.11` (lockfile) 7 advisory groups and `jackson-databind@2.9.8` (POM, exact) 60; a scan with the
+npm archive took about 7–10 s. The adapter is not registered and nothing exported runs it: the package gate is partial
+until the planner and command integrate it.
+
+The offline advisory adapter is measured on Linux arm64 and native Linux amd64. The [amd64 qualification](https://github.com/zalos/farsight/actions/runs/39788785215) passed 21 tests with zero skips and ran the installed worker against its original fixtures. Full installed CLI registration remains a separate integration gate.

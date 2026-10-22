@@ -94,7 +94,7 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 09 | Standalone CLI and minimal report slice | 08 | in progress | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
 | 10 | Pattern scanner and original rules | 09, 01 engine decision | in progress | Pinned engine matches known positives/negatives incl. exit-zero omissions | SOL reviewed; integrated real-container suite 22 passed with zero skips, 350 ordinary tests/25 explicit skips, packaged worker/rules checked. Native amd64 qualification passed 22 tests with zero skips; PR 09 installed-CLI registration remains open |
 | 11 | Current-tree secrets | 09 | in progress | Synthetic secrets never appear in output, export or logs | — |
-| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | — |
+| 12 | Offline dependency advisories | 09 | in progress | Lockfile/Maven complete vs partial matching distinguished; advisory DB gate measured | SOL approved including independent refused/skipped comparison probes; integrated 351 tests/23 explicit skips and 21 real-container tests with zero skips. Native amd64 qualification passed 21 tests with zero skips; PR09 installed CLI remains open |
 | 13 | Infrastructure and CI checks | 09, 12 | pending | Workflow/Dockerfile/IaC positives and negatives against installed tools | — |
 | 14 | Next matcher semantics | 05, 06, 09 | in progress | Matching, excluded, dynamic and version-mismatch cases correct | — |
 | 15 | Express order and mounts | 05, 06, 09 | in progress | Auth before/after route, nested mounts and bypass fixtures | — |

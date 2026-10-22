@@ -58,11 +58,20 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
 
 - `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
   local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern adapter remains unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
+  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The advisory adapter remains unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
   public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
-  `test/store-integration.test.ts` drives the facade end to end across processes. `src/snapshot/index.ts` is the
+  `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
+  `src/adapters/osv/`, not yet registered; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
+  (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with
+  certainty and transitive limits, findings once per component and advisory, per-file coverage, `explainAdvisoryChanges`),
+  `acquire.ts` (the separate, receipt-confirmed download of OSV archives and `loadAdvisorySnapshot`) and `run.ts` (one attempt
+  through the PR 07 service); `scripts/package-assets-osv.mjs` ships the worker with its digest manifest;
+  `scripts/qualify-osv-database.mjs` is the owner-run real-database qualification; tests `test/osv-adapter.test.ts` and, with
+  `SENTINEL_ISOLATION=1`, `test/osv-conformance.test.ts`; fixtures `test/fixtures/advisories/` (original, synthetic, `.fixture`
+  names). `src/snapshot/index.ts` is the
   capture facade (ADR 21; also `./snapshot` and the root): `git.ts` (a read-only Git object reader, no git process),
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
   LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
