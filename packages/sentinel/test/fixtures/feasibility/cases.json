@@ -1035,24 +1035,32 @@
         {
           "case": "ts-injection-pair",
           "path": "src/query.ts",
-          "symbol": "interpolated"
+          "symbol": "interpolated",
+          "startLine": 2,
+          "endLine": 4
         },
         {
           "case": "ts-injection-pair",
           "path": "src/query.js",
-          "symbol": "interpolated"
+          "symbol": "interpolated",
+          "startLine": 1,
+          "endLine": 3
         }
       ],
       "expectedNoMatches": [
         {
           "case": "ts-injection-pair",
           "path": "src/query.ts",
-          "symbol": "parameterized"
+          "symbol": "parameterized",
+          "startLine": 5,
+          "endLine": 7
         },
         {
           "case": "ts-injection-pair",
           "path": "src/query.js",
-          "symbol": "parameterized"
+          "symbol": "parameterized",
+          "startLine": 4,
+          "endLine": 6
         }
       ]
     },
@@ -1066,14 +1074,18 @@
         {
           "case": "java-injection-pair",
           "path": "src/Queries.java",
-          "symbol": "interpolated"
+          "symbol": "interpolated",
+          "startLine": 4,
+          "endLine": 6
         }
       ],
       "expectedNoMatches": [
         {
           "case": "java-injection-pair",
           "path": "src/Queries.java",
-          "symbol": "parameterized"
+          "symbol": "parameterized",
+          "startLine": 7,
+          "endLine": 11
         }
       ]
     }

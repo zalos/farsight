@@ -108,12 +108,55 @@ export async function verifyBinary(path) {
   return { path: await realpath(path), sha256: actual, bytes: info.size };
 }
 
+// These pins and the acquired executable support only native ARM64 execution.
+export function validateHost(host = { os: process.platform, arch: process.arch }) {
+  if (!['arm64', 'aarch64'].includes(host.arch) || !['darwin', 'linux'].includes(host.os)) throw new Error('Probe requires a native arm64 macOS or Linux host; no emulation');
+  return { os: host.os, arch: 'arm64' };
+}
+export function validateDockerPlatform(version, images) {
+  let server;
+  try { server = JSON.parse(version.stdout).Server; } catch { throw new Error('Invalid Docker server platform evidence'); }
+  const platform = value => {
+    if (value?.os !== 'linux' || !['arm64', 'aarch64'].includes(value?.arch)) throw new Error('Pinned probe requires Linux/arm64 Docker server and images; no emulation');
+    return { os: 'linux', arch: 'arm64' };
+  };
+  const validatedServer = platform({ os: server?.Os, arch: server?.Arch });
+  const validatedImages = images.map(image => {
+    let values;
+    try { values = JSON.parse(image.inspection.stdout); } catch { throw new Error('Invalid Docker image platform evidence'); }
+    if (!Array.isArray(values) || values.length !== 1) throw new Error('Missing or ambiguous Docker image platform');
+    return { candidate: image.candidate, ...platform({ os: values[0]?.Os, arch: values[0]?.Architecture }) };
+  });
+  return { server: validatedServer, images: validatedImages };
+}
+
+export function networkDenied(trial) {
+  return trial.isolation?.networkMode === 'none' && commandOK(trial.execution) &&
+    trial.socketAttempt?.connected === false && trial.socketAttempt?.errorType === 'OSError' &&
+    trial.socketAttempt?.errno === 101;
+}
+
+export function validateSpans(expectations, sourceTexts) {
+  const seen = new Map();
+  for (const rule of expectations) {
+    if (!Array.isArray(rule.matches) || !Array.isArray(rule.noMatches)) throw new Error('Missing expected symbol spans');
+    for (const entry of [...rule.matches, ...rule.noMatches]) {
+      const path = `${entry.case}/${entry.path}`, text = sourceTexts[path];
+      const lines = typeof text === 'string' ? text.replace(/\n$/, '').split('\n').length : 0;
+      if (!entry.symbol || !Number.isInteger(entry.startLine) || !Number.isInteger(entry.endLine) || entry.startLine < 1 || entry.endLine < entry.startLine || entry.endLine > lines) throw new Error('Invalid expected symbol span');
+      const prior = seen.get(path) ?? [];
+      if (prior.some(span => entry.startLine <= span.endLine && entry.endLine >= span.startLine)) throw new Error('Overlapping expected symbol spans');
+      prior.push(entry); seen.set(path, prior);
+    }
+  }
+}
+
 export function containerArgs({ candidate, name, owner, scenario, source, rules, binary, command }) {
   const args = ['create', '--pull', 'never', '--name', name,
     '--label', `${OWNER_LABEL}=${owner}`, '--label', `org.farsight.sentinel-feasibility.scenario=${scenario}`,
     '--platform', 'linux/arm64', '--network', 'none', '--read-only', '--user', '65534:65534', '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges:true', '--memory', '2g', '--cpus', '2', '--pids-limit', '128',
-    '--tmpfs', '/tmp:rw,exec,nosuid,size=256m,mode=1777', '--workdir', '/input',
+    '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m,mode=1777', '--workdir', '/input',
     '--env', 'HOME=/tmp', '--env', 'SEMGREP_SEND_METRICS=off', '--env', 'SEMGREP_ENABLE_VERSION_CHECK=0',
     '--env', 'OPENGREP_SEND_METRICS=off', '--env', 'OPENGREP_ENABLE_VERSION_CHECK=0',
     '--env', 'SEMGREP_APP_TOKEN=', '--env', 'OPENGREP_APP_TOKEN=',
@@ -220,6 +263,9 @@ export async function materialize(root, corpusRoot = CORPUS) {
       inputs.push({ path, sha256: file.sha256, bytes: bytes.length });
     }
   }
+  const sourceTexts = {};
+  for (const input of inputs) sourceTexts[input.path] = await readFile(join(source, input.path), 'utf8');
+  validateSpans(index.rules.map(r => ({ matches: r.expectedMatches, noMatches: r.expectedNoMatches })), sourceTexts);
   const expectedRules = ['sentinel-fixture-sql-concat-tsjs', 'sentinel-fixture-sql-concat-java'];
   if (!Array.isArray(index.rules) || index.rules.length !== 2 || expectedRules.some(id => !index.rules.some(rule => rule.id === id))) throw new Error('Unexpected rule inventory');
   for (const rule of index.rules) {
@@ -262,20 +308,15 @@ export function assessScan(record, expectations, sourceTexts) {
   if (result.coverage.scanned === null) result.gaps.push('scanned-file-inventory-unavailable');
   if (result.coverage.skipped === null) result.gaps.push('skipped-file-reasons-unavailable');
   if (result.errors.length) result.gaps.push('engine-reported-errors');
+  try { validateSpans(expectations, sourceTexts); }
+  catch { result.gaps.push('invalid-expected-symbol-spans'); result.unattributedFindings = (output.results ?? []).length; return result; }
   const findings = output.results ?? [];
   const matchesSymbol = (finding, expected) => {
     const path = `${expected.case}/${expected.path}`;
     const actualPath = String(finding.path ?? '').replace(/^\/input\//, '').replace(/^\.\//, '');
     if (actualPath !== path) return false;
-    const lines = sourceTexts[path]?.split('\n') ?? [];
-    const symbolStart = lines.findIndex(line => new RegExp(`\\b${expected.symbol}\\s*\\(`).test(line));
-    if (symbolStart < 0) return false;
-    // Synthetic paired functions have explicit next declaration boundaries, independently named in labels.
-    let symbolEnd = lines.length;
-    for (let i = symbolStart + 1; i < lines.length; i++) {
-      if (/^\s*(?:export function|public ResultSet)\s/.test(lines[i])) { symbolEnd = i; break; }
-    }
-    return finding.start?.line >= symbolStart + 1 && finding.start?.line <= symbolEnd;
+    return Number.isInteger(finding.start?.line) && finding.start.line >= expected.startLine && finding.start.line <= expected.endLine &&
+      (finding.end?.line === undefined || (Number.isInteger(finding.end.line) && finding.end.line >= finding.start.line && finding.end.line <= expected.endLine));
   };
   for (const rule of expectations) {
     for (const [kind, entries] of [['positiveSymbols', rule.matches], ['negativeSymbols', rule.noMatches]]) {
@@ -285,6 +326,8 @@ export function assessScan(record, expectations, sourceTexts) {
       }
     }
   }
+  result.unattributedFindings = findings.filter(f => !expectations.some(rule => (f.check_id === rule.id || String(f.check_id).endsWith(`.${rule.id}`)) && [...rule.matches, ...rule.noMatches].some(e => matchesSymbol(f, e)))).length;
+  if (result.unattributedFindings) result.gaps.push('unattributed-findings');
   if (record.state !== 'measured') result.gaps.push('execution-failed');
   return result;
 }
@@ -305,6 +348,7 @@ export function scenarioControl(trial) {
   if (trial.scenario === 'version') check('version-pin-matches', trial.versionMatches);
   else if (trial.scenario === 'paired-baseline') {
     check('valid-json', assessment?.parseableJson);
+    check('all-findings-attributed', assessment?.unattributedFindings === 0 && !assessment?.gaps?.includes('invalid-expected-symbol-spans'));
     check('three-positive-symbols-found', assessment?.positiveSymbols?.length === 3 && assessment.positiveSymbols.every(s => s.matched === true));
     check('three-safe-symbols-unmatched', assessment?.negativeSymbols?.length === 3 && assessment.negativeSymbols.every(s => s.matched === false));
     check('no-engine-errors', Array.isArray(assessment?.errors) && assessment.errors.length === 0);
@@ -313,7 +357,7 @@ export function scenarioControl(trial) {
     check('explicit-size-omission', Array.isArray(assessment?.coverage?.scanned) && assessment.oversizedNotScanned === true);
     check('no-engine-errors', Array.isArray(assessment?.errors) && assessment.errors.length === 0);
   } else if (trial.scenario === 'network-denial') {
-    check('socket-attempt-denied', trial.denialObserved === true && trial.socketAttempt?.connected === false);
+    check('socket-attempt-denied', networkDenied(trial));
   } else if (trial.scenario === 'missing-rules') {
     check('valid-json-missing-rule-diagnostic', assessment?.parseableJson === true && assessment.missingRuleDiagnostic === true);
   } else check('known-scenario', false);
@@ -337,6 +381,8 @@ export function evaluateControls(result) {
 
 export function preview(options = {}) {
   return { schemaVersion: 'sentinel-feasibility-scanners-v1', mode: options.run ? 'run' : 'preview',
+    platformRestriction: 'Native arm64 macOS/Linux host; Linux/arm64 Docker server and pinned images only; no emulation',
+    tmpfs: '/tmp:rw,noexec,nosuid,size=256m,mode=1777',
     candidates: CANDIDATES, cases: selectedCases, scenarios: ['version', 'paired-baseline', 'oversized', 'missing-rules', 'network-denial'],
     effects: { acquisition: false, hostScannerExecution: false, providerCalls: false, network: 'none inside each container',
       localWrites: options.run ? 'fresh --out directory; synthetic inputs and retained evidence' : 'none',
@@ -347,6 +393,7 @@ export function preview(options = {}) {
 
 export async function runProbe(options, { runner = execute, corpusRoot = CORPUS, signal } = {}) {
   // Verify every immutable prerequisite before creating output or a container.
+  const host = validateHost();
   const binary = await verifyBinary(options.binary);
   const provenance = await scriptProvenance(runner);
   if (options.out.includes(',') || binary.path.includes(',')) throw new Error('Docker mount paths cannot contain commas');
@@ -358,6 +405,7 @@ export async function runProbe(options, { runner = execute, corpusRoot = CORPUS,
     if (!commandOK(image)) throw new Error(`Pinned ${candidate.id} image unavailable locally; no acquisition or host fallback`);
     images.push({ candidate: candidate.id, inspection: image });
   }
+  const validatedPlatform = { host, ...validateDockerPlatform(dockerVersion, images) };
   await mkdir(options.out); // Exclusive: existing evidence is never replaced.
   await chmod(options.out, 0o755); // Rootless container UID can read only the explicitly mounted subdirectories.
   const materialized = await materialize(options.out, corpusRoot);
@@ -370,7 +418,7 @@ export async function runProbe(options, { runner = execute, corpusRoot = CORPUS,
   const sourceTexts = {};
   for (const input of materialized.inputs.filter(x => !x.path.startsWith('rules/'))) sourceTexts[input.path] = await readFile(join(materialized.source, input.path), 'utf8');
   const result = { ...preview(options), startedAt: new Date().toISOString(), nodeVersion: process.version,
-    platform: process.platform, arch: process.arch, provenance, dockerVersion, images, binary: { sha256: binary.sha256, bytes: binary.bytes },
+    platform: process.platform, arch: process.arch, validatedPlatform, provenance, dockerVersion, images, binary: { sha256: binary.sha256, bytes: binary.bytes },
     inputManifestHash: materialized.indexHash, inputs: materialized.inputs, oversize: materialized.oversize, trials: [] };
   const persist = async () => {
     const bytes = JSON.stringify(result, null, 2) + '\n';
@@ -409,7 +457,7 @@ export async function runProbe(options, { runner = execute, corpusRoot = CORPUS,
     const network = await runContainer({ candidate, scenario: 'network-denial', source: materialized.source,
       rules: materialized.rules, binary: copiedBinary, command: ['-c', networkScript] }, runner, signal);
     try { network.socketAttempt = JSON.parse(network.execution?.stdout); } catch { network.socketAttempt = null; }
-    network.denialObserved = network.isolation?.networkMode === 'none' && network.socketAttempt?.connected === false && network.execution?.exitCode === 0;
+    network.denialObserved = networkDenied(network);
     result.trials.push(network);
   } catch (error) { result.state = 'failed'; result.reason = scrub(error.message); }
   finally {

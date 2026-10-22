@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { CANDIDATES, parseArgs, preview, containerArgs, verifyBinary, execute,
-  runContainer, cleanupOwned, materialize, scanCommand, assessScan, runProbe, scenarioControl, evaluateControls, scriptProvenance } from '../sentinel-feasibility-scanners.mjs';
+  runContainer, cleanupOwned, materialize, scanCommand, assessScan, runProbe, scenarioControl, evaluateControls, scriptProvenance, validateHost, validateDockerPlatform, networkDenied, validateSpans } from '../sentinel-feasibility-scanners.mjs';
 
 const script = resolve('scripts/sentinel-feasibility-scanners.mjs');
 const corpus = resolve('packages/sentinel/test/fixtures/feasibility');
@@ -40,7 +40,7 @@ test('fixed Docker arguments forbid acquisition and bind only explicit synthetic
     assert.equal(value('--security-opt'), 'no-new-privileges:true');
     assert.equal(value('--memory'), '2g'); assert.equal(value('--cpus'), '2'); assert.equal(value('--pids-limit'), '128');
     assert.ok(args.includes('--read-only'));
-    assert.equal(value('--tmpfs'), '/tmp:rw,exec,nosuid,size=256m,mode=1777');
+    assert.equal(value('--tmpfs'), '/tmp:rw,noexec,nosuid,size=256m,mode=1777');
     assert.equal(value('--entrypoint'), candidate.entrypoint);
     assert.ok(args.includes(candidate.image));
     const mounts = args.filter((_, index) => args[index - 1] === '--mount');
@@ -180,7 +180,7 @@ test('missing-rule control stays explicit and no registry configuration is used'
 });
 
 test('exit zero does not imply coverage; safe sibling and duplicate locations are checked independently', () => {
-  const rule = { id: 'original-rule', matches: [{ case: 'pair', path: 'a.ts', symbol: 'unsafe' }], noMatches: [{ case: 'pair', path: 'a.ts', symbol: 'safe' }] };
+  const rule = { id: 'original-rule', matches: [{ case: 'pair', path: 'a.ts', symbol: 'unsafe', startLine: 1, endLine: 3 }], noMatches: [{ case: 'pair', path: 'a.ts', symbol: 'safe', startLine: 4, endLine: 6 }] };
   const finding = { check_id: rule.id, path: '/input/pair/a.ts', start: { line: 2 } };
   const record = { state: 'measured', execution: { exitCode: 0, stdout: JSON.stringify({ results: [finding, finding], errors: [], paths: { scanned: ['pair/a.ts'] } }) } };
   const result = assessScan(record, [rule], { 'pair/a.ts': 'export function unsafe() {\n db.query(prefix + input);\n}\nexport function safe() {\n db.query(sql, [input]);\n}\n' });
@@ -209,8 +209,8 @@ function passingTrial(scenario, candidate = CANDIDATES[0]) {
   const trial = { candidate: candidate.id, scenario, expectedImage: candidate.image,
     isolation: { id: 'a'.repeat(64), image: candidate.image, networkMode: 'none' }, cleanup: { state: 'removed-owned-container' },
     execution: ok(''), containerCompleted: true, containerExitMatchesClient: true, containerExit: 0,
-    versionMatches: true, denialObserved: true, socketAttempt: { connected: false },
-    assessment: { parseableJson: true, errors: [], positiveSymbols: Array.from({ length: 3 }, () => ({ matched: true })),
+    versionMatches: true, denialObserved: true, socketAttempt: { connected: false, errorType: 'OSError', errno: 101 },
+    assessment: { parseableJson: true, errors: [], unattributedFindings: 0, positiveSymbols: Array.from({ length: 3 }, () => ({ matched: true })),
       negativeSymbols: Array.from({ length: 3 }, () => ({ matched: false })), coverage: { scanned: [] }, oversizedNotScanned: true } };
   if (scenario === 'missing-rules') { trial.execution.exitCode = 7; trial.containerExit = 7; trial.assessment.missingRuleDiagnostic = true; }
   return trial;
@@ -289,7 +289,7 @@ test('overall control verdict includes all scenarios, versions, network, cleanup
   assert.equal(evaluateControls(fresh()).passed, true);
   for (const mutate of [
     r => { r.trials.pop(); }, r => { r.trials[0].versionMatches = false; },
-    r => { r.trials[1].cleanup.state = 'refused'; }, r => { r.trials[8].denialObserved = false; },
+    r => { r.trials[1].cleanup.state = 'refused'; }, r => { r.trials[8].socketAttempt.errno = null; },
     r => { r.trials[8].isolation.networkMode = 'bridge'; }, r => { r.trials[8].socketAttempt.connected = true; },
     r => { r.trials[0].isolation.image = 'other-image'; }, r => { r.inputIntegrity[0].unchanged = false; },
     r => { r.inputIntegrity = []; }, r => { r.provenance.dirty = null; }, r => { r.provenance.sha256 = null; },
@@ -329,4 +329,48 @@ test('materialization refuses symbolic output root, corpus root, index, source a
       await assert.rejects(materialize(output, fixture), /symbolic link/);
     }
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('platform gates reject unknown or mismatched hosts, servers and images', () => {
+  assert.deepEqual(validateHost({ os: 'darwin', arch: 'arm64' }), { os: 'darwin', arch: 'arm64' });
+  for (const host of [{ os: 'linux', arch: 'x64' }, { os: 'darwin' }, { os: 'win32', arch: 'arm64' }]) assert.throws(() => validateHost(host), /native arm64/);
+  const version = server => ok(JSON.stringify({ Server: server }));
+  const images = image => [{ candidate: 'test', inspection: ok(JSON.stringify([image])) }];
+  assert.equal(validateDockerPlatform(version({ Os: 'linux', Arch: 'aarch64' }), images({ Os: 'linux', Architecture: 'arm64' })).server.arch, 'arm64');
+  for (const server of [{ Os: 'linux', Arch: 'amd64' }, {}, { Os: 'windows', Arch: 'arm64' }]) assert.throws(() => validateDockerPlatform(version(server), images({ Os: 'linux', Architecture: 'arm64' })));
+  for (const image of [{ Os: 'linux', Architecture: 'amd64' }, {}, { Os: 'windows', Architecture: 'arm64' }]) assert.throws(() => validateDockerPlatform(version({ Os: 'linux', Arch: 'arm64' }), images(image)));
+  assert.throws(() => validateDockerPlatform(ok('{}'), []));
+});
+
+test('only inspected network none and OSError ENETUNREACH satisfy denial', () => {
+  assert.equal(networkDenied(passingTrial('network-denial')), true);
+  for (const attempt of [
+    { connected: false, errorType: 'TimeoutError', errno: null },
+    { connected: false, errorType: 'ConnectionRefusedError', errno: 111 },
+    { connected: false, errorType: 'OSError', errno: 111 },
+    { connected: false, errorType: 'OSError' },
+    { connected: false, errorType: 'OSError', errno: '101' },
+    { connected: false, errorType: 'TimeoutError', errno: 101 },
+  ]) {
+    const trial = passingTrial('network-denial'); trial.socketAttempt = attempt;
+    assert.equal(networkDenied(trial), false); assert.equal(scenarioControl(trial).passed, false);
+  }
+});
+
+test('pinned spans work across declarations and reject outside or unbounded findings', () => {
+  const texts = { 'pair/a.ts': 'const unsafe = () => {\n query(input);\n};\nconst safe = function () {\n query(sql, input);\n};\nquery(outside);\n' };
+  const rule = { id: 'rule', matches: [{ case: 'pair', path: 'a.ts', symbol: 'unsafe', startLine: 1, endLine: 3 }], noMatches: [{ case: 'pair', path: 'a.ts', symbol: 'safe', startLine: 4, endLine: 6 }] };
+  const assess = line => assessScan({ state: 'measured', execution: ok(JSON.stringify({ results: [{ check_id: 'rule', path: 'pair/a.ts', start: { line } }] })) }, [rule], texts);
+  assert.equal(assess(2).positiveSymbols[0].matched, true);
+  assert.equal(assess(5).negativeSymbols[0].matched, true);
+  assert.equal(assess(7).unattributedFindings, 1);
+  assert.ok(assess(7).gaps.includes('unattributed-findings'));
+  for (const span of [{}, { startLine: 0, endLine: 3 }, { startLine: 4, endLine: 3 }, { startLine: 1, endLine: 8 }]) {
+    const invalid = structuredClone(rule); Object.assign(invalid.matches[0], span);
+    if (!Object.keys(span).length) delete invalid.matches[0].startLine;
+    assert.throws(() => validateSpans([invalid], texts));
+  }
+  const overlap = structuredClone(rule); overlap.noMatches[0].startLine = 3;
+  assert.throws(() => validateSpans([overlap], texts), /Overlapping/);
 });
