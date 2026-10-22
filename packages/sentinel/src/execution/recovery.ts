@@ -63,10 +63,11 @@ export class JournalDir<T extends Record<string, string | number>> {
     const base = join(storePath, 'execution');
     this.dir = join(base, name);
     for (const [d, parent] of [[base, storePath], [this.dir, base]] as const) {
-      let created = false;
-      try { mkdirSync(d, { mode: 0o700 }); created = true; } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
-      // A new folder exists durably only once its parent is synced; that happens before any record is acknowledged.
-      if (created) syncDirectory(parent);
+      try { mkdirSync(d, { mode: 0o700 }); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
+      // A folder's entry is durable only once its parent is synced, and that must hold before any record is
+      // acknowledged. A folder that already exists proves nothing: an earlier open may have created it and then failed
+      // its parent sync. So the parent is synced on every open, created or not; nothing records a creation as durable.
+      syncDirectory(parent);
       const s = lstatSync(d);
       if (!s.isDirectory() || s.isSymbolicLink() || (s.mode & 0o077) !== 0 || s.uid !== process.getuid?.()) {
         throw new ExecutionError('sentinel.execution.journalUnreadable', { reason: `${name} folder is not private` });

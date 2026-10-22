@@ -15,7 +15,7 @@ import { syntheticPlan } from './coordinator-helpers.ts';
 const roots: string[] = [];
 after(() => roots.forEach(removeScratch));
 const real = { write: journalIo.writeSync, read: journalIo.readSync, fsync: durabilityIo.fsyncSync };
-afterEach(() => { journalIo.writeSync = real.write; journalIo.readSync = real.read; durabilityIo.fsyncSync = real.fsync; });
+afterEach(() => { journalIo.writeSync = real.write; journalIo.readSync = real.read; durabilityIo.fsyncSync = real.fsync; durabilityIo.trace = undefined; });
 const fresh = () => { const s = scratch('journal-faults'); roots.push(s.root); return s; };
 const identity = (store: string, over: Record<string, unknown> = {}) => ({ attempt: `att-${randomUUID().slice(0, 8)}`, store, epoch: 'epoch-earlier', pid: 0, token: randomUUID(), kernelStart: '', ...over });
 
@@ -109,13 +109,39 @@ test('a new journal folder exists durably before its first record: each new fold
   workers.record(identity('store-x') as any);
   durabilityIo.trace = undefined;
   assert.deepEqual(seen, [s.root, join(s.root, 'execution'), workers.dir], 'store root, then execution, then the record\'s own folder');
-  // An existing folder is not re-synced; only the record's folder is.
+  // Opening again syncs the parents of folders that already exist too: their creation may never have been made
+  // durable (an earlier open failed its sync), and nothing records that it was.
   const again: string[] = [];
   durabilityIo.trace = p => again.push(p);
   new WorkerFiles(s.root).record(identity('store-x') as any);
   durabilityIo.trace = undefined;
-  assert.deepEqual(again, [workers.dir]);
+  assert.deepEqual(again, [s.root, join(s.root, 'execution'), workers.dir]);
 });
+
+for (const failing of ['the store root', 'the execution folder'] as const) {
+  test(`a failed parent sync of ${failing} is retried on the next open, not skipped because the folder now exists`, () => {
+    const s = fresh();
+    const target = failing === 'the store root' ? s.root : join(s.root, 'execution');
+    const failOn = (path: string) => {
+      durabilityIo.trace = p => { current = p; };
+      let current = '';
+      durabilityIo.fsyncSync = ((fd: number) => { if (current === path) throw Object.assign(new Error('EIO'), { code: 'EIO' }); return real.fsync(fd); }) as any;
+    };
+    // First open: the folders are created, the parent sync fails, so no record is ever acknowledged.
+    failOn(target);
+    assert.throws(() => new WorkerFiles(s.root), (e: any) => e.code === 'sentinel.execution.durabilityFailed' && e.detail.path === target);
+    // A second open with the sync still failing fails again: the folder existing proves nothing about its durability.
+    assert.throws(() => new WorkerFiles(s.root), (e: any) => e.code === 'sentinel.execution.durabilityFailed' && e.detail.path === target);
+    // Once the sync succeeds the journal opens, having synced that parent before any record exists.
+    durabilityIo.fsyncSync = real.fsync;
+    const synced: string[] = [];
+    durabilityIo.trace = p => synced.push(p);
+    const workers = new WorkerFiles(s.root);
+    workers.record(identity('store-x') as any);
+    durabilityIo.trace = undefined;
+    assert.ok(synced.indexOf(target) >= 0 && synced.indexOf(target) < synced.indexOf(workers.dir), `${target} is synced before the record's folder`);
+  });
+}
 
 test('a failed parent sync stops the journal before any record exists', () => {
   const s = fresh();
