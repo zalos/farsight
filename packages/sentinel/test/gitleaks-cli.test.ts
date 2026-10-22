@@ -37,7 +37,7 @@ test('public Gitleaks CLI binds all captured file kinds, withheld locations, exp
   for(const row of observations){const observation=row.value;assert.ok(observation.evidence.every((e:any)=>e.location==='withheld'&&!('relativePath'in e)));
    for(const evidence of observation.evidence){const location=resolveWithheldLocation(snapshot,evidence);assert.equal(location.ok,true);if(location.ok&&['first.txt','second.txt'].includes(location.entry.relativePath))duplicates.add(evidence.entry);}}
   assert.equal(duplicates.size,2,'identical bytes still cite two distinct capture entries');
-  const database=new DatabaseSync(store.ledger.path,{readOnly:true});
+  const database=new DatabaseSync(join(ws.storePath,'ledger.sqlite'),{readOnly:true});
   try{let privateJobs=0;for(const row of database.prepare('SELECT id, privacy_floor FROM artifacts').all()){
     const bytes=await store.readArtifact(String(row.id));
     if(row.privacy_floor==='metadata'){absent(bytes,'redacted metadata projection',VALUE);absent(bytes,'redacted metadata projection',GENERIC_VALUE);}

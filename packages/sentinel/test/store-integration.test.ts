@@ -224,8 +224,8 @@ test('the facade exposes domain operations only', needsStore, async t => {
   assert.equal(typeof store.runtime.sqlite, 'string', 'the SQLite release, not the module');
   assert.equal(root.openStore, openStore, 'the root export is the same facade');
   assert.equal(root.CAPABILITIES.find(c => c.id === 'ledger')?.state, 'available-draft');
-  assert.ok(root.CAPABILITIES.filter(c => !['ledger', 'contract-validation', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli'].includes(c.id)).every(c => c.state === 'unavailable'),
-    'no scan capability is claimed');
+  assert.ok(root.CAPABILITIES.filter(c => !['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks'].includes(c.id)).every(c => c.state === 'unavailable'),
+    'only the pinned scanners are claimed; no framework, deep-flow, report or model capability is');
 });
 
 test('an unqualified host or SQLite release is refused before any store file exists', { skip: (QUALIFIED || !!process.env.CI) && 'this host is qualified, or CI requires the store tests themselves' }, async t => {
