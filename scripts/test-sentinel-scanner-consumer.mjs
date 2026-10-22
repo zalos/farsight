@@ -38,5 +38,13 @@ try{
  const report=(await cli('report',id)).body.facts.report;assert.equal(report.schema,'sentinel-scanner-report/draft-1');const adapters=new Set(report.observations.map(o=>o.value.adapter));for(const adapter of ['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor'])assert.ok(adapters.has(adapter));
  for(const path of Object.keys(f.files))rmSync(join(f.ws,path),{force:true});await stopOwnService();
  const regenerated=(await cli('report',id)).body.facts.report;assert.deepEqual(regenerated.observations,report.observations);assert.deepEqual(regenerated.coverage,report.coverage);assert.equal(regenerated.ledgerSequence,report.ledgerSequence);
- console.log('sentinel scanner consumer ok: npm-only init twice, adoption, exact original packs, missing-asset refusal, owner-receipted tool/database adoption, plan, detach/join/wait through four real pinned containers, retained report after service restart and source removal; incomplete required coverage stays exit 2');
+ // A selected rerun with the source gone: one unit, run through its own pinned container over the retained snapshot.
+ const units=planned.body.facts.unitIds;assert.ok(units.length>1);const parentBefore=(await cli('report',id)).body.facts.report;
+ const rerun=await cli('rerun',id,'--stage',units[0]);assert.deepEqual([rerun.status,rerun.body.outcome,rerun.body.facts.parentId],[0,'prepared',id],JSON.stringify(rerun.body));
+ const rp=rerun.body.facts.preview;assert.deepEqual([rp.selected,rp.all,rp.units.length,rp.held.length],[[units[0]],false,1,units.length-1]);
+ const child=rerun.body.facts.runId;const reran=await cli('run',child);assert.deepEqual([reran.status,reran.body.facts.state],[2,'completed'],JSON.stringify(reran.body));
+ const childReport=(await cli('report',child)).body.facts.report;const childAdapters=new Set(childReport.observations.map(o=>o.value.adapter));
+ assert.ok(childAdapters.size<=1,'only the selected worker ran: '+[...childAdapters]);for(const a of childAdapters)assert.ok(adapters.has(a));
+ const parentAfter=(await cli('report',id)).body.facts.report;assert.deepEqual(parentAfter.observations,parentBefore.observations);assert.deepEqual(parentAfter.coverage,parentBefore.coverage);
+ console.log('sentinel scanner consumer ok: npm-only init twice, adoption, exact original packs, missing-asset refusal, owner-receipted tool/database adoption, plan, detach/join/wait through four real pinned containers, retained report after service restart and source removal, a selected one-unit rerun through only its pinned container with the source gone; incomplete required coverage stays exit 2');
 }finally{await stopOwnService();consumer.cleanup();}
