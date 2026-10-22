@@ -1,0 +1,29 @@
+{
+  "schema": "sentinel-import-manifest/draft-1",
+  "format": "zap-traditional-json",
+  "producer": {
+    "name": null,
+    "version": null
+  },
+  "tested": {
+    "origins": [
+      "https://app.example.test"
+    ],
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "properties": [
+      "cookie-secure",
+      "cookie-http-only",
+      "cookie-same-site"
+    ],
+    "directions": [
+      "outbound"
+    ]
+  },
+  "context": {
+    "runId": "run-example",
+    "sourceId": "app"
+  }
+}
