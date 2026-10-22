@@ -256,12 +256,20 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
     if (tail && tail !== '{}') return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm patchedDependencies is outside the supported block shape' };
     if (!tail) {
       const [start, end] = blockOf(i, 0);
+      // YAML block maps may use any positive indentation. Infer the direct-entry depth, then skip each entry's
+      // complete value block; never mistake nested metadata for a sibling or silently discard a deeper map.
+      let entryDepth: number | undefined;
       for (let n = start; n < end; n++) {
         const line = lines[n]!;
-        if (!line.trim() || line.trimStart().startsWith('#') || indent(line) !== 2) continue;
-        const key = /^\s{2}((?:'[^']*'|"[^"]*"|[^:]+)):\s*(?:#.*)?$/.exec(line);
+        if (!line.trim() || line.trimStart().startsWith('#')) continue;
+        entryDepth ??= indent(line);
+        if (indent(line) !== entryDepth) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm patchedDependencies has inconsistent entry indentation' };
+        const key = /^\s+((?:'[^']*'|"[^"]*"|[^:]+)):\s*(?:#.*)?$/.exec(line);
         if (!key || /[\\]/.test(key[1]!)) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm patchedDependencies has an unsupported entry' };
-        if (patchTargets(unq(key[1]!), pkg)) return { state: 'unknown', reason: 'identity-mismatch', detail: `pnpm-lock.yaml records a patch for ${pkg}; the unmodified registry package was measured` };
+        const selector = unq(key[1]!);
+        if (!/^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+(?:@[^\r\n]*)?$/.test(selector)) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm patchedDependencies has an unsupported selector' };
+        if (patchTargets(selector, pkg)) return { state: 'unknown', reason: 'identity-mismatch', detail: `pnpm-lock.yaml records a patch for ${pkg}; the unmodified registry package was measured` };
+        n = blockOf(n, entryDepth)[1] - 1;
       }
     }
   }

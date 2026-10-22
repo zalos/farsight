@@ -54,6 +54,21 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Next pnpm patch-map indentation correction — 2026-10-22
+
+Branch `codex/sentinel-next-patch-indent` follows reviewed patch-identity correction `c9972d84`. The lockfile reader
+infers the direct-entry indentation of `patchedDependencies` instead of assuming two spaces, and skips each entry's
+complete metadata block before reading its sibling. Relevant patches remain unknown; unsupported selector/map shapes
+are refused rather than ignored. Ordinary peer suffixes and patches for unrelated packages still qualify. The pack
+revision advances to 4 so prior analysis cannot reuse this changed identity decision.
+
+Three original capture/parse regressions (one-, four- and eight-space patch maps) fail on frozen `c9972d84`.
+Each corrected case checks both relevant-patch refusal and an unrelated-patch positive through retained bytes after
+source removal. The original four-space probe is valid YAML: the existing YAML parser produces the same object as
+for the ordinary two-space form. Target code is never installed, compiled or executed. Build, typecheck and catalog
+checks passed; all 36 focused Next/package tests and both exact review probes passed with zero skips. Independent review and integration
+remain with the coordinating owner; no primary build, graph replacement or push occurred.
+
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as

@@ -318,3 +318,33 @@ test('captured workspace-root patch declarations bind nested Next analysis', nee
   assert.deepEqual(verdicts(after.result, SURFACE.info), ['unknown']);
   assert.notEqual(before.result.envelopes[0]!.registrationDigest, after.result.envelopes[0]!.registrationDigest);
 });
+
+
+for (const depth of [1, 4, 8]) {
+  test(`captured pnpm patch maps at indentation ${depth} cannot borrow registry identity`, needsStore, async t => {
+    const pad = ' '.repeat(depth);
+    const patchMap = (target: string) => `patchedDependencies:
+${pad}# Original inert fixture: an unrelated patch precedes the selected package.
+${pad}'left-pad@1.0.0':
+${pad}  path: patches/unrelated.patch
+${pad}  hash: unrelated-fixture
+${pad}'${target}':
+${pad}  path: patches/target.patch
+${pad}  hash: target-fixture
+
+`;
+    const files = { ...APP, 'pnpm-lock.yaml': pnpmLock({ '.': '14.2.25' }),
+      'patches/unrelated.patch': '# Original inert unrelated patch\n', 'patches/target.patch': '# Original inert target patch\n' };
+    delete (files as Record<string, string>)['package-lock.json'];
+    const changed = await analyzed(t, { ...files,
+      'pnpm-lock.yaml': files['pnpm-lock.yaml'].replace('importers:', patchMap('next@14.2.25') + 'importers:') });
+    assert.equal(changed.result.projects[0]!.supported, false);
+    assert.deepEqual(verdicts(changed.result, SURFACE.info), ['unknown']);
+    assert.ok(facts(changed.result, SURFACE.info).every((f: any) => f.reasonCode === 'sentinel.next.reason.versionUnknown'));
+    // Same valid map shape and ordinary peer suffixes, but no relevant modified package: exclusions still decide.
+    const unrelated = await analyzed(t, { ...files,
+      'pnpm-lock.yaml': files['pnpm-lock.yaml'].replace('importers:', patchMap('@fixture/other@1.0.0') + 'importers:') });
+    assert.equal(unrelated.result.projects[0]!.supported, true);
+    assert.deepEqual(verdicts(unrelated.result, SURFACE.info), ['does-not-apply']);
+  });
+}
