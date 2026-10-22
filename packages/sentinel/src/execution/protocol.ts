@@ -3,6 +3,8 @@
 // Framing: one message per line of UTF-8 JSON on the worker's stdout, newline-terminated. The decoder enforces
 // the frame size before it decodes or parses anything, so an endless or oversized line costs at most one frame
 // of memory; it also caps the number of frames and the total bytes. Invalid UTF-8 is refused, not replaced.
+// A partial line is copied into one reusable buffer, grown by doubling up to the frame limit, never kept as a
+// list of chunks: however finely a worker splits its output, buffering stays O(maxFrameBytes).
 // stderr is never read as protocol: the supervisor keeps it apart as bounded diagnostics.
 //
 // Authority: the session is built from the supervisor's own binding (attempt, work revision, coordinator epoch,
@@ -30,6 +32,8 @@ export interface FrameLimits {
 }
 
 const NEWLINE = 0x0a;
+/** The partial-line buffer's first size; it doubles as needed, never past the frame limit. */
+const INITIAL_PENDING_BYTES = 4096;
 
 /** Splits a byte stream into bounded frames and decodes each as one validated protocol message. */
 export class FrameDecoder {
@@ -37,7 +41,8 @@ export class FrameDecoder {
   readonly #maxFrames: number;
   readonly #maxTotal: number;
   readonly #utf8 = new TextDecoder('utf-8', { fatal: true });
-  #pending: Buffer[] = [];
+  /** The partial line so far: `#pending[0, #pendingBytes)`. Allocated on first need; capacity ≤ the frame limit. */
+  #pending: Buffer | undefined;
   #pendingBytes = 0;
   #frames = 0;
   #total = 0;
@@ -62,12 +67,19 @@ export class FrameDecoder {
         if (nl < 0) {
           // The size check happens before any decode: a line that cannot fit fails here, unread.
           if (this.#pendingBytes + buf.byteLength > this.#maxFrame) this.#fail('sentinel.execution.frameTooLarge', { bytes: this.#maxFrame });
-          if (buf.byteLength) { this.#pending.push(Buffer.from(buf)); this.#pendingBytes += buf.byteLength; }
+          this.#append(buf);
           return out;
         }
         if (this.#pendingBytes + nl > this.#maxFrame) this.#fail('sentinel.execution.frameTooLarge', { bytes: this.#maxFrame });
-        const frame = this.#pending.length ? Buffer.concat([...this.#pending, buf.subarray(0, nl)]) : buf.subarray(0, nl);
-        this.#pending = []; this.#pendingBytes = 0;
+        let frame: Buffer;
+        if (this.#pendingBytes === 0) {
+          frame = buf.subarray(0, nl); // the whole line is in this chunk: no copy
+        } else {
+          this.#append(buf.subarray(0, nl));
+          frame = this.#pending!.subarray(0, this.#pendingBytes);
+        }
+        // Decoding copies the bytes into a string, so the buffer can be reused for the next line straight away.
+        this.#pendingBytes = 0;
         buf = buf.subarray(nl + 1);
         if (++this.#frames > this.#maxFrames) this.#fail('sentinel.execution.stdoutBudget', { frames: this.#maxFrames });
         out.push(this.#decode(frame));
@@ -86,6 +98,24 @@ export class FrameDecoder {
       throw this.#failed;
     }
   }
+
+  /** Copies bytes into the partial-line buffer. The caller has already checked the frame limit. */
+  #append(bytes: Buffer): void {
+    if (bytes.byteLength === 0) return;
+    const needed = this.#pendingBytes + bytes.byteLength;
+    if (!this.#pending || needed > this.#pending.byteLength) {
+      let capacity = Math.max(this.#pending?.byteLength ?? 0, Math.min(INITIAL_PENDING_BYTES, this.#maxFrame));
+      while (capacity < needed) capacity = Math.min(capacity * 2, this.#maxFrame);
+      const grown = Buffer.allocUnsafe(capacity);
+      if (this.#pending && this.#pendingBytes) this.#pending.copy(grown, 0, 0, this.#pendingBytes);
+      this.#pending = grown;
+    }
+    bytes.copy(this.#pending, this.#pendingBytes);
+    this.#pendingBytes = needed;
+  }
+
+  /** Bytes reserved for a partial line: at most the frame limit, whatever the chunking. */
+  get bufferedCapacity(): number { return this.#pending?.byteLength ?? 0; }
 
   get frames(): number { return this.#frames; }
   get bytes(): number { return this.#total; }
