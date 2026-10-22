@@ -185,6 +185,11 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   error-handler bodies), `patterns.ts` (Express 4 path and method matching), `version.ts` (manifest and npm lockfile),
   `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
   core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
+  `src/frameworks/controls/` runs the four framework packs as one inspection (ADR 44): `worker.ts` (the built-in child
+  adapter over sealed inputs), `closure.ts` (the generated entry that pins and checks the worker's byte closure), `driver.ts` (the trusted check
+  driver over the coordinator's retained parser evidence), `facts.ts` (control facts → repository-scoped inspection coverage and the `framework-inspection` report,
+  never a finding); rule pack `rules/framework-controls/`, words in core's `strings-sentinel-framework-controls.ts`, tests
+  in `test/framework-controls-{facts,worker,closure,driver}.test.ts`.
   `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the

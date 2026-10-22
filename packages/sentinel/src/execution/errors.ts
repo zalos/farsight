@@ -17,7 +17,7 @@ export const EXECUTION_ERROR_CODES = Object.freeze([
   'sentinel.execution.journalUnreadable', 'sentinel.execution.cleanupObligation', 'sentinel.execution.dependencyFailed',
   'sentinel.execution.runDeadline',
   'sentinel.execution.notSelected',
-  'sentinel.execution.bootstrapEvidence',
+  'sentinel.execution.bootstrapEvidence', 'sentinel.execution.analysisUnavailable',
 ] as const);
 
 export type ExecutionErrorCode = typeof EXECUTION_ERROR_CODES[number];
