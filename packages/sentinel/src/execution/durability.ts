@@ -2,13 +2,17 @@
 //
 // A file's bytes are fsynced and any failure is an error. A folder's entry (the rename that makes a record exist,
 // or the unlink that settles it) is made durable by fsyncing the folder: on the qualified hosts (APFS, ext4) that
-// is supported and an error from it is an error. Only a platform that does not support fsync on a folder at all
-// (EINVAL, ENOTSUP, EOPNOTSUPP, EISDIR, EBADF) is allowed through, and is reported as such. An I/O error, a full
-// disk or quota, or a read-only file system (EIO, ENOSPC, EDQUOT, EROFS and anything else) fails the step.
+// is supported and an error from it is an error. Only the documented "this file system does not support fsync on
+// this object" answers (EINVAL on Linux, ENOTSUP / EOPNOTSUPP) are allowed through, and reported as unsupported.
+// Everything else fails: an invalid descriptor (EBADF) is a bug, not proof that durability is unsupported, and an
+// I/O error, a full disk or quota, or a read-only file system (EIO, ENOSPC, EDQUOT, EROFS) fails the step.
 import { closeSync, constants, fsyncSync, openSync } from 'node:fs';
 import { ExecutionError } from './errors.js';
 
-const UNSUPPORTED = new Set(['EINVAL', 'ENOTSUP', 'EOPNOTSUPP', 'EISDIR', 'EBADF']);
+const UNSUPPORTED = new Set(['EINVAL', 'ENOTSUP', 'EOPNOTSUPP']);
+
+/** Package-internal fault-injection seam for the tests; production never replaces it. */
+export const durabilityIo = { fsyncSync };
 
 export type DirectorySync = 'synced' | 'unsupported';
 
@@ -18,7 +22,7 @@ export function syncDirectory(path: string): DirectorySync {
     throw new ExecutionError('sentinel.execution.durabilityFailed', { path, osCode: (e as NodeJS.ErrnoException).code ?? 'unknown', operation: 'open' }, { cause: e });
   }
   try {
-    fsyncSync(fd);
+    durabilityIo.fsyncSync(fd);
     return 'synced';
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
@@ -31,7 +35,7 @@ export function syncDirectory(path: string): DirectorySync {
 
 /** fsync a file descriptor; every failure is an error (file data must be durable). */
 export function syncFile(fd: number, path: string): void {
-  try { fsyncSync(fd); } catch (e) {
+  try { durabilityIo.fsyncSync(fd); } catch (e) {
     throw new ExecutionError('sentinel.execution.durabilityFailed', { path, osCode: (e as NodeJS.ErrnoException).code ?? 'unknown', operation: 'fsync' }, { cause: e });
   }
 }
