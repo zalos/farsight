@@ -21,7 +21,8 @@ export type GitObjectType = 'commit' | 'tree' | 'blob' | 'tag';
 export type GitHashAlgorithm = 'sha1' | 'sha256';
 
 export class GitReadError extends Error {
-  constructor(readonly code: 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved', message: string) {
+  /** `limit`: the object may be intact, but reading it would exceed a bound this reader keeps (never `corrupt`). */
+  constructor(readonly code: 'unsupported' | 'corrupt' | 'notRepository' | 'unresolved' | 'limit', message: string) {
     super(message);
     this.name = 'GitReadError';
   }
@@ -538,23 +539,21 @@ export class GitRepository {
       if ((e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') throw new GitReadError('corrupt', `object ${oid} exceeds the size limit`);
       throw new GitReadError('corrupt', `loose object ${oid} does not inflate`);
     }
-    const nul = raw.indexOf(0);
-    const m = nul < 0 ? null : /^(commit|tree|blob|tag) (\d+)$/.exec(raw.toString('latin1', 0, nul));
-    if (!m || Number(m[2]) !== raw.length - nul - 1) throw new GitReadError('corrupt', `loose object ${oid} has a bad header`);
-    if (Number(m[2]) > maxBytes) throw new GitReadError('corrupt', `object ${oid} exceeds the size limit`);
-    return { type: m[1] as GitObjectType, data: raw.subarray(nul + 1) };
+    const header = looseHeader(raw);
+    if (!header || header.size !== raw.length - header.end) throw new GitReadError('corrupt', `loose object ${oid} has a bad header`);
+    if (header.size > maxBytes) throw new GitReadError('corrupt', `object ${oid} exceeds the size limit`);
+    return { type: header.type, data: raw.subarray(header.end) };
   }
 
   #headerByOid(oid: string, chain: Chain, asBase: boolean): { type: GitObjectType; size: number } | undefined {
     if (asBase) this.#step(chain, `oid:${oid}`);
     const bytes = this.#looseFile(oid);
     if (bytes) {
-      // Inflate only a short compressed prefix, flushed without requiring the stream's end: the header is in it.
-      const head = inflatePrefix(bytes, `loose object ${oid}`);
-      const nul = head.indexOf(0);
-      const m = /^(commit|tree|blob|tag) (\d+)$/.exec(head.toString('latin1', 0, nul < 0 ? head.length : nul));
-      if (!m) throw new GitReadError('corrupt', `loose object ${oid} has no header`);
-      return { type: m[1] as GitObjectType, size: Number(m[2]) };
+      // Inflate only as much of the stream as the header needs: the header ends at the first NUL.
+      const head = inflateHeader(bytes, out => out.indexOf(0) >= 0 || out.length > MAX_LOOSE_HEADER, `loose object ${oid}`);
+      const header = looseHeader(head);
+      if (!header) throw new GitReadError('corrupt', `loose object ${oid} has no header`);
+      return { type: header.type, size: header.size };
     }
     const located = this.#locate(oid);
     if (!located) return undefined;
@@ -741,7 +740,8 @@ export class GitRepository {
     if (TYPE_BY_NUMBER[h.type]) return { type: TYPE_BY_NUMBER[h.type]!, size: h.size };
     // A delta's result size is the second varint of its inflated delta data; its type is the base's.
     const base = this.#deltaBase(pack, offset, buf, h);
-    const inflated = inflatePrefix(buf.subarray(base.dataAt), 'a delta');
+    // The delta data opens with two varints (base size, result size): inflate only until both are complete.
+    const inflated = inflateHeader(buf.subarray(base.dataAt), out => varintsComplete(out, 2), 'a delta');
     const reader = { i: 0 };
     varint(inflated, reader);
     const size = varint(inflated, reader);
@@ -824,13 +824,85 @@ export class GitRepository {
   }
 }
 
-/** Inflates the first compressed bytes only (sync flush: a truncated stream is not an error). Bounded output. */
-function inflatePrefix(compressed: Buffer, what: string): Buffer {
+/** A loose object's header (`<type> <size>\0`) is at most this long; longer output without a NUL is corrupt. */
+const MAX_LOOSE_HEADER = 32;
+
+/**
+ * `<type> <size>\0` at the start of a decoded loose object: a known type and a decimal size with no leading zero that
+ * is a safe integer, within {@link MAX_LOOSE_HEADER} bytes. `end` is the offset just past the NUL.
+ */
+function looseHeader(buf: Buffer): { type: GitObjectType; size: number; end: number } | undefined {
+  const nul = buf.subarray(0, MAX_LOOSE_HEADER + 1).indexOf(0);
+  if (nul < 0) return undefined;
+  const m = /^(commit|tree|blob|tag) (0|[1-9]\d{0,15})$/.exec(buf.toString('latin1', 0, nul));
+  if (!m) return undefined;
+  const size = Number(m[2]);
+  return Number.isSafeInteger(size) ? { type: m[1] as GitObjectType, size, end: nul + 1 } : undefined;
+}
+/**
+ * The most compressed bytes read to find one header. A legal zlib stream may open with any number of empty DEFLATE
+ * blocks (5 bytes each) before its first output byte, so no fixed prefix is enough; this budget bounds the search, and
+ * a header not found within it is a `limit`, never `corrupt`.
+ */
+export const HEADER_COMPRESSED_BUDGET = 1024 * 1024;
+/** The most output any one header probe may decode. A header is at most a few dozen bytes. */
+const HEADER_OUTPUT_CAP = 64 * 1024;
+
+type Probe = { kind: 'out'; out: Buffer } | { kind: 'big' } | { kind: 'invalid' };
+
+function probe(compressed: Buffer, length: number): Probe {
   try {
-    return inflateSync(compressed.subarray(0, 64), { finishFlush: zconstants.Z_SYNC_FLUSH, maxOutputLength: 128 * 1024 });
-  } catch {
-    throw new GitReadError('corrupt', `${what} does not inflate`);
+    return { kind: 'out', out: inflateSync(compressed.subarray(0, length), { finishFlush: zconstants.Z_SYNC_FLUSH, maxOutputLength: HEADER_OUTPUT_CAP }) };
+  } catch (e) {
+    return (e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE' ? { kind: 'big' } : { kind: 'invalid' };
   }
+}
+
+/**
+ * The decoded start of a zlib stream, from the shortest compressed prefix whose output satisfies `complete`. Each probe
+ * decodes a prefix with a sync flush (a stream cut short is not an error) and at most 64 KiB of output; the shortest
+ * sufficient prefix is found by doubling and then bisecting, within {@link HEADER_COMPRESSED_BUDGET}. Bisection is sound
+ * because a prefix's output only grows with its length, and data that does not decode stays undecodable in every
+ * longer prefix. Outcomes:
+ * - the header completes before any undecodable byte: its output, which is small because the prefix is minimal;
+ * - the stream stops decoding first: `corrupt`;
+ * - the whole stream decodes without completing the header: its output, which the caller refuses as corrupt;
+ * - the budget is spent first: `limit`, since the object may be intact.
+ */
+export function inflateHeader(compressed: Buffer, complete: (out: Buffer) => boolean, what: string): Buffer {
+  const limit = Math.min(compressed.length, HEADER_COMPRESSED_BUDGET);
+  const settled = (p: Probe) => p.kind !== 'out' || complete(p.out);
+  // Find a settled prefix by doubling (the common case settles at 64 bytes), then the shortest one by bisection.
+  let lo = 0;
+  let hi = Math.min(64, limit);
+  let at = probe(compressed, hi);
+  while (!settled(at) && hi < limit) { lo = hi; hi = Math.min(hi * 2, limit); at = probe(compressed, hi); }
+  if (!settled(at)) {
+    if (limit < compressed.length) throw new GitReadError('limit', `${what}: no header within the first ${limit} compressed bytes`);
+    return (at as { out: Buffer }).out;
+  }
+  while (hi - lo > 1) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    const p = probe(compressed, mid);
+    if (settled(p)) { hi = mid; at = p; } else lo = mid;
+  }
+  if (at.kind === 'invalid') throw new GitReadError('corrupt', `${what} does not inflate`);
+  if (at.kind === 'big') throw new GitReadError('limit', `${what}: the header's prefix decodes past ${HEADER_OUTPUT_CAP} bytes`);
+  return at.out;
+}
+
+/** Whether `buf` begins with `count` complete varints (7 bits per byte, high bit continues; at most 10 bytes each). */
+function varintsComplete(buf: Buffer, count: number): boolean {
+  let i = 0;
+  for (let n = 0; n < count; n++) {
+    let len = 0;
+    for (;;) {
+      if (i >= buf.length) return false;
+      if (++len > 10) return true; // malformed: the reader refuses it
+      if ((buf[i++]! & 0x80) === 0) break;
+    }
+  }
+  return true;
 }
 
 function varint(buf: Buffer, r: { i: number }): number {

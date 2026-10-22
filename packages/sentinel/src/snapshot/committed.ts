@@ -32,7 +32,9 @@ export interface CommittedSource {
 export interface FoundSubmodule { readonly request: SubmoduleRequest; readonly commit: string }
 
 const corruptOrMissing = (e: unknown): CaptureReasonCode | undefined =>
-  e instanceof GitReadError && e.code === 'corrupt' ? 'sentinel.capture.gitObjectCorrupt' : undefined;
+  !(e instanceof GitReadError) ? undefined
+    : e.code === 'corrupt' ? 'sentinel.capture.gitObjectCorrupt'
+    : e.code === 'limit' ? 'sentinel.capture.gitReadLimit' : undefined;
 
 /** Enumerates one commit's tree. Returns the submodules to capture as separate sources. */
 export function enumerateCommit(inv: Inventory, src: CommittedSource): FoundSubmodule[] {
