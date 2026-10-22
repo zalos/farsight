@@ -8,15 +8,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireStoreOwner } from '../dist/store/owner.js';
 import { isStoreError } from '../dist/store/errors.js';
-import { SQLITE_RELEASE_POLICY, currentHost } from '../dist/store/runtime.js';
+import { SQLITE_RELEASE_POLICY, currentHost, qualificationFor } from '../dist/store/runtime.js';
 import { validateEnvelope } from '../dist/index.js';
 import { OwnerProcesses, probeOwnership } from './helpers/owner-processes.ts';
 
-// Ownership is exercised only on hosts the release policy qualifies; elsewhere the gate refuses first (tested
+// Ownership is exercised only on host and SQLite pairs the release policy qualifies; elsewhere the gate refuses first (tested
 // in store-runtime.test.ts). Qualifying a host means adding it to the policy and running this suite there.
 // On CI nothing skips: an unqualified CI host runs these tests and fails at the gate, loudly.
-const unqualified = !SQLITE_RELEASE_POLICY.hosts.includes(currentHost()) && !process.env.CI
-  && `host ${currentHost()} is not in SQLITE_RELEASE_POLICY.hosts`;
+const unqualified = !qualificationFor(SQLITE_RELEASE_POLICY, currentHost(), process.versions.sqlite ?? '') && !process.env.CI
+  && `${currentHost()} with SQLite ${process.versions.sqlite} is not a pair in SQLITE_RELEASE_POLICY`;
 const test = (name: string, fn: () => Promise<void> | void) => nodeTest(name, { skip: unqualified }, fn);
 
 const scratch = mkdtempSync(join(realpathSync(tmpdir()), 'sentinel-owner-'));

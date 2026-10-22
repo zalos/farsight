@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SENTINEL_STORE_STRINGS } from '@farsight/core/dist/strings-sentinel-store.js';
-import { checkSqliteRuntime, currentHost, SQLITE_RELEASE_POLICY } from '../dist/store/runtime.js';
+import { checkSqliteRuntime, currentHost, qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/runtime.js';
 import { STORE_ERROR_CODES, StoreError, isStoreError } from '../dist/store/errors.js';
 import { acquireStoreOwner } from '../dist/store/owner.js';
 import { measureFilesystem, prepareStoreRoot, preparePrivateFile, canonicalSpelling, storeLayout } from '../dist/store/paths.js';
@@ -19,17 +19,19 @@ after(() => rmSync(scratch, { recursive: true, force: true }));
 let n = 0;
 const fresh = () => join(scratch, `case-${++n}`);
 const is = (code: string) => (e: unknown) => isStoreError(e) && e.code === code;
-const qualifiedHost = SQLITE_RELEASE_POLICY.hosts.includes(currentHost());
+const qualifiedPair = qualificationFor(SQLITE_RELEASE_POLICY, currentHost(), process.versions.sqlite ?? '');
+const qualifiedHost = SQLITE_RELEASE_POLICY.qualified.some(q => q.host === currentHost());
 // On CI nothing skips: an unqualified CI host runs the qualified-host tests and fails at the gate, loudly.
-const onQualifiedHost = { skip: !qualifiedHost && !process.env.CI && `host ${currentHost()} is not in SQLITE_RELEASE_POLICY.hosts` };
+const onQualifiedHost = { skip: !qualifiedPair && !process.env.CI
+  && `${currentHost()} with SQLite ${process.versions.sqlite} is not a pair in SQLITE_RELEASE_POLICY` };
 // The path checks need no SQLite, so they run (and gather evidence) on a host before it is qualified.
 const checkStore = (root: string) => { prepareStoreRoot(root); return preparePrivateFile(storeLayout(root).owner); };
 const refuses = (code: string, root: string) => assert.throws(() => checkStore(root), is(code));
 
 test('every store error code is a catalog entry and every store catalog entry is a code', () => {
   assert.deepEqual([...STORE_ERROR_CODES].sort(), Object.keys(SENTINEL_STORE_STRINGS).sort());
-  const e = new StoreError('sentinel.store.runtimeUnqualified', { found: '9.9.9', qualified: ['3.53.3'] });
-  assert.equal(e.message, 'SQLite 9.9.9 has not been qualified for the Sentinel store (qualified: 3.53.3)');
+  const e = new StoreError('sentinel.store.runtimeUnqualified', { found: '9.9.9', host: 'darwin-arm64', qualified: ['3.53.3', '3.53.4'] });
+  assert.equal(e.message, 'SQLite 9.9.9 has not been qualified for the Sentinel store on darwin-arm64 (qualified there: 3.53.3, 3.53.4)');
   assert.ok(Object.isFrozen(e.detail));
 });
 
@@ -38,21 +40,38 @@ test('an unqualified host is refused by the default gate before node:sqlite is u
     && (e as StoreError).detail.platform === currentHost());
 });
 
-test('every listed host carries its evidence', () => {
-  assert.deepEqual(Object.keys(SQLITE_RELEASE_POLICY.hostEvidence).sort(), [...SQLITE_RELEASE_POLICY.hosts].sort());
+test('qualification is exact host and SQLite pairs, each with evidence, never a cross product', () => {
+  const keys = SQLITE_RELEASE_POLICY.qualified.map(q => `${q.host}/${q.sqlite}`);
+  assert.equal(new Set(keys).size, keys.length, 'no pair is listed twice');
+  for (const q of SQLITE_RELEASE_POLICY.qualified) {
+    assert.match(q.host, /^[a-z0-9]+-[a-z0-9]+$/);
+    assert.match(q.sqlite, /^\d+\.\d+\.\d+$/);
+    assert.ok(['measured', 'candidate'].includes(q.status));
+    assert.ok(q.evidence.length > 0);
+  }
+  assert.equal(qualificationFor(SQLITE_RELEASE_POLICY, 'darwin-arm64', '3.53.3')?.status, 'measured');
+  // linux-x64 is a candidate with 3.53.4 only; darwin-arm64's 3.53.3 does not carry over to it.
+  assert.equal(qualificationFor(SQLITE_RELEASE_POLICY, 'linux-x64', '3.53.3'), undefined);
+  assert.equal(qualificationFor(SQLITE_RELEASE_POLICY, 'linux-arm64', '3.53.4'), undefined);
+  const synthetic = { qualified: [
+    { host: 'host-a', sqlite: '1.0.0', status: 'measured' as const, evidence: 'synthetic' },
+    { host: 'host-b', sqlite: '2.0.0', status: 'measured' as const, evidence: 'synthetic' },
+  ] };
+  assert.equal(qualificationFor(synthetic, 'host-a', '2.0.0'), undefined);
+  assert.equal(qualificationFor(synthetic, 'host-b', '1.0.0'), undefined);
 });
 
 test('qualification facts for this host, printed for the run log', onQualifiedHost, async t => {
   const rt = await checkSqliteRuntime();
   const fs = prepareStoreRoot(join(fresh(), 'store')).filesystem;
-  t.diagnostic(`sentinel-store-qualification host=${currentHost()} node=${rt.node} sqlite=${rt.sqliteVersion} `
+  t.diagnostic(`sentinel-store-qualification host=${currentHost()} node=${rt.node} sqlite=${rt.sqliteVersion} status=${rt.qualification.status} `
     + `filesystem=${fs.type} evidence=${fs.evidence} checks=${rt.checks.join(',')} ci=${process.env.CI ? 'yes' : 'no'}`);
 });
 
 test('the gate passes the qualified runtime and names every behaviour it checked', onQualifiedHost, async () => {
   const rt = await checkSqliteRuntime();
   assert.equal(rt.sqliteVersion, process.versions.sqlite);
-  assert.ok(SQLITE_RELEASE_POLICY.qualifiedSqlite.includes(rt.sqliteVersion));
+  assert.deepEqual(rt.qualification, qualificationFor(SQLITE_RELEASE_POLICY, currentHost(), rt.sqliteVersion));
   assert.deepEqual([...rt.checks], ['api-surface', 'version-agrees', 'error-codes', 'foreign-keys', 'strict-tables',
     'deferred-foreign-keys', 'transaction-state', 'compile-options']);
   assert.equal(typeof rt.sqlite.DatabaseSync, 'function');
@@ -60,12 +79,12 @@ test('the gate passes the qualified runtime and names every behaviour it checked
 });
 
 test('an unqualified SQLite release or host is refused, and a refusal is not cached', async () => {
-  const unqualified = { ...SQLITE_RELEASE_POLICY, hosts: [currentHost()], qualifiedSqlite: ['0.0.1'] };
+  const unqualified = { qualified: [{ host: currentHost(), sqlite: '0.0.1', status: 'measured' as const, evidence: 'synthetic' }] };
   await assert.rejects(checkSqliteRuntime(unqualified), (e: unknown) => is('sentinel.store.runtimeUnqualified')(e)
     && (e as StoreError).detail.found === process.versions.sqlite);
-  const host = { ...SQLITE_RELEASE_POLICY, hosts: ['aix-ppc64'] };
+  const host = { qualified: [{ host: 'aix-ppc64', sqlite: process.versions.sqlite ?? '', status: 'measured' as const, evidence: 'synthetic' }] };
   await assert.rejects(checkSqliteRuntime(host), is('sentinel.store.platformUnqualified'));
-  if (qualifiedHost) assert.ok((await checkSqliteRuntime()).checks.length > 0);
+  if (qualifiedPair) assert.ok((await checkSqliteRuntime()).checks.length > 0);
 });
 
 test('loading the store modules imports neither node:sqlite nor anything else with effects', () => {

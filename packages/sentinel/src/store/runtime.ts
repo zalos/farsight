@@ -10,39 +10,52 @@ import { StoreError, sqlitePrimaryCode } from './errors.js';
 
 type SqliteModule = typeof import('node:sqlite');
 
-export interface SqliteReleasePolicy {
-  /** SQLite releases that passed the PR 01 storage probe and this package's store tests. */
-  readonly qualifiedSqlite: readonly string[];
-  /**
-   * Hosts (`platform-arch`) where this release and the store's lock protocol were measured: POSIX advisory locks
-   * through SQLite's default unix VFS. A host is added only after the store tests have run on it.
-   */
-  readonly hosts: readonly string[];
-  /** What qualified each listed host, or that its qualification is still pending. */
-  readonly hostEvidence: Readonly<Record<string, string>>;
-  /** Where the qualification came from, for reports and error detail. */
+/** `measured`: the store tests passed on this exact pair. `candidate`: listed so CI runs them; not yet evidence. */
+export type QualificationStatus = 'measured' | 'candidate';
+
+/** One host (`platform-arch`) with one SQLite release. Pairs are listed one by one, never crossed. */
+export interface QualifiedRuntime {
+  readonly host: string;
+  readonly sqlite: string;
+  readonly status: QualificationStatus;
+  /** What qualified this pair, or what must still run for a candidate. */
   readonly evidence: string;
 }
 
+export interface SqliteReleasePolicy {
+  /**
+   * Every qualified host and SQLite pair: POSIX advisory locks through SQLite's default unix VFS, the lock
+   * protocol and the eight behaviour checks below. A host listed with one release qualifies no other release.
+   */
+  readonly qualified: readonly QualifiedRuntime[];
+}
+
+const pair = (host: string, sqlite: string, status: QualificationStatus, evidence: string): QualifiedRuntime =>
+  Object.freeze({ host, sqlite, status, evidence });
+
 /**
- * darwin-arm64 is measured: PR 01's E4 probe and the PR 03 store tests, SQLite 3.53.3 linked by Node 24.19.0.
- * linux-x64 is a candidate: it is listed so the full store tests run, unskipped, on GitHub's ubuntu runners
- * (ext4) before this merges, and its evidence entry is replaced with that run's facts. If that run links
- * another SQLite release, the gate refuses it and the tests fail; the release list is not widened to pass.
- * Add a release or host only with such evidence.
+ * - darwin-arm64 · 3.53.3: PR 01's E4 probe and the PR 03 store tests on Node 24.19.0.
+ * - darwin-arm64 · 3.53.4: the PR 03 store tests on the official Node 24.22.0 darwin-arm64 build (archive
+ *   checked against its signed SHASUMS256.txt), run from a scratch folder, with no system install.
+ * - linux-x64 · 3.53.4: a candidate, so GitHub's ubuntu runners (Node 24.22.0, ext4) run the full store tests
+ *   unskipped before this merges; its evidence is replaced with that run's facts.
+ * A runtime linking any other release, or a host with no entry, is refused. Add a pair only with such evidence.
  */
 export const SQLITE_RELEASE_POLICY: SqliteReleasePolicy = Object.freeze({
-  qualifiedSqlite: Object.freeze(['3.53.3']),
-  hosts: Object.freeze(['darwin-arm64', 'linux-x64']),
-  hostEvidence: Object.freeze({
-    'darwin-arm64': 'PR 01 E4 storage probe and PR 03 store tests: SQLite 3.53.3, Node 24.19.0',
-    'linux-x64': 'candidate: pending the PR 03 store tests on GitHub ubuntu CI (ext4)',
-  }),
-  evidence: 'PR 01 E4 storage probe and PR 03 store tests: SQLite 3.53.3; darwin-arm64 measured, linux-x64 pending CI',
+  qualified: Object.freeze([
+    pair('darwin-arm64', '3.53.3', 'measured', 'PR 01 E4 storage probe and PR 03 store tests, Node 24.19.0'),
+    pair('darwin-arm64', '3.53.4', 'measured', 'PR 03 store tests, official Node 24.22.0 darwin-arm64, checksum and signature verified'),
+    pair('linux-x64', '3.53.4', 'candidate', 'pending the PR 03 store tests on GitHub ubuntu CI, Node 24.22.0, ext4'),
+  ]),
 });
 
 /** This process's host in policy form, `platform-arch`. */
 export const currentHost = (): string => `${process.platform}-${process.arch}`;
+
+/** The policy entry for exactly this host and release, if there is one. */
+export function qualificationFor(policy: SqliteReleasePolicy, host: string, sqlite: string): QualifiedRuntime | undefined {
+  return policy.qualified.find(q => q.host === host && q.sqlite === sqlite);
+}
 
 export interface SqliteRuntime {
   /** The lazily imported module; store code opens connections through this, never by importing it again. */
@@ -53,6 +66,8 @@ export interface SqliteRuntime {
   readonly arch: string;
   /** The behaviour checks that passed, by name. */
   readonly checks: readonly string[];
+  /** The policy entry that admitted this runtime. */
+  readonly qualification: QualifiedRuntime;
 }
 
 const BEHAVIOUR_CHECKS = [
@@ -71,8 +86,9 @@ export function checkSqliteRuntime(policy: SqliteReleasePolicy = SQLITE_RELEASE_
 }
 
 async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
-  if (!policy.hosts.includes(currentHost())) {
-    throw new StoreError('sentinel.store.platformUnqualified', { platform: currentHost(), qualified: policy.hosts });
+  const host = currentHost();
+  if (!policy.qualified.some(q => q.host === host)) {
+    throw new StoreError('sentinel.store.platformUnqualified', { platform: host, qualified: [...new Set(policy.qualified.map(q => q.host))] });
   }
   let sqlite: SqliteModule;
   try {
@@ -81,8 +97,11 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
     throw new StoreError('sentinel.store.runtimeUnavailable', { node: process.versions.node }, { cause: error });
   }
   const found = process.versions.sqlite ?? 'unknown';
-  if (!policy.qualifiedSqlite.includes(found)) {
-    throw new StoreError('sentinel.store.runtimeUnqualified', { found, qualified: policy.qualifiedSqlite, node: process.versions.node, evidence: policy.evidence });
+  const qualification = qualificationFor(policy, host, found);
+  if (!qualification) {
+    throw new StoreError('sentinel.store.runtimeUnqualified', {
+      found, host, node: process.versions.node, qualified: policy.qualified.filter(q => q.host === host).map(q => q.sqlite),
+    });
   }
   const passed: string[] = [];
   let current = 'api-surface';
@@ -135,6 +154,6 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
   if (passed.length !== BEHAVIOUR_CHECKS.length) fail();
   return Object.freeze({
     sqlite, sqliteVersion: found, node: process.versions.node, platform: process.platform, arch: process.arch,
-    checks: Object.freeze(passed),
+    checks: Object.freeze(passed), qualification,
   });
 }
