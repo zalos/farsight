@@ -58,6 +58,12 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/processes.js': ['node:child_process'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
+  'review/providers/broker.js': ['node:crypto'],
+  'review/providers/budget.js': ['node:path'],
+  'review/providers/credentials.js': ['@farsight/core/dist/keychain.js'],
+  'review/providers/errors.js': ['@farsight/core/dist/strings-sentinel-providers.js'],
+  'review/providers/transport.js': ['node:http', 'node:https'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
