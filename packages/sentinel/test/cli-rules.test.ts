@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -204,4 +204,156 @@ test('promotions racing from one revision: exactly one succeeds each revision, t
       });
     }
   });
+});
+
+// ---- publication boundaries: a reader, a failure or a crash never meets a partial record ----
+
+const PUBLISH_CHILD = fileURLToPath(new URL('./helpers/lock-publish-child.ts', import.meta.url));
+const lockA = () => emptyLock(new Date('2026-10-22T00:00:00Z'));
+const lockB = () => emptyLock(new Date('2026-10-22T00:00:01Z'));
+
+function trustWithA(t: { after(fn: () => void): void }) {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-publish-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const trust = join(dir, 'trust');
+  const book = new RuleLockBook(trust);
+  const da = book.store(lockA());
+  book.select(da, null);
+  return { trust, da };
+}
+
+test('while a link is being published, readers see the previous revision whole; the record appears only complete', t => {
+  const { trust, da } = trustWithA(t);
+  const reader = new RuleLockBook(trust);
+  const seen: string[] = [];
+  const book = new RuleLockBook(trust, { hooks: { at: (at, name) => {
+    if (name.endsWith('.json') && name !== `${da.slice(7)}.json`) return; // only the link after A
+    if (at === 'temp-opened' || at === 'temp-written') seen.push(`${at}:${reader.current()!.digest === da ? 'A' : 'other'}`);
+    if (at === 'linked') seen.push(`${at}:${reader.current()!.digest === da ? 'A' : 'B'}`);
+  } } });
+  const db = book.store(lockB());
+  book.select(db, da);
+  assert.deepEqual(seen, ['temp-opened:A', 'temp-written:A', 'linked:B'], 'before the link the chain ends at A; from it, at B');
+  assert.deepEqual(readdirSync(join(trust, 'rules', 'next')).filter(n => n.startsWith('.')), [], 'no temporary name is left');
+});
+
+test('a failure while writing a record leaves nothing at its name, and the chain stays usable', t => {
+  const { trust, da } = trustWithA(t);
+  const eio = Object.assign(new Error('EIO: i/o error, write'), { code: 'EIO' });
+  for (const boundary of ['temp-opened', 'temp-written'] as const) {
+    const failing = new RuleLockBook(trust, { hooks: { at: (at, name) => { if (at === boundary && name === `${da.slice(7)}.json`) throw eio; } } });
+    const db = failing.store(lockB());
+    assert.throws(() => failing.select(db, da), /EIO/);
+    const reader = new RuleLockBook(trust);
+    assert.equal(reader.current()!.digest, da, `${boundary}: the chain still ends at A`);
+    assert.equal(existsSync(join(trust, 'rules', 'next', `${da.slice(7)}.json`)), false, `${boundary}: no record at the final name`);
+    assert.deepEqual(readdirSync(join(trust, 'rules', 'next')).filter(n => n.startsWith('.')), [], `${boundary}: the temporary name was removed`);
+  }
+  const book = new RuleLockBook(trust);
+  book.select(book.store(lockB()), da);
+  assert.notEqual(book.current()!.digest, da, 'the same promotion succeeds afterwards');
+});
+
+for (const phase of ['store', 'select'] as const) {
+  for (const boundary of ['temp-opened', 'temp-written', 'linked', 'temp-removed'] as const) {
+    test(`SIGKILL during ${phase} at ${boundary}: the chain is whole and the promotion can still complete`, t => {
+      const { trust, da } = trustWithA(t);
+      const r = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--experimental-strip-types', PUBLISH_CHILD, trust, phase, boundary], { encoding: 'utf8', timeout: 60_000 });
+      assert.equal(r.signal, 'SIGKILL', r.stderr);
+      const book = new RuleLockBook(trust);
+      const current = book.current()!.digest;
+      const db = book.store(lockB()); // the revision, whole: filed now or already, never half
+      const linkedB = phase === 'select' && (boundary === 'linked' || boundary === 'temp-removed');
+      assert.equal(current, linkedB ? db : da, 'the chain ends at a complete record');
+      if (!linkedB) book.select(db, da);
+      else assert.throws(() => book.select(db, da), (e: any) => e.code === 'sentinel.service.lockChanged');
+      assert.equal(new RuleLockBook(trust).current()!.digest, db);
+    });
+  }
+}
+
+test('readers running beside racing promotions never meet a partial record', t => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-readers-')));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const ws = join(dir, 'ws');
+  mkdirSync(ws);
+  const env = { PATH: process.env.PATH ?? '', HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  mkdirSync(env.HOME);
+  const sync = (...args: string[]) => JSON.parse(spawnSync(process.execPath, [CLI, ...args, '--json'], { cwd: ws, env, encoding: 'utf8', timeout: 60_000 }).stdout);
+  sync('init');
+  sync('settings', 'adopt', '--confirm');
+  const packs = Array.from({ length: 6 }, (_, i) => { const p = join(dir, `pack-${i}`); writePack(p, `0.${i + 1}.0`, ['sentinel.ts.eval']); return p; });
+  const trust = join(env.XDG_STATE_HOME, 'farsight', 'sentinel', 'trust');
+  return new Promise<void>((resolve, reject) => {
+    let left = packs.length;
+    let reads = 0;
+    const failures: string[] = [];
+    const reader = new RuleLockBook(trust);
+    const poll = setInterval(() => {
+      try { reader.current(); reads++; } catch (e: any) { failures.push(e.code ?? String(e)); }
+    }, 1);
+    for (const p of packs) {
+      const child = spawn(process.execPath, [CLI, 'rules', 'promote', p, '--confirm', '--json'], { cwd: ws, env });
+      child.stdout.resume();
+      child.on('close', () => {
+        if (--left > 0) return;
+        clearInterval(poll);
+        try {
+          assert.deepEqual(failures, [], 'no read met a partial or missing record');
+          assert.ok(reads > 10, `the reader actually ran (${reads} reads)`);
+          assert.equal(reader.current()!.lock.revision, sync('rules', 'show').facts.revision);
+          resolve();
+        } catch (e) { reject(e); }
+      });
+    }
+  });
+});
+
+test('only the writer\'s own temporary alias of the same record is removed; any other second name is refused', async t => {
+  const { linkSync, writeFileSync: write } = await import('node:fs');
+  const { trust, da } = trustWithA(t);
+  const revisions = join(trust, 'rules', 'locks');
+  const record = join(revisions, `${da.slice(7)}.json`);
+  // A temporary-pattern name for a different file is left alone.
+  const decoy = join(revisions, `.${da.slice(7)}.json.${'0'.repeat(16)}.tmp`);
+  write(decoy, 'unrelated', { mode: 0o600 });
+  // A second, foreign name for the record itself is refused, never removed.
+  linkSync(record, join(revisions, 'elsewhere.json'));
+  assert.throws(() => new RuleLockBook(trust).current(), (e: any) => e.code === 'sentinel.service.recordUnsafe');
+  assert.ok(existsSync(join(revisions, 'elsewhere.json')) && existsSync(decoy));
+  rmSync(join(revisions, 'elsewhere.json'));
+  // The writer's own alias (as a crash between link and unlink leaves it) is removed and the record read.
+  linkSync(record, join(revisions, `.${da.slice(7)}.json.${'a'.repeat(16)}.tmp`));
+  assert.equal(new RuleLockBook(trust).current()!.digest, da);
+  assert.equal(existsSync(join(revisions, `.${da.slice(7)}.json.${'a'.repeat(16)}.tmp`)), false);
+  assert.ok(existsSync(decoy), 'the unrelated file is untouched');
+});
+
+test('every folder a record is published into is synced into its parent when created, and every record before its link', async t => {
+  const fs = (await import('node:fs')).default;
+  const { syncBuiltinESMExports } = await import('node:module');
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-durable-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const originals = { open: fs.openSync, close: fs.closeSync, sync: fs.fsyncSync };
+  const paths = new Map<number, string>();
+  const synced: string[] = [];
+  (fs as any).openSync = function (p: unknown, ...rest: unknown[]) { const fd = (originals.open as any).call(this, p, ...rest); paths.set(fd, String(p)); return fd; };
+  (fs as any).closeSync = function (fd: number) { paths.delete(fd); return originals.close.call(this, fd); };
+  (fs as any).fsyncSync = function (fd: number) { synced.push(paths.get(fd)!); return originals.sync.call(this, fd); };
+  syncBuiltinESMExports();
+  try {
+    const trust = join(root, 'trust');
+    const book = new RuleLockBook(trust);
+    const da = book.store(lockA());
+    book.select(da, null);
+    book.select(book.store(lockB()), da);
+    for (const dir of [root, trust, join(trust, 'rules'), join(trust, 'rules', 'locks'), join(trust, 'rules', 'next')]) {
+      assert.ok(synced.includes(dir), `${dir} was synced`);
+    }
+    assert.ok(synced.some(p => /\/locks\/\.[0-9a-f]{64}\.json\.[0-9a-f]{16}\.tmp$/.test(p)), 'a revision is synced under its temporary name');
+    assert.ok(synced.some(p => /\/next\/\.[0-9a-f]{64}\.json\.[0-9a-f]{16}\.tmp$/.test(p)), 'a link is synced under its temporary name');
+  } finally {
+    Object.assign(fs, { openSync: originals.open, closeSync: originals.close, fsyncSync: originals.sync });
+    syncBuiltinESMExports();
+  }
 });

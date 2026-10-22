@@ -87,6 +87,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
   // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.
   'service/rule-locks.js': ['node:path'],
+  // Owner-private records published whole: a synced temporary name linked to its final one, never replaced.
+  'service/publish-once.js': ['node:crypto', 'node:fs', 'node:path'],
   // The CLI's trusted profile: its canonical document's digest.
   'service/trusted-profile.js': ['node:crypto'],
   // The owner's background service is the one process the command line starts itself (asserted below).
