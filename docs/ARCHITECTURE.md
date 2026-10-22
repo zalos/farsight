@@ -465,8 +465,17 @@ revision, byte for byte, with no clock, file, ledger or network access. Its inpu
 the rule lock resolved by the rules module's `resolveLockedRules` against its canonical pin and the exact
 validated packs (a rule is planned only with the definition whose digest the lock pins), the effective policy (pinned by its `revision`, the digest receipts and admission bind to),
 the snapshot envelope and each source's parser evidence. Surfaces are graph nodes of kind `route` (an HTTP endpoint)
-and `page` (a UI route); a handler is the function a route reaches, not a surface. The profile states which rule
-capabilities its stages establish and which adapters it ships.
+and `page` (a UI route); a handler is the function a route reaches, not a surface. A capability is available only
+when a capability table Sentinel's own code built records that an adapter in the trusted adapter registry (PR 07)
+establishes it, that adapter is still registered with the same digest, and the profile permits relying on it; a
+profile, caller or settings label cannot make an unestablished capability available. A rule runs only through a
+registered adapter, and an external one only when the rule lock also pins it. The bootstrap stages run only through
+registered operations bound by the profile; an unbound stage stays in the plan and its work is handed off blocked
+(`sentinel.plan.operationUnbound`), never run by a generic worker. A whole-repository check reads the source's complete
+captured file set (bounded; a larger source is not planned as a whole), and every entry it cannot read, excluded,
+refused, unreadable or unlisted, is kept as its own gap. Each unit binds its exact captured input set by digest,
+apart from its wider input fingerprint. An unresolved framework version is unknown for the source it names, or for
+every source when it names none.
 
 A bootstrap revision captures once, parses each source and builds the inventory. An analysis revision derives one
 check per scope a selected rule names, identified by (scope, rule revision, environment, mode). A check the profile

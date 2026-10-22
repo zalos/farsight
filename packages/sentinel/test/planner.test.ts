@@ -8,25 +8,13 @@ import {
   CHECK_STATES, PLAN_ERROR_CODES, PLAN_REASON_CODES, PlanError, checkWorkGraph, languageOf, planAnalysis, planBootstrap,
   surfacesFromIndex, verifyPlanRevision,
 } from '../dist/planner/index.js';
-import type { PlanRevision, PlannerAnalysis, PlannerPolicy, PlannerProfile, PlannerRule, PlannerRuleLock, PlannerSnapshot } from '../dist/planner/index.js';
+import type { PlanRevision, PlannerAnalysis, PlannerPolicy, PlannerRule, PlannerRuleLock, PlannerSnapshot } from '../dist/planner/index.js';
+import { registry, trustedProfile } from './planner-helpers.ts';
 
 const d = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const code = (c: string) => (e: unknown) => e instanceof PlanError && e.code === c;
 
-const profile: PlannerProfile = {
-  id: 'profile-default',
-  capabilities: [
-    { capability: 'source-bytes', available: true },
-    { capability: 'pattern-match', available: true },
-    { capability: 'source-span', available: true },
-    { capability: 'call-occurrence', available: true, perFileParse: true },
-    { capability: 'dependency-manifest', available: true },
-    { capability: 'advisory-database', available: true },
-    { capability: 'framework-order', available: false, reasonCode: 'sentinel.capability.notImplemented' },
-  ],
-  builtInAdapters: [{ adapterId: 'sentinel-pattern', implementationDigest: d('builtin pattern adapter') }],
-  stages: { capture: d('capture stage'), parse: d('parse stage'), inventory: d('inventory stage') },
-};
+const profile = trustedProfile({ permitExtra: ['framework-order'] });
 
 const rule = (familyId: string, over: Partial<PlannerRule> = {}): PlannerRule => ({
   familyId, revision: 1, definitionDigest: d(`def ${familyId}`), packDigest: d('pack-a'), languages: ['typescript', 'javascript'],
@@ -118,12 +106,24 @@ test('every scope a rule names gets a check with an explicit state; nothing is d
   // Framework-gated: only the Spring source, one check per surface; the order rule's capability is unavailable.
   assert.deepEqual(checksOf(plan, RULES.spring.familyId).map(c => [c.scopeId, c.state]).sort(),
     [['api::src/main/java/App.java::App.create', 'planned'], ['api::src/main/java/App.java::App.list', 'planned']]);
-  assert.ok(checksOf(plan, RULES.springOrder.familyId).every(c => c.state === 'unsupported' && c.reasonCode === 'sentinel.capability.notImplemented'));
+  assert.ok(checksOf(plan, RULES.springOrder.familyId).every(c => c.state === 'unsupported' && c.reasonCode === 'sentinel.plan.capabilityUnavailable'),
+    'permitted by the profile, but no registered adapter establishes it');
   assert.deepEqual(checksOf(plan, RULES.deps.familyId).map(c => [c.scopeId, c.state]).sort(),
     [['api:pom.xml', 'planned'], ['web:locked/', 'scope-unknown'], ['web:package.json', 'planned']], 'an unlisted folder may hold manifests too');
   assert.deepEqual(checksOf(plan, RULES.ci.familyId).map(c => [c.scopeId, c.state, c.reasonCode]).sort(),
-    [['web:.github/workflows/ci.yml', 'unsupported', 'sentinel.plan.adapterNotLocked'], ['web:locked/', 'scope-unknown', 'sentinel.plan.unknownDescendants']]);
-  assert.deepEqual(checksOf(plan, RULES.repo.familyId).map(c => c.scopeId).sort(), ['api', 'web']);
+    [['web:.github/workflows/ci.yml', 'unsupported', 'sentinel.plan.adapterNotRegistered'], ['web:locked/', 'scope-unknown', 'sentinel.plan.unknownDescendants']]);
+  // A whole-repository check reads every captured file of its source; everything it cannot read is an explicit gap.
+  assert.deepEqual(Object.fromEntries(checksOf(plan, RULES.repo.familyId).map(c => [c.scopeId, `${c.state}${c.reasonCode ? ` ${c.reasonCode}` : ''}`])), {
+    'api': 'planned', 'web': 'planned',
+    'web:src/huge.ts': 'scope-unavailable sentinel.capture.tooLarge',
+    'web:vendor/x.js': 'scope-unavailable sentinel.capture.excludedByPolicy',
+    'web:node_modules/': 'scope-unavailable sentinel.capture.excludedDependencyCache',
+    'web:locked/': 'scope-unknown sentinel.plan.unknownDescendants',
+  });
+  const repoUnit = plan.units.find(u => u.checks.includes(checksOf(plan, RULES.repo.familyId).find(c => c.scopeId === 'web')!.id))!;
+  assert.deepEqual(repoUnit.inputs.map(i => i.relativePath),
+    snapshot.entries.filter(e => e.sourceId === 'web' && e.kind === 'file' && e.disposition === 'included').map(e => e.relativePath).sort(),
+    'the complete captured set, never an empty input');
   // Tallies agree with the checks; mandatory unsupported checks make complete required coverage unachievable.
   assert.equal(Object.values(plan.tallies.checks).reduce((a, b) => a + b, 0), plan.checks.length);
   assert.equal(plan.requiredCoverageAchievable, false);
@@ -145,7 +145,7 @@ test('physical batching covers exactly the planned checks, each once, within its
   }
   for (const c of plan.checks) if (c.state !== 'planned') assert.equal(c.unit, undefined, 'an unplanned check has no work');
   const dbUnit = plan.units.find(w => w.adapterId === 'osv')!;
-  assert.equal(dbUnit.implementationDigest, d('osv binary'), 'a locked tool runs by its pinned digest');
+  assert.equal(dbUnit.implementationDigest, registry.get('osv').digest, 'a registered adapter runs by its registry digest');
 });
 
 test('the same inputs in any order give the same revision; the pins name exactly what it used', () => {

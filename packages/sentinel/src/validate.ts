@@ -524,11 +524,22 @@ const plan: Check<PlanEnvelope> = (v, out) => {
   for (const i of duplicates(v.units, w => w.id)) out.add(err(`/units/${i}/id`, 'duplicate work'));
   for (const i of duplicates(v.ruleGaps, g => g.familyId)) out.add(err(`/ruleGaps/${i}`, 'duplicate rule gap'));
   const work = new Map(v.units.map(w => [w.id, w]));
+  const pinnedAdapters = new Map(v.pins.adapters.map(a => [a.adapterId, a.digest]));
+  for (const i of duplicates(v.pins.adapters, a => a.adapterId)) out.add(err(`/pins/adapters/${i}`, 'duplicate adapter pin'));
   const covered = new Map<string, string>();
   v.units.forEach((w, i) => {
     if (analysis !== (w.stage === 'check')) out.add(err(`/units/${i}/stage`, analysis ? 'an analysis revision schedules checks only' : 'a bootstrap revision schedules capture, parse and inventory'));
     if (!analysis && !BOOTSTRAP_STAGES.has(w.stage)) out.add(err(`/units/${i}/stage`, 'unknown bootstrap stage'));
-    if ((w.stage === 'check') !== (w.adapterId !== null)) out.add(err(`/units/${i}/adapterId`, 'exactly check work names an adapter'));
+    if (w.stage === 'check' && w.adapterId === null) out.add(err(`/units/${i}/adapterId`, 'check work names its registered adapter'));
+    if (w.stage !== 'check') {
+      const op = v.pins.operations[w.stage as 'capture' | 'parse' | 'inventory'];
+      if ((op?.adapterId ?? null) !== w.adapterId || (op !== null && op !== undefined && op.digest !== w.implementationDigest)) {
+        out.add(err(`/units/${i}/adapterId`, 'a bootstrap unit runs the operation the plan binds to its stage, or none'));
+      }
+    } else if (w.adapterId !== null && pinnedAdapters.get(w.adapterId) !== w.implementationDigest) {
+      out.add(err(`/units/${i}/implementationDigest`, 'a check unit runs a pinned adapter at its pinned digest'));
+    }
+    if (w.inputSetDigest !== digestOf(w.inputs)) out.add(err(`/units/${i}/inputSetDigest`, 'the input set digest is the digest of exactly the inputs'));
     if (w.stage === 'check' && w.checks.length === 0) out.add(err(`/units/${i}/checks`, 'a check unit covers at least one check'));
     if (w.stage !== 'check' && (w.checks.length || w.scopes.length || w.inputs.length)) out.add(err(`/units/${i}/checks`, 'a bootstrap unit covers no check'));
     for (const id of w.checks) {

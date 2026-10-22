@@ -3,7 +3,7 @@
   "runId": "run-1",
   "revision": 2,
   "kind": "analysis",
-  "previous": "sha256:022c35e5c205fdb04a7782033995dd6ade289e64333fe148322eb2ad96330688",
+  "previous": "sha256:d0ac74565734733cb60ffba211bd8991c8ab7aa25bb36d9a8f7aca620b302aaf",
   "pins": {
     "snapshotId": "snap-1",
     "inventoryDigest": "sha256:89270a50341bb8e83734ee062603c63c219320ed4a40fb9fb8c2792358548e8a",
@@ -33,11 +33,38 @@
         "analysisFingerprint": "fp-web"
       }
     ],
-    "stages": {
-      "capture": "sha256:460ee6aa3a80359181b794cc31a7185addba77626e9f719c10e3c8efb8668a1d",
-      "parse": "sha256:30c471f6aafbca7085640653eeef555e85eb0df1602c98a662814c27767d1188",
-      "inventory": "sha256:b11a85b296a90afc460430434a504e7acb04b064575b7277724688af0e59d189"
-    }
+    "operations": {
+      "capture": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      },
+      "parse": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      },
+      "inventory": {
+        "adapterId": "sentinel-bootstrap",
+        "digest": "sha256:d2550da00b405aeb4ee6b1977e4f75dee4b2785e2eee4321053c04c2532be500"
+      }
+    },
+    "adapters": [
+      {
+        "adapterId": "sentinel-pattern",
+        "digest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f"
+      }
+    ],
+    "capabilities": [
+      {
+        "capability": "pattern-match",
+        "adapterId": "sentinel-pattern",
+        "adapterDigest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f"
+      },
+      {
+        "capability": "source-bytes",
+        "adapterId": "sentinel-pattern",
+        "adapterDigest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f"
+      }
+    ]
   },
   "reused": [
     {
@@ -51,7 +78,7 @@
       "revision": 1,
       "stage": "check",
       "contract": "sentinel.stage.check.sentinel-pattern",
-      "implementationDigest": "sha256:1fd38d5cbd2a997b91f725cb1cb0a710849db30dac491ee42e92443fd8e3c1a2",
+      "implementationDigest": "sha256:cd568da86920e106eb5cd4ea84d4475d125810a3e4936d9a9b85344fa6568c8f",
       "sourceId": "web",
       "adapterId": "sentinel-pattern",
       "dependencies": [
@@ -60,7 +87,7 @@
           "revision": 1
         }
       ],
-      "inputFingerprint": "sha256:1282029c2918ec8e8837b43a9a1fc178b9c12c574f251c3a128784ee9d8378d2",
+      "inputFingerprint": "sha256:265cfdff68aa28b0d27ac9559123e942ed788c985123b37ba15d448d348418ff",
       "checks": [
         "chk-3921d5ff956235a8ef3ce502",
         "chk-5b9dedafb82f11f117f9aee8"
@@ -80,7 +107,8 @@
           "relativePath": "src/b.ts",
           "content": "sha256:363f5941f4d8df68d4bd5a6a9fa72f57f452e7ea9880d3a622cdaae065f1b5fb"
         }
-      ]
+      ],
+      "inputSetDigest": "sha256:bbf16be52d24bc61d1fbeb7fdb7adfe265a2ddadbe39b27cc8c1d54e634578c4"
     }
   ],
   "checks": [
@@ -105,7 +133,7 @@
       "sourceId": "web",
       "required": true,
       "state": "unsupported",
-      "reasonCode": "sentinel.capability.notImplemented",
+      "reasonCode": "sentinel.plan.capabilityUnavailable",
       "id": "chk-1ea0a11ed755a64f07140658",
       "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
       "mode": "deterministic"
@@ -147,7 +175,7 @@
       "sourceId": "web",
       "required": true,
       "state": "unsupported",
-      "reasonCode": "sentinel.capability.notImplemented",
+      "reasonCode": "sentinel.plan.capabilityUnavailable",
       "id": "chk-568c37a16d3e941a923c1626",
       "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
       "mode": "deterministic"
@@ -183,5 +211,5 @@
     "units": 1
   },
   "requiredCoverageAchievable": false,
-  "digest": "sha256:cc51f52be50faae28dd1f01de164c2ca6b5815f6c32586c99047c6cc03098947"
+  "digest": "sha256:47010c7ebba13cb568291a5ce34f87cd97dca256fd9fc32599041ff536769b6a"
 }

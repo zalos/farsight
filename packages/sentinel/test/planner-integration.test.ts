@@ -19,6 +19,7 @@ import {
   plannerSnapshotFrom, planAnalysis, planBootstrap, verifyPlanRevision, workEnvelopesFor,
 } from '../dist/planner/index.js';
 import { commitRepo, needsStore, openCaptureStore, scratch, unlock } from './snapshot-helpers.ts';
+import { trustedProfile } from './planner-helpers.ts';
 
 const D = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const NOW = new Date('2026-10-22T12:00:00.000Z');
@@ -56,16 +57,7 @@ function pack(rules: ReturnType<typeof rule>[]) {
   return validatePack(files);
 }
 
-const profile = {
-  id: 'profile-local',
-  capabilities: [
-    { capability: 'source-bytes', available: true }, { capability: 'pattern-match', available: true },
-    { capability: 'call-occurrence', available: true, perFileParse: true },
-    { capability: 'framework-order', available: false, reasonCode: 'sentinel.capability.notImplemented' },
-  ],
-  builtInAdapters: [{ adapterId: 'sentinel-pattern', implementationDigest: D('builtin pattern adapter') }],
-  stages: { capture: D('capture stage'), parse: D('parse stage'), inventory: D('inventory stage') },
-};
+const profile = trustedProfile({ permitExtra: ['framework-order'] });
 const LIMITS = { deadlineMs: 60_000, memoryBytes: 512 * 1024 * 1024, cpuQuota: 1, maxPids: 32, maxOutputBytes: 1024 * 1024 };
 const execution = { resources: { capture: LIMITS, parse: LIMITS, inventory: LIMITS, check: LIMITS } };
 

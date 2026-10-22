@@ -238,17 +238,38 @@
           },
           "maxItems": 64
         },
-        "stages": {
+        "operations": {
           "type": "object",
           "properties": {
             "capture": {
-              "$ref": "#/definitions/Digest"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PlanAdapterPin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "parse": {
-              "$ref": "#/definitions/Digest"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PlanAdapterPin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "inventory": {
-              "$ref": "#/definitions/Digest"
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/PlanAdapterPin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -256,7 +277,41 @@
             "parse",
             "inventory"
           ],
-          "additionalProperties": false
+          "additionalProperties": false,
+          "description": "The registered adapters bound to the bootstrap stages; null when none is bound yet (the work is blocked)."
+        },
+        "adapters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PlanAdapterPin"
+          },
+          "description": "Every registered adapter this revision's units run, by its registry digest.",
+          "maxItems": 256
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "capability": {
+                "type": "string"
+              },
+              "adapterId": {
+                "$ref": "#/definitions/Id"
+              },
+              "adapterDigest": {
+                "$ref": "#/definitions/Digest"
+              }
+            },
+            "required": [
+              "capability",
+              "adapterId",
+              "adapterDigest"
+            ],
+            "additionalProperties": false
+          },
+          "description": "The capability facts this revision relied on: which registered adapter establishes which capability.",
+          "maxItems": 256
         }
       },
       "required": [
@@ -270,7 +325,9 @@
         "tools",
         "databases",
         "analyses",
-        "stages"
+        "operations",
+        "adapters",
+        "capabilities"
       ],
       "additionalProperties": false
     },
@@ -303,6 +360,22 @@
       "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
       "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
       "maxLength": 128
+    },
+    "PlanAdapterPin": {
+      "type": "object",
+      "properties": {
+        "adapterId": {
+          "$ref": "#/definitions/Id"
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "adapterId",
+        "digest"
+      ],
+      "additionalProperties": false
     },
     "WorkRef": {
       "type": "object",
@@ -390,7 +463,11 @@
           "items": {
             "$ref": "#/definitions/PlanInput"
           },
-          "maxItems": 256
+          "maxItems": 20000
+        },
+        "inputSetDigest": {
+          "$ref": "#/definitions/Digest",
+          "description": "Digest of exactly `inputs`: the captured bytes this unit may read, bound apart from its wider fingerprint."
         }
       },
       "required": [
@@ -405,7 +482,8 @@
         "inputFingerprint",
         "checks",
         "scopes",
-        "inputs"
+        "inputs",
+        "inputSetDigest"
       ],
       "additionalProperties": false,
       "description": "One physical work unit. It covers exactly `checks`, however many rules or scopes it batches."

@@ -56,8 +56,10 @@ export interface PlanWork {
   checks: Id[];
   /** @maxItems 256 */
   scopes: ScopeId[];
-  /** @maxItems 256 */
+  /** @maxItems 20000 */
   inputs: PlanInput[];
+  /** Digest of exactly `inputs`: the captured bytes this unit may read, bound apart from its wider fingerprint. */
+  inputSetDigest: Digest;
 }
 
 export interface PlanPinnedRule {
@@ -90,7 +92,23 @@ export interface PlanPins {
      */
     analysisFingerprint: string;
   }[];
-  stages: { capture: Digest; parse: Digest; inventory: Digest };
+  /** The registered adapters bound to the bootstrap stages; null when none is bound yet (the work is blocked). */
+  operations: { capture: PlanAdapterPin | null; parse: PlanAdapterPin | null; inventory: PlanAdapterPin | null };
+  /**
+   * Every registered adapter this revision's units run, by its registry digest.
+   * @maxItems 256
+   */
+  adapters: PlanAdapterPin[];
+  /**
+   * The capability facts this revision relied on: which registered adapter establishes which capability.
+   * @maxItems 256
+   */
+  capabilities: { capability: string; adapterId: Id; adapterDigest: Digest }[];
+}
+
+export interface PlanAdapterPin {
+  adapterId: Id;
+  digest: Digest;
 }
 
 /** A rule the policy selects that could not be scheduled at all. */

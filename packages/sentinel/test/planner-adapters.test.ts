@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { emptyLock, lockDigest, validatePack } from '../dist/rules/index.js';
 import { DEFAULT_SETTINGS, effectivePolicy } from '../dist/policy/index.js';
 import { validateEnvelope } from '../dist/validate.js';
+import { registry, trustedProfile } from './planner-helpers.ts';
 import {
   PlanError, adapterOf, canonicalArtifactId, capturedInputsOf, checksCoveredBy, influenceManifestOf,
   planAnalysis, planBootstrap, plannerLockFrom, plannerPolicyFrom, workEnvelopesFor,
@@ -55,8 +56,7 @@ test('another lock, a missing, changed or forged pack, or a forged policy object
 test('a plan converts to canonical work envelopes that cover exactly its checks', () => {
   const policy = effectivePolicy({ trust: 'adopted', settings: { ...structuredClone(DEFAULT_SETTINGS), mandatoryRules: ['sentinel.ts.eval'] },
     settingsDigest: D('settings'), repoConfig: null, repoConfigDigest: null });
-  const profile = { id: 'p', capabilities: [{ capability: 'source-bytes', available: true }, { capability: 'pattern-match', available: true }],
-    builtInAdapters: [{ adapterId: 'sentinel-pattern', implementationDigest: D('pattern') }], stages: { capture: D('c'), parse: D('p'), inventory: D('i') } };
+  const profile = trustedProfile();
   const boot = planBootstrap({ runId: 'run-1', sourceIds: ['web'], profile });
   const file = (p: string) => ({ sourceId: 'web', relativePath: p, kind: 'file' as const, disposition: 'included' as const, content: D(p), bytes: 1, generated: false });
   const snapshot = { id: 'snap-1', entries: [file('src/a.ts'), file('src/b.ts')] };
@@ -69,13 +69,13 @@ test('a plan converts to canonical work envelopes that cover exactly its checks'
   const [unit] = workEnvelopesFor(plan, conversion);
   assert.ok(validateEnvelope('work', unit!.envelope).ok);
   assert.equal(unit!.envelope.influenceManifest, canonicalArtifactId(influenceManifestOf(plan, unit!.envelope)));
-  assert.deepEqual(unit!.envelope.stage, { contract: 'sentinel.stage.check.sentinel-pattern', contractVersion: 'draft-1', kind: 'coded', implementationDigest: D('pattern') });
+  assert.deepEqual(unit!.envelope.stage, { contract: 'sentinel.stage.check.sentinel-pattern', contractVersion: 'draft-1', kind: 'coded', implementationDigest: registry.get('sentinel-pattern').digest });
   assert.deepEqual(checksCoveredBy(plan, unit!.envelope), plan.checks.filter(c => c.state === 'planned').map(c => c.id));
   assert.equal(adapterOf(plan, unit!.envelope), 'sentinel-pattern');
   assert.deepEqual(capturedInputsOf(plan, unit!.envelope, snapshot).map(i => i.id), [D('src/a.ts'), D('src/b.ts')]);
   const bootUnits = workEnvelopesFor(boot, conversion);
   assert.deepEqual(bootUnits.map(u => u.envelope.state), ['ready', 'pending', 'pending']);
-  assert.equal(adapterOf(boot, boot.units[0]!), null);
+  assert.equal(adapterOf(boot, boot.units[0]!), 'sentinel-bootstrap');
   // Refusals: an edited plan, a missing stage budget, a ceiling breach, another snapshot, an unlisted file, an unknown unit.
   assert.throws(() => workEnvelopesFor({ ...plan, revision: 9 } as never, conversion), code('sentinel.plan.pinMismatch'));
   assert.throws(() => workEnvelopesFor(plan, { ...conversion, execution: { resources: {} as never } }), code('sentinel.plan.invalidInput'));

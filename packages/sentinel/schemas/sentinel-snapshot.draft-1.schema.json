@@ -443,6 +443,10 @@
               },
               "reasonCode": {
                 "$ref": "#/definitions/CatalogKey"
+              },
+              "sourceId": {
+                "$ref": "#/definitions/Id",
+                "description": "The source the unresolved entry was read for, when known; without it the version is unknown for every source."
               }
             },
             "required": [

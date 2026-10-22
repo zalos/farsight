@@ -89,14 +89,17 @@ export function workEnvelopesFor(plan: PlanRevision, conversion: WorkConversion)
     const resources = conversion.execution.resources[u.stage];
     if (!resources) throw invalid(`the profile grants no resources to the ${u.stage} stage`);
     const kind: StageKind = u.adapterId !== null && tools.has(u.adapterId) ? 'external-tool' : 'coded';
-    const envelope: WorkEnvelope = {
-      schema: 'sentinel-work/draft-1', id: u.id, revision: u.revision, runId: plan.runId, planRevision: plan.revision,
+    const common = {
+      schema: 'sentinel-work/draft-1' as const, id: u.id, revision: u.revision, runId: plan.runId, planRevision: plan.revision,
       stage: { contract: u.contract, contractVersion: 'draft-1', kind, implementationDigest: u.implementationDigest },
       inputFingerprint: u.inputFingerprint, influenceManifest: canonicalArtifactId(manifest),
       dependencies: u.dependencies.map(d => ({ id: d.id, revision: d.revision })), resources: { ...resources },
-      coordinatorEpoch: conversion.coordinatorEpoch, createdAt: conversion.createdAt,
-      state: u.dependencies.length ? 'pending' : 'ready', activeAttemptId: null,
+      coordinatorEpoch: conversion.coordinatorEpoch, createdAt: conversion.createdAt, activeAttemptId: null,
     };
+    // A unit without a registered operation is blocked with its reason: nothing generic may run it.
+    const envelope: WorkEnvelope = u.adapterId === null
+      ? { ...common, state: 'blocked', reasonCode: 'sentinel.plan.operationUnbound' }
+      : { ...common, state: u.dependencies.length ? 'pending' : 'ready' };
     const checked = validateEnvelope('work', envelope);
     if (!checked.ok) throw invalid(`${u.id} is not a valid work envelope: ${checked.errors[0]?.path || '/'} ${checked.errors[0]?.message ?? ''}`);
     return Object.freeze({ envelope: checked.value, manifest });
@@ -108,7 +111,7 @@ export function checksCoveredBy(plan: PlanRevision, ref: WorkRef): readonly Id[]
   return [...unitOf(sealedPlan(plan), ref).checks];
 }
 
-/** The adapter that runs a check unit; null for the bootstrap stages, which the service runs itself. */
+/** The registered adapter that runs a unit; null for a bootstrap stage with no bound operation (its work is blocked). */
 export function adapterOf(plan: PlanRevision, ref: WorkRef): Id | null {
   return unitOf(sealedPlan(plan), ref).adapterId;
 }
@@ -206,4 +209,15 @@ export function planBoundaryFor(plan: PlanRevision, request: BoundaryRequest): P
     inputsFor: (w: WorkEnvelope) => Object.freeze(capturedInputsOf(plan, known(w), request.snapshot)
       .map(i => Object.freeze({ id: i.id, path: request.pathOf(i) }))),
   });
+}
+
+/**
+ * Refuses an actual captured input set that is not exactly the plan's for this unit: the same artifacts, each once,
+ * whatever order they come in. The unit's wider input fingerprint stays a separate binding.
+ */
+export function verifyInputSet(plan: PlanRevision, ref: WorkRef, actual: readonly { readonly id: ArtifactId }[]): void {
+  const unit = unitOf(sealedPlan(plan), ref);
+  const want = unit.inputs.map(i => i.content).sort();
+  const got = actual.map(i => i.id).sort();
+  if (got.length !== want.length || got.some((id, i) => id !== want[i])) throw mismatch(`${ref.id}: the captured inputs are not exactly the plan's`);
 }

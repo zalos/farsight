@@ -3,12 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { trustedProfile } from './planner-helpers.ts';
 import { evaluateRequiredCoverage, planAnalysis, planBootstrap, verifyWorkEnvelope, workEnvelopesFor, PlanError } from '../dist/planner/index.js';
 
 const d = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
-const profile = { id: 'p', capabilities: [{ capability: 'source-bytes', available: true }, { capability: 'pattern-match', available: true },
-  { capability: 'framework-order', available: false, reasonCode: 'sentinel.capability.notImplemented' }],
-  builtInAdapters: [{ adapterId: 'sentinel-pattern', implementationDigest: d('pattern') }], stages: { capture: d('c'), parse: d('p'), inventory: d('i') } };
+const profile = trustedProfile({ permitExtra: ['framework-order'] });
 const rule = (familyId: string, over: Record<string, unknown> = {}) => ({ familyId, revision: 1, definitionDigest: d(familyId), packDigest: d('pack'),
   languages: ['typescript'], scopeKind: 'source-file', requires: ['source-bytes', 'pattern-match'], adapterId: 'sentinel-pattern', ...over });
 const file = (p: string) => ({ sourceId: 'web', relativePath: p, kind: 'file' as const, disposition: 'included' as const, content: d(p), bytes: 1, generated: false });
@@ -66,7 +65,7 @@ test('a required check the plan could not plan, or a required rule gap, keeps co
   const records = p.checks.filter(c => c.state === 'planned').map(c => record(p, c.id));
   const result = evaluateRequiredCoverage(p, records);
   assert.equal(result.complete, false);
-  assert.ok(result.checks.filter(c => c.planState === 'unsupported').every(c => !c.complete && c.reasonCode === 'sentinel.capability.notImplemented'));
+  assert.ok(result.checks.filter(c => c.planState === 'unsupported').every(c => !c.complete && c.reasonCode === 'sentinel.plan.capabilityUnavailable'));
   assert.deepEqual(result.ruleGaps.map(g => g.familyId), ['sentinel.ts.not-locked']);
   assert.throws(() => evaluateRequiredCoverage({ ...p, revision: 7 } as never, records), (e: unknown) => e instanceof PlanError);
 });

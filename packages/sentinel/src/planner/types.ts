@@ -6,7 +6,9 @@
 // internally. Adapters from their published types build these inputs; nothing here reads a file, the ledger, a
 // clock or the network.
 import type { CaptureEntry, FrameworkVersion } from '../contracts/snapshot.js';
-import type { CatalogKey, Digest, Id, Ordinal } from '../contracts/common.js';
+import type { Digest, Id, Ordinal } from '../contracts/common.js';
+import type { AdapterRegistry } from '../execution/registry.js';
+import type { CapabilityTable } from './capabilities.js';
 import type {
   PlanCheck, PlanCheckState, PlanEnvelope, PlanInput, PlanPins, PlanRuleGap, PlanStage, PlanTallies, PlanWork,
 } from '../contracts/plan.js';
@@ -69,27 +71,20 @@ export interface PlannerAnalysis {
   readonly surfaces: readonly { readonly nodeId: string; readonly path: string; readonly kind: string }[];
 }
 
-/** One stage that establishes a capability on this profile, or why none does. */
-export interface CapabilityEntry {
-  readonly capability: string;
-  readonly available: boolean;
-  /** Required when unavailable: why. */
-  readonly reasonCode?: CatalogKey;
-  /** Capabilities that need parser evidence per file: a file that did not parse cannot have them. */
-  readonly perFileParse?: boolean;
-}
-
-/** What one profile can run: its capabilities, built-in adapters and the bootstrap stages' identities. */
+/**
+ * What one profile may run. Capability availability comes from the trusted capability table over the trusted adapter
+ * registry; `permits` only narrows which available capabilities the profile may rely on.
+ */
 export interface PlannerProfile {
   readonly id: Id;
-  readonly capabilities: readonly CapabilityEntry[];
-  /** Coded adapters that ship with Sentinel and need no locked tool. */
-  readonly builtInAdapters: readonly { readonly adapterId: Id; readonly implementationDigest: Digest }[];
-  readonly stages: {
-    readonly capture: Digest;
-    readonly parse: Digest;
-    readonly inventory: Digest;
-  };
+  readonly registry: AdapterRegistry;
+  readonly capabilities: CapabilityTable;
+  readonly permits: readonly string[];
+  /**
+   * The registered adapters that run the bootstrap stages. A stage without one stays in the plan, and its work is
+   * blocked (sentinel.plan.operationUnbound), never run by a generic worker.
+   */
+  readonly operations?: { readonly capture?: Id; readonly parse?: Id; readonly inventory?: Id };
 }
 
 export interface PlannerLimits {
@@ -101,10 +96,12 @@ export interface PlannerLimits {
   readonly maxChecksPerWork: number;
   /** Work units one revision may hold. */
   readonly maxWork: number;
+  /** Captured files one repository-scoped unit may read: a larger repository is not planned as a whole. */
+  readonly maxRepositoryInputs: number;
 }
 
 export const DEFAULT_PLANNER_LIMITS: PlannerLimits = Object.freeze({
-  maxChecks: 200_000, maxScopesPerWork: 256, maxChecksPerWork: 2048, maxWork: 10_000,
+  maxChecks: 200_000, maxScopesPerWork: 256, maxChecksPerWork: 2048, maxWork: 10_000, maxRepositoryInputs: 20_000,
 });
 
 // ---- the plan revision: the canonical sentinel-plan/draft-1 contract (contracts/plan.ts) ----

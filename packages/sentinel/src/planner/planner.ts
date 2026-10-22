@@ -16,6 +16,7 @@ import { digestOf } from '../store/ledger-json.js';
 import { validateEnvelope } from '../validate.js';
 import type { NodeKind } from '@farsight/graph';
 import { PlanError, type PlanReasonCode } from './errors.js';
+import { capabilityOf, isCapabilityTable } from './capabilities.js';
 import {
   CHECK_STATES, DEFAULT_PLANNER_LIMITS, PLAN_SCHEMA,
   type CheckState, type PlanPins, type PlanRevision, type PlanStage, type PlannedCheck, type PlannedWork, type PlannerAnalysis,
@@ -154,6 +155,24 @@ function chainFrom(previous: PlanRevision | null, runId: string, revision: numbe
   return previous.digest;
 }
 
+function checkProfile(profile: PlannerProfile): PlannerProfile {
+  checkId(profile?.id, 'profile id');
+  if (!profile.registry || typeof profile.registry.get !== 'function' || !Array.isArray(profile.registry.ids)) throw invalid('the profile names the trusted adapter registry');
+  if (!isCapabilityTable(profile.capabilities)) throw invalid('capabilities come only from a table createCapabilityTable built');
+  return profile;
+}
+
+/** The registered adapters bound to the bootstrap stages; an unregistered binding is refused, an absent one is null. */
+function operationPins(profile: PlannerProfile): PlanPins['operations'] {
+  const pin = (id: Id | undefined) => {
+    if (id === undefined) return null;
+    if (!profile.registry.ids.includes(id)) throw invalid(`bootstrap operation ${id} is not in the trusted registry`);
+    return { adapterId: id, digest: profile.registry.get(id).digest };
+  };
+  const o = profile.operations ?? {};
+  return { capture: pin(o.capture), parse: pin(o.parse), inventory: pin(o.inventory) };
+}
+
 export interface BootstrapRequest {
   readonly runId: Id;
   readonly revision?: number;
@@ -169,13 +188,16 @@ export function planBootstrap(request: BootstrapRequest): PlanRevision {
   const previous = chainFrom(request.previous ?? null, runId, revision);
   const sources = [...new Set(request.sourceIds.map(s => checkId(s, 'source id')))].sort();
   if (sources.length === 0 || sources.length !== request.sourceIds.length) throw invalid('source ids are one or more distinct ids');
-  const stages = request.profile.stages;
-  for (const [k, v] of Object.entries(stages)) checkDigest(v, `the ${k} stage`);
-  const unit = (stage: PlanStage, sourceId: Id | null, dependencies: WorkRef[]): PlannedWork => {
-    const implementationDigest = stages[stage as 'capture' | 'parse' | 'inventory'];
-    const inputFingerprint = digestOf({ stage, sourceId, sources, implementationDigest, dependencies });
+  const profile = checkProfile(request.profile);
+  const operations = operationPins(profile);
+  const unit = (stage: 'capture' | 'parse' | 'inventory', sourceId: Id | null, dependencies: WorkRef[]): PlannedWork => {
+    const bound = operations[stage];
+    // An unbound stage keeps a deterministic identity of "no operation" and is blocked at hand-off, never run.
+    const implementationDigest = bound?.digest ?? digestOf({ unbound: `sentinel.stage.${stage}` });
+    const inputFingerprint = digestOf({ stage, sourceId, sources, implementationDigest, adapterId: bound?.adapterId ?? null, dependencies });
     return { id: `work-${stage}-${shortHash({ runId, revision, stage, sourceId })}`, revision: 1, stage, contract: `sentinel.stage.${stage}`,
-      implementationDigest, sourceId, adapterId: null, dependencies, inputFingerprint, checks: [], scopes: [], inputs: [] };
+      implementationDigest, sourceId, adapterId: bound?.adapterId ?? null, dependencies, inputFingerprint, checks: [], scopes: [], inputs: [],
+      inputSetDigest: digestOf([]) };
   };
   const capture = unit('capture', null, []);
   const parses = sources.map(s => unit('parse', s, [{ id: capture.id, revision: 1 }]));
@@ -183,7 +205,10 @@ export function planBootstrap(request: BootstrapRequest): PlanRevision {
   return seal({
     schema: PLAN_SCHEMA, runId, revision, kind: 'bootstrap', previous,
     pins: { snapshotId: null, inventoryDigest: null, environment: null, ruleLockDigest: null, policyDigest: null,
-      profileId: checkId(request.profile.id, 'profile id'), rules: [], tools: [], databases: [], analyses: [], stages: { ...stages } },
+      profileId: checkId(profile.id, 'profile id'), rules: [], tools: [], databases: [], analyses: [], operations,
+      adapters: Object.values(operations).filter((o): o is { adapterId: Id; digest: Digest } => o !== null)
+        .filter((o, i, all) => all.findIndex(x => x.adapterId === o.adapterId) === i).sort(byKey(o => o.adapterId)),
+      capabilities: [] },
     reused: [], units: [capture, ...parses, inventory], checks: [], ruleGaps: [],
   });
 }
@@ -205,7 +230,7 @@ export interface AnalysisRequest {
   readonly limits?: Partial<PlannerLimits>;
 }
 
-interface Candidate { scopeKind: PlannerScopeKind; scopeId: string; sourceId: string; path: string | null; entry?: CaptureEntry; boundary?: boolean }
+interface Candidate { scopeKind: PlannerScopeKind; scopeId: string; sourceId: string; path: string | null; entry?: CaptureEntry; boundary?: boolean; repositoryGap?: boolean }
 
 /** Every check the policy's locked rules imply over the snapshot, in a frozen analysis revision. */
 export function planAnalysis(request: AnalysisRequest): PlanRevision {
@@ -214,7 +239,10 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const previous = chainFrom(request.previous ?? null, runId, revision);
   const limits = { ...DEFAULT_PLANNER_LIMITS, ...request.limits };
   for (const [k, v] of Object.entries(limits)) if (!Number.isSafeInteger(v) || v < 1 || v > (DEFAULT_PLANNER_LIMITS as unknown as Record<string, number>)[k]!) throw invalid(`${k} must be 1..${(DEFAULT_PLANNER_LIMITS as unknown as Record<string, number>)[k]}`);
-  const { snapshot, lock, policy, profile } = request;
+  const { snapshot, lock, policy } = request;
+  const profile = checkProfile(request.profile);
+  const operations = operationPins(profile);
+  const permits = new Set(profile.permits);
   if (request.bootstrap.length === 0) throw invalid('an analysis revision depends on published bootstrap work');
   for (const r of request.bootstrap) checkId(r.id, 'bootstrap work id');
   checkId(snapshot.id, 'snapshot id');
@@ -237,8 +265,15 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
     locked.set(r.familyId, r);
   }
   const tools = new Map(lock.tools.map(t => [t.adapterId, t.artifactDigest]));
-  const builtIn = new Map(profile.builtInAdapters.map(a => [a.adapterId, a.implementationDigest]));
-  const capabilities = new Map(profile.capabilities.map(c => [c.capability, c]));
+  /** A rule's adapter must be registered; an external one must also be pinned by the lock. */
+  const adapterAnswer = (id: Id): { digest: Digest } | { reasonCode: string } => {
+    if (!profile.registry.ids.includes(id)) return { reasonCode: 'sentinel.plan.adapterNotRegistered' };
+    const adapter = profile.registry.get(id);
+    if (adapter.kind === 'external' && !tools.has(id)) return { reasonCode: 'sentinel.plan.adapterNotLocked' };
+    return { digest: adapter.digest };
+  };
+  const usedFacts = new Map<string, { capability: string; adapterId: Id; adapterDigest: Digest }>();
+  const usedAdapters = new Map<Id, Digest>();
   const requiredCaps = new Set(policy.requiredCapabilities);
   const ruleGaps: RuleGap[] = [];
   const selected: Array<{ rule: PlannerRule; mandatory: boolean }> = [];
@@ -251,11 +286,15 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
 
   // Framework resolution per source: resolved where a lockfile in that source names it; unknown where any entry is.
   const resolved = new Map<string, Set<string>>();
-  const unknown = new Set<string>();
+  /** Unknown versions read for one source, and those with no source (unknown everywhere). */
+  const unknownIn = new Map<string, Set<string>>();
+  const unknownEverywhere = new Set<string>();
+  const into = (m: Map<string, Set<string>>, k: string, v: string) => (m.get(k) ?? m.set(k, new Set()).get(k)!).add(v);
   for (const f of snapshot.frameworkVersions) {
     const name = f.framework.toLowerCase();
-    if (f.state === 'resolved') (resolved.get(f.provenance.sourceId) ?? resolved.set(f.provenance.sourceId, new Set()).get(f.provenance.sourceId)!).add(name);
-    else unknown.add(name);
+    if (f.state === 'resolved') into(resolved, f.provenance.sourceId, name);
+    else if (f.sourceId !== undefined) into(unknownIn, f.sourceId, name);
+    else unknownEverywhere.add(name);
   }
 
   const checks: PlannedCheck[] = [];
@@ -263,7 +302,14 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const readsFile = new Map<string, string>();
   /** Each included file's content artifact, keyed by source and path. */
   const contentOf = new Map<string, string>();
-  for (const e of snapshot.entries) if (e.kind === 'file' && e.disposition === 'included') contentOf.set(`${e.sourceId}\u0000${e.relativePath}`, e.content);
+  /** Every included file of each source, sorted: a repository check's complete input set. */
+  const repositoryFiles = new Map<string, string[]>();
+  for (const e of snapshot.entries) {
+    if (e.kind !== 'file' || e.disposition !== 'included') continue;
+    contentOf.set(`${e.sourceId}\u0000${e.relativePath}`, e.content);
+    (repositoryFiles.get(e.sourceId) ?? repositoryFiles.set(e.sourceId, []).get(e.sourceId)!).push(e.relativePath);
+  }
+  for (const list of repositoryFiles.values()) list.sort();
   const add = (c: Omit<PlannedCheck, 'id' | 'environment' | 'mode'>, path: string | null) => {
     if (checks.length >= limits.maxChecks) throw new PlanError('sentinel.plan.tooManyChecks', String(limits.maxChecks));
     const id = `chk-${shortHash({ scope: c.scopeId, family: c.familyId, revision: c.ruleRevision, environment, mode: 'deterministic' })}`;
@@ -277,7 +323,16 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   for (const { rule, mandatory } of selected) {
     const candidates: Candidate[] = [];
     for (const sourceId of sourceIds) {
-      if (rule.scopeKind === 'repository') candidates.push({ scopeKind: 'repository', scopeId: sourceId, sourceId, path: null });
+      if (rule.scopeKind === 'repository') {
+        candidates.push({ scopeKind: 'repository', scopeId: sourceId, sourceId, path: null });
+        // Everything the whole-repository check cannot read stays an explicit gap: excluded, refused, unreadable or
+        // unlisted entries are never silently left out of a repository check.
+        for (const entry of snapshot.entries) {
+          if (entry.sourceId !== sourceId || (entry.kind === 'file' && entry.disposition === 'included')) continue;
+          candidates.push({ scopeKind: 'repository', scopeId: `${sourceId}:${entry.relativePath}${entry.kind === 'directory-boundary' ? '/' : ''}`,
+            sourceId, path: entry.relativePath, entry, boundary: entry.kind === 'directory-boundary', repositoryGap: true });
+        }
+      }
       else if (rule.scopeKind === 'surface') {
         for (const s of analyses.get(sourceId)!.surfaces) {
           const l = languageOf(s.path);
@@ -302,10 +357,10 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
     }
     const requiresRequired = rule.requires.some(c => requiredCaps.has(c));
     const required = mandatory || policy.requireCompleteCoverage || requiresRequired;
-    const missingCapability = rule.requires.map(c => capabilities.get(c)).find(c => !c?.available);
-    const missingName = rule.requires.find(c => !capabilities.get(c)?.available);
-    const needsParse = rule.requires.some(c => capabilities.get(c)?.perFileParse);
-    const adapterKnown = tools.has(rule.adapterId) || builtIn.has(rule.adapterId);
+    const answers = rule.requires.map(c => capabilityOf(profile.capabilities, profile.registry, permits, c));
+    const missing = answers.find(a => !a.available);
+    const needsParse = answers.some(a => a.fact?.perFileParse);
+    const adapter = adapterAnswer(rule.adapterId);
     for (const c of candidates.sort(byKey(x => x.scopeId))) {
       const base = { familyId: rule.familyId, ruleRevision: rule.revision, scopeKind: c.scopeKind, scopeId: c.scopeId, sourceId: c.sourceId, required };
       const state = (s: CheckState, reasonCode?: string) => add(reasonCode ? { ...base, state: s, reasonCode } : { ...base, state: s }, c.path);
@@ -315,17 +370,26 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
         if (!names.some(n => here?.has(n))) {
           // An unresolved version anywhere is unknown for every source (a snapshot's unknown entry names no source).
           // No entry at all is not evidence the framework is absent: it is recorded as not detected, never skipped.
-          state('applicability-unknown', names.some(n => unknown.has(n)) ? 'sentinel.plan.frameworkUnresolved' : 'sentinel.plan.frameworkNotDetected');
+          const unresolved = names.some(n => unknownEverywhere.has(n) || unknownIn.get(c.sourceId)?.has(n));
+          state('applicability-unknown', unresolved ? 'sentinel.plan.frameworkUnresolved' : 'sentinel.plan.frameworkNotDetected');
           continue;
         }
       }
-      if (c.boundary) { state('scope-unknown', 'sentinel.plan.unknownDescendants'); continue; }
-      if (c.entry && c.entry.kind === 'file' && c.entry.disposition !== 'included') { state('scope-unavailable', c.entry.reasonCode); continue; }
-      if (!adapterKnown) { state('unsupported', 'sentinel.plan.adapterNotLocked' satisfies PlanReasonCode); continue; }
-      if (missingName !== undefined) { state('unsupported', missingCapability?.reasonCode ?? 'sentinel.plan.capabilityUnavailable'); continue; }
+      if (c.boundary) {
+        if (c.repositoryGap && c.entry?.disposition === 'excluded') { state('scope-unavailable', c.entry.reasonCode); continue; }
+        state('scope-unknown', 'sentinel.plan.unknownDescendants'); continue;
+      }
+      if (c.entry && c.entry.kind !== 'directory-boundary' && !(c.entry.kind === 'file' && c.entry.disposition === 'included')) { state('scope-unavailable', c.entry.reasonCode); continue; }
+      if ('reasonCode' in adapter) { state('unsupported', adapter.reasonCode); continue; }
+      if (missing) { state('unsupported', missing.reasonCode!); continue; }
+      if (c.scopeKind === 'repository' && (repositoryFiles.get(c.sourceId)?.length ?? 0) > limits.maxRepositoryInputs) {
+        state('scope-unavailable', 'sentinel.plan.repositoryTooLarge' satisfies PlanReasonCode); continue;
+      }
       if (needsParse && c.path !== null && fileClass.get(c.sourceId)!.get(c.path) !== 'parsed') { state('scope-unavailable', 'sentinel.plan.parseRequired'); continue; }
       if (c.path !== null && !contentOf.has(`${c.sourceId}\u0000${c.path}`)) { state('scope-unavailable', 'sentinel.plan.inputNotCaptured'); continue; }
       state('planned');
+      usedAdapters.set(rule.adapterId, adapter.digest);
+      for (const a of answers) usedFacts.set(`${a.fact!.capability}\u0000${a.fact!.adapterId}`, { capability: a.fact!.capability, adapterId: a.fact!.adapterId, adapterDigest: a.fact!.adapterDigest });
     }
   }
   checks.sort(byKey(c => c.id));
@@ -336,13 +400,14 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const groups = new Map<string, PlannedCheck[]>();
   for (const c of checks) {
     if (c.state !== 'planned') continue;
-    const k = `${rulePin.get(c.familyId)!.adapterId}\u0000${c.sourceId}`;
+    const k = `${rulePin.get(c.familyId)!.adapterId}\u0000${c.sourceId}\u0000${c.scopeKind === 'repository' ? 'repository' : 'scoped'}`;
     (groups.get(k) ?? groups.set(k, []).get(k)!).push(c);
   }
   const work: PlannedWork[] = [];
   const assigned = new Map<string, string>();
   for (const k of [...groups.keys()].sort()) {
-    const [adapterId, sourceId] = k.split('\u0000') as [string, string];
+    const [adapterId, sourceId, shape] = k.split('\u0000') as [string, string, string];
+    const wholeRepository = shape === 'repository';
     const members = groups.get(k)!.sort(byKey(c => `${c.scopeId}\u0000${c.familyId}`));
     let batch: PlannedCheck[] = [];
     let scopes = new Set<string>();
@@ -352,27 +417,30 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
       if (work.length >= limits.maxWork) throw new PlanError('sentinel.plan.tooMuchWork', String(limits.maxWork));
       const ids = batch.map(c => c.id).sort();
       const families = [...new Set(batch.map(c => c.familyId))].sort();
-      const implementationDigest = tools.get(adapterId) ?? builtIn.get(adapterId)!;
+      const implementationDigest = usedAdapters.get(adapterId)!;
+      // A repository check reads the source's complete captured set; any other unit reads exactly its scopes' files.
+      if (wholeRepository) files = new Set(repositoryFiles.get(sourceId) ?? []);
+      const inputs = [...files].sort().map(relativePath => ({ sourceId, relativePath, content: contentOf.get(`${sourceId}\u0000${relativePath}`)! }));
       const needsDatabases = families.some(f => rulePin.get(f)!.requires.includes('advisory-database'));
       const inputFingerprint = digestOf({
         inventory: snapshot.inventoryDigest, environment, analysis: analyses.get(sourceId)!.analysisFingerprint,
         rules: families.map(f => { const r = rulePin.get(f)!; return [r.familyId, r.revision, r.definitionDigest, r.packDigest]; }),
         adapterId, implementationDigest, scopes: [...scopes].sort(),
-        inputs: [...files].sort().map(f => [f, contentOf.get(`${sourceId}\u0000${f}`)!]),
+        inputs: inputs.map(i => [i.relativePath, i.content]),
         databases: needsDatabases ? lock.databases.map(d => [d.databaseId, d.snapshotDigest]).sort() : [],
       });
       const id = `work-check-${shortHash({ runId, revision, adapterId, sourceId, checks: ids })}`;
       work.push({ id, revision: 1, stage: 'check', contract: `sentinel.stage.check.${adapterId}`, implementationDigest, sourceId, adapterId,
         dependencies: [...request.bootstrap].map(r => ({ id: r.id, revision: r.revision })).sort(byKey(r => `${r.id}@${r.revision}`)),
         inputFingerprint, checks: ids, scopes: [...scopes].sort(),
-        inputs: [...files].sort().map(relativePath => ({ sourceId, relativePath, content: contentOf.get(`${sourceId}\u0000${relativePath}`)! })) });
+        inputs, inputSetDigest: digestOf(inputs) });
       for (const c of ids) assigned.set(c, id);
       batch = []; scopes = new Set(); files = new Set();
     };
     for (const c of members) {
       const path = readsFile.get(c.id);
       if (batch.length >= limits.maxChecksPerWork || (!scopes.has(c.scopeId) && scopes.size >= limits.maxScopesPerWork)
-        || (path !== undefined && !files.has(path) && files.size >= limits.maxScopesPerWork)) flush();
+        || (!wholeRepository && path !== undefined && !files.has(path) && files.size >= limits.maxScopesPerWork)) flush();
       batch.push(c);
       scopes.add(c.scopeId);
       if (path !== undefined) files.add(path);
@@ -389,7 +457,9 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
     tools: [...lock.tools].map(t => ({ adapterId: t.adapterId, artifactDigest: t.artifactDigest })).sort(byKey(t => t.adapterId)),
     databases: [...lock.databases].map(d => ({ databaseId: d.databaseId, snapshotDigest: d.snapshotDigest })).sort(byKey(d => d.databaseId)),
     analyses: [...analyses.values()].map(a => ({ sourceId: a.sourceId, analysisFingerprint: a.analysisFingerprint })).sort(byKey(a => a.sourceId)),
-    stages: { ...profile.stages },
+    operations,
+    adapters: [...usedAdapters].map(([adapterId, digest]) => ({ adapterId, digest })).sort(byKey(a => a.adapterId)),
+    capabilities: [...usedFacts.values()].sort(byKey(f => `${f.capability}\u0000${f.adapterId}`)),
   };
   return seal({
     schema: PLAN_SCHEMA, runId, revision, kind: 'analysis', previous, pins,
