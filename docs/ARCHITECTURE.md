@@ -518,3 +518,37 @@ gate (`run.start` on the plan digest). Tool matching here establishes version an
 platform qualification remains an admission requirement and must use the full lock and qualified registry.
 Not decided here: framework control-fact work (framework-order stays unavailable until packs exist),
 and scheduling for model review.
+
+33. **Sentinel checks infrastructure configuration with Trivy's misconfiguration scanner only, against one pinned checks
+    bundle, and needs the engine's own evidence for every covered file (2026-10-22).** `src/adapters/trivy/` (PR 13)
+    runs `trivy config` from the official Trivy 0.76.1 image index (tag commit e713f67; the image's revision label names
+    it), behind an original POSIX shell worker, only through PR 07's isolated execution service: no pull, no network,
+    no host fallback. Only the configuration scanner runs, so nothing duplicates the OSV adapter's dependency results;
+    the selected types are Dockerfiles, Kubernetes YAML and Terraform (`.tf`, `.tf.json`, local modules). Helm,
+    CloudFormation, Azure ARM, Ansible, plans and Kubernetes JSON are listed as unsupported, not silently skipped.
+
+    - **Checks are data the owner acquires once.** The trivy-checks 2.3.0 OCI manifest and its one layer are pinned by
+      digest (the manifest's revision names the release tag commit; MIT). `acquireChecksBundle` is an owner action
+      (`tool.acquire`) admitted only by a spent receipt for exactly that bundle, used once; it fetches the anonymous
+      pull token, the manifest and the layer from `ghcr.io`, follows only the registry's redirect to its blob host
+      without the token, checks every byte against the pins and stores the archive privately. Because the request
+      names digests it is immutable. Without it nothing runs: every configuration file is `bundle-missing`.
+    - **The engine's silent fallback is refused.** Trivy uses the checks compiled into its binary when its cache is
+      missing, and says so only in its log. The worker unpacks the pinned bundle into the cache layout, skips updates,
+      telemetry and version checks, disables `.trivyignore`, and reports the engine's own "loaded from disk" evidence
+      and check count as fixed words and digits. A run without it counts nothing (`bundleNotLoaded`).
+    - **Coverage needs positive evidence.** The worker also reports, from the engine's log and filtered to the job's
+      own paths, which files and Terraform module folders were scanned, which failed to parse and where a remote module
+      failed to load. At exit 0, a Dockerfile or Terraform file the engine never logged is `notReported`, a gap, never
+      a pass (the engine silently skips `.git` folders, for one). YAML it did not recognize is not applicable. Inline
+      `trivy:`/`tfsec:` ignore comments, which the engine honours with no switch to disable them, a remote module
+      (scans have no network, so modules are never fetched) and unread variable files leave a file `partial`.
+    - **Findings are configuration facts at captured paths.** A finding keeps the check id, the bundle's severity,
+      the configuration type, the captured path and artifact (a module folder has none) and lines validated against
+      the captured bytes; never the engine's message, which quotes the file, and never a new graph node. Checks outside
+      the pinned bundle's `builtin.` namespace, unknown targets and impossible lines are refused, with a reason.
+    - **Platforms.** linux/arm64 is measured on a darwin-arm64 Docker Desktop host; linux/amd64 is unmeasured until the
+      native `sentinel-iac-qualification` workflow passes with zero skips.
+
+    Not decided here: registering the adapter in the production registry and planning its checks (PR 08/09),
+    Terraform variable files and plans, Helm rendering, and any additional configuration type.

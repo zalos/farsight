@@ -82,6 +82,13 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `decideGrants`) and `user-state.ts` (owner-only files); `src/contracts/controls.ts` is the framework control-fact
   contract PRs 14–17 emit; the reason codes are `strings-sentinel-policy.ts`; `test/rules-policy.test.ts` covers them.
   Depends only on graph, code-parser and core; nothing in the
+  `src/adapters/sealed-input.ts` reads an attempt's sealed input copies by artifact id for every external adapter.
+  `src/adapters/trivy/` is the Trivy misconfiguration adapter (PR 13, ADR 33), internal until integration:
+  `adapter.ts` (pins, arguments, support), `bundle.ts` (owner-confirmed checks-bundle acquisition and verified
+  loading), `job.ts` (which captured files are sent, and why not), `worker-source.ts` (the in-container shell
+  worker), `normalize.ts` (findings and per-file coverage), `run.ts` and `errors.ts` (words: `strings-sentinel-trivy.ts`);
+  `scripts/package-assets-trivy.mjs` stages its worker and manifest, `scripts/acquire-trivy-checks.mjs` is the owner's
+  acquisition step; `test/trivy-adapter.test.ts` and `test/trivy-conformance.test.ts` (real engine) cover it.
   `src/planner/` is the pure deterministic planner (PR 06, ADR 24), exported as `./planner`: `planner.ts`
   (`planBootstrap`, `planAnalysis`, `checkWorkGraph`, the surface vocabulary), `adapters.ts` (inputs from the rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work

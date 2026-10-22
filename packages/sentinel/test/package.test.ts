@@ -52,6 +52,12 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/sealed-input.js': ['node:fs', 'node:path'],
+  // The Trivy misconfiguration adapter (PR 13): its job and bundle files and hashing; the engine runs through execution/.
+  'adapters/trivy/adapter.js': ['node:crypto'],
+  'adapters/trivy/bundle.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/trivy/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/trivy/normalize.js': ['node:crypto'],
+  'adapters/trivy/run.js': ['node:fs', 'node:path'],
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
