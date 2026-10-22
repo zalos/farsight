@@ -224,23 +224,56 @@ export const tokenArgument = (token: string): string => `--sentinel-token=${toke
 /** The one line the launch gate accepts (launch-gate.ts keeps its own copy of the format, so it imports nothing). */
 export const launchAuthorization = (token: string): string => `sentinel-launch ${token}\n`;
 
-/** Linux: the process's exact start identity, `<boot id>:<start ticks>`. null elsewhere or when it is gone. */
-export function kernelStartOf(pid: number): string | null {
-  if (process.platform !== 'linux') return null;
-  const stat = readSmall(`/proc/${pid}/stat`, 4096);
-  const boot = readSmall('/proc/sys/kernel/random/boot_id', 64);
-  if (stat === null || boot === null) return null;
-  const rest = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-  const ticks = rest[19]; // field 22 (starttime), counting from field 3 after the command
-  return ticks && /^\d+$/.test(ticks) ? `${boot.trim()}:${ticks}` : null;
+/**
+ * Package-internal test seam for the process table readers: the platform branch taken and the /proc reads, so the
+ * Linux branch's error handling can be exercised anywhere. Production never replaces it.
+ */
+export const procIo: { platform: string; openSync: typeof openSync; readSync: typeof readSync; opendirSync: typeof opendirSync } =
+  { platform: process.platform, openSync, readSync, opendirSync };
+
+/** Only these answers prove a process is absent; every other failure leaves its state unknown. */
+const ABSENT = new Set(['ENOENT', 'ESRCH']);
+type ProcRead = { text: string } | { absent: true } | { error: string };
+
+/** One bounded /proc read: the text, proven absence (ENOENT, ESRCH), or the error that left it unknown. */
+function readProc(path: string, limit: number): ProcRead {
+  let fd: number;
+  try { fd = procIo.openSync(path, constants.O_RDONLY); } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
+    return ABSENT.has(code) ? { absent: true } : { error: code };
+  }
+  try {
+    const buf = Buffer.alloc(limit);
+    const n = procIo.readSync(fd, buf, 0, limit, null);
+    return { text: buf.subarray(0, n).toString('utf8') };
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code ?? 'unknown';
+    return ABSENT.has(code) ? { absent: true } : { error: code };
+  } finally { closeSync(fd); }
 }
 
-/** The process's argument list from the kernel; null when it is gone, undefined when it cannot be read. */
+/**
+ * Linux: the process's exact start identity, `<boot id>:<start ticks>`. null when the process is proven gone (or on
+ * another platform); undefined when it could not be read (a denied, exhausted or failing read, or an unparseable stat).
+ */
+export function kernelStartOf(pid: number): string | null | undefined {
+  if (procIo.platform !== 'linux') return null;
+  const stat = readProc(`/proc/${pid}/stat`, 4096);
+  if ('absent' in stat) return null;
+  const boot = readProc('/proc/sys/kernel/random/boot_id', 64);
+  if ('error' in stat || !('text' in boot)) return undefined;
+  const rest = stat.text.slice(stat.text.lastIndexOf(')') + 2).split(' ');
+  const ticks = rest[19]; // field 22 (starttime), counting from field 3 after the command
+  return ticks && /^\d+$/.test(ticks) ? `${boot.text.trim()}:${ticks}` : undefined;
+}
+
+/** The process's argument list from the kernel; null when it is proven gone, undefined when it cannot be read. */
 export function argumentsOf(pid: number): string[] | null | undefined {
-  if (process.platform === 'linux') {
-    const cmd = readSmall(`/proc/${pid}/cmdline`, 256 * 1024);
-    if (cmd === null) return null;
-    return cmd.split('\0').filter(Boolean);
+  if (procIo.platform === 'linux') {
+    const cmd = readProc(`/proc/${pid}/cmdline`, 256 * 1024);
+    if ('absent' in cmd) return null;
+    if ('error' in cmd) return undefined;
+    return cmd.text.split('\0').filter(Boolean);
   }
   // macOS: ps reads the argument area from the kernel; -ww keeps it whole.
   const r = runBoundedSync('/bin/ps', ['-ww', '-o', 'command=', '-p', String(pid)], { env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' }, timeoutMs: 5_000, maxStdoutBytes: 256 * 1024, maxStderrBytes: 4096 });
@@ -249,31 +282,23 @@ export function argumentsOf(pid: number): string[] | null | undefined {
   return r.stdout.toString('utf8').trim().split(/\s+/);
 }
 
-function readSmall(path: string, limit: number): string | null {
-  let fd: number;
-  try { fd = openSync(path, constants.O_RDONLY); } catch { return null; }
-  try {
-    const buf = Buffer.alloc(limit);
-    const n = readSync(fd, buf, 0, limit, null);
-    return buf.subarray(0, n).toString('utf8');
-  } catch { return null; } finally { closeSync(fd); }
-}
-
 /**
  * Every live process whose kernel argument list carries this exact token, read without a shell: /proc on Linux,
- * `ps -ww -A` on macOS. undefined when the process table cannot be read.
+ * `ps -ww -A` on macOS. undefined when the process table cannot be read completely: a process whose arguments could
+ * not be read (other than one proven gone mid-scan) might be the one carrying the token.
  */
 export function processesCarrying(token: string): number[] | undefined {
   const arg = tokenArgument(token);
-  if (process.platform === 'linux') {
+  if (procIo.platform === 'linux') {
     let dir;
-    try { dir = opendirSync('/proc'); } catch { return undefined; }
+    try { dir = procIo.opendirSync('/proc'); } catch { return undefined; }
     const found: number[] = [];
     try {
       for (let e = dir.readSync(), n = 0; e && n < 1_000_000; e = dir.readSync(), n++) {
         if (!/^\d+$/.test(e.name)) continue;
-        const cmd = readSmall(`/proc/${e.name}/cmdline`, 256 * 1024);
-        if (cmd !== null && cmd.split('\0').includes(arg)) found.push(Number(e.name));
+        const cmd = readProc(`/proc/${e.name}/cmdline`, 256 * 1024);
+        if ('error' in cmd) return undefined;
+        if ('text' in cmd && cmd.text.split('\0').includes(arg)) found.push(Number(e.name));
       }
     } finally { dir.closeSync(); }
     return found;
@@ -296,9 +321,11 @@ export function verifyWorker(id: WorkerIdentity): WorkerVerdict {
   if (argv === null) return 'gone';
   if (argv === undefined) return 'unverifiable';
   const carries = argv.includes(tokenArgument(id.token));
-  if (process.platform === 'linux') {
+  if (procIo.platform === 'linux') {
     const start = kernelStartOf(id.pid);
     if (start === null) return 'gone';
+    // A start that could not be read is not proof of anything: the record is kept as an obligation.
+    if (start === undefined) return 'unverifiable';
     if (id.kernelStart && start !== id.kernelStart) return 'someone-else';
   }
   return carries ? 'ours' : 'someone-else';
