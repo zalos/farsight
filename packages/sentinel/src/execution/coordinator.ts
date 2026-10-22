@@ -16,7 +16,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileDigest, isCheckDriverRegistry, type CheckDriver, type CheckDriverRegistry, type DriverContext, type RuleFiles } from './check-drivers.js';
+import { driverRefusal, fileDigest, isCheckDriverRegistry, type CheckDriver, type CheckDriverRegistry, type DriverContext, type RuleFiles } from './check-drivers.js';
 import { resolveLockedRules } from '../rules/resolve.js';
 import type { ValidatedPack } from '../rules/pack.js';
 import { restoreSnapshot } from '../snapshot/materialize.js';
@@ -78,6 +78,8 @@ export interface CoordinatorOptions {
   cleanupWaitMs?: number;
   /** Trusted check drivers (createCheckDriverRegistry), bound to adapters by id and implementation digest. */
   drivers?: CheckDriverRegistry;
+  /** The admitted owner copies of the advisory databases the plan pins, for drivers (each verified when used). */
+  databases?: ReadonlyArray<{ databaseId: Id; snapshotDigest: string; path: string }>;
   /** The promoted packs the plan's lock pins, with their files' bytes, for drivers (each verified when used). */
   packs?: ReadonlyArray<{ pack: ValidatedPack; files: ReadonlyMap<string, Uint8Array> }>;
   /** Package-internal test seam for the container runtime (see ContainerBackend.connect). */
@@ -158,6 +160,7 @@ export class Coordinator {
   readonly #scratchRoot: string;
   readonly #drivers: CheckDriverRegistry | undefined;
   readonly #packs: CoordinatorOptions['packs'];
+  readonly #databases: ReadonlyArray<{ databaseId: Id; snapshotDigest: string; path: string }>;
   /** The plan's scope extents, indexed once. */
   readonly #scopes: ScopeIndex;
 
@@ -165,6 +168,10 @@ export class Coordinator {
     this.#store = o.store; this.#plan = plan; this.#service = service; this.#intents = intents; this.#workers = workers;
     this.#scratchRoot = o.scratchRoot;
     if (o.drivers !== undefined && !isCheckDriverRegistry(o.drivers)) throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'drivers come only from createCheckDriverRegistry' });
+    // With drivers, every check unit runs through one, over rules it supports: a raw worker's claims never count.
+    const refusal = o.drivers ? driverRefusal(plan.admitted.plan, o.drivers) : undefined;
+    if (refusal) throw new ExecutionError('sentinel.execution.planInvalid', { reason: refusal });
+    this.#databases = o.databases ? o.databases.map(d => ({ ...d })) : [];
     this.#drivers = o.drivers;
     this.#packs = o.packs ? o.packs.map(p => ({ pack: p.pack, files: new Map([...p.files].map(([k, v]) => [k, Uint8Array.from(v)])) })) : undefined;
     this.#scopes = scopeIndex(plan.admitted.plan);
@@ -506,7 +513,10 @@ export class Coordinator {
           // trusted adapter establishes; published with the result.
           // A driver normalizes the verified result (before the work folder is released) into the coverage view
           // and records published with it; without one, the result's own coverage claims are read.
-          const normalized = driver ? await driver.normalize(prepared!.context, { result: outcome.result!, outputs: outcome.outputs, workDir: outcome.workDir }) : null;
+          const out = outcome;
+          const normalized = driver ? await driver.normalize(prepared!.context, { result: out.result!, outputs: out.outputs, workDir: out.workDir, job: prepared!.job,
+            output: (oid: ArtifactId) => { const o = out.outputs.find(x => x.id === oid); if (!o) throw new ExecutionError('sentinel.execution.outputMismatch', { reason: 'not a verified output' }); return readFileSync(o.path); },
+            sealed: (sid: ArtifactId) => { const m = /^sha256:([0-9a-f]{64})$/.exec(sid); if (!m) return undefined; try { return readFileSync(join(out.workDir, 'input', m[1]!)); } catch { return undefined; } } }) : null;
           const view = normalized ? { ...outcome.result!, ...normalized.coverage } : outcome.result!;
           const coverage = coverageRecords({ runId: this.#plan.run.id, attemptId, work: ref, checks: executable.checks, scopes: this.#scopes,
             adapterGranularity: executable.adapter!.coverage, result: view, recordedAt: now() });
@@ -551,6 +561,13 @@ export class Coordinator {
     const context: DriverContext = {
       plan: this.#plan.admitted.plan, unit: executable.unit, checks: executable.checks, profile: this.#plan.admitted.profile,
       inputs: executable.inputs, inputScopes: executable.inputScopes, rules: this.#rulesOf(executable.checks),
+      tools: this.#plan.admitted.plan.pins.tools.filter(t => t.adapterId === executable.unit.adapterId).map(t => ({ ...t })),
+      databases: this.#plan.admitted.plan.pins.databases.map(pin => {
+        const copy = this.#databases.find(d => d.databaseId === pin.databaseId && d.snapshotDigest === pin.snapshotDigest);
+        if (!copy) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: `no admitted copy of database ${pin.databaseId}` });
+        if (fileDigest(copy.path) !== pin.snapshotDigest) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: `database ${pin.databaseId} is not the pinned snapshot` });
+        return { databaseId: pin.databaseId, snapshotDigest: pin.snapshotDigest, path: copy.path };
+      }),
       restored: this.#plan.restored, workDir: dir,
     };
     const job = await driver.prepare(context);
@@ -571,7 +588,7 @@ export class Coordinator {
       derived: { job: jobId, auxiliary: auxiliary.map(a => ({ id: a.id, role: a.role })) } };
     const records = [{ value: job.job, schema: 'sentinel-check-job/draft-1' },
       ...auxiliary.map(a => ({ bytes: readFileSync(a.path), schema: `sentinel-check-input/${a.role}`.slice(0, 128) }))];
-    return { dir, context, binding, inputs, records };
+    return { dir, context, binding, inputs, records, job: job.job };
   }
 
   /** The resolved rules (with verified pack file bytes) of exactly these checks, under the plan's pinned lock. */

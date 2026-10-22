@@ -5,6 +5,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { Coordinator } from '../dist/execution/coordinator.js';
 import { createCheckDriverRegistry } from '../dist/execution/check-drivers.js';
 import { bindingId } from '../dist/execution/plan.js';
@@ -16,10 +17,11 @@ after(() => roots.forEach(removeScratch));
 const ALL = Object.fromEntries(UNITS.map(u => [u, 'covering-ok']));
 const refused = (re: RegExp) => (e: any) => e?.code === 'sentinel.execution.adapterInvalid' && re.test(e.detail?.reason ?? '');
 
-function driver(registry: any, over: Record<string, unknown> = {}) {
+function driver(registry: any, over: Record<string, unknown> = {}, rules: any[] = []) {
   const seen: any[] = [];
   const d = {
     adapterId: 'test-covering-ok', implementationDigest: registry.get('test-covering-ok').digest,
+    supportedRules: () => rules.map((r: any) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: r.definitionDigest })),
     async prepare(ctx: any) {
       seen.push(ctx);
       const config = join(ctx.workDir, 'rules.yml');
@@ -28,6 +30,9 @@ function driver(registry: any, over: Record<string, unknown> = {}) {
         auxiliary: [{ path: config, role: 'rule' }] };
     },
     async normalize(ctx: any, verified: any) {
+      // The attempt's sealed copies are the bytes each input names; the job prepare returned comes back.
+      for (const i of ctx.inputs) assert.equal(`sha256:${createHash('sha256').update(verified.sealed(i.id)!).digest('hex')}`, i.id);
+      assert.ok(verified.job && Array.isArray(verified.job.checks));
       return { coverage: { coveredChecks: verified.result.coveredChecks, scannedSet: verified.result.scannedSet, skipped: [], unresolvedFrontiers: [], granularity: 'per-file-per-rule' },
         records: [{ value: { schema: 'sentinel-test-observations/draft-1', unit: ctx.unit.id, artifacts: verified.outputs.map((o: any) => o.id) }, schema: 'sentinel-test-observations/draft-1' }] };
     },
@@ -57,7 +62,7 @@ test('the driver prepares the exact job with pinned rule bytes; job and auxiliar
   const store = await storeIn(s.root);
   try {
     const p = await syntheticPlan(store, s.root, ALL, { registry });
-    const { d, seen } = driver(registry);
+    const { d, seen } = driver(registry, {}, p.plan.pins.rules);
     const drivers = createCheckDriverRegistry([d as any], registry);
     const c = await Coordinator.open({ store, runId: p.runId, run: p.run, registry, scratchRoot: s.work, drivers, packs: [{ pack: p.pack, files: p.packFiles }] });
     const summary = await c.run();
@@ -96,7 +101,7 @@ test('normalize decides the coverage view: an engine that establishes only aggre
     const p = await syntheticPlan(store, s.root, ALL, { registry });
     const { d } = driver(registry, { async normalize(_ctx: any, v: any) {
       return { coverage: { coveredChecks: v.result.coveredChecks, scannedSet: v.result.scannedSet, skipped: [], unresolvedFrontiers: [], granularity: 'aggregate' }, records: [] };
-    } });
+    } }, p.plan.pins.rules);
     const summary = await (await Coordinator.open({ store, runId: p.runId, run: p.run, registry, scratchRoot: s.work, drivers: createCheckDriverRegistry([d as any], registry) })).run();
     assert.equal(summary.outcome, 'partial-coverage');
     assert.ok(summary.coverage!.checks.every((c: any) => c.reasonCode === 'sentinel.plan.coverageTooCoarse'));
@@ -111,7 +116,7 @@ test('pack bytes other than the lock pins, or a failing prepare, start no worker
     const p = await syntheticPlan(store, s.root, ALL, { registry });
     const tampered = new Map(p.packFiles);
     for (const k of tampered.keys()) if (k.startsWith('detectors/')) tampered.set(k, Buffer.from('changed\n'));
-    const { d } = driver(registry);
+    const { d } = driver(registry, {}, p.plan.pins.rules);
     const summary = await (await Coordinator.open({ store, runId: p.runId, run: p.run, registry, scratchRoot: s.work, drivers: createCheckDriverRegistry([d as any], registry),
       packs: [{ pack: p.pack, files: tampered }] })).run();
     assert.equal(summary.published, 0);
@@ -123,11 +128,28 @@ test('pack bytes other than the lock pins, or a failing prepare, start no worker
   const store2 = await storeIn(s2.root);
   try {
     const p2 = await syntheticPlan(store2, s2.root, ALL, { registry: registry2 });
-    const { d } = driver(registry2, { async prepare() { throw Object.assign(new Error('unsupported rule'), { code: 'sentinel.execution.adapterInvalid' }); } });
+    const { d } = driver(registry2, { async prepare() { throw Object.assign(new Error('unsupported rule'), { code: 'sentinel.execution.adapterInvalid' }); } }, p2.plan.pins.rules);
     const summary = await (await Coordinator.open({ store: store2, runId: p2.runId, run: p2.run, registry: registry2, scratchRoot: s2.work,
       drivers: createCheckDriverRegistry([d as any], registry2) })).run();
     assert.equal(summary.published, 0);
     assert.deepEqual(store2.ledger.listAttempts({ id: p2.ids.A, revision: 1 }), [], 'a driver that cannot prepare starts nothing');
     assert.deepEqual(readdirSync(s2.work).filter(n => n.startsWith('prep.')), [], 'its prepared folder is removed');
   } finally { store2.close(); }
+});
+
+test('with drivers, every check unit needs one, over rules it runs at their pinned definition: otherwise nothing opens', async () => {
+  const s = scratch('drivers-rules'); roots.push(s.root);
+  const registry = syntheticRegistry(s.root, ['covering-ok', 'ok']);
+  const store = await storeIn(s.root);
+  try {
+    const p = await syntheticPlan(store, s.root, ALL, { registry });
+    const open = (d: any) => Coordinator.open({ store, runId: p.runId, run: p.run, registry, scratchRoot: s.work, drivers: createCheckDriverRegistry([d], registry) });
+    const planInvalid = (re: RegExp) => (e: any) => e?.code === 'sentinel.execution.planInvalid' && re.test(e.detail?.reason ?? '');
+    await assert.rejects(open(driver(registry).d), planInvalid(/does not run rule/), 'a driver that supports no rule');
+    const wrong = p.plan.pins.rules.map((r: any) => ({ ...r, definitionDigest: `sha256:${'1'.repeat(64)}` }));
+    await assert.rejects(open(driver(registry, {}, wrong).d), planInvalid(/does not run rule/), 'the same family at another definition');
+    const other = { ...driver(registry, {}, p.plan.pins.rules).d, adapterId: 'test-ok', implementationDigest: registry.get('test-ok').digest };
+    await assert.rejects(open(other), planInvalid(/has no trusted driver/), 'a check adapter with no driver');
+    assert.ok(await open(driver(registry, {}, p.plan.pins.rules).d));
+  } finally { store.close(); }
 });
