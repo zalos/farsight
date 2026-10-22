@@ -188,7 +188,7 @@ export class Coordinator {
     const recovery = await recoverStore(o.store, { intents, workers, ...(service.backend ? { backend: service.backend } : {}) });
     const c = new Coordinator(o, plan, service, intents, workers, recovery);
     // What dead owners left in this scratch root that is provably unused now goes; anything uncertain stays.
-    c.scratch = reconcileScratch(o.scratchRoot, o.store, recovery);
+    c.scratch = reconcileScratch(o.scratchRoot, o.store, recovery, c.#unknown.list());
     return c;
   }
 

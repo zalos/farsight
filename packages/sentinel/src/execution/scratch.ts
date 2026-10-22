@@ -6,8 +6,9 @@
 //   epoch belongs to an owner that is gone (this one holds the store lock), so recovery removes it.
 // - An attempt work folder (`<attempt id>-<uuid>`) is removed by the supervisor once its worker is reaped. One left
 //   by a crash is removed only when its attempt is this store's and ended in the ledger (or was never recorded and its
-//   worker record was settled by this recovery), and recovery holds no obligation, pending create, uncertain container
-//   or unreadable record: its worker is confirmed stopped or unable to act. Anything else (an
+//   worker record was settled by this recovery), and recovery holds no obligation, pending create, uncertain container,
+//   unreadable record or terminal-unknown record (an acknowledgement is not a stop): its worker is confirmed stopped
+//   or unable to act. Anything else (an
 //   unknown folder, another store's attempt, a live or unconfirmed worker) is left as it is.
 import { chmodSync, lstatSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,14 +42,18 @@ export interface ScratchReconciliation {
 }
 
 /** After recovery: remove what dead owners left that is provably no longer in use; keep everything else. */
-export function reconcileScratch(scratchRoot: string, store: SentinelStore, recovery: RecoveryReport): ScratchReconciliation {
+export function reconcileScratch(scratchRoot: string, store: SentinelStore, recovery: RecoveryReport,
+  /** Records acknowledged as terminal-unknown: kept for audit, and never proof that anything stopped. */
+  terminalUnknown: readonly string[]): ScratchReconciliation {
   const out: ScratchReconciliation = { removedRestores: [], removedWorkDirs: [], kept: [] };
   let names: string[];
   try { names = readdirSync(scratchRoot); } catch { return out; }
   const held = new Set<string>([
     ...recovery.obligations.map(o => o.attempt), ...recovery.pendingIntents.map(i => i.attempt),
   ]);
-  const uncertain = recovery.uncertain.length > 0 || recovery.unresolved.length > 0;
+  // An acknowledgement that cleanup will not be confirmed is not a stop: while any terminal-unknown record exists,
+  // the worker it describes may still be alive and using its folder, so every attempt folder is kept.
+  const uncertain = recovery.uncertain.length > 0 || recovery.unresolved.length > 0 || terminalUnknown.length > 0;
   const settled = new Set(recovery.settledWorkers);
   for (const name of names) {
     const path = join(scratchRoot, name);

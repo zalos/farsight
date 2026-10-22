@@ -76,3 +76,28 @@ test('while recovery holds anything it cannot confirm, a crashed attempt\'s fold
     assert.equal(c.scratch.removedRestores.length, 1, 'a dead owner\'s restore is read by no worker, so it goes');
   } finally { second.close(); }
 });
+
+test('an acknowledged terminal-unknown record is not a stop: a later open still keeps the crashed attempt\'s folder', async () => {
+  const s = scratch('scratch-acknowledged'); roots.push(s.root);
+  const first = await storeIn(s.root);
+  const p = await syntheticPlan(first, s.root, { A: 'hang' }, { limits: { timeoutMs: 20_000 } });
+  let crashed = false;
+  const hooks = { at: (b: string) => { if (b === 'after-attempt-start' && !crashed) { crashed = true; first.close(); } } };
+  await (await Coordinator.open({ store: first, runId: p.runId, run: p.run, registry: p.registry, scratchRoot: s.work, hooks })).run().catch(() => undefined);
+  const second = await storeIn(s.root);
+  try {
+    // An unreadable record (it might describe a worker still running) blocks, then is acknowledged as unknown.
+    writeFileSync(join(new WorkerFiles(second.storePath).dir, 'garbage.json'), '{not json', { mode: 0o600 });
+    const c = await Coordinator.open({ store: second, runId: p.runId, registry: p.registry, scratchRoot: s.work, cleanupWaitMs: 0 });
+    assert.equal(workDirs(s.work).length, 1);
+    assert.equal(c.acknowledgeUnknownCleanup().length, 1);
+  } finally { second.close(); }
+  // A later owner sees a clean recovery (the record is in the terminal-unknown journal), and still keeps the folder.
+  const third = await storeIn(s.root);
+  try {
+    const c = await Coordinator.open({ store: third, runId: p.runId, registry: p.registry, scratchRoot: s.work });
+    assert.equal(c.recovery.clean, true);
+    assert.equal(c.scratch.removedWorkDirs.length, 0, 'acknowledgement is never proof that a worker stopped');
+    assert.equal(workDirs(s.work).length, 1);
+  } finally { third.close(); }
+});
