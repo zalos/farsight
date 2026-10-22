@@ -864,15 +864,15 @@ tmpfs, only its digest leaving. The coordinator accepts a report line only as `F
 `P, rule, line, line`, the rule one of the 222 the pinned default configuration defines (`rules.ts`, generated from
 the release's own `config/gitleaks.toml`), then builds each observation from a closed field list: the rule, a
 captured file, a whole-line byte span read from the sealed input copy, a fixed message and fixed limitation keys.
-**Names are not assumed safe:** the shim writes every target's name to `scan/paths.txt` beside the tree, so the same
-engine screens the names (`P` lines). A name it matches, a name a line cannot carry, every name when there are too
-many to screen, and every name in a failed scan are **withheld**: `relativePath`, scopes and IDs use the reference
-`.sentinel-withheld-name/<24 hex>` (a job-salted digest of the name, not reversible from results), the observation
-carries `sentinel.secrets.pathWithheld`, and the result's `withheld[]` maps each reference to the file's content
-digest, which the private captured snapshot resolves for an authorized local reader. A matched name is itself a
-finding (`sentinel.secrets.nameMatch`, a zero-length span: the value is not in the content). Other names are shown
-as captured: the engine found nothing secret-shaped in them, which is a detector judgement, not a guarantee.
-**Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
+**No path is exported:** a name can hold a secret no detector recognises out of context (a value assigned in one
+file and used as another file's name), so no name is ever judged safe to print. Every target — scanned, skipped or
+cited — is named in results by an opaque reference, `.sentinel-opaque/<ordinal>` (its place in path order over the
+job's targets), in observation evidence (marked `sentinel.secrets.locationOpaque`, so it is never read as a source
+path), in scanned and skipped scopes and in observation IDs. The exact location (source, path, content digest and the
+capture entry, so identical files stay distinct) is in the result's `privateLocations`, which is not enumerable (JSON
+and spreads leave it out) and serves local navigation only. The shim also writes every name to `scan/paths.txt`
+beside the tree so the same engine screens names; a name it matches is itself a finding (`sentinel.secrets.nameMatch`,
+a zero-length span: the value is not in the content). **Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
 disagree), an unknown rule or file, lines a file does not have, an unmeasured platform, or a refused job makes the scan
 an `error` over every target with a coded reason; the shim itself reports only a catalog code. **Audit:** the result
 names the engine, adapter digest, image reference and id, platform, configuration and default-rules digests, the shim,

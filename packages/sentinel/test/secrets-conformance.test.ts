@@ -11,7 +11,7 @@ import {
   GITLEAKS_ADAPTER, GITLEAKS_PRODUCTION_BUILD, GITLEAKS_ENGINE, buildGitleaksAdapter, runSecretsAttempt, normalizeSecretsRun, buildSecretsJob, toolAllowlisted,
 } from '../dist/adapters/gitleaks/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { VALUE, absent, allowlistCorpus, captured, sha, treeFiles } from './secrets-helpers.ts';
+import { GENERIC_VALUE, VALUE, absent, allowlistCorpus, captured, sha, treeFiles } from './secrets-helpers.ts';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
 const skip = !enabled && 'real pinned engine: set SENTINEL_ISOLATION=1 with a qualified local Docker and the pinned Gitleaks image installed';
@@ -57,7 +57,10 @@ async function run(files: Record<string, string | Buffer>, adapter = GITLEAKS_PR
   absent(JSON.stringify(r), 'the scan result');
   return { r, ms: Date.now() - t0, outputs };
 }
-const found = (r: any) => r.observations.map((o: any) => `${o.producerRuleId} ${o.evidence[0].relativePath}:${o.evidence[0].span.startByte}`).sort();
+// Results cite opaque references only; tests resolve them through the private table, as a local reader would.
+const pathOf = (r: any, ref: string) => r.privateLocations.find((l: any) => l.reference === ref)?.relativePath;
+const scopePath = (r: any, scopeId: string) => pathOf(r, scopeId.slice('src-synthetic:'.length));
+const found = (r: any) => r.observations.map((o: any) => `${o.producerRuleId} ${pathOf(r, o.evidence[0].relativePath)}:${o.evidence[0].span.startByte}`).sort();
 
 test('positive: each leaking line is one redacted observation; a root ignore list and inline allows suppress nothing', { skip }, async t => {
   const { r, ms } = await run(treeFiles());
@@ -145,11 +148,11 @@ test('a folder the engine prunes (images.png/, package-lock.json/, nested) is a 
     'a/images.png/b/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'src/clean.ts': 'export const x = 1;\n',
   });
   assert.equal(r.status, 'partial', r.reasonCode);
-  assert.deepEqual(r.skipped.map((s: any) => s.scopeId).sort(),
-    ['src-synthetic:a/images.png/b/token.env', 'src-synthetic:images.png/token.env', 'src-synthetic:package-lock.json/token.env']);
+  assert.deepEqual(r.skipped.map((s: any) => scopePath(r, s.scopeId)).sort(),
+    ['a/images.png/b/token.env', 'images.png/token.env', 'package-lock.json/token.env']);
   assert.ok(r.skipped.every((s: any) => s.reasonCode === 'sentinel.secrets.toolAllowlisted'));
   assert.equal(r.observations.length, 0);
-  assert.deepEqual(r.scanned, ['src-synthetic:src/clean.ts']);
+  assert.deepEqual(r.scanned.map((x: string) => scopePath(r, x)), ['src/clean.ts']);
 });
 
 test('the engine itself prunes those folders when they are sent anyway, so the skip is the engine\'s, not a guess', { skip }, async () => {
@@ -169,20 +172,46 @@ test('the engine itself prunes those folders when they are sent anyway, so the s
   assert.deepEqual(report.trim().split('\n').map(l => sent[Number(l.split('\t')[4])]), ['web/app.env'], 'nothing under the pruned folders is reported');
 });
 
-test('a file name shaped like a secret is found by the engine, withheld from every result, and leaks nowhere', { skip }, async () => {
+test('a file name shaped like a secret is found by the engine, and no location leaks anywhere', { skip }, async () => {
   const named = `keys/${VALUE}.txt`;
   const { r, outputs } = await run({ [named]: `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'keys/plain.txt': 'nothing\n', [`assets/${VALUE}.png`]: 'x' });
   assert.equal(outputs, 2, 'the record and the report were checked');
   assert.equal(r.status, 'partial', r.reasonCode);
   const name = r.observations.filter((o: any) => o.limitationKeys.includes('sentinel.secrets.nameMatch'));
-  assert.equal(name.length, 2, 'both secret-shaped names, the scanned one and the allowlisted one, are findings');
-  const withheld = new Map(r.withheld.map((w: any) => [w.reference, w]));
-  assert.equal(withheld.size, 2);
-  assert.ok([...withheld.values()].every((w: any) => w.reasonCode === 'sentinel.secrets.nameMatch'));
-  const inside = r.observations.find((o: any) => !o.limitationKeys.includes('sentinel.secrets.nameMatch') && withheld.has(o.evidence[0].relativePath));
-  assert.ok(inside, 'the content finding in the withheld file cites its reference');
-  assert.ok(r.scanned.includes('src-synthetic:keys/plain.txt'));
-  assert.ok(r.skipped.some((s: any) => withheld.has(s.scopeId.slice('src-synthetic:'.length)) && s.reasonCode === 'sentinel.secrets.toolAllowlisted'));
+  // names below hold the value: compare masked, so no failure message can print it
+  const mask = (p: string | undefined) => String(p).replaceAll(VALUE, '<value>');
+  assert.deepEqual(name.map((o: any) => mask(pathOf(r, o.evidence[0].relativePath))).sort(), ['assets/<value>.png', 'keys/<value>.txt'], 'both secret-shaped names are findings');
+  const inside = r.observations.find((o: any) => !o.limitationKeys.includes('sentinel.secrets.nameMatch'));
+  assert.equal(mask(pathOf(r, inside.evidence[0].relativePath)), 'keys/<value>.txt');
+  assert.ok(r.observations.every((o: any) => o.limitationKeys.includes('sentinel.secrets.locationOpaque')));
+  assert.ok(!JSON.stringify(r).includes('keys/') && !JSON.stringify(r).includes('assets/'), 'no captured path is exported');
+});
+
+test('a value the detector finds only in context (generic-api-key) never leaks through a file name, in this file or another', { skip }, async () => {
+  const files = {
+    'config/keys.env': `api_key = "${GENERIC_VALUE}"\n`,
+    // the matched value used as names: alone, no detector recognises it
+    [`config/${GENERIC_VALUE}.env`]: `api_key = "${GENERIC_VALUE}"\n`,
+    [`cache/${GENERIC_VALUE}`]: 'clean\n',
+  };
+  // Paths below hold the value: every comparison goes through this mask, so no failure message can print it.
+  const mask = (p: string | undefined) => String(p).replaceAll(GENERIC_VALUE, '<value>');
+  let outputsChecked = 0;
+  const i = n++;
+  const targets = captured(join(root.root, `tree-${i}`), files);
+  const r = await runSecretsAttempt(service, { attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
+    snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets, scratch: root.root, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
+    inspect: (outcome: any) => {
+      for (const o of outcome.outputs) { absent(readFileSync(o.path), 'an output artifact', GENERIC_VALUE); outputsChecked++; }
+      absent(JSON.stringify(outcome), 'the worker outcome', GENERIC_VALUE);
+    } });
+  absent(JSON.stringify(r), 'the exported result', GENERIC_VALUE);
+  assert.equal(outputsChecked, 2);
+  assert.equal(r.status, 'complete', r.reasonCode);
+  const generic = r.observations.filter((o: any) => o.producerRuleId === 'generic-api-key');
+  assert.deepEqual(generic.map((o: any) => mask(pathOf(r, o.evidence[0].relativePath))).sort(), ['config/<value>.env', 'config/keys.env'], 'the engine finds the value in both assignments');
+  assert.ok(!r.observations.some((o: any) => o.limitationKeys.includes('sentinel.secrets.nameMatch')), 'no detector sees the value as a bare name');
+  assert.deepEqual(r.scanned.map((x: string) => mask(scopePath(r, x))).sort(), ['cache/<value>', 'config/<value>.env', 'config/keys.env'], 'the private table still resolves every file exactly');
 });
 
 test('host and engine agree on every allowlisted path of a case-folding corpus (ſ, Kelvin K, upper case, folders)', { skip }, async t => {
