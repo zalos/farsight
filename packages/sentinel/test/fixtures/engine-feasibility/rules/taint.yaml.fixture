@@ -1,0 +1,23 @@
+rules:
+  - id: sentinel-engine-taint-tsjs
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: Original synthetic SQL taint capability probe; no application verdict.
+    mode: taint
+    pattern-sources:
+      - pattern: $REQUEST.value()
+    pattern-sinks:
+      - patterns:
+          - pattern: $DB.query($SQL, ...)
+          - focus-metavariable: $SQL
+  - id: sentinel-engine-taint-java
+    languages: [java]
+    severity: WARNING
+    message: Original synthetic SQL taint capability probe; no application verdict.
+    mode: taint
+    pattern-sources:
+      - pattern: $REQUEST.value()
+    pattern-sinks:
+      - patterns:
+          - pattern: $DB.query($SQL, ...)
+          - focus-metavariable: $SQL

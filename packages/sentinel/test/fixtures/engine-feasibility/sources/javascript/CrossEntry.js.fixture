@@ -1,0 +1,7 @@
+import { positive, safe } from './CrossSink.js';
+export function crossPositive(request, database) {
+  positive(database, "SELECT id FROM customer WHERE name = '" + request.value() + "'");
+}
+export function crossSafe(request, database) {
+  safe(database, "SELECT id FROM customer WHERE name = ?", request.value());
+}

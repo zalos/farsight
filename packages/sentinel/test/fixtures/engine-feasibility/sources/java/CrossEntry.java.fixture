@@ -1,0 +1,8 @@
+class CrossEntry {
+  void positive(Request request, Database database) {
+    CrossSink.positive(database, "SELECT id FROM customer WHERE name = '" + request.value() + "'");
+  }
+  void safe(Request request, Database database) {
+    CrossSink.safe(database, "SELECT id FROM customer WHERE name = ?", request.value());
+  }
+}

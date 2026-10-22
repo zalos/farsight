@@ -1,0 +1,18 @@
+class Main {
+  void directPositive(Request request, Database database) {
+    database.query("SELECT id FROM customer WHERE name = '" + request.value() + "'");
+  }
+  void directSafe(Request request, Database database) {
+    database.query("SELECT id FROM customer WHERE name = ?", request.value());
+  }
+  void localPositive(Request request, Database database) {
+    String name = request.value();
+    String sql = "SELECT id FROM customer WHERE name = '" + name + "'";
+    database.query(sql);
+  }
+  void localSafe(Request request, Database database) {
+    String name = request.value();
+    String sql = "SELECT id FROM customer WHERE name = ?";
+    database.query(sql, name);
+  }
+}

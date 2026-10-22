@@ -1,0 +1,16 @@
+export function directPositive(request, database) {
+  database.query("SELECT id FROM customer WHERE name = '" + request.value() + "'");
+}
+export function directSafe(request, database) {
+  database.query("SELECT id FROM customer WHERE name = ?", request.value());
+}
+export function localPositive(request, database) {
+  const name = request.value();
+  const sql = "SELECT id FROM customer WHERE name = '" + name + "'";
+  database.query(sql);
+}
+export function localSafe(request, database) {
+  const name = request.value();
+  const sql = "SELECT id FROM customer WHERE name = ?";
+  database.query(sql, name);
+}

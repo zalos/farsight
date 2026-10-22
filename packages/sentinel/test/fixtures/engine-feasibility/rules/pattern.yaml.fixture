@@ -1,0 +1,11 @@
+rules:
+  - id: sentinel-engine-pattern-tsjs
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: Original synthetic SQL pattern capability probe; no application verdict.
+    pattern: $DB.query($LEFT + $RIGHT)
+  - id: sentinel-engine-pattern-java
+    languages: [java]
+    severity: WARNING
+    message: Original synthetic SQL pattern capability probe; no application verdict.
+    pattern: $DB.query($LEFT + $RIGHT)
