@@ -181,7 +181,7 @@ test('an engine failure reaches diagnostics as a fixed category and exit code on
   for (const leaked of [LOWER, SECRET, 'MixedCase9Token', 'Hunter2', 'password', 'db.query', '/tmp/sentinel-pattern', 'leak/']) {
     assert.ok(!outcome.diagnostics.text.includes(leaked), `diagnostics leaked ${leaked}`);
   }
-  const r = await runPatternAttempt(service, { attemptId: `att-leaky-${n++}`, work: { id: 'work-pattern', revision: 1 }, rules: RULES, targets: t, scratch: root.root, adapter: LEAKY });
+  const r = await runPatternAttempt(service, { attemptId: `att-leaky-${n++}`, work: { id: 'work-pattern', revision: 1 }, rules: RULES, targets: t, scratch: root.root, adapter: LEAKY, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}) });
   assert.equal(r.engineFailure, 'sentinel.pattern.engine.invalidArgument');
   assert.equal(r.engineExit, 2);
   assert.ok(r.coverage.every(c => c.status === 'error' || c.status === 'not-applicable'));
