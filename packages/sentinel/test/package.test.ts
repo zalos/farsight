@@ -69,6 +69,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
   'validate.js': ['ajv'],
+  // The planner's reason codes are catalog words.
+  'planner/errors.js': ['@farsight/core/dist/strings-sentinel-plan.js'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
   'store/ledger-json.js': ['node:crypto'],

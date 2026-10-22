@@ -53,6 +53,7 @@ import { SENTINEL_REPORT_STRINGS } from './strings-sentinel-report.js';
 import { SENTINEL_STORE_STRINGS } from './strings-sentinel-store.js';
 import { SENTINEL_CAPTURE_STRINGS } from './strings-sentinel-capture.js';
 import { SENTINEL_PARSER_STRINGS } from './strings-sentinel-parser.js';
+import { SENTINEL_PLAN_STRINGS } from './strings-sentinel-plan.js';
 import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-errors.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
@@ -175,6 +176,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_REPORT_STRINGS,
   // Sentinel store errors: the SQLite runtime gate, storage path checks and the owner lock (strings-sentinel-store.ts)
   ...SENTINEL_STORE_STRINGS,
+  // Sentinel's deterministic planner: check states, why a check is not planned, why a plan is refused (strings-sentinel-plan.ts)
+  ...SENTINEL_PLAN_STRINGS,
   // Sentinel ledger, object store and reachability error codes (strings-sentinel-storage-errors.ts)
   ...SENTINEL_STORAGE_ERROR_STRINGS,
   // Sentinel worker execution: protocol, adapter registry, container isolation, supervisor (strings-sentinel-execution.ts)
