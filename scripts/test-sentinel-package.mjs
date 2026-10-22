@@ -275,6 +275,38 @@ try {
     assert.equal(osv.registered, false);
     assert.ok(!readdirSync(installed, { recursive: true }).map(String).some((f) => /\.zip$|all\.zip|advisories\/SENTINEL/.test(f)), 'no advisory database or fixture ships');
     osvDemo = `osv assets (worker ${osv.worker.digest.slice(7, 19)}, no database), `;
+    // With SENTINEL_ISOLATION=1 and the pinned image installed, the shipped worker bytes run in the real engine through
+    // the WORKSPACE's isolated execution service, against a synthetic snapshot. This checks the installed asset, not an
+    // installed runtime: nothing exported invokes the adapter until the PR 09 command.
+    if (process.env.SENTINEL_ISOLATION === '1') {
+      const imp = (p) => import(new URL(`file://${join(sourceDir, 'dist', p)}`).href);
+      const { OSV_ADAPTER, OSV_WORKER_DIGEST, runOsvAttempt } = await imp('adapters/osv/index.js');
+      assert.deepEqual(osv.adapter.command, [...OSV_ADAPTER.command], 'the shipped adapter is the workspace adapter');
+      assert.equal(osv.worker.digest, OSV_WORKER_DIGEST);
+      const { createAdapterRegistry } = await imp('execution/registry.js');
+      const { createExecutionService } = await imp('execution/service.js');
+      const { openStore } = await imp('store/index.js');
+      const helpers = await import(new URL(`file://${join(sourceDir, 'test', 'osv-helpers.ts')}`).href);
+      const scratch = realpathSync(consumer.dir);
+      const work = join(scratch, 'osv-work');
+      mkdirSync(work, { mode: 0o700 });
+      const store = await openStore(join(scratch, 'osv-store'));
+      try {
+        const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([OSV_ADAPTER]), containers: true });
+        const snapshots = [helpers.syntheticSnapshot(join(scratch, 'osv-db'), 'npm', [1], '2026-10-21T00:00:00.000Z')];
+        const qualify = process.env.SENTINEL_OSV_QUALIFY?.replace(/^linux\//, '');
+        const r = await runOsvAttempt(service, {
+          attemptId: 'att-package-osv', work: { id: 'work-package', revision: 1 }, scratch,
+          targets: helpers.capturedTree(join(scratch, 'osv-tree'), { 'web/package-lock.json': 'package-lock-json.fixture' }),
+          snapshots, policy: { now: new Date(), maxDatabaseAgeMs: 3650 * 86_400_000 }, ...(qualify ? { qualifyingArchitecture: qualify } : {}),
+        });
+        assert.equal(r.attempt, 'succeeded');
+        assert.deepEqual(r.findings.map((f) => f.name), ['sentinel-fixture-alpha']);
+        osvDemo += `installed osv worker run by the workspace service: ${r.findings.length} finding (${r.platform.architecture} ${r.platform.state}; installed-runtime acceptance open), `;
+      } finally {
+        await store.close();
+      }
+    }
   }
 
   console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${osvDemo}npm consumer`);

@@ -57,6 +57,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/osv/job.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/osv/normalize.js': ['node:crypto'],
   'adapters/osv/run.js': ['node:fs', 'node:path'],
+  'adapters/sealed-input.js': ['node:fs', 'node:path'],
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],

@@ -519,8 +519,8 @@ platform qualification remains an admission requirement and must use the full lo
 Not decided here: framework control-fact work (framework-order stays unavailable until packs exist),
 and scheduling for model review.
 
-**(Number to be assigned at integration.) Dependency advisories come from pinned, separately acquired OSV snapshots,
-matched fully offline, and counted only where the engine proves it matched (2026-10-22).**
+29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
+where the engine proves it matched (2026-10-22).**
 
 `src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official
 multi-platform index; linux/arm64 measured, linux/amd64 listed and unmeasured) through PR 07's isolated execution
@@ -549,4 +549,5 @@ bound is refused. Offline, Maven transitives are never resolved (no deps.dev, no
 includes the snapshot digest, so a new snapshot is a new assessment, and `explainAdvisoryChanges` says whether a change
 came from the snapshot (same captured bytes) or the source. Advisory text is not kept. Package matches never claim
 reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
-command (PR 09), shipping no database in the package, and amd64 qualification.
+command (PR 09) and shipping no database in the package. linux/amd64 is measured only by the
+`sentinel-osv-qualification` workflow on a native runner; until a green run is recorded it stays a candidate.

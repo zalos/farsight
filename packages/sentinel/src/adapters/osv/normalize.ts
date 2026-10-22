@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import type { ArtifactId } from '../../contracts/common.js';
 import type { WorkerOutcome } from '../../execution/supervisor.js';
 import { canonicalDigest } from '../../policy/digest.js';
+import { deepFreeze } from '../../policy/immutable.js';
 import { OSV_ENGINE, OSV_IMAGE_PLATFORMS, OSV_MAX_OUTPUT_BYTES, OSV_MEASURED_ARCHITECTURES } from './adapter.js';
 import { osvFail } from './errors.js';
 import { KIND_ECOSYSTEMS, type DependencyFileKind, type Ecosystem, type OsvJob, type OsvJobTarget } from './job.js';
@@ -128,11 +129,6 @@ export interface OsvNormalizeInput {
 const TARGET_PATH = /^\/tmp\/sentinel-osv\/t\/(\d+)\/[A-Za-z.-]+$/;
 const ADVISORY_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
 const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
-
-function deepFreeze<T>(v: T): T {
-  if (v && typeof v === 'object' && !Object.isFrozen(v)) { Object.freeze(v); for (const x of Object.values(v)) deepFreeze(x); }
-  return v;
-}
 
 /**
  * The version text each dependency of a `pom.xml` declares, by `group:artifact`: null when it declares none (managed

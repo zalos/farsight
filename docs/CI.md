@@ -190,3 +190,14 @@ CI does not change the dogfood graph. To bring a CI run in, download `e2e-result
 and re-sync the workspace server (`curl -X POST localhost:4477/api/sync`). The digest says whether that run
 matches your checkout. A runner checks out without `.farsight/settings.json`, so it computes its digest without
 the workspace source excludes. If yours differs, the report reads as not matching rather than as fresh.
+
+## Qualification: OSV advisory adapter on Linux/amd64
+
+`.github/workflows/sentinel-osv-qualification.yml` runs on a pull request that changes the OSV adapter, its fixtures, the
+execution service, the packing scripts or the workflow itself, and by hand once it is on the default branch, on a native
+`ubuntu-24.04` amd64 runner. It is not a required check. Its one network step provisions the pinned OSV-Scanner index and
+checks the linux/amd64 manifest the adapter records; scans run through PR 07's isolation with `--pull never`, no network
+and synthetic advisory snapshots built from the original fixtures. It runs the OSV unit and real-engine conformance
+suites with `SENTINEL_OSV_QUALIFY=linux/amd64` (results accepted as candidate, not refused) and the packed tarball's
+shipped worker; any skipped, failed or cancelled test, a container left behind or a daemon that cannot be asked fails it.
+A green run is the evidence for marking linux/amd64 measured in `src/adapters/osv/adapter.ts` (ADR 29).
