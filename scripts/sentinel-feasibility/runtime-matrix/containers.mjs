@@ -11,13 +11,19 @@ export function classifyFailure(value) {
   if (value?.outputExceeded) return 'output-budget-exhausted';
   return ok(value) ? 'completed' : 'failed';
 }
+export function missingContainerExecutable(value) {
+  return Number.isInteger(value?.exitCode) && value.exitCode !== 0 && !value.spawnError && !value.timedOut && !value.cancelled && !value.outputExceeded && !value.exitSignal &&
+    typeof value.stderr === 'string' && value.stderr.includes('/sentinel-executable-intentionally-absent') && /(?:no such file or directory|executable file not found)/i.test(value.stderr);
+}
 export function validateIsolation(container, owner) {
   const host = container?.HostConfig;
+  const tmpfsTokens = typeof host?.Tmpfs?.['/tmp'] === 'string' ? host.Tmpfs['/tmp'].split(',').sort() : [];
+  const expectedTmpfs = ['rw', 'noexec', 'nosuid', 'size=1m', 'mode=1777'].sort();
   if (!/^[a-f0-9]{64}$/.test(container?.Id ?? '') || container.Config?.Labels?.[OWNER] !== owner || container.Config?.Image !== IMAGE ||
       container.Config?.User !== '65534:65534' || host?.NetworkMode !== 'none' || host.ReadonlyRootfs !== true ||
       host.Memory !== 268435456 || host.MemorySwap !== 268435456 || host.NanoCpus !== 1_000_000_000 || host.PidsLimit !== 32 ||
       !host.CapDrop?.includes('ALL') || !host.SecurityOpt?.includes('no-new-privileges:true') ||
-      !host.Tmpfs?.['/tmp']?.includes('noexec') || !host.Tmpfs?.['/tmp']?.includes('size=1m') || (container.Mounts ?? []).length !== 0) throw new Error('CONTAINER_ISOLATION_MISMATCH');
+      JSON.stringify(tmpfsTokens) !== JSON.stringify(expectedTmpfs) || Object.keys(host.Tmpfs ?? {}).length !== 1 || (container.Mounts ?? []).length !== 0) throw new Error('CONTAINER_ISOLATION_MISMATCH');
   return { id: container.Id, imageId: container.Image, image: container.Config.Image, user: container.Config.User,
     networkMode: host.NetworkMode, readOnlyRootfs: host.ReadonlyRootfs, memoryBytes: host.Memory,
     memorySwapBytes: host.MemorySwap, nanoCpus: host.NanoCpus, pidsLimit: host.PidsLimit,
@@ -64,7 +70,7 @@ export async function containerTrial(scenario, runner = execute, outerSignal) {
     finally { clearTimeout(timer); outerSignal?.removeEventListener('abort', cancelOuter); }
     record.afterClient = await inspect();
     record.outcome = classifyFailure(record.execution);
-    if (scenario === 'missing-executable') record.outcome = !ok(record.execution) && /(?:no such file|not found|executable file)/i.test(record.execution.stderr) ? 'missing-container-executable' : 'unexpected-missing-executable-result';
+    if (scenario === 'missing-executable') record.outcome = missingContainerExecutable(record.execution) ? 'missing-container-executable' : 'unexpected-missing-executable-result';
     if (['network', 'limits', 'tmpfs'].includes(scenario)) try { record.observation = JSON.parse(record.execution.stdout); } catch { record.observation = null; }
     const complete = record.afterClient.state?.Status === 'exited' && record.afterClient.state?.OOMKilled === false && record.afterClient.state?.ExitCode === 0;
     record.passed = scenario === 'network' ? complete && networkDenied({ isolation: record.isolation, execution: record.execution, socketAttempt: record.observation })

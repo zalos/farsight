@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseArgs, preview, resourcePreflight } from '../sentinel-feasibility-runtime.mjs';
 import { execute } from '../sentinel-feasibility-scanners.mjs';
-import { classifyFailure, validateIsolation, containerTrial, IMAGE } from '../sentinel-feasibility/runtime-matrix/containers.mjs';
+import { classifyFailure, missingContainerExecutable, validateIsolation, containerTrial, IMAGE } from '../sentinel-feasibility/runtime-matrix/containers.mjs';
 import { admission, payload, sha, LIMITS } from '../sentinel-feasibility/runtime-matrix/resources.mjs';
 
 test('preview has no execution side effects and run requires explicit output', () => {
@@ -32,6 +32,13 @@ test('bounded process executor distinguishes timeout, cancellation and output bu
   const output = await execute(process.execPath, ['-e', 'process.stdout.write("x".repeat(100000))'], { timeout: 2000, maxOutput: 512 });
   assert.equal(classifyFailure(output), 'output-budget-exhausted');
   assert.ok(Buffer.byteLength(output.stdout) <= 512);
+});
+test('missing container executable requires completed exact-path failure, never interruption or unrelated missing files', () => {
+  const result = { exitCode: 127, stderr: 'exec: \"/sentinel-executable-intentionally-absent\": stat /sentinel-executable-intentionally-absent: no such file or directory' };
+  assert.equal(missingContainerExecutable(result), true);
+  for (const changed of [{ exitCode: 0 }, { exitCode: null }, { timedOut: true }, { cancelled: true }, { outputExceeded: true }, { spawnError: 'ENOENT' }, { exitSignal: 'SIGKILL' }, { stderr: 'stat /unrelated: no such file or directory' }, { stderr: '/sentinel-executable-intentionally-absent: permission denied' }]) {
+    assert.equal(missingContainerExecutable({ ...result, ...changed }), false);
+  }
 });
 test('quota admission refuses unavailable controllers, impossible requests and unknown measurements', () => {
   const vm = { MemTotal: 8 * 1024 ** 3, NCPU: 8, MemoryLimit: true, SwapLimit: true, CpuCfsQuota: true, PidsLimit: true };
@@ -78,7 +85,7 @@ function container(owner = 'mine') {
 test('container policy rejects host exposure, executable tmpfs and weakened inspected limits', () => {
   assert.equal(validateIsolation(container(), 'mine').networkMode, 'none');
   for (const mutate of [v => v.Mounts.push({ Destination: '/host' }), v => v.HostConfig.NetworkMode = 'host', v => v.HostConfig.Memory = 0, v => v.HostConfig.MemorySwap = -1,
-    v => v.HostConfig.Tmpfs['/tmp'] = 'rw,exec,size=1m', v => v.Config.User = '0', v => v.Config.Image = 'semgrep:latest', v => v.Config.Labels['org.farsight.sentinel-feasibility.owner'] = 'other']) {
+    v => v.HostConfig.Tmpfs['/tmp'] = 'rw,exec,size=1m', v => v.HostConfig.Tmpfs['/tmp'] = 'rw,noexec,nosuid,size=11m,mode=1777', v => v.HostConfig.Tmpfs['/tmp'] = 'rw,noexec,size=1m,mode=1777', v => v.Config.User = '0', v => v.Config.Image = 'semgrep:latest', v => v.Config.Labels['org.farsight.sentinel-feasibility.owner'] = 'other']) {
     const value = container(); mutate(value); assert.throws(() => validateIsolation(value, 'mine'), /MISMATCH/);
   }
 });
