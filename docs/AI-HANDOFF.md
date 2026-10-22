@@ -41,6 +41,22 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel reporting integration — 2026-10-22
+
+The reporting slice on `codex/sentinel-reports-integration` combines independently reviewed finding identity,
+comparison, standalone HTML/Markdown/JSON/SARIF, redaction and owner-bound context placement. The final authority
+correction passed separate SOL review: structural or copied pins, cross-capture placement and mutations of returned
+artifact bytes cannot substitute evidence. The integrated build, workspace typecheck, schema check and catalog lint
+pass; Sentinel has 449 passing tests with 33 explicit platform/opt-in skips. All 29 focused report checks pass without
+skips, including the official SARIF schema and an offline browser with JavaScript disabled. A clean npm installation
+loads 10 typed exports, 19 contracts/schemas and 54 fixtures; installed private/shareable report generation and
+SARIF validation pass. Fresh fixed-source ingests against main `2587eb16` agree on every node/edge value and digest:
+8,198 nodes, 16,956 edges, source digest `1a488ec22d7c`, 22,709,909 graph bytes and 30,998,528 database bytes.
+Three fresh browser surfaces have zero page errors; only existing missing design-image fixture requests remain.
+Private/shareable report screenshots were inspected. CLI/report dispatch, dispositions, application placement UI and
+full scanner integration remain follow-on gates; this package does not complete the entire reporting plan.
+No primary-checkout build or dogfood refresh occurred. The validation server was stopped.
+
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
