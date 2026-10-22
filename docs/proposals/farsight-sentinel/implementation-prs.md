@@ -5,7 +5,8 @@ Execution preparation checked against main `46018cb` on 2026-10-21; container-on
 Execution preparation [#131](https://github.com/zalos/farsight/pull/131) and PR 01's two slices,
 [#132](https://github.com/zalos/farsight/pull/132) `2bd38f6` and [#133](https://github.com/zalos/farsight/pull/133)
 `ef5c525`, are merged. On 2026-10-21 the owner accepted PR 01's bounded matrix and resource defaults **for
-implementation** only (see the [acceptance record](feasibility-acceptance.md)); PR 02 is in progress. Package
+implementation** only (see the [acceptance record](feasibility-acceptance.md)); PR 02 merged as
+[#134](https://github.com/zalos/farsight/pull/134), and PR 03 storage is in progress. Package
 status lives in the [execution progress ledger](execution-progress.md), not in this backlog.
 Read the [architecture](implementation-plan.md) and [code examples](implementation-examples.md) with this backlog.
 Numbers below are local planning identifiers, not existing GitHub PR numbers.
