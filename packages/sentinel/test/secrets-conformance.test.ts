@@ -11,7 +11,9 @@ import {
   GITLEAKS_ADAPTER, GITLEAKS_PRODUCTION_BUILD, GITLEAKS_ENGINE, buildGitleaksAdapter, runSecretsAttempt, normalizeSecretsRun, buildSecretsJob, toolAllowlisted,
 } from '../dist/adapters/gitleaks/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { GENERIC_VALUE, VALUE, absent, allowlistCorpus, captured, sha, treeFiles } from './secrets-helpers.ts';
+import { GENERIC_VALUE, VALUE, absent, allowlistCorpus, captured, sha, snapshotFor, treeFiles } from './secrets-helpers.ts';
+import { resolveWithheldLocation } from '../dist/snapshot/locations.js';
+import { ENTRY_SCOPE } from '../dist/adapters/gitleaks/index.js';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
 const skip = !enabled && 'real pinned engine: set SENTINEL_ISOLATION=1 with a qualified local Docker and the pinned Gitleaks image installed';
@@ -44,23 +46,25 @@ after(async () => { if (enabled) { await store.close(); removeScratch(root.root)
 
 async function run(files: Record<string, string | Buffer>, adapter = GITLEAKS_PRODUCTION_BUILD) {
   const i = n++;
-  const targets = captured(join(root.root, `tree-${i}`), files);
+  const scoped = snapshotFor('snap-synthetic', 'src-synthetic', captured(join(root.root, `tree-${i}`), files));
   const t0 = Date.now();
   let outputs = 0;
   const r = await runSecretsAttempt(service, { attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
-    snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets, scratch: root.root, adapter, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
+    ...scoped, sourceId: 'src-synthetic', scratch: root.root, adapter, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
     // Every artifact that left the container, read while it exists: none may carry the value, a path or a name.
     inspect: (outcome: any) => {
       for (const o of outcome.outputs) { const b = readFileSync(o.path); absent(b, 'an output artifact'); assert.ok(!b.includes('scan/tree'), 'no path leaves the container'); outputs++; }
       absent(JSON.stringify(outcome), 'the worker outcome');
     } });
   absent(JSON.stringify(r), 'the scan result');
+  snapshots.set(r, scoped.snapshot);
   return { r, ms: Date.now() - t0, outputs };
 }
-// Results cite opaque references only; tests resolve them through the private table, as a local reader would.
-const pathOf = (r: any, ref: string) => r.privateLocations.find((l: any) => l.reference === ref)?.relativePath;
-const scopePath = (r: any, scopeId: string) => pathOf(r, scopeId.slice('src-synthetic:'.length));
-const found = (r: any) => r.observations.map((o: any) => `${o.producerRuleId} ${pathOf(r, o.evidence[0].relativePath)}:${o.evidence[0].span.startByte}`).sort();
+const snapshots = new WeakMap<object, any>();
+// Results cite withheld locations only; tests resolve them over the private snapshot, as a local reader would.
+const pathOf = (r: any, evidence: any) => { const x = resolveWithheldLocation(snapshots.get(r), evidence); return x.ok ? x.entry.relativePath : undefined; };
+const scopePath = (r: any, scopeId: string) => snapshots.get(r).entries[Number(ENTRY_SCOPE.exec(scopeId)?.[2] ?? -1)]?.relativePath;
+const found = (r: any) => r.observations.map((o: any) => `${o.producerRuleId} ${pathOf(r, o.evidence[0])}:${o.evidence[0].span.startByte}`).sort();
 
 test('positive: each leaking line is one redacted observation; a root ignore list and inline allows suppress nothing', { skip }, async t => {
   const { r, ms } = await run(treeFiles());
@@ -95,7 +99,7 @@ test('the allowlist is the engine’s: sent anyway, Gitleaks itself skips the lo
   const i = n++;
   const targets = captured(join(root.root, `tree-${i}`), { 'web/package-lock.json': `{"token":"${VALUE}"}\n`, 'web/app.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n` });
   const dir = join(root.root, `job-${i}`); mkdirSync(dir);
-  const built = buildSecretsJob({ snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets }, dir);
+  const built = buildSecretsJob({ ...snapshotFor('snap-synthetic', 'src-synthetic', targets), sourceId: 'src-synthetic' }, dir);
   const lock = targets.find(t => t.relativePath === 'web/package-lock.json')!;
   const job = readFileSync(built.inputs[1]!.path, 'utf8') + `F 9 ${lock.artifact.slice(7)} web/package-lock.json\n`;
   const jobPath = join(dir, 'job-all.txt'); writeFileSync(jobPath, job);
@@ -130,7 +134,7 @@ test('a job the shim cannot trust is refused with a code before the engine runs'
   const i = n++;
   const targets = captured(join(root.root, `tree-${i}`), treeFiles());
   const dir = join(root.root, `job-${i}`); mkdirSync(dir);
-  const built = buildSecretsJob({ snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets }, dir);
+  const built = buildSecretsJob({ ...snapshotFor('snap-synthetic', 'src-synthetic', targets), sourceId: 'src-synthetic' }, dir);
   const bad = `sentinel-gitleaks-job/1\nF 0 ${targets[0]!.artifact.slice(7)} ../escape.env\n`;
   const badPath = join(dir, 'bad.txt'); writeFileSync(badPath, bad);
   const outcome = await service.run({ adapterId: GITLEAKS_ADAPTER.id, attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
@@ -160,7 +164,7 @@ test('the engine itself prunes those folders when they are sent anyway, so the s
   const files = { 'images.png/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'package-lock.json/token.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`, 'web/app.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n` };
   const targets = captured(join(root.root, `tree-${i}`), files);
   const dir = join(root.root, `job-${i}`); mkdirSync(dir);
-  const built = buildSecretsJob({ snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets }, dir);
+  const built = buildSecretsJob({ ...snapshotFor('snap-synthetic', 'src-synthetic', targets), sourceId: 'src-synthetic' }, dir);
   const lines = ['sentinel-gitleaks-job/1', ...targets.map((t, k) => `F ${k} ${t.artifact.slice(7)} ${t.relativePath}`)];
   const job = `${lines.join('\n')}\n`;
   const jobPath = join(dir, 'job-all.txt'); writeFileSync(jobPath, job);
@@ -180,10 +184,10 @@ test('a file name shaped like a secret is found by the engine, and no location l
   const name = r.observations.filter((o: any) => o.limitationKeys.includes('sentinel.secrets.nameMatch'));
   // names below hold the value: compare masked, so no failure message can print it
   const mask = (p: string | undefined) => String(p).replaceAll(VALUE, '<value>');
-  assert.deepEqual(name.map((o: any) => mask(pathOf(r, o.evidence[0].relativePath))).sort(), ['assets/<value>.png', 'keys/<value>.txt'], 'both secret-shaped names are findings');
+  assert.deepEqual(name.map((o: any) => mask(pathOf(r, o.evidence[0]))).sort(), ['assets/<value>.png', 'keys/<value>.txt'], 'both secret-shaped names are findings');
   const inside = r.observations.find((o: any) => !o.limitationKeys.includes('sentinel.secrets.nameMatch'));
-  assert.equal(mask(pathOf(r, inside.evidence[0].relativePath)), 'keys/<value>.txt');
-  assert.ok(r.observations.every((o: any) => o.limitationKeys.includes('sentinel.secrets.locationOpaque')));
+  assert.equal(mask(pathOf(r, inside.evidence[0])), 'keys/<value>.txt');
+  assert.ok(r.observations.every((o: any) => o.evidence.every((e: any) => e.location === 'withheld' && !('relativePath' in e))));
   assert.ok(!JSON.stringify(r).includes('keys/') && !JSON.stringify(r).includes('assets/'), 'no captured path is exported');
 });
 
@@ -198,18 +202,19 @@ test('a value the detector finds only in context (generic-api-key) never leaks t
   const mask = (p: string | undefined) => String(p).replaceAll(GENERIC_VALUE, '<value>');
   let outputsChecked = 0;
   const i = n++;
-  const targets = captured(join(root.root, `tree-${i}`), files);
+  const scoped = snapshotFor('snap-synthetic', 'src-synthetic', captured(join(root.root, `tree-${i}`), files));
   const r = await runSecretsAttempt(service, { attemptId: `att-secrets-${i}`, work: { id: 'work-secrets', revision: 1 },
-    snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets, scratch: root.root, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
+    ...scoped, sourceId: 'src-synthetic', scratch: root.root, ...(QUALIFY ? { qualifyingArchitecture: QUALIFY } : {}),
     inspect: (outcome: any) => {
       for (const o of outcome.outputs) { absent(readFileSync(o.path), 'an output artifact', GENERIC_VALUE); outputsChecked++; }
       absent(JSON.stringify(outcome), 'the worker outcome', GENERIC_VALUE);
     } });
   absent(JSON.stringify(r), 'the exported result', GENERIC_VALUE);
+  snapshots.set(r, scoped.snapshot);
   assert.equal(outputsChecked, 2);
   assert.equal(r.status, 'complete', r.reasonCode);
   const generic = r.observations.filter((o: any) => o.producerRuleId === 'generic-api-key');
-  assert.deepEqual(generic.map((o: any) => mask(pathOf(r, o.evidence[0].relativePath))).sort(), ['config/<value>.env', 'config/keys.env'], 'the engine finds the value in both assignments');
+  assert.deepEqual(generic.map((o: any) => mask(pathOf(r, o.evidence[0]))).sort(), ['config/<value>.env', 'config/keys.env'], 'the engine finds the value in both assignments');
   assert.ok(!r.observations.some((o: any) => o.limitationKeys.includes('sentinel.secrets.nameMatch')), 'no detector sees the value as a bare name');
   assert.deepEqual(r.scanned.map((x: string) => mask(scopePath(r, x))).sort(), ['cache/<value>', 'config/<value>.env', 'config/keys.env'], 'the private table still resolves every file exactly');
 });
@@ -220,7 +225,7 @@ test('host and engine agree on every allowlisted path of a case-folding corpus (
   const files = Object.fromEntries(paths.map(p => [p, `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n`]));
   const targets = captured(join(root.root, `tree-${i}`), files);
   const dir = join(root.root, `job-${i}`); mkdirSync(dir);
-  const built = buildSecretsJob({ snapshotId: 'snap-synthetic', sourceId: 'src-synthetic', targets: targets.slice(0, 1) }, dir);
+  const built = buildSecretsJob({ ...snapshotFor('snap-synthetic', 'src-synthetic', targets.slice(0, 1)), sourceId: 'src-synthetic' }, dir);
   // Every path is sent, whatever the host thinks, so the engine's own skips are what is measured.
   const job = `${['sentinel-gitleaks-job/1', ...targets.map((x, k) => `F ${k} ${x.artifact.slice(7)} ${x.relativePath}`)].join('\n')}\n`;
   const jobPath = join(dir, 'job-all.txt'); writeFileSync(jobPath, job);

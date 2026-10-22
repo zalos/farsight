@@ -1,0 +1,32 @@
+{
+  "schema": "sentinel-observation/draft-1",
+  "id": "obs-withheld",
+  "snapshotId": "snap-1",
+  "producer": {
+    "kind": "scanner",
+    "adapterId": "pattern-engine",
+    "adapterDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "attemptId": "att-1"
+  },
+  "producerRuleId": "github-pat",
+  "originalSeverity": "unrated",
+  "message": "A value shaped like a secret matched this detector. The value is withheld.",
+  "evidence": [
+    {
+      "location": "withheld",
+      "snapshotId": "snap-1",
+      "sourceId": "api",
+      "entry": 3,
+      "content": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "span": {
+        "startByte": 0,
+        "endByte": 40
+      }
+    }
+  ],
+  "limitationKeys": [
+    "sentinel.secrets.valueWithheld",
+    "sentinel.secrets.lineLocation"
+  ],
+  "observedAt": "2026-10-21T12:05:00.250Z"
+}

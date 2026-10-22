@@ -54,9 +54,9 @@
         "evidence": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/SourceEvidence"
+            "$ref": "#/definitions/ObservationEvidence"
           },
-          "maxItems": 256
+          "description": "Ordinary citations, or citations whose location is withheld (`location: 'withheld'`); never both shapes in one."
         },
         "limitationKeys": {
           "type": "array",
@@ -295,6 +295,17 @@
       "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
       "maxLength": 4000
     },
+    "ObservationEvidence": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SourceEvidence"
+        },
+        {
+          "$ref": "#/definitions/WithheldLocationEvidence"
+        }
+      ],
+      "description": "What an observation cites: an ordinary source citation, or one whose location is withheld."
+    },
     "SourceEvidence": {
       "type": "object",
       "properties": {
@@ -373,6 +384,41 @@
       "minLength": 1,
       "maxLength": 1024,
       "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
+    },
+    "WithheldLocationEvidence": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "type": "string",
+          "const": "withheld"
+        },
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "entry": {
+          "$ref": "#/definitions/Count",
+          "description": "Index of the cited file's entry in `SnapshotEnvelope.entries`."
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "span": {
+          "$ref": "#/definitions/ByteSpan"
+        }
+      },
+      "required": [
+        "location",
+        "snapshotId",
+        "sourceId",
+        "entry",
+        "content",
+        "span"
+      ],
+      "additionalProperties": false,
+      "description": "A citation whose location is withheld: it names the capture entry by its position in the snapshot's `entries`, never by a path. Used where a path itself may carry a secret (secret-scan findings, ADR 28). It is not a `SourceEvidence` and carries no `relativePath`: a consumer that shows a location resolves it over the private snapshot (`resolveWithheldLocation`), which refuses any snapshot, source, entry or content that does not match, so two files with the same bytes resolve to their own entries. Never read `entry` as, or turn it into, a path."
     },
     "CatalogKey": {
       "type": "string",

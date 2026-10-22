@@ -545,15 +545,20 @@ tmpfs, only its digest leaving. The coordinator accepts a report line only as `F
 `P, rule, line, line`, the rule one of the 222 the pinned default configuration defines (`rules.ts`, generated from
 the release's own `config/gitleaks.toml`), then builds each observation from a closed field list: the rule, a
 captured file, a whole-line byte span read from the sealed input copy, a fixed message and fixed limitation keys.
-**No path is exported:** a name can hold a secret no detector recognises out of context (a value assigned in one
-file and used as another file's name), so no name is ever judged safe to print. Every target — scanned, skipped or
-cited — is named in results by an opaque reference, `.sentinel-opaque/<ordinal>` (its place in path order over the
-job's targets), in observation evidence (marked `sentinel.secrets.locationOpaque`, so it is never read as a source
-path), in scanned and skipped scopes and in observation IDs. The exact location (source, path, content digest and the
-capture entry, so identical files stay distinct) is in the result's `privateLocations`, which is not enumerable (JSON
-and spreads leave it out) and serves local navigation only. The shim also writes every name to `scan/paths.txt`
-beside the tree so the same engine screens names; a name it matches is itself a finding (`sentinel.secrets.nameMatch`,
-a zero-length span: the value is not in the content). **Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
+**No path is exported (contract, draft):** a name can hold a secret no detector recognises out of context (a value
+assigned in one file and used as another file's name), so the scan withholds every path rather than judging names.
+Observation evidence is a union: ordinary `SourceEvidence` (unchanged, with `relativePath`) or
+`WithheldLocationEvidence` `{ location: 'withheld', snapshotId, sourceId, entry, content, span }`, where `entry` is
+the cited file's index in the snapshot's `entries`. The schema makes the two exclusive (a withheld citation carries no
+path; an ordinary one cannot claim `location`), and the validator checks a path only on an ordinary one. Every
+secret-scan observation uses the withheld form; scanned, skipped and error scopes are `<sourceId>#entry:<n>` (a source
+ID has no `#`). `resolveWithheldLocation(snapshot, evidence)` (`snapshot/locations.ts`) is the one way back to a path:
+one bounded lookup that resolves only when snapshot, source, entry kind (an included file) and content all agree, so
+two files with the same bytes resolve to their own entries; anything else is `sentinel.capture.locationUnresolved`.
+Exact paths stay in the private snapshot and the private job; the scan's targets name entries, and their paths and
+digests are taken from the snapshot, never from the caller. The shim also writes every name to `scan/paths.txt` beside
+the tree so the same engine screens names; a name it matches is itself a finding (`sentinel.secrets.nameMatch`, a
+zero-length span: the value is not in the content). **Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
 disagree), an unknown rule or file, lines a file does not have, an unmeasured platform, or a refused job makes the scan
 an `error` over every target with a coded reason; the shim itself reports only a catalog code. **Audit:** the result
 names the engine, adapter digest, image reference and id, platform, configuration and default-rules digests, the shim,
