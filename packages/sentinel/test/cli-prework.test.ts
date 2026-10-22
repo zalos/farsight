@@ -237,11 +237,22 @@ test('a stale socket of ours is replaced; a file or an open folder at the addres
   const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
   const address = runtimeAddress({ storePath: '/s', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
   // A process that dies while listening leaves its socket file behind.
-  const child = spawn(process.execPath, ['-e', `require('node:net').createServer().listen(${JSON.stringify(address.socket)}, () => process.stdout.write('up'))`]);
-  await new Promise(r => child.stdout.once('data', r));
+  // A service of ours that dies while listening: its socket file (0600, as ours always is) is left behind. The
+  // child's listen error, or no answer in time, fails the fixture rather than hanging it.
+  const child = spawn(process.execPath, ['-e', `const p = ${JSON.stringify(address.socket)};
+    const s = require('node:net').createServer();
+    s.on('error', e => { process.stderr.write(String(e.code)); process.exit(3); });
+    s.listen(p, () => { require('node:fs').chmodSync(p, 0o600); process.stdout.write('up'); });`]);
+  const up = await Promise.race([
+    new Promise(r => child.stdout.once('data', () => r('up'))),
+    new Promise(r => child.once('exit', code => r(`exit ${code}`))),
+    new Promise(r => setTimeout(() => r('timeout'), 10_000)),
+  ]);
+  assert.equal(up, 'up');
   child.kill('SIGKILL');
   await new Promise(r => child.once('exit', r));
   assert.ok(lstatSync(address.socket).isSocket(), 'the stale socket is still there');
+  assert.equal(lstatSync(address.socket).mode & 0o777, 0o600);
   const server = await listenOwnerSocket(address, identity, async () => 'ok');
   const c = await connectOwnerSocket(address, identity, 'mcp');
   assert.equal(await c.request('ping', {}), 'ok');
@@ -294,4 +305,44 @@ test('every glossary term has a business twin, and no twin carries a developer u
     assert.ok(twin?.define && twin.professional, k);
     assert.doesNotMatch(twin.professional, /\b(SARIF|CWE|SCC|frontier|epoch|attempt|publication|span|steps?|hops?)\b/i, k);
   }
+});
+
+test('one connection cannot take the daemon down, and a client never waits forever', async t => {
+  const base = scratch(t, 'sne-');
+  const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
+  const address = runtimeAddress({ storePath: '/s', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
+  let release: (() => void) | undefined;
+  const server = await listenOwnerSocket(address, identity, async op => {
+    if (op === 'huge') return 'x'.repeat(MAX_FRAME_BYTES + 10);
+    if (op === 'circular') { const a: Record<string, unknown> = {}; a.a = a; return a; }
+    if (op === 'slow') { await new Promise<void>(r => { release = r; }); return 'late'; }
+    return 'ok';
+  });
+  t.after(() => server.close());
+  const a = await connectOwnerSocket(address, identity, 'mcp');
+  const b = await connectOwnerSocket(address, identity, 'mcp');
+  // An answer too large (or not JSON) is a typed refusal of that request; the connection and the daemon carry on.
+  await assert.rejects(a.request('huge', {}), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge');
+  await assert.rejects(a.request('circular', {}), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameMalformed');
+  assert.equal(await a.request('ping', {}), 'ok');
+  assert.equal(await b.request('ping', {}), 'ok', 'other clients are unaffected');
+  // A request too large to send is refused before it is pending.
+  assert.throws(() => a.request('ping', { blob: 'x'.repeat(MAX_FRAME_BYTES) }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.frameTooLarge');
+  // Deadlines and cancellation reject promptly; the service keeps working on what it admitted.
+  await assert.rejects(a.request('slow', {}, { timeoutMs: 50 }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.timeout');
+  const ctl = new AbortController();
+  const canceled = assert.rejects(a.request('slow', {}, { signal: ctl.signal }), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.canceled');
+  ctl.abort();
+  await canceled;
+  // A request in flight when its connection closes rejects; one made after the close rejects at once.
+  const pending = b.request('slow', {}, { timeoutMs: 10_000 });
+  b.close();
+  await assert.rejects(pending, (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.notListening');
+  assert.equal(b.closed, true);
+  const started = Date.now();
+  await assert.rejects(b.request('ping', {}), (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.notListening');
+  assert.ok(Date.now() - started < 1000);
+  release?.();
+  assert.equal(await a.request('ping', {}), 'ok', 'the daemon is still serving');
+  a.close();
 });

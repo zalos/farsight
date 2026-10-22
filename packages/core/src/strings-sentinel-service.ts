@@ -49,6 +49,8 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.ipc.frameMalformed': same('a local service message is not valid', 'Messages are length-prefixed UTF-8 JSON; anything else ends the connection.'),
   'sentinel.ipc.handshakeMismatch': same('the local service is not the one this store expects', 'The service must name the store and owner the client expects before any request is sent; a different or missing answer is refused.'),
   'sentinel.ipc.notListening': same('no local service is listening for this store', 'The store has no running service at its recorded address. Start one, or run in the foreground.'),
+  'sentinel.ipc.timeout': same('the local service did not answer in time', 'A request waits a bounded time for its answer; the service may still be working, and status shows what it did.'),
+  'sentinel.ipc.canceled': same('the request was canceled before it was answered', 'The caller stopped waiting; this does not stop work the service already admitted.'),
   'sentinel.ipc.requestFailed': same('the local service could not answer that request', 'The service refused or failed the request; its own reason code says why when it gives one.'),
 
   // ---- initialization ----

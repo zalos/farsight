@@ -25,7 +25,8 @@ const SUN_PATH: Readonly<Record<string, number>> = { darwin: 104, linux: 108 };
 export type IpcErrorCode =
   | 'sentinel.ipc.platformUnsupported' | 'sentinel.ipc.pathTooLong' | 'sentinel.ipc.runtimeDirUnsafe'
   | 'sentinel.ipc.socketUnsafe' | 'sentinel.ipc.socketInUse' | 'sentinel.ipc.frameTooLarge'
-  | 'sentinel.ipc.frameMalformed' | 'sentinel.ipc.handshakeMismatch' | 'sentinel.ipc.notListening';
+  | 'sentinel.ipc.frameMalformed' | 'sentinel.ipc.handshakeMismatch' | 'sentinel.ipc.notListening'
+  | 'sentinel.ipc.timeout' | 'sentinel.ipc.canceled';
 
 export class IpcError extends Error {
   constructor(readonly code: IpcErrorCode, readonly detail = '') {
@@ -218,7 +219,20 @@ function answers(path: string): Promise<boolean> {
 function serveConnection(socket: Socket, identity: ServiceIdentity, handler: ServiceHandler): void {
   const decoder = new FrameDecoder();
   let by: ReturnType<typeof requestedByOf> | undefined;
-  const send = (v: unknown) => { if (!socket.destroyed) socket.write(encodeFrame(v)); };
+  // One connection's failure never reaches the daemon: an unencodable value (too large, not JSON) becomes a bounded,
+  // typed error for that request, and a write to a closed connection is dropped.
+  const send = (v: unknown) => {
+    if (socket.destroyed) return;
+    let frame: Buffer;
+    try { frame = encodeFrame(v); } catch (e) {
+      const id = isRecord(v) ? v.id : undefined;
+      try { frame = encodeFrame({ type: 'response', id, ok: false, code: e instanceof IpcError ? e.code : 'sentinel.ipc.frameMalformed' }); } catch {
+        socket.destroy();
+        return;
+      }
+    }
+    try { socket.write(frame); } catch { socket.destroy(); }
+  };
   const refuse = (code: string) => { send({ type: 'error', code }); socket.end(); };
   socket.on('data', chunk => {
     let frames: unknown[];
@@ -243,16 +257,28 @@ function serveConnection(socket: Socket, identity: ServiceIdentity, handler: Ser
       Promise.resolve()
         .then(() => handler(f.op as string, refuseActorClaims(f.body), granted))
         .then(value => send({ type: 'response', id, ok: true, value }),
-          error => send({ type: 'response', id, ok: false, code: typeof error?.code === 'string' ? error.code : 'sentinel.ipc.requestFailed' }));
+          error => send({ type: 'response', id, ok: false, code: typeof error?.code === 'string' && /^sentinel\.[a-zA-Z.]{1,120}$/.test(error.code) ? error.code : 'sentinel.ipc.requestFailed' }))
+        .catch(() => socket.destroy());
     }
   });
   socket.on('error', () => socket.destroy());
 }
 
+export interface RequestOptions {
+  /** Rejects with `sentinel.ipc.timeout` when no response arrives in time (default 30 s). */
+  readonly timeoutMs?: number;
+  /** Rejects with `sentinel.ipc.canceled` when aborted. */
+  readonly signal?: AbortSignal;
+}
+
 export interface ServiceClient {
-  request(op: string, body: unknown): Promise<unknown>;
+  /** A closed client rejects at once; every pending request rejects when the connection closes. */
+  request(op: string, body: unknown, options?: RequestOptions): Promise<unknown>;
+  readonly closed: boolean;
   close(): void;
 }
+
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * Connects to a recorded address as `client`, after checking the folder and the socket are ours and private, and
@@ -290,23 +316,35 @@ export async function connectOwnerSocket(address: RuntimeAddress, expect: Servic
       }
     }
   });
+  let closed = false;
   socket.on('close', () => {
+    closed = true;
     welcomed?.(false);
     for (const p of pending.values()) p.reject(new IpcError('sentinel.ipc.notListening', 'connection closed'));
     pending.clear();
   });
+  socket.on('error', () => socket.destroy());
   socket.write(encodeFrame({ protocol: SERVICE_PROTOCOL, type: 'hello', client }));
   if (!(await welcome)) { socket.destroy(); throw new IpcError('sentinel.ipc.handshakeMismatch'); }
   let next = 1;
   return Object.freeze({
-    request(op: string, body: unknown): Promise<unknown> {
+    request(op: string, body: unknown, options: RequestOptions = {}): Promise<unknown> {
       refuseActorClaims(body);
+      if (closed || socket.destroyed) return Promise.reject(new IpcError('sentinel.ipc.notListening', 'connection closed'));
+      if (options.signal?.aborted) return Promise.reject(new IpcError('sentinel.ipc.canceled'));
+      const frame = encodeFrame({ type: 'request', id: next, op, body }); // too large: refused before it is pending
       const id = next++;
+      const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
       return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        socket.write(encodeFrame({ type: 'request', id, op, body }));
+        const settle = (fn: () => void) => { clearTimeout(timer); options.signal?.removeEventListener('abort', onAbort); pending.delete(id); fn(); };
+        const timer = setTimeout(() => settle(() => reject(new IpcError('sentinel.ipc.timeout'))), timeoutMs);
+        const onAbort = () => settle(() => reject(new IpcError('sentinel.ipc.canceled')));
+        options.signal?.addEventListener('abort', onAbort, { once: true });
+        pending.set(id, { resolve: v => settle(() => resolve(v)), reject: e => settle(() => reject(e)) });
+        socket.write(frame);
       });
     },
+    get closed() { return closed || socket.destroyed; },
     close: () => socket.destroy(),
   });
 }
