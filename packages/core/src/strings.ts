@@ -57,6 +57,7 @@ import { SENTINEL_PLAN_STRINGS } from './strings-sentinel-plan.js';
 import { SENTINEL_SERVICE_STRINGS } from './strings-sentinel-service.js';
 import { SENTINEL_GLOSSARY_STRINGS } from './strings-sentinel-glossary.js';
 import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-errors.js';
+import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
@@ -182,6 +183,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_PLAN_STRINGS,
   // Sentinel ledger, object store and reachability error codes (strings-sentinel-storage-errors.ts)
   ...SENTINEL_STORAGE_ERROR_STRINGS,
+  // Sentinel's pattern adapter: coverage reasons, refused results, limitations and rule titles (strings-sentinel-pattern.ts)
+  ...SENTINEL_PATTERN_STRINGS,
   // Sentinel worker execution: protocol, adapter registry, container isolation, supervisor (strings-sentinel-execution.ts)
   ...SENTINEL_EXECUTION_STRINGS,
   // Sentinel source capture: entry reasons and capture/restore refusals (strings-sentinel-capture.ts)

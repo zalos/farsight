@@ -51,7 +51,14 @@ and recording a tool digest in the lock authorizes no download or execution. As 
 owner's own account is outside this boundary. The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
-providers are opt-in per run. The package smokes install from npm into temporary directories with their own npm
+providers are opt-in per run. The pattern adapter (PR 10) is the first external scanner: Semgrep 1.181.0, the image pinned by
+digest and installed ahead (never pulled), run only through the isolated execution service with no network, a
+read-only root, a non-root user and inputs read-only. An original shim inside the container, pinned by digest in the
+adapter's fixed command, runs the engine with telemetry and version checks off and only the open-source engine;
+repository ignore files are never materialized, in-source suppression comments are disabled, and a captured file
+shaped like a job makes the worker refuse rather than run it. Results are trusted only after the coordinator checks
+them against the job it supplied and the captured bytes; engine fingerprints and messages are not used, and findings
+keep spans and digests, not source text. The package smokes install from npm into temporary directories with their own npm
 cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
 free loopback port.
 
