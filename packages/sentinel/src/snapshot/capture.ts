@@ -23,7 +23,7 @@ import { canonicalJsonBytes } from '../store/objects.js';
 import { validateEnvelope } from '../validate.js';
 import { enumerateCommit, trackedBlobs, type SubmoduleRequest } from './committed.js';
 import { SnapshotError } from './errors.js';
-import { GitReadError, GitRepository } from './git.js';
+import { GitReadBudget, GitReadError, GitRepository } from './git.js';
 import { CaptureChanged, Inventory } from './inventory.js';
 import { MATERIALIZATION_SCHEMA, inventoryDigestOf, materializationSources, type Materialization, type MaterializedSource } from './materialization.js';
 import { digestOf, isRecordablePath, resolvePolicy, type CapturePolicy } from './policy.js';
@@ -140,8 +140,8 @@ function storeInside(root: string, storePath: string): string | undefined {
 const gitGrants = (s: { gitDir?: string; commonDir?: string }) =>
   ({ ...(s.gitDir === undefined ? {} : { gitDir: s.gitDir }), ...(s.commonDir === undefined ? {} : { commonDir: s.commonDir }) });
 
-function openRepo(root: string, grants: { gitDir?: string; commonDir?: string }): GitRepository {
-  try { return GitRepository.open(root, grants); } catch (e) {
+function openRepo(root: string, grants: { gitDir?: string; commonDir?: string }, budget: GitReadBudget): GitRepository {
+  try { return GitRepository.open(root, { ...grants, budget }); } catch (e) {
     if (e instanceof GitReadError && e.code === 'unsupported') throw new SnapshotError('sentinel.capture.gitUnsupported', e.message);
     throw new SnapshotError('sentinel.capture.notRepository', e instanceof Error ? e.message : '');
   }
@@ -167,7 +167,7 @@ function fingerprint(e: Enumerated): string {
   });
 }
 
-function enumerate(request: CaptureRequest, policy: CapturePolicy, store: CaptureStore, now: () => string): Enumerated {
+function enumerate(request: CaptureRequest, policy: CapturePolicy, store: CaptureStore, now: () => string, budget: GitReadBudget): Enumerated {
   const inv = new Inventory(policy);
   const sources: SnapshotSource[] = [];
   const repos: GitRepository[] = [];
@@ -178,7 +178,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
       if (!st.isDirectory()) throw new SnapshotError('sentinel.capture.rootUnreadable', s.sourceId);
       const storeRel = storeInside(root, store.storePath);
       if (request.mode === 'committed-tree') {
-        const repo = openRepo(root, gitGrants(s));
+        const repo = openRepo(root, gitGrants(s), budget);
         repos.push(repo);
         let commit: string;
         let found;
@@ -189,7 +189,7 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         sources.push({ sourceId: s.sourceId, repositoryId: s.repositoryId, commit, dirty: false, capturedAt: now() });
         for (const sub of found) {
           const subRoot = canonical(sub.request.root, sub.request.sourceId);
-          const subRepo = openRepo(subRoot, gitGrants(sub.request));
+          const subRepo = openRepo(subRoot, gitGrants(sub.request), budget);
           repos.push(subRepo);
           let present = false;
           try { present = subRepo.readObject(sub.commit, 64 * 1024 * 1024)?.type === 'commit'; } catch { present = false; }
@@ -207,7 +207,9 @@ function enumerate(request: CaptureRequest, policy: CapturePolicy, store: Captur
         }
       } else {
         let repo: GitRepository | undefined;
-        try { repo = GitRepository.open(root, gitGrants(s)); } catch { repo = undefined; }
+        // A repository the reader refuses (unsafe layout, unsupported format, over budget) names no commit: the copy
+        // is then recorded with commit null and dirty true, never claimed clean.
+        try { repo = GitRepository.open(root, { ...gitGrants(s), budget }); } catch { repo = undefined; }
         if (repo) repos.push(repo);
         let commit: string | null = null;
         if (repo) { try { commit = repo.resolveCommit('HEAD'); } catch { commit = null; } }
@@ -282,14 +284,25 @@ function buildEnvelope(mode: CaptureModeRequest, policy: CapturePolicy, e: Enume
 }
 
 /** Captures the sources into one snapshot and admits it. See the module comment for the order of effects. */
-export async function captureSnapshot(store: CaptureStore, request: CaptureRequest): Promise<CaptureResult> {
+export function captureSnapshot(store: CaptureStore, request: CaptureRequest): Promise<CaptureResult> {
+  return captureWithBudget(store, request, new GitReadBudget());
+}
+
+/**
+ * Internal test seam (not exported from the facade): the capture with a caller's Git read budget. One budget serves
+ * every repository the capture opens (sources, submodules, both working-copy enumerations, every retry); each is
+ * closed when its capture attempt ends, which releases what it reserved.
+ */
+export async function captureWithBudget(store: CaptureStore, request: CaptureRequest, budget: GitReadBudget): Promise<CaptureResult> {
   const policy = checkRequest(request);
   const now = request.now ?? (() => new Date().toISOString());
   store.assertHeld();
   for (let attempt = 1; attempt <= policy.stabilityAttempts; attempt++) {
     try {
-      return await captureOnce(store, request, policy, now, attempt);
+      return await captureOnce(store, request, policy, now, attempt, budget);
     } catch (e) {
+      // A Git read refused after enumeration (a re-read reloading an index over the budget) is explicit too.
+      if (e instanceof GitReadError) gitFailure(e);
       if (!(e instanceof CaptureChanged)) throw e;
       if (attempt === policy.stabilityAttempts) throw new SnapshotError('sentinel.capture.unstable', '', { cause: e });
     }
@@ -297,12 +310,12 @@ export async function captureSnapshot(store: CaptureStore, request: CaptureReque
   throw new SnapshotError('sentinel.capture.unstable');
 }
 
-async function captureOnce(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string, attempt: number):
-  Promise<CaptureResult> {
-  const first = enumerate(request, policy, store, now);
+async function captureOnce(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string, attempt: number,
+  budget: GitReadBudget): Promise<CaptureResult> {
+  const first = enumerate(request, policy, store, now, budget);
   let second: Enumerated | undefined;
   try {
-    return await captureEnumerated(store, request, policy, now, attempt, first, e => { second = e; });
+    return await captureEnumerated(store, request, policy, now, attempt, first, budget, e => { second = e; });
   } finally {
     // The committed-tree read closures reopen pack files on demand; every handle is closed here, once nothing reads.
     for (const r of [...first.repos, ...(second?.repos ?? [])]) r.close();
@@ -310,7 +323,7 @@ async function captureOnce(store: CaptureStore, request: CaptureRequest, policy:
 }
 
 async function captureEnumerated(store: CaptureStore, request: CaptureRequest, policy: CapturePolicy, now: () => string,
-  attempt: number, first: Enumerated, keep: (e: Enumerated) => void): Promise<CaptureResult> {
+  attempt: number, first: Enumerated, budget: GitReadBudget, keep: (e: Enumerated) => void): Promise<CaptureResult> {
   const envelope = buildEnvelope(request.mode, policy, first, now(), attempt);
   const valid = validateEnvelope('snapshot', envelope);
   if (!valid.ok) throw new SnapshotError('sentinel.capture.contractInvalid', valid.errors.slice(0, 3).map(x => `${x.path} ${x.message}`).join('; '));
@@ -354,7 +367,7 @@ async function captureEnumerated(store: CaptureStore, request: CaptureRequest, p
     }
     // 5. A working copy must hold still across the whole capture.
     if (request.mode === 'working-copy') {
-      const second = enumerate(request, policy, store, now);
+      const second = enumerate(request, policy, store, now, budget);
       keep(second);
       if (fingerprint(first) !== fingerprint(second)) throw new CaptureChanged('the working copy changed during capture');
     }

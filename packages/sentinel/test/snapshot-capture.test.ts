@@ -638,3 +638,38 @@ test('a linked worktree is captured only with its Git and common directories bot
   const wc = await captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ ...source, gitDir, commonDir: join(main, '.git') }] });
   assert.equal(wc.snapshot.sources[0].commit, head, 'the working copy names its commit through the same grants');
 });
+
+test('one Git read budget serves every repository of a capture, is released after it, and refuses explicitly', needsStore, async t => {
+  const { captureWithBudget } = await import('../dist/snapshot/capture.js');
+  const { GitReadBudget } = await import('../dist/snapshot/git.js');
+  const dir = scratch(t);
+  const roots = ['one', 'two'].map(name => {
+    const root = join(dir, name);
+    commitRepo(root, { [`${name}.ts`]: `export const ${name} = 1;\n`.repeat(50) });
+    git(root, ['gc', '--quiet', '--prune=now']);
+    return root;
+  });
+  const fx = await openCaptureStore(t, dir);
+  const sources = roots.map((root, i) => ({ sourceId: `src-${i}`, repositoryId: `r${i}`, root }));
+
+  // Every reservation, from both repositories and both working-copy enumerations, lands on the one budget.
+  const budget = new GitReadBudget();
+  const reserved: string[] = [];
+  const reserve = budget.reserve.bind(budget);
+  (budget as any).reserve = (bytes: number, objects: number, what: string) => { reserved.push(what); return reserve(bytes, objects, what); };
+  await captureWithBudget(fx.store, { mode: 'committed-tree', sources }, budget);
+  assert.ok(new Set(reserved.filter(w => w.startsWith('pack index'))).size >= 2, `both repositories reserved: ${reserved.join(', ')}`);
+  assert.deepEqual([budget.usedBytes, budget.usedObjects], [0, 0], 'everything the capture reserved was released');
+  reserved.length = 0;
+  await captureWithBudget(fx.store, { mode: 'working-copy', sources }, budget);
+  assert.deepEqual([budget.usedBytes, budget.usedObjects], [0, 0]);
+
+  // A budget too small for the indexes is an explicit refusal, not a guess, and nothing is staged.
+  const tiny = new GitReadBudget({ maxRetainedBytes: 1 });
+  await assert.rejects(captureWithBudget(fx.store, { mode: 'committed-tree', sources }, tiny),
+    (e: unknown) => e instanceof SnapshotError && e.code === 'sentinel.capture.gitUnsupported' && /budget/.test(e.message));
+  assert.deepEqual([tiny.usedBytes, tiny.usedObjects], [0, 0]);
+  // A working copy whose repository the reader refuses names no commit and is never claimed clean.
+  const wc = await captureWithBudget(fx.store, { mode: 'working-copy', sources: sources.slice(0, 1) }, new GitReadBudget({ maxRetainedBytes: 1 }));
+  assert.deepEqual([wc.snapshot.sources[0].commit === null || wc.snapshot.sources[0].dirty, wc.snapshot.sources[0].dirty], [true, true]);
+});
