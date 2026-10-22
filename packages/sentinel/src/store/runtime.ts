@@ -81,9 +81,11 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
 
   let db: InstanceType<SqliteModule['DatabaseSync']> | undefined;
   try {
-    expect(typeof sqlite.DatabaseSync === 'function' && typeof sqlite.StatementSync === 'function' && typeof sqlite.backup === 'function'
-      && 'isTransaction' in sqlite.DatabaseSync.prototype);
+    if (typeof sqlite.DatabaseSync !== 'function') fail();
     db = new sqlite.DatabaseSync(':memory:');
+    // isOpen and isTransaction are per-connection accessors, not prototype members, on Node 24.
+    expect(typeof sqlite.StatementSync === 'function' && typeof sqlite.backup === 'function'
+      && typeof db.isOpen === 'boolean' && typeof db.isTransaction === 'boolean');
     current = 'version-agrees';
     expect((db.prepare('SELECT sqlite_version() AS v').get() as { v: string }).v === found);
     // Busy detection and constraint handling read errcode; a release that stopped exposing it fails here.
@@ -95,7 +97,9 @@ async function runGate(policy: SqliteReleasePolicy): Promise<SqliteRuntime> {
     expect((db.prepare('PRAGMA foreign_keys').get() as { foreign_keys: number }).foreign_keys === 1
       && rejectsWith(19, () => db!.exec('INSERT INTO c VALUES(42)')));
     current = 'strict-tables';
-    expect(rejectsWith(19, () => db!.prepare('INSERT INTO p VALUES(?)').run('not-an-integer')));
+    // A rowid alias reports a datatype mismatch differently, so test an ordinary STRICT column.
+    db.exec('CREATE TABLE s(v INTEGER NOT NULL) STRICT');
+    expect(rejectsWith(19, () => db!.prepare('INSERT INTO s VALUES(?)').run('not-an-integer')));
     current = 'deferred-foreign-keys';
     db.exec('BEGIN IMMEDIATE; INSERT INTO c VALUES(7); INSERT INTO p VALUES(7); COMMIT;');
     expect((db.prepare('SELECT count(*) AS n FROM c').get() as { n: number }).n === 1);

@@ -52,7 +52,10 @@ export interface StoreOwner {
 }
 
 export interface AcquireOptions {
-  /** How long SQLite may wait for a contended lock, in ms (0–10000, default 250). Not a lease. */
+  /**
+   * SQLite's busy budget for a contended lock, in ms (0–10000, default 250). Not a lease. SQLite's busy handler
+   * sleeps in coarse steps, so the wall time is longer: 250 measured about 1.2 s on darwin-arm64 with 3.53.3.
+   */
   waitMs?: number;
 }
 
