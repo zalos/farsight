@@ -293,7 +293,7 @@ try {
       const store = await openStore(join(scratch, 'osv-store'));
       try {
         const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([OSV_ADAPTER]), containers: true });
-        const snapshots = [helpers.syntheticSnapshot(join(scratch, 'osv-db'), 'npm', [1], '2026-10-21T00:00:00.000Z')];
+        const snapshots = [helpers.syntheticSnapshot(join(scratch, 'osv-db'), 'npm', [1], '2026-10-21T00:00:00.000000000Z')];
         const qualify = process.env.SENTINEL_OSV_QUALIFY?.replace(/^linux\//, '');
         const r = await runOsvAttempt(service, {
           attemptId: 'att-package-osv', work: { id: 'work-package', revision: 1 }, scratch,

@@ -37,7 +37,7 @@ export function storedZip(entries: { name: string; data: Buffer }[]): Buffer {
 }
 
 /** A synthetic snapshot for one ecosystem from the named fixture advisories, as acquisition would record it. */
-export function syntheticSnapshot(dir: string, ecosystem: 'npm' | 'Maven', ids: number[], sourceLastModified: string) {
+export function syntheticSnapshot(dir: string, ecosystem: 'npm' | 'Maven', ids: number[], sourceLastModified: string | null) {
   const entries = ids.map(n => `SENTINEL-FIXTURE-2026-${String(n).padStart(4, '0')}.json`)
     .map(name => ({ name, data: readFileSync(join(FIXTURES, 'advisories', name)) }))
     .filter(e => JSON.parse(e.data.toString()).affected[0].package.ecosystem === ecosystem);
@@ -49,7 +49,7 @@ export function syntheticSnapshot(dir: string, ecosystem: 'npm' | 'Maven', ids: 
     path,
     snapshot: Object.freeze({
       schema: 'sentinel-advisory-snapshot/draft-1' as const, ecosystem, source: `synthetic:fixtures/${ids.join(',')}`, sha256: sha(zip),
-      md5: createHash('md5').update(zip).digest('base64'), size: zip.length, sourceLastModified, etag: null, acquiredAt: sourceLastModified,
+      md5: createHash('md5').update(zip).digest('base64'), size: zip.length, sourceLastModified, etag: null, acquiredAt: '2026-10-22T00:00:00.000000000Z',
     }),
   };
 }

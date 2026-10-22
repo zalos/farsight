@@ -32,7 +32,8 @@ export const OSV_COVERAGE_REASONS = [
   'sentinel.osv.coverage.notDependencyFile', 'sentinel.osv.coverage.inputMismatch', 'sentinel.osv.coverage.attemptFailed',
   'sentinel.osv.coverage.attemptTimedOut', 'sentinel.osv.coverage.attemptCanceled', 'sentinel.osv.coverage.engineFailed',
   'sentinel.osv.coverage.engineTimedOut', 'sentinel.osv.coverage.outputTruncated', 'sentinel.osv.coverage.platformUnmeasured',
-  'sentinel.osv.coverage.databaseNotLoaded', 'sentinel.osv.coverage.componentsSkipped',
+  'sentinel.osv.coverage.databaseNotLoaded', 'sentinel.osv.coverage.componentsSkipped', 'sentinel.osv.coverage.componentsRefused',
+  'sentinel.osv.coverage.databaseAgeUnknown',
 ] as const;
 export type OsvCoverageReason = typeof OSV_COVERAGE_REASONS[number];
 export const OSV_REFUSAL_REASONS = [
@@ -45,7 +46,7 @@ export const OSV_ENGINE_FAILURES = [
 ] as const;
 export type OsvEngineFailure = typeof OSV_ENGINE_FAILURES[number];
 
-export type OsvCoverageStatus = 'complete' | 'partial' | 'database-absent' | 'database-stale' | 'empty' | 'error' | 'not-applicable';
+export type OsvCoverageStatus = 'complete' | 'partial' | 'database-absent' | 'database-stale' | 'database-age-unknown' | 'empty' | 'error' | 'not-applicable';
 
 export interface OsvComponent {
   readonly ecosystem: Ecosystem;
@@ -76,7 +77,7 @@ export interface OsvFinding {
   readonly advisories: { readonly ids: readonly string[]; readonly aliases: readonly string[]; readonly modified: string | null };
   readonly certainty: VersionCertainty;
   readonly occurrences: readonly { readonly relativePath: string; readonly artifact: ArtifactId }[];
-  readonly database: { readonly sha256: string; readonly sourceLastModified: string };
+  readonly database: { readonly sha256: string; readonly sourceLastModified: string | null };
 }
 
 export interface OsvCoverage {
@@ -94,9 +95,10 @@ export interface OsvCoverage {
 export interface OsvDatabaseUse {
   readonly ecosystem: Ecosystem;
   readonly sha256: string;
-  readonly sourceLastModified: string;
-  readonly ageMs: number;
-  readonly freshness: 'fresh' | 'stale';
+  readonly sourceLastModified: string | null;
+  /** Null when the source's age is unknown: never assumed fresh. */
+  readonly ageMs: number | null;
+  readonly freshness: 'fresh' | 'stale' | 'unknown';
 }
 
 export interface OsvRunResult {
@@ -128,6 +130,9 @@ export interface OsvNormalizeInput {
 
 const TARGET_PATH = /^\/tmp\/sentinel-osv\/t\/(\d+)\/[A-Za-z.-]+$/;
 const ADVISORY_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
+/** A strict UTC RFC 3339 timestamp; anything else (extra text, offsets, words) is not read as a time. */
+const RFC3339_Z = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$/;
+const STAMP = RFC3339_Z;
 const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
 /**
@@ -164,7 +169,9 @@ const transitiveOf = (kind: DependencyFileKind): TransitiveLimit =>
 export function normalizeOsvRun(input: OsvNormalizeInput): OsvRunResult {
   const { job, outcome } = input;
   const databases: OsvDatabaseUse[] = job.databases.map(d => {
-    const ageMs = input.policy.now.getTime() - Date.parse(d.sourceLastModified);
+    const at = d.sourceLastModified && STAMP.test(d.sourceLastModified) ? Date.parse(d.sourceLastModified) : NaN;
+    if (Number.isNaN(at)) return { ecosystem: d.ecosystem, sha256: d.sha256, sourceLastModified: null, ageMs: null, freshness: 'unknown' };
+    const ageMs = input.policy.now.getTime() - at;
     return { ecosystem: d.ecosystem, sha256: d.sha256, sourceLastModified: d.sourceLastModified, ageMs, freshness: ageMs > input.policy.maxDatabaseAgeMs ? 'stale' : 'fresh' };
   });
   const unsentRows: OsvCoverage[] = job.unsent.map(u => u.reason === 'not-dependency-file'
@@ -254,7 +261,7 @@ export function normalizeOsvRun(input: OsvNormalizeInput): OsvRunResult {
         const ids: string[] = (Array.isArray(g?.ids) ? g.ids : []).filter((x: unknown): x is string => typeof x === 'string' && ADVISORY_ID.test(x)).sort();
         if (!ids.length) { refused.push({ reasonCode: 'sentinel.osv.refused.malformed', relativePath: target.relativePath }); continue; }
         const aliases: string[] = [...new Set<string>((Array.isArray(g.aliases) ? g.aliases : []).filter((x: unknown): x is string => typeof x === 'string' && ADVISORY_ID.test(x)))].sort();
-        const modified = vulns.filter((v: any) => ids.includes(v?.id) && typeof v.modified === 'string' && !Number.isNaN(Date.parse(v.modified))).map((v: any) => v.modified as string).sort().at(-1) ?? null;
+        const modified = vulns.filter((v: any) => ids.includes(v?.id) && typeof v.modified === 'string' && RFC3339_Z.test(v.modified) && !Number.isNaN(Date.parse(v.modified))).map((v: any) => v.modified as string).sort().at(-1) ?? null;
         const db = dbOf.get(ecosystem)!;
         const key = canonicalDigest({ kind: 'sentinel-osv-component-advisory/1', ecosystem, name: pkg.name, version: pkg.version, ids });
         const id = canonicalDigest({ kind: 'sentinel-osv-assessment/1', key, database: db.sha256 });
@@ -277,11 +284,15 @@ export function normalizeOsvRun(input: OsvNormalizeInput): OsvRunResult {
     // A component the engine was expected to match, of an ecosystem whose database it never loaded: nothing matched.
     if (mine.some(c => !c.skippedByEngine && c.version !== null && !loaded.has(c.ecosystem))) return sentRow(t, 'error', 'sentinel.osv.coverage.databaseNotLoaded', [], mine.length, unassessed);
     const limits: OsvCoverageReason[] = [];
+    if (KIND_ECOSYSTEMS[t.kind].some(e => dbOf.get(e)?.freshness === 'unknown')) limits.push('sentinel.osv.coverage.databaseAgeUnknown');
     if (KIND_ECOSYSTEMS[t.kind].some(e => dbOf.get(e)?.freshness === 'stale')) limits.push('sentinel.osv.coverage.databaseStale');
     if (mine.some(c => !c.assessed && !c.skippedByEngine)) limits.push('sentinel.osv.coverage.versionsUnknown');
     if (t.kind === 'maven-pom') limits.push('sentinel.osv.coverage.transitivesNotResolved');
     if (unexplainedSkips || mine.some(c => c.skippedByEngine)) limits.push('sentinel.osv.coverage.componentsSkipped');
+    // Anything the engine reported in this file that was refused (another ecosystem, malformed) is not assessed either.
+    if (refused.some(x => x.relativePath === t.relativePath && x.reasonCode !== 'sentinel.osv.refused.versionUnverified')) limits.push('sentinel.osv.coverage.componentsRefused');
     if (!reported.has(t.index)) return sentRow(t, 'empty', 'sentinel.osv.coverage.noComponents', limits);
+    if (limits[0] === 'sentinel.osv.coverage.databaseAgeUnknown') return sentRow(t, 'database-age-unknown', limits[0], limits, mine.length, unassessed);
     if (limits[0] === 'sentinel.osv.coverage.databaseStale') return sentRow(t, 'database-stale', limits[0], limits, mine.length, unassessed);
     if (limits.length) return sentRow(t, 'partial', limits[0]!, limits, mine.length, unassessed);
     return sentRow(t, 'complete', 'sentinel.osv.coverage.complete', [], mine.length, 0);
@@ -293,26 +304,49 @@ export function normalizeOsvRun(input: OsvNormalizeInput): OsvRunResult {
 
 export interface AdvisoryChange {
   readonly key: string;
-  readonly change: 'new' | 'resolved';
+  /**
+   * `new` or `resolved` only when the component was assessed on both sides; otherwise `unknown`: a failed, partial or
+   * absent assessment on one side says nothing about whether the advisory still applies.
+   */
+  readonly change: 'new' | 'resolved' | 'unknown';
   /** Why: the same component in the same captured bytes met a different advisory snapshot, or the source changed. */
-  readonly because: 'advisory-database-changed' | 'source-changed';
+  readonly because: 'advisory-database-changed' | 'source-changed' | 'not-comparable';
   readonly from: { readonly database: string | null; readonly artifacts: readonly string[] };
   readonly to: { readonly database: string | null; readonly artifacts: readonly string[] };
 }
 
-/** Explains how findings moved between two assessments. */
+/**
+ * Explains how findings moved between two assessments. A change is reported only where it is comparable: both sides
+ * assessed the component (then the snapshot or the source explains it), or the files that named it on one side were
+ * assessed successfully on the other and no longer name it at all (a dependency added or removed). Anything else, a
+ * failed, partial or unversioned side, is `unknown`.
+ */
 export function explainAdvisoryChanges(previous: OsvRunResult, next: OsvRunResult): readonly AdvisoryChange[] {
   const keyed = (r: OsvRunResult) => new Map(r.findings.map(f => [f.key, f]));
   const prev = keyed(previous), cur = keyed(next);
-  const artifactsOf = (r: OsvRunResult, ecosystem: string, name: string, version: string) =>
-    r.components.filter(c => c.ecosystem === ecosystem && c.name === name && c.version === version).map(c => c.artifact).sort();
+  const usable = (r: OsvRunResult) => new Set(r.coverage.filter(c => c.status !== 'error' && c.status !== 'database-absent' && c.status !== 'not-applicable' && c.status !== 'empty').map(c => c.relativePath));
+  const same = (c: OsvComponent, f: OsvFinding) => c.ecosystem === f.ecosystem && c.name === f.name && c.version === f.version;
+  const assessedIn = (r: OsvRunResult, f: OsvFinding) => {
+    const ok = usable(r);
+    return r.components.filter(c => c.assessed && ok.has(c.relativePath) && same(c, f)).map(c => c.artifact).sort();
+  };
+  /** The other side assessed every file where `f` was found, and none of them names the component any more. */
+  const absentFrom = (other: OsvRunResult, f: OsvFinding) => {
+    const ok = usable(other);
+    const paths = f.occurrences.map(o => o.relativePath);
+    return paths.every(p => ok.has(p)) && !other.components.some(c => paths.includes(c.relativePath) && c.ecosystem === f.ecosystem && c.name === f.name);
+  };
   const dbOf = (r: OsvRunResult, ecosystem: string) => r.databases.find(d => d.ecosystem === ecosystem)?.sha256 ?? null;
   const out: AdvisoryChange[] = [];
-  const explain = (change: 'new' | 'resolved', f: OsvFinding) => {
-    const a = artifactsOf(previous, f.ecosystem, f.name, f.version), b = artifactsOf(next, f.ecosystem, f.name, f.version);
-    const sameSource = a.length > 0 && a.join() === b.join();
-    out.push({ key: f.key, change, because: sameSource ? 'advisory-database-changed' : 'source-changed',
-      from: { database: dbOf(previous, f.ecosystem), artifacts: a }, to: { database: dbOf(next, f.ecosystem), artifacts: b } });
+  const explain = (direction: 'new' | 'resolved', f: OsvFinding) => {
+    const a = assessedIn(previous, f), b = assessedIn(next, f);
+    const other = direction === 'new' ? previous : next;
+    let change: AdvisoryChange['change'] = direction;
+    let because: AdvisoryChange['because'];
+    if (a.length > 0 && b.length > 0) because = a.join() === b.join() ? 'advisory-database-changed' : 'source-changed';
+    else if (absentFrom(other, f)) because = 'source-changed';
+    else { change = 'unknown'; because = 'not-comparable'; }
+    out.push({ key: f.key, change, because, from: { database: dbOf(previous, f.ecosystem), artifacts: a }, to: { database: dbOf(next, f.ecosystem), artifacts: b } });
   };
   for (const [k, f] of cur) if (!prev.has(k)) explain('new', f);
   for (const [k, f] of prev) if (!cur.has(k)) explain('resolved', f);

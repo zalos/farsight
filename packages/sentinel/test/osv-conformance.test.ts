@@ -29,7 +29,7 @@ before(async () => {
 });
 after(async () => { if (enabled) { await store.close(); removeScratch(root.root); } });
 
-const snapshots = (ids: number[], age = '2026-10-21T00:00:00.000Z') => [
+const snapshots = (ids: number[], age = '2026-10-21T00:00:00.000000000Z') => [
   syntheticSnapshot(join(root.root, `db-${n}`), 'npm', ids, age), syntheticSnapshot(join(root.root, `db-${n}`), 'Maven', ids, age),
 ];
 const run = (targets: any[], snaps: any[], maxDatabaseAgeMs = 7 * DAY) => runOsvAttempt(service, {
@@ -85,7 +85,7 @@ test('an absent snapshot is an explicit gap, a stale one is not complete, and a 
   assert.equal(row(npmOnly, 'api/pom.xml'), 'database-absent:databaseAbsent');
   assert.equal(row(npmOnly, 'api/target/bom.cdx.json'), 'database-absent:databaseAbsent', 'an SBOM can name either ecosystem');
   assert.equal(row(npmOnly, 'web/package-lock.json'), 'complete:');
-  const stale = await run(tree, snapshots([1, 2, 3, 5], '2026-09-01T00:00:00.000Z'));
+  const stale = await run(tree, snapshots([1, 2, 3, 5], '2026-09-01T00:00:00.000000000Z'));
   assert.equal(row(stale, 'web/package-lock.json'), 'database-stale:databaseStale');
   assert.equal(stale.databases[0]!.freshness, 'stale');
   assert.ok(stale.findings.length > 0, 'findings from a stale snapshot are still evidence; coverage says it is stale');

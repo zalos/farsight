@@ -529,7 +529,9 @@ service only. **Acquisition is separate:** the only network step is `acquireAdvi
 `https://osv-vulnerabilities.storage.googleapis.com/<npm|Maven>/all.zip`, refuses redirects and anything over the stated
 bound (at most 512 MiB; the npm archive was 219 MB and Maven 10 MB on 2026-10-22), checks the origin's MD5 and stores
 each archive by SHA-256 beside a provenance manifest in an owner-only folder; `loadAdvisorySnapshot` re-hashes it before
-any scan. A scan never downloads: snapshots are inputs by digest, the engine runs `--offline` with no network, and the
+any scan. The request is a private frozen copy taken before validation, and one spent confirmation admits exactly one
+acquisition (a retry needs a new confirmation; a failed one stores nothing). The origin's date is read only as a strict
+HTTP date; anything else leaves the snapshot's age unknown, and a scan reports `database-age-unknown`, never fresh. A scan never downloads: snapshots are inputs by digest, the engine runs `--offline` with no network, and the
 owner's freshness bound turns an old snapshot into `database-stale`. **The worker:** the official image is
 golang:alpine (busybox sh, no Python) and inputs are sealed 0444, so an original POSIX shell shim runs as `/bin/sh
 /input/<digest>`; it reads only constrained values (ids, digests, an integer index and a dependency-file basename from a
@@ -547,7 +549,9 @@ declared (exact, property, range, managed); ranges and managed versions are not 
 bound is refused. Offline, Maven transitives are never resolved (no deps.dev, no registry), so a POM file is always
 `partial`. Findings are one per component and advisory group across every file that names it; the assessment id
 includes the snapshot digest, so a new snapshot is a new assessment, and `explainAdvisoryChanges` says whether a change
-came from the snapshot (same captured bytes) or the source. Advisory text is not kept. Package matches never claim
+came from the snapshot (same captured bytes) or the source, and reports `unknown` when one side did not assess the
+component (a failed run is never a resolution). A component the adapter refuses (another ecosystem, malformed) keeps its
+file `partial`. Advisory text is not kept. Package matches never claim
 reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
 command (PR 09) and shipping no database in the package. linux/amd64 is measured only by the
 `sentinel-osv-qualification` workflow on a native runner; until a green run is recorded it stays a candidate.

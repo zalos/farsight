@@ -56,7 +56,7 @@ test('fixtures are original, synthetic and stored under non-manifest names', () 
 test('a job sends dependency files whose ecosystem has a snapshot, and names every other file as a gap', t => {
   const dir = scratch(t);
   const tree = capturedTree(join(dir, 'tree'), undefined, { 'web/README.md': 'readme\n' });
-  const npm = syntheticSnapshot(join(dir, 'db'), 'npm', [1], '2026-10-21T00:00:00.000Z');
+  const npm = syntheticSnapshot(join(dir, 'db'), 'npm', [1], '2026-10-21T00:00:00.000000000Z');
   const built = buildOsvJob(tree, [npm], dir);
   assert.deepEqual(built.job.targets.map(x => `${x.index}:${x.relativePath}:${x.kind}`), ['0:web/package-lock.json:npm-package-lock', '1:web/pnpm-lock.yaml:npm-pnpm-lock']);
   assert.deepEqual(built.job.unsent.map(u => `${u.relativePath}:${u.reason}`), ['api/pom.xml:database-absent', 'api/target/bom.cdx.json:database-absent', 'web/README.md:not-dependency-file']);
@@ -85,7 +85,8 @@ test('the POM reading says how each version was declared, and nothing more', () 
 function run(t: { after(fn: () => void): void }, engine: unknown, record: Record<string, unknown> = {}, opts: { arch?: string; maxAge?: number; mutate?: string; dbAge?: string } = {}) {
   const dir = scratch(t);
   const tree = capturedTree(join(dir, 'tree'));
-  const snaps = [syntheticSnapshot(join(dir, 'db'), 'npm', [1, 2, 3, 5], opts.dbAge ?? '2026-10-21T00:00:00.000Z'), syntheticSnapshot(join(dir, 'db'), 'Maven', [1, 2, 3, 5], opts.dbAge ?? '2026-10-21T00:00:00.000Z')];
+  const age = opts.dbAge === undefined ? '2026-10-21T00:00:00.000000000Z' : opts.dbAge;
+  const snaps = [syntheticSnapshot(join(dir, 'db'), 'npm', [1, 2, 3, 5], age as any), syntheticSnapshot(join(dir, 'db'), 'Maven', [1, 2, 3, 5], age as any)];
   const built = buildOsvJob(tree, snaps, dir);
   const engineBytes = Buffer.from(JSON.stringify(engine));
   const recordBytes = Buffer.from(JSON.stringify({ schema: 'sentinel-osv-run/draft-1', job: built.jobDigest, exitCode: 1, timedOut: false, stdoutTruncated: false, engineOutput: sha(engineBytes), failure: null, loaded: ['npm', 'Maven'], ...record }));
@@ -130,7 +131,7 @@ test('a failed engine, an unloaded database, a stale snapshot, a changed copy an
   const unloaded = run(t, ENGINE, { loaded: ['Maven'] });
   assert.equal(row(unloaded, 'web/package-lock.json'), 'error:databaseNotLoaded');
   assert.ok(!unloaded.findings.some((f: any) => f.ecosystem === 'npm'));
-  const stale = run(t, ENGINE, {}, { dbAge: '2026-09-01T00:00:00.000Z' });
+  const stale = run(t, ENGINE, {}, { dbAge: '2026-09-01T00:00:00.000000000Z' });
   assert.equal(row(stale, 'web/package-lock.json'), 'database-stale:databaseStale');
   assert.equal(stale.databases[0]!.freshness, 'stale');
   const changed = run(t, ENGINE, {}, { mutate: 'fixture-app' });
@@ -151,14 +152,19 @@ test('a change is explained by the snapshot when the captured bytes did not chan
   const before = run(t, ENGINE);
   const added = structuredClone(ENGINE);
   added.results[0]!.packages[1] = pkg('npm', 'sentinel-fixture-beta', '2.1.0', ['SENTINEL-FIXTURE-2026-0009']);
-  const nextSnapshot = run(t, added, {}, { dbAge: '2026-10-22T00:00:00.000Z' });
+  const nextSnapshot = run(t, added, {}, { dbAge: '2026-10-22T00:00:00.000000000Z' });
   const changes = explainAdvisoryChanges(before, nextSnapshot);
   assert.deepEqual(changes.map(c => `${c.change}:${c.because}`), ['new:advisory-database-changed']);
   const removedComponent = structuredClone(ENGINE);
   removedComponent.results[0]!.packages.shift();
   removedComponent.results[1]!.packages.shift();
   const moved = explainAdvisoryChanges(before, run(t, removedComponent));
-  assert.deepEqual(moved.map(c => `${c.change}:${c.because}`), ['resolved:source-changed']);
+  assert.deepEqual(moved.map(c => `${c.change}:${c.because}`), ['resolved:source-changed'], 'the dependency was removed from files assessed both times');
+  // The same component now present only with an unknown version: neither side can be compared.
+  const unversioned = structuredClone(ENGINE);
+  unversioned.results[0]!.packages[0] = pkg('npm', 'sentinel-fixture-alpha', '');
+  unversioned.results[1]!.packages[0] = pkg('npm', 'sentinel-fixture-alpha', '');
+  assert.deepEqual(explainAdvisoryChanges(before, run(t, unversioned)).map(c => `${c.change}:${c.because}`), ['unknown:not-comparable']);
 });
 
 // ---- acquisition ---------------------------------------------------------------------------------------------------
@@ -169,13 +175,17 @@ function spend(b: ReceiptBook, request: { ecosystems: ('npm' | 'Maven')[]; maxBy
   const r = issueReceipt(b, { channel: 'owner-cli', principal: 'owner' }, { intent, stateDigest: sha('state'), policyRevision: sha('policy') }, { now: new Date(), ttlMs: 60_000 });
   return b.consume(r.id, { intent, stateDigest: sha('state'), policyRevision: sha('policy') }, new Date());
 }
-function fakeOrigin(files: Record<string, Buffer>, override: Partial<{ md5: string | null; url: string; length: number; status: number }> = {}) {
+function fakeOrigin(files: Record<string, Buffer>, override: Partial<{ md5: string | null; url: string; length: number; status: number; lastModified: string | null; onFetch: () => void }> = {}) {
   const calls: string[] = [];
   const transport = async (url: string) => {
     calls.push(url);
+    override.onFetch?.();
+    await new Promise(r => setTimeout(r, 1));
     const eco = /\/(npm|Maven)\/all\.zip$/.exec(url)![1]!;
     const body = files[eco]!;
-    const headers = new Headers({ 'content-length': String(override.length ?? body.length), 'last-modified': 'Wed, 21 Oct 2026 16:48:16 GMT', etag: '"e"' });
+    const headers = new Headers({ 'content-length': String(override.length ?? body.length), etag: '"e"' });
+    const lastModified = override.lastModified === undefined ? 'Wed, 21 Oct 2026 16:48:16 GMT' : override.lastModified;
+    if (lastModified !== null) headers.set('last-modified', lastModified);
     const md5 = override.md5 === undefined ? createHash('md5').update(body).digest('base64') : override.md5;
     if (md5) headers.set('x-goog-hash', `crc32c=AAAAAA==, md5=${md5}`);
     const res = new Response(body, { status: override.status ?? 200, headers });
@@ -221,6 +231,72 @@ test('acquisition refuses other sources, oversize or redirected responses, and b
   const d = dir();
   await code(() => acquireAdvisorySnapshots(req(), { dir: d, receipt: spend(b, req()), transport: fakeOrigin(files, { md5: createHash('md5').update('x').digest('base64') }).transport }));
   assert.deepEqual(readdirSync(d), [], 'a failed download leaves nothing behind');
+});
+
+test('SOL: a confirmed request cannot be widened by mutation, and one confirmation admits one acquisition', async t => {
+  const files = { npm: Buffer.alloc(25, 1), Maven: Buffer.alloc(3, 2) };
+  const b = book(t);
+  // Approved: npm only, at most 1 byte. The caller's object is changed while the download is in flight.
+  const request: any = { ecosystems: ['npm'], maxBytesPerEcosystem: 1 };
+  const receipt = spend(b, { ecosystems: ['npm'], maxBytesPerEcosystem: 1 });
+  const origin = fakeOrigin(files, { onFetch: () => { request.maxBytesPerEcosystem = 64; request.ecosystems.push('Maven'); } });
+  assert.equal(await code(() => acquireAdvisorySnapshots(request, { dir: join(scratch(t, 'adv'), 's'), receipt, transport: origin.transport })), 'sentinel.osv.acquisitionRefused', 'still the confirmed 1-byte bound');
+  assert.deepEqual(origin.calls, ['https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip'], 'no ecosystem was added');
+  // A spent confirmation admits one acquisition: a second call, sequential or concurrent, is refused.
+  const ok = { ecosystems: ['npm'] as ('npm' | 'Maven')[], maxBytesPerEcosystem: 1024 };
+  const once = spend(b, ok);
+  const dir = join(scratch(t, 'adv'), 's');
+  const [first, second] = await Promise.allSettled([
+    acquireAdvisorySnapshots(ok, { dir, receipt: once, transport: fakeOrigin(files).transport }),
+    acquireAdvisorySnapshots(ok, { dir, receipt: once, transport: fakeOrigin(files).transport }),
+  ]);
+  assert.equal(first.status, 'fulfilled');
+  assert.equal(second.status === 'rejected' && (second.reason as OsvError).code, 'sentinel.osv.acquisitionUnauthorized');
+  assert.equal(await code(() => acquireAdvisorySnapshots(ok, { dir, receipt: once, transport: fakeOrigin(files).transport })), 'sentinel.osv.acquisitionUnauthorized', 'a retry needs a new confirmation');
+});
+
+test('SOL: an origin date that is missing or not a strict HTTP date leaves the age unknown, never fresh', async t => {
+  const files = { npm: Buffer.from('synthetic npm archive'), Maven: Buffer.from('m') };
+  const b = book(t);
+  const req = { ecosystems: ['npm'] as ('npm' | 'Maven')[], maxBytesPerEcosystem: 1024 };
+  for (const lastModified of [null, 'Wed, 21 Oct 2026 16:48:16 GMT (secret-token-1234)', 'yesterday', 'Wed, 31 Feb 2026 16:48:16 GMT']) {
+    const dir = join(scratch(t, 'adv'), 's');
+    const [snap] = await acquireAdvisorySnapshots(req, { dir, receipt: spend(b, req), transport: fakeOrigin(files, { lastModified }).transport, now: () => NOW });
+    assert.equal(snap!.sourceLastModified, null, String(lastModified));
+    assert.equal(loadAdvisorySnapshot(dir, snap!.sha256).snapshot.sourceLastModified, null);
+  }
+  // A scan against a snapshot of unknown age: not fresh, not complete.
+  const unknownAge = run(t, ENGINE, {}, { dbAge: null as any });
+  assert.equal(unknownAge.databases[0]!.freshness, 'unknown');
+  assert.equal(unknownAge.databases[0]!.ageMs, null);
+  assert.equal(row(unknownAge, 'web/package-lock.json'), 'database-age-unknown:databaseAgeUnknown');
+  // An advisory "modified" that is not a strict UTC timestamp is not kept.
+  const odd = structuredClone(ENGINE);
+  (odd.results[0]!.packages[0] as any).vulnerabilities[0].modified = '2026-10-01T00:00:00Z (secret-token-1234)';
+  const r = run(t, odd);
+  assert.equal(r.findings.find((f: any) => f.name === 'sentinel-fixture-alpha')!.advisories.modified, null);
+  assert.doesNotMatch(JSON.stringify(r), /secret-token/);
+});
+
+test('SOL: refused components keep their file short of complete, and an SBOM of another ecosystem is never complete', t => {
+  const pypi = structuredClone(ENGINE);
+  pypi.results[3]!.packages = [pkg('PyPI', 'sentinel-fixture-py', '1.0.0')];
+  const r = run(t, pypi);
+  assert.equal(row(r, 'api/target/bom.cdx.json'), 'partial:componentsRefused');
+  assert.equal(r.components.filter((c: any) => c.relativePath === 'api/target/bom.cdx.json').length, 0);
+  const malformed = structuredClone(ENGINE);
+  (malformed.results[0]!.packages as any[]).push({ package: { name: '', version: '1.0.0', ecosystem: 'npm' } });
+  assert.equal(row(run(t, malformed), 'web/package-lock.json'), 'partial:componentsRefused');
+});
+
+test('SOL: a finding that disappears because the next run failed is not resolved: the change is unknown', t => {
+  const good = run(t, ENGINE);
+  const failed = run(t, ENGINE, { exitCode: 127, failure: { category: 'engineError', exitCode: 127 } });
+  const changes = explainAdvisoryChanges(good, failed);
+  assert.ok(changes.length > 0);
+  assert.ok(changes.every(c => c.change === 'unknown' && c.because === 'not-comparable'), JSON.stringify(changes.map(c => `${c.change}:${c.because}`)));
+  const back = explainAdvisoryChanges(failed, good);
+  assert.ok(back.every(c => c.change === 'unknown' && c.because === 'not-comparable'), 'nor is a finding new because the earlier run failed');
 });
 
 test('every OSV reason code is a catalog entry with both registers and a definition', async () => {
