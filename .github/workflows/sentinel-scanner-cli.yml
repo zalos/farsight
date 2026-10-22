@@ -149,7 +149,7 @@ jobs:
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-concurrency=1 --test-timeout=600000 \
             --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=scanner-cli.tap \
             test/drivers.test.ts test/drivers-boundary.test.ts test/drivers-canonical.test.ts test/drivers-conformance.test.ts \
-            test/scanner-assets.test.ts test/scanner-admission.test.ts test/cli-scanners-e2e.test.ts test/cli-full-report-e2e.test.ts test/service-full-report-secrets.test.ts \
+            test/scanner-assets.test.ts test/scanner-admission.test.ts test/cli-scanners-e2e.test.ts test/cli-full-report-e2e.test.ts test/service-full-report-secrets.test.ts test/sol-report-review.test.ts \
             test/service-full-report-authority.test.ts
           grep -Eq '^# tests [1-9][0-9]*$' scanner-cli.tap
           grep -qx '# skipped 0' scanner-cli.tap

@@ -31,7 +31,9 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   writeFileSync(join(f.ws, 'first.txt'), `api_key = "${GENERIC_VALUE}"\n`);
   writeFileSync(join(f.ws, 'second.txt'), `api_key = "${GENERIC_VALUE}"\n`);
   writeFileSync(join(f.ws, 'src', `${VALUE}.ts`), 'export function named(id: string) { return db.query("SELECT * FROM named WHERE id = " + id); }\n');
-  const clean = (text: string, where: string) => { for (const v of [VALUE, GENERIC_VALUE]) absent(text, where, v); };
+  // The store id keys the withheld-location HMAC. It is not secret, but no report output needs or carries it.
+  let storeId = '';
+  const clean = (text: string, where: string) => { for (const v of [VALUE, GENERIC_VALUE, ...(storeId ? [storeId] : [])]) absent(text, where, v); };
   const env = { PATH: process.env.PATH!, HOME: process.env.HOME!, XDG_STATE_HOME: join(dir, 'state') };
   const cli = (...args: string[]) => {
     const r = spawnSync(process.execPath, [CLI, ...args, '--json'], { cwd: f.ws, env, encoding: 'utf8', timeout: 300000, maxBuffer: 64 << 20 });
@@ -52,6 +54,13 @@ test('public CLI: full report, owner-confirmed context, offline HTML in both dis
   assert.equal(cli('assets', 'adopt-database', 'osv:npm', '--license', 'MIT', '--manifest', f.manifest, '--archive', f.db.path, '--confirm').status, 0);
   assert.equal(cli('assets', 'adopt-database', 'trivy-checks', '--manifest', f.trivyManifest, '--archive', f.checks.path, '--confirm').status, 0);
   const first = cli('plan').body.facts.runId as string;
+  {
+    const { openStore } = await import('../dist/store/index.js');
+    const { workspaceOf } = await import('../dist/service/local.js');
+    const store = await openStore(workspaceOf(f.ws, env).storePath);
+    try { storeId = store.storeId; } finally { store.close(); }
+    assert.ok(storeId.length >= 8);
+  }
   assert.equal(cli('run', first, '--confirm').status, 2);
 
   // The minimal report is unchanged, and its flags do not leak into it.

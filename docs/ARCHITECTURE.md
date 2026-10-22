@@ -1354,9 +1354,13 @@ assigned, with a span inside those bytes (a name match cites none). Its rule fam
 record's. Every scanner unit's own report states how many findings it accepted, and the publication must hold exactly
 that many finding records, so a dropped or added record refuses the report instead of reading as fewer findings. A
 withheld citation's identity is an opaque key for its file (`findings` `withheldKey`, the capture entry by default; the
-command line uses an HMAC of source and path under a key only the store holds), so identical bytes in two files are two
-findings, a secret finding continues across captures of one store, and no report carries a recomputable digest of the
-path. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+command line uses an HMAC of source and path keyed by the store id), so identical bytes in two files are two findings
+and a secret finding continues across captures of one store. A report carries neither the key nor the store id, but the
+store id is not secret (container labels, owner records, a failed run's facts): its holder can confirm an exact guess
+of a path against a report's fingerprints, so this keeps a path from being read off a report, not a low-entropy path
+from that holder. Every long token the secret scan matched (a matched name, or anything on a matched line) is replaced
+in every string of the report document in every profile, context labels, ids and excerpts included, with one fixed word
+per token so cross-references still match; catalog definitions are left as they are. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
 attestation limitation above is unchanged.

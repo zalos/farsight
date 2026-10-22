@@ -426,7 +426,9 @@ independently verify the supplied graph's relationships, labels or producer.
 Secret-scan findings are reported with their locations withheld in every profile and never placed; two files with the
 same bytes stay two findings. A file whose name the secret scan matched is withheld from every report, including other
 scanners' citations of it and the minimal `report <runId>` output. A missing, extra or forged accepted secret record
-refuses the report.
+refuses the report. Every long token on a line the secret scan matched, and in a matched file name, is replaced in
+every report string, including the labels and ids of a confirmed application graph and private excerpts. Names and
+values the scan did not match are not detected or withheld.
 
 ### Express control facts (draft)
 
