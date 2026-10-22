@@ -567,10 +567,11 @@ Each operation only reads and prepares its records. The coordinator publishes th
 - its deadline, cut to what is left of the run's, with the parser's signal aborted at it;
 - the memory this process grew by, sampled while the operation runs;
 - its CPU time against the quota;
-- the bytes it would publish;
 - and the run was neither canceled nor expired meanwhile.
 
-An operation starts no process, so its pid grant always holds. Because operations run in the coordinator's process,
+An operation starts no process and writes no process output, so its pid grant and `maxOutputBytes` (a bound on a
+worker's stdout and stderr) always hold. The size of what it retains is a separate contract: the store's object cap
+and the parser's own pinned limits. Because operations run in the coordinator's process,
 the memory and CPU bounds are measured on that process, not isolated.
 
 `loadBootstrap` reads that evidence back for `planAnalysis`. A stage with no bound operation stays held, and no

@@ -520,8 +520,9 @@ export class Coordinator {
    * coordinator, naming the operation adapter the plan pinned. Its invocation record (what was asked, with what
    * settings) is accepted with the start. The operation only prepares its records; they are published through the
    * attempt only when the unit's grant held: its deadline, the process memory it added (sampled; it runs in this
-   * process, so the bound is on what this process grew by), its CPU time against the quota, and the bytes it would
-   * publish. It starts no process, so its pid grant always holds. Returns the attempt id.
+   * process, so the bound is on what this process grew by) and its CPU time against the quota. It starts no process
+   * and writes no process output, so its pid and process-output grants always hold; retained artifact sizes are the
+   * store's and the parser's own bounds. Returns the attempt id.
    */
   async #operation(work: Readonly<WorkEnvelope>, ordinal: number, id: Id): Promise<Id> {
     const ref: WorkRef = { id: work.id, revision: work.revision };
@@ -547,8 +548,10 @@ export class Coordinator {
     } catch (error) { this.#abortStage(records.stageId); throw error; }
     this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
     // The unit's grant holds the operation as it holds a worker: its deadline (cut to what is left of the run's),
-    // the process memory it may add, the CPU time it may use and the bytes it may publish. The operation only
-    // prepares; nothing is published unless every bound held and the run was not canceled or expired meanwhile.
+    // the process memory it may add and the CPU time it may use. The operation only prepares; nothing is published
+    // unless every bound held and the run was not canceled or expired meanwhile. maxOutputBytes bounds a worker's
+    // process output (stdout and stderr); an operation has none, so it holds trivially. The size of what it retains
+    // is a separate contract: the store's object cap and the parser's own pinned limits, enforced where they apply.
     const grant = work.resources;
     const deadlineMs = Math.max(1, Math.min(grant.deadlineMs, Math.floor(this.#runDeadline - Date.now())));
     const own = AbortSignal.timeout(deadlineMs);
@@ -577,9 +580,7 @@ export class Coordinator {
             : memory.signal.aborted || peak > grant.memoryBytes ? ['sentinel.execution.resourceExceeded', { resource: 'memory', limit: grant.memoryBytes, observed: peak }]
               // The process's CPU time over the operation (its own GC and I/O threads included), against the quota.
               : cpuMs > grant.cpuQuota * wallMs + CPU_SLACK_MS ? ['sentinel.execution.resourceExceeded', { resource: 'cpu', quota: grant.cpuQuota, cpuMs: Math.round(cpuMs), wallMs: Math.round(wallMs) }]
-                : failure ? null
-                  : prepared!.bytes > grant.maxOutputBytes ? ['sentinel.execution.outputTooLarge', { bytes: grant.maxOutputBytes, observed: prepared!.bytes }]
-                    : null;
+                : null;
     if (refusal) {
       this.#end(ref, id, refusal[0] === 'sentinel.execution.canceled' ? 'canceled' : 'failed', refusal[0], refusal[1]);
       return id;
