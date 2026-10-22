@@ -68,11 +68,13 @@ export function ledgerObjectVerifier(store: ObjectStore): ObjectVerifier {
 export function reachabilityFromLedger(snapshot: GcSnapshot): ReachabilitySnapshot {
   const list = <T>(v: readonly T[] | undefined): readonly T[] | undefined => (Array.isArray(v) ? v : undefined);
   const parts = {
-    referenced: list(snapshot?.referenced), active: list(snapshot?.active), staged: list(snapshot?.staged),
+    referenced: list(snapshot?.referenced), retained: list(snapshot?.retained), active: list(snapshot?.active),
+    staged: list(snapshot?.staged),
     report: list(snapshot?.reports), links: list(snapshot?.links), objects: list(snapshot?.objects),
   };
   const complete = snapshot?.complete === true && Object.values(parts).every(p => p !== undefined);
-  const roots = (['referenced', 'active', 'staged', 'report'] as const)
+  // Every list is a root kind; a missing one makes the snapshot incomplete, a sparse one makes it invalid.
+  const roots = (['referenced', 'retained', 'active', 'staged', 'report'] as const)
     .map(kind => ({ kind, id: `ledger:${kind}`, artifacts: [...(parts[kind] ?? [])] }));
   const links = (parts.links ?? []).map(l => (Array.isArray(l) && l.length === 2 ? { from: l[0], to: l[1] } : { from: '', to: '' }));
   const recorded = (parts.objects ?? []).map(r => refFromLedgerReceipt(r) ?? { rawDigest: '', codec: 'raw' as const });

@@ -84,7 +84,7 @@ test('reachability follows links transitively through cycles and shared children
   const expected = ['report', 'finding', 'evidence', 'shared', 'cycleA', 'cycleB', 'active', 'pinned', 'staged'].map(id);
   expected.push(identify(Buffer.from('not written yet')).artifactId);
   assert.deepEqual(report.reachable, [...new Set(expected)].sort());
-  assert.deepEqual(report.rootCounts, { referenced: 0, active: 1, staged: 1, report: 1, pinned: 1 });
+  assert.deepEqual(report.rootCounts, { referenced: 0, retained: 0, active: 1, staged: 1, report: 1, pinned: 1 });
   assert.deepEqual(report.pendingStaged, [identify(Buffer.from('not written yet')).artifactId], 'registered before its write');
   assert.equal(report.physical.objects, 12);
   assert.equal(report.physical.protectedObjects, 10, 'shared is protected in both its gzip and raw files');

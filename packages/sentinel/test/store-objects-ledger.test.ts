@@ -103,8 +103,13 @@ test('a publication through the real ledger is accepted only for bytes this stor
   const plan = await planPruneFromLedger(store, ledger);
   assert.equal(plan.ok, true, JSON.stringify(plan.errors));
   assert.deepEqual(plan.validFor, { storeId: 'store-ol-1', sequence: ledger.currentSequence() });
-  // Once the work is published its manifest and invocation are no longer active roots; nothing else references them.
-  assert.deepEqual(plan.candidates.map(c => c.relPath).sort(), [orphan.relPath, manifest.relPath, invocation.relPath].sort());
+  // The completed work's manifest and the attempt's invocation stay protected while their rows are retained;
+  // only the independent orphan is a candidate.
+  const snap = ledger.gcSnapshot();
+  assert.ok(snap.retained.includes(manifest.artifactId) && snap.retained.includes(invocation.artifactId));
+  assert.ok(!snap.active.includes(manifest.artifactId), 'the work is finished, so not active');
+  assert.deepEqual(plan.candidates.map(c => c.relPath), [orphan.relPath]);
+  assert.ok(plan.report.rootCounts.retained === 1);
   assert.ok(!plan.candidates.some(c => c.rawDigest === ro.rawDigest || c.rawDigest === rc.rawDigest), 'published output and its link are kept');
   assert.equal(plan.deleted, 0);
 });
@@ -132,6 +137,11 @@ test('a ledger snapshot that moved, names another store or is incomplete plans n
     ['no store id', { storeId: undefined }],
     ['not complete', { complete: false }],
     ['no links', { links: undefined }],
+    ['no retained list', { retained: undefined }],
+    ['retained not a list', { retained: 'all' }],
+    ['sparse retained', { retained: new Array(2) }],
+    ['malformed retained id', { retained: ['manifest'] }],
+    ['retained artifact missing', { retained: [identify(Buffer.from('retained, never stored')).artifactId] }],
     ['malformed link', { links: [[current.referenced[0] ?? 'x']] }],
     ['sparse staged', { staged: new Array(2) }],
     ['malformed receipt', { objects: [{ id: 'x', codec: 'gzip', storedDigest: 'x', rawSize: 0, storedSize: 0 }] }],

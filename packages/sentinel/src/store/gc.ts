@@ -7,7 +7,7 @@
 // does any reachable or recorded object that is missing or does not verify: the plan then lists no candidate.
 import { type ObjectRef, type ObjectStore, type PhysicalObject, artifactIdOf } from './objects.js';
 
-export const GC_ROOT_KINDS = ['referenced', 'active', 'staged', 'report', 'pinned'] as const;
+export const GC_ROOT_KINDS = ['referenced', 'retained', 'active', 'staged', 'report', 'pinned'] as const;
 export type GcRootKind = typeof GC_ROOT_KINDS[number];
 
 /** The minimal seam this module needs from the ledger (PR 03 lane B): one committed snapshot of roots and links. */
