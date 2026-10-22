@@ -233,6 +233,25 @@ function invokedAtTopLevel(file: ParsedFile, fn: AstNode): boolean {
   });
 }
 
+/** True when the member expression at `anc[i]` (or a member chain built on it) is assigned, updated or deleted. */
+function isWriteTarget(anc: readonly AstNode[], i: number): boolean {
+  let k = i;
+  while (k > 0 && (anc[k - 1]!.type === 'MemberExpression' || anc[k - 1]!.type === 'StaticMemberExpression') && anc[k - 1]!.object === anc[k]) k--;
+  const node = anc[k]!, up = anc[k - 1];
+  if (!up) return false;
+  if (up.type === 'AssignmentExpression' && up.left === node) return true;
+  if (up.type === 'UpdateExpression' && up.argument === node) return true;
+  if (up.type === 'UnaryExpression' && up.operator === 'delete' && up.argument === node) return true;
+  return false;
+}
+
+/** The identifier a member chain starts from (`a` in `a.b.c`), if any. */
+function chainRoot(n: AstNode): string | null {
+  let e = n;
+  while (e && (e.type === 'MemberExpression' || e.type === 'StaticMemberExpression' || e.type === 'ComputedMemberExpression')) e = e.object;
+  return e?.type === 'Identifier' ? String(e.name) : null;
+}
+
 /** True when a statement can leave its function: a return or throw outside any nested function. */
 function mayLeave(st: AstNode): boolean {
   let leaves = false;
@@ -268,22 +287,30 @@ const OPAQUE_RULES = new Set(['Validate', 'ValidateBy', 'ValidateNested', 'Valid
  */
 function dtoRules(file: ParsedFile, cls: AstNode): { rules: number; conditional: boolean; inherited: boolean } {
   let rules = 0;
-  let conditional = false;
+  // A decorator the pack cannot prove harmless (a local wrapper, another library's, one on the class itself) may
+  // register conditions or transformations of its own: whether the rules apply is then unknown.
+  let conditional = (cls.decorators ?? []).length > 0;
+  const literal = (a: AstNode): boolean =>
+    ['Literal', 'StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'NullLiteral', 'RegExpLiteral'].includes(a.type)
+    || (a.type === 'TemplateLiteral' && (a.expressions ?? []).length === 0)
+    || (a.type === 'UnaryExpression' && a.operator === '-' && literal(a.argument))
+    || (a.type === 'ArrayExpression' && (a.elements ?? []).every((e: AstNode | null) => e && literal(e)));
   for (const m of cls.body?.body ?? []) {
     for (const d of m.decorators ?? []) {
       const { callee, args } = decoratorCall(d);
       const ref = refName(callee);
-      if (!ref) continue;
-      const r = resolveAt(file, ref, d.start);
-      if (r.module !== 'class-validator' || NOT_RULES.has(r.name)) continue;
+      const r = ref ? resolveAt(file, ref, d.start) : null;
+      if (!r || r.module !== 'class-validator') { conditional = true; continue; }
+      if (NOT_RULES.has(r.name)) continue;
       if (CONDITIONAL_RULES.has(r.name) || OPAQUE_RULES.has(r.name)) { conditional = true; continue; }
       rules++;
       for (const a of args) {
-        if (a.type !== 'ObjectExpression') continue;
-        for (const p of a.properties ?? []) {
-          const key = p.type === 'Property' && !p.computed ? String(p.key?.name ?? p.key?.value) : null;
-          if (key === null || key === 'groups' || key === 'always') conditional = true;
-        }
+        if (a.type === 'ObjectExpression') {
+          for (const p of a.properties ?? []) {
+            const key = p.type === 'Property' && !p.computed ? String(p.key?.name ?? p.key?.value) : null;
+            if (key === null || key === 'groups' || key === 'always') conditional = true;
+          }
+        } else if (!literal(a)) conditional = true; // a value the pack cannot read could be options with groups or always
       }
     }
   }
@@ -373,17 +400,24 @@ function evidenceForText(ctx: Ctx, path: string, text: string, start: number, en
   };
 }
 
-type Resolved = { version: string; provenance: string } | null;
-type Versions = NestScopeReport['framework'] & { classValidatorFor(path: string): string | null };
+/** Where a dependency resolves from a file: its version, the installed location, and the file that says so. */
+type Resolved = { version: string; location: string; source: string; kind: 'lock' | 'pin' } | null;
+type Versions = NestScopeReport['framework'] & {
+  /** class-validator as the ValidationPipe of this controller and this DTO's decorators each load it; null unless the same supported copy. */
+  classValidatorFor(controller: string, dto: string): string | null;
+};
 
 /**
- * Versions, per owning project: a file belongs to the nearest package.json above it that declares @nestjs/common or
- * @nestjs/core. In that project, a version comes from the nearest package-lock.json at or above it (its own nested
- * install, then each hoisted one up to the lockfile, as Node resolves), else an exact pin in its manifest. The
- * envelope has one framework version: only when every project the analysed files belong to resolves to the supported
- * release; otherwise it is null and every fact is unknown, with a frontier at each project that differs.
+ * Versions as Node would resolve each dependency from the file that imports it. Walking up from the file's folder,
+ * the first folder whose install (the nearest captured package-lock.json's `<folder>/node_modules/<name>` entry) or
+ * manifest (a package.json declaring the name) provides it decides: a lockfile entry gives its exact version; without
+ * a lockfile, only an exact pin does. A range, or a lockfile that names no install, is unresolved; nothing is assumed
+ * from a manifest that does not declare the dependency. The envelope's one Nest version is set only when the
+ * bootstrap and every controller resolve @nestjs/common and @nestjs/core to the supported release. ValidationPipe
+ * loads class-validator from where @nestjs/common is installed, while a DTO's decorators register with the copy the
+ * DTO resolves: both must be the same installed copy of the supported release.
  */
-async function versions(ctx: Ctx, files: readonly string[]): Promise<Versions> {
+async function versions(ctx: Ctx, nestFiles: readonly string[], dtoPairs: readonly (readonly [string, string])[]): Promise<Versions> {
   const cache = new Map<string, any>();
   const read = async (path: string) => {
     if (cache.has(path)) return cache.get(path);
@@ -395,54 +429,60 @@ async function versions(ctx: Ctx, files: readonly string[]): Promise<Versions> {
   };
   const at = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
   const parent = (dir: string) => (dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '');
-  const declares = (pkg: any) => ['dependencies', 'devDependencies'].some(f => pkg?.[f]?.['@nestjs/common'] !== undefined || pkg?.[f]?.['@nestjs/core'] !== undefined);
-  const projectOf = async (path: string): Promise<string | null> => {
-    for (let dir = parent(path); ; dir = parent(dir)) {
-      if (declares(await read(at(dir, 'package.json')))) return dir;
+  const DEP_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+  const resolveFor = async (file: string, name: string): Promise<Resolved> => {
+    let lockDir: string | null = null;
+    for (let d = parent(file); ; d = parent(d)) { if (ctx.content.has(at(d, 'package-lock.json'))) { lockDir = d; break; } if (d === '') break; }
+    const lockPath = lockDir === null ? null : at(lockDir, 'package-lock.json');
+    const lock = lockPath ? await read(lockPath) : null;
+    if (lockPath && !lock) return null;
+    for (let dir = parent(file); ; dir = parent(dir)) {
+      if (lock && lockDir !== null && (lockDir === '' || dir === lockDir || dir.startsWith(`${lockDir}/`))) {
+        const rel = lockDir === '' ? dir : dir === lockDir ? '' : dir.slice(lockDir.length + 1);
+        const entry = lock.packages?.[at(rel, `node_modules/${name}`)];
+        if (entry !== undefined) return typeof entry?.version === 'string' && EXACT.test(entry.version) ? { version: entry.version, location: at(dir, `node_modules/${name}`), source: lockPath!, kind: 'lock' } : null;
+      }
+      const pkg = await read(at(dir, 'package.json'));
+      const spec = DEP_FIELDS.map(f => pkg?.[f]?.[name]).find(v => v !== undefined);
+      if (spec !== undefined) {
+        // Declared here: without a lockfile the pin decides; with one, npm may have hoisted the install, so keep looking.
+        if (!lock) return typeof spec === 'string' && EXACT.test(spec) ? { version: spec, location: at(dir, `node_modules/${name}`), source: at(dir, 'package.json'), kind: 'pin' } : null;
+      }
+      // Declared with a lockfile that names no install for it: npm would have recorded one, so this is unresolved.
       if (dir === '') return null;
     }
   };
-  const resolve = async (dir: string, name: string): Promise<Resolved> => {
-    for (let lockDir = dir; ; lockDir = parent(lockDir)) {
-      const lockPath = at(lockDir, 'package-lock.json');
-      if (ctx.content.has(lockPath)) {
-        const lock = await read(lockPath);
-        const rel = lockDir === '' ? dir : dir.slice(lockDir.length + 1);
-        for (let d = rel; ; d = parent(d)) {
-          const v = lock?.packages?.[at(d, `node_modules/${name}`)]?.version;
-          if (typeof v === 'string') return EXACT.test(v) ? { version: v, provenance: lockPath } : null;
-          if (d === '') break;
-        }
-        break;
-      }
-      if (lockDir === '') break;
+  let ok = nestFiles.length > 0;
+  const commons: NonNullable<Resolved>[] = [];
+  if (!nestFiles.length) frontier(ctx, 'package.json', 'versionUnresolved');
+  for (const f of new Set(nestFiles)) {
+    const common = await resolveFor(f, '@nestjs/common'), core = await resolveFor(f, '@nestjs/core');
+    if (!common || !core) { frontier(ctx, f, 'versionUnresolved'); ok = false; continue; }
+    if (common.version !== NEST_PACK.versions['@nestjs/common'] || core.version !== NEST_PACK.versions['@nestjs/core']) {
+      frontier(ctx, common.version !== NEST_PACK.versions['@nestjs/common'] ? common.source : core.source, 'versionUnsupported'); ok = false; continue;
     }
-    const pkg = await read(at(dir, 'package.json'));
-    const declared = pkg?.dependencies?.[name] ?? pkg?.devDependencies?.[name];
-    return typeof declared === 'string' && EXACT.test(declared) ? { version: declared, provenance: `${at(dir, 'package.json')} (exact pin)` } : null;
+    commons.push(common);
+  }
+  const cvCache = new Map<string, string | null>();
+  const classValidatorFor = async (controller: string, dto: string): Promise<string | null> => {
+    const key = `${controller}\u0000${dto}`;
+    if (cvCache.has(key)) return cvCache.get(key)!;
+    const common = await resolveFor(controller, '@nestjs/common');
+    const fromPipe = common?.kind === 'lock' ? await resolveFor(`${common.location}/index.js`, 'class-validator') : await resolveFor(controller, 'class-validator');
+    const fromDto = await resolveFor(dto, 'class-validator');
+    const v = fromPipe && fromDto && fromPipe.location === fromDto.location && fromPipe.version === fromDto.version && fromDto.version === NEST_PACK.versions['class-validator'] ? fromDto.version : null;
+    cvCache.set(key, v);
+    return v;
   };
-  const projects = new Map<string, { common: Resolved; core: Resolved; cv: Resolved }>();
-  const projectOfFile = new Map<string, string | null>();
-  let unowned = false;
-  for (const f of new Set(files)) {
-    const dir = await projectOf(f);
-    projectOfFile.set(f, dir);
-    if (dir === null) { unowned = true; continue; }
-    if (!projects.has(dir)) projects.set(dir, { common: await resolve(dir, '@nestjs/common'), core: await resolve(dir, '@nestjs/core'), cv: await resolve(dir, 'class-validator') });
-  }
-  let ok = !unowned && projects.size > 0;
-  if (unowned || projects.size === 0) frontier(ctx, 'package.json', 'versionUnresolved');
-  for (const [dir, p] of projects) {
-    if (!p.common || !p.core) { frontier(ctx, at(dir, 'package.json'), 'versionUnresolved'); ok = false; }
-    else if (p.common.version !== NEST_PACK.versions['@nestjs/common'] || p.core.version !== NEST_PACK.versions['@nestjs/core']) { frontier(ctx, at(dir, 'package.json'), 'versionUnsupported'); ok = false; }
-  }
-  const first = [...projects.values()][0];
-  const cvs = new Set([...projects.values()].map(p => p.cv?.version ?? null));
+  const sources = [...new Set(commons.map(c => c.source))].sort();
+  const pairs = new Map<string, string | null>();
+  for (const [c, d] of dtoPairs) pairs.set(`${c}\u0000${d}`, await classValidatorFor(c, d));
+  const all = new Set(pairs.values());
   return {
-    version: ok ? first!.common!.version : null,
-    provenance: ok ? [...projects.values()].map(p => p.common!.provenance).sort().join(', ') : null,
-    classValidator: cvs.size === 1 ? [...cvs][0]! : null,
-    classValidatorFor: (path: string) => { const dir = projectOfFile.get(path); return dir == null ? null : projects.get(dir)?.cv?.version ?? null; },
+    version: ok ? NEST_PACK.versions['@nestjs/common'] : null,
+    provenance: ok ? sources.join(', ') : null,
+    classValidator: all.size === 1 ? [...all][0]! : null,
+    classValidatorFor: (controller: string, dto: string) => pairs.get(`${controller}\u0000${dto}`) ?? null,
   };
 }
 
@@ -517,7 +557,11 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
         if (n.type !== 'Identifier' || n.name !== app) return;
         const parent = anc[anc.length - 1];
         if (parent === undefined || (parent.type === 'VariableDeclarator' && parent.id === n)) return;
-        if ((parent.type === 'MemberExpression' || parent.type === 'StaticMemberExpression') && parent.object === n && !parent.computed) return;
+        if ((parent.type === 'MemberExpression' || parent.type === 'StaticMemberExpression') && parent.object === n && !parent.computed) {
+          // A method call on the application is read as itself only while nothing replaces its members.
+          if (isWriteTarget(anc, anc.length - 1)) frontier(ctx, boot.file.path, 'applicationMutated');
+          return;
+        }
         // A nested scope that declares its own `app` is a different binding.
         if (anc.slice(anc.indexOf(fnBody) + 1).some(a => a !== bodyBlock && bindsName(a, app))) return;
         frontier(ctx, boot.file.path, 'applicationEscapes');
@@ -550,6 +594,29 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
         if (mayLeave(st)) definite = false;
       }
     }
+  }
+  // Code that rewrites the framework, class-validator, class-transformer or reflected metadata can change what any
+  // registration, pipe or rule does: nothing it could change is established.
+  const FRAMEWORK = /^(@nestjs\/|class-validator$|class-transformer$|reflect-metadata$)/;
+  for (const file of ctx.files.values()) {
+    walkWithAncestors(file.program, (n, anc) => {
+      if (n.type === 'Identifier' && (anc.at(-1)?.type === 'MemberExpression' || anc.at(-1)?.type === 'StaticMemberExpression') && anc.at(-1)!.object === n) {
+        const r = file.imports.has(String(n.name)) ? resolveAt(file, { local: String(n.name) }, n.start) : null;
+        if (r?.module && FRAMEWORK.test(r.module) && isWriteTarget(anc, anc.length - 1)) frontier(ctx, file.path, 'frameworkMutated');
+      }
+      if (n.type === 'CallExpression') {
+        const r = refName(n.callee);
+        const target = n.arguments?.[0];
+        const root = target ? chainRoot(target) : null;
+        const imported = root ? resolveAt(file, { local: root }, target.start) : null;
+        if (r && ['Object', 'Reflect'].includes(r.local) && !resolveAt(file, { local: r.local }, n.start).shadowed
+          && ['defineProperty', 'defineProperties', 'assign', 'setPrototypeOf', 'set', 'deleteProperty'].includes(r.member ?? '') && imported?.module && FRAMEWORK.test(imported.module)) {
+          frontier(ctx, file.path, 'frameworkMutated');
+        }
+        if (r?.local === 'Reflect' && ['defineMetadata', 'deleteMetadata', 'metadata'].includes(r.member ?? '')) frontier(ctx, file.path, 'frameworkMutated');
+      }
+      return undefined;
+    });
   }
   // A global registration anywhere else (conditional, after initialization, in another function, on another binding)
   // is not followed, and it could change any chain.
@@ -674,13 +741,13 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
   for (const [key, c] of controllers) if (!resolved.includes(key)) frontier(ctx, c.file.path, 'controllerWithoutRoutes');
 
   // 5. Facts, under the versions of the projects that own the bootstrap, the controllers and their inputs.
-  const owned = [...(boot ? [boot.file.path] : []), ...surfaces.map(x => x.relativePath), ...surfaces.flatMap(x => x.inputs.flatMap(i => (i.dto ? [i.dto.relativePath] : [])))];
-  const framework = await versions(ctx, owned.length ? owned : ['package.json']);
+  const owned = [...(boot ? [boot.file.path] : []), ...surfaces.map(x => x.relativePath)];
+  const framework = await versions(ctx, owned, surfaces.flatMap(x => x.inputs.flatMap(i => (i.dto ? [[x.relativePath, i.dto.relativePath] as const] : []))));
   const versionKnown = framework.version !== null;
   const globalFrontiers = ctx.frontiers.filter(f => ([
     'versionUnresolved', 'versionUnsupported', 'bootstrapNotFound', 'bootstrapAmbiguous', 'rootModuleUnresolved', 'applicationUnresolved',
     'middlewareNotModeled', 'nonLiteralRegistration', 'dynamicModule', 'externalModule', 'unknownFactory', 'moduleUnresolved',
-    'bootstrapNotInvoked', 'applicationEscapes', 'registrationNotFollowed',
+    'bootstrapNotInvoked', 'applicationEscapes', 'registrationNotFollowed', 'applicationMutated', 'frameworkMutated',
     'controllerUnresolved', 'parseFailed', 'invalidUtf8', 'fileNotRead', 'fileNotCaptured', 'spanUnavailable',
   ] as NestReason[]).map(R).includes(f.reasonCode as NestReasonCode)).map(f => f.reasonCode);
   const facts: ControlFact[] = [];
@@ -723,7 +790,7 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
       if (validated.some(i => i.dto?.conditional)) reasons.push(R('dtoConditional'));
       if (validated.some(i => i.dto && i.dto.rules === 0)) reasons.push(R('dtoWithoutRules'));
       if (validated.some(i => i.dto?.inherited)) reasons.push(R('dtoInherited'));
-      if ([s.relativePath, ...validated.flatMap(i => (i.dto ? [i.dto.relativePath] : []))].some(f => framework.classValidatorFor(f) !== NEST_PACK.versions['class-validator'])) reasons.push(R('classValidatorUnsupported'));
+      if (validated.some(i => i.dto && framework.classValidatorFor(s.relativePath, i.dto.relativePath) !== NEST_PACK.versions['class-validator'])) reasons.push(R('classValidatorUnsupported'));
       const metadata = await decoratorMetadata(ctx, s.relativePath, metadataCache);
       if (metadata.state === 'off') reasons.push(R('decoratorMetadataOff'));
       if (metadata.state === 'unknown') reasons.push(R('decoratorMetadataUnknown'));

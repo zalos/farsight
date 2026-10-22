@@ -744,6 +744,16 @@ in the production registry, the planner's batching, the scan command (PR 09), an
       (`ValidateNested`) constraints hold logic the pack does not read, so they leave validation unknown. An interceptor
       the pack does not model runs before the pipes and can answer without the handler, so it blocks `applies`; it, or a
       guard, also blocks `does-not-apply`, since unmodelled code may check the input itself.
+    - **Decorators, dependency copies and rewritten code (third review, 2026-10-22).** Any DTO decorator that is not
+      class-validator's own (a local wrapper such as one returning `ValidateIf(() => false)`, class-transformer's, one
+      on the class) and any rule argument the pack cannot read leave validation unknown. Every dependency resolves as
+      Node would from the file that loads it: the nearest lockfile install for that folder, else an exact pin in the
+      nearest manifest that declares it; ranges and missing installs are unresolved. ValidationPipe loads
+      class-validator from where @nestjs/common is installed and a DTO registers its rules with the copy its own folder
+      resolves, so `applies` needs both to be the same installed copy of 0.14.1. Writing to a member of the
+      application (`app.useGlobalPipes = ...`) is `applicationMutated`; writing to anything imported from Nest,
+      class-validator or class-transformer, through assignment, `Object.defineProperty` and the like, or rewriting
+      reflected metadata, is `frameworkMutated`; both block every fact they could change.
     - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
       `registrationDigest` every cited registration span; a change to any invalidates the facts.
 

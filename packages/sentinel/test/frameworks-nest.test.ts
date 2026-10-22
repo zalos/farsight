@@ -497,3 +497,60 @@ test('SOL: versions are those of the project that owns the files, not the reposi
   const nestedInstall = await run(t, under('apps/api', { 'package.json': root, 'apps/api/package.json': root.replaceAll('"10.4.15"', '"^9.0.0"'), 'package-lock.json': lockfile }));
   assert.equal(nestedInstall.analysis.controls.framework.version, null, 'its own install of @nestjs/common shadows the hoisted one');
 });
+
+// ---- third review: decorators the pack cannot prove harmless, per-file dependency resolution, rewritten code
+
+test('SOL: a DTO decorator that is not class-validator’s own is never treated as harmless', needsStore, async t => {
+  const global = { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());') };
+  const dto = readFileSync(join(APP, 'create-order.dto.ts.fixture'), 'utf8');
+  const never = await run(t, { ...global,
+    'never.ts': "import { ValidateIf } from 'class-validator';\n\nexport const Never = () => ValidateIf(() => false);\n",
+    'create-order.dto.ts': dto.replace("import { IsInt, IsString, Min } from 'class-validator';", "import { IsInt, IsString, Min } from 'class-validator';\nimport { Never } from './never';").replace('  @IsString()\n', '  @Never()\n  @IsString()\n').replace('  @IsInt()\n', '  @Never()\n  @IsInt()\n'),
+  });
+  assert.equal(validation(never.analysis).verdict, 'unknown');
+  assert.equal(validation(never.analysis).reasonCode, 'sentinel.nest.dtoConditional');
+  const transformer = await run(t, { ...global, 'create-order.dto.ts': dto.replace("import { IsInt, IsString, Min } from 'class-validator';", "import { IsInt, IsString, Min } from 'class-validator';\nimport { Transform } from 'class-transformer';").replace('  @IsString()\n', '  @Transform(() => undefined)\n  @IsString()\n') });
+  assert.equal(validation(transformer.analysis).reasonCode, 'sentinel.nest.dtoConditional');
+  const options = await run(t, { ...global, 'create-order.dto.ts': dto.replace('  @IsString()\n', '  @IsString(SKU_OPTIONS)\n').replace('export class', 'const SKU_OPTIONS = {};\n\nexport class') });
+  assert.equal(validation(options.analysis).reasonCode, 'sentinel.nest.dtoConditional', 'options the pack cannot read could hold groups');
+  const literals = await run(t, { ...global, 'create-order.dto.ts': dto.replace('  @Min(1)\n', "  @Min(1, { message: 'at least one' })\n") });
+  assert.equal(validation(literals.analysis).verdict, 'applies', 'the near neighbour: literal constraints and a message');
+});
+
+test('SOL: each dependency resolves from the file that loads it, and the pipe and the DTO must share one supported copy', needsStore, async t => {
+  const global = { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());') };
+  const app = tree(APP);
+  const moved = {
+    ...global, 'create-order.dto.ts': null, 'dto/create-order.dto.ts': app['create-order.dto.ts']!,
+    'orders.controller.ts': ctlText().replace("from './create-order.dto'", "from './dto/create-order.dto'"),
+  };
+  const own = await run(t, { ...moved, 'dto/package.json': '{ "name": "dto", "private": true, "dependencies": { "class-validator": "0.13.2" } }\n' });
+  assert.equal(validation(own.analysis).reasonCode, 'sentinel.nest.classValidatorUnsupported', 'the DTO registers with its own class-validator 0.13.2');
+  const plain = await run(t, { ...moved, 'dto/package.json': '{ "name": "dto", "private": true }\n' });
+  assert.equal(validation(plain.analysis).verdict, 'applies', 'the near neighbour: a manifest that does not declare it resolves on up');
+  const ranged = await run(t, { ...moved, 'dto/package.json': '{ "name": "dto", "private": true, "dependencies": { "class-validator": "^0.14.0" } }\n' });
+  assert.equal(validation(ranged.analysis).reasonCode, 'sentinel.nest.classValidatorUnsupported', 'a range without a lockfile is unresolved');
+  const lock = JSON.stringify({ lockfileVersion: 3, packages: {
+    'node_modules/@nestjs/common': { version: '10.4.15' }, 'node_modules/@nestjs/core': { version: '10.4.15' }, 'node_modules/class-validator': { version: '0.14.1' },
+    'dto/node_modules/class-validator': { version: '0.14.1' },
+  } });
+  const twoCopies = await run(t, { ...moved, 'dto/package.json': '{ "name": "dto", "private": true, "dependencies": { "class-validator": "^0.14.0" } }\n', 'package-lock.json': lock });
+  assert.equal(validation(twoCopies.analysis).reasonCode, 'sentinel.nest.classValidatorUnsupported', 'the same version, but another copy than the pipe loads');
+  const hoisted = await run(t, { ...moved, 'dto/package.json': '{ "name": "dto", "private": true, "dependencies": { "class-validator": "^0.14.0" } }\n', 'package-lock.json': lock.replace(',"dto/node_modules/class-validator":{"version":"0.14.1"}', '') });
+  assert.equal(validation(hoisted.analysis).verdict, 'applies', 'the near neighbour: one hoisted copy');
+});
+
+test('SOL: replacing the application’s methods, or the framework’s, invalidates what the calls appear to register', needsStore, async t => {
+  const mutated = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes = () => app;\n  app.useGlobalPipes(new ValidationPipe());') });
+  assert.ok(reasons(mutated.analysis).includes('sentinel.nest.applicationMutated'));
+  assert.equal(validation(mutated.analysis).verdict, 'unknown');
+  const prototype = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', 'ValidationPipe.prototype.transform = async (value: unknown) => value;') });
+  assert.ok(reasons(prototype.analysis).includes('sentinel.nest.frameworkMutated'));
+  assert.equal(validation(prototype.analysis).verdict, 'unknown');
+  const defined = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());', "Object.defineProperty(ValidationPipe.prototype, 'transform', { value: (v: unknown) => v });") });
+  assert.ok(reasons(defined.analysis).includes('sentinel.nest.frameworkMutated'));
+  const metadata = await run(t, { 'main.ts': mainWith("  Reflect.defineMetadata('design:paramtypes', [Object], app, 'x');\n  app.useGlobalPipes(new ValidationPipe());") });
+  assert.ok(reasons(metadata.analysis).includes('sentinel.nest.frameworkMutated'));
+  const reads = await run(t, { 'main.ts': mainWith('  const port = app.getHttpServer;\n  app.useGlobalPipes(new ValidationPipe());') });
+  assert.equal(validation(reads.analysis).verdict, 'applies', 'the near neighbour: reading a member changes nothing');
+});
