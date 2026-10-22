@@ -80,10 +80,22 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
     const installed = dir.split(sep).includes('node_modules');
     // An installed package holds only what its publisher packed; a workspace package ships its `files`.
     const tops: string[] = !installed && Array.isArray(pkg.files) ? ['package.json', ...pkg.files] : readdirSync(dir).filter(n => n !== 'node_modules');
+    const followed = new Set<string>();
     const walk = (abs: string) => {
       let st;
       try { st = lstatSync(abs); } catch { add(abs, 'absent', '', `${name}/${relative(dir, abs)}`); return; }
-      if (st.isSymbolicLink()) add(abs, 'link', readlinkSync(abs), `${name}/${relative(dir, abs)}`);
+      if (st.isSymbolicLink()) {
+        // Node loads through a link: bind the link, the real path it resolves to, and the target's own bytes or
+        // folder, wherever it is. A dangling link stays bound to its text and its target's absence.
+        const label = `${name}/${relative(dir, abs)}`;
+        const text = readlinkSync(abs);
+        add(abs, 'link', text, label);
+        let real: string | null = null;
+        try { real = realpathSync(abs); } catch { real = null; }
+        if (real === null) { add(resolve(dirname(abs), text), 'absent', '', `${label}->absent`); return; }
+        add(abs, 'resolves', real, `${label}->`);
+        if (!followed.has(real)) { followed.add(real); walk(real); }
+      }
       else if (st.isDirectory()) {
         const names = readdirSync(abs).sort();
         add(abs, 'dir', sha(JSON.stringify(names)), `${name}/${relative(dir, abs)}/`);

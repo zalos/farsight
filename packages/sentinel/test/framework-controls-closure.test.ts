@@ -147,3 +147,26 @@ test('an installed (copied, not linked) package closure runs unchanged and binds
   symlinkSync(join(fx.root, 'workspace-a'), fx.link);
   assert.equal(run(entry.module).status, CLOSURE_REFUSED, 'the same bytes reached another way are another resolution');
 });
+
+test('a link inside a package whose external target changes is refused, though the link itself did not move (review blocker)', t => {
+  const fx = linked(t);
+  const external = join(fx.root, 'outside-target.mjs');
+  writeFileSync(external, 'export default "original-target";\n');
+  rmSync(join(fx.root, 'workspace-a', 'index.js'));
+  symlinkSync(external, join(fx.root, 'workspace-a', 'index.js'));
+  const dir = join(fx.root, 'entries-target');
+  mkdirSync(dir, { mode: 0o700 });
+  const entry = writeClosureEntry(dir, fx.worker);
+  assert.equal(run(entry.module).stdout, 'original-target');
+  writeFileSync(external, 'export default "changed-target";\n');
+  const r = run(entry.module);
+  assert.deepEqual([r.status, r.stdout], [CLOSURE_REFUSED, '']);
+  // Retargeting the inner link to another file with the original bytes is refused too.
+  const copy = join(fx.root, 'copy-target.mjs');
+  writeFileSync(copy, 'export default "original-target";\n');
+  writeFileSync(external, 'export default "original-target";\n');
+  assert.equal(run(entry.module).stdout, 'original-target', 'restored bytes run again');
+  unlinkSync(join(fx.root, 'workspace-a', 'index.js'));
+  symlinkSync(copy, join(fx.root, 'workspace-a', 'index.js'));
+  assert.equal(run(entry.module).status, CLOSURE_REFUSED);
+});

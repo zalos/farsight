@@ -1329,8 +1329,9 @@ static or literal dynamic imports, and every package used, whole (an installed p
 listings, a workspace package's published files), with each package's dependencies in turn and an absent optional
 dependency's lookup recorded too. It also binds how Node finds each package: every `node_modules` candidate Node
 would try before the one it takes holds no folder, the one it takes resolves to exactly the recorded real path, and
-each Sentinel module stays at its own real path, so a retargeted link or a nearer new package is a change even when
-no byte moved. A change anywhere in the closure is a different module digest and so a different adapter; an entry whose closure changed after it was written exits before importing the worker, writing nothing.
+each Sentinel module stays at its own real path; a link inside a package is bound to its text, the real path it
+resolves to and that target's bytes or folder, wherever it lies. So a retargeted link, a changed link target or a
+nearer new package is a change even when no listed byte moved. A change anywhere in the closure is a different module digest and so a different adapter; an entry whose closure changed after it was written exits before importing the worker, writing nothing.
 This detects a changed build or installation, not a writer racing the check and the import. The module runs through
 the launch gate with only the worker environment and its sealed inputs (the job, the snapshot envelope, the source's retained
 parser artifact, result and index, and its captured files, each read only by id and checked against its digest). The
