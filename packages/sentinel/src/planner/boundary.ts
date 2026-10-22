@@ -7,6 +7,7 @@
 // captured inputs are exactly the files the plan lists for it, resolved against the snapshot it pins.
 import { createHash } from 'node:crypto';
 import type { ArtifactId, Id, Timestamp, WorkRef } from '../contracts/common.js';
+import type { RunEnvelope } from '../contracts/run.js';
 import type { SnapshotEnvelope } from '../contracts/snapshot.js';
 import type { ResourcePolicy, StageKind, WorkEnvelope } from '../contracts/work.js';
 import { canonicalJsonBytes } from '../store/objects.js';
@@ -126,5 +127,59 @@ export function capturedInputsOf(plan: PlanRevision, ref: WorkRef, snapshot: Pic
     const id = included.get(`${i.sourceId}\u0000${i.relativePath}`);
     if (!id) throw mismatch(`${i.sourceId}:${i.relativePath} is not an included file of the pinned snapshot`);
     return { sourceId: i.sourceId, relativePath: i.relativePath, id };
+  });
+}
+
+/** A captured input as the coordinator's supervisor takes it: the artifact and where its bytes are now. */
+export interface BoundaryInput {
+  readonly id: ArtifactId;
+  readonly path: string;
+}
+
+/** Exactly the coordinator's PlanBoundary (PR 08): the run, its canonical work and the two lookups execution needs. */
+export interface PlanBoundaryParts {
+  readonly run: RunEnvelope;
+  readonly works: readonly WorkEnvelope[];
+  adapterFor(work: WorkEnvelope): Id;
+  inputsFor(work: WorkEnvelope): readonly BoundaryInput[];
+}
+
+export interface BoundaryRequest {
+  /** The run the plan belongs to: its id, plan revision, snapshot, lock, policy and epoch must be the plan's. */
+  readonly run: RunEnvelope;
+  readonly conversion: WorkConversion;
+  readonly snapshot: Pick<SnapshotEnvelope, 'id' | 'entries'>;
+  /** Where a captured input's bytes are now (a materialization or restore), by its artifact. */
+  pathOf(input: { readonly sourceId: Id; readonly relativePath: string; readonly id: ArtifactId }): string;
+}
+
+/**
+ * The coordinator's boundary for an analysis revision. A bootstrap revision is refused: its units are run by the
+ * service, not by a check adapter. The run is checked against the plan's own pins, never trusted to name them.
+ */
+export function planBoundaryFor(plan: PlanRevision, request: BoundaryRequest): PlanBoundaryParts {
+  sealedPlan(plan);
+  if (plan.kind !== 'analysis') throw invalid('only an analysis revision is handed to the coordinator');
+  const run = request.run;
+  const checked = validateEnvelope('run', run);
+  if (!checked.ok) throw invalid(`the run is not a valid run envelope: ${checked.errors[0]?.path || '/'}`);
+  const pairs: Array<[string, unknown, unknown]> = [
+    ['run id', run.id, plan.runId], ['plan revision', run.planRevision, plan.revision], ['snapshot', run.snapshotId, plan.pins.snapshotId],
+    ['rule lock', run.ruleLockDigest, plan.pins.ruleLockDigest], ['policy revision', run.policyRevisionDigest, plan.pins.policyDigest],
+    ['coordinator epoch', run.coordinatorEpoch, request.conversion.coordinatorEpoch],
+  ];
+  for (const [what, got, want] of pairs) if (got !== want) throw mismatch(`the run's ${what} is not the plan's`);
+  const converted = workEnvelopesFor(plan, request.conversion);
+  const works = converted.map(c => c.envelope);
+  const known = (w: WorkEnvelope) => {
+    const i = works.findIndex(x => x.id === w?.id && x.revision === w?.revision);
+    if (i < 0) throw invalid('the work is not part of this boundary');
+    return plan.units.find(u => u.id === w.id && u.revision === w.revision)!;
+  };
+  return Object.freeze({
+    run, works: Object.freeze(works),
+    adapterFor: (w: WorkEnvelope) => known(w).adapterId!,
+    inputsFor: (w: WorkEnvelope) => Object.freeze(capturedInputsOf(plan, known(w), request.snapshot)
+      .map(i => Object.freeze({ id: i.id, path: request.pathOf(i) }))),
   });
 }

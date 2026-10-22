@@ -471,8 +471,9 @@ capabilities its stages establish and which adapters it ships.
 A bootstrap revision captures once, parses each source and builds the inventory. An analysis revision derives one
 check per scope a selected rule names, identified by (scope, rule revision, environment, mode). A check the profile
 can run is `planned` and assigned to exactly one work unit (one adapter over one source, bounded); every other check
-stays in the plan with its state and reason: unsupported, applicability unknown (a framework the snapshot could
-not resolve), scope unavailable (not captured, or not parsed where the rule needs parser evidence) or scope unknown
+stays in the plan with its state and reason: unsupported, applicability unknown (a framework whose version is
+unresolved, which counts for every source because an unresolved entry names none, or one the snapshot does not
+name at all, which is never read as absent), scope unavailable (not captured, or not parsed where the rule needs parser evidence) or scope unknown
 (a folder capture could not list). A policy rule missing from the lock is a rule gap. Required coverage follows
 mandatory rules, complete-coverage policy and required capabilities; `requiredCoverageAchievable` says whether a
 run can complete it. The contract's invariants refuse a plan in which any unplanned check is covered, any planned
@@ -481,7 +482,8 @@ recount, or the content differs from its digest. A revision is never edited: a n
 new revision (or a child run's first) that depends on the already published bootstrap work, so nothing is captured
 or parsed again, and the earlier revision and its lock stay exactly as pinned.
 
-The coordinator receives canonical `sentinel-work/draft-1` envelopes (`workEnvelopesFor`): stage resources come
+The coordinator receives its `PlanBoundary` (`planBoundaryFor`, analysis revisions only, with the run checked
+against the plan's pins) of canonical `sentinel-work/draft-1` envelopes (`workEnvelopesFor`): stage resources come
 from the trusted profile within the work contract's ceilings, and each unit's influence manifest is the canonical
 JSON its artifact id names. `checksCoveredBy` and `capturedInputsOf` return exactly what the plan assigned; nothing
 in the conversion adds coverage. Persistence and admission of a plan stay with the coordinator and the policy

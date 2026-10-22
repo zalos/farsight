@@ -5,7 +5,7 @@ import { sentinelPlanWord } from '@farsight/core/dist/strings-sentinel-plan.js';
 /** Why a check is not planned, or a rule could not be scheduled. Recorded in the plan, never thrown. */
 export const PLAN_REASON_CODES = Object.freeze([
   'sentinel.plan.capabilityUnavailable', 'sentinel.plan.adapterNotLocked', 'sentinel.plan.parseRequired',
-  'sentinel.plan.frameworkUnresolved', 'sentinel.plan.unknownDescendants', 'sentinel.plan.ruleNotLocked',
+  'sentinel.plan.frameworkUnresolved', 'sentinel.plan.frameworkNotDetected', 'sentinel.plan.unknownDescendants', 'sentinel.plan.ruleNotLocked',
 ] as const);
 export type PlanReasonCode = typeof PLAN_REASON_CODES[number];
 

@@ -201,11 +201,13 @@ test('selection and capability decide required coverage; a policy rule missing f
   assert.equal(byCapability.requiredCoverageAchievable, false);
 });
 
-test('an unresolved framework leaves applicability unknown; an absent one means the rule does not apply', () => {
+test('an unresolved framework leaves applicability unknown, and so does one the snapshot does not name', () => {
   const unresolved = { ...snapshot, frameworkVersions: [{ framework: 'spring', state: 'unknown' as const, reasonCode: 'sentinel.capture.unreadable' }] };
   const plan = analysis([RULES.spring], { snapshot: unresolved });
   assert.ok(plan.checks.length === 2 && plan.checks.every(c => c.state === 'applicability-unknown' && c.reasonCode === 'sentinel.plan.frameworkUnresolved'));
-  assert.equal(analysis([RULES.spring], { snapshot: { ...snapshot, frameworkVersions: [] } }).checks.length, 0);
+  const undetected = analysis([RULES.spring], { snapshot: { ...snapshot, frameworkVersions: [] } });
+  assert.ok(undetected.checks.length === 2 && undetected.checks.every(c => c.state === 'applicability-unknown' && c.reasonCode === 'sentinel.plan.frameworkNotDetected'),
+    'no version entry is never read as the framework being absent');
 });
 
 test('work cycles and unknown dependencies are refused', () => {

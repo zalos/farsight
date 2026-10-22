@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import { parseSnapshot } from '../dist/snapshot/parser.js';
@@ -15,7 +15,7 @@ import { DEFAULT_SETTINGS, ReceiptBook, admit, effectivePolicy } from '../dist/p
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { validateEnvelope } from '../dist/validate.js';
 import {
-  SURFACE_NODE_KINDS, adapterOf, capturedInputsOf, checksCoveredBy, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom,
+  SURFACE_NODE_KINDS, planBoundaryFor, adapterOf, capturedInputsOf, checksCoveredBy, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom,
   plannerSnapshotFrom, planAnalysis, planBootstrap, verifyPlanRevision, workEnvelopesFor,
 } from '../dist/planner/index.js';
 import { commitRepo, needsStore, openCaptureStore, scratch, unlock } from './snapshot-helpers.ts';
@@ -143,6 +143,23 @@ test('captured, parsed, locked and adopted inputs plan, admit and convert end to
   }
   const covered = converted.flatMap(c => c.manifest.checks).sort();
   assert.deepEqual(covered, first.checks.filter(c => c.state === 'planned').map(c => c.id).sort(), 'no invented coverage');
+
+  // The coordinator's PlanBoundary: a run that names this plan's pins; anything else is refused.
+  const base = JSON.parse(readFileSync(new URL('./contracts/valid/run-active.json', import.meta.url), 'utf8'));
+  const run = { ...base, id: 'run-1', planRevision: first.revision, snapshotId: snapshot.id, coordinatorEpoch: 'epoch-test',
+    ruleLockDigest: first.pins.ruleLockDigest, policyRevisionDigest: first.pins.policyDigest, toolLockDigest: first.pins.ruleLockDigest };
+  const request = { run, conversion: { coordinatorEpoch: 'epoch-test', createdAt: '2026-10-22T12:00:00Z', execution }, snapshot,
+    pathOf: (i: { relativePath: string }) => join(work, 'materialized', i.relativePath) };
+  const boundary = planBoundaryFor(first, request);
+  assert.deepEqual(boundary.works.map(w => w.id), first.units.map(u => u.id));
+  for (const w of boundary.works) {
+    assert.equal(boundary.adapterFor(w), 'sentinel-pattern');
+    assert.ok(boundary.inputsFor(w).every(i => i.path.startsWith(join(work, 'materialized')) && /^sha256:/.test(i.id)));
+  }
+  assert.throws(() => planBoundaryFor(first, { ...request, run: { ...run, policyRevisionDigest: D('other policy') } }), /policy revision/);
+  assert.throws(() => planBoundaryFor(first, { ...request, run: { ...run, planRevision: 9 } }), /plan revision/);
+  assert.throws(() => planBoundaryFor(boot, request), /only an analysis revision/);
+  assert.throws(() => boundary.adapterFor({ ...boundary.works[0]!, id: 'work-other' }), /not part of this boundary/);
 
   // 7. A pack update adds the third rule: a new revision over the same snapshot and published bootstrap.
   const firstJson = JSON.stringify(first);

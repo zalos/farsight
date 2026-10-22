@@ -310,8 +310,10 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
         const names = rule.frameworks.map(f => f.toLowerCase());
         const here = resolved.get(c.sourceId);
         if (!names.some(n => here?.has(n))) {
-          if (names.some(n => unknown.has(n))) { state('applicability-unknown', 'sentinel.plan.frameworkUnresolved'); continue; }
-          continue; // the framework is not in use in this source: the rule does not apply here
+          // An unresolved version anywhere is unknown for every source (a snapshot's unknown entry names no source).
+          // No entry at all is not evidence the framework is absent: it is recorded as not detected, never skipped.
+          state('applicability-unknown', names.some(n => unknown.has(n)) ? 'sentinel.plan.frameworkUnresolved' : 'sentinel.plan.frameworkNotDetected');
+          continue;
         }
       }
       if (c.boundary) { state('scope-unknown', 'sentinel.plan.unknownDescendants'); continue; }
