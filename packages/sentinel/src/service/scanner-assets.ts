@@ -79,12 +79,12 @@ function metadataOf(id:string,metadata:unknown,bytes:Buffer,now:Date,license?:st
    ||!validStamp(m.acquiredAt)||Date.parse(m.acquiredAt)>now.getTime()||!(m.sourceLastModified===null||(validStamp(m.sourceLastModified)&&Date.parse(m.sourceLastModified)<=now.getTime()))
    ||!(m.etag===null||(typeof m.etag==='string'&&m.etag.length<=4096)))bad();
  }else if(id==='trivy-checks'){
-  if(license!==undefined&&license!=='Apache-2.0')bad();
+  if(license!==undefined&&license!==TRIVY_CHECKS_BUNDLE.license)bad();
   if(m?.schema!=='sentinel-trivy-checks/draft-1'||hash!==TRIVY_CHECKS_BUNDLE.layer||m.layer!==hash||m.manifest!==TRIVY_CHECKS_BUNDLE.manifest
    ||m.size!==TRIVY_CHECKS_BUNDLE.size||bytes.length!==m.size||m.version!==TRIVY_CHECKS_BUNDLE.version||m.name!=='trivy-checks'||m.commit!==TRIVY_CHECKS_BUNDLE.commit
    ||m.repository!==TRIVY_CHECKS_BUNDLE.repository||m.created!==TRIVY_CHECKS_BUNDLE.created||!validStamp(m.acquiredAt))bad();
  }else throw new ScannerAssetError('sentinel.assets.unsupported');
- return{metadata:structuredClone(metadata),candidate:{kind:'database',database:{databaseId:id,snapshotDigest:hash,capturedAt:m.acquiredAt,rights:{spdx:id==='trivy-checks'?'Apache-2.0':license!,origin:'third-party',upstream:{name:id,revision:hash}}}}};
+ return{metadata:structuredClone(metadata),candidate:{kind:'database',database:{databaseId:id,snapshotDigest:hash,capturedAt:m.acquiredAt,rights:{spdx:id==='trivy-checks'?TRIVY_CHECKS_BUNDLE.license:license!,origin:'third-party',upstream:{name:id,revision:hash}}}}};
 }
 /** No network: explicitly adopt an existing image or an archive with its separately named provenance file. */
 export async function adoptScannerAsset(ws:Workspace,options:{kind:'tool'|'database';id:string;archive?:string;manifest?:string;license?:string;confirm:boolean;now:Date}):Promise<CommandResult>{

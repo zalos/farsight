@@ -26,7 +26,9 @@ test('public CLI: explicit adopted assets → canonical four-engine run → reta
  for(const pack of ['foundation-preview','advisories','infrastructure','ci'])assert.equal(cli('rules','promote','builtin:'+pack,'--confirm').status,0);
  const dbArgs=['assets','adopt-database','osv:npm','--license','MIT','--manifest',f.manifest,'--archive',f.db.path];
  assert.equal(cli(...dbArgs).status,4);assert.equal(cli(...dbArgs,'--confirm').status,0);
- assert.equal(cli('assets','adopt-database','trivy-checks','--manifest',f.trivyManifest,'--archive',f.checks.path,'--confirm').status,0);
+ const trivyArgs=['assets','adopt-database','trivy-checks','--manifest',f.trivyManifest,'--archive',f.checks.path];
+ const wrongRights=cli(...trivyArgs,'--license','Apache-2.0','--confirm');assert.deepEqual([wrongRights.status,wrongRights.body.reasonCode],[3,'sentinel.assets.invalid'],'engine rights cannot replace the pinned checks-bundle rights');
+ const trivy=cli(...trivyArgs,'--confirm');assert.equal(trivy.status,0);assert.equal(trivy.body.facts.entry.rights.spdx,'MIT');
  const planned=cli('plan');assert.equal(planned.status,0,JSON.stringify(planned.body));assert.equal(planned.body.facts.label,'deterministic');const runId=planned.body.facts.runId;
  const heldArchive=join(env.XDG_STATE_HOME,'farsight','sentinel','trust','assets','objects',f.db.snapshot.sha256.slice(7));
  const heldBytes=readFileSync(heldArchive);const before=cli('status',runId,'--limit','500').body.facts.events.filter((e:any)=>e.kind==='attempt-started').length;

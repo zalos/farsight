@@ -1940,3 +1940,10 @@ bounds and preview compatibility were exercised. Required coverage remains hones
 claimed. The scanner report is a draft CLI slice; full report/policy/framework/model work remains open. Detailed
 final checks and immutable integration context are retained privately for independent SOL review. No primary build,
 ingest, dogfood graph or shared owner source tree was changed; no push or merge was performed.
+
+## Sentinel checks-bundle rights correction — 2026-10-22
+
+The public scanner integration now takes the checks bundle's rights directly from the pinned bundle metadata
+(MIT), independently of the Trivy engine's Apache-2.0 license. An explicit conflicting override is refused. Public
+and installed CLI tests assert the disclosed candidate rights before the exact candidate is receipt-bound and
+promoted. No scanner input, worker or coverage behavior changes.
