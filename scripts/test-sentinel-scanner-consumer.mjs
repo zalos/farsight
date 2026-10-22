@@ -65,7 +65,9 @@ try{
  assert.ok(secretFindings.length>=4&&secretFindings.every(x=>x.evidence.every(e=>e.state==='withheld'&&!e.location)),'secret findings are reported, their locations withheld');
  assert.ok(secretFindings.length>new Set(secretFindings.flatMap(x=>x.evidence.map(e=>e.content))).size,'identical bytes in two files stay two findings');
  for(const html of [shareable,priv]){assert.match(html,/Content-Security-Policy/);assert.match(html,/@media print/);assert.doesNotMatch(html,/<script|src="http|href="http|@import/i);}
- assert.ok(!shareable.includes('SELECT * FROM users WHERE id = ')&&priv.includes('SELECT * FROM users WHERE id = '),'only the private report embeds source');
+ // The run has accepted secret matches, so no profile embeds source text, and both say why.
+ assert.ok(!shareable.includes('SELECT * FROM users WHERE id = ')&&!priv.includes('SELECT * FROM users WHERE id = '),'no source excerpt while the run has secret matches');
+ for(const html of [shareable,priv])assert.match(html,/secret scan matched values in this run/);
  const comparison=await cli('compare',nextId,id);assert.equal(comparison.status,0,'installed retained-capture comparison');
  assert.ok(comparison.body.facts.comparison.current.length>0&&comparison.body.facts.comparison.historical.length>0,'both actual accepted runs contribute comparison evidence');
  const comparedPath=join(delivered,'comparison.json');assert.equal((await cli('compare',nextId,id,'--format','json','--out',comparedPath)).status,0);

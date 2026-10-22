@@ -545,7 +545,7 @@ export async function fullReportIn(ws: Workspace, options: FullReportOptions): P
         ...(options.baselineRunId ? { baselineRunId: options.baselineRunId, comparison: r.comparison } : {}),
         ...(options.out ? { written: options.out } : {}),
         // Never a policy result: findings are not judged against a finding policy here, and dispositions are PR 20.
-        limitations: ['sentinel.service.policyNotEvaluated'],
+        limitations: ['sentinel.service.policyNotEvaluated', ...(r.withheldForSecrets ? ['sentinel.report.withheld.secretRun'] : [])],
       };
       return { result: result(command, 'answered', { ...(verdicts ? { verdicts } : {}), facts }), ...(options.out ? {} : { text }) };
     } catch (e) {

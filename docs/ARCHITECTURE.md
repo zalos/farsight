@@ -1364,17 +1364,25 @@ socket. Withheld-location identity continuity requires that same private key: if
 under a different private trust folder, the next report creates a new key and its withheld-location identities change.
 Existing report files remain unchanged; a store copy or bundle cannot restore the missing key or prove continuity
 with the earlier identities. A report and a bundle together, with the store id, confirm no guessed path.
-Every candidate the secret scan's matched text yields is replaced in every source- or context-controlled string of the
-report document in every profile (context labels and ids, paths, symbols, titles, sentences, excerpts), one fixed word
-per candidate so references still match. The detector reports whole lines, so a matched line yields the whole trimmed
-line, each quoted string, the right-hand side of its first assignment (unquoted values with `:` or padding included),
-its pieces split at whitespace and quotes, at assignment, separator and bracket characters, and at path separators (with
-and without a final extension), and its runs of letters and digits; a value of short pieces joined by punctuation is
-withheld whole. Candidates are 8 or more characters and are held in memory only. Fields Sentinel generates and the
-contract constrains (schema, enums, catalog keys, digests, content and artifact ids, generated finding, evidence and
-report ids, counts' words, catalog definitions) are left as they are, so a matched line holding ordinary structural words
-still yields a valid report; the redacted document is checked against the contract again and refused if it does not
-fit. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
+The pinned worker reports only the rule, the lines and a file reference (template `RuleID`, `StartLine`, `EndLine`,
+`File`, with `--redact=100`), so a report sees whole matched lines, never the value's position, and cannot prove that any
+text a captured file or a confirmed graph supplied is free of a matched value. A report whose run or baseline has
+accepted secret matches therefore fails closed (`withholdSecretRun`): every finding's title and explanation are rebuilt
+from the rule pack's catalog words only; every evidence item is withheld with no excerpt and no location; every other
+source- or context-controlled string (context ids, labels and references, node ids, count part labels) becomes one
+opaque word per distinct original, so references still match and placement keeps its shape; every place records
+`sentinel.report.withheld.secretRun`, defined in the report, and the command lists it among its limitations. Trust is by
+position in the report contract, never by a key's name or a value's spelling: only positions whose value Sentinel
+generates (schema, enums, catalog keys, digests, content and artifact ids, generated run, check, finding, evidence and
+report ids, counts' words, a decision's and a definition's exact generated fields, a gap's catalog explanation) are
+kept. A run without secret matches reports as before, excerpts and labels included. The cost is availability: in a run
+with any secret match no report shows source excerpts, locations or context names. The precise replacement is an exact
+value range: the pinned template would emit, as numbers only, the match's start column and the secret's offset and
+length within it (computed inside the container from the unredacted match; Gitleaks fills its match fields with the
+redacted placeholder under `--redact`), kept privately in the publication beside the whole-line citation and read over
+the private snapshot at render time. That changes the pinned template and worker digest, needs Gitleaks
+requalification on both measured platforms and a check of the engine's column semantics for multibyte and multiline
+matches, and adds a private publication field; it is not part of this change. A file whose name the secret scan matched is withheld from every scanner's citations in every profile (cited by
 its entry, without a symbol, never used to place a gap), and the minimal scanner report replaces such a name wherever it
 appears. Refusal reasons never name a path. Names the scan did not match are not withheld; the context-graph
 attestation limitation above is unchanged.

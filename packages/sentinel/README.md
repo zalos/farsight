@@ -426,12 +426,15 @@ independently verify the supplied graph's relationships, labels or producer.
 Secret-scan findings are reported with their locations withheld in every profile and never placed; two files with the
 same bytes stay two findings. A file whose name the secret scan matched is withheld from every report, including other
 scanners' citations of it and the minimal `report <runId>` output. A missing, extra or forged accepted secret record
-refuses the report. Every candidate a matched line or name yields (the whole value, whatever punctuation joins
-it, and its long pieces) is replaced in every report string that source or a confirmed graph can supply, including
-context labels and ids and private excerpts; generated structure such as enums, catalog keys and digests is kept. Names and
+refuses the report. When the secret scan matched anything in a run (or its baseline), the scanner reports whole lines, not the value, so
+the report cannot prove other text is free of it: it withholds every excerpt, location and context name or label in
+that report, in both profiles, keeps findings' rule words, counts and placement shape, and says so
+(`sentinel.report.withheld.secretRun`). A run with no secret match reports as before (ADR 38). Names and
 values the scan did not match are not detected or withheld. A secret finding's identity is keyed by a per-store random secret kept in the owner's
 trust folder (never the public store id, and never in the store, a bundle or a report), so the same file keeps its
-identity across captures without anyone being able to confirm a guessed name from a report.
+identity across captures without anyone being able to confirm a guessed name from a report. Keep the owner's trust
+folder to keep those identities: if its `report-keys/` key is lost, a new one is created, every secret finding gets a
+new identity, and comparisons with reports made before the loss no longer continue them.
 
 ### Express control facts (draft)
 

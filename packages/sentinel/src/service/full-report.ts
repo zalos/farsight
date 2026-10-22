@@ -82,8 +82,9 @@ export interface RunAssessment {
   /** Files (`sourceId:relativePath`) whose name the secret scan matched: never printed or used to place anything. */
   readonly withheldFiles: ReadonlySet<string>;
   /**
-   * Every token of 8 or more letters, digits, `_` or `-` the secret scan matched, read from the private snapshot only:
-   * the matched file names and the matched lines. No report string may carry one (redactSecretTokens).
+   * The candidates the secret scan's matched text yields (tokensOf), read from the private snapshot and held in memory
+   * only. Diagnostic: the report does not depend on them; a run with any secret match withholds all source and context
+   * text instead (withholdSecretRun).
    */
   readonly secretTokens: ReadonlySet<string>;
 }
@@ -328,21 +329,24 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   };
 }
 
-/** The shortest candidate a match is withheld by: shorter fragments are too common to stand for a value alone. */
-const MIN_TOKEN = 8;
+/**
+ * Candidates cut at a value's own boundaries (quotes, assignment, separators, paths) are kept from 3 characters: a
+ * supported detector can match a short value (curl's `user:pass`, measured at 7 characters). 3 is not a proved minimum
+ * for every supported detector. Runs of letters and
+ * digits split out of longer text are kept only from 8, since shorter runs are ordinary words rather than a value.
+ */
+const MIN_BOUNDED = 3;
+const MIN_RUN = 8;
 
 /**
- * Every candidate a matched value or name can appear as, taken from the matched text itself (a matched line or a matched
- * path) and held in memory only. The detector reports whole lines, not the value's bytes, so the value is withheld at
- * every boundary a supported detector's value can have: the whole trimmed text, each quoted string, the text split at
- * whitespace and quotes (a value with `.`, `/`, `+`, `=`, `:` inside), split also at assignment, separator and bracket
- * characters, the whole right-hand side of the first `key = value` or `key: value` (unquoted values with `:` or
- * padding included), and its runs of letters and digits. A value made
- * of short pieces joined by punctuation is therefore withheld whole, and each long piece of it on its own.
+ * Candidate strings a matched line or name yields (quoted strings, assignment right-hand sides, pieces at common
+ * separators, runs of letters and digits), held in memory only. Diagnostic: a report does not depend on them, because
+ * the scanner reports whole lines and no such heuristic is proved complete; a run with any secret match withholds all
+ * source and context text instead (withholdSecretRun).
  */
 export function tokensOf(text: string): string[] {
   const out = new Set<string>();
-  const add = (t: string) => { const v = t.trim(); if (v.length >= MIN_TOKEN) out.add(v); };
+  const add = (t: string, min = MIN_BOUNDED) => { const v = t.trim(); if (v.length >= min) out.add(v); };
   add(text);
   for (const m of text.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`\n]*)`/g)) add(m[1] ?? m[2] ?? m[3] ?? '');
   // The right-hand side of the first assignment, unquoted values included (`key=a:b:c`, `key=base64==`), up to a
@@ -354,46 +358,96 @@ export function tokensOf(text: string): string[] {
   }
   for (const t of text.split(/[\s"'`]+/)) add(t);
   // A path's segments, with and without a final extension: a matched name is withheld wherever it appears alone.
-  for (const t of text.split(/[\s"'`/\\]+/)) { add(t); add(t.replace(/\.[A-Za-z0-9]{1,8}$/, '')); }
-  for (const t of text.split(/[\s"'`=:,;#(){}\[\]<>]+/)) add(t);
-  for (const t of text.split(/[^A-Za-z0-9]+/)) add(t);
+  for (const t of text.split(/[\s"'`/\\@]+/)) { add(t); add(t.replace(/\.[A-Za-z0-9]{1,8}$/, '')); }
+  for (const t of text.split(/[\s"'`=,;#(){}\[\]<>]+/)) add(t);
+  for (const t of text.split(/[^A-Za-z0-9]+/)) add(t, MIN_RUN);
   return [...out];
 }
 
 /**
- * Report fields Sentinel itself generates and the contract constrains: schema names, enums, catalog keys, digests,
- * content and artifact ids, generated finding/evidence/report ids and counts' words. They never carry source or context
- * text, and redacting a word inside one would break the contract, so they are left as they are. Every other string,
- * which source or a confirmed context can supply (titles, explanations, excerpts, paths, context ids and labels,
- * symbols, sentences), is screened.
+ * The positions in a report document whose value Sentinel itself generates and the contract constrains: the schema,
+ * enums, catalog keys, digests, content and artifact ids, generated run, check, finding, evidence, observation and
+ * report ids, counts' words, decisions and the catalog's definitions. Trust is by position in the contract, never by a
+ * key's name or a value's spelling: a context-owned id or label is screened however it is spelled, and so is anything
+ * a confirmed graph or captured source supplies (titles, explanations, excerpts, paths, node ids, screen, journey and
+ * persona ids, labels and references, count part labels).
  */
-const STRUCTURAL = new Set(['schema', 'profile', 'profileDigest', 'completeness', 'unit', 'bizUnit', 'scope', 'source', 'key',
-  'severity', 'comparison', 'comparisonReason', 'kind', 'state', 'reasonCode', 'binding', 'via', 'status', 'limitationKeys',
-  'projectionVersion', 'artifact', 'sourceBindingReceipt', 'content', 'catalogVersion', 'evaluatedAt', 'ruleFamilyId',
-  'checkId', 'observationIds', 'baselineFindingId', 'baselineFindingIds', 'findingId', 'artifactClosure', 'exact', 'probable', 'version', 'reportId', 'snapshotId', 'evidenceArtifact', 'cli', 'mcp']);
-const GENERATED_ID = /^(?:finding|ev|report|obs|run|snap|plan)[.-][0-9a-f]{8,}$|^sha256:[0-9a-f]{64}$/;
+const PLACE = String.raw`(?:findings|gaps|historical)\.\*\.place`;
+const COUNT = String.raw`(?:unit|bizUnit|scope|source|breakdown\.\*\.key|recheck\.cli|recheck\.mcp|n|of|breakdown\.\*\.n)`;
+const TRUSTED = new RegExp('^(?:' + [
+  String.raw`schema|id|run\.(?:id|snapshotId|planRevision)|ledgerSequence|evaluatedAt|catalogVersion`,
+  String.raw`disclosure\.(?:profile|profileDigest)|completeness|baseline\.reportId|artifactClosure\.\*`,
+  // Exact scalar paths only: a later field added to either (a disposition's rationale, say) is screened until it is
+  // listed here on purpose. Definitions are the catalog's own words (document.ts); a decision's fields are generated.
+  String.raw`definitions\.\*\.(?:key|define|text\.business|text\.code)`,
+  String.raw`decisions\.\*\.(?:dispositionId|findingId|validity|expiresAt)`,
+  String.raw`counts\.[A-Za-z]+\.` + COUNT,
+  String.raw`findings\.\*\.(?:id|observationIds\.\*|ruleFamilyId|severity|comparison|comparisonReason|match\.kind|match\.baselineFindingIds\.\*|fingerprint\.(?:version|exact|probable))`,
+  String.raw`findings\.\*\.evidence\.\*\.(?:id|state|reasonCode|content|location\.(?:startByte|endByte|startLine|endLine))`,
+  String.raw`gaps\.\*\.(?:checkId|status|reasonCode)`,
+  String.raw`historical\.\*\.(?:baselineFindingId|ruleFamilyId|severity|label|reasonCode|match\.kind|match\.baselineFindingIds\.\*)`,
+  PLACE + String.raw`\.(?:binding|limitationKeys\.\*|context\.(?:artifact|sourceBindingReceipt|projectionVersion))`,
+  PLACE + String.raw`\.counts\.[A-Za-z]+\.` + COUNT,
+  PLACE + String.raw`\.screens\.\*\.(?:via|evidenceArtifact)`,
+  PLACE + String.raw`\.personas\.\*\.(?:declared|evidenceArtifact)`,
+].join('|') + ')$');
+
+/** The catalog key a report carries when it withholds source and context text because the secret scan matched. */
+export const SECRET_RUN_WITHHELD = 'sentinel.report.withheld.secretRun';
+/** Positions rebuilt from trusted words only, in a projection that withholds source and context text. */
+const REBUILT = /^(?:findings\.\*\.(?:title|explanation)\.(?:business|code)|historical\.\*\.title\.(?:business|code)|gaps\.\*\.explanation\.(?:business|code))$/;
 
 /**
- * Replaces every secret candidate in every source- or context-controlled string of a report document, in every
- * disclosure profile: context labels, ids, metadata, sentences, titles, paths and excerpts, from whichever file or
- * graph they came. Generated structure (STRUCTURAL, generated ids, the catalog's own definitions) is left as it is, so
- * the document keeps its contract. Each candidate becomes one fixed word, the same everywhere, so the context ids that
- * reference each other still match. The result is checked against the report contract again by the caller, which
- * refuses rather than delivers a document that does not fit.
+ * The fail-closed projection of a report whose run (or baseline) has accepted secret-scan matches. The scanner reports
+ * whole matched lines, not the value's exact bytes, so no text a captured file or a confirmed graph supplied can be
+ * proved free of a matched value; instead of screening it by heuristic, all of it is withheld:
+ * - every finding's title and explanation are rebuilt from the rule pack's catalog words only (or fixed words), and a
+ *   gap's explanation is already catalog words and generated facts;
+ * - every evidence item is withheld with no excerpt and no location (a path is source text);
+ * - every other source- or context-controlled string (context ids, labels and references, node ids, count part
+ *   labels) becomes one opaque word per distinct original, so references still match and placement keeps its shape;
+ * - every place records the limitation, and its definition travels with the report.
+ * Generated structure (TRUSTED) is kept, so the document keeps its contract; the caller validates it again.
  */
-export function redactSecretTokens<T>(doc: T, tokens: ReadonlySet<string>): T {
-  if (!tokens.size) return doc;
-  const ordered = [...tokens].sort((a, b) => b.length - a.length || (a < b ? -1 : 1));
-  const word = new Map(ordered.map((t, i) => [t, `withheld-${i + 1}`]));
-  const scrub = (v: string) => ordered.reduce((s, t) => (s.includes(t) ? s.split(t).join(word.get(t)!) : s), v);
-  const walk = (v: unknown, key?: string): unknown => {
-    if (key === 'definitions') return v;
-    if (typeof v === 'string') return (key && STRUCTURAL.has(key)) || (key === 'id' && GENERATED_ID.test(v)) ? v : scrub(v);
-    if (Array.isArray(v)) return v.map(x => walk(x, key));
-    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]));
+export function withholdSecretRun(input: any, words: ReadonlyMap<string, { title: { business: string; code: string }; explanation: { business: string; code: string } }>): any {
+  const doc = structuredClone(input);
+  const fixed = STRINGS[SECRET_RUN_WITHHELD]!;
+  const generic = (severity: string) => `A ${severity === 'info' ? 'recorded' : severity} issue the checks found`;
+  const places: any[] = [];
+  for (const f of doc.findings ?? []) {
+    const w = words.get(f.ruleFamilyId);
+    f.title = { business: (w?.title.business ?? generic(f.severity)).slice(0, 4000), code: (w?.title.code ?? f.ruleFamilyId).slice(0, 4000) };
+    f.explanation = { business: [w?.explanation.business, fixed.professional].filter(Boolean).join(' ').slice(0, 4000), code: (w?.explanation.code || f.ruleFamilyId).slice(0, 4000) };
+    f.evidence = f.evidence.map((e: any) => (e.state === 'withheld' && e.reasonCode === 'sentinel.report.withheld.secret'
+      ? { id: e.id, state: 'withheld', reasonCode: e.reasonCode, content: e.content }
+      : { id: e.id, state: 'withheld', reasonCode: SECRET_RUN_WITHHELD, content: e.content }));
+    places.push(f.place);
+  }
+  for (const h of doc.historical ?? []) {
+    const w = words.get(h.ruleFamilyId);
+    h.title = { business: (w?.title.business ?? generic(h.severity)).slice(0, 4000), code: (w?.title.code ?? h.ruleFamilyId).slice(0, 4000) };
+    places.push(h.place);
+  }
+  for (const g of doc.gaps ?? []) places.push(g.place);
+  for (const place of places) place.limitationKeys = [...new Set([...place.limitationKeys, SECRET_RUN_WITHHELD])].sort();
+  const opaque = new Map<string, string>();
+  const walk = (v: unknown, path: string): unknown => {
+    if (typeof v === 'string') {
+      if (TRUSTED.test(path) || REBUILT.test(path)) return v;
+      let w = opaque.get(v);
+      if (!w) opaque.set(v, w = `withheld-${opaque.size + 1}`);
+      return w;
+    }
+    if (Array.isArray(v)) return v.map(x => walk(x, path ? `${path}.*` : '*'));
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, path ? `${path}.${k}` : k)]));
     return v;
   };
-  return walk(doc) as T;
+  const out: any = walk(doc, '');
+  if (!(out.definitions ?? []).some((d: any) => d.key === SECRET_RUN_WITHHELD)) {
+    out.definitions = [...(out.definitions ?? []), { key: SECRET_RUN_WITHHELD, text: { business: fixed.professional, code: fixed.hud }, define: fixed.define ?? '' }]
+      .sort((a: any, b: any) => (a.key < b.key ? -1 : 1));
+  }
+  return out;
 }
 
 /**
@@ -685,6 +739,8 @@ export interface FullReport {
   readonly sarif: unknown;
   readonly comparison?: Comparison;
   readonly context: { readonly binding: PinnedContext['binding']; readonly reasons: readonly string[] } | null;
+  /** The run or its baseline has accepted secret matches, so source and context text is withheld (withholdSecretRun). */
+  readonly withheldForSecrets: boolean;
 }
 
 /** Builds the full report of a completed run, optionally placed and compared, from accepted evidence alone. */
@@ -703,10 +759,10 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   const readContent = (id: string) => store.readArtifact(id as never);
   let comparison: { baselineReportId: string; result: Comparison; baselineFindings: Map<string, BaselineFindingSummary> } | undefined;
   let currentFindings: readonly Finding[] | undefined;
-  let baselineTokens: ReadonlySet<string> | undefined;
+  let baselineSecret: boolean | undefined;
   if (req.baselineRunId) {
     const baseline = await assessRun(store, req.baselineRunId, { trustDir: req.trustDir });
-    baselineTokens = baseline.secretTokens;
+    baselineSecret = baseline.observations.some(o => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER);
     const b = await sideOf(store, baseline);
     const c = await sideOf(store, current);
     currentFindings = c.findings;
@@ -734,12 +790,15 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
     inventory: current.inventory, readContent, withheldFiles: current.withheldFiles, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));
-  // Nothing the secret scan matched reaches any rendering, whichever file or confirmed graph a string came from.
-  const tokens = new Set([...current.secretTokens, ...(baselineTokens ?? [])]);
-  const doc = redactSecretTokens(build.document, tokens);
+  // With accepted secret matches in either run, no source or context text can be proved free of a matched value (the
+  // scanner reports whole lines), so all of it is withheld (withholdSecretRun). Without any, the report is as built.
+  const isSecret = (o: ObservationEnvelope) => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER;
+  const secretRun = current.observations.some(isSecret) || (baselineSecret ?? false);
+  const doc = secretRun ? withholdSecretRun(build.document, ruleWords(req.trustDir, current.ruleLock)) : build.document;
   const valid = validateEnvelope('report', doc);
-  if (!valid.ok) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the redacted report does not fit its contract' });
+  if (!valid.ok) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the withheld report does not fit its contract' });
   return {
+    withheldForSecrets: secretRun,
     document: doc, json: canonicalJson(doc), markdown: renderMarkdown(doc), html: renderHtml(doc), sarif: toSarif(doc),
     ...(comparison ? { comparison: comparison.result } : {}),
     context: pinned ? { binding: pinned.binding, reasons: [...pinned.reasons] } : null,
