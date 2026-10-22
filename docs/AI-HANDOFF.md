@@ -56,7 +56,10 @@ updating the packer's stand-in to the final API (the ten packer tests were rerun
 consumers verified all three typed exports, nine contract types/schemas, 36 fixtures, shared root/store API and
 error identities, and publication followed by reopening in another process. Farsight also installed, ingested
 and served with Sentinel entirely absent. Exact macOS ARM64/SQLite pairs 3.53.3 and 3.53.4 were measured on APFS;
-Linux x64/SQLite 3.53.4 is still a CI candidate and requires its actual run before qualification or merge.
+Linux x64/SQLite 3.53.4 was measured on Node 24.21.0/ext4 in
+[CI](https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934): 134 passed, four explicit skips. Linux exposed two test-fixture portability
+issues (argument length and immediate inode reuse); Opus reproduced and fixed both, and SOL verified the fixes.
+Final CI is rerun after recording this qualification; no merge is claimed yet.
 
 The same frozen source against main and feature builds produced identical 7,175 nodes, 15,066 edges and source
 digest, with unchanged database size; the PR body records byte counts. Fresh front-door, Map and grouped code-map

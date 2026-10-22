@@ -11,7 +11,8 @@ identifiers, not GitHub PR numbers.
 - PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after independent SOL
   contract/packaging review, clean npm consumer checks, browser validation and all nine CI checks. PR 03
   storage has passed local integration and independent SOL review across four Opus lanes, including the public
-  facade and packaging. Linux qualification and CI remain before merge. PR 04 capture and PR 07 isolation
+  facade and packaging. Linux runtime qualification passed in [CI](https://github.com/zalos/farsight/actions/runs/39723522049);
+  final checks remain before merge. PR 04 capture and PR 07 isolation
   are starting in independent worktrees against the reviewed store API.
 - PR 01's measured-decisions slice merged as [#133](https://github.com/zalos/farsight/pull/133), `ef5c525`,
   after the first slice [#132](https://github.com/zalos/farsight/pull/132), `2bd38f6`.

@@ -83,8 +83,8 @@ words are in the shared catalog.
 
 Qualified, and refused otherwise: an exact host and SQLite pair the release policy lists (`qualificationFor`), and a
 canonical owner-only folder on a file system the path checks identify as local. Measured: darwin-arm64 with SQLite
-3.53.3 and 3.53.4 on APFS. linux-x64 with SQLite 3.53.4 on ext4 is a CI candidate, not yet qualified; the other
-allowlisted local file system types are not measured. Any other pair is refused before a file is created. Durability holds across process death, not physical power loss (see ADR 19 in
+3.53.3 and 3.53.4 on APFS; linux-x64 with SQLite 3.53.4 on ext4, Node 24.21.0
+([CI evidence](https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934)). The other allowlisted local file system types are not measured. Any other pair is refused before a file is created. Durability holds across process death, not physical power loss (see ADR 19 in
 `docs/ARCHITECTURE.md`). A store is a library facility in this draft: the `capabilities` list shows `ledger` as
 `available-draft` and every scan capability as unavailable; there is no store command until the CLI (PR 09).
 

@@ -37,15 +37,15 @@ const pair = (host: string, sqlite: string, status: QualificationStatus, evidenc
  * - darwin-arm64 · 3.53.3: PR 01's E4 probe and the PR 03 store tests on Node 24.19.0.
  * - darwin-arm64 · 3.53.4: the PR 03 store tests on the official Node 24.22.0 darwin-arm64 build (archive
  *   checked against its signed SHASUMS256.txt), run from a scratch folder, with no system install.
- * - linux-x64 · 3.53.4: a candidate, so GitHub's ubuntu runners (Node 24.22.0, ext4) run the full store tests
- *   unskipped before this merges; its evidence is replaced with that run's facts.
+ * - linux-x64 · 3.53.4: PR 03's full store tests on GitHub Ubuntu, Node 24.21.0, ext4; the qualified
+ *   runtime tests ran rather than skipping. The policy entry links the observed run.
  * A runtime linking any other release, or a host with no entry, is refused. Add a pair only with such evidence.
  */
 export const SQLITE_RELEASE_POLICY: SqliteReleasePolicy = Object.freeze({
   qualified: Object.freeze([
     pair('darwin-arm64', '3.53.3', 'measured', 'PR 01 E4 storage probe and PR 03 store tests, Node 24.19.0'),
     pair('darwin-arm64', '3.53.4', 'measured', 'PR 03 store tests, official Node 24.22.0 darwin-arm64, checksum and signature verified'),
-    pair('linux-x64', '3.53.4', 'candidate', 'pending the PR 03 store tests on GitHub ubuntu CI, Node 24.22.0, ext4'),
+    pair('linux-x64', '3.53.4', 'measured', 'PR 03 store tests, Node 24.21.0, ext4: https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934'),
   ]),
 });
 

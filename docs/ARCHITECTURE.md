@@ -242,9 +242,9 @@ while its records are kept.
 Qualification is bounded, and anything outside it is refused rather than assumed. The runtime's release policy lists
 exact host and SQLite pairs (`qualificationFor`); a store opens only for a listed pair, in a canonical owner-only
 folder on a file system the path checks identify as local. Measured: darwin-arm64 with SQLite 3.53.3 (Node 24.19.0)
-and 3.53.4 (Node 24.22.0), on APFS. linux-x64 with SQLite 3.53.4 (Node 24.22.0) on ext4 is admitted only as a
-candidate, so CI runs the real-owner store tests there and fails instead of skipping; it is not qualified until that
-CI evidence replaces the candidate entry. The other local types the path checks accept (hfs on macOS; xfs, btrfs,
+and 3.53.4 (Node 24.22.0), on APFS; linux-x64 with SQLite 3.53.4 (Node 24.21.0), on ext4
+([PR 03 CI evidence](https://github.com/zalos/farsight/actions/runs/39723522049/job/119642215934): 134 passed, four explicit platform/permission skips,
+including every applicable real-owner, migration and object-publication test). The other local types the path checks accept (hfs on macOS; xfs, btrfs,
 tmpfs, zfs and f2fs by Linux statfs) are allowlisted, not measured. Any other pair is refused before a store file
 exists. Network, FUSE, overlay and unrecognised
 file systems are refused. Durability is claimed for **process death**: SQLite runs WAL with `synchronous=FULL`,

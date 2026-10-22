@@ -50,7 +50,7 @@ test('qualification is exact host and SQLite pairs, each with evidence, never a 
     assert.ok(q.evidence.length > 0);
   }
   assert.equal(qualificationFor(SQLITE_RELEASE_POLICY, 'darwin-arm64', '3.53.3')?.status, 'measured');
-  // linux-x64 is a candidate with 3.53.4 only; darwin-arm64's 3.53.3 does not carry over to it.
+  // linux-x64 is qualified with 3.53.4 only; darwin-arm64's 3.53.3 does not carry over to it.
   assert.equal(qualificationFor(SQLITE_RELEASE_POLICY, 'linux-x64', '3.53.3'), undefined);
   assert.equal(qualificationFor(SQLITE_RELEASE_POLICY, 'linux-arm64', '3.53.4'), undefined);
   const synthetic = { qualified: [
