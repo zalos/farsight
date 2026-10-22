@@ -124,7 +124,8 @@
       "source": "sources/controls/unsupported.rs.fixture",
       "sha256": "341a86a29a1ee73f1d0d20de6d603e9834711a6243be75eb03921dfc9cd83cf9",
       "bytes": 136,
-      "stage": "unsupported"
+      "stage": "out-of-rule-language",
+      "reason": "Rust is outside the selected JS/TS/Java rule languages; this does not claim Rust is unsupported by either engine."
     },
     {
       "path": "controls/oversized.ts",
@@ -184,7 +185,9 @@
       "startLine": 1,
       "endLine": 3,
       "reason": "Caller concatenates request text into SQL before passing it across this file boundary.",
-      "sourcePath": "typescript/CrossEntry.ts"
+      "sourcePath": "typescript/CrossEntry.ts",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
     },
     {
       "id": "typescript-cross-file-safe",
@@ -195,7 +198,9 @@
       "startLine": 4,
       "endLine": 6,
       "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
-      "sourcePath": "typescript/CrossEntry.ts"
+      "sourcePath": "typescript/CrossEntry.ts",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
     },
     {
       "id": "javascript-direct-positive",
@@ -246,7 +251,9 @@
       "startLine": 1,
       "endLine": 3,
       "reason": "Caller concatenates request text into SQL before passing it across this file boundary.",
-      "sourcePath": "javascript/CrossEntry.js"
+      "sourcePath": "javascript/CrossEntry.js",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
     },
     {
       "id": "javascript-cross-file-safe",
@@ -257,7 +264,9 @@
       "startLine": 4,
       "endLine": 6,
       "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
-      "sourcePath": "javascript/CrossEntry.js"
+      "sourcePath": "javascript/CrossEntry.js",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
     },
     {
       "id": "java-direct-positive",
@@ -308,7 +317,9 @@
       "startLine": 2,
       "endLine": 4,
       "reason": "Caller concatenates request text into SQL before passing it across this file boundary.",
-      "sourcePath": "java/CrossEntry.java"
+      "sourcePath": "java/CrossEntry.java",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
     },
     {
       "id": "java-cross-file-safe",
@@ -319,7 +330,9 @@
       "startLine": 5,
       "endLine": 7,
       "reason": "Caller passes constant SQL and a separate value across the file boundary; assumes query binding semantics.",
-      "sourcePath": "java/CrossEntry.java"
+      "sourcePath": "java/CrossEntry.java",
+      "sourceStartLine": 3,
+      "sourceEndLine": 3
     }
   ],
   "rules": [

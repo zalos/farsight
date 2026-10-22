@@ -11,7 +11,7 @@ source byte hash, manually authored inclusive symbol span, purpose and paired la
 No engine or Farsight parser supplies the labels. Independent static review is recorded separately.
 There are nine valid files, nine positive symbols and nine safe siblings: TS, JS and Java each have
 one direct, one local-variable and one cross-file pair. Three input controls are outside those
-capability denominators: a malformed TS tail after a valid prefix, unsupported Rust and oversized TS.
+capability denominators: a malformed TS tail after a valid prefix, Rust outside the selected rule languages and oversized TS.
 The positive changes SQL structure with request text; the safe sibling uses constant SQL and passes
 the request value separately. Safe means only that SQL structure is constant, assuming binding
 semantics for the inert `query` facade; it does not certify the application.
@@ -28,7 +28,7 @@ all 9 eligible paths. Local taint qualification requires all 6 direct/local posi
 on 9 safe siblings. Cross-file qualification separately requires all 3 cross-file positives, no
 safe hits, and source-to-sink path evidence crossing the named file boundary. These are exact
 micro-corpus criteria, not general accuracy targets. Every candidate also needs matching pins,
-completed bounded commands, unchanged inputs and verified owned-container removal. Unsupported,
+completed bounded commands, unchanged inputs and verified owned-container removal. Out-of-rule-language,
 partial, malformed and skipped inputs remain visible gaps even on exit zero. Partial diagnostics
 and engine-reported scanned paths are retained; a scanned-path list alone does not prove complete
 analysis. No safe/no-finding result proves coverage.
