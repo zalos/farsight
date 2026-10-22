@@ -8,6 +8,7 @@ import {tmpdir} from 'node:os';
 import {initWorkspace} from '../dist/cli/init.js';
 import {workspaceOf,adoptWorkspaceSettings} from '../dist/service/local.js';
 import {adoptScannerAsset,acquireScannerDatabase,heldDatabases,readAsset} from '../dist/service/scanner-assets.js';
+import {ContainerBackend} from '../dist/execution/isolation.js';
 import {RuleLockBook} from '../dist/service/rule-locks.js';
 import {syntheticSnapshot} from './osv-helpers.ts';
 import {needsStore,unlock} from './snapshot-helpers.ts';
@@ -37,4 +38,16 @@ test('local database adoption: mismatched bytes, impossible dates, unsafe files 
  assert.equal((await acquireScannerDatabase(f.ws,{id:'osv:npm',maxBytes:1024,confirm:false,now:new Date()})).exitCode,4);
  await assert.rejects(acquireScannerDatabase(f.ws,{id:'osv:npm',maxBytes:513*1024*1024,confirm:true,now:new Date()}),(e:any)=>e.code==='sentinel.assets.invalid');
  assert.equal(new RuleLockBook(f.ws.trustDir).current(),null);
+});
+
+
+test('local tool adoption decides shared policy before querying the container backend',needsStore,async t=>{
+ const denied=fixture(t);const settingsPath=join(denied.ws.path,'.farsight','sentinel','settings.json');const settings=JSON.parse(readFileSync(settingsPath,'utf8'));
+ settings.grants=settings.grants.map((grant:any)=>({...grant,actions:grant.actions.filter((action:string)=>action!=='tool.acquire')})).filter((grant:any)=>grant.actions.length);
+ writeFileSync(settingsPath,JSON.stringify(settings));adoptWorkspaceSettings(denied.ws,{confirm:true,now:new Date()});
+ let contacts=0;const query=t.mock.method(ContainerBackend,'connect',async()=>{contacts++;return{inspectImage:async()=>({id:'sha256:'+'1'.repeat(64),os:'linux',architecture:'arm64'})} as any;});
+ const refused=await adoptScannerAsset(denied.ws,{kind:'tool',id:'pattern-semgrep',confirm:true,now:new Date()});
+ assert.deepEqual([refused.exitCode,refused.reasonCode],[3,'sentinel.admission.noGrant']);assert.equal(contacts,0);assert.equal(refused.verdicts?.capability.asked,false);
+ const allowed=fixture(t);const preview=await adoptScannerAsset(allowed.ws,{kind:'tool',id:'pattern-semgrep',confirm:false,now:new Date()});
+ assert.equal(preview.exitCode,4);assert.equal(contacts,1,'allowed policy reaches local capability inspection');assert.equal(new RuleLockBook(allowed.ws.trustDir).current(),null,'inspection does not promote an asset');query.mock.restore();
 });

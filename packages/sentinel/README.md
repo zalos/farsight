@@ -229,6 +229,9 @@ does not infer a blanket license for all advisory sources. The pinned Trivy chec
 separately from the engine's Apache-2.0 license. The receipt binds the exact candidate, provenance, rights
 and previous lock revision. A scan uses the admitted lock, including older retained revisions, rather than whatever
 lock happens to be current. Missing or changed required assets refuse before any scanner attempt.
+External scanner runs disclose and require `tool-execution` as well as `local-artifacts`; a narrower adopted grant
+refuses before any scanner attempt. The exact local preview remains a local-artifact action. Asset adoption decides
+policy before querying Docker, and still confirms the final exact candidate after inspection.
 
 For acquisition, `assets acquire-database osv:npm --max-bytes <limit> --confirm` (or `osv:Maven`) invokes the reviewed
 OSV allowlisted broker; `assets acquire-database trivy-checks --confirm` invokes the pinned checks broker. Both are

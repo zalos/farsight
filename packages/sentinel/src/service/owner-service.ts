@@ -185,7 +185,8 @@ export class OwnerService {
     const { policy } = adopted;
     if (policy.revision !== record.policyRevision) return { refusal: result(command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts }) };
     // The write is on this workspace's store and this run: a receipt confirmed for another instance does not match.
-    const { intent, stateDigest } = runWriteBinding(this.#ws, action, record.planDigest, { storeId: this.#store.storeId, runId: planId });
+    const { intent, stateDigest } = runWriteBinding(this.#ws, action, record, { storeId: this.#store.storeId, runId: planId });
+    facts.effects = intent.effects;
     const now = this.#now();
     if (receiptId !== undefined) {
       // The owner's receipt: checked against exactly this action, plan digest and policy revision, and spent once.

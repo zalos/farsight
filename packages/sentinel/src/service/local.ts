@@ -93,7 +93,7 @@ function decide(ws: Workspace, policy: EffectivePolicy, intent: ActionIntent, st
   }
   const r = decision.record;
   if (r.outcome === 'admitted') return { admitted: true, record: r };
-  const facts = { action: intent.action, intentDigest: r.intentDigest };
+  const facts = { action: intent.action, effects: intent.effects, intentDigest: r.intentDigest };
   return {
     admitted: false,
     result: r.outcome === 'awaiting-confirmation'
@@ -117,11 +117,11 @@ export interface RunInstance { readonly storeId: string; readonly runId: string 
  * A write on a run, bound to the instance it acts on. Two workspaces with the same content, settings and plan digest
  * still differ in workspace identity and store: a receipt confirmed for one is a mismatch in the other.
  */
-export function runWriteBinding(ws: Workspace, action: 'run.start' | 'run.pause' | 'run.cancel', planDigest: string, instance: RunInstance):
+export function runWriteBinding(ws: Workspace, action: 'run.start' | 'run.pause' | 'run.cancel', plan: CurrentPlan, instance: RunInstance):
   { intent: ActionIntent; stateDigest: string } {
   const workspace = workspaceIdentity(ws.path).digest;
-  const intent = intentOf(action, planDigest, ['local-artifacts'], [`sentinel.workspace:${workspace}`, `sentinel.store:${instance.storeId}`, `sentinel.run:${instance.runId}`]);
-  return { intent, stateDigest: sha(canonicalJsonBytes({ kind: 'sentinel-run-write/1', plan: planDigest, workspace, store: instance.storeId, run: instance.runId })) };
+  const intent = intentOf(action, plan.planDigest, action === 'run.start' ? [...plan.effects] : ['local-artifacts'], [`sentinel.workspace:${workspace}`, `sentinel.store:${instance.storeId}`, `sentinel.run:${instance.runId}`]);
+  return { intent, stateDigest: sha(canonicalJsonBytes({ kind: 'sentinel-run-write/1', plan: plan.planDigest, workspace, store: instance.storeId, run: instance.runId })) };
 }
 
 // ---- settings adoption (an owner action) ----
@@ -251,7 +251,8 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
     const plan = await currentPlan(store, options.planId);
     if (!plan || plan.kind !== 'analysis') return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } });
     if (policy.revision !== plan.policyRevision) return result('run', 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: plan.runId } });
-    const decided = decide(ws, policy, intentOf('run.start', plan.planDigest, ['local-artifacts']), plan.planDigest, options.confirm, options.now);
+    const binding = runWriteBinding(ws, 'run.start', plan, { storeId: store.storeId, runId: plan.runId });
+    const decided = decide(ws, policy, binding.intent, binding.stateDigest, options.confirm, options.now);
     if (!decided.admitted) return decided.result;
     const verdicts = printed(decided.record);
     if (!isFinalRunState(runStateIn(store, plan.runId))) {
@@ -289,15 +290,15 @@ export function confirmForService(ws: Workspace, options: { command: string; act
   // Bound to this workspace, this run and, once a service answered, its store; without a store yet the decision is
   // shown against the unbound intent and nothing is issued.
   const { intent, stateDigest } = options.storeId === undefined
-    ? { intent: intentOf(options.action, record.planDigest, ['local-artifacts']), stateDigest: record.planDigest }
-    : runWriteBinding(ws, options.action, record.planDigest, { storeId: options.storeId, runId: record.runId });
+    ? { intent: intentOf(options.action, record.planDigest, options.action === 'run.start' ? [...record.effects] : ['local-artifacts']), stateDigest: record.planDigest }
+    : runWriteBinding(ws, options.action, record, { storeId: options.storeId, runId: record.runId });
   const decision = admit({
     intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest, now: options.now,
     capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
     credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
   }).record;
   const verdicts = printed(decision);
-  const facts = { planId: record.runId, action: intent.action, intentDigest: decision.intentDigest };
+  const facts = { planId: record.runId, action: intent.action, effects: intent.effects, intentDigest: decision.intentDigest };
   if (decision.outcome === 'denied') {
     const v = decision.verdicts;
     return { result: result(options.command, 'configuration-failure', { verdicts, facts,
