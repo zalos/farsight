@@ -26,7 +26,7 @@ export type IpcErrorCode =
   | 'sentinel.ipc.platformUnsupported' | 'sentinel.ipc.pathTooLong' | 'sentinel.ipc.runtimeDirUnsafe'
   | 'sentinel.ipc.socketUnsafe' | 'sentinel.ipc.socketInUse' | 'sentinel.ipc.frameTooLarge'
   | 'sentinel.ipc.frameMalformed' | 'sentinel.ipc.handshakeMismatch' | 'sentinel.ipc.notListening'
-  | 'sentinel.ipc.timeout' | 'sentinel.ipc.canceled';
+  | 'sentinel.ipc.timeout' | 'sentinel.ipc.canceled' | 'sentinel.ipc.socketIndeterminate';
 
 export class IpcError extends Error {
   constructor(readonly code: IpcErrorCode, readonly detail = '') {
@@ -184,13 +184,27 @@ const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typ
  * refuses. Each connection must open with a hello naming its client kind; the reply carries this service's identity.
  * Requests then run with the requester that kind maps to, and a body naming a requester is refused.
  */
-export async function listenOwnerSocket(address: RuntimeAddress, identity: ServiceIdentity, handler: ServiceHandler): Promise<OwnerSocket> {
+export interface ListenOptions {
+  /** Test seam: how the existing socket is probed. Production uses node:net's connect. */
+  readonly connect?: (path: string) => Socket;
+}
+
+export async function listenOwnerSocket(address: RuntimeAddress, identity: ServiceIdentity, handler: ServiceHandler, options: ListenOptions = {}): Promise<OwnerSocket> {
   checkAddress(address);
   const existing = socketStat(address.socket);
   if (existing) {
     assertOwnSocket(existing);
-    if (await answers(address.socket)) throw new IpcError('sentinel.ipc.socketInUse');
-    unlinkSync(address.socket); // ours, and nothing listens: stale
+    const probe = await probeSocket(address.socket, options.connect ?? connect);
+    if (probe === 'live') throw new IpcError('sentinel.ipc.socketInUse');
+    // Only a refused connection (or a vanished name) proves nothing listens. Any other error (EMFILE, EACCES, a
+    // timeout) says nothing about the service, so its socket is left exactly as it is.
+    if (probe !== 'stale') throw new IpcError('sentinel.ipc.socketIndeterminate', probe.slice('unknown:'.length));
+    // Removed only if the name is still the very socket that refused, not one a new service bound meanwhile.
+    const now = socketStat(address.socket);
+    if (now) {
+      if (!now.isSocket() || now.dev !== existing.dev || now.ino !== existing.ino) throw new IpcError('sentinel.ipc.socketIndeterminate', 'the socket changed while it was checked');
+      unlinkSync(address.socket);
+    }
   }
   const server: Server = createServer(socket => serveConnection(socket, identity, handler));
   await new Promise<void>((resolve, reject) => {
@@ -208,11 +222,17 @@ export async function listenOwnerSocket(address: RuntimeAddress, identity: Servi
   });
 }
 
-function answers(path: string): Promise<boolean> {
+/** `live` when something accepts, `stale` only on a refused connection or a missing name, else `unknown:<code>`. */
+function probeSocket(path: string, open: (path: string) => Socket): Promise<'live' | 'stale' | `unknown:${string}`> {
   return new Promise(resolve => {
-    const s = connect(path);
-    s.once('connect', () => { s.destroy(); resolve(true); });
-    s.once('error', () => resolve(false));
+    let s: Socket;
+    try { s = open(path); } catch (e) { resolve(`unknown:${(e as NodeJS.ErrnoException).code ?? 'error'}`); return; }
+    const timer = setTimeout(() => { s.destroy(); resolve('unknown:ETIMEDOUT'); }, 2000);
+    s.once('connect', () => { clearTimeout(timer); s.destroy(); resolve('live'); });
+    s.once('error', (e: NodeJS.ErrnoException) => {
+      clearTimeout(timer);
+      resolve(e.code === 'ECONNREFUSED' || e.code === 'ENOENT' ? 'stale' : `unknown:${e.code ?? 'error'}`);
+    });
   });
 }
 

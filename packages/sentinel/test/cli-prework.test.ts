@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { connect } from 'node:net';
+import { connect, Socket as NetSocket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -428,4 +428,29 @@ test('a claim nested past the depth bound is refused, not skipped', () => {
   let shallow: Record<string, unknown> = { actor: 'human' };
   for (let i = 0; i < 30; i++) shallow = { next: shallow };
   assert.throws(() => refuseActorClaims(shallow), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadClaim');
+});
+
+test('only a refused connection proves a socket stale: any other error leaves a live service in place', async t => {
+  const base = scratch(t, 'snf-');
+  const identity = { storeId: 'store-1', ownerNonce: newOwnerNonce() };
+  const address = runtimeAddress({ storePath: '/s', ownerNonce: identity.ownerNonce, env: { TMPDIR: base } });
+  const live = await listenOwnerSocket(address, identity, async () => 'first');
+  t.after(() => live.close());
+  const inode = lstatSync(address.socket).ino;
+  // The probe of the existing socket fails with EMFILE (as when the process is out of descriptors).
+  const failing = () => {
+    const s = new NetSocket();
+    queueMicrotask(() => s.emit('error', Object.assign(new Error('too many open files'), { code: 'EMFILE' })));
+    return s;
+  };
+  await assert.rejects(listenOwnerSocket(address, identity, async () => 'second', { connect: failing }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketIndeterminate' && /EMFILE/.test(e.message));
+  assert.equal(lstatSync(address.socket).ino, inode, 'the live socket was not unlinked or replaced');
+  const c = await connectOwnerSocket(address, identity, 'mcp');
+  assert.equal(await c.request('who', {}), 'first', 'the original service still answers');
+  c.close();
+  // A probe that throws synchronously is indeterminate too.
+  await assert.rejects(listenOwnerSocket(address, identity, async () => 'third', { connect: () => { throw Object.assign(new Error('x'), { code: 'EACCES' }); } }),
+    (e: unknown) => e instanceof IpcError && e.code === 'sentinel.ipc.socketIndeterminate');
+  assert.equal(lstatSync(address.socket).ino, inode);
 });
