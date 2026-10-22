@@ -199,7 +199,6 @@ test('capture refuses a run whose snapshot holds other sources than the plan par
 
 for (const [label, parse, code, field] of [
   ['its deadline', { deadlineMs: 1 }, 'sentinel.execution.deadlineExceeded', 'deadlineMs'],
-  ['its memory bound', { memoryBytes: 1 }, 'sentinel.execution.resourceExceeded', 'resource'],
 ] as const) {
   test(`a bootstrap operation is held to ${label}: the attempt fails and nothing of it is published`, needsStore, async t => {
     const dir = scratch(t, 'sentinel-exec-boot-grant-');
@@ -223,6 +222,48 @@ for (const [label, parse, code, field] of [
     assert.ok(ended.errorDetail && field in ended.errorDetail, JSON.stringify(ended.errorDetail));
     assert.equal(summary.outcome, 'execution-failure');
     assert.deepEqual(store.ledger.listOpenStages(500), [], 'nothing was staged for it');
+  });
+}
+
+// RSS is sampled growth, not an allocation counter: a real parse can reuse pages or finish below its baseline
+// after GC. Keep the real operation and ledger, but control the sampler input to test both sides of the grant.
+for (const [observed, refused] of [[1_025, true], [1_023, false]] as const) {
+  test(`a bootstrap parse with sampled memory growth ${observed} against a 1024-byte grant ${refused ? 'refuses publication' : 'publishes'}`, needsStore, async t => {
+    const dir = scratch(t, 'sentinel-exec-boot-memory-');
+    const work = join(dir, 'work');
+    mkdirSync(work, { mode: 0o700 });
+    const { store, snapshot } = await captured(t, dir);
+    t.after(() => store.close());
+    const { registry, profile, record } = trusted(dir, true, { parse: { memoryBytes: 1_024 } });
+    const { pin } = lockedRules([{ familyId: RULE, adapterId: 'sentinel-pattern' }], []);
+    const { policy } = policyView([RULE]);
+    const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
+    await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
+    const parseUnit = boot.units.find(u => u.stage === 'parse')!;
+    let samples = 0;
+    const hooks = { at: (boundary: string, context: any) => {
+      if (boundary !== 'after-attempt-start' || context.work.id !== parseUnit.id) return;
+      const usage = process.memoryUsage();
+      t.mock.method(process, 'memoryUsage', () => ({ ...usage, rss: usage.rss + (samples++ === 0 ? 0 : observed) }));
+    } };
+    const summary = await (await Coordinator.open({ store, runId: 'run-boot', run: runEnvelope(snapshot.id, pin, policy.revision, profile.id), registry,
+      scratchRoot: work, retry: { maxAttempts: 1 }, hooks })).run();
+    assert.ok(samples >= 2, 'the operation took its baseline and at least one growth sample');
+    const [attempt] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
+    const ended = store.ledger.getAttempt(attempt!.id)!;
+    const publication = store.ledger.getPublication({ id: parseUnit.id, revision: 1 });
+    if (refused) {
+      assert.equal(publication, null, 'the real parse produced no accepted publication');
+      assert.equal(ended.state, 'failed');
+      assert.equal(ended.envelope.error?.code, 'sentinel.execution.resourceExceeded');
+      assert.deepEqual(ended.errorDetail, { resource: 'memory', limit: 1_024, observed });
+      assert.equal(summary.outcome, 'execution-failure');
+    } else {
+      assert.ok(publication, 'the real parse below the sampled limit was accepted');
+      assert.equal(ended.state, 'succeeded');
+      assert.equal(summary.published, boot.units.length, JSON.stringify(summary.failures));
+    }
+    assert.deepEqual(store.ledger.listOpenStages(500), [], 'no preparation remains staged');
   });
 }
 
@@ -263,16 +304,17 @@ test('maxOutputBytes bounds process output, which an operation does not produce:
   assert.equal(summary.published, boot.units.length, JSON.stringify(summary.failures));
 });
 
-/** Hold the analysis artifact's object write for `ms`: the window between the grant check and acceptance. */
-async function slowAnalysisWrites(t: any, ms: number) {
+/** Hold one operation's object write for `ms`: the window between the grant check and acceptance. */
+async function slowBootstrapWrites(t: any, ms: number, stage: 'parse' | 'capture') {
   const { bootstrapIo } = await import('../dist/execution/bootstrap.js');
-  bootstrapIo.beforeWrite = async (value: any) => { if (value?.analysis?.fingerprint) await new Promise(r => setTimeout(r, ms)); };
+  bootstrapIo.beforeWrite = async (value: any) => { if (stage === 'parse' ? value?.analysis?.fingerprint : value?.schema === 'sentinel-bootstrap-capture/draft-1') await new Promise(r => setTimeout(r, ms)); };
   t.after(() => { bootstrapIo.beforeWrite = undefined; });
 }
 
-for (const [label, grant, budget, code] of [
-  ['the unit deadline', { deadlineMs: 1_000 }, 600_000, 'sentinel.execution.deadlineExceeded'],
-  ['the run deadline', {}, 1_000, 'sentinel.execution.runDeadline'],
+for (const [label, grant, budget, code, slowAt] of [
+  ['the unit deadline', { deadlineMs: 1_000 }, 600_000, 'sentinel.execution.deadlineExceeded', 'parse'],
+  ['the run deadline', {}, 1_000, 'sentinel.execution.runDeadline', 'parse'],
+  ['the run deadline in an ancestor', {}, 1_000, 'sentinel.execution.runDeadline', 'capture'],
 ] as const) {
   test(`${label} passing while a bootstrap operation's objects are written refuses its publication`, needsStore, async t => {
     const dir = scratch(t, 'sentinel-exec-boot-window-');
@@ -286,15 +328,32 @@ for (const [label, grant, budget, code] of [
     const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
     await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
     const run = { ...runEnvelope(snapshot.id, pin, policy.revision, profile.id), budgets: { maxTokens: null, maxCost: null, deadlineMs: budget } };
-    await slowAnalysisWrites(t, 1_200);
-    await (await Coordinator.open({ store, runId: 'run-boot', run, registry, scratchRoot: work, retry: { maxAttempts: 1 } })).run();
+    await slowBootstrapWrites(t, 1_200, slowAt);
+    const summary = await (await Coordinator.open({ store, runId: 'run-boot', run, registry, scratchRoot: work, retry: { maxAttempts: 1 } })).run();
     const parseUnit = boot.units.find(u => u.stage === 'parse')!;
     assert.equal(store.ledger.getPublication({ id: parseUnit.id, revision: 1 }), null, 'nothing accepted after the deadline');
     const [a] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
-    // Under load the run's budget can end before the parse even starts; then it is held, never run. Either way
-    // nothing is accepted after the deadline.
+    if (slowAt === 'capture') assert.equal(a, undefined, 'a capture that could not publish cannot start its dependent parse');
+    // The run budget can expire in an ancestor before parse starts. A dependency hold is valid only with a
+    // recorded run-deadline refusal in that ancestor chain; never infer a deadline from a missing work record.
     if (a || code !== 'sentinel.execution.runDeadline') assert.equal(store.ledger.getAttempt(a!.id)!.envelope.error?.code, code);
-    else assert.equal(store.ledger.getWork({ id: parseUnit.id, revision: 1 })?.reason ?? 'sentinel.execution.runDeadline', 'sentinel.execution.runDeadline');
+    else {
+      const ancestors = new Set<string>();
+      const visit = (id: string) => { for (const parent of boot.units.find(unit => unit.id === id)?.dependencies ?? []) {
+        if (!ancestors.has(parent.id)) { ancestors.add(parent.id); visit(parent.id); }
+      } };
+      visit(parseUnit.id);
+      const held = store.ledger.getWork({ id: parseUnit.id, revision: 1 });
+      if (held) assert.ok(['sentinel.execution.runDeadline', 'sentinel.execution.dependencyFailed'].includes(held.reason!), `unexpected hold: ${held.reason}`);
+      const causes = summary.failures.filter(failure => failure.code === code && (ancestors.has(failure.work.id)
+        || (held?.reason !== 'sentinel.execution.dependencyFailed' && failure.work.id === parseUnit.id)));
+      assert.ok(causes.length > 0, 'the unstarted parse needs an actual run-deadline refusal in its dependency chain');
+      for (const cause of causes) if (cause.attemptId !== null) {
+        const ended = store.ledger.getAttempt(cause.attemptId)!;
+        assert.equal(ended.state, 'failed');assert.equal(ended.envelope.error?.code, code);
+        assert.equal(store.ledger.getPublication(cause.work), null, 'the failed deadline ancestor published nothing');
+      }
+    }
     assert.deepEqual(store.ledger.listOpenStages(500), [], 'its stage was aborted');
     assert.equal(store.ledger.getPublication({ id: boot.units.find(u => u.stage === 'inventory')!.id, revision: 1 }), null);
   });

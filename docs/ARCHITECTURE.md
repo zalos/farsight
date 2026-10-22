@@ -602,150 +602,6 @@ executes the analysis, and crashes and resumes in both revisions.
 
 **Not decided here:** the run's admission receipt (`run.start` on the plan digest) and its CLI, child runs over a
 parent's bootstrap, reuse derivations (PR 27), and planning in the coordinator itself.
-26. **The pattern engine runs behind an original protocol shim inside its pinned image, and coverage is per file per
-rule only where the engine timed the rule (2026-10-22).** (21–25 are reserved for capture, the parser, the planner and
-the command.)
-
-Semgrep 1.181.0 cannot speak the `sentinel-worker` protocol, and PR 07 hands an external worker its inputs only as
-content-addressed blobs (`/input/<digest>`, no paths) with a fixed environment. Rather than add a second execution path
-or a derived image, the adapter's fixed command runs an original, standard-library shim from its inputs inside the
-unmodified pinned image: `/usr/bin/python3 -I -S -B /input/<shim digest>`. The shim's digest sits in the command, so the
-adapter digest pins it alongside the image reference and the engine arguments; the scheduler supplies the shim, one job
-manifest, the rule config and the targets as ordinary inputs, which PR 07 copies and hashes. The shim is transport: it
-reads exactly one job (a second job-shaped input makes it refuse, so captured source cannot stand in for the job),
-materializes targets by relative path under the container's noexec `/tmp`, never materializes repository ignore files and
-writes its own empty `.semgrepignore` (the engine's built-in ignores would otherwise drop `node_modules/`, `tests/`,
-`dist/` silently), runs the fixed arguments with telemetry and version checks off, and returns the bounded raw JSON and a
-run record. Authority stays with the coordinator: the run record must name the supplied job; only job rules, job targets
-and declared languages count; spans are checked as bytes, lines and columns against the captured bytes; identity is
-Sentinel's digest, never the engine fingerprint; no source text is kept; structural locators and local taint stay
-distinct and cross-file traces are refused. **Coverage:** the engine's `paths.scanned` cannot certify that each rule ran
-on a file (its file prefilter skips rules whose required text is absent), so `--time` match times are the evidence: a
-rule is `complete` on a file only with a non-zero match time, `not-run` with zero, `partial` when an engine-reported
-timeout names that rule, and `not-established` when timing is missing; a requested file neither scanned nor skipped is
-`omitted` even on exit zero. A zero match time stays a required-coverage gap: no policy option turns absence of execution evidence
-into completion, and accepting a prefilter as proof would need its exact qualified semantics and independent fixtures.
-**Diagnostics:** engine stderr can quote arguments, paths and source text, and a sensitive value
-can be a plain lowercase word, so no engine text is ever forwarded or stored. A failed run is reported as one fixed
-catalog category (invalid pattern, unparseable or missing config, invalid language, invalid argument, killed, or
-unknown) and its exact exit code, as a protocol diagnostic and in the run record; the stderr digest is kept for
-provenance. **Platforms:** the pinned reference is a multi-platform index; only linux/arm64 is
-measured (darwin-arm64, Docker Desktop), and results from another image architecture are refused. The opt-in
-`sentinel-pattern-qualification` workflow measures linux/amd64 on a native runner, where results are accepted only as
-`candidate`; a green run is the evidence for marking it measured. **Package:** the tarball ships the pack and the worker
-with a digest/rights manifest, but no export can invoke the adapter: the package gate is partial until the PR 09 command
-runs the installed adapter, and the consumer test's engine run uses the workspace service on the installed assets.
-**Rules** come from PR 06's resolved, pinned rules through `patternRulesFromResolved`, which accepts only rules this
-adapter can run faithfully (source-file scope, no framework, source bytes / pattern match / source span, TS/JS/Java),
-checks detector bytes against the pinned pack digest, and returns every other rule as an explicit unsupported check.
-**Cost:** a Python file inside a string in the package, a tie to the image's `/usr/bin/python3`, and one attempt per job
-batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
-in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
-29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
-where the engine proves it matched (2026-10-22).**
-
-`src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official
-multi-platform index; linux/arm64 measured, linux/amd64 listed and unmeasured) through PR 07's isolated execution
-service only. **Acquisition is separate:** the only network step is `acquireAdvisorySnapshots`, an owner action
-(`tool.acquire`) confirmed by a spent receipt for exactly the request (ecosystems, URLs, size bound). It fetches only
-`https://osv-vulnerabilities.storage.googleapis.com/<npm|Maven>/all.zip`, refuses redirects and anything over the stated
-bound (at most 512 MiB; the npm archive was 219 MB and Maven 10 MB on 2026-10-22), checks the origin's MD5 and stores
-each archive by SHA-256 beside a provenance manifest in an owner-only folder; `loadAdvisorySnapshot` re-hashes it before
-any scan. The request is a private frozen copy taken before validation, and one spent confirmation admits exactly one
-acquisition (a retry needs a new confirmation; a failed one stores nothing). The origin's date is read only as a strict
-HTTP date; anything else leaves the snapshot's age unknown, and a scan reports `database-age-unknown`, never fresh. A scan never downloads: snapshots are inputs by digest, the engine runs `--offline` with no network, and the
-owner's freshness bound turns an old snapshot into `database-stale`. **The worker:** the official image is
-golang:alpine (busybox sh, no Python) and inputs are sealed 0444, so an original POSIX shell shim runs as `/bin/sh
-/input/<digest>`; it reads only constrained values (ids, digests, an integer index and a dependency-file basename from a
-fixed list per file; real relative paths stay with the coordinator), links the snapshots read-only into the layout the
-engine expects, and never forwards engine stderr: it reports the exit code, a fixed failure category, the stderr digest,
-which databases the engine reported loading, and the count of packages it dropped. **What counts** (measured, each a
-silent false negative of the engine): a failed run still prints packages with no advisories, so a failed run counts
-nothing; a database that fails to load leaves the exit code at 1 when another ecosystem matched, so a component counts as
-matched only when the engine reported loading its ecosystem's database; and a lock entry without a registry source is
-listed with `source=LOCAL` and never matched (`lodash@4.17.11`: 0 advisories without `resolved`, 7 with it), so such a
-component is not assessed and its file is `partial`. **Certainty and limits:** lockfiles (npm, pnpm) give resolved
-versions and the transitive closure as locked; a CycloneDX SBOM gives components as its producer listed them; a
-`pom.xml` gives declared direct dependencies only, read by a deliberately small parser that says how each version was
-declared (exact, property, range, managed); ranges and managed versions are not assessed, and a match on a range's lower
-bound is refused. Offline, Maven transitives are never resolved (no deps.dev, no registry), so a POM file is always
-`partial`. Findings are one per component and advisory group across every file that names it; the assessment id
-includes the snapshot digest, so a new snapshot is a new assessment, and `explainAdvisoryChanges` says whether a change
-came from the snapshot (same captured bytes) or the source, and reports `unknown` when one side did not assess the
-component (a failed run is never a resolution). A component the adapter refuses (another ecosystem, malformed) keeps its
-file `partial`. Advisory text is not kept. Package matches never claim
-reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
-command (PR 09) and shipping no database in the package. linux/amd64 is measured only by the
-`sentinel-osv-qualification` workflow on a native runner; until a green run is recorded it stays a candidate.
-33. **Sentinel checks infrastructure configuration with Trivy's misconfiguration scanner only, against one pinned checks
-    bundle, and needs the engine's own evidence for every covered file (2026-10-22).** `src/adapters/trivy/` (PR 13)
-    runs `trivy config` from the official Trivy 0.76.1 image index (tag commit e713f67; the image's revision label names
-    it), behind an original POSIX shell worker, only through PR 07's isolated execution service: no pull, no network,
-    no host fallback. Only the configuration scanner runs, so nothing duplicates the OSV adapter's dependency results;
-    the selected types are Dockerfiles, Kubernetes YAML and Terraform (`.tf`, `.tf.json`, local modules). Helm,
-    CloudFormation, Azure ARM, Ansible, plans and Kubernetes JSON are listed as unsupported, not silently skipped.
-
-    - **Checks are data the owner acquires once.** The trivy-checks 2.3.0 OCI manifest and its one layer are pinned by
-      digest (the manifest's revision names the release tag commit; MIT). `acquireChecksBundle` is an owner action
-      (`tool.acquire`) admitted only by a spent receipt for exactly that bundle, used once; it fetches the anonymous
-      pull token, the manifest and the layer from `ghcr.io`, follows only the registry's redirect to its blob host
-      without the token, checks every byte against the pins and stores the archive privately. Because the request
-      names digests it is immutable. Without it nothing runs: every configuration file is `bundle-missing`.
-    - **The engine's silent fallback is refused.** Trivy uses the checks compiled into its binary when its cache is
-      missing, and says so only in its log. The worker unpacks the pinned bundle into the cache layout, skips updates,
-      telemetry and version checks, disables `.trivyignore`, and reports the engine's own "loaded from disk" evidence
-      and check count as fixed words and digits. A run without it counts nothing (`bundleNotLoaded`).
-    - **Coverage needs positive evidence.** The worker also reports, from the engine's log and filtered to the job's
-      own paths, which files and Terraform module folders were scanned, which failed to parse and where a remote module
-      failed to load. At exit 0, a Dockerfile or Terraform file the engine never logged is `notReported`, a gap, never
-      a pass (the engine silently skips `.git` folders, for one). Files are scanned below one fixed folder so the engine's
-      root-relative `proc`, `sys` and `dev` skips cannot hide a captured folder of that name. YAML the engine did not log
-      is not applicable only when its bytes prove the engine's Kubernetes rule (a document with apiVersion, kind and
-      metadata) cannot match; otherwise it is `notReported`. Inline
-      `trivy:`/`tfsec:` ignore comments, which the engine honours with no switch to disable them, a remote module
-      (scans have no network, so modules are never fetched) and unread variable files leave a file `partial`.
-    - **Findings are configuration facts at captured paths.** A finding keeps the check id, the bundle's severity,
-      the configuration type, the captured path and artifact (a module folder has none) and lines validated against
-      the captured bytes; never the engine's message, which quotes the file, and never a new graph node. Checks outside
-      the pinned bundle's `builtin.` namespace, unknown targets and impossible lines are refused, with a reason.
-    - **Platforms.** linux/arm64 is measured on a darwin-arm64 Docker Desktop host; linux/amd64 is unmeasured until the
-      native `sentinel-iac-qualification` workflow passes with zero skips.
-
-    Not decided here: registering the adapter in the production registry and planning its checks (PR 08/09),
-    Terraform variable files and plans, Helm rendering, and any additional configuration type.
-
-34. **Sentinel audits CI configuration with zizmor offline, and the audits that need the network are a stated gap
-    (2026-10-22).** `src/adapters/zizmor/` (PR 13) runs the official zizmor 1.31.1 image index (its build provenance
-    names `refs/tags/v1.31.1` at commit effdb35; MIT) behind an original POSIX shell worker, only through PR 07's
-    isolated execution service: no pull, no network, no token (the GitHub token variables are unset as well).
-
-    - **Inputs.** GitHub Actions workflows directly in any `.github/workflows` folder, `action.yml`/`action.yaml`, and
-      `.github/dependabot.yml`; files keep their paths so zizmor collects them by its own layout. Pre-commit
-      configuration, remote repositories and other CI systems are listed as unsupported.
-    - **The repository cannot suppress a finding.** `--no-config` and `--no-ignores`: neither a repository
-      `zizmor.yml` nor an ignore comment changes what is reported. The regular persona is selected and recorded.
-    - **Offline is explicit.** zizmor 1.31.1 skips five audits without the GitHub API (impostor-commit,
-      known-vulnerable-actions, ref-confusion, ref-version-mismatch, stale-action-refs) and runs three with less
-      information (artipacked, typosquat-uses, unpinned-uses). The worker reports the engine's own "skipping" lines; the
-      coordinator requires exactly the pinned online set, so every workflow and action is `partial` with
-      `onlineAuditsSkipped` and `offlineDegraded`, never complete; any other audit failing to load is `auditNotLoaded`.
-    - **Coverage and consistency need the engine's own evidence.** A file the engine reported completing is covered; one
-      it collected but did not audit (unparseable, schema-invalid or empty, all at exit 0) is `notAudited`; one it
-      never collected is `notCollected`. The exit code is zizmor's own summary of its highest finding (11–14, or 0 with
-      none): a report that disagrees with it, or a run where an online audit loaded, counts nothing.
-    - **Findings are CI configuration facts at captured paths.** A finding keeps the audit, severity, confidence and
-      its primary and related locations as UTF-8 byte spans checked against the captured bytes; never the engine's
-      annotations, quoted features, descriptions or fixes, and never a new graph node.
-    - **Platforms.** linux/arm64 is measured; linux/amd64 is unmeasured until the native `sentinel-iac-qualification`
-      workflow passes with zero skips.
-
-    The worker change found here applies to every shell worker: a frame binding built in a command substitution never
-    advances the sequence number, so a diagnostic followed by a result repeats it and PR 07 refuses the attempt. Both
-    PR 13 workers build it in their own shell.
-
-    Not decided here: online audits with an owner-supplied token, pre-commit inputs, other personas, registration and
-    planning (PR 08/09).
-
 
 37. **Sentinel's command line is the owner's entrypoint; its local service never grants owner authority (2026-10-22).**
 
@@ -815,6 +671,153 @@ no lock. **Not in this decision:** the full report and finding policy (PR 19); p
 protocol, which would let a unit cover several files. Same-account code is outside this boundary, as for the store.
 
 
+26. **The pattern engine runs behind an original protocol shim inside its pinned image, and coverage is per file per
+rule only where the engine timed the rule (2026-10-22).**
+
+Semgrep 1.181.0 cannot speak the `sentinel-worker` protocol, and PR 07 hands an external worker its inputs only as
+content-addressed blobs (`/input/<digest>`, no paths) with a fixed environment. Rather than add a second execution path
+or a derived image, the adapter's fixed command runs an original, standard-library shim from its inputs inside the
+unmodified pinned image: `/usr/bin/python3 -I -S -B /input/<shim digest>`. The shim's digest sits in the command, so the
+adapter digest pins it alongside the image reference and the engine arguments; the scheduler supplies the shim, one job
+manifest, the rule config and the targets as ordinary inputs, which PR 07 copies and hashes. The shim is transport: it
+reads exactly one job (a second job-shaped input makes it refuse, so captured source cannot stand in for the job),
+materializes targets by relative path under the container's noexec `/tmp`, never materializes repository ignore files and
+writes its own empty `.semgrepignore` (the engine's built-in ignores would otherwise drop `node_modules/`, `tests/`,
+`dist/` silently), runs the fixed arguments with telemetry and version checks off, and returns the bounded raw JSON and a
+run record. Authority stays with the coordinator: the run record must name the supplied job; only job rules, job targets
+and declared languages count; spans are checked as bytes, lines and columns against the captured bytes; identity is
+Sentinel's digest, never the engine fingerprint; no source text is kept; structural locators and local taint stay
+distinct and cross-file traces are refused. **Coverage:** the engine's `paths.scanned` cannot certify that each rule ran
+on a file (its file prefilter skips rules whose required text is absent), so `--time` match times are the evidence: a
+rule is `complete` on a file only with a non-zero match time, `not-run` with zero, `partial` when an engine-reported
+timeout names that rule, and `not-established` when timing is missing; a requested file neither scanned nor skipped is
+`omitted` even on exit zero. A zero match time stays a required-coverage gap: no policy option turns absence of execution evidence
+into completion, and accepting a prefilter as proof would need its exact qualified semantics and independent fixtures.
+**Diagnostics:** engine stderr can quote arguments, paths and source text, and a sensitive value
+can be a plain lowercase word, so no engine text is ever forwarded or stored. A failed run is reported as one fixed
+catalog category (invalid pattern, unparseable or missing config, invalid language, invalid argument, killed, or
+unknown) and its exact exit code, as a protocol diagnostic and in the run record; the stderr digest is kept for
+provenance. **Platforms:** the pinned reference is a multi-platform index; only linux/arm64 is
+measured (darwin-arm64, Docker Desktop), and results from another image architecture are refused. The opt-in
+`sentinel-pattern-qualification` workflow measures linux/amd64 on a native runner, where results are accepted only as
+`candidate`; a green run is the evidence for marking it measured. **Package:** the tarball ships the pack and the worker
+with a digest/rights manifest, but no export can invoke the adapter: the package gate is partial until the PR 09 command
+runs the installed adapter, and the consumer test's engine run uses the workspace service on the installed assets.
+**Rules** come from PR 06's resolved, pinned rules through `patternRulesFromResolved`, which accepts only rules this
+adapter can run faithfully (source-file scope, no framework, source bytes / pattern match / source span, TS/JS/Java),
+checks detector bytes against the pinned pack digest, and returns every other rule as an explicit unsupported check.
+**Cost:** a Python file inside a string in the package, a tie to the image's `/usr/bin/python3`, and one attempt per job
+batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
+in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
+
+29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
+where the engine proves it matched (2026-10-22).**
+
+`src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official
+multi-platform index; linux/arm64 and linux/amd64 measured) through PR 07's isolated execution
+service only. **Acquisition is separate:** the only network step is `acquireAdvisorySnapshots`, an owner action
+(`tool.acquire`) confirmed by a spent receipt for exactly the request (ecosystems, URLs, size bound). It fetches only
+`https://osv-vulnerabilities.storage.googleapis.com/<npm|Maven>/all.zip`, refuses redirects and anything over the stated
+bound (at most 512 MiB; the npm archive was 219 MB and Maven 10 MB on 2026-10-22), checks the origin's MD5 and stores
+each archive by SHA-256 beside a provenance manifest in an owner-only folder; `loadAdvisorySnapshot` re-hashes it before
+any scan. The request is a private frozen copy taken before validation, and one spent confirmation admits exactly one
+acquisition (a retry needs a new confirmation; a failed one stores nothing). The origin's date is read only as a strict
+HTTP date; anything else leaves the snapshot's age unknown, and a scan reports `database-age-unknown`, never fresh. A scan never downloads: snapshots are inputs by digest, the engine runs `--offline` with no network, and the
+owner's freshness bound turns an old snapshot into `database-stale`. **The worker:** the official image is
+golang:alpine (busybox sh, no Python) and inputs are sealed 0444, so an original POSIX shell shim runs as `/bin/sh
+/input/<digest>`; it reads only constrained values (ids, digests, an integer index and a dependency-file basename from a
+fixed list per file; real relative paths stay with the coordinator), links the snapshots read-only into the layout the
+engine expects, and never forwards engine stderr: it reports the exit code, a fixed failure category, the stderr digest,
+which databases the engine reported loading, and the count of packages it dropped. **What counts** (measured, each a
+silent false negative of the engine): a failed run still prints packages with no advisories, so a failed run counts
+nothing; a database that fails to load leaves the exit code at 1 when another ecosystem matched, so a component counts as
+matched only when the engine reported loading its ecosystem's database; and a lock entry without a registry source is
+listed with `source=LOCAL` and never matched (`lodash@4.17.11`: 0 advisories without `resolved`, 7 with it), so such a
+component is not assessed and its file is `partial`. **Certainty and limits:** lockfiles (npm, pnpm) give resolved
+versions and the transitive closure as locked; a CycloneDX SBOM gives components as its producer listed them; a
+`pom.xml` gives declared direct dependencies only, read by a deliberately small parser that says how each version was
+declared (exact, property, range, managed); ranges and managed versions are not assessed, and a match on a range's lower
+bound is refused. Offline, Maven transitives are never resolved (no deps.dev, no registry), so a POM file is always
+`partial`. Findings are one per component and advisory group across every file that names it; the assessment id
+includes the snapshot digest, so a new snapshot is a new assessment, and `explainAdvisoryChanges` says whether a change
+came from the snapshot (same captured bytes) or the source, and reports `unknown` when one side did not assess the
+component (a failed run is never a resolution). A component the adapter refuses (another ecosystem, malformed) keeps its
+file `partial`. Advisory text is not kept. Package matches never claim
+reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
+command (PR 09). No database ships in the package. Native linux/amd64 qualification passed
+[21 tests with zero skips and the installed worker](https://github.com/zalos/farsight/actions/runs/39788785215);
+the adapter records that evidence, and the workflow rechecks the pinned image on affected changes.
+
+33. **Sentinel checks infrastructure configuration with Trivy's misconfiguration scanner only, against one pinned checks
+    bundle, and needs the engine's own evidence for every covered file (2026-10-22).** `src/adapters/trivy/` (PR 13)
+    runs `trivy config` from the official Trivy 0.76.1 image index (tag commit e713f67; the image's revision label names
+    it), behind an original POSIX shell worker, only through PR 07's isolated execution service: no pull, no network,
+    no host fallback. Only the configuration scanner runs, so nothing duplicates the OSV adapter's dependency results;
+    the selected types are Dockerfiles, Kubernetes YAML and Terraform (`.tf`, `.tf.json`, local modules). Helm,
+    CloudFormation, Azure ARM, Ansible, plans and Kubernetes JSON are listed as unsupported, not silently skipped.
+
+    - **Checks are data the owner acquires once.** The trivy-checks 2.3.0 OCI manifest and its one layer are pinned by
+      digest (the manifest's revision names the release tag commit; MIT). `acquireChecksBundle` is an owner action
+      (`tool.acquire`) admitted only by a spent receipt for exactly that bundle, used once; it fetches the anonymous
+      pull token, the manifest and the layer from `ghcr.io`, follows only the registry's redirect to its blob host
+      without the token, checks every byte against the pins and stores the archive privately. Because the request
+      names digests it is immutable. Without it nothing runs: every configuration file is `bundle-missing`.
+    - **The engine's silent fallback is refused.** Trivy uses the checks compiled into its binary when its cache is
+      missing, and says so only in its log. The worker unpacks the pinned bundle into the cache layout, skips updates,
+      telemetry and version checks, disables `.trivyignore`, and reports the engine's own "loaded from disk" evidence
+      and check count as fixed words and digits. A run without it counts nothing (`bundleNotLoaded`).
+    - **Coverage needs positive evidence.** The worker also reports, from the engine's log and filtered to the job's
+      own paths, which files and Terraform module folders were scanned, which failed to parse and where a remote module
+      failed to load. At exit 0, a Dockerfile or Terraform file the engine never logged is `notReported`, a gap, never
+      a pass (the engine silently skips `.git` folders, for one). Files are scanned below one fixed folder so the engine's
+      root-relative `proc`, `sys` and `dev` skips cannot hide a captured folder of that name. YAML the engine did not log
+      is not applicable only when its bytes prove the engine's Kubernetes rule (a document with apiVersion, kind and
+      metadata) cannot match; otherwise it is `notReported`. Inline
+      `trivy:`/`tfsec:` ignore comments, which the engine honours with no switch to disable them, a remote module
+      (scans have no network, so modules are never fetched) and unread variable files leave a file `partial`.
+    - **Findings are configuration facts at captured paths.** A finding keeps the check id, the bundle's severity,
+      the configuration type, the captured path and artifact (a module folder has none) and lines validated against
+      the captured bytes; never the engine's message, which quotes the file, and never a new graph node. Checks outside
+      the pinned bundle's `builtin.` namespace, unknown targets and impossible lines are refused, with a reason.
+    - **Platforms.** linux/arm64 is measured on a darwin-arm64 Docker Desktop host; linux/amd64 is measured on
+      native Ubuntu 24.04.5 with Docker Engine 28.0.4 by [CI run 39817213827](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627) (33 tests, zero skips, and both installed workers).
+      The exact tested revision and pins are in [the evidence record](proposals/farsight-sentinel/evidence/2026-10-22-iac-native.json).
+
+    Not decided here: registering the adapter in the production registry and planning its checks (PR 08/09),
+    Terraform variable files and plans, Helm rendering, and any additional configuration type.
+
+34. **Sentinel audits CI configuration with zizmor offline, and the audits that need the network are a stated gap
+    (2026-10-22).** `src/adapters/zizmor/` (PR 13) runs the official zizmor 1.31.1 image index (its build provenance
+    names `refs/tags/v1.31.1` at commit effdb35; MIT) behind an original POSIX shell worker, only through PR 07's
+    isolated execution service: no pull, no network, no token (the GitHub token variables are unset as well).
+
+    - **Inputs.** GitHub Actions workflows directly in any `.github/workflows` folder, `action.yml`/`action.yaml`, and
+      `.github/dependabot.yml`; files keep their paths so zizmor collects them by its own layout. Pre-commit
+      configuration, remote repositories and other CI systems are listed as unsupported.
+    - **The repository cannot suppress a finding.** `--no-config` and `--no-ignores`: neither a repository
+      `zizmor.yml` nor an ignore comment changes what is reported. The regular persona is selected and recorded.
+    - **Offline is explicit.** zizmor 1.31.1 skips five audits without the GitHub API (impostor-commit,
+      known-vulnerable-actions, ref-confusion, ref-version-mismatch, stale-action-refs) and runs three with less
+      information (artipacked, typosquat-uses, unpinned-uses). The worker reports the engine's own "skipping" lines; the
+      coordinator requires exactly the pinned online set, so every workflow and action is `partial` with
+      `onlineAuditsSkipped` and `offlineDegraded`, never complete; any other audit failing to load is `auditNotLoaded`.
+    - **Coverage and consistency need the engine's own evidence.** A file the engine reported completing is covered; one
+      it collected but did not audit (unparseable, schema-invalid or empty, all at exit 0) is `notAudited`; one it
+      never collected is `notCollected`. The exit code is zizmor's own summary of its highest finding (11–14, or 0 with
+      none): a report that disagrees with it, or a run where an online audit loaded, counts nothing.
+    - **Findings are CI configuration facts at captured paths.** A finding keeps the audit, severity, confidence and
+      its primary and related locations as UTF-8 byte spans checked against the captured bytes; never the engine's
+      annotations, quoted features, descriptions or fixes, and never a new graph node.
+    - **Platforms.** linux/arm64 is measured; linux/amd64 is measured on native Ubuntu 24.04.5 with
+      Docker Engine 28.0.4 by [the same native CI job](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627); its offline gaps remain unchanged.
+
+    The worker change found here applies to every shell worker: a frame binding built in a command substitution never
+    advances the sequence number, so a diagnostic followed by a result repeats it and PR 07 refuses the attempt. Both
+    PR 13 workers build it in their own shell.
+
+    Not decided here: online audits with an owner-supplied token, pre-commit inputs, other personas, registration and
+    planning (PR 08/09).
+
 
 **ADR 37 extension — explicit scanner command dispatch (2026-10-22).** The owner CLI composes the four reviewed
 production drivers through the canonical coordinator; the preview also has an exact-rule trusted driver and its
@@ -845,8 +848,9 @@ external adapter, the official multi-platform image index pinned by digest (`ghc
 installed ahead of time and never pulled at scan time, no host fallback (`src/adapters/gitleaks/`). **Shape:** Gitleaks
 cannot speak the worker protocol, so an original POSIX shell shim does, inside the unmodified image (alpine: busybox
 sh and applets). The shim runs as `/bin/sh /input/<its digest>`; the adapter digest
-pins it, and with it the configuration and report template it writes. Only arm64 is measured; amd64, listed in the
-index, gives `candidate` results under an explicit qualification run and is otherwise refused. **Inputs:** the shim, a
+pins it, and with it the configuration and report template it writes. Image architecture authority comes from the
+supervisor-verified outcome and the pinned platform manifest. Qualification is bound to the recorded engine evidence;
+the changed canonical command path must also pass its selected native CI gate. **Inputs:** the shim, a
 line job (`F <index> <content> <path>`) and each captured content once, in any order (the canonical coordinator lists
 captured sources first, then its job record and the auxiliary worker and job). The shim takes as its job the one input
 that is neither itself nor a captured source the start's `inputScopes` names, and whose first line is the job header:
@@ -888,7 +892,46 @@ an `error` over every target with a coded reason; the shim itself reports only a
 names the engine, adapter digest, image reference and id, platform, configuration and default-rules digests, the shim,
 job and invocation digests, the exit code, and the stderr and report digests. **Packaging:** `scripts/package-assets-gitleaks.mjs`
 ships the shim and a digest/rights manifest as `farsight-sentinel/assets/gitleaks/*`; no image, binary or report ships.
-**Not decided here:** registration in the production registry and the report/CLI surface (PR 08/09), Git history
-scanning. **Cost:** a location is whole lines, so a long line cites more than the match; the release's per-rule
+**Canonical command integration:** the owner promotes the original repository-scoped pack and explicitly adopts the
+pinned image. The admitted snapshot supplies every included source entry; identical content is sealed once while
+findings retain distinct entry identities. The driver preserves the verified supervisor outcome, validates sealed
+job/output digests, and publishes normalized findings with canonical per-check coverage in one accepted attempt.
+Omissions stay partial and failed scans cover nothing. `run.start` requires the plan's `tool-execution` effect.
+Captured names and source-derived job/invocation records remain private; public citations and scopes withhold paths.
+**Not decided here:** Git history scanning, finding policy and replay-bundle command acceptance. **Cost:** a location is whole lines, so a long line cites more than the match; the release's per-rule
 allowlists and stop words are detector semantics and part of the pin; a path whose file is also another's folder is
 refused rather than partly scanned.
+
+
+31. **Sentinel's Express pack reads registration order from source and never credits a refusal as authentication or authorization (2026-10-22).**
+`farsight-sentinel/frameworks/express` (PR 15) answers, for each Express route the public parser found, what runs
+before its handler and whether anything there can refuse the request, for exactly Express 4.21.2. It reads only captured
+source with Oxc; it installs, builds and runs nothing, and leaves the structural graph unchanged (its surfaces are the
+parser's route nodes, its registrations are re-derived from syntax). The version must be pinned exactly in the root
+manifest, or be a range the npm lockfile written for it resolves to exactly 4.21.2; overrides, another lockfile with a
+range or a path alias for `express` leave every fact unknown and `framework.version` null, and so does any registration
+on a route's path that sits under a nested package manifest. Every route the pack discovers is reconciled with the
+parser's surfaces: a `route()` chain, an `all()` route or a route on an object the parser does not index is a frontier
+(`registrationUnsupported` or `routeNotInGraph`), never a silent omission.
+Applications and routers are top-level `express()` / `Router()` constants; their layers are the top-level
+`use`, method, `all`, `route` and `param` statements of their own module, in order. Any other use of the object — a
+registration inside a function, branch or loop, the object handed to other code or registered on from another module —
+makes it open, and every route it could reach is unknown (`sentinel.express.registrationDynamic`): a skipped branch is
+never read as either outcome. Dispatch is simulated as Express runs it: for a route's effective path (mount paths
+joined, case-insensitive, non-strict), the matching layers registered before it on the application and on every router
+on its path, earlier routers whose prefix matches (their own layers), earlier routes matching the same method and path,
+then the route's own handlers before the last. A layer registered after the route is never on its path, so late
+middleware cannot clear a finding. A partial match is unknown, not either side. Middleware effects come from bodies,
+never names: a non-async `(req, res, next)` whose body is one guarded refusal with a literal 401 or 403 on a request
+value, then `next()`; a pass-through; or an error handler. A refusal is cited as evidence at its position but never
+credited: its status code and the request value it reads (which the client may control) do not establish a principal
+or a permission, so both properties stay unknown there (`sentinel.express.refusalUnproven`). Everything else —
+third-party or unresolved functions, `next('route')`/`next('router')`, async bodies, param callbacks, router options or
+routing settings that change matching, sub-applications — is unknown with its reason. Because Express skips ordinary
+layers after an error until an error handler, a refusal followed by an error handler that may resume with `next()`, or
+by a layer whose arity is unknown, is unknown (`sentinel.express.errorPathResumes`). Facts per route and property:
+never `applies`; `unknown` at each refusal and each unreadable position; and `does-not-apply` at the handler's
+position only when every earlier layer was read and none can refuse. Node's `require` is read only where the file does
+not bind its own, and only Node's `http`/`https` `createServer` may receive an application without opening it. Proving
+a principal or permission would need the provenance of the value a refusal reads, which this pack does not model; it is a draft, source-only capability until PR 09 wires it into a
+scan. Reason words are `strings-sentinel-express.ts`.

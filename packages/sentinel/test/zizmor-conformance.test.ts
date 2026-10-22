@@ -45,7 +45,8 @@ test('workflow, action and Dependabot positives, a true negative, files it canno
   const r = await run(tree);
   const wall = Date.now() - t0;
   assert.equal(r.attempt, 'succeeded');
-  assert.equal(r.platform.state, QUALIFY ? 'candidate' : 'measured');
+  assert.equal(r.platform.state, 'measured');
+  if (QUALIFY) assert.equal(r.platform.architecture, QUALIFY, 'the outcome, not the host or qualification request, names the measured architecture');
   assert.equal(r.engineExit, 14, 'the highest finding is high');
   console.log(`# zizmor conformance: ${r.findings.length} findings, ${r.refused.length} refused, ${wall} ms`);
   for (const c of r.coverage) console.log(`# ${c.relativePath} ${c.status} ${c.limitations.join(',')} [${audits(r, c.relativePath).join(' ')}]`);

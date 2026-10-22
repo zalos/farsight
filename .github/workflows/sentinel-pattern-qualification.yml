@@ -76,6 +76,7 @@ jobs:
       - name: Install the packed tarball and run its shipped pattern assets
         env:
           SENTINEL_ISOLATION: '1'
+          SENTINEL_PACKAGE_ENGINE: pattern
         run: |
           set -o pipefail
           pnpm pack:sentinel

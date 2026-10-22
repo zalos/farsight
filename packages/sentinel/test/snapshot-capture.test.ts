@@ -432,13 +432,17 @@ test('every reason and error code is a catalog entry with both registers and a d
   assert.deepEqual(catalog, [...CAPTURE_REASON_CODES, ...SNAPSHOT_ERROR_CODES].sort(), 'no unused or unlisted capture words');
 });
 
-test('source capture is listed as a draft capability; only the pinned scanners are, and every framework or deep capability stays unavailable', async () => {
+test('source capture and the implemented scanner slice are draft capabilities; later features stay unavailable', async () => {
   const { CAPABILITIES } = await import('../dist/index.js');
   const { STRINGS } = await import('@farsight/core/dist/strings.js');
   const capture = CAPABILITIES.find((c: any) => c.id === 'source-capture');
   assert.deepEqual([capture?.state, capture?.reasonCode], ['available-draft', 'sentinel.capability.draftCapture']);
   assert.ok(STRINGS['sentinel.capability.draftCapture']?.define);
-  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks']);
+  for (const id of ['framework-next', 'framework-nest', 'framework-spring', 'interprocedural-flow', 'reports', 'dispositions', 'model-review', 'mcp', 'farsight-host-bridge', 'gui', 'replay-bundles']) {
+    assert.equal(CAPABILITIES.find(c => c.id === id)?.state, 'unavailable', id);
+  }
+  for (const id of ['pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks']) assert.equal(CAPABILITIES.find(c => c.id === id)?.reasonCode, 'sentinel.capability.pinnedScanners', id);
+  assert.deepEqual(CAPABILITIES.filter((c: any) => c.state !== 'unavailable').map((c: any) => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express']);
 });
 
 test('restore recreates empty folders and never an execute bit; the materialization keeps the original as provenance', needsStore, async t => {

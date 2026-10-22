@@ -43,9 +43,9 @@ export const TRIVY_IMAGE_PLATFORMS = Object.freeze([
   Object.freeze({ platform: 'linux/arm64', architecture: 'arm64', state: 'measured' as const,
     manifest: 'sha256:fc223b6f033406fd0c5efe59b566295e90cff76ccd2af696bd0d66d53ad83a2d',
     evidence: 'darwin-arm64 host, Docker Desktop with Engine 29.2.1; Trivy conformance 2026-10-22' }),
-  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'unmeasured' as const,
+  Object.freeze({ platform: 'linux/amd64', architecture: 'amd64', state: 'measured' as 'measured' | 'unmeasured',
     manifest: 'sha256:2e6c00d711ab4ae41d8a30c2c1fd3bd3b62704c177bb120f95012e939edfb3df',
-    evidence: 'listed in the pinned index; qualified only by the native amd64 workflow' }),
+    evidence: 'native Ubuntu 24.04.5 x86_64, Docker Engine 28.0.4 linux/amd64; 2026-10-22; https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627; tested merge 0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5' }),
 ]);
 export const TRIVY_MEASURED_ARCHITECTURES: ReadonlySet<string> = new Set(TRIVY_IMAGE_PLATFORMS.filter(p => p.state === 'measured').map(p => p.architecture));
 

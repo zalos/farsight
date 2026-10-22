@@ -337,7 +337,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     if (identity) request.workers?.settle(identity);
     if (containerId) {
       const backend = request.backend!;
-      const state = await backend.state(containerId, labels).catch(() => null);
+      const state = await backend.state(containerId, labels, request.signal).catch(() => null);
       if (state) outcome.container!.state = { exitCode: state.exitCode, oomKilled: state.oomKilled };
       if (state?.oomKilled && outcome.state === 'failed') setFailure(outcome, 'sentinel.execution.resourceExceeded', {}, true);
       outcome.cleanup = await backend.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
@@ -345,6 +345,9 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     }
     unregister();
   }
+
+  // The final daemon observation/cleanup is awaited too: cancellation there voids a provisional result.
+  if (outcome.state === 'succeeded' && request.signal?.aborted) setFailure(outcome, 'sentinel.execution.canceled', {}, true);
 
   // Exit facts first: a worker that delivered a result must also have exited cleanly.
   if (outcome.state === 'succeeded') {

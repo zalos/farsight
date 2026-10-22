@@ -65,8 +65,9 @@ repository ignore files are never materialized, in-source suppression comments a
 shaped like a job makes the worker refuse rather than run it. A failed engine run is reported only as a fixed category and its exit code, never its messages, which
 can quote source text. Results are trusted only after the coordinator checks them against the job it supplied and the
 captured bytes; engine fingerprints and messages are not used, and findings
-keep spans and digests, not source text. The package smokes install from npm into temporary directories with their own npm
-providers are opt-in per run. Dependency advisories (PR 12): the advisory database is downloaded only by an explicit,
+keep spans and digests, not source text.
+
+Dependency advisories (PR 12): the advisory database is downloaded only by an explicit,
 owner-confirmed acquisition, from one allowlisted origin (the OSV project's published archives), size-bounded, with the
 origin's MD5 checked and the archive stored by digest in an owner-only folder; scans run OSV-Scanner fully offline with
 no network and never download, and no project package manager runs. Engine stderr never leaves its container; the

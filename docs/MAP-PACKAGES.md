@@ -57,8 +57,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   runs in the optional, path-filtered CI job, while Echo unit tests remain in required validation.
 
 - `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
-  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern adapter remains unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
-  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The advisory adapter remains unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
+  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The explicit scanner CLI composes pattern, dependency, infrastructure and CI adapters; model runtime is not implemented. `src/store/index.ts` is the store's
   public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
@@ -123,7 +122,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
-  `test/store-integration.test.ts` drives the facade end to end across processes. The pattern adapter (PR 10,
+  The pattern adapter (PR 10,
   `src/adapters/pattern/`, composed by the explicit scanner CLI): `adapter.ts` (Semgrep 1.181.0 pinned by image digest
   with its measured and unmeasured platforms, the fixed engine arguments, `buildPatternAdapter` for the registry
   definition and test variants, and the support statement), `resolved.ts` (PR 06 resolved rules → adapter rules, or
@@ -134,7 +133,14 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `scripts/package-assets.mjs`, which `scripts/pack-sentinel.mjs` calls), its words
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
-  `sentinel-pattern-qualification` workflow). Depends only on graph, code-parser and core; nothing in the
+  `sentinel-pattern-qualification` workflow).
+  `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
+  `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
+  resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,
+  error-handler bodies), `patterns.ts` (Express 4 path and method matching), `version.ts` (manifest and npm lockfile),
+  `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
+  core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
+  Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

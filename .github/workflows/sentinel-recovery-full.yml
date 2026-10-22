@@ -2,12 +2,21 @@
 # orphaned-worker and parent-loss cases, each recovered by a fresh process with zero lost and zero duplicate accepted
 # outputs; then 20 real-container crashes in each of four cases (lost create reply, late create, crash while
 # canceling, same-epoch uncertain create) with no owned container left and two unrelated containers untouched.
-# A release gate: run by hand, and on every push to a release branch. SENTINEL_RECOVERY_FULL=1 fails on a missing
+# A release gate: run for affected pull requests, by hand, and on release branches. SENTINEL_RECOVERY_FULL=1 fails on a missing
 # prerequisite, and the job fails if any test was skipped.
 name: sentinel-recovery-full
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/sentinel-recovery-full.yml
+      - packages/sentinel/src/execution/**
+      - packages/sentinel/src/store/**
+      - packages/sentinel/src/planner/**
+      - packages/sentinel/test/execution-*.test.ts
+      - packages/sentinel/test/coordinator-helpers.ts
+      - packages/sentinel/test/helpers/**
   push:
     branches: ['release/**']
 
@@ -17,7 +26,7 @@ permissions:
 jobs:
   sentinel-recovery-full:
     name: sentinel-recovery-full
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7

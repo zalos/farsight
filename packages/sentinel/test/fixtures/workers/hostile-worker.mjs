@@ -166,6 +166,7 @@ switch (behavior) {
       case 'hang': await sleep(600_000); break;
       case 'ack-cancel': { const m = await next(); if (m.type === 'cancel') send({ protocol: P, type: 'cancel-ack', ...bound(start) }); await sleep(100); break; }
       case 'ignore-cancel': await sleep(600_000); break;
+      case 'self-sigkill': process.kill(process.pid, 'SIGKILL'); await sleep(60000); break;
       case 'memory': { const hog = []; for (let i = 0; i < 4096; i++) { const b = Buffer.alloc(16 * 1024 * 1024, i & 255); hog.push(b); } result(start, honestWork(start)); break; }
       case 'identity': {
         // What the kernel says this process may do, not what the container configuration claims.

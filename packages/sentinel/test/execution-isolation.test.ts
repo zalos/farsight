@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { ContainerBackend, createArgs, validateContainer, LABELS, ISOLATION_POLICY, isolationQualification } from '../dist/execution/isolation.js';
 import { createAdapterRegistry, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
+import { delayedOomInspects } from './container-state-fixtures.ts';
 import { isExecutionError } from '../dist/execution/errors.js';
 import { inputs, removeScratch, runAttempt, scratch, storeIn, work, WORKER } from './execution-helpers.ts';
 
@@ -123,6 +124,21 @@ const backendDocker = () => ['/usr/bin/docker', '/usr/local/bin/docker', '/opt/h
 const absent = (id: string) => /no such (container|object)/i.test(docker('inspect', '--type', 'container', id).stderr);
 const canary = (text: string) => JSON.parse(/canary (\{.*\})/.exec(text)?.[1] ?? '{}');
 
+// Keep a failing native runner honest: report bounded daemon event facts, rather than infer OOM from 137.
+function memoryEvidence(t: any, outcome: any) {
+  if (outcome.code === 'sentinel.execution.resourceExceeded') return;
+  const id = outcome.container?.id;
+  if (!/^[0-9a-f]{64}$/.test(id ?? '')) return;
+  const result = spawnSync(backendDocker(), ['events', '--since', new Date(Date.now() - 60_000).toISOString(),
+    '--until', new Date().toISOString(), '--filter', `container=${id}`, '--format', '{{json .}}'],
+  { encoding: 'utf8', timeout: 5000, maxBuffer: 65536, env: { ...process.env } });
+  const events = [];
+  for (const line of (result.stdout ?? '').split('\n').filter(Boolean).slice(0, 32)) {
+    try { const event = JSON.parse(line); if (event.Actor?.ID === id) events.push({ action: event.Action, timeNano: event.timeNano }); } catch { /* diagnostic only */ }
+  }
+  t.diagnostic(`unconfirmed memory canary ${JSON.stringify({ code: outcome.code, container: id, state: outcome.container?.state, events, eventQueryStatus: result.status })}`);
+}
+
 test('the backend is a qualified local runtime; its facts are printed for the run log', { skip }, t => {
   const f = backend.facts;
   t.diagnostic(`sentinel-isolation-qualification host=${f.host} backend=${f.backend} server=${f.server} engine=${f.serverVersion} os=${JSON.stringify(f.operatingSystem)} cgroup=${f.cgroupVersion} status=${f.qualification.status}`);
@@ -172,6 +188,7 @@ test('host-file canary: no host path, sibling file, daemon socket or writable in
 
 test('resource canaries: memory, processes and temporary storage are bounded', { skip }, async t => {
   const memory = await run('memory', { memoryBytes: 64 * 1024 * 1024 });
+  memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify({ code: memory.code, c: memory.container?.state }));
   assert.equal(memory.container?.state?.oomKilled, true);
   const pids = await run('pids', { pids: 16 });
@@ -182,6 +199,46 @@ test('resource canaries: memory, processes and temporary storage are bounded', {
   assert.equal(canary(tmp.diagnostics.text).fillTmp, 'ENOSPC');
   t.diagnostic(`resource canaries oom=${memory.container?.state?.oomKilled} forked=${forked.started}/16 tmpfs=${canary(tmp.diagnostics.text).fillTmp}`);
   for (const o of [memory, pids, tmp]) assert.equal(o.cleanup, 'removed-owned-container');
+});
+
+test('a real OOM whose first inspect flags are delayed settles before owned cleanup; plain SIGKILL stays unidentified', { skip }, async t => {
+  let delayed!: ReturnType<typeof delayedOomInspects>;
+  t.after(() => t.diagnostic(`delayed-OOM raw inspect trace ${JSON.stringify({ terminalReads: delayed?.terminalReads(), observations: delayed?.observations })}`));
+  const service = await createExecutionService(store, { scratchRoot: s.work, registry: registryFor('memory', { memoryBytes: 64 * 1024 * 1024 }), containers: true,
+    wrapRunner: real => (delayed = delayedOomInspects(real)).runner,
+  });
+  const memory = await service.run({ adapterId: 'canary-memory', attemptId: `delayed-oom-${++n}`, work, inputs: captured });
+  memoryEvidence(t, memory);
+  assert.equal(memory.code, 'sentinel.execution.resourceExceeded', JSON.stringify(memory.container?.state));
+  assert.equal(memory.container?.state?.oomKilled, true);
+  assert.equal(delayed.observations.filter(o => o.masked).length, 2, 'exactly the first two terminal observations were hidden');
+  assert.ok(delayed.observations.some(o => !o.masked && o.rawOomKilled), 'the final classification required a real affirmative daemon observation after the delayed flags');
+  assert.equal(memory.cleanup, 'removed-owned-container');
+  const killed = await run('self-sigkill');
+  assert.equal(killed.container?.state?.exitCode, 137);
+  assert.equal(killed.container?.state?.oomKilled, false);
+  assert.equal(killed.code, 'sentinel.execution.workerExited');
+  assert.equal(killed.cleanup, 'removed-owned-container');
+});
+
+test('cancellation during final container observation cannot revive a provisional success', { skip }, async () => {
+  const controller = new AbortController();
+  const service = await createExecutionService(store, { scratchRoot: s.work, registry: registryFor('ok'), containers: true,
+    wrapRunner: real => ({ ...real, run: async (args, signal) => {
+      const answer = await real.run(args, signal);
+      if (args[0] === 'inspect' && args.includes('--format') && answer.exitCode === 0) {
+        const container = JSON.parse(answer.stdout.toString('utf8'));
+        if (container.State?.Status === 'exited' && container.State?.ExitCode === 0) controller.abort();
+      }
+      return answer;
+    } }),
+  });
+  const outcome = await service.run({ adapterId: 'canary-ok', attemptId: `final-cancel-${++n}`, work, inputs: captured, signal: controller.signal });
+  assert.equal(controller.signal.aborted, true);
+  assert.equal(outcome.state, 'canceled');
+  assert.equal(outcome.result, undefined);
+  assert.deepEqual(outcome.outputs, []);
+  assert.equal(outcome.cleanup, 'removed-owned-container');
 });
 
 test('malformed-output canary and deadline: the container itself is stopped and removed', { skip }, async () => {
@@ -334,6 +391,7 @@ test('a work resource policy lowers the container limits, and the kernel enforce
     runAttempt(store, s.work, registryFor(behaviour), { adapterId: `canary-${behaviour}`, attemptId: `attempt-p${++n}`, work, inputs: captured, resources: policy(resources) }, true);
   // The adapter allows 256 MiB; the policy's 64 MiB is what the container gets, and the worker is stopped by it.
   const memory = await runWith('memory', { memoryBytes: 64 * 1024 * 1024 });
+  memoryEvidence(t, memory);
   assert.equal(memory.code, 'sentinel.execution.resourceExceeded');
   assert.equal(memory.invocation.record.limits.memoryBytes, 64 * 1024 * 1024);
   // A fractional CPU quota: three busy processes get about half a CPU.

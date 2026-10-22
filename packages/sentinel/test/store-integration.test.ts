@@ -224,8 +224,9 @@ test('the facade exposes domain operations only', needsStore, async t => {
   assert.equal(typeof store.runtime.sqlite, 'string', 'the SQLite release, not the module');
   assert.equal(root.openStore, openStore, 'the root export is the same facade');
   assert.equal(root.CAPABILITIES.find(c => c.id === 'ledger')?.state, 'available-draft');
-  assert.ok(root.CAPABILITIES.filter(c => !['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks'].includes(c.id)).every(c => c.state === 'unavailable'),
-    'only the pinned scanners are claimed; no framework, deep-flow, report or model capability is');
+  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'available-draft').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'secrets-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express']);
+  assert.deepEqual(root.CAPABILITIES.filter(c => c.state === 'unavailable').map(c => c.id), ['framework-next', 'framework-nest', 'framework-spring', 'interprocedural-flow', 'reports', 'dispositions', 'model-review', 'mcp', 'farsight-host-bridge', 'gui', 'replay-bundles'],
+    'unimplemented features remain explicitly unavailable');
 });
 
 test('an unqualified host or SQLite release is refused before any store file exists', { skip: (QUALIFIED || !!process.env.CI) && 'this host is qualified, or CI requires the store tests themselves' }, async t => {

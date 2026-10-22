@@ -6,6 +6,41 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Delayed OOM canary correction — 2026-10-22
+
+Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
+first two terminal exit-137 observations, including naturally false flags, instead of hiding the first two true
+OOM flags. The old adapter compounds natural daemon delay and can exhaust the actual backend's four-read bound;
+a deterministic backend regression fails with the old adapter and passes with the correction. Production
+classification, the 500 ms bound, cancellation and exact ownership/cleanup are unchanged. Exit 137 with no
+affirmative OOM evidence remains `workerExited`. Required native positives still require genuine daemon evidence.
+
+Validation: Sentinel dependency-closure build; four pure state controls plus all 20 native isolation checks pass
+with zero skips on Docker Desktop Engine 29.2.1 / Linux arm64. Ten additional focused native OOM/plain-SIGKILL
+trials pass. Native inspect diagnostics retain at most 16 bounded state/timing rows, without paths or source.
+The original Linux CI failure lacked raw inspect observations, so its exact daemon sequence remains unproven;
+required native CI on the corrected head must pass before integration.
+
+## Combined scanner foundations — 2026-10-22
+
+Branch `codex/sentinel-scanner-integration` combines reviewed scanner integration `44ff7fae` with foundation
+head `7d392239` in one feature merge. Scanner, driver, scheduler, policy and report implementation bytes remain
+identical to `44ff7fae`; the incoming Express implementation and corrected bounded OOM visibility controls are
+retained. The pre-start confirmed-cleanup regression and scoped invocation inputs also remain intact. Catalogs,
+ADRs, README, import audits, exports and package consumers retain all four scanner asset sets and the source-only
+Express library. Express is available as a draft library; no framework scanner driver or public framework command
+acceptance is claimed. The IaC package selector and no-selector four-engine behavior are unchanged.
+
+Validation: Sentinel dependency-closure build, typecheck, generated schemas and catalog lint passed. Four pure
+OOM-state controls and ten package controls, plus two capability-union controls, passed with zero skips. The fresh
+npm-only package consumer compiled nine exports and 19 contract types, validated 19 schemas and 53 fixtures,
+reopened the store across processes, analyzed the installed Express before/after/conditional fixture and verified
+all four scanner asset sets. A separate installed public CLI consumer passed owner adoption, missing-asset refusal,
+exact tool/database promotion, plan and detached/joined execution through all four existing pinned containers;
+its report survived service restart and source removal, and incomplete required coverage remained exit 2. No target
+code or host scanner ran; no scanner assets were downloaded and no hosted model was called. This is local arm64 evidence; combined native CI remains an
+integration gate. The earlier 576-test broad suite belongs to `44ff7fae` and was not repeated for this source-preserving merge.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.
@@ -41,6 +76,68 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel Trivy/zizmor native qualification — 2026-10-22
+
+A separate follow-on records Linux amd64 as measured for the existing pinned Trivy and zizmor workers only.
+[Native CI job 119958735627](https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627) checked out merge
+`0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5` (PR head `454667ed8f254ac11b6e030b1ad9e44dcd333b8b` onto
+`e25424fb637e5491e307a2be8d9124af2463450d`): all 33 adapter/conformance tests passed with zero skips, then both
+installed workers produced the expected findings. The sanitized evidence record binds image manifests, worker
+bytes, source digests and the exact job. No broader engine, runtime, architecture, CLI or coverage qualification is
+implied; zizmor's offline limits still apply. The workflow now expects the measured platform word.
+Local follow-on validation: build and typecheck passed, all 35 unit/container conformance cases passed with zero
+skips on the existing arm64 runtime, and the installed package ran both unchanged workers successfully.
+
+## Sentinel offline advisory foundation rebased — 2026-10-22
+
+Branch `codex/sentinel-osv-integration` rebases the independently reviewed advisory adapter from `30b618f1`
+onto merged PR 145 (`5196dc70`), preserving PR 158's execution repair. Adapter source, sealed input reader, original
+fixtures, tests and asset hook are byte-identical to that reviewed version. Integration retains both Pattern and
+OSV catalogs, security/ADR sections, asset hooks and installed-worker checks; OSV is ADR 29 on this main branch.
+
+Checked on the rebased source: Sentinel dependency-closure build and typecheck; 54 affected OSV, package, Pattern,
+preview and actual detached-CLI tests, zero skips; 181 script tests, zero skips; catalog and exact-title lint.
+The clean npm consumer validated eight typed exports, 19 schemas, 53 fixtures and cross-process storage. Actual
+installed worker checks passed for Pattern (six original findings), OSV (one original finding), and both together.
+The individual native qualification jobs select their own provisioned worker; both asset sets are always validated,
+and the default local smoke still runs both workers. No image was acquired for these checks.
+
+This is a mergeable adapter foundation, not full PR 12 completion: production scanner command/registry admission,
+owner acquisition CLI and installed public-command acceptance remain integration work. Earlier fixed-source ingest
+and browser evidence below belongs to its named head; this rebase does not alter parser/core graph behavior.
+No primary checkout build, graph replacement or server restart occurred.
+
+## Sentinel sampled-memory test — 2026-10-22
+
+Branch `codex/sol-memory-test` changes only the bootstrap resource regression: the real parse and store now receive
+controlled resident-memory samples just above and below the recorded grant. This avoids assuming a small parse
+must grow process memory after allocation reuse or garbage collection. The refusal still checks the exact memory
+error and absence of a publication; the neighbor checks successful publication. Runtime grants are unchanged.
+Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
+reviewed separately against the native CI evidence.
+
+## Sentinel scheduler merged; CLI integration — 2026-10-22
+
+The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
+[#147](https://github.com/zalos/farsight/pull/147), `2587eb16`. Scheduler acceptance includes independent SOL
+review, 421 local tests with 32 explicit platform/opt-in skips, clean npm packaging, identical fixed-source graph
+ingests against main, and the full native Linux process/container crash matrix at 20 repetitions with no
+failures, cancellations or skips ([run](https://github.com/zalos/farsight/actions/runs/39803836156)).
+
+Branch `codex/sentinel-cli-integration` combines the owner CLI, detached service, canonical planning and report
+preview on that merged scheduler. The initial combined suite passed 481 tests with 32 explicit skips; subsequent
+bootstrap retry and durable diagnostic corrections passed independent SOL review with 18 focused tests. Final
+integrated checks and installed npm consumer validation remain in progress. The scanner and framework draft PRs
+remain separate until their canonical command paths are validated; a library or worker test alone does not close
+their plan gates. The [execution ledger](proposals/farsight-sentinel/execution-progress.md) records these boundaries.
+No primary-checkout build, dogfood refresh or global installation was performed.
+
+## Sentinel service reliability — 2026-10-22
+
+Branch `codex/sentinel-cli-reliability`, based on `e0e7c547`: public retry/rerun accepts an ended admitted bootstrap, prepares a fresh child over its retained snapshot and credits no parent work as completed. Fatal errors after coordinator acceptance are retained in a private durable service journal, bound to store/run/current admitted plan and containing known catalog codes only. Wait, status and unfinished report read this diagnostic after restart; raw exception text is withheld.
+
+Checks: Sentinel dependency closure build; `service-reliability.test.ts` (three regressions: partially published bootstrap through public retry/rerun after source changes; actual SQLite finalization failure across service/store restart; bounded diagnostics and copied cross-store refusal); existing `preview-slice.test.ts` (six tests), and `cli-preview-e2e.test.ts` (two actual CLI lifecycle/detached-service tests): 11 passed, zero skipped. No primary build, ingest, server or graph changes. Independent SOL review and integration remain open.
+
 ## Sentinel planner merged; pattern qualification in progress — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc9`, after independent
@@ -65,6 +162,7 @@ batching and actual installed-command acceptance pass. The scheduler, detached C
 advisories and framework packs remain in implementation/review. SOL found secrets allowlist omissions and a
 filename redaction channel; those findings must be closed before acceptance. npm release packaging prework is
 underway; no release has been cut.
+
 ## Sentinel advisory integration; native qualification pending — 2026-10-22
 
 The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc9`, after all eight
@@ -89,28 +187,6 @@ PR 12 remains incomplete until native amd64 qualification and production schedul
 Scheduler/CLI admission, receipt scope and crash durability findings remain under correction. Framework packs
 are being checked for false protection claims. Release packaging remains prework; mandatory acceptance gates
 must pass before publication, and no release has been cut.
-
-## Sentinel scheduler merged; CLI integration — 2026-10-22
-
-The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc99`, and scheduler as
-[#147](https://github.com/zalos/farsight/pull/147), `2587eb16`. Scheduler acceptance includes independent SOL
-review, 421 local tests with 32 explicit platform/opt-in skips, clean npm packaging, identical fixed-source graph
-ingests against main, and the full native Linux process/container crash matrix at 20 repetitions with no
-failures, cancellations or skips ([run](https://github.com/zalos/farsight/actions/runs/39803836156)).
-
-Branch `codex/sentinel-cli-integration` combines the owner CLI, detached service, canonical planning and report
-preview on that merged scheduler. The initial combined suite passed 481 tests with 32 explicit skips; subsequent
-bootstrap retry and durable diagnostic corrections passed independent SOL review with 18 focused tests. Final
-integrated checks and installed npm consumer validation remain in progress. The scanner and framework draft PRs
-remain separate until their canonical command paths are validated; a library or worker test alone does not close
-their plan gates. The [execution ledger](proposals/farsight-sentinel/execution-progress.md) records these boundaries.
-No primary-checkout build, dogfood refresh or global installation was performed.
-
-## Sentinel service reliability — 2026-10-22
-
-Branch `codex/sentinel-cli-reliability`, based on `e0e7c547`: public retry/rerun accepts an ended admitted bootstrap, prepares a fresh child over its retained snapshot and credits no parent work as completed. Fatal errors after coordinator acceptance are retained in a private durable service journal, bound to store/run/current admitted plan and containing known catalog codes only. Wait, status and unfinished report read this diagnostic after restart; raw exception text is withheld.
-
-Checks: Sentinel dependency closure build; `service-reliability.test.ts` (three regressions: partially published bootstrap through public retry/rerun after source changes; actual SQLite finalization failure across service/store restart; bounded diagnostics and copied cross-store refusal); existing `preview-slice.test.ts` (six tests), and `cli-preview-e2e.test.ts` (two actual CLI lifecycle/detached-service tests): 11 passed, zero skipped. No primary build, ingest, server or graph changes. Independent SOL review and integration remain open.
 
 ## Sentinel policy merged; planner integration verified — 2026-10-22
 
@@ -1959,7 +2035,7 @@ checks-bundle rights sentence now names MIT. Focused coverage includes restricte
 attempts, a sufficient grant running the real pinned scanner, rerun refusal, direct service/receipt denial, no daemon
 contact on asset-policy denial, and preview/lifecycle/receipt regressions.
 
-## Gitleaks integration checkpoint — 2026-10-22 (unfinished)
+## Historical Gitleaks checkpoint — 2026-10-22 (superseded by the reviewed completion)
 
 Branch `codex/sol-gitleaks-cli` combines the reviewed secrets library context with the reviewed scanner CLI and
 admission corrections. The separate repository-input binding seam has four passing focused cases. The in-progress
@@ -1968,3 +2044,23 @@ first real public CLI regression currently ends with `sentinel.execution.workerE
 findings. This checkpoint is not ready to integrate or an installed-command qualification. Resume with that exact
 synthetic regression; installed npm lifecycle, redacted-export acceptance and final compatibility checks remain.
 The reviewed worker and normalizer are unchanged. No source target was executed or engine downloaded.
+
+
+## Native installed scanner CLI gate — 2026-10-22
+
+Branch `codex/sol-scanner-native-ci` adds the separate `sentinel-scanner-cli` workflow over the reviewed four-engine
+CLI and native IaC metadata context. It verifies source/image/amd64-manifest pins, explicitly provisions four images
+and the bounded checks bundle, requires zero-skip actual canonical CLI/driver/admission tests, and runs the npm-only
+installed detached lifecycle and retained-report consumer. Selection uses the existing package/isolation dependency
+union and fails closed; test files run sequentially. No scanner, policy, grant or authority logic changes. Local
+validation replays the selected commands on the existing arm64 container runtime; it is not native amd64 CI evidence.
+The native job must pass after integration before its installed-command gate is claimed.
+
+## Combined scanner test assertions — 2026-10-22
+
+Branch `codex/sol-scanner-suite-tests` updates two older capability assertions to the exact reviewed four-engine
+draft slice while retaining the explicit unavailable feature list. The bootstrap publication-window regression
+now accepts an unstarted parse only when the coordinator records a run-deadline refusal on that work or its exact
+ancestor chain; a dependency hold specifically needs an ancestor cause. A delayed-capture case exercises the
+ancestor path directly. Runtime code, grants and resource limits are unchanged. Dependency-closure build passed;
+the three affected suites passed 47 cases with one existing qualified-host-only negative-case skip and no failures.

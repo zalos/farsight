@@ -32,6 +32,19 @@ test('the pins name the official release and image; offline, no repository confi
   assert.deepEqual(ZIZMOR_SUPPORT.onlineAuditsSkipped, ZIZMOR_ONLINE_AUDITS);
 });
 
+test('native amd64 qualification is bound to the measured CI revision and actual outcome architecture', t => {
+  assert.deepEqual(ZIZMOR_SUPPORT.platforms.map(p => [p.architecture, p.state]), [['arm64', 'measured'], ['amd64', 'measured']]);
+  const amd64 = ZIZMOR_SUPPORT.platforms.find(p => p.architecture === 'amd64')!;
+  assert.ok(amd64.evidence.includes('https://github.com/zalos/farsight/actions/runs/39817213827/job/119958735627'));
+  assert.ok(amd64.evidence.includes('0d6daa8cd369835fe6ec8ec5a89b4d25cb23edc5'));
+  const result = run(t, REPORT, {}, { arch: 'amd64' });
+  assert.deepEqual(result.platform, { architecture: 'amd64', state: 'measured' });
+  assert.ok(result.findings.length > 0);
+  const elsewhere = run(t, REPORT, {}, { arch: 'riscv64' });
+  assert.deepEqual(elsewhere.platform, { architecture: 'riscv64', state: 'refused' });
+  assert.equal(elsewhere.findings.length, 0);
+});
+
 test('which files are zizmor inputs, by its own collection layout', () => {
   const kinds = Object.fromEntries(['.github/workflows/ci.yml', '.github/workflows/ci.yaml', 'svc/.github/workflows/x.yml', '.github/workflows/sub/x.yml',
     '.github/workflows/ci.json', 'action.yml', 'tools/a/action.yaml', '.github/dependabot.yml', 'x/.github/dependabot.yaml', 'dependabot.yml', 'ci.yml'].map(p => [p, ciKindOf(p) ?? null]));
@@ -109,7 +122,7 @@ test('a report that disagrees with the exit code, or a run that was not offline,
   assert.equal(failed.engineFailure, 'sentinel.zizmor.engine.engineError');
   assert.equal(run(t, REPORT, { exitCode: 9, failure: { category: 'stderr words', exitCode: 9 } }).engineFailure, 'sentinel.zizmor.engine.unknown');
   assert.equal(row(run(t, REPORT, { stdoutTruncated: true }), '.github/dependabot.yml'), 'error:outputTruncated');
-  assert.equal(run(t, REPORT, {}, { arch: 'amd64' }).platform.state, 'refused');
+  assert.equal(run(t, REPORT, {}, { arch: 'riscv64' }).platform.state, 'refused');
   assert.equal(row(run(t, REPORT, {}, { mutate: 'cooldown' }), '.github/dependabot.yml'), 'complete:', 'the fixture has no such text: unchanged');
   assert.equal(row(run(t, REPORT, {}, { mutate: 'package-ecosystem' }), '.github/dependabot.yml'), 'error:inputMismatch');
   return Promise.all([
