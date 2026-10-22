@@ -140,3 +140,23 @@ test('the store identity reached under another name is refused, never exempted o
     assertHeld() { throw new Error('owner lost'); } };
   assert.throws(() => enumerateWorktree(new Inventory(resolvePolicy({})), { sourceId: 'app', root, store: lost, lfsObjects: undefined }), /owner lost/);
 });
+
+test('a snapshot captured under the old .farsight exclusion keeps its recorded boundary after the store reopens', needsStore, async t => {
+  const { openStore } = await import('../dist/store/index.js');
+  const { openSnapshot } = await import('../dist/snapshot/index.js');
+  const dir = scratch(t);
+  const root = join(dir, 'work');
+  commitRepo(root, { 'a.ts': 'a\n' });
+  writeTree(root, { '.farsight/custom/app.ts': 'export {};\n' });
+  const storePath = join(root, '.farsight', 'sentinel', 'store');
+  let store = await openStore(storePath);
+  const old = (await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'x', root }],
+    policy: { exclude: { '*': ['.farsight'] } } })).snapshot;
+  store.close();
+  rmSync(join(root, 'a.ts'));
+  store = await openStore(storePath);
+  t.after(() => store.close());
+  const again = (await openSnapshot(store, old.id)).snapshot;
+  assert.deepEqual(again.entries, old.entries, 'retained entries are not reinterpreted');
+  assert.equal(entryOf(again, '.farsight').reasonCode, 'sentinel.capture.excludedByPolicy');
+});
