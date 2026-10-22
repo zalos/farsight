@@ -51,7 +51,6 @@ test('no Farsight package depends on or imports Sentinel', () => {
 // Every module import outside the package, per built file. A new import fails here until it is reviewed and
 // added; nothing networked, no worker or cluster, and no static node:sqlite import anywhere.
 const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
-  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
@@ -79,6 +78,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
+  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs'],
+  'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
+  'transport/ipc.js': ['node:crypto', 'node:fs', 'node:net', 'node:path'],
+  'reports/preview.js': ['@farsight/core/dist/strings-sentinel-report.js', '@farsight/core/dist/strings-sentinel-service.js'],
   'validate.js': ['ajv'],
   // The planner's reason codes are catalog words.
   'planner/errors.js': ['@farsight/core/dist/strings-sentinel-plan.js'],
@@ -211,7 +215,12 @@ test('planned commands refuse with exit 3 and start nothing', () => {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
     assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));
-    assert.equal(r.stdout, '');
+    // JSON says unavailable, with every verdict not asked: never a scan result.
+    const body = JSON.parse(r.stdout);
+    assert.equal(body.outcome, 'unavailable', command);
+    assert.equal(body.exitCode, 3);
+    for (const v of Object.values(body.verdicts) as Array<{ asked: boolean; allowed: boolean }>) assert.deepEqual([v.asked, v.allowed], [false, false]);
+    assert.equal(cli(command).stdout, '', 'without --json nothing is printed to stdout');
   }
   assert.equal(cli('scan-everything').status, 3);
 });

@@ -1,20 +1,21 @@
 #!/usr/bin/env node
-// Placeholder executable: help, version, the explicit capability list and draft contract validation.
-// No scan, ledger, scanner, container or model is started by any command here.
+// The executable: help, version, the capability list, draft contract validation and workspace initialization.
+// Planning, running and the commands around a run are refused as unavailable until the coordinator exists (PR 08);
+// nothing is started for them. No command downloads a tool, starts a container or contacts a model provider.
+// Every result is typed (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
 import { readFileSync, statSync } from 'node:fs';
 import { CAPABILITIES } from './capabilities.js';
+import { parseArgs, plannedIn, COMMANDS, type ParsedCommand } from './cli/args.js';
+import { initWorkspace, InitError } from './cli/init.js';
+import { result, type CommandResult } from './cli/outcome.js';
 import { ENVELOPES, ENVELOPE_KINDS, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/index.js';
 import { parseEnvelope } from './validate.js';
-// Every printed word comes from the shared catalog (packages/core/src/strings-sentinel-cli.ts).
-import { sentinelWord as word } from '@farsight/core/dist/strings-sentinel-cli.js';
+// Every printed word comes from the shared catalog (strings-sentinel-cli.ts and strings-sentinel-service.ts).
+import { sentinelWord, SENTINEL_CLI_STRINGS } from '@farsight/core/dist/strings-sentinel-cli.js';
+import { sentinelServiceWord } from '@farsight/core/dist/strings-sentinel-service.js';
 
-// Sentinel's own exit codes (they are not Work's: there, 2 means awaiting confirmation).
-const EXIT = { ok: 0, configuration: 3 } as const;
-
-const PLANNED: Record<string, string> = {
-  plan: 'PR 09', run: 'PR 09', status: 'PR 09', pause: 'PR 09', resume: 'PR 09', cancel: 'PR 09', retry: 'PR 09',
-  rerun: 'PR 09', serve: 'PR 08', compare: 'PR 19', report: 'PR 19', rules: 'PR 06', bundle: 'PR 26',
-};
+const word = (key: string, values: Record<string, string | number> = {}) =>
+  (Object.hasOwn(SENTINEL_CLI_STRINGS, key) ? sentinelWord(key, values) : sentinelServiceWord(key, values));
 
 function version(): string {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -22,6 +23,7 @@ function version(): string {
 }
 
 function help(): string {
+  const planned = (Object.keys(COMMANDS) as (keyof typeof COMMANDS)[]).filter(c => COMMANDS[c] !== null);
   return [
     word('sentinel.cli.title'),
     '',
@@ -32,30 +34,38 @@ function help(): string {
     `  ${word('sentinel.cli.usageCapabilities')}`,
     `  ${word('sentinel.cli.usageValidate')}`,
     `      ${word('sentinel.cli.kinds', { kinds: ENVELOPE_KINDS.join(', ') })}`,
+    `  ${word('sentinel.cli.usageInit')}`,
     '',
-    word('sentinel.cli.planned', { commands: Object.keys(PLANNED).join(', ') }),
+    word('sentinel.cli.planned', { commands: planned.join(', ') }),
     '',
     word('sentinel.cli.exitCodes'),
   ].join('\n');
 }
 
+let jsonOut = false;
 function out(text: string) { process.stdout.write(text.endsWith('\n') ? text : `${text}\n`); }
 function errOut(text: string) { process.stderr.write(text.endsWith('\n') ? text : `${text}\n`); }
+function finish(r: CommandResult): number {
+  if (jsonOut) out(JSON.stringify(r, null, 2));
+  return r.exitCode;
+}
 
-function capabilities(json: boolean): number {
-  if (json) { out(JSON.stringify({ version: version(), capabilities: CAPABILITIES }, null, 2)); return EXIT.ok; }
+function capabilities(p: ParsedCommand): number {
+  if (p.json) { out(JSON.stringify({ version: version(), capabilities: CAPABILITIES }, null, 2)); return 0; }
   const state = (c: (typeof CAPABILITIES)[number]) => word(c.state === 'unavailable' ? 'sentinel.cli.stateUnavailable' : 'sentinel.cli.stateDraft');
   const width = Math.max(...CAPABILITIES.map(c => state(c).length));
   for (const c of CAPABILITIES) {
     out(`${state(c).padEnd(width)}  ${c.id.padEnd(26)} ${word(c.reasonCode)} · ${word('sentinel.cli.plannedIn', { change: c.plannedIn })}`);
   }
-  return EXIT.ok;
+  return 0;
 }
 
-function validate(kind: string | undefined, file: string | undefined, json: boolean): number {
+function validate(p: ParsedCommand): number {
+  const kind = p.args.kind;
+  const file = p.args.file;
   if (!kind || !file || !(ENVELOPE_KINDS as string[]).includes(kind)) {
     errOut(word('sentinel.cli.validateUsage', { kinds: ENVELOPE_KINDS.join('|') }));
-    return EXIT.configuration;
+    return 3;
   }
   let text: string;
   try {
@@ -63,40 +73,73 @@ function validate(kind: string | undefined, file: string | undefined, json: bool
     if (!st.isFile()) throw new Error('not a file');
     if (st.size > MAX_ENVELOPE_BYTES) {
       errOut(word('sentinel.cli.refusedTooLarge', { bytes: MAX_ENVELOPE_BYTES }));
-      return EXIT.configuration;
+      return 3;
     }
     text = readFileSync(file, 'utf8');
   } catch {
     errOut(word('sentinel.cli.refusedUnreadable'));
-    return EXIT.configuration;
+    return 3;
   }
-  const result = parseEnvelope(kind as EnvelopeKind, text);
+  const r = parseEnvelope(kind as EnvelopeKind, text);
   const schema = ENVELOPES[kind as EnvelopeKind].schema;
-  if (json) out(JSON.stringify(result.ok ? { ok: true, schema } : { ok: false, schema, errors: result.errors }, null, 2));
-  else if (result.ok) out(word('sentinel.cli.valid', { schema }));
+  if (p.json) out(JSON.stringify(r.ok ? { ok: true, schema } : { ok: false, schema, errors: r.errors }, null, 2));
+  else if (r.ok) out(word('sentinel.cli.valid', { schema }));
   else {
     errOut(word('sentinel.cli.invalid', { schema }));
     // Printed words come from the catalog only; the validator's diagnostic detail stays in --json output.
-    for (const e of result.errors.slice(0, 50)) errOut(`  ${e.code} ${e.path || '/'} ${word(e.code)}`);
-    if (result.errors.length > 50) errOut(`  ${word('sentinel.cli.more', { count: result.errors.length - 50 })}`);
+    for (const e of r.errors.slice(0, 50)) errOut(`  ${e.code} ${e.path || '/'} ${word(e.code)}`);
+    if (r.errors.length > 50) errOut(`  ${word('sentinel.cli.more', { count: r.errors.length - 50 })}`);
   }
-  return result.ok ? EXIT.ok : EXIT.configuration;
+  return r.ok ? 0 : 3;
+}
+
+function init(p: ParsedCommand): number {
+  const workspace = typeof p.flags['--workspace'] === 'string' ? p.flags['--workspace'] : process.cwd();
+  const profile = typeof p.flags['--profile'] === 'string' ? p.flags['--profile'] : undefined;
+  let done;
+  try {
+    done = initWorkspace({ workspace, ...(profile === undefined ? {} : { profile }) });
+  } catch (e) {
+    if (!(e instanceof InitError)) throw e;
+    errOut(word(e.code, { detail: e.detail }));
+    return finish(result('init', 'refused', { reasonCode: e.code, facts: { workspace } }));
+  }
+  const facts = { path: done.path, digest: done.digest, profile: done.profile, recognised: done.recognised, downloads: 0, scansStarted: 0 };
+  if (!done.recognised) {
+    errOut(word('sentinel.init.unrecognised'));
+    return finish(result('init', 'refused', { reasonCode: 'sentinel.init.unrecognised', facts }));
+  }
+  if (!jsonOut) {
+    out(word(done.outcome === 'prepared' ? 'sentinel.init.created' : 'sentinel.init.kept', { path: done.path }));
+    out(word('sentinel.init.profile', { profile: done.profile }));
+    out(word('sentinel.init.prerequisites'));
+    out(word('sentinel.init.credentials'));
+    out(word('sentinel.init.noEffects'));
+    out(word('sentinel.init.next'));
+  }
+  return finish(result('init', done.outcome, { facts }));
 }
 
 export function main(argv: string[]): number {
-  const json = argv.includes('--json');
-  const args = argv.filter(a => a !== '--json');
-  const [command, ...rest] = args;
-  if (!command || command === '--help' || command === '-h' || command === 'help') { out(help()); return EXIT.ok; }
-  if (command === '--version' || command === '-v') { out(word('sentinel.cli.version', { version: version(), draft: ENVELOPES.run.schema.split('/')[1]! })); return EXIT.ok; }
-  if (command === 'capabilities') return capabilities(json);
-  if (command === 'validate') return validate(rest[0], rest[1], json);
-  if (Object.hasOwn(PLANNED, command)) {
-    errOut(word('sentinel.cli.unavailable', { command, change: PLANNED[command]! }));
-    return EXIT.configuration;
+  const parsed = parseArgs(argv);
+  jsonOut = parsed.ok ? parsed.parsed.json : parsed.json;
+  if (!parsed.ok) {
+    errOut(word(parsed.code, { detail: parsed.detail }));
+    return finish(result('unknown', 'refused', { reasonCode: parsed.code }));
   }
-  errOut(word('sentinel.cli.unknownCommand'));
-  return EXIT.configuration;
+  const p = parsed.parsed;
+  switch (p.command) {
+    case 'help': out(help()); return 0;
+    case 'version': out(word('sentinel.cli.version', { version: version(), draft: ENVELOPES.run.schema.split('/')[1]! })); return 0;
+    case 'capabilities': return capabilities(p);
+    case 'validate': return validate(p);
+    case 'init': return init(p);
+    default: {
+      const change = plannedIn(p.command)!;
+      errOut(word('sentinel.cli.unavailable', { command: p.command, change }));
+      return finish(result(p.command, 'unavailable', { reasonCode: 'sentinel.outcome.unavailable', facts: { plannedIn: change } }));
+    }
+  }
 }
 
 process.exitCode = main(process.argv.slice(2));

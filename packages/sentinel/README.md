@@ -163,6 +163,27 @@ complete analysis artifact (occurrences included), an index of node and call-sit
 with UTF-8 byte spans, and a result record can be published with `retainSnapshotAnalysis`. `parserComplete` is the
 parser's own selection flag, not coverage, and parser evidence clears no check (`clearsChecks: false`). No
 application ingestion, configuration enrichment, network or process is used.
+## Install and initialize with npm only (draft)
+
+Sentinel needs Node 24 or later and npm; no pnpm and no Farsight checkout. Install one pinned tarball, then
+initialize the workspace you will scan:
+
+```sh
+npm install -g <pinned farsight-sentinel tarball URL>   # a GitHub Release asset once one is published (PR 26);
+                                                        # until then a local build of scripts/pack-sentinel.mjs
+cd /path/to/your/workspace
+farsight-sentinel init           # creates .farsight/sentinel/settings.json (0600) from scrubbed defaults
+farsight-sentinel init           # again: the file is kept byte for byte; nothing is overwritten
+```
+
+`init` writes the settings file only when it is missing and never touches an existing one. The defaults grant
+nothing, configure no provider and make every agent action wait for a person. Settings name credentials by
+keychain reference only (`keychain:farsight/<name>`). `init` downloads nothing, installs no scanner, starts no
+container and no scan. The file grants nothing until its owner adopts its exact bytes (PR 06's adoption flow).
+`plan`, `run`, `status` and `report` are listed in `--help`, and say *unavailable* (exit 3) until the coordinator
+behind them exists; none of them is simulated. Commands print typed results: with `--json`, every result carries
+its `outcome`, `exitCode`, the three admission verdicts (`policy`, `capability`, `credential`) and its facts. A
+detached run reports `submitted`, never `satisfied`, and awaiting confirmation is exit 4, never a scan result.
 
 ## Versions and evolution
 
@@ -182,7 +203,8 @@ application ingestion, configuration enrichment, network or process is used.
 Everything the executable prints comes from the shared two-register catalog in core
 (`packages/core/src/strings-sentinel-cli.ts`, keys `sentinel.cli.*`, `sentinel.capability.*`,
 `sentinel.contract.*` and `sentinel.protocol.*`; the store's reason codes in `strings-sentinel-store.ts` and
-`strings-sentinel-storage-errors.ts`). There is no catalog of Sentinel's own. Human output prints each validation error as its
+`strings-sentinel-storage-errors.ts`; arguments, outcomes, verdicts, actors, the local socket, `init` and the preview
+report in `strings-sentinel-service.ts`). There is no catalog of Sentinel's own. Human output prints each validation error as its
 code, location and catalog words; the validator's diagnostic `message` appears only in `--json` output.
 
 ## Exit codes
@@ -190,7 +212,8 @@ code, location and catalog words; the validator's diagnostic `message` appears o
 `0` satisfied · `1` finding policy failed · `2` required coverage incomplete · `3` configuration or input error ·
 `4` awaiting owner confirmation before admission. These codes are Sentinel's own: `farsight work` keeps using `2`
 for awaiting confirmation. Configuration failure takes precedence over the others, followed by coverage and
-then findings (`policyResultOf`). Every unavailable command in this draft exits `3`.
+then findings (`policyResultOf`). Every unavailable command in this draft exits `3`, and so does a refused command
+line: each command accepts only its own options, and an unknown, missing or repeated one is refused, never ignored.
 
 ## Tests
 
