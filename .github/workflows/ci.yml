@@ -27,6 +27,7 @@ jobs:
       e2e: ${{ steps.select.outputs.e2e }}
       echo: ${{ steps.select.outputs.echo }}
       sentinel: ${{ steps.select.outputs.sentinel }}
+      isolation: ${{ steps.select.outputs.isolation }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -141,6 +142,39 @@ jobs:
         run: |
           test -f packages/sentinel/package.json || { echo "::error::packages/sentinel/package.json is missing"; exit 1; }
           pnpm test:sentinel:package
+
+  # Sentinel's real-container isolation canaries (PR 07). The pinned canary image is installed here, by digest,
+  # before the tests; the code under test never pulls and refuses a missing image. SENTINEL_ISOLATION=1 makes a
+  # missing or unqualified container runtime a failure, and the job fails if any test was skipped.
+  sentinel-isolation:
+    name: sentinel-isolation
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.isolation != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install the pinned canary image (node:22-alpine index, by digest)
+        run: docker pull node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9
+      - name: Build Sentinel and its workspace closure
+        run: pnpm --filter '@farsight/sentinel...' build
+      - name: Isolation canaries and the worker protocol, nothing skipped
+        working-directory: packages/sentinel
+        env:
+          SENTINEL_ISOLATION: '1'
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=300000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=isolation.tap \
+            test/execution-isolation.test.ts test/execution-protocol.test.ts
+          grep -qx '# skipped 0' isolation.tap || { echo "::error::an isolation test was skipped"; exit 1; }
+          grep -qx '# fail 0' isolation.tap && grep -qx '# cancelled 0' isolation.tap
 
   e2e:
     name: e2e

@@ -23,6 +23,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
 | **parser-package (Linux/macOS)** (non-required) | parser package/workflow/dependency changes: actual tarballs installed outside the workspace, public types, native/WASM parsing, saved-graph query | 15 min |
 | **echo-package** | when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
+| **sentinel-isolation** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `docker pull` of the one pinned canary image by digest (provisioning; the code under test never pulls) → `pnpm --filter '@farsight/sentinel...' build` → `SENTINEL_ISOLATION=1` worker-protocol and real-container canaries (network, host-file, memory, process, temporary-storage, malformed-output, deadline, cancel, cleanup ownership). A missing or unqualified container runtime fails it, and so does any skipped test | 20 min |
 | **sentinel-package** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm pack:cli` (builds only the CLI's closure, so Sentinel stays unbuilt; the job fails if `packages/sentinel/dist` exists) → `scripts/test-farsight-package.mjs` → `pnpm test:cli:package:absent` → `pnpm test:sentinel:package` (below) | 15 min |
 
 ### Which changes select which checks
@@ -35,10 +36,11 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 | Root Markdown, Markdown under `docs/`, `.github/`, `.claude/`, `.agents/`, or `LICENSE` | none, except the packaged Echo docs below |
 | `docs/ECHO.md`, `packages/echo/README.md`, Echo packaging scripts or example connection/settings | `echo-package` |
 | `packages/sentinel/README.md`, `scripts/pack-sentinel.mjs`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
-| `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` (no application package imports Sentinel, so no e2e) |
+| `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` + `sentinel-isolation` (no application package imports Sentinel, so no e2e) |
+| `packages/sentinel/test/` | `validate` + `sentinel-isolation` |
 | `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs`, `scripts/synth-graph.mjs` | `e2e` (including its typecheck and small perf suite) |
 | Package `test/` folders, `scripts/test/`, changelog/release/hook-install/commit-lint scripts | `validate` |
-| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; changes to a package in `farsight-cli`'s workspace dependency closure (cli, server, mcp, parsers, code-parser, core, graph, work and the work providers today, read from the manifests by `scripts/ci-changes.mjs`), Sentinel's own closure, or `examples/invoice-app/` also select `sentinel-package`; unreadable manifests select all |
+| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; changes to a package in `farsight-cli`'s workspace dependency closure (cli, server, mcp, parsers, code-parser, core, graph, work and the work providers today, read from the manifests by `scripts/ci-changes.mjs`), Sentinel's own closure, or `examples/invoice-app/` also select `sentinel-package`; Sentinel's own closure (core and graph today, read from the manifests) also selects `sentinel-isolation`; unreadable manifests select all |
 | Everything else, including dependencies, build config, workflows, the selector itself and the shared packaging scripts (`pack.mjs`, `pack-preflight.mjs`, `npm-consumer.mjs`, `test-farsight-package.mjs`, `test-farsight-package-absent.mjs`) | all |
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
@@ -103,7 +105,10 @@ dependencies. Both packers build in a staging directory under `build/` and repla
 anywhere in the closure fails the pack with every prior artifact, and other packages' outputs, left in place.
 `node scripts/pack.mjs --check` runs the preflight and the full staged bundle and replaces nothing.
 Sentinel's fast schema tests are its package `test` script, so they run in `validate` with every other package;
-container and kill-matrix suites are explicit opt-ins with named skip reasons. `sentinel-package` becomes a required
+container and kill-matrix suites are explicit opt-ins with named skip reasons: without `SENTINEL_ISOLATION=1` only the
+real-container cases skip, and the fake-worker protocol tests still run. The isolation qualification is exact host,
+runtime and server triples (`ISOLATION_POLICY` in `packages/sentinel/src/execution/isolation.ts`): darwin-arm64 with
+Docker Desktop is measured, linux-x64 with Docker Engine is a candidate that `sentinel-isolation` qualifies. `sentinel-package` becomes a required
 check once it has passed on `main` (an owner branch-protection change); until then it is reported but not required.
 
 The **secrets** job runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
@@ -129,6 +134,9 @@ pnpm test:echo:package                  # optional network integration check for
 pnpm test:cli:package                   # farsight-cli from its closure alone, in a clean npm consumer
 pnpm test:cli:package:absent            # the same with packages/sentinel removed from a temporary workspace copy
 pnpm test:sentinel:package              # farsight-sentinel, separately, in a clean npm consumer
+docker pull node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9   # once: the canary image
+(cd packages/sentinel && SENTINEL_ISOLATION=1 node --disable-warning=ExperimentalWarning --experimental-strip-types \
+  --test test/execution-isolation.test.ts test/execution-protocol.test.ts)   # real-container canaries
 pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```
