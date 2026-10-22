@@ -4,6 +4,12 @@
 // The same runner checks freshly packed tarballs (served over a loopback URL, so npm records a URL exactly as it
 // would for a GitHub Release) and, through scripts/verify-release.mjs, the published release assets themselves.
 //
+// Installed bytes are bound to verified bytes, never fetched twice unchecked: each source is held as one local copy
+// with its SHA-256 and SHA-512 (a URL given alone is downloaded once; verify-release passes the copies it checked
+// against the release manifest). A global install installs that verified copy. A project install names the URL in
+// package.json and pins the verified SHA-512 in the lockfile (built from the verified copy under a separate npm
+// cache), then `npm ci` fetches the URL itself: npm refuses bytes that differ (EINTEGRITY) before any script runs.
+//
 // Six combinations: farsight alone, sentinel alone, both; each global and project-local. Each runs in its own
 // scratch folder with a toolchain of exactly node, npm and npx (no pnpm, corepack, yarn or other global bins), no
 // npm configuration from the caller, its own HOME, and no way to resolve a workspace package. Every check is a
@@ -219,7 +225,34 @@ export async function acceptOne({ products, mode, sources, expect, keep = false,
     const npm = (args) => exec(join(toolchain, 'npm'), args).catch((e) => { throw new Error(`npm ${args.join(' ')}: ${e.stderr || e.message}`); });
     const installed = (key) => mode === 'global' ? join(prefix, 'lib', 'node_modules', PRODUCTS[key].name) : join(app, 'node_modules', PRODUCTS[key].name);
     const binOf = (key) => join(bins[0], PRODUCTS[key].bin);
-    const install = (keys) => npm(mode === 'global' ? ['install', '-g', '--prefix', prefix, ...keys.map((k) => sources[k])] : ['install', ...keys.map((k) => sources[k])]);
+    // Global: the verified copy itself. Project: the URL, with the verified integrity pinned in the lockfile.
+    const install = async (keys) => {
+      if (mode === 'global') return npm(['install', '-g', '--prefix', prefix, ...keys.map((k) => sources[k].file)]);
+      const gen = join(scratch, `lock-${keys.join('-')}-${Date.now()}`);
+      mkdirSync(gen, { recursive: true });
+      // A separate cache, so the consumer's own npm ci fetches the URL rather than reusing these bytes.
+      const genEnv = { ...env, npm_config_cache: join(gen, 'cache') };
+      const genNpm = (args) => run(join(toolchain, 'npm'), args, { cwd: gen, env: genEnv, timeout: 300_000, maxBuffer: 16_000_000 })
+        .catch((e) => { throw new Error(`npm ${args.join(' ')} (lockfile): ${e.stderr || e.message}`); });
+      await genNpm(['init', '-y']);
+      await genNpm(['install', '--package-lock-only', '--ignore-scripts', ...keys.map((k) => sources[k].file)]);
+      const lock = JSON.parse(readFileSync(join(gen, 'package-lock.json'), 'utf8'));
+      const manifest = JSON.parse(readFileSync(join(app, 'package.json'), 'utf8'));
+      manifest.dependencies = {};
+      lock.packages[''].dependencies = {};
+      for (const k of keys) {
+        const entry = lock.packages[`node_modules/${PRODUCTS[k].name}`];
+        if (!entry) throw new Error(`the lockfile has no ${PRODUCTS[k].name}`);
+        if (entry.integrity !== sources[k].integrity) throw new Error(`npm computed ${entry.integrity} for the verified copy of ${PRODUCTS[k].name}, not ${sources[k].integrity}`);
+        entry.resolved = sources[k].url;
+        manifest.dependencies[PRODUCTS[k].name] = sources[k].url;
+        lock.packages[''].dependencies[PRODUCTS[k].name] = sources[k].url;
+      }
+      writeFileSync(join(app, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
+      writeFileSync(join(app, 'package-lock.json'), JSON.stringify(lock, null, 2) + '\n');
+      rmSync(join(app, 'node_modules'), { recursive: true, force: true });
+      return npm(['ci']);
+    };
     const uninstall = (key) => npm(mode === 'global' ? ['uninstall', '-g', '--prefix', prefix, PRODUCTS[key].name] : ['uninstall', PRODUCTS[key].name]);
     if (mode === 'local') await npm(['init', '-y']);
 
@@ -233,9 +266,11 @@ export async function acceptOne({ products, mode, sources, expect, keep = false,
     });
     if (!isolated) return results;
 
-    const ok = await record('consumer.install-from-urls', async () => {
+    const ok = await record('consumer.install-verified-bytes', async () => {
       await install(products);
-      return products.map((k) => `${PRODUCTS[k].name} ← ${sources[k]}`).join('; ');
+      return products.map((k) => mode === 'global'
+        ? `${PRODUCTS[k].name} ← the verified copy of ${sources[k].url} (${sources[k].sha256})`
+        : `${PRODUCTS[k].name} ← ${sources[k].url} with ${sources[k].integrity.slice(0, 19)}… pinned`).join('; ');
     });
     if (!ok) return results;
 
@@ -265,8 +300,8 @@ export async function acceptOne({ products, mode, sources, expect, keep = false,
         const before = {};
         for (const key of products) {
           const entry = lock.packages?.[`node_modules/${PRODUCTS[key].name}`];
-          if (entry?.resolved !== sources[key]) throw new Error(`${PRODUCTS[key].name} is locked to ${entry?.resolved}, not ${sources[key]}`);
-          if (!/^sha512-/.test(entry.integrity ?? '')) throw new Error(`${PRODUCTS[key].name} has no integrity in the lockfile`);
+          if (entry?.resolved !== sources[key].url) throw new Error(`${PRODUCTS[key].name} is locked to ${entry?.resolved}, not ${sources[key].url}`);
+          if (entry.integrity !== sources[key].integrity) throw new Error(`${PRODUCTS[key].name} is locked to another integrity than the verified bytes`);
           before[key] = readFileSync(join(installed(key), 'package.json'), 'utf8');
         }
         rmSync(join(app, 'node_modules'), { recursive: true, force: true });
@@ -274,7 +309,7 @@ export async function acceptOne({ products, mode, sources, expect, keep = false,
         for (const key of products) {
           if (readFileSync(join(installed(key), 'package.json'), 'utf8') !== before[key]) throw new Error(`npm ci installed another ${PRODUCTS[key].name}`);
         }
-        return 'npm ci from the lockfile reinstalled the same URLs and integrity';
+        return 'npm ci from the lockfile reinstalled the URLs at the verified integrity';
       });
     }
 
@@ -296,7 +331,7 @@ export async function acceptOne({ products, mode, sources, expect, keep = false,
         if (!line.includes(`farsight ${expect.farsight ?? ''}`)) throw new Error(`farsight --version after uninstall: ${line}`);
         await exec(binOf('farsight'), ['ingest', '.', '--repo', 'acceptance-app', '--out', 'graph-after-uninstall.json']);
         if (!(JSON.parse(readFileSync(join(app, 'graph-after-uninstall.json'), 'utf8')).nodes?.length > 0)) throw new Error('ingest after uninstall wrote no nodes');
-        await install(['sentinel']);
+        await install(products);
         const reopened = await storeProbe({ exec, installed: installed('sentinel'), toolchain, store, step: 'reopen' });
         return `retained ${Object.keys(before).length} store files unchanged; Farsight ran; reinstalled Sentinel reopened the store (epoch ${reopened.epoch})`;
       });
@@ -435,20 +470,49 @@ export function summarize(results) {
     blockedBy: [...new Set(by('pending').map((r) => r.blockedBy))].sort() };
 }
 
+const digests = (bytes) => ({
+  sha256: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+  integrity: `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+});
+
+/**
+ * One source as `{ url, file, sha256, integrity }`: a local file (served over loopback), a URL (downloaded once, here),
+ * or a verified `{ url, file, sha256 }` from verify-release (its file re-hashed against the sha256 it was checked at).
+ */
+async function resolveSource(source, scratch, served, name) {
+  if (!source) return undefined;
+  if (typeof source === 'object') {
+    const d = digests(readFileSync(source.file));
+    if (source.sha256 && d.sha256 !== source.sha256) throw new Error(`${source.file} is not the bytes that were verified`);
+    return { url: source.url, file: source.file, ...d };
+  }
+  if (/^https?:\/\//.test(source)) {
+    const res = await fetch(source, { redirect: 'follow' });
+    if (!res.ok) throw new Error(`${source}: HTTP ${res.status}`);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const file = join(scratch, `${name}.tgz`);
+    writeFileSync(file, bytes, { mode: 0o600 });
+    return { url: source, file, ...digests(bytes) };
+  }
+  const file = resolve(source);
+  if (!existsSync(file)) throw new Error(`${file} is missing`);
+  return { url: served.url(file), file, ...digests(readFileSync(file)) };
+}
+
 /** Everything: resolves the sources (serving local files over loopback), runs the chosen combinations. */
 export async function runAcceptance({ farsight, sentinel, expect = {}, only, modes = MODES, keep = false, log = console.log }) {
-  const local = [farsight, sentinel].filter((s) => s && !/^https?:\/\//.test(s)).map((s) => resolve(s));
-  for (const file of local) if (!existsSync(file)) throw new Error(`${file} is missing`);
+  const local = [farsight, sentinel].filter((s) => typeof s === 'string' && !/^https?:\/\//.test(s)).map((s) => resolve(s));
   const served = local.length ? await serveFiles(local) : null;
-  const toUrl = (s) => (!s ? undefined : /^https?:\/\//.test(s) ? s : served.url(resolve(s)));
-  const sources = { farsight: toUrl(farsight), sentinel: toUrl(sentinel) };
+  const held = realpathSync(mkdtempSync(join(tmpdir(), 'farsight-acceptance-sources-')));
   try {
+    const sources = { farsight: await resolveSource(farsight, held, served, 'farsight'), sentinel: await resolveSource(sentinel, held, served, 'sentinel') };
     const combos = COMBINATIONS.filter((c) => c.every((k) => sources[k])).filter((c) => !only || only === (c.length === 2 ? 'both' : c[0]));
     if (!combos.length) throw new Error('no combination can run: pass --farsight and/or --sentinel');
     const results = [];
     for (const products of combos) for (const mode of modes) results.push(...await acceptOne({ products, mode, sources, expect, keep, log }));
-    return { sources, results, summary: summarize(results) };
-  } finally { await served?.close(); }
+    const shown = Object.fromEntries(Object.entries(sources).filter(([, v]) => v).map(([k, v]) => [k, v.url]));
+    return { sources: shown, digests: Object.fromEntries(Object.entries(sources).filter(([, v]) => v).map(([k, v]) => [k, { sha256: v.sha256, integrity: v.integrity }])), results, summary: summarize(results) };
+  } finally { await served?.close(); rmSync(held, { recursive: true, force: true }); }
 }
 
 async function main(argv) {

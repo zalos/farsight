@@ -81,14 +81,16 @@ function pack(dir, name, version, files, extra = {}) {
   return join(dir, `${name}-${version}.tgz`);
 }
 
-export function standIns({ sentinelCaps = CAPABILITIES(), sentinelVersionLine, sentinelVersion = '0.1.0', stampVersion } = {}) {
+export function standIns({ sentinelCaps = CAPABILITIES(), sentinelVersionLine, sentinelVersion = '0.1.0', stampVersion, postinstallMarker } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'acceptance-standins-'));
   const farsight = pack(dir, 'farsight-cli', '0.4.0', { 'bin/farsight.mjs': FARSIGHT_BIN }, { bin: { farsight: 'bin/farsight.mjs' } });
   const sentinel = pack(dir, 'farsight-sentinel', sentinelVersion, {
     'bin/sentinel.mjs': SENTINEL_BIN(sentinelCaps, sentinelVersionLine),
     'dist/store/index.mjs': SENTINEL_STORE,
     'dist/build-stamp.json': JSON.stringify({ name: 'farsight-sentinel', version: stampVersion ?? sentinelVersion, built: '2026-10-22T00:00:00Z', commit: 'abc1234' }),
-  }, { bin: { 'farsight-sentinel': 'bin/sentinel.mjs' }, exports: { './store': { import: './dist/store/index.mjs' }, './package.json': './package.json' } });
+  }, { bin: { 'farsight-sentinel': 'bin/sentinel.mjs' }, exports: { './store': { import: './dist/store/index.mjs' }, './package.json': './package.json' },
+    // an inert marker: proves whether a substituted tarball's install script ever ran
+    ...(postinstallMarker ? { scripts: { postinstall: `node -e "require('fs').writeFileSync(${JSON.stringify(postinstallMarker)}, 'ran')"` } } : {}) });
   return { dir, farsight, sentinel, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
