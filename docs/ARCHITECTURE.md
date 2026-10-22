@@ -190,3 +190,24 @@ line may identify a unique parameterized case in the named file; ambiguous templ
 For a runtime describe title, a reporter may also identify a literal leaf case by its named file, exact declaration line and exact leaf title, only when one case matches. Text-only joins still require the full suite title.
 An empty coverage report is retained as `reason: empty` metadata without a gap warning; it proves no
 execution and supplies no coverage edges. Empty results remain a reported gap.
+
+18. **Sentinel is an optional package with its own artifact and draft contracts (2026-10-21).**
+
+`packages/sentinel` (`@farsight/sentinel`) holds Farsight Sentinel's contracts and, later, its runtime. It
+may depend on `@farsight/graph`, `@farsight/code-parser` and `@farsight/core`; no Farsight application package
+depends on it, and core never imports it. `farsight-cli` does not bundle, import or initialize Sentinel, scanners,
+containers or model SDKs: its pack preflight (`scripts/pack-preflight.mjs`) requires only the compiled outputs
+of the CLI's own `workspace:` dependency closure, so an absent or unbuilt Sentinel cannot block a Farsight
+release, and that check still runs before any prior artifact is removed. Sentinel ships separately as the
+`farsight-sentinel` tarball (`scripts/pack-sentinel.mjs`): its bins and root export are bundled with Sentinel's
+workspace closure inlined, its third-party dependencies stay declared, and its schemas travel with it. Both
+tarballs are verified from a clean `npm init -y` consumer, not a pnpm workspace.
+
+The first contracts are draft versions. A `…/v1` name is adopted only when the contract review completes;
+from then on, evolution is additive within a version, and a reader that meets an unknown major version refuses
+it explicitly instead of guessing. Existing frozen contracts (`farsight-diff v1`, `farsight-tests-matrix v1`,
+`farsight-impact-tests v1`, `farsight-affected v1`, `farsight-work v1`) and graph schema version 1 are
+unchanged. The placeholder bin reports that no scanner is available; it claims no support. A later host bridge
+(`packages/cli/src/sentinel.ts`, PR 24) reaches Sentinel as a separately installed executable over IPC and
+updates this record. Rollback removes the package registration and leaves user data in place. See the
+[Sentinel implementation plan](proposals/farsight-sentinel/implementation-plan.md).

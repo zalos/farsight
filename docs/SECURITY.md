@@ -15,6 +15,18 @@ are trusted code. Analyze a stable checkout: this is not an atomic filesystem sn
 The compatibility `extractRepository` API retains the application's legacy IO semantics. See
 [PARSER-LIBRARIES.md](PARSER-LIBRARIES.md) and the parser README for the API boundary and defaults.
 
+## Sentinel's separate package
+
+Sentinel (`packages/sentinel`, ADR 18) is optional and ships as its own `farsight-sentinel` tarball.
+`farsight-cli` does not bundle, import or start it, so installing Farsight installs no scanner, container client
+or model SDK; the `sentinel-package` CI job checks the CLI bundle and a clean consumer for that. The current
+package defines draft contracts and a placeholder command that claims no scanning support. It reads no settings,
+credentials or source and makes no network calls. Later scanner, container and model work arrives with its
+own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
+providers are opt-in per run. The package smokes install from npm into temporary directories with their own npm
+cache and user config/state, and start nothing beyond the packaged command and a read-only Farsight server on a
+free loopback port.
+
 ## Threat model
 
 | part | who can reach it | what guards it |

@@ -6,12 +6,14 @@
  *
  *   pnpm build && node scripts/pack.mjs
  *   npm install -g ./build/farsight-cli-*.tgz
+ *   node scripts/pack.mjs --check   # only the build-prerequisite preflight
  */
 import { build } from 'esbuild';
-import { cpSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { missingBuildOutputs } from './pack-preflight.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'build', 'farsight-cli');
@@ -23,19 +25,16 @@ const workspaceVersion = workspacePkg.version;
 // commit, are one build to `farsight status` however many seconds apart they were
 // compiled. Needs `pnpm build` first, as the usage above says.
 const versionModule = join(root, 'packages', 'core', 'dist', 'version.js');
-const compiledEntries = [versionModule];
-const packagesDir = join(root, 'packages');
-if (existsSync(packagesDir)) for (const entry of readdirSync(packagesDir, { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue;
-  const manifest = join(packagesDir, entry.name, 'package.json');
-  if (!existsSync(manifest)) continue;
-  const pkg = JSON.parse(readFileSync(manifest, 'utf8'));
-  if (typeof pkg.main === 'string') compiledEntries.push(join(packagesDir, entry.name, pkg.main));
-}
-if (compiledEntries.some((path) => !existsSync(path))) {
+// Only the CLI's own workspace dependency closure must be built: an optional package
+// outside it (Sentinel, Echo) may be absent or unbuilt. Checked before build/ is touched.
+const missing = missingBuildOutputs(root, '@farsight/cli', [versionModule]);
+if (missing.length) {
   console.error('pack: compiled packages are missing. Run `pnpm build && node scripts/pack.mjs` from the repository root.');
+  for (const path of missing) console.error('  missing: ' + (isAbsolute(path) ? relative(root, path) : path));
   process.exit(1);
 }
+// `--check` stops after the preflight, before any artifact changes.
+if (process.argv.includes('--check')) { console.log('pack: build prerequisites present'); process.exit(0); }
 const { gitIdentity } = await import(versionModule);
 const git = gitIdentity(root);
 const commit = git.commit;

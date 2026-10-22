@@ -23,6 +23,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
 | **parser-package (Linux/macOS)** (non-required) | parser package/workflow/dependency changes: actual tarballs installed outside the workspace, public types, native/WASM parsing, saved-graph query | 15 min |
 | **echo-package** | when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
+| **sentinel-package** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm pack:cli` (builds only the CLI's closure, so Sentinel stays unbuilt; the job fails if `packages/sentinel/dist` exists) → `scripts/test-farsight-package.mjs` → `pnpm test:sentinel:package` (below) | 15 min |
 
 ### Which changes select which checks
 
@@ -33,10 +34,12 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 |---|---|
 | Root Markdown, Markdown under `docs/`, `.github/`, `.claude/`, `.agents/`, or `LICENSE` | none, except the packaged Echo docs below |
 | `docs/ECHO.md`, `packages/echo/README.md`, Echo packaging scripts or example connection/settings | `echo-package` |
+| `packages/sentinel/README.md`, `scripts/pack-sentinel.mjs`, `scripts/test-sentinel-package.mjs` | `sentinel-package` |
+| `packages/sentinel/` outside `test/` | `validate` + `sentinel-package` (no application package imports Sentinel, so no e2e) |
 | `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs`, `scripts/synth-graph.mjs` | `e2e` (including its typecheck and small perf suite) |
 | Package `test/` folders, `scripts/test/`, changelog/release/hook-install/commit-lint scripts | `validate` |
-| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package` |
-| Everything else, including dependencies, build config, workflows and the selector itself | all |
+| Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; graph, code-parser, core, cli, server and mcp changes also select `sentinel-package` |
+| Everything else, including dependencies, build config, workflows, the selector itself and the shared packaging scripts (`pack.mjs`, `pack-preflight.mjs`, `npm-consumer.mjs`, `test-farsight-package.mjs`) | all |
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
 whole package is watched, not just a few currently imported helpers. PRs compare merge-base → head, excluding
@@ -75,6 +78,21 @@ the running memory bridge, including sharing one profile between two workspaces.
 no real memories or host sessions. This check needs npm and GitHub release downloads; a failure is reported in
 `echo-package` and blocks merging when that check runs. An unaffected package job is explicitly skipped.
 
+Sentinel's package job (ADR 18) proves the boundary in both directions from clean `npm init -y` consumers,
+outside the pnpm workspace. First `pnpm pack:cli` builds only `@farsight/cli...` and packs `farsight-cli`; the
+pack preflight (`scripts/pack-preflight.mjs`) requires only the CLI's `workspace:` dependency closure and refuses
+before removing any prior artifact. `scripts/test-farsight-package.mjs` installs that tarball, checks that the
+bundle names no Sentinel module and that no Sentinel package is installed, prints `--version`, ingests the
+invoice example and serves it read-only on a free port until `/api/version` answers, then stops its own server
+by pid. Then `pnpm test:sentinel:package` builds `@farsight/sentinel...`, packs `farsight-sentinel` and installs
+it: every bin answers `--help`, the root export imports, packaged schemas parse, and neither `farsight-cli` nor
+any `@farsight/*` package is installed with it. The job fails, rather than skips, when the Sentinel manifest is
+missing. No scanner, container, model or provider is started; npm fetches only declared third-party
+dependencies. Order matters locally too: `scripts/pack.mjs` replaces `build/` wholesale.
+Sentinel's fast schema tests are its package `test` script, so they run in `validate` with every other package;
+container and kill-matrix suites are explicit opt-ins with named skip reasons. `sentinel-package` becomes a required
+check once it has passed on `main` (an owner branch-protection change); until then it is reported but not required.
+
 The **secrets** job runs gitleaks over the pushed or PR commits with `.gitleaks.toml`. A finding fails the job and uploads a SARIF artifact; it posts no PR comment. What it checks, and
 how to allowlist a value you have checked: [SECURITY.md](SECURITY.md#the-scan-in-ci).
 
@@ -95,6 +113,8 @@ pnpm -r test
 pnpm test:scripts
 pnpm lint:strings
 pnpm test:echo:package                  # optional network integration check for Echo changes
+pnpm test:cli:package                   # farsight-cli from its closure alone, in a clean npm consumer
+pnpm test:sentinel:package              # farsight-sentinel, separately, in a clean npm consumer
 pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```

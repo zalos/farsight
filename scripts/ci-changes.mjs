@@ -4,25 +4,33 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const all = () => ({ validate: true, e2e: true, echo: true });
+const all = () => ({ validate: true, e2e: true, echo: true, sentinel: true });
 
 export function selectChecks(paths) {
-  const checks = { validate: false, e2e: false, echo: false };
+  const checks = { validate: false, e2e: false, echo: false, sentinel: false };
   for (const path of paths) {
     // These Markdown files are shipped in the Echo tarball, so still check packaging.
     if (['docs/ECHO.md', 'packages/echo/README.md', 'scripts/pack-echo.mjs',
       'scripts/test-echo-package.mjs', '.echo/settings.example.json', '.echo/connection.example.json'].includes(path)) {
       checks.echo = true;
+    } else if (['packages/sentinel/README.md', 'scripts/pack-sentinel.mjs', 'scripts/test-sentinel-package.mjs'].includes(path)) {
+      // Sentinel's tarball and its packaging; Farsight's package does not include it.
+      checks.sentinel = true;
     } else if (/^(?:[^/]+\.md|docs\/.*\.md|\.(?:github|claude|agents)\/.*\.md)$/s.test(path) || path === 'LICENSE') {
       // Only known documentation locations; Markdown in fixtures can affect tests.
     } else if (path.startsWith('e2e/') || /^scripts\/(?:e2e|e2e-perf|synth-graph)\.mjs$/.test(path)) {
       checks.e2e = true;
+    } else if (/^packages\/sentinel\/(?!test\/)/.test(path)) {
+      // Nothing in Farsight's application imports Sentinel, so its code needs no e2e run.
+      checks.validate = checks.sentinel = true;
     } else if (/^packages\/[^/]+\/test\//.test(path) || path.startsWith('scripts/test/') ||
       /^scripts\/(?:changelog|release|install-hooks|lint-commits)\.mjs$/.test(path)) {
       checks.validate = true;
     } else if (/^(?:packages|examples|schemas)\//.test(path)) {
       checks.validate = checks.e2e = true;
       if (/^packages\/(?:graph|core|echo)\//.test(path)) checks.echo = true;
+      // Sentinel's build closure, and the CLI layers whose package must still start without Sentinel.
+      if (/^packages\/(?:graph|code-parser|core|cli|server|mcp)\//.test(path)) checks.sentinel = true;
     } else {
       return all(); // includes build/config/dependencies, workflows and this selector
     }
@@ -60,7 +68,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, output);
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Affected checks\n\n${reason}.\n\n` +
-      Object.entries(checks).map(([name, run]) => `- ${name === 'echo' ? 'echo-package' : name}: ${run ? 'run' : 'skip'}`).join('\n') +
+      Object.entries(checks).map(([name, run]) => `- ${{ echo: 'echo-package', sentinel: 'sentinel-package' }[name] ?? name}: ${run ? 'run' : 'skip'}`).join('\n') +
       '\n\nSecret scanning and PR commit conventions run independently.\n');
   }
 }
