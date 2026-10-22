@@ -97,7 +97,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `scripts/package-assets.mjs`, which `scripts/pack-sentinel.mjs` calls), its words
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image (ADR 26; linux/amd64 through the scoped PR/manual
-  `sentinel-pattern-qualification` workflow). 
+  `sentinel-pattern-qualification` workflow).
 
   `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
   (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and
