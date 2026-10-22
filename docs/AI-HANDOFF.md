@@ -41,6 +41,25 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel parser merged; rules and policy integration — 2026-10-22
+
+PR [#141](https://github.com/zalos/farsight/pull/141) merged at `500351c` after all ten final CI checks and
+independent SOL review. Integration passed 266 Sentinel tests (17 explicit opt-in skips), core 404, all 181
+script tests, full build/typecheck and catalog lint. Clean npm consumers compiled the parser API and reopened
+the store across processes. A fixed-source ingest against main `464da4e` was identical: 7,637 nodes, 15,950
+edges, source digest `372c3fc9fce5`, 21,209,802 graph bytes and 28,880,896 database bytes. Three inspected
+browser pages had zero page errors; the fixture's missing design-image responses remain.
+
+Rules and policy passed independent SOL review, including bounded pack reads, immutable promotion intent,
+receipt consumption, adopted policy and exact lock resolution. The combined integration passes 297 Sentinel
+tests with 17 explicit skips and a clean npm consumer with seven typed exports, 18 contracts/schemas and 51
+fixtures. The deterministic planner remains in review: undiscovered surfaces and mutable trusted views must
+not erase required coverage. Scheduler recovery, detached CLI operation, pattern input binding and Spring
+registration/matcher semantics remain under active correction. A committed-tree capture header compatibility
+fix is separately under review. These partial implementations do not complete their later plan gates.
+
+No primary-checkout build, dogfood refresh or global installation was performed.
+
 ## Sentinel capture and isolation merged; parser integration — 2026-10-22
 
 PR [#139](https://github.com/zalos/farsight/pull/139) merged at `625a920`, and capture
