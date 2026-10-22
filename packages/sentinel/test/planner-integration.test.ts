@@ -176,5 +176,5 @@ test('captured, parsed, locked and adopted inputs plan, admit and convert end to
   assert.equal(second.previous, first.digest);
   assert.equal(JSON.stringify(first), firstJson, 'the earlier revision is unchanged');
   assert.deepEqual(verifyPinnedLock(JSON.parse(JSON.stringify(lock2)), first.pins.ruleLockDigest!), lock2, 'its lock is still the pinned one');
-  assert.throws(() => plannerLockFrom(lock3, [v1]), /not the definition|no validated pack/, 'the old pack cannot stand in for the new lock');
+  assert.throws(() => plannerLockFrom(lock3, [v1], lockDigest(lock3)), (e: any) => e.code === 'sentinel.rules.packMismatch', 'the old pack cannot stand in for the new lock');
 });

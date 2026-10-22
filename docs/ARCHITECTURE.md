@@ -462,8 +462,8 @@ this boundary, as for the store.
 
 `@farsight/sentinel/planner` is a pure planner: the same pinned inputs give the same `sentinel-plan/draft-1`
 revision, byte for byte, with no clock, file, ledger or network access. Its inputs come from the actual modules:
-the rule lock with the validated packs it was promoted from (a rule is planned only with the definition whose
-digest the lock pins), the effective policy (pinned by its `revision`, the digest receipts and admission bind to),
+the rule lock resolved by the rules module's `resolveLockedRules` against its canonical pin and the exact
+validated packs (a rule is planned only with the definition whose digest the lock pins), the effective policy (pinned by its `revision`, the digest receipts and admission bind to),
 the snapshot envelope and each source's parser evidence. Surfaces are graph nodes of kind `route` (an HTTP endpoint)
 and `page` (a UI route); a handler is the function a route reaches, not a surface. The profile states which rule
 capabilities its stages establish and which adapters it ships.

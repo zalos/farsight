@@ -7,7 +7,7 @@ import { emptyLock, lockDigest, validatePack } from '../dist/rules/index.js';
 import { DEFAULT_SETTINGS, effectivePolicy } from '../dist/policy/index.js';
 import { validateEnvelope } from '../dist/validate.js';
 import {
-  PlanError, adapterOf, canonicalArtifactId, capturedInputsOf, checksCoveredBy, influenceManifestOf, lockedRuleDefinitions,
+  PlanError, adapterOf, canonicalArtifactId, capturedInputsOf, checksCoveredBy, influenceManifestOf,
   planAnalysis, planBootstrap, plannerLockFrom, plannerPolicyFrom, workEnvelopesFor,
 } from '../dist/planner/index.js';
 
@@ -31,22 +31,22 @@ const NOW = new Date('2026-10-22T12:00:00.000Z');
 const lock = { ...emptyLock(NOW), revision: 2, previous: lockDigest(emptyLock(NOW)),
   packs: [{ ...structuredClone((pack as any).entry), promotion: { receipt: D('receipt'), at: '2026-10-22T12:00:00.000000000Z' } }] };
 
+const pin = lockDigest(lock as never);
+const policyCode = (c: string) => (e: unknown) => (e as { code?: string }).code === c;
+
 test('a locked rule is planned with exactly the definition the lock pins', () => {
   assert.ok(validateEnvelope('rulelock', lock).ok);
-  const [resolved] = lockedRuleDefinitions(lock, [pack], lockDigest(lock));
-  assert.deepEqual(resolved!.definition, pack.manifest.rules[0]);
-  assert.equal(resolved!.definitionDigest, pack.rules[0]!.definitionDigest);
-  const view = plannerLockFrom(lock, [pack]);
-  assert.equal(view.digest, lockDigest(lock));
+  const view = plannerLockFrom(lock, [pack], pin);
+  assert.equal(view.digest, pin);
   assert.deepEqual(view.rules[0], { familyId: 'sentinel.ts.eval', revision: 2, definitionDigest: pack.rules[0]!.definitionDigest, packDigest: pack.packDigest,
     languages: ['typescript'], scopeKind: 'source-file', requires: ['source-bytes', 'pattern-match'], adapterId: 'sentinel-pattern' });
 });
 
-test('another lock, another pack, a changed definition or a forged pack or policy object is refused', () => {
-  assert.throws(() => plannerLockFrom(lock, [pack], D('another lock')));
-  assert.throws(() => plannerLockFrom(lock, []), code('sentinel.plan.pinMismatch'));
-  assert.throws(() => plannerLockFrom(lock, [packOf([{ ...definition, severity: 'low' }])]), code('sentinel.plan.pinMismatch'), 'not the pinned pack');
-  assert.throws(() => plannerLockFrom(lock, [JSON.parse(JSON.stringify(pack))]), code('sentinel.plan.pinMismatch'), 'a copy is not a validated pack');
+test('another lock, a missing, changed or forged pack, or a forged policy object is refused', () => {
+  assert.throws(() => plannerLockFrom(lock, [pack], D('another lock')), policyCode('sentinel.rules.lockInvalid'));
+  assert.throws(() => plannerLockFrom(lock, [], pin), policyCode('sentinel.rules.packMissing'));
+  assert.throws(() => plannerLockFrom(lock, [packOf([{ ...definition, severity: 'low' }])], pin), policyCode('sentinel.rules.packMismatch'));
+  assert.throws(() => plannerLockFrom(lock, [JSON.parse(JSON.stringify(pack))], pin), policyCode('sentinel.rules.packMismatch'), 'a copy is not a validated pack');
   const real = effectivePolicy({ trust: 'missing', settings: null, settingsDigest: null, repoConfig: null, repoConfigDigest: null });
   assert.equal(plannerPolicyFrom(real).digest, real.revision);
   assert.throws(() => plannerPolicyFrom({ ...real } as never), code('sentinel.plan.pinMismatch'), 'only effectivePolicy’s own result');
@@ -62,7 +62,7 @@ test('a plan converts to canonical work envelopes that cover exactly its checks'
   const snapshot = { id: 'snap-1', entries: [file('src/a.ts'), file('src/b.ts')] };
   const plan = planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: [{ id: boot.units.at(-1)!.id, revision: 1 }], profile,
     snapshot: { ...snapshot, inventoryDigest: D('inv'), environmentProfileDigest: D('env'), sources: [{ sourceId: 'web' }], frameworkVersions: [] },
-    analyses: [{ sourceId: 'web', analysisFingerprint: 'fp', files: [], surfaces: [] }], lock: plannerLockFrom(lock, [pack]), policy: plannerPolicyFrom(policy) });
+    analyses: [{ sourceId: 'web', analysisFingerprint: 'fp', files: [], surfaces: [] }], lock: plannerLockFrom(lock, [pack], pin), policy: plannerPolicyFrom(policy) });
   const L = { deadlineMs: 1000, memoryBytes: 1 << 26, cpuQuota: 1, maxPids: 8, maxOutputBytes: 1 << 16 };
   const execution = { resources: { capture: L, parse: L, inventory: L, check: L } };
   const conversion = { coordinatorEpoch: 'epoch-1', createdAt: '2026-10-22T12:00:00Z', execution };

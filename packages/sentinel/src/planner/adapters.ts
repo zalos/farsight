@@ -1,61 +1,32 @@
-// Planner inputs from the actual exported types: the rule lock and the validated packs it was promoted from
-// (rules/), the effective policy (policy/), the snapshot envelope and the parser's per-source analysis
-// (snapshot/parser). Nothing here restates their schemas; it reads their fields and refuses anything that does not
-// match its pin.
-//
-// A rule is planned only with the definition the lock pinned: for each locked rule, a validated pack with the same
-// pack id and pack digest must hold a rule of that family and revision whose definition digest equals the lock's.
-// The digest is the rules module's own (validatePack); the planner never recomputes or substitutes one.
-import type { RuleDefinition, RuleLockEnvelope, SnapshotEnvelope } from '../contracts/index.js';
+// Planner inputs from the actual exported types: the rule lock resolved against the validated packs it was
+// promoted from (rules/resolveLockedRules), the effective policy (policy/), the snapshot envelope and the parser's
+// per-source analysis (snapshot/parser). Nothing here restates their schemas or recomputes their digests.
+import type { RuleLockEnvelope, SnapshotEnvelope } from '../contracts/index.js';
 import { isEffectivePolicy, type EffectivePolicy } from '../policy/settings.js';
-import { isValidatedPack, type ValidatedPack } from '../rules/pack.js';
-import { lockDigest, verifyPinnedLock } from '../rules/lock.js';
+import type { ValidatedPack } from '../rules/pack.js';
+import { resolveLockedRules } from '../rules/resolve.js';
 import type { SourceAnalysis } from '../snapshot/parser.js';
 import { PlanError } from './errors.js';
 import { SURFACE_NODE_KINDS, surfacesFromIndex } from './planner.js';
-import type { PlannerAnalysis, PlannerPolicy, PlannerRule, PlannerRuleLock, PlannerSnapshot } from './types.js';
+import type { PlannerAnalysis, PlannerPolicy, PlannerRuleLock, PlannerSnapshot } from './types.js';
 
 const mismatch = (detail: string) => new PlanError('sentinel.plan.pinMismatch', detail);
 
-export interface LockedRuleDefinition {
-  readonly packId: string;
-  readonly packDigest: string;
-  readonly definitionDigest: string;
-  readonly definition: RuleDefinition;
-}
-
 /**
- * Every rule the lock pins with the exact definition it pinned. `pinned`, when given, must be the lock's digest
- * (the rules module's verifyPinnedLock). A missing pack, a pack with another digest, a missing rule or a definition
- * with another digest is refused; a pack object not returned by validatePack is refused too.
+ * The planner's rule-lock view: every rule the lock pins, with the original definition resolveLockedRules verified
+ * against the canonical lock pin and the exact validated pack (a missing, stale or forged pack or lock is refused
+ * there, with the rules module's own reason). The view's digest is the pin.
  */
-export function lockedRuleDefinitions(lock: RuleLockEnvelope, packs: readonly ValidatedPack[], pinned?: string): LockedRuleDefinition[] {
-  const checked = pinned === undefined ? lock : verifyPinnedLock(lock, pinned);
-  for (const p of packs) if (!isValidatedPack(p)) throw mismatch('a pack is accepted only as validatePack returned it');
-  const out: LockedRuleDefinition[] = [];
-  for (const locked of checked.packs) {
-    const pack = packs.find(p => p.manifest.packId === locked.packId && p.packDigest === locked.packDigest);
-    if (!pack) throw mismatch(`no validated pack ${locked.packId} with the pinned digest`);
-    for (const rule of locked.rules) {
-      const digest = pack.rules.find(r => r.familyId === rule.familyId && r.revision === rule.revision)?.definitionDigest;
-      const definition = pack.manifest.rules.find(r => r.familyId === rule.familyId && r.revision === rule.revision);
-      if (!definition || digest !== rule.definitionDigest) throw mismatch(`${rule.familyId} revision ${rule.revision} is not the definition the lock pins`);
-      out.push({ packId: locked.packId, packDigest: locked.packDigest, definitionDigest: rule.definitionDigest, definition });
-    }
-  }
-  return out;
-}
-
-/** The planner's rule-lock view, from verified definitions. Its digest is the rules module's lockDigest. */
-export function plannerLockFrom(lock: RuleLockEnvelope, packs: readonly ValidatedPack[], pinned?: string): PlannerRuleLock {
-  const rules: PlannerRule[] = lockedRuleDefinitions(lock, packs, pinned).map(({ definition: d, packDigest, definitionDigest }) => ({
-    familyId: d.familyId, revision: d.revision, definitionDigest, packDigest,
-    languages: [...d.applicability.languages], scopeKind: d.applicability.scopeKind,
-    ...(d.applicability.frameworks ? { frameworks: [...d.applicability.frameworks] } : {}),
-    requires: [...d.requires], adapterId: d.implementation.adapterId,
-  }));
+export function plannerLockFrom(lock: RuleLockEnvelope, packs: readonly ValidatedPack[], pin: string): PlannerRuleLock {
+  const resolved = resolveLockedRules(lock, pin, packs);
   return {
-    digest: lockDigest(lock), rules,
+    digest: pin,
+    rules: resolved.map(({ definition: d, definitionDigest, packDigest }) => ({
+      familyId: d.familyId, revision: d.revision, definitionDigest, packDigest,
+      languages: [...d.applicability.languages], scopeKind: d.applicability.scopeKind,
+      ...(d.applicability.frameworks ? { frameworks: [...d.applicability.frameworks] } : {}),
+      requires: [...d.requires], adapterId: d.implementation.adapterId,
+    })),
     tools: lock.tools.map(t => ({ adapterId: t.adapterId, version: t.version, artifactDigest: t.artifactDigest })),
     databases: lock.databases.map(d => ({ databaseId: d.databaseId, snapshotDigest: d.snapshotDigest })),
   };

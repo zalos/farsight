@@ -9,7 +9,6 @@ export type {
   PlanRevision, PlannedCheck, PlannedWork, PlanPins, RuleGap, PlanTallies, CheckState, PlanStage, PlannerRule, PlannerRuleLock,
   PlannerPolicy, PlannerSnapshot, PlannerAnalysis, PlannerProfile, PlannerLimits, PlannerLanguage, PlannerScopeKind, CapabilityEntry,
 } from './types.js';
-export { lockedRuleDefinitions, plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom, plannerAnalysisFrom } from './adapters.js';
-export type { LockedRuleDefinition } from './adapters.js';
+export { plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom, plannerAnalysisFrom } from './adapters.js';
 export { workEnvelopesFor, influenceManifestOf, canonicalArtifactId, checksCoveredBy, adapterOf, capturedInputsOf, planBoundaryFor } from './boundary.js';
 export type { ExecutionProfile, WorkConversion, InfluenceManifest, ConvertedWork, BoundaryInput, PlanBoundaryParts, BoundaryRequest } from './boundary.js';
