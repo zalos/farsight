@@ -20,14 +20,23 @@ optional plan pin, source-filtered planner fingerprint and request/generation id
 run before expensive processing, reject duplicate/unsorted node pairs or broader edge kinds and preserve old no-pin
 canonical plan output. A query never grants execution or supplies the missing deep-flow capability. Fifty focused
 contract, planner and package controls pass with zero skips; the affected closure build and typecheck, generated
-schemas and catalog check pass. This is a private integration checkpoint, not a completed path-command feature.
+schemas and catalog check pass. A following pure job/output checkpoint binds the canonical request, exact ancestor,
+snapshot/source and parser artifact/result/index references to the bytes sealed for an attempt. It reads no workspace
+paths, launches or publishes nothing, and returns only the existing call-reachability evidence and frontiers. Five
+new original capture/parse controls plus the request/package controls pass 21 tests with zero skips, including source
+removal, valid-digest foreign references, missing/substituted bytes and unknown-node frontiers; build/typecheck pass.
+These data checks do not authenticate the producer chain or replace request admission. This is a private integration
+checkpoint, not a completed path-command feature.
 
 Before production admission is wired, Spring owns factoring the already reviewed retained-analysis source verifier
 into a common readonly proof for exact current ended/canceled ancestors and their accepted parser/operation closure.
 No parallel loader or structural JSON authority is substituted. That reviewed API must be integrated with request
 admission/retention and execution before the owner CLI, packaged trusted child and privacy-safe inspection report
 are qualified end to end after source removal. The driver/service/report/assets changes remain coordinated with the
-framework lane. Durable deep-import acceptance remains design-only; no engine acquisition, target execution or model
+framework lane. The agreed built-in worker refactor uses fixed internal IDs, assets and exports for framework
+controls and bounded paths, sharing the complete packed dist/dependency closure proof. A missing packed asset must
+refuse rather than fall back to a workspace-layout file; no caller-selected module or function enters that API.
+Spring owns that refactor after the framework checkpoint. Durable deep-import acceptance remains design-only; no engine acquisition, target execution or model
 call is part of this checkpoint. The end-of-plan product cleanup review remains required.
 
 ## Selected-rerun crash-window recovery — 2026-10-22

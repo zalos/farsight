@@ -199,6 +199,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'reports/place.js': ['@farsight/core/dist/affected.js', '@farsight/core/dist/impact.js', '@farsight/core/dist/journeys.js', '@farsight/core/dist/query.js'],
   // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
   'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
+  'analysis/paths/protocol.js': ['node:crypto'],
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],

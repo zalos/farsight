@@ -294,5 +294,8 @@ npm-only detached execution. These are executable internals, not new JavaScript 
 Sentinel structural task requests (ADR 45) add `contracts/pathrequest.ts` and
 `analysis/paths/request.ts`: bounded, immutable canonical query data and deterministic request/generation identity.
 `planner/planner.ts` optionally pins that artifact and fingerprints source-scoped path work; missing requests and
-unavailable deep-flow capability stay explicit gaps. These helpers grant no execution or receipt authority. Shared
+unavailable deep-flow capability stay explicit gaps. These helpers grant no execution or receipt authority.
+`analysis/paths/protocol.ts` is the pure sealed-object job/output reader: exact request/ancestor/source bindings,
+read-byte hashes and parser result/index links, returning call reachability and frontiers without check credit. It
+launches and publishes nothing. Shared
 retained-source admission, canonical driver/owner dispatch and report projection remain required integration gates.
