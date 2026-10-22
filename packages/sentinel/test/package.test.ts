@@ -58,6 +58,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/pattern/normalize.js': ['node:crypto'],
   'adapters/pattern/resolved.js': ['node:crypto'],
   'adapters/pattern/run.js': ['node:fs', 'node:path'],
+
+  // The OSV advisory adapter (PR 12): hashing, its own job and snapshot files; the engine runs through execution/.
+  'adapters/osv/acquire.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/osv/adapter.js': ['node:crypto'],
+  'adapters/osv/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/osv/normalize.js': ['node:crypto'],
+  'adapters/osv/run.js': ['node:fs', 'node:path'],
+  'adapters/sealed-input.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
