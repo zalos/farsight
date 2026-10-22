@@ -284,3 +284,14 @@ test('the preview report is labelled, scoped and regenerates from its stored doc
   bad({ counts: [{ ...doc.counts[0], scope: 'count.scope.journey' }] });
   bad({ counts: [{ ...doc.counts[0], recheck: undefined }] });
 });
+
+test('every glossary term has a business twin, and no twin carries a developer unit', async () => {
+  const { STRINGS } = await import('@farsight/core/dist/strings.js');
+  const terms = Object.keys(STRINGS).filter(k => k.startsWith('sentinel.term.') && !k.startsWith('sentinel.term.biz.'));
+  assert.ok(terms.length >= 13);
+  for (const k of terms) {
+    const twin = STRINGS[k.replace('sentinel.term.', 'sentinel.term.biz.')];
+    assert.ok(twin?.define && twin.professional, k);
+    assert.doesNotMatch(twin.professional, /\b(SARIF|CWE|SCC|frontier|epoch|attempt|publication|span|steps?|hops?)\b/i, k);
+  }
+});

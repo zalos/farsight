@@ -582,3 +582,37 @@ executes the analysis, and crashes and resumes in both revisions.
 
 **Not decided here:** the run's admission receipt (`run.start` on the plan digest) and its CLI, child runs over a
 parent's bootstrap, reuse derivations (PR 27), and planning in the coordinator itself.
+
+25. **Sentinel's command line is the owner's entrypoint; its local service never grants owner authority (2026-10-22).**
+
+`farsight-sentinel` is where the owner acts: `init` writes the workspace's settings once (PR 06's defaults plus a
+human-only `capture.source`/`run.start` grant for the chosen profile) and never overwrites them; `settings adopt`
+shows the settings digest and waits (exit 4) until `--confirm`, when the owner's receipt is issued and spent in that
+same process and the exact bytes adopted; `plan`, `run`, `status` and `report` work in the foreground over the store
+facade, each change decided first by admission's three verdicts. Commands parse only the options they declare;
+every result is typed (`cli/outcome.ts`): Sentinel's exit codes 0–4 for policy results, plus `submitted`,
+`unavailable`, `prepared`, `kept`, `answered` and `refused`, which never borrow a policy word, and `--json` always
+carries the outcome, the exit code and the three verdicts.
+
+**Who asks is the entrypoint's, never the request's.** The owner channel is the command line in its own process. A
+client of the local service (`transport/ipc.ts`) is always a non-owner agent, whatever its hello names: `cli`,
+`mcp` and `http-bridge` only label the channel (`local-service`, proposed for `DecisionChannel`, until then mapped).
+A request body that names an actor, principal, channel or confirmer is refused, so owner authority can reach the
+service only as a receipt id the owner's own process minted, which the service verifies. The socket lives in a
+private runtime folder keyed by the canonical store path and an owner nonce (`$XDG_RUNTIME_DIR`, `$TMPDIR`, else a
+short 0700 folder under `/tmp`); its path is measured in bytes with room for the terminator (103 on macOS, 107 on
+Linux); folder and socket must be this user's and closed to others; a stale socket of ours is replaced and anything
+else refused; frames are length-bounded JSON; the handshake must name the store and owner the client expects.
+
+**A foundation preview, not coverage.** One original coded check (SQL text assembled from strings in TS/JS and
+Java) runs as a built-in worker through PR 08's coordinator, so the path init → adopt → plan → run → report works
+with Node and npm alone; the worker is the package's own executable, entered only when its otherwise empty
+environment carries the detector's identity, which keeps it findable in the published bundle. The preview planner
+stands behind PR 08's `PlanBoundary` and is replaced by PR 06's planner. A preview run ends
+`required-coverage-incomplete` (exit 2), never satisfied, and its report says it is not scanner coverage. A plan's
+identity is its captured inventory, policy revision and adapter, so the same content plans to the same id; running a
+completed plan again executes nothing. The report is rendered from the ledger and stored artifacts, pinned to the
+run's last event. **Not in this decision:** the detached owner process (`serve`, `run --detach`, `wait`) and the
+run controls, refused as unavailable until built; a ledger read of a run (until then a private plan record sits
+beside the settings); the full report (PR 19). Same-account code is outside this boundary, as for the store.
+

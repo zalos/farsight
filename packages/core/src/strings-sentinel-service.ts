@@ -8,6 +8,8 @@ const same = (text: string, define: string): StringEntry => ({ hud: text, profes
 export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.cli.usageInit': same('farsight-sentinel init [--workspace <dir>] [--profile static] [--json]    create the private settings file once; never overwrites, downloads or scans', 'Writes the workspace\'s Sentinel settings from scrubbed defaults when the file is missing, and leaves an existing file exactly as it is.'),
 
+  'sentinel.capability.draftPreviewCli': same('foundation preview only: plan and run in the foreground', 'The command line can initialize a workspace, adopt its settings, plan and run one original preview check in the foreground and print its report. It is not scanner coverage; background runs and run controls are not built.'),
+
   // ---- arguments ----
   'sentinel.args.unknownCommand': same('unknown command: {detail}; run farsight-sentinel --help', 'The command is not one this executable knows.'),
   'sentinel.args.unknownFlag': same('unknown option for this command: {detail}', 'Each command accepts only the options it lists. An unknown one is refused rather than ignored, so a typo cannot quietly change what a command does.'),

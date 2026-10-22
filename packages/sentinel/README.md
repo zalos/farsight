@@ -165,25 +165,30 @@ parser's own selection flag, not coverage, and parser evidence clears no check (
 application ingestion, configuration enrichment, network or process is used.
 ## Install and initialize with npm only (draft)
 
-Sentinel needs Node 24 or later and npm; no pnpm and no Farsight checkout. Install one pinned tarball, then
-initialize the workspace you will scan:
+Sentinel needs Node 24 or later and npm; no pnpm and no Farsight checkout. Install one pinned tarball, then work in
+the folder you want to scan:
 
 ```sh
 npm install -g <pinned farsight-sentinel tarball URL>   # a GitHub Release asset once one is published (PR 26);
                                                         # until then a local build of scripts/pack-sentinel.mjs
 cd /path/to/your/workspace
-farsight-sentinel init           # creates .farsight/sentinel/settings.json (0600) from scrubbed defaults
-farsight-sentinel init           # again: the file is kept byte for byte; nothing is overwritten
+farsight-sentinel init                     # .farsight/sentinel/settings.json (0600); again: kept byte for byte
+farsight-sentinel settings adopt           # shows the settings digest and waits (exit 4)
+farsight-sentinel settings adopt --confirm # you, the owner, adopt these exact bytes
+farsight-sentinel plan                     # captures the workspace; prints the plan id, digest and effects
+farsight-sentinel run <planId>             # foreground; a foundation preview ends exit 2 (never "satisfied")
+farsight-sentinel status <planId>          # the run's state and a bounded page of its events
+farsight-sentinel report <planId>          # Markdown (or --format json), from stored results only
 ```
 
-`init` writes the settings file only when it is missing and never touches an existing one. The defaults grant
-nothing, configure no provider and make every agent action wait for a person. Settings name credentials by
-keychain reference only (`keychain:farsight/<name>`). `init` downloads nothing, installs no scanner, starts no
-container and no scan. The file grants nothing until its owner adopts its exact bytes (PR 06's adoption flow).
-`plan`, `run`, `status` and `report` are listed in `--help`, and say *unavailable* (exit 3) until the coordinator
-behind them exists; none of them is simulated. Commands print typed results: with `--json`, every result carries
-its `outcome`, `exitCode`, the three admission verdicts (`policy`, `capability`, `credential`) and its facts. A
-detached run reports `submitted`, never `satisfied`, and awaiting confirmation is exit 4, never a scan result.
+`init` writes the settings file only when it is missing: PR 06's defaults plus one grant letting the owner (a
+person, never an agent) capture and run the `static` profile. Settings name credentials by keychain reference
+only (`keychain:farsight/<name>`). Nothing downloads a tool, installs a scanner, starts a container or contacts a
+model provider. The run is a **foundation preview**: one original coded check (SQL text assembled from strings in
+TypeScript, JavaScript and Java) shows the whole path working; it is not scanner or framework coverage, and its
+report says so. `run --detach`, `wait`, `pause`, `resume`, `cancel`, `retry` and `rerun` say *unavailable* (exit 3)
+until the background service exists. With `--json`, every result carries its `outcome`, `exitCode`, the three
+admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 25 in `docs/ARCHITECTURE.md`.
 
 ## Versions and evolution
 
