@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import { parseSnapshot } from '../dist/snapshot/parser.js';
@@ -187,4 +187,53 @@ test('captured, parsed, locked and adopted inputs plan, admit and convert end to
   assert.equal(JSON.stringify(first), firstJson, 'the earlier revision is unchanged');
   assert.deepEqual(verifyPinnedLock(JSON.parse(JSON.stringify(lock2)), first.pins.ruleLockDigest!), lock2, 'its lock is still the pinned one');
   assert.throws(() => plannerLockFrom(lock3, [v1], lockDigest(lock3)), (e: any) => e.code === 'sentinel.rules.packMismatch', 'the old pack cannot stand in for the new lock');
+});
+
+test('parser evidence is accepted only for the snapshot and source it read: a stale A analysis cannot plan snapshot B', needsStore, async t => {
+  const dir = scratch(t);
+  const root = join(dir, 'repo');
+  const lib = join(dir, 'lib');
+  commitRepo(root, { 'app/api/items/route.ts': 'export const items = [];\n' });
+  commitRepo(lib, { 'src/util.ts': 'export function util() { return 1; }\n' });
+  const fx = await openCaptureStore(t, dir);
+  const parse = async (snapshotId: string, name: string) => {
+    const work = join(dir, name);
+    mkdirSync(work, { mode: 0o700 });
+    return parseSnapshot(fx.store, { snapshotId, workDir: work, selection: { gitignore: true, testFiles: 'include' },
+      limits: { maxFiles: 100, maxFileBytes: 65536, maxTotalBytes: 1 << 20, maxEntries: 10_000, maxDurationMs: 60_000 } });
+  };
+  const sources = [{ sourceId: 'app', repositoryId: 'example/app', root }, { sourceId: 'lib', repositoryId: 'example/lib', root: lib }];
+  const a = (await captureSnapshot(fx.store, { mode: 'working-copy', sources })).snapshot;
+  const parsedA = await parse(a.id, 'work-a');
+  // B: the same file now exports a route handler.
+  writeFileSync(join(root, 'app/api/items/route.ts'), 'export async function GET() {\n  return new Response("[]");\n}\n');
+  const b = (await captureSnapshot(fx.store, { mode: 'working-copy', sources })).snapshot;
+  const parsedB = await parse(b.id, 'work-b');
+  const analysesOf = (parsed: typeof parsedA) => parsed.sources.map(s => plannerAnalysisFrom(s));
+  assert.equal(analysesOf(parsedA).find(x => x.sourceId === 'app')!.surfaces.length, 0, 'A has no route');
+  assert.equal(analysesOf(parsedB).find(x => x.sourceId === 'app')!.surfaces.length, 1, 'B has the route');
+
+  const v1 = pack([ROUTE]);
+  const lock = { ...emptyLock(NOW), revision: 2, previous: lockDigest(emptyLock(NOW)),
+    packs: [{ ...structuredClone((v1 as any).entry), promotion: { receipt: D('receipt'), at: '2026-10-22T12:00:00.000000000Z' } }] };
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), mandatoryRules: [ROUTE.familyId] };
+  const policy = plannerPolicyFrom(effectivePolicy({ trust: 'adopted', settings, settingsDigest: D('settings'), repoConfig: null, repoConfigDigest: null }));
+  const boot = planBootstrap({ runId: 'run-ab', sourceIds: ['app', 'lib'], profile });
+  const planB = (analyses: ReturnType<typeof plannerAnalysisFrom>[]) => planAnalysis({ runId: 'run-ab', revision: 2, previous: boot,
+    bootstrap: [{ id: boot.units.at(-1)!.id, revision: 1 }], profile, snapshot: plannerSnapshotFrom(b), analyses,
+    lock: plannerLockFrom(lock as never, [v1], lockDigest(lock as never)), policy });
+
+  assert.throws(() => planB(analysesOf(parsedA)), (e: any) => e.code === 'sentinel.plan.pinMismatch', 'A’s evidence cannot plan B');
+  const good = planB(analysesOf(parsedB));
+  assert.deepEqual(good.checks.filter(c => c.familyId === ROUTE.familyId && c.sourceId === 'app').map(c => c.state), ['unsupported'],
+    'the route B declares is a required check');
+  assert.equal(good.requiredCoverageAchievable, false);
+
+  // Mixed or relabelled evidence: B's app with A's lib, a result paired with another snapshot's index, a source relabelled.
+  const [appB, libB] = ['app', 'lib'].map(s => parsedB.sources.find(x => x.sourceId === s)!);
+  const libA = parsedA.sources.find(x => x.sourceId === 'lib')!;
+  assert.throws(() => planB([plannerAnalysisFrom(appB), plannerAnalysisFrom(libA)]), (e: any) => e.code === 'sentinel.plan.pinMismatch');
+  assert.throws(() => plannerAnalysisFrom({ ...appB, index: parsedA.sources.find(x => x.sourceId === 'app')!.index }), (e: any) => e.code === 'sentinel.plan.pinMismatch');
+  assert.throws(() => plannerAnalysisFrom({ ...libB, sourceId: 'app' }), (e: any) => e.code === 'sentinel.plan.pinMismatch');
+  assert.throws(() => planB([plannerAnalysisFrom(appB)]), (e: any) => e.code === 'sentinel.plan.pinMismatch', 'every source needs its own analysis');
 });

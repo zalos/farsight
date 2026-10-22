@@ -252,6 +252,20 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   if (analyses.size !== request.analyses.length) throw invalid('one analysis per source');
   for (const s of sourceIds) if (!analyses.has(s)) throw new PlanError('sentinel.plan.pinMismatch', `no parser analysis for source ${s}`);
   for (const a of analyses.keys()) if (!sourceIds.includes(a)) throw new PlanError('sentinel.plan.pinMismatch', `analysis for source ${a} is not in the snapshot`);
+  // Every analysis read this snapshot: its snapshot id, and every captured file it joined, must be the pinned ones.
+  const captured = new Map<string, string>();
+  for (const e of snapshot.entries) if (e.kind === 'file' && e.disposition === 'included') captured.set(`${e.sourceId}\u0000${e.relativePath}`, e.content);
+  for (const a of analyses.values()) {
+    if (a.snapshotId !== snapshot.id) throw new PlanError('sentinel.plan.pinMismatch', `the analysis of ${a.sourceId} read snapshot ${a.snapshotId}, not ${snapshot.id}`);
+    for (const f of a.files) {
+      if (f.content !== undefined && captured.get(`${a.sourceId}\u0000${f.path}`) !== f.content) {
+        throw new PlanError('sentinel.plan.pinMismatch', `the analysis of ${a.sourceId} read other bytes for ${f.path} than the snapshot captured`);
+      }
+    }
+    for (const s of a.surfaces) {
+      if (!captured.has(`${a.sourceId}\u0000${s.path}`)) throw new PlanError('sentinel.plan.pinMismatch', `a surface of ${a.sourceId} is in ${s.path}, which the snapshot did not capture`);
+    }
+  }
 
   // The policy selects rules; the lock pins them.
   const locked = new Map<string, PlannerRule>();

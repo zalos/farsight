@@ -63,10 +63,12 @@ export interface PlannerSnapshot {
 
 /** One source's parser evidence, as planning needs it. */
 export interface PlannerAnalysis {
+  /** The snapshot the parser read: must be the snapshot the plan pins. */
+  readonly snapshotId: Id;
   readonly sourceId: Id;
   readonly analysisFingerprint: string;
-  /** The parser's class for each captured path (`parsed`, `parse-failed`, …). */
-  readonly files: readonly { readonly path: string; readonly class: string }[];
+  /** The parser's class for each captured path (`parsed`, `parse-failed`, …), with the captured bytes it joined. */
+  readonly files: readonly { readonly path: string; readonly class: string; readonly content?: string }[];
   /** Route, handler and page surfaces: canonical graph identities with the file that declares them. */
   readonly surfaces: readonly { readonly nodeId: string; readonly path: string; readonly kind: string }[];
 }

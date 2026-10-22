@@ -477,7 +477,9 @@ refused, unreadable or unlisted, is kept as its own gap. Each unit binds its exa
 apart from its wider input fingerprint. An unresolved framework version is unknown for the source it names, or for
 every source when it names none. A surface rule also keeps, as required gaps, every file of its languages that did
 not parse and every folder capture could not list: surfaces nobody could discover never disappear from coverage.
-Planner inputs carry trusted identity only as the deep-frozen views the adapters derive; a copy or an edited view
+Parser evidence is accepted only for the snapshot and source it read: the adapter requires the parser's result and
+index to agree on snapshot, source and analysis fingerprint, and the planner refuses an analysis of another snapshot,
+one that joined other bytes than the snapshot captured, or a surface in an uncaptured file. Planner inputs carry trusted identity only as the deep-frozen views the adapters derive; a copy or an edited view
 is refused. The contract's validator re-derives every check and unit id from its content and enforces the pin
 graph (each check's rule revision and adapter, its analysed source, the canonical bootstrap shape), so a resealed
 revision with a recomputed digest is still refused; every binding handed to the coordinator is a deep-frozen copy.

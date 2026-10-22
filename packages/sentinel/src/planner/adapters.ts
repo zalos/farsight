@@ -56,10 +56,20 @@ export function plannerSnapshotFrom(snapshot: SnapshotEnvelope): PlannerSnapshot
 
 /** One source's parser evidence: each captured path's class, and surfaces from the index by graph kind. */
 export function plannerAnalysisFrom(source: SourceAnalysis, surfaceKinds: readonly string[] = SURFACE_NODE_KINDS): PlannerAnalysis {
+  // The result and the index must be one analysis of one source of one snapshot.
+  const { result, index } = source;
+  if (result.sourceId !== source.sourceId || index.sourceId !== source.sourceId) throw mismatch('the parser result, its index and its source disagree on the source');
+  if (result.snapshotId !== index.snapshotId) throw mismatch('the parser result and its index name different snapshots');
+  if (result.analysisFingerprint !== index.analysisFingerprint) throw mismatch('the parser result and its index are different analyses');
+  const artifact = (source as { artifact?: { analysis?: { fingerprint?: string } } }).artifact;
+  if (artifact?.analysis?.fingerprint !== undefined && artifact.analysis.fingerprint !== result.analysisFingerprint) {
+    throw mismatch('the retained analysis artifact is not the analysis its result describes');
+  }
   return trustedView({
+    snapshotId: result.snapshotId,
     sourceId: source.sourceId,
-    analysisFingerprint: source.result.analysisFingerprint,
-    files: source.result.entries.map(e => ({ path: e.path, class: e.class })),
+    analysisFingerprint: result.analysisFingerprint,
+    files: result.entries.map(e => ({ path: e.path, class: e.class, ...(e.content !== undefined ? { content: e.content } : {}) })),
     surfaces: surfacesFromIndex(source.index, surfaceKinds),
   });
 }
