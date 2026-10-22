@@ -9,6 +9,7 @@ import { createCapabilityTable, type CapabilityFact, type PlannerProfile } from 
 import { createAdapterRegistry, type AdapterRegistry } from '../execution/registry.js';
 import { executionProfileRecord, EXECUTION_PROFILE_SCHEMA, type ExecutionProfileRecord } from '../execution/profile.js';
 import { canonicalJsonBytes } from '../store/objects.js';
+import { CONTROLS_SUPPORTED_RULES } from '../frameworks/controls/driver.js';
 import { productionDrivers } from '../adapters/drivers/index.js';
 import { PREVIEW_DETECTOR_ID } from '../adapters/preview-detector.js';
 import { builtinPackDir, ownExecutable } from './package-paths.js';
@@ -87,11 +88,12 @@ export function supportedRules(): readonly SupportedRule[] {
     return Object.freeze({ adapterId: definition.implementation.adapterId, familyId: locked.familyId, revision: locked.revision, definitionDigest: locked.definitionDigest });
   }));
   supportedCache = Object.freeze([...supportedCache, ...[...productionDrivers({ maxAdvisoryAgeMs: 7 * 86400000 }).values()].flatMap(e => e.driver.supportedRules().map(r => ({ ...r, adapterId: e.definition.id })))]);
+  supportedCache=Object.freeze([...supportedCache,...CONTROLS_SUPPORTED_RULES.map(r=>({...r,adapterId:'framework-controls'}))]);
   return supportedCache;
 }
 
 /** The check adapters this build ships (whose rules are bound by supportedRules). */
-export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([PREVIEW_DETECTOR_ID, 'pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor', 'secrets-gitleaks']);
+export const SHIPPED_CHECK_ADAPTERS: ReadonlySet<string> = new Set([PREVIEW_DETECTOR_ID, 'pattern-semgrep', 'advisories-osv', 'iac-trivy', 'ci-zizmor', 'secrets-gitleaks', 'framework-controls']);
 
 /**
  * The plan's rules that a shipped check adapter would be asked to run but does not implement, exactly: any other

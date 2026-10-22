@@ -119,7 +119,7 @@ export class OwnerService {
   constructor(store: SentinelStore, ws: Workspace, options: OwnerServiceOptions = {}) {
     this.#store = store;
     this.#ws = ws;
-    this.#registry = options.registry ?? publicRegistry();
+    this.#registry = options.registry ?? publicRegistry(ws.trustDir);
     this.#drivers = options.drivers;
     this.#runEnvelope = options.runEnvelope ?? (() => undefined);
     this.#now = options.now ?? (() => new Date());
@@ -225,7 +225,7 @@ export class OwnerService {
       return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) } });
     }
     if (this.#stopping || this.#active.size > 0) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.anotherRunActive' });
-    if (isFinalRunState(runStateIn(this.#store, planId))) return canonicalResult(this.#store, 'run', planId, { executing: false, verdicts, facts, registry: this.#registry });
+    if (isFinalRunState(runStateIn(this.#store, planId))) return canonicalResult(this.#store, 'run', planId, { executing: false, verdicts, facts, registry: this.#registry, trustDir:this.#ws.trustDir });
     // Accepted only once the coordinator has opened the admitted revision under this installation's registry: a plan
     // this installation cannot execute is refused here, with why, never answered `submitted` and left looking queued.
     const failed = await this.#launch(planId, { pause: false, cancel: false }).opened;
@@ -290,7 +290,7 @@ export class OwnerService {
     // An error this service met executing it is a fact for its lifetime; what the store and this installation say
     // (canonicalResult, including whether this installation can execute it at all) holds after any restart too.
     const error = run?.error ?? this.#lastError.get(runId);
-    const r = await canonicalResult(this.#store, 'wait', runId, { executing, registry: this.#registry, ...(error ? { facts: { error } } : {}) });
+    const r = await canonicalResult(this.#store, 'wait', runId, { executing, registry: this.#registry, trustDir:this.#ws.trustDir, ...(error ? { facts: { error } } : {}) });
     return executing ? result('wait', 'submitted', { facts: r.facts, reasonCode: 'sentinel.service.waitTimedOut' }) : r;
   }
 

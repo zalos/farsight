@@ -34,8 +34,8 @@ import { ServiceError } from './owner-service.js';
 import { scannerReportOf } from '../reports/scanner.js';
 import { retainedBootstrapForReport } from '../execution/retained-bootstrap.js';
 import type { BootstrapEvidence } from '../execution/bootstrap.js';
-import { publicRegistry, publicProfile, scannerExecution, externalDrivers } from './scanner-profile.js';
-import { heldDatabases, installedAdapters, checkPlanDatabases } from './scanner-assets.js';
+import { publicRegistry, publicProfile, scannerExecution, externalDrivers, publicAvailability } from './scanner-profile.js';
+import { checkPlanDatabases } from './scanner-assets.js';
 import { recordRunFailure, runFailureFacts } from './run-failure.js';
 import { SELECTION_SCHEMA, selectionClosure, unitIdentity, unitsToRun, type RerunSelection } from '../execution/selection.js';
 
@@ -124,10 +124,9 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   const current = book.current();
   if (!current) throw new ServiceError('sentinel.service.noRuleLock');
   const packs = book.packsOf(current.lock);
-  const registry = options.registry ?? publicRegistry();
+  const registry = options.registry ?? publicRegistry(options.trustDir);
   const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => options.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
-  const available = options.profile ? new Set<string>() : await installedAdapters(options.trustDir, current.lock, ids, options.scratchRoot);
-  if (!options.profile && ids.length) heldDatabases(options.trustDir, current.lock);
+  const available = options.profile ? new Set<string>() : await publicAvailability(options.trustDir, current.lock, packs, ids, options.scratchRoot);
   const profile = options.profile ?? publicProfile(registry, available, packs);
   const snapshot = options.snapshotId !== undefined
     ? (await openSnapshot(store, options.snapshotId)).snapshot
@@ -207,7 +206,7 @@ export async function executeRun(store: SentinelStore, runId: string, options: {
   // Again before anything runs: an admitted plan from elsewhere is held to the same exact rules.
   const plan = await currentPlan(store, runId);
   if (plan) assertSupportedRules((await loadPlan(store, runId, plan.revision)).plan);
-  const registry = options.registry ?? publicRegistry();
+  const registry = options.registry ?? publicRegistry(options.trustDir);
   const assets = options.drivers ? { drivers: options.drivers } : await scannerExecution(store, runId, options.trustDir, options.scratchRoot, registry);
   const run = options.run ?? await rerunEnvelopeOf(store, runId);
   const coordinator = await Coordinator.open({ ...assets, store, runId, registry, scratchRoot: options.scratchRoot, ...(run ? { run } : {}) });
@@ -271,7 +270,7 @@ export async function notExecutableHere(store: SentinelStore, runId: string, reg
 
 export async function canonicalResult(store: SentinelStore, command: string, runId: string, options: { executing: boolean; verdicts?: PrintedVerdicts; facts?: Record<string, unknown>;
   /** The registry that would execute it (this installation's by default). */
-  registry?: AdapterRegistry }): Promise<CommandResult> {
+  registry?: AdapterRegistry; trustDir?: string }): Promise<CommandResult> {
   const base = options.verdicts ? { verdicts: options.verdicts } : {};
   const recorded = store.ledger.getRun(runId);
   const plan = await currentPlan(store, runId);
@@ -288,7 +287,7 @@ export async function canonicalResult(store: SentinelStore, command: string, run
   const admitted = await loadPlan(store, runId, plan.revision);
   const preview = isPreview(admitted.plan);
   const findings = state === 'completed' ? await previewFindingsOf(store, runId) : undefined;
-  const scanner = state === 'completed' ? await scannerReportOf(store, runId, new Date()) : undefined;
+  const scanner = state === 'completed' ? await scannerReportOf(store, runId, new Date(), {trustDir:options.trustDir}) : undefined;
   const diagnostic = runFailureFacts(store, runId);
   const facts = { ...(options.facts ?? {}), ...diagnostic, runId, state, revision: plan.revision, runOutcome: recorded.outcome ?? null,
     previewFindings: findings?.findings.length ?? null, ...(scanner ? { observations: scanner.observations.length, requiredChecks: scanner.coverage.required, requiredComplete: scanner.coverage.requiredComplete, requiredCoverageComplete: scanner.coverage.complete } : {}), label: preview ? 'foundation-preview' : 'deterministic' };
@@ -428,10 +427,9 @@ async function currentTerms(terms: RerunTerms) {
   const current = book.current();
   if (!current) throw new ServiceError('sentinel.service.noRuleLock');
   const packs = book.packsOf(current.lock);
-  const registry = terms.registry ?? publicRegistry();
+  const registry = terms.registry ?? publicRegistry(terms.trustDir);
   const ids = [...new Set(packs.flatMap(p => p.manifest.rules.filter(r => terms.policy.rules.includes(r.familyId)).map(r => r.implementation.adapterId)))].filter(id => externalDrivers().has(id));
-  const available = terms.profile ? new Set<string>() : await installedAdapters(terms.trustDir, current.lock, ids, terms.scratchRoot);
-  if (!terms.profile && ids.length) heldDatabases(terms.trustDir, current.lock);
+  const available = terms.profile ? new Set<string>() : await publicAvailability(terms.trustDir, current.lock, packs, ids, terms.scratchRoot);
   const profile = terms.profile ?? publicProfile(registry, available, packs);
   return { current, packs, profile };
 }

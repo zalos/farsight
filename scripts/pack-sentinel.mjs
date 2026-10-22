@@ -76,7 +76,7 @@ if (!Object.keys(bins).length || !jsExports.some(([subpath]) => subpath === '.')
 // Files started or hashed by path rather than imported ship as their own entries (not exports): the launch gate
 // a built-in worker process runs first (src/execution/assets.ts finds it from the package root).
 // It is required whenever the package can start a built-in worker (it has the supervisor).
-const ASSETS = [['execution/launch-gate', 'execution/supervisor']];
+const ASSETS = [['execution/launch-gate', 'execution/supervisor'], ['frameworks/controls/worker', 'frameworks/controls/driver']];
 for (const [asset, needs] of ASSETS) {
   const source = join(dir, 'src', `${asset}.ts`);
   if (!existsSync(join(dir, 'src', `${needs}.ts`))) continue;

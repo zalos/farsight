@@ -3,8 +3,8 @@
 // workspace node_modules, no pnpm, and none of the caller's npm configuration. Inherited
 // `npm_config_*` variables (pnpm sets many while running a script) are dropped, and npm's user
 // and global config files, cache, and XDG config/state point into the scratch directory. HOME
-// is left alone. The only setting carried over is a registry the caller names explicitly with
-// FARSIGHT_NPM_REGISTRY (a mirror or proxy). The scratch directory is removed on any failure.
+// is left alone. Explicit FARSIGHT_NPM_REGISTRY selects a mirror/proxy. FARSIGHT_NPM_OFFLINE_CACHE selects
+// an existing trusted npm cache with offline resolution and install scripts disabled. The scratch directory is removed on any failure.
 import { execFile } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -24,6 +24,8 @@ export function cleanNpmEnv(scratch, base = process.env) {
     npm_config_userconfig: userconfig, npm_config_globalconfig: globalconfig,
     npm_config_cache: join(scratch, 'npm-cache'), npm_config_update_notifier: 'false',
     npm_config_audit: 'false', npm_config_fund: 'false',
+    // Explicit offline acceptance uses an already populated cache; npm itself still resolves installed dependencies.
+    ...(base.FARSIGHT_NPM_OFFLINE_CACHE ? { npm_config_cache: base.FARSIGHT_NPM_OFFLINE_CACHE, npm_config_offline: 'true', npm_config_ignore_scripts: 'true' } : {}),
     ...(base.FARSIGHT_NPM_REGISTRY ? { npm_config_registry: base.FARSIGHT_NPM_REGISTRY } : {}),
   };
 }

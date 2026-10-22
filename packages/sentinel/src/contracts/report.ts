@@ -1,6 +1,6 @@
 import type {
   ArtifactId, BoundedText, CatalogKey, Count, Digest, Id, NodeId, Ordinal, RegisterText, RelativePath, SharedCatalogKey, ShortText,
-  Timestamp,
+  Timestamp, WorkRef,
 } from './common.js';
 import type { CoverageStatus } from './coverage.js';
 
@@ -175,6 +175,46 @@ export interface ReportDecision {
   expiresAt: Timestamp | null;
 }
 
+/** Accepted framework inspection answers. Applying or not applying a control is never an issue or an assessment. */
+export interface ReportControlInspection {
+  sourceId: Id;
+  artifact: ArtifactId;
+  attemptId: Id;
+  work: WorkRef;
+  analysis: { result: ArtifactId; index: ArtifactId; artifact: ArtifactId; manifest: ArtifactId };
+  assessment: 'none';
+  recognised: boolean;
+  extent: Count;
+  /** @maxItems 4 */
+  libraries: Array<{
+    framework: 'next' | 'express' | 'nest' | 'spring';
+    packDigest: Digest | null;
+    ran: boolean;
+    reasonCode?: CatalogKey;
+    /** @maxItems 10000 */
+    versions: Array<ShortText | null>;
+    envelopes: Count;
+    supportedScope: { versions: { [key: string]: ShortText }; /** @maxItems 7 */
+      properties: ShortText[] };
+  }>;
+  /** @maxItems 300000 */
+  rows: Array<{
+    surfaceId: NodeId;
+    property: 'authentication' | 'authorization' | 'input-validation';
+    state: 'established' | 'partial' | 'not-run';
+    verdict: 'applies' | 'does-not-apply' | null;
+    reasonCode: CatalogKey | null;
+    /** @maxItems 10000 */
+    claims: Array<{ framework: 'next' | 'express' | 'nest' | 'spring'; verdict: 'applies' | 'does-not-apply' | 'unknown'; factId: Id }>;
+  }>;
+  /** @maxItems 3 */
+  checks: Array<{ checkId: Id; familyId: ShortText; state: 'complete' | 'partial' | 'not-run'; /** @maxItems 10000 */
+    reasons: CatalogKey[] }>;
+  /** @maxItems 40000 */
+  frontiers: Array<{ scopeId: NodeId; reasonCode: CatalogKey }>;
+  limitationKey: 'sentinel.controls.limitation.inspectionOnly';
+}
+
 /** sentinel-report/draft-1 — one deterministic projection at a pinned ledger sequence and evaluation time. */
 export interface ReportEnvelope {
   schema: 'sentinel-report/draft-1';
@@ -203,9 +243,13 @@ export interface ReportEnvelope {
     unknownScopeBoundaries: ReportCount;
     /** Baseline findings the current findings do not continue, by comparison label. */
     historical?: ReportCount;
+    /** Surface/property answers established, partial or not run; never added to findings. */
+    controlAnswers?: ReportCount;
   };
   /** @maxItems 25000 */
   findings: ReportFinding[];
+  /** @maxItems 10000 */
+  inspections?: ReportControlInspection[];
   /** @maxItems 25000 */
   gaps: ReportGap[];
   /** @maxItems 25000 */

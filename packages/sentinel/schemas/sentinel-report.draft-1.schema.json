@@ -114,6 +114,10 @@
             "historical": {
               "$ref": "#/definitions/ReportCount",
               "description": "Baseline findings the current findings do not continue, by comparison label."
+            },
+            "controlAnswers": {
+              "$ref": "#/definitions/ReportCount",
+              "description": "Surface/property answers established, partial or not run; never added to findings."
             }
           },
           "required": [
@@ -132,6 +136,13 @@
             "$ref": "#/definitions/ReportFinding"
           },
           "maxItems": 25000
+        },
+        "inspections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ReportControlInspection"
+          },
+          "maxItems": 10000
         },
         "gaps": {
           "type": "array",
@@ -799,6 +810,326 @@
       "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
       "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
       "maxLength": 4096
+    },
+    "ReportControlInspection": {
+      "type": "object",
+      "properties": {
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "artifact": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "attemptId": {
+          "$ref": "#/definitions/Id"
+        },
+        "work": {
+          "$ref": "#/definitions/WorkRef"
+        },
+        "analysis": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            "index": {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            "artifact": {
+              "$ref": "#/definitions/ArtifactId"
+            },
+            "manifest": {
+              "$ref": "#/definitions/ArtifactId"
+            }
+          },
+          "required": [
+            "result",
+            "index",
+            "artifact",
+            "manifest"
+          ],
+          "additionalProperties": false
+        },
+        "assessment": {
+          "type": "string",
+          "const": "none"
+        },
+        "recognised": {
+          "type": "boolean"
+        },
+        "extent": {
+          "$ref": "#/definitions/Count"
+        },
+        "libraries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "framework": {
+                "type": "string",
+                "enum": [
+                  "next",
+                  "express",
+                  "nest",
+                  "spring"
+                ]
+              },
+              "packDigest": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/Digest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ran": {
+                "type": "boolean"
+              },
+              "reasonCode": {
+                "$ref": "#/definitions/CatalogKey"
+              },
+              "versions": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/definitions/ShortText"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxItems": 10000
+              },
+              "envelopes": {
+                "$ref": "#/definitions/Count"
+              },
+              "supportedScope": {
+                "type": "object",
+                "properties": {
+                  "versions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "$ref": "#/definitions/ShortText"
+                    }
+                  },
+                  "properties": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/ShortText"
+                    }
+                  }
+                },
+                "required": [
+                  "versions",
+                  "properties"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "framework",
+              "packDigest",
+              "ran",
+              "versions",
+              "envelopes",
+              "supportedScope"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "surfaceId": {
+                "$ref": "#/definitions/NodeId"
+              },
+              "property": {
+                "type": "string",
+                "enum": [
+                  "authentication",
+                  "authorization",
+                  "input-validation"
+                ]
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "established",
+                  "partial",
+                  "not-run"
+                ]
+              },
+              "verdict": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "applies",
+                  "does-not-apply",
+                  null
+                ]
+              },
+              "reasonCode": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/CatalogKey"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "claims": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "framework": {
+                      "type": "string",
+                      "enum": [
+                        "next",
+                        "express",
+                        "nest",
+                        "spring"
+                      ]
+                    },
+                    "verdict": {
+                      "type": "string",
+                      "enum": [
+                        "applies",
+                        "does-not-apply",
+                        "unknown"
+                      ]
+                    },
+                    "factId": {
+                      "$ref": "#/definitions/Id"
+                    }
+                  },
+                  "required": [
+                    "framework",
+                    "verdict",
+                    "factId"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 10000
+              }
+            },
+            "required": [
+              "surfaceId",
+              "property",
+              "state",
+              "verdict",
+              "reasonCode",
+              "claims"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 300000
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "checkId": {
+                "$ref": "#/definitions/Id"
+              },
+              "familyId": {
+                "$ref": "#/definitions/ShortText"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "not-run"
+                ]
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/CatalogKey"
+                }
+              }
+            },
+            "required": [
+              "checkId",
+              "familyId",
+              "state",
+              "reasons"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 3
+        },
+        "frontiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "scopeId": {
+                "$ref": "#/definitions/NodeId"
+              },
+              "reasonCode": {
+                "$ref": "#/definitions/CatalogKey"
+              }
+            },
+            "required": [
+              "scopeId",
+              "reasonCode"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 40000
+        },
+        "limitationKey": {
+          "type": "string",
+          "const": "sentinel.controls.limitation.inspectionOnly"
+        }
+      },
+      "required": [
+        "sourceId",
+        "artifact",
+        "attemptId",
+        "work",
+        "analysis",
+        "assessment",
+        "recognised",
+        "extent",
+        "libraries",
+        "rows",
+        "checks",
+        "frontiers",
+        "limitationKey"
+      ],
+      "additionalProperties": false,
+      "description": "Accepted framework inspection answers. Applying or not applying a control is never an issue or an assessment."
+    },
+    "WorkRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        }
+      },
+      "required": [
+        "id",
+        "revision"
+      ],
+      "additionalProperties": false,
+      "description": "A logical work unit at one immutable revision; every reference to work names both."
     },
     "ReportGap": {
       "type": "object",

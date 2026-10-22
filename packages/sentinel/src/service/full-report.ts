@@ -12,7 +12,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ArtifactId, CoverageEnvelope, ObservationEnvelope, PlanCheck, PlanWork, SnapshotEnvelope } from '../contracts/index.js';
+import type { ArtifactId, CoverageEnvelope, ObservationEnvelope, PlanCheck, PlanWork, SnapshotEnvelope, ReportControlInspection } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
 import type { SentinelStore } from '../store/index.js';
 import { loadPlan } from '../execution/plans.js';
@@ -32,6 +32,7 @@ import {
 import { canonicalJson } from '@farsight/graph';
 import { STRINGS } from '@farsight/core/dist/strings.js';
 import { RuleLockBook } from './rule-locks.js';
+import { acceptedInspection } from './inspection-report.js';
 import { ReportKeyError, withheldLocationKey } from './report-key.js';
 
 /** The scanner adapters whose accepted records this report reads, and the preview detector's own findings. */
@@ -66,6 +67,7 @@ export interface RunAssessment {
   readonly checks: readonly PlanCheck[];
   readonly units: readonly PlanWork[];
   readonly observations: readonly ObservationEnvelope[];
+  readonly inspections: readonly ReportControlInspection[];
   readonly coverage: readonly CoverageEnvelope[];
   readonly plannedChecks: readonly PlannedCheck[];
   readonly inventory: { readonly included: number; readonly seenByNoStage: number; readonly unknownScopeBoundaries: number };
@@ -172,10 +174,12 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
 
   const coverage: CoverageEnvelope[] = [];
   const observations: ObservationEnvelope[] = [];
+  const inspections: ReportControlInspection[] = [];
   const unitChecks = new Map(plan.units.map(u => [u.id, new Set(u.checks)]));
   for (const unit of plan.units) {
     const pub = store.ledger.getPublication({ id: unit.id, revision: unit.revision });
     if (!pub) continue;
+    if (unit.adapterId === 'framework-controls') inspections.push(await acceptedInspection(store, admitted, unit, evidence, unbound));
     const assigned = new Map(unit.inputs.map(i => [fileScope(i.sourceId, i.relativePath), i.content]));
     // Resolve a finding's claim through the admitted check, never through an independently supplied family pin.
     const assignedCheck = (id: string) => {
@@ -220,7 +224,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
         continue;
       }
       if (output.schema === DRIVER_REPORT_SCHEMA) {
-        if (!unit.adapterId || !SCANNER_ADAPTERS.has(unit.adapterId) || value.runId !== runId || value.work?.id !== unit.id || value.work?.revision !== unit.revision
+        if (!unit.adapterId || (!SCANNER_ADAPTERS.has(unit.adapterId) && unit.adapterId !== 'framework-controls') || value.runId !== runId || value.work?.id !== unit.id || value.work?.revision !== unit.revision
           || value.attemptId !== pub.attemptId || !Number.isSafeInteger(value.findings) || value.findings < 0) unbound('an accepted scanner report is bound to another unit or attempt');
         driverReports.push(value.findings);
         continue;
@@ -322,7 +326,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
     });
   }
   return {
-    runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, coverage, plannedChecks, inventory,
+    runId, planRevision: run.planRevision, snapshot, checks: plan.checks, units: plan.units, observations, inspections, coverage, plannedChecks, inventory,
     analyses: evidence.analyses, conditions, ledgerSequence: lastSequence(store, runId), ruleLock: admitted.ruleLock,
     withheldKey: e => locationKeyOf(e), withheldFiles: nameWithheld, secretTokens, selectedAncestors: evidence.selectedAncestors,
   };
@@ -384,6 +388,12 @@ const TRUSTED = new RegExp('^(?:' + [
   String.raw`findings\.\*\.(?:id|observationIds\.\*|ruleFamilyId|severity|comparison|comparisonReason|match\.kind|match\.baselineFindingIds\.\*|fingerprint\.(?:version|exact|probable))`,
   String.raw`findings\.\*\.evidence\.\*\.(?:id|state|reasonCode|content|location\.(?:startByte|endByte|startLine|endLine))`,
   String.raw`gaps\.\*\.(?:checkId|status|reasonCode)`,
+  // Fixed generated structure only. Surface/source ids, versions, scope ids and fact ids remain untrusted text.
+  String.raw`inspections\.\*\.(?:artifact|attemptId|assessment|recognised|extent|limitationKey|work\.(?:id|revision)|analysis\.(?:result|index|artifact|manifest))`,
+  String.raw`inspections\.\*\.libraries\.\*\.(?:framework|packDigest|ran|reasonCode|envelopes|supportedScope\.properties\.\*)`,
+  String.raw`inspections\.\*\.rows\.\*\.(?:property|state|verdict|reasonCode|claims\.\*\.(?:framework|verdict))`,
+  String.raw`inspections\.\*\.checks\.\*\.(?:checkId|familyId|state|reasons\.\*)`,
+  String.raw`inspections\.\*\.frontiers\.\*\.reasonCode`,
   String.raw`historical\.\*\.(?:baselineFindingId|ruleFamilyId|severity|label|reasonCode|match\.kind|match\.baselineFindingIds\.\*)`,
   PLACE + String.raw`\.(?:binding|limitationKeys\.\*|context\.(?:artifact|sourceBindingReceipt|projectionVersion))`,
   PLACE + String.raw`\.counts\.[A-Za-z]+\.` + COUNT,
@@ -745,7 +755,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   const build = await buildReport({
     id: reportIdOf(runId, req.baselineRunId), run: { id: runId, snapshotId: current.snapshot.id, planRevision: current.planRevision },
     ledgerSequence: current.ledgerSequence, evaluatedAt: now.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z'), catalogVersion: 'draft-1',
-    disclosure: req.disclosure, observations: current.observations, coverage: current.coverage, plannedChecks: current.plannedChecks,
+    disclosure: req.disclosure, inspections: current.inspections, observations: current.observations, coverage: current.coverage, plannedChecks: current.plannedChecks,
     inventory: current.inventory, readContent, withheldFiles: current.withheldFiles, ...(contexts ? { contexts } : {}), rules: ruleWords(req.trustDir, current.ruleLock),
     ...(comparison ? { comparison } : {}),
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));

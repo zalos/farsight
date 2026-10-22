@@ -1,0 +1,10 @@
+// Synthetic inspection fixture: a refusal layer registered before the route, so the library inspects a layer here.
+import express from 'express';
+const app = express();
+function requireBadge(req, res, next) {
+  if (!req.headers['x-badge']) { res.status(401).end(); return; }
+  next();
+}
+app.use(requireBadge);
+app.get('/ledger', (req, res) => res.json([]));
+export default app;

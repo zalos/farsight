@@ -33,3 +33,13 @@ export function launchGateUrl(): string {
   }
   throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'the launch gate is not shipped with the package' });
 }
+
+
+/** Framework worker is a shipped asset, never relative to a bundled shared chunk. */
+export function frameworkWorkerPath(): string {
+  for (const rel of ['dist/frameworks/controls/worker.mjs', 'dist/frameworks/controls/worker.js']) {
+    const path = join(packageRoot(), rel);
+    try { if (lstatSync(path).isFile()) return path; } catch { /* try the source-layout build */ }
+  }
+  throw new ExecutionError('sentinel.execution.adapterInvalid', { reason: 'the framework worker is not shipped with the package' });
+}
