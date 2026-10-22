@@ -27,7 +27,7 @@ import type { SentinelStore } from '../store/index.js';
 import { PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome.js';
 import { RuleLockBook } from './rule-locks.js';
-import { foundationProfile, foundationRegistry } from './trusted-profile.js';
+import { foundationProfile, foundationRegistry, type TrustedProfile } from './trusted-profile.js';
 import { ServiceError } from './owner-service.js';
 
 const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
@@ -87,13 +87,15 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   workspace: string; trustDir: string; policy: EffectivePolicy; scratchRoot: string; registry?: AdapterRegistry; parentId?: string | null; now: Date;
   /** Re-plan over this admitted snapshot instead of capturing again (a retry of the run that pinned it). */
   snapshotId?: string;
+  /** Test seam: the trusted profile to plan under (the shipped one by default). */
+  profile?: TrustedProfile;
 }): Promise<{ outcome: 'prepared' | 'kept'; disclosure: CanonicalDisclosure }> {
   const book = new RuleLockBook(options.trustDir);
   const current = book.current();
   if (!current) throw new ServiceError('sentinel.service.noRuleLock');
   const packs = book.packsOf(current.lock);
   const registry = options.registry ?? foundationRegistry();
-  const profile = foundationProfile(registry);
+  const profile = options.profile ?? foundationProfile(registry);
   const snapshot = options.snapshotId !== undefined
     ? (await openSnapshot(store, options.snapshotId)).snapshot
     : (await captureSnapshot(store, {
@@ -115,8 +117,11 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
     requestedScope: { sourceIds: [WORKSPACE_SOURCE], profile: profile.planner.id }, budgets: { maxTokens: null, maxCost: null, deadlineMs: 600_000 },
     createdAt: options.now.toISOString(), state: 'planned',
   } as RunEnvelope;
-  const booted = await (await Coordinator.open({ store, runId, ...(recorded ? {} : { run }), registry, scratchRoot: options.scratchRoot })).run();
-  if (booted.kind !== 'bootstrap' || booted.published < boot.units.length) throw new ServiceError('sentinel.service.bootstrapFailed');
+  // A run whose bootstrap already ended without publishing is finished: it is not run again. Planning the same
+  // content again names it, and `rerun` plans a new run after it.
+  const ended = recorded && (store.ledger.getRun(runId)?.state === 'completed' || store.ledger.getRun(runId)?.state === 'canceled');
+  const booted = ended ? undefined : await (await Coordinator.open({ store, runId, ...(recorded ? {} : { run }), registry, scratchRoot: options.scratchRoot })).run();
+  if (!booted || booted.kind !== 'bootstrap' || booted.published < boot.units.length) throw new ServiceError('sentinel.service.bootstrapFailed', { runId });
 
   const inventory = boot.units.find(u => u.stage === 'inventory')!;
   const evidence = await loadBootstrap(store, runId, { id: inventory.id, revision: inventory.revision });

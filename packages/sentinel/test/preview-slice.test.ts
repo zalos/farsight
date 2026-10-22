@@ -71,3 +71,38 @@ test('canonical plan → admitted analysis → coordinator → coverage records 
     assert.deepEqual([read.outcome, read.reasonCode, read.facts.label], ['required-coverage-incomplete', 'sentinel.service.previewNotCoverage', 'foundation-preview']);
   } finally { removeScratch(work); }
 });
+
+test('a run whose bootstrap could not publish is finished: planning again names it, and a rerun plans after it', needsStore, async t => {
+  const { foundationProfile, foundationRegistry } = await import('../dist/service/trusted-profile.js');
+  const { followRun } = await import('../dist/service/canonical.js');
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-bootfail-')));
+  t.after(() => { unlock(dir); rmSync(dir, { recursive: true, force: true }); });
+  const path = join(dir, 'ws');
+  mkdirSync(join(path, 'src'), { recursive: true });
+  writeFileSync(join(path, 'src/users.ts'), 'export const find = (id: string) => db.query("SELECT * FROM users WHERE id = " + id);\n');
+  const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
+  initWorkspace({ workspace: path });
+  adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
+  promoteRulePack(ws, { packDir: realpathSync.native(builtinPackDir('foundation-preview')!), confirm: true, now: new Date() });
+  const adopted = adoptedPolicy(ws);
+  assert.ok('policy' in adopted);
+  const store = await openStore(ws.storePath);
+  t.after(() => { try { store.close(); } catch { /* closed */ } });
+  const work = scratchUnder(ws);
+  try {
+    // No bootstrap operation is bound: the stages are held, never run by a generic worker, and the run ends failed.
+    const unbound = foundationProfile(foundationRegistry(), { operations: false });
+    const opts = { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date(), profile: unbound };
+    let failedRun = '';
+    await assert.rejects(planWorkspaceCanonical(store, opts), (e: any) => { failedRun = e.facts?.runId; return e.code === 'sentinel.service.bootstrapFailed'; });
+    assert.equal(store.ledger.getRun(failedRun)!.state, 'completed');
+    assert.equal(store.ledger.getRun(failedRun)!.outcome, 'execution-failure');
+    // The same content again names the same finished run, at once, executing nothing.
+    const events = store.ledger.readEvents({ runId: failedRun, after: 0, limit: 500 }).events.length;
+    await assert.rejects(planWorkspaceCanonical(store, opts), (e: any) => e.code === 'sentinel.service.bootstrapFailed' && e.facts.runId === failedRun);
+    assert.equal(store.ledger.readEvents({ runId: failedRun, after: 0, limit: 500 }).events.length, events, 'nothing ran again');
+    // A rerun plans a new run after it, under the shipped profile.
+    const next = await followRun(store, failedRun, 'rerun', { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
+    assert.ok('disclosure' in next && next.outcome === 'prepared' && next.disclosure.runId !== failedRun);
+  } finally { removeScratch(work); }
+});

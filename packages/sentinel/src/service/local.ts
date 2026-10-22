@@ -21,6 +21,7 @@ import { result, type CommandResult, type PrintedVerdicts } from '../cli/outcome
 
 import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readPackDirectory, validatePack } from '../rules/index.js';
 import { RuleLockBook } from './rule-locks.js';
+import { ServiceError } from './owner-service.js';
 import { canonicalResult, currentPlan, executeRun, followRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
 export interface Workspace {
@@ -178,8 +179,16 @@ export async function planWorkspace(ws: Workspace, options: { confirm: boolean; 
   return withStore(ws, async store => {
     const work = scratchUnder(ws);
     try {
-      const planned = await planWorkspaceCanonical(store, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now,
-        ...(options.parentId ? { parentId: options.parentId } : {}) });
+      let planned;
+      try {
+        planned = await planWorkspaceCanonical(store, { workspace: ws.path, trustDir: trustFolder(ws), policy, scratchRoot: work, now: options.now,
+          ...(options.parentId ? { parentId: options.parentId } : {}) });
+      } catch (e) {
+        if (e instanceof ServiceError && e.code === 'sentinel.service.bootstrapFailed') {
+          return result('plan', 'configuration-failure', { verdicts: printed(decided.record), reasonCode: e.code, facts: { ...e.facts } });
+        }
+        throw e;
+      }
       return { ...result('plan', planned.outcome, { verdicts: printed(decided.record), facts: { ...planned.disclosure } }), disclosure: planned.disclosure };
     } finally { removeScratch(work); }
   });

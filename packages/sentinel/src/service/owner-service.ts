@@ -42,7 +42,7 @@ export type ServiceErrorCode =
   | 'sentinel.service.noRuleLock' | 'sentinel.service.bootstrapFailed';
 
 export class ServiceError extends Error {
-  constructor(readonly code: ServiceErrorCode) { super(code); this.name = 'ServiceError'; }
+  constructor(readonly code: ServiceErrorCode, readonly facts: Readonly<Record<string, unknown>> = {}) { super(code); this.name = 'ServiceError'; }
 }
 
 interface ActiveRun {
