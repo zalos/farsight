@@ -82,6 +82,16 @@ exactly one work unit or kept with its reason (unsupported, applicability unknow
 `workEnvelopesFor` gives the coordinator canonical work envelopes for a plan. A new rule plans a new revision over
 the already published capture and parse; earlier revisions never change (ADR 24).
 
+## Model providers (draft, opt-in)
+
+`farsight-sentinel/review/providers` is the only part of Sentinel that talks to a model: a local Ollama or an
+OpenAI-compatible endpoint. A provider is used only when it appears in the owner's adopted settings, with a model
+profile whose binding digest an owner receipt confirms whenever inference is priced or context leaves the machine.
+Every call reserves its worst case from a durable shared budget before it is sent. A call whose usage is unknown
+stays charged until the owner reconciles it. Redirects are never followed and there is no fallback to another
+provider (ADR 35). Nothing here runs unless a caller opens an envelope; the package's tests use local mock endpoints
+only.
+
 ## Next middleware applicability (draft)
 
 `farsight-sentinel/frameworks/next` reads a captured Next 14.2.25 / React 18.3.1 project (versions from its lockfile

@@ -83,6 +83,13 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
+  'review/providers/broker.js': ['node:crypto'],
+  'review/providers/budget.js': ['node:crypto', 'node:path'],
+  'review/providers/credentials.js': ['@farsight/core/dist/keychain.js'],
+  'review/providers/errors.js': ['@farsight/core/dist/strings-sentinel-providers.js'],
+  'review/providers/transport.js': ['node:http', 'node:https'],
+
   // The Next pack (PR 14) reads literal syntax with Oxc, loaded on first read only; it never runs application code.
   'frameworks/next/analyze.js': ['node:crypto'],
   'frameworks/next/config.js': ['dynamic:oxc-parser'],

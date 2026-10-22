@@ -6,6 +6,24 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Provider foundation with paths and framework libraries — 2026-10-22
+
+Branch `codex/sentinel-providers-integration` merges frozen paths/framework integration `58cd029c` into provider
+integration `04da438d`. All 12 provider implementation/test/helper/catalog files remain byte-identical to reviewed
+`d7a55530`; all 206 incoming Sentinel implementation, contract/schema, rule, asset, packaging and selected OOM/path
+control files remain byte-identical to `58cd029c`. Additive resolutions retain both public exports, both catalog
+registrations and package-map descriptions. The precise capability assertions still list drafts only where the
+library is available; public provider dispatch and deep-engine qualification remain open.
+
+Validation: Sentinel dependency-closure build and typecheck, generated-schema check and catalog lint (4,162
+entries); ten package-boundary cases plus two capability-union controls pass with zero skips. A clean npm-only
+consumer compiles 13 exports and 21 contract types, validates 21 schemas and 55 fixtures, verifies Pattern/OSV
+assets, reopens the store, runs the installed path query/import refusal and analyzes Spring and Express fixtures.
+A separate npm-only consumer compiles all 27 named provider types and verifies durable budget reopening,
+uncertain-charge retention and excess-reservation refusal without invoking an endpoint. The unchanged
+35-case provider/package behavioral run remains bound to its earlier named head; no broad repeat is claimed.
+No hosted/model call or real keychain read is used for this integration.
+
 ## Bounded paths with Next and Spring integration — 2026-10-22
 
 Branch `codex/sentinel-paths-integration` combines the reviewed paths/import foundation `41de557d` with frozen
@@ -200,6 +218,43 @@ must grow process memory after allocation reuse or garbage collection. The refus
 error and absence of a publication; the neighbor checks successful publication. Runtime grants are unchanged.
 Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
 reviewed separately against the native CI evidence.
+
+## Provider PR156 integration rebase — 2026-10-22
+
+Branch `codex/sentinel-providers-integration` was rebased onto fetched main `5196dc70`, then includes the newer
+merged Express foundation `95387a4e` through feature-branch merge `5dad0a61`. All reviewed provider implementation,
+test/helper and provider catalog bytes remain identical to `979d7146`; policy-revision, per-call and budget-fence
+corrections are unchanged. Conflict resolutions retain Pattern, Express and provider ADR/package map, catalogs
+and exports. Incoming Express/Pattern implementations, rules, asset hook, packer and consumer are byte-identical
+to main `95387a4e`.
+
+The provider/package suites passed 35 tests with no skips on the byte-identical provider foundation before the
+Express merge, using only original local mock endpoints. After the merge, affected dependency build/typecheck,
+catalog lint and ten affected package checks passed, with no broad suite repeat. A fresh npm-only consumer
+verified ten exports, 19 contract types and schemas, 53 fixtures, cross-process store reopen, 17 Pattern pack files
+and actual installed Express capture/parse/analysis. Another installed-only consumer compiled all 27 named
+provider types and verified durable uncertain-budget accounting and excess-reservation refusal without invoking
+an endpoint. Exact existing PR and authored commit subjects passed lint.
+
+No hosted/model request, model download, real keychain read, primary build, graph refresh, push or merge to main
+occurred. This is the reviewed provider foundation. Trusted capability production, provider settings/selection
+and public owner-CLI dispatch remain open. Ledger reconciliation is a host primitive; its owner command,
+spent-receipt validation and coordinator fencing path are not supplied here. Live model/E5 qualification and
+model-review orchestration remain separate gates. The integrating lead owns review and push.
+
+## Sentinel provider transport integration — 2026-10-22
+
+The independently reviewed model transport on `codex/sentinel-providers-integration` adds the opt-in Ollama and
+OpenAI-compatible broker, exact provider/profile binding, bounded response parsing and a durable shared budget.
+Input mutation across an asynchronous boundary, changed policies, operation identity collisions and uncertain
+charges are covered by the final corrections. Integrated full build, workspace typecheck and catalog lint pass;
+Sentinel has 446 passing tests and 32 explicit platform/opt-in skips. A clean npm consumer loads nine typed exports,
+19 contract types/schemas and 53 fixtures and reopens the store across processes. Fresh fixed-source ingests against
+main `2587eb16` match on every node/edge value and digest: 8,196 nodes, 17,054 edges, digest `b47eaf940580`,
+22,785,052 graph bytes and 31,117,312 database bytes. Three inspected browser views have zero page errors, with only
+existing missing design-image fixture requests. Test endpoints are local mocks; no paid provider request or live
+model qualification occurred. Public model settings/dispatch and the model-review stage remain separate work.
+No primary build, dogfood refresh or global install occurred; the validation server was stopped.
 
 ## Spring PR149 integration rebase — 2026-10-22
 
