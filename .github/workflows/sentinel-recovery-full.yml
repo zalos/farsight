@@ -1,5 +1,7 @@
 # Sentinel's full crash-recovery matrix (PR 08, E4): 20 real SIGKILLs at every coordinator boundary plus 20
-# orphaned-worker cases, each recovered by a fresh process with zero lost and zero duplicate accepted outputs.
+# orphaned-worker and parent-loss cases, each recovered by a fresh process with zero lost and zero duplicate accepted
+# outputs; then 20 real-container crashes in each of four cases (lost create reply, late create, crash while
+# canceling, same-epoch uncertain create) with no owned container left and two unrelated containers untouched.
 # A release gate: run by hand, and on every push to a release branch. SENTINEL_RECOVERY_FULL=1 fails on a missing
 # prerequisite, and the job fails if any test was skipped.
 name: sentinel-recovery-full
@@ -25,6 +27,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install the pinned canary image (node:22-alpine index, by digest)
+        run: docker pull node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9
       - name: Build Sentinel and its workspace closure
         run: pnpm --filter '@farsight/sentinel...' build
       - name: The 20-repetition kill matrix, nothing skipped
@@ -38,3 +42,15 @@ jobs:
             test/execution-recovery-kill.test.ts
           grep -qx '# skipped 0' recovery-full.tap || { echo "::error::a recovery test was skipped"; exit 1; }
           grep -qx '# fail 0' recovery-full.tap && grep -qx '# cancelled 0' recovery-full.tap
+      - name: The 20-repetition real-container crash matrix, nothing skipped
+        working-directory: packages/sentinel
+        env:
+          SENTINEL_ISOLATION: '1'
+          SENTINEL_RECOVERY_FULL: '1'
+        run: |
+          set -o pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-timeout=2400000 \
+            --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=container-full.tap \
+            test/execution-container-recovery.test.ts
+          grep -qx '# skipped 0' container-full.tap || { echo "::error::a container recovery test was skipped"; exit 1; }
+          grep -qx '# fail 0' container-full.tap && grep -qx '# cancelled 0' container-full.tap
