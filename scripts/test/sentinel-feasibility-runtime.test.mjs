@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { parseArgs, preview, resourcePreflight } from '../sentinel-feasibility-runtime.mjs';
 import { execute } from '../sentinel-feasibility-scanners.mjs';
 import { classifyFailure, missingContainerExecutable, missingImage, validateIsolation, containerTrial, IMAGE } from '../sentinel-feasibility/runtime-matrix/containers.mjs';
-import { admission, payload, sha, LIMITS, verifyTrialIdentity, verifyInputIdentity } from '../sentinel-feasibility/runtime-matrix/resources.mjs';
+import { admission, payload, sha, LIMITS, verifyTrialIdentity, verifyInputIdentity, verifyTrialOutcome, resourceTrials, trialAccounting } from '../sentinel-feasibility/runtime-matrix/resources.mjs';
 
 test('preview has no execution side effects and run requires explicit output', () => {
   assert.equal(parseArgs([]).run, false);
@@ -114,6 +114,64 @@ test('parent rejects wrong or missing claimed input/output identities and change
     await rm(inputPath);
     await assert.rejects(verifyTrialIdentity(options), /INPUT_ARTIFACT_MISSING/);
     await assert.rejects(verifyInputIdentity(inputPath, expectedInput), /INPUT_ARTIFACT_MISSING/);
+  } finally { await rm(out, { recursive: true, force: true }); }
+});
+test('only completed exact zstd API unavailability is a gap, without fabricated output or metrics', async () => {
+  const out = await mkdtemp(join(tmpdir(), 'sentinel-runtime-unavailable-'));
+  try {
+    const bytes = Buffer.from('original synthetic input'); const inputPath = join(out, 'input'), artifactPath = join(out, 'absent-output');
+    await writeFile(inputPath, bytes);
+    const expectedInput = { bytes: bytes.length, sha256: sha(bytes) };
+    const metric = { state: 'unavailable', codec: 'zstd', reason: 'NODE_ZSTD_API_UNAVAILABLE' };
+    const options = { inputPath, artifactPath, expectedInput, metric, codec: 'zstd', execution: { exitCode: 0 } };
+    const outcome = await verifyTrialOutcome(options);
+    assert.equal(outcome.state, 'unavailable'); assert.equal(outcome.artifactAbsent, true);
+    assert.deepEqual(outcome.inputIdentity, expectedInput); assert.equal(outcome.identity, undefined);
+    for (const codec of ['raw', 'gzip']) await assert.rejects(verifyTrialOutcome({ ...options, codec }), /UNEXPECTED_CODEC_UNAVAILABLE/);
+    for (const changed of [{ codec: 'raw' }, { reason: 'OTHER_REASON' }, { reason: undefined }, { codec: undefined }, { encodedBytes: 0 }, { encodeMs: 0 }]) {
+      await assert.rejects(verifyTrialOutcome({ ...options, metric: { ...metric, ...changed } }), /UNEXPECTED_CODEC_UNAVAILABLE/);
+    }
+    for (const changed of [{ exitCode: 1 }, { exitCode: null }, { timedOut: true }, { cancelled: true }, { outputExceeded: true }, { spawnError: 'ENOENT' }, { exitSignal: 'SIGKILL' }]) {
+      await assert.rejects(verifyTrialOutcome({ ...options, execution: { exitCode: 0, ...changed } }), /RESOURCE_CHILD_FAILED/);
+    }
+    await assert.rejects(verifyTrialOutcome({ ...options, metric: { ...metric, state: 'failed' } }), /TRIAL_METRIC_IDENTITY_MISMATCH/);
+    await writeFile(artifactPath, 'unexpected');
+    await assert.rejects(verifyTrialOutcome(options), /UNAVAILABLE_CODEC_ARTIFACT_PRESENT/);
+    await rm(artifactPath); await writeFile(inputPath, 'changed');
+    await assert.rejects(verifyTrialOutcome(options), /INPUT_ARTIFACT_IDENTITY_MISMATCH/);
+  } finally { await rm(out, { recursive: true, force: true }); }
+});
+test('synthetic injected unavailable zstd attempts preserve all 54 rows and verified raw/gzip siblings', async () => {
+  const out = await mkdtemp(join(tmpdir(), 'sentinel-runtime-synthetic-continuation-'));
+  try {
+    // Mocked child protocol only: these bytes/metrics are not performance or compression observations.
+    const runner = async (_program, args) => {
+      const [, inputPath, artifactPath, codec] = args;
+      if (codec === 'zstd') return { exitCode: 0, stdout: JSON.stringify({ state: 'unavailable', codec, reason: 'NODE_ZSTD_API_UNAVAILABLE' }), stderr: '' };
+      const input = await readFile(inputPath), encoded = Buffer.from(`synthetic ${codec} child output`);
+      await writeFile(artifactPath, encoded, { flag: 'wx' });
+      return { exitCode: 0, stdout: JSON.stringify({ state: 'measured', codec, rawBytes: input.length, rawSha256: sha(input), encodedBytes: encoded.length, encodedSha256: sha(encoded) }), stderr: '' };
+    };
+    const result = await resourceTrials(out, runner);
+    assert.deepEqual(result.accounting, { expectedTrials: 54, attemptedTrials: 54, measuredTrials: 36, unavailableTrials: 18, passed: true });
+    assert.equal(result.gaps.length, 1); assert.equal(result.gaps[0].unavailableTrials, 18);
+    assert.equal(result.trials.filter(t => t.state === 'measured' && t.identity.verified).length, 36);
+    for (const trial of result.trials.filter(t => t.state === 'unavailable')) {
+      assert.equal(trial.codec, 'zstd'); assert.equal(trial.artifact, null); assert.equal(trial.identity, undefined);
+      assert.deepEqual(Object.keys(trial.metric).sort(), ['codec', 'reason', 'state']);
+    }
+    assert.ok(result.inputs.every(input => input.finalIdentity.sha256 === input.sha256));
+    const progress = JSON.parse(await readFile(join(out, 'resources/progress.json'), 'utf8'));
+    assert.equal(progress.trials.length, 54);
+    assert.equal(trialAccounting(result.trials.slice(1), result.inputs).passed, false);
+    const duplicate = structuredClone(result.trials); duplicate[1] = structuredClone(duplicate[0]);
+    assert.equal(trialAccounting(duplicate, result.inputs).passed, false);
+    const invalid = structuredClone(result.trials); invalid[2].codec = 'gzip';
+    assert.equal(trialAccounting(invalid, result.inputs).passed, false);
+    const failed = structuredClone(result.trials); failed[2].execution.timedOut = true;
+    assert.equal(trialAccounting(failed, result.inputs).passed, false);
+    const changedInputs = structuredClone(result.inputs); changedInputs[0].finalIdentity.sha256 = '0'.repeat(64);
+    assert.equal(trialAccounting(result.trials, changedInputs).passed, false);
   } finally { await rm(out, { recursive: true, force: true }); }
 });
 function container(owner = 'mine') {

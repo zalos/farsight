@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { open, writeFile, mkdir } from 'node:fs/promises';
+import { open, writeFile, mkdir, lstat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,46 @@ export async function verifyTrialIdentity({ inputPath, artifactPath, expectedInp
   if (encoded.bytes !== metric.encodedBytes || encoded.sha256 !== metric.encodedSha256) throw new Error('ENCODED_ARTIFACT_IDENTITY_MISMATCH');
   return { input, encoded, verified: true };
 }
+const completedZero = execution => execution?.exitCode === 0 && !execution.timedOut && !execution.outputExceeded && !execution.cancelled && !execution.spawnError && !execution.exitSignal;
+export function knownZstdUnavailable(codec, metric) {
+  return codec === 'zstd' && metric?.state === 'unavailable' && metric.codec === 'zstd' && metric.reason === 'NODE_ZSTD_API_UNAVAILABLE' &&
+    JSON.stringify(Object.keys(metric).sort()) === JSON.stringify(['codec', 'reason', 'state']);
+}
+export async function verifyTrialOutcome({ execution, ...options }) {
+  if (!completedZero(execution)) throw new Error('RESOURCE_CHILD_FAILED');
+  if (options.metric?.state === 'unavailable') {
+    if (!knownZstdUnavailable(options.codec, options.metric)) throw new Error('UNEXPECTED_CODEC_UNAVAILABLE');
+    const inputIdentity = await verifyInputIdentity(options.inputPath, options.expectedInput);
+    let absent = false;
+    try { await lstat(options.artifactPath); } catch (error) { if (error.code === 'ENOENT') absent = true; else throw error; }
+    if (!absent) throw new Error('UNAVAILABLE_CODEC_ARTIFACT_PRESENT');
+    return { state: 'unavailable', inputIdentity, artifactAbsent: true, reason: options.metric.reason };
+  }
+  return { state: 'measured', identity: await verifyTrialIdentity(options) };
+}
+export function trialAccounting(trials, inputs) {
+  const expectedAttempts = new Set();
+  for (const kind of ['parser', 'scan']) for (const size of [65_536, 1_048_576, 8_388_608]) for (let repetition = 1; repetition <= 3; repetition++) for (const codec of ['raw', 'gzip', 'zstd']) expectedAttempts.add(`${kind}/${size}/${repetition}/${codec}`);
+  let measuredTrials = 0, unavailableTrials = 0, verifiedAttempts = true;
+  for (const trial of trials) {
+    const key = `${trial.kind}/${trial.requestedMinimumBytes}/${trial.repetition}/${trial.codec}`;
+    if (!expectedAttempts.delete(key)) verifiedAttempts = false;
+    const input = inputs.find(value => value.kind === trial.kind && value.requestedMinimumBytes === trial.requestedMinimumBytes);
+    const sameInput = identity => input && identity?.bytes === input.bytes && identity?.sha256 === input.sha256;
+    if (trial.state === 'measured') {
+      measuredTrials++;
+      verifiedAttempts &&= completedZero(trial.execution) && trial.identity?.verified === true && trial.metric?.state === 'measured' && trial.metric?.codec === trial.codec &&
+        sameInput(trial.identity?.input) && trial.metric.rawBytes === input.bytes && trial.metric.rawSha256 === input.sha256 && typeof trial.artifact === 'string' &&
+        trial.identity.encoded?.bytes === trial.metric.encodedBytes && trial.identity.encoded?.sha256 === trial.metric.encodedSha256;
+    } else if (trial.state === 'unavailable') {
+      unavailableTrials++;
+      verifiedAttempts &&= completedZero(trial.execution) && knownZstdUnavailable(trial.codec, trial.metric) && sameInput(trial.inputIdentity) && trial.artifact === null && trial.artifactAbsent === true;
+    } else verifiedAttempts = false;
+  }
+  const verifiedInputs = inputs.length === 6 && new Set(inputs.map(input => `${input.kind}/${input.requestedMinimumBytes}`)).size === 6 && inputs.every(input => input.finalIdentity?.bytes === input.bytes && input.finalIdentity?.sha256 === input.sha256);
+  return { expectedTrials: 54, attemptedTrials: trials.length, measuredTrials, unavailableTrials,
+    passed: trials.length === 54 && expectedAttempts.size === 0 && measuredTrials + unavailableTrials === 54 && verifiedAttempts && verifiedInputs };
+}
 // Original synthetic JSON represents artifact structure, not a distribution sampled from real applications.
 export function payload(kind, minimumBytes) {
   if (!['parser', 'scan'].includes(kind) || !Number.isInteger(minimumBytes) || minimumBytes < 1 || minimumBytes > LIMITS.maxInputBytes) throw new Error('INVALID_PAYLOAD');
@@ -70,11 +110,13 @@ export async function resourceTrials(out, runner = execute, signal) {
       const command = [process.execPath, join(dirname(fileURLToPath(import.meta.url)), 'codec-worker.mjs'), path, join(directory, artifact), codec];
       const execution = await runner(command[0], command.slice(1), { timeout: 15_000, maxOutput: 16_384, signal });
       let metric = null; try { metric = JSON.parse(execution.stdout); } catch { /* Retain failed child evidence. */ }
-      const trial = { kind, requestedMinimumBytes: size, repetition, codec, command: command.map(scrub), execution, metric, artifact: `resources/${artifact}` };
+      const trial = { kind, requestedMinimumBytes: size, repetition, codec, command: command.map(scrub), execution, metric, artifact: null };
       trials.push(trial);
       try {
-        if (execution.exitCode !== 0 || execution.timedOut || execution.outputExceeded || execution.cancelled || execution.spawnError || execution.exitSignal) throw new Error('RESOURCE_CHILD_FAILED');
-        trial.identity = await verifyTrialIdentity({ inputPath: path, artifactPath: join(directory, artifact), expectedInput, metric, codec });
+        const outcome = await verifyTrialOutcome({ execution, inputPath: path, artifactPath: join(directory, artifact), expectedInput, metric, codec });
+        trial.state = outcome.state;
+        if (outcome.state === 'measured') { trial.identity = outcome.identity; trial.artifact = `resources/${artifact}`; }
+        else { trial.inputIdentity = outcome.inputIdentity; trial.artifactAbsent = true; trial.gap = outcome.reason; }
       } catch (error) { trial.identityFailure = scrub(error.message); }
       await writeFile(join(directory, 'progress.json'), JSON.stringify({ inputs, trials }, null, 2) + '\n', { mode: 0o600 });
       if (trial.identityFailure) throw new Error(trial.identityFailure);
@@ -84,7 +126,8 @@ export async function resourceTrials(out, runner = execute, signal) {
     input.finalIdentity = await verifyInputIdentity(join(out, input.path), input);
   }
   await writeFile(join(directory, 'progress.json'), JSON.stringify({ inputs, trials }, null, 2) + '\n', { mode: 0o600 });
-  return { inputs, trials, controls: [
+  const accounting = trialAccounting(trials, inputs);
+  return { inputs, trials, accounting, gaps: accounting.unavailableTrials ? [{ id: 'zstd-api-unavailable', state: 'gap', reason: 'NODE_ZSTD_API_UNAVAILABLE', unavailableTrials: accounting.unavailableTrials }] : [], controls: [
     { id: 'synthetic-input-admission-exhaustion', ...admission({ inputBytes: LIMITS.maxInputBytes + 1, totalBytes: 0, trials: 1 }) },
     { id: 'synthetic-total-admission-exhaustion', ...admission({ inputBytes: 1, totalBytes: LIMITS.totalInputBytes + 1, trials: 1 }) },
     { id: 'synthetic-trial-admission-exhaustion', ...admission({ inputBytes: 1, totalBytes: 1, trials: LIMITS.maxTrials + 1 }) },

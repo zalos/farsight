@@ -111,7 +111,8 @@ export async function runProbe({ out }, { runner = execute, signal } = {}) {
       if (!trial.passed) throw new Error('CONTAINER_CONTROL_FAILED');
     }
     result.resources = await resourceTrials(out, runner, signal);
-    control('codec-resource-trials', result.resources.trials.length === 54 && result.resources.trials.every(t => t.metric?.state === 'measured' && t.identity?.verified === true) && result.resources.inputs.every(input => input.finalIdentity?.sha256 === input.sha256 && input.finalIdentity?.bytes === input.bytes), { expectedTrials: 54, completedTrials: result.resources.trials.length });
+    control('codec-resource-trials', result.resources.accounting.passed, result.resources.accounting);
+    result.gaps.push(...result.resources.gaps);
     result.state = result.controls.every(value => value.passed) ? 'measured-with-explicit-gaps' : 'failed';
   } catch (error) { result.reason = scrub(error.message); }
   finally { result.endedAt = new Date().toISOString(); result.artifacts = await inventory(out); await persist(); }
@@ -125,7 +126,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     else {
       const controller = new AbortController(), cancel = () => controller.abort();
       process.once('SIGINT', cancel); process.once('SIGTERM', cancel);
-      try { const result = await runProbe(options, { signal: controller.signal }); console.log(JSON.stringify({ state: result.state, controls: result.controls.length, trials: result.resources?.trials.length ?? 0 })); if (result.state === 'failed') process.exitCode = 1; }
+      try { const result = await runProbe(options, { signal: controller.signal }); console.log(JSON.stringify({ state: result.state, controls: result.controls.length, trials: result.resources?.trials.length ?? 0, measuredTrials: result.resources?.accounting.measuredTrials ?? 0, unavailableTrials: result.resources?.accounting.unavailableTrials ?? 0 })); if (result.state === 'failed') process.exitCode = 1; }
       finally { process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel); }
     }
   } catch (error) { console.error(scrub(error.message)); process.exitCode = 1; }

@@ -7,8 +7,8 @@ const [input, output, codec] = process.argv.slice(2);
 if (!['raw', 'gzip', 'zstd'].includes(codec)) throw new Error('INVALID_CODEC');
 const bytes = await readFile(input);
 if (bytes.length > 16 * 1024 * 1024) throw new Error('INPUT_LIMIT');
-if (codec === 'zstd' && typeof zlib.zstdCompressSync !== 'function') {
-  console.log(JSON.stringify({ state: 'unavailable', reason: 'NODE_ZSTD_API_UNAVAILABLE' }));
+if (codec === 'zstd' && (typeof zlib.zstdCompressSync !== 'function' || typeof zlib.zstdDecompressSync !== 'function')) {
+  console.log(JSON.stringify({ state: 'unavailable', codec, reason: 'NODE_ZSTD_API_UNAVAILABLE' }));
 } else {
   const rssBeforeBytes = process.memoryUsage().rss, begin = performance.now();
   const encoded = codec === 'raw' ? Buffer.from(bytes) : codec === 'gzip' ? zlib.gzipSync(bytes, { level: 6 }) : zlib.zstdCompressSync(bytes);
