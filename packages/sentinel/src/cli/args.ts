@@ -25,8 +25,8 @@ const STORE: Record<string, FlagKind> = { '--workspace': 'value' };
 const RUN_REF: CommandSpec = { flags: { ...COMMON, ...STORE }, positional: ['runId'], min: 1 };
 
 const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
-  help: { flags: {}, positional: [], min: 0 },
-  version: { flags: {}, positional: [], min: 0 },
+  help: { flags: COMMON, positional: [], min: 0 },
+  version: { flags: COMMON, positional: [], min: 0 },
   capabilities: { flags: COMMON, positional: [], min: 0 },
   validate: { flags: COMMON, positional: ['kind', 'file'], min: 2 },
   init: { flags: { ...COMMON, '--workspace': 'value', '--profile': 'value' }, positional: [], min: 0 },
@@ -84,7 +84,6 @@ export function parseArgs(argv: readonly string[]): ParseResult {
       const [flag, inline] = a.includes('=') ? [a.slice(0, a.indexOf('=')), a.slice(a.indexOf('=') + 1)] : [a, undefined];
       const kind = spec.flags[flag];
       if (kind === undefined) {
-        if (flag === '--json' && command === 'help') continue;
         return fail('sentinel.args.unknownFlag', flag);
       }
       if (Object.hasOwn(flags, flag)) return fail('sentinel.args.repeatedFlag', flag);

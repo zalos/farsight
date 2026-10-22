@@ -60,7 +60,7 @@ function finish(r: CommandResult): number {
 }
 
 function capabilities(p: ParsedCommand): number {
-  if (p.json) { out(JSON.stringify({ version: version(), capabilities: CAPABILITIES }, null, 2)); return 0; }
+  if (p.json) return finish(result('capabilities', 'answered', { facts: { version: version(), capabilities: CAPABILITIES } }));
   const state = (c: (typeof CAPABILITIES)[number]) => word(c.state === 'unavailable' ? 'sentinel.cli.stateUnavailable' : 'sentinel.cli.stateDraft');
   const width = Math.max(...CAPABILITIES.map(c => state(c).length));
   for (const c of CAPABILITIES) {
@@ -72,27 +72,28 @@ function capabilities(p: ParsedCommand): number {
 function validate(p: ParsedCommand): number {
   const kind = p.args.kind;
   const file = p.args.file;
-  if (!kind || !file || !(ENVELOPE_KINDS as string[]).includes(kind)) {
-    errOut(word('sentinel.cli.validateUsage', { kinds: ENVELOPE_KINDS.join('|') }));
-    return 3;
-  }
+  const refuse = (reasonCode: string, values: Record<string, string | number> = {}) => {
+    errOut(word(reasonCode, values));
+    return finish(result('validate', 'refused', { reasonCode, facts: { kind: kind ?? null } }));
+  };
+  if (!kind || !file || !(ENVELOPE_KINDS as string[]).includes(kind)) return refuse('sentinel.cli.validateUsage', { kinds: ENVELOPE_KINDS.join('|') });
   let text: string;
   try {
     const st = statSync(file);
     if (!st.isFile()) throw new Error('not a file');
-    if (st.size > MAX_ENVELOPE_BYTES) {
-      errOut(word('sentinel.cli.refusedTooLarge', { bytes: MAX_ENVELOPE_BYTES }));
-      return 3;
-    }
+    if (st.size > MAX_ENVELOPE_BYTES) return refuse('sentinel.cli.refusedTooLarge', { bytes: MAX_ENVELOPE_BYTES });
     text = readFileSync(file, 'utf8');
   } catch {
-    errOut(word('sentinel.cli.refusedUnreadable'));
-    return 3;
+    return refuse('sentinel.cli.refusedUnreadable');
   }
   const r = parseEnvelope(kind as EnvelopeKind, text);
   const schema = ENVELOPES[kind as EnvelopeKind].schema;
-  if (p.json) out(JSON.stringify(r.ok ? { ok: true, schema } : { ok: false, schema, errors: r.errors }, null, 2));
-  else if (r.ok) out(word('sentinel.cli.valid', { schema }));
+  if (p.json) {
+    return finish(r.ok
+      ? result('validate', 'answered', { facts: { ok: true, schema } })
+      : result('validate', 'refused', { reasonCode: 'sentinel.cli.invalid', facts: { ok: false, schema, errors: r.errors } }));
+  }
+  if (r.ok) out(word('sentinel.cli.valid', { schema }));
   else {
     errOut(word('sentinel.cli.invalid', { schema }));
     // Printed words come from the catalog only; the validator's diagnostic detail stays in --json output.
@@ -189,7 +190,9 @@ async function owner(p: ParsedCommand): Promise<number> {
     }
     const doc = await previewReport(ws, { runId: p.args.runId!, now });
     if ('outcome' in doc) return serviceOut(doc);
-    out(format === 'json' || jsonOut ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
+    // --json is the typed result with the report inside it; --format json alone prints the report document.
+    if (jsonOut) return finish(result('report', 'answered', { facts: { report: doc } }));
+    out(format === 'json' ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
     return 0;
   } catch (e) {
     const code = (e as { code?: string }).code;
@@ -209,9 +212,25 @@ export async function main(argv: string[]): Promise<number> {
     return finish(result('unknown', 'refused', { reasonCode: parsed.code }));
   }
   const p = parsed.parsed;
+  try {
+    return await dispatch(p);
+  } catch (e) {
+    // Whatever failed, the caller gets a typed result and a catalog word, not a stack trace.
+    errOut(word('sentinel.cli.unexpected', { detail: (e as { code?: unknown }).code !== undefined ? String((e as { code?: unknown }).code) : (e as Error)?.name ?? 'error' }));
+    return finish(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.cli.unexpected' }));
+  }
+}
+
+async function dispatch(p: ParsedCommand): Promise<number> {
   switch (p.command) {
-    case 'help': out(help()); return 0;
-    case 'version': out(word('sentinel.cli.version', { version: version(), draft: ENVELOPES.run.schema.split('/')[1]! })); return 0;
+    case 'help':
+      if (p.json) return finish(result('help', 'answered', { facts: { text: help() } }));
+      out(help()); return 0;
+    case 'version': {
+      const facts = { version: version(), contracts: ENVELOPES.run.schema.split('/')[1]! };
+      if (p.json) return finish(result('version', 'answered', { facts }));
+      out(word('sentinel.cli.version', { version: facts.version, draft: facts.contracts })); return 0;
+    }
     case 'capabilities': return capabilities(p);
     case 'validate': return validate(p);
     case 'init': return init(p);

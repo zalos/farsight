@@ -10,6 +10,9 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
 
   'sentinel.capability.draftPreviewCli': same('foundation preview only: plan and run in the foreground', 'The command line can initialize a workspace, adopt its settings, plan and run one original preview check in the foreground and print its report. It is not scanner coverage; background runs and run controls are not built.'),
 
+  'sentinel.cli.unexpected': same('the command could not finish ({detail})', 'Something this command relies on failed in a way it does not name more precisely. Nothing was overwritten; the code in parentheses is the operating system\'s or the component\'s own.'),
+  'sentinel.actor.payloadTooDeep': same('a request nests deeper than allowed', 'Request bodies nest at most 32 levels deep. A deeper one is refused rather than partly checked.'),
+
   // ---- arguments ----
   'sentinel.args.unknownCommand': same('unknown command: {detail}; run farsight-sentinel --help', 'The command is not one this executable knows.'),
   'sentinel.args.unknownFlag': same('unknown option for this command: {detail}', 'Each command accepts only the options it lists. An unknown one is refused rather than ignored, so a typo cannot quietly change what a command does.'),

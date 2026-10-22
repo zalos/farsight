@@ -41,7 +41,11 @@ export function requestedByOf(entry: Entrypoint): RequestedBy {
   return Object.freeze({ principal: 'agent', channel: g.channel as ServiceChannel });
 }
 
-export type ActorErrorCode = 'sentinel.actor.payloadClaim' | 'sentinel.actor.confirmNotOwner' | 'sentinel.actor.ownerChannelNotGrantable';
+export type ActorErrorCode = 'sentinel.actor.payloadClaim' | 'sentinel.actor.confirmNotOwner' | 'sentinel.actor.ownerChannelNotGrantable'
+  | 'sentinel.actor.payloadTooDeep';
+
+/** Request bodies nest at most this deep; a deeper one is refused, never skipped. */
+export const MAX_BODY_DEPTH = 32;
 
 export class ActorError extends Error {
   constructor(readonly code: ActorErrorCode, readonly field?: string) {
@@ -58,7 +62,9 @@ const CLAIM_FIELDS = new Set(['actor', 'principal', 'channel', 'who', 'requested
 export function refuseActorClaims<T>(body: T): T {
   const seen = new Set<unknown>();
   const walk = (v: unknown, depth: number) => {
-    if (v === null || typeof v !== 'object' || seen.has(v) || depth > 32) return;
+    if (v === null || typeof v !== 'object' || seen.has(v)) return;
+    // Refused rather than skipped: a claim nested past the bound must not slip through unseen.
+    if (depth > MAX_BODY_DEPTH) throw new ActorError('sentinel.actor.payloadTooDeep');
     seen.add(v);
     if (Array.isArray(v)) { v.forEach(x => walk(x, depth + 1)); return; }
     for (const [k, x] of Object.entries(v)) {

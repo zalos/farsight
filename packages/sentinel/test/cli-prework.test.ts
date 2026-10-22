@@ -346,3 +346,86 @@ test('one connection cannot take the daemon down, and a client never waits forev
   assert.equal(await a.request('ping', {}), 'ok', 'the daemon is still serving');
   a.close();
 });
+
+test('every command keeps the JSON result contract: outcome, exit code, three verdicts, facts', t => {
+  const dir = scratch(t);
+  const valid = fileURLToPath(new URL('./contracts/valid/report.json', import.meta.url));
+  const cases: [string[], number][] = [
+    [['help'], 0], [['--help'], 0], [['version'], 0], [['capabilities'], 0],
+    [['validate', 'report', valid], 0], [['validate', 'run', '/nonexistent/run.json'], 3], [['validate', 'run', dir], 3],
+    [['validate', 'ledger', valid], 3], [['validate'], 3], [['scan-everything'], 3], [['init', '--worksapce', dir], 3],
+    [['wait', 'r'], 3], [['run', 'x', '--detach', '--workspace', dir], 3], [['init', '--workspace', 'relative'], 3],
+  ];
+  for (const [args, exit] of cases) {
+    const r = cli([...args, '--json'], dir);
+    assert.equal(r.status, exit, `${args.join(' ')}: ${r.stderr}`);
+    let body: any;
+    assert.doesNotThrow(() => { body = JSON.parse(r.stdout); }, `${args.join(' ')} printed JSON`);
+    assert.equal(body.exitCode, exit, args.join(' '));
+    assert.equal(typeof body.outcome, 'string');
+    assert.deepEqual(Object.keys(body.verdicts), ['policy', 'capability', 'credential'], args.join(' '));
+    assert.equal(typeof body.facts, 'object');
+    if (exit !== 0) assert.match(body.reasonCode ?? '', /^sentinel\./, `${args.join(' ')} names its reason`);
+  }
+});
+
+test('init refuses an existing settings file it cannot read, with a typed result, and leaves it as it is', { skip: process.getuid?.() === 0 && 'root reads any file' }, t => {
+  const ws = scratch(t);
+  initWorkspace({ workspace: ws });
+  const path = join(ws, '.farsight/sentinel/settings.json');
+  const before = readFileSync(path);
+  chmodSync(path, 0o000);
+  assert.throws(() => initWorkspace({ workspace: ws }), (e: unknown) => e instanceof InitError && e.code === 'sentinel.init.settingsUnsafe');
+  const r = cli(['init', '--json'], ws);
+  assert.equal(r.status, 3, r.stderr);
+  assert.deepEqual([JSON.parse(r.stdout).outcome, JSON.parse(r.stdout).reasonCode], ['refused', 'sentinel.init.settingsUnsafe']);
+  assert.doesNotMatch(r.stderr, /\n\s+at /, 'no stack trace');
+  assert.equal(statSync(path).mode & 0o777, 0o000, 'not touched');
+  chmodSync(path, 0o600);
+  assert.deepEqual(readFileSync(path), before);
+  // An unreadable folder on the way is a typed refusal too.
+  const ws2 = scratch(t);
+  mkdirSync(join(ws2, '.farsight'), { mode: 0o000 });
+  try {
+    const r2 = cli(['init', '--json'], ws2);
+    assert.equal(r2.status, 3);
+    assert.match(JSON.parse(r2.stdout).reasonCode, /^sentinel\.init\./);
+  } finally { chmodSync(join(ws2, '.farsight'), 0o700); }
+});
+
+test('the preview report refuses malformed counts and documents before rendering anything', () => {
+  const count = { n: 2, unit: 'sentinel.count.findings', scope: 'sentinel.scope.report', source: 'fixture', recheck: { cli: 'farsight-sentinel report r' } };
+  const doc = (counts: unknown[], over: Record<string, unknown> = {}) => ({
+    schema: 'sentinel-preview-report/draft-1', label: 'foundation-preview', runId: 'r', snapshotId: 's', ledgerSequence: 1,
+    generatedAt: '2026-10-22T00:00:00Z', counts, limitations: ['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage'], ...over,
+  });
+  assert.doesNotThrow(() => renderPreviewMarkdown(doc([count]) as never));
+  const refused = (d: unknown, why: string) => {
+    assert.throws(() => renderPreviewMarkdown(d as never), /sentinel\.report\.invalid/, why);
+    assert.throws(() => renderPreviewJson(d as never), /sentinel\.report\.invalid/, why);
+  };
+  refused(doc([{ ...count, unit: 'sentinel.report.previewTitle' }]), 'a unit with no {n}');
+  refused(doc([{ ...count, unit: 'sentinel.count.nothing' }]), 'a unit not in the catalog');
+  refused(doc([{ ...count, source: '' }]), 'an empty source');
+  refused(doc([{ ...count, breakdown: [{ key: 'sentinel.count.part.high', n: 3 }, { key: 'sentinel.count.part.low', n: -1 }] }]), 'a negative part that still sums');
+  refused(doc([{ ...count, breakdown: [{ key: 'sentinel.count.part.nope', n: 2 }] }]), 'an unknown part key');
+  refused(doc([{ ...count, breakdown: [{ key: 'sentinel.count.part.high', n: 1.5 }, { key: 'sentinel.count.part.low', n: 0.5 }] }]), 'fractional parts');
+  refused(doc([{ ...count, n: -1 }]), 'a negative count');
+  refused(doc([{ ...count, extra: 1 }]), 'an unknown count field');
+  refused(doc([count], { extra: 1 }), 'an unknown report field');
+  refused(doc([count], { limitations: ['sentinel.report.previewOnly', 'sentinel.report.noScannerCoverage', 'sentinel.report.madeUp'] }), 'an unknown limitation');
+  refused(doc([count], { counts: 'all' }), 'counts that are not a list');
+  refused(null, 'no document');
+});
+
+test('a claim nested past the depth bound is refused, not skipped', () => {
+  let deep: Record<string, unknown> = { actor: 'human' };
+  for (let i = 0; i < 34; i++) deep = { next: deep };
+  assert.throws(() => refuseActorClaims(deep), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadTooDeep');
+  let harmless: Record<string, unknown> = { ok: true };
+  for (let i = 0; i < 34; i++) harmless = { next: harmless };
+  assert.throws(() => refuseActorClaims(harmless), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadTooDeep', 'too deep is refused whatever it holds');
+  let shallow: Record<string, unknown> = { actor: 'human' };
+  for (let i = 0; i < 30; i++) shallow = { next: shallow };
+  assert.throws(() => refuseActorClaims(shallow), (e: unknown) => e instanceof ActorError && e.code === 'sentinel.actor.payloadClaim');
+});

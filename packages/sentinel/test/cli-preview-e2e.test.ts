@@ -65,9 +65,10 @@ test('init → adopt → plan → run → status → report, twice where it matt
   assert.equal(report.status, 0, report.stderr);
   assert.match(report.stdout, /foundation preview/i);
   assert.match(report.stdout, /1 finding in this report/);
-  const json = run('report', planId, '--format', 'json').body;
-  const json2 = run('report', planId, '--format', 'json').body;
-  assert.deepEqual({ ...json, generatedAt: null }, { ...json2, generatedAt: null }, 'the report regenerates from stored results alone');
+  const json = run('report', planId).body;
+  const json2 = run('report', planId).body;
+  assert.deepEqual([json.outcome, json.exitCode], ['answered', 0], 'with --json the report travels inside the typed result');
+  assert.deepEqual({ ...json.facts.report, generatedAt: null }, { ...json2.facts.report, generatedAt: null }, 'the report regenerates from stored results alone');
 
   assert.deepEqual([run('run', planId, '--detach').status, run('run', planId, '--detach').body.outcome], [3, 'unavailable'], 'no background run is pretended');
   assert.equal(run('run', 'plan-' + '0'.repeat(32)).body.reasonCode, 'sentinel.service.planUnknown');

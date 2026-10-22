@@ -3,9 +3,9 @@
 // (settings hold keychain references only, and the defaults hold none), downloads nothing, starts no scan, and
 // trusts nothing: the file only grants once its owner adopts these exact bytes (PR 06's adoption flow).
 import { createHash } from 'node:crypto';
-import { closeSync, constants as FS, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, writeSync } from 'node:fs';
+import { closeSync, constants as FS, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, writeSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
-import { DEFAULT_SETTINGS, parseSettings, SETTINGS_PATH } from '../policy/index.js';
+import { DEFAULT_SETTINGS, MAX_SETTINGS_BYTES, parseSettings, SETTINGS_PATH } from '../policy/index.js';
 
 /** The settings file's place in a workspace, and its scrubbed defaults: PR 06's own, so init writes what policy reads. */
 export { SETTINGS_PATH, DEFAULT_SETTINGS };
@@ -55,6 +55,14 @@ function ensurePrivateDir(path: string): void {
 
 /** Creates the settings file if it does not exist; otherwise reports it unchanged. Never writes over a file. */
 export function initWorkspace(options: { workspace: string; profile?: string }): InitResult {
+  try { return initOnce(options); } catch (e) {
+    if (e instanceof InitError) throw e;
+    // Any other operating-system refusal is a typed one too; nothing has been written over.
+    throw new InitError('sentinel.init.workspaceUnsafe', `${(e as NodeJS.ErrnoException).code ?? 'error'}`);
+  }
+}
+
+function initOnce(options: { workspace: string; profile?: string }): InitResult {
   const profile = options.profile ?? 'static';
   if (!(PROFILES as readonly string[]).includes(profile)) throw new InitError('sentinel.init.profileUnknown', profile);
   if (!isAbsolute(options.workspace)) throw new InitError('sentinel.init.workspaceUnsafe', 'the workspace path must be absolute');
@@ -73,10 +81,27 @@ export function initWorkspace(options: { workspace: string; profile?: string }):
   ensurePrivateDir(sentinelDir);
   const path = join(sentinelDir, fileName);
 
+  // An existing file is read through one descriptor, opened without following a link: what is checked is what is
+  // read. Unreadable, oversized or not a regular file: refused with a reason, and never written over.
   const kept = (): InitResult => {
-    const st = lstatSync(path);
-    if (st.isSymbolicLink() || !st.isFile()) throw new InitError('sentinel.init.settingsUnsafe', 'the settings path is not a regular file');
-    const bytes = readFileSync(path);
+    let fd: number;
+    try { fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0)); } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      throw new InitError('sentinel.init.settingsUnsafe', code === 'ELOOP' ? 'the settings path is a link' : `the settings file cannot be read (${code ?? 'error'})`);
+    }
+    let bytes: Buffer;
+    try {
+      const st = fstatSync(fd);
+      if (!st.isFile()) throw new InitError('sentinel.init.settingsUnsafe', 'the settings path is not a regular file');
+      if (st.size > MAX_SETTINGS_BYTES) throw new InitError('sentinel.init.settingsUnsafe', 'the settings file is larger than settings may be');
+      bytes = Buffer.alloc(st.size);
+      let off = 0;
+      while (off < st.size) { const n = readSync(fd, bytes, off, st.size - off, off); if (n === 0) break; off += n; }
+      bytes = bytes.subarray(0, off);
+    } catch (e) {
+      if (e instanceof InitError) throw e;
+      throw new InitError('sentinel.init.settingsUnsafe', `the settings file cannot be read (${(e as NodeJS.ErrnoException).code ?? 'error'})`);
+    } finally { closeSync(fd); }
     // Recognised when policy itself would read it: PR 06's parser (schema, bounds, no credential values).
     let recognised = false;
     try { parseSettings(bytes); recognised = true; } catch { recognised = false; }
@@ -84,6 +109,7 @@ export function initWorkspace(options: { workspace: string; profile?: string }):
   };
   try { lstatSync(path); return kept(); } catch (e) {
     if (e instanceof InitError) throw e;
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw new InitError('sentinel.init.settingsUnsafe', `the settings path cannot be inspected (${(e as NodeJS.ErrnoException).code ?? 'error'})`);
   }
   const bytes = Buffer.from(`${JSON.stringify(initialSettings(profile), null, 2)}\n`, 'utf8');
   parseSettings(bytes); // what init writes is what policy reads

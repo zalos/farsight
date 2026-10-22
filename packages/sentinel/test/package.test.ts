@@ -86,7 +86,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
   // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
   'transport/ipc.js': ['node:crypto', 'node:fs', 'node:net', 'node:path'],
-  'reports/preview.js': ['@farsight/core/dist/strings-sentinel-report.js', '@farsight/core/dist/strings-sentinel-service.js'],
+  // The report checks every count with core's own countedProblems, over the whole catalog.
+  'reports/preview.js': ['@farsight/core/dist/counts.js', '@farsight/core/dist/strings.js'],
   'validate.js': ['ajv'],
   // The planner's reason codes are catalog words.
   'planner/errors.js': ['@farsight/core/dist/strings-sentinel-plan.js'],
@@ -203,7 +204,7 @@ test('help and version say plainly that no scanner exists', () => {
 test('draft contracts, store, capture, parser, policy and planner are available; scanners remain unavailable', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
-  const listed = JSON.parse(r.stdout).capabilities as typeof CAPABILITIES;
+  const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
   assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'scan-cli']);
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
@@ -241,9 +242,10 @@ test('validate checks a file against its draft schema', () => {
     const r = cli('validate', 'run', bad, '--json');
     assert.equal(r.status, 3);
     const body = JSON.parse(r.stdout);
-    assert.equal(body.ok, false);
-    assert.equal(body.errors[0].code, 'sentinel.contract.unsupportedVersion');
-    assert.deepEqual(body.errors[0].supported, ['sentinel-run/draft-1']);
+    assert.deepEqual([body.outcome, body.exitCode, body.reasonCode], ['refused', 3, 'sentinel.cli.invalid']);
+    assert.equal(body.facts.ok, false);
+    assert.equal(body.facts.errors[0].code, 'sentinel.contract.unsupportedVersion');
+    assert.deepEqual(body.facts.errors[0].supported, ['sentinel-run/draft-1']);
     const human = cli('validate', 'run', bad);
     assert.equal(human.stderr, 'invalid sentinel-run/draft-1\n  sentinel.contract.unsupportedVersion /schema version not supported\n');
     assert.equal(cli('validate', 'run', dir).status, 3, 'a directory is refused');

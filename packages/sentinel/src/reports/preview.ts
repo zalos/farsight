@@ -2,8 +2,8 @@
 // counts over and the command that re-checks it. It is labelled a foundation preview: it says nothing about scanner
 // or framework coverage, and its limitations are printed with it. Rendering is pure: a report regenerates from its
 // stored document alone, with no ledger, scan or source read. The full report arrives in PR 19.
-import { SENTINEL_REPORT_STRINGS } from '@farsight/core/dist/strings-sentinel-report.js';
-import { SENTINEL_SERVICE_STRINGS } from '@farsight/core/dist/strings-sentinel-service.js';
+import { countedProblems } from '@farsight/core/dist/counts.js';
+import { STRINGS } from '@farsight/core/dist/strings.js';
 import type { ReportCount } from '../contracts/index.js';
 
 export const PREVIEW_REPORT_SCHEMA = 'sentinel-preview-report/draft-1';
@@ -32,22 +32,45 @@ export class ReportError extends Error {
   }
 }
 
-const word = (key: string): string | undefined => SENTINEL_REPORT_STRINGS[key]?.professional ?? SENTINEL_SERVICE_STRINGS[key]?.professional;
+// The same catalog countedProblems checks against, so a count it accepts always has its words.
+const word = (key: string): string | undefined => STRINGS[key]?.professional;
 
-/** Checks a preview document: its label, scopes, words and that every breakdown sums to its count. */
+const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+const KNOWN_LIMITATIONS = new Set<string>(PREVIEW_LIMITATIONS);
+
+/**
+ * Checks a preview document before anything renders from it, stored or new: its exact fields and label, its
+ * limitations, and every count through core's own `countedProblems` (catalog words with {n}, a known scope, a
+ * source, a breakdown of catalog parts that sums) plus whole, non-negative parts. Anything else is refused.
+ */
 export function checkPreviewReport(doc: PreviewReport): PreviewReport {
   const bad = (d: string): never => { throw new ReportError('sentinel.report.invalid', d); };
-  if (doc?.schema !== PREVIEW_REPORT_SCHEMA || doc.label !== 'foundation-preview') bad('not a preview report');
+  if (!isRecord(doc)) bad('not an object');
+  const only = (o: Record<string, unknown>, keys: string[], what: string) => {
+    for (const k of Object.keys(o)) if (!keys.includes(k)) bad(`${what} has an unknown field ${k}`);
+  };
+  only(doc as unknown as Record<string, unknown>, ['schema', 'label', 'runId', 'snapshotId', 'ledgerSequence', 'generatedAt', 'counts', 'limitations'], 'the report');
+  if (doc.schema !== PREVIEW_REPORT_SCHEMA || doc.label !== 'foundation-preview') bad('not a preview report');
+  if (typeof doc.runId !== 'string' || typeof doc.snapshotId !== 'string' || typeof doc.generatedAt !== 'string') bad('identity');
   if (!Number.isSafeInteger(doc.ledgerSequence) || doc.ledgerSequence < 0) bad('ledger sequence');
+  if (!Array.isArray(doc.limitations) || doc.limitations.some(l => typeof l !== 'string' || !KNOWN_LIMITATIONS.has(l))) bad('limitations');
   for (const l of PREVIEW_LIMITATIONS) if (!doc.limitations.includes(l)) bad(`missing limitation ${l}`);
-  for (const [i, c] of doc.counts.entries()) {
-    if (!Number.isSafeInteger(c.n) || c.n < 0) bad(`count ${i}: n`);
-    if (!SCOPES.has(c.scope)) bad(`count ${i}: scope ${c.scope}`);
-    if (!word(c.unit) || !word(c.scope)) bad(`count ${i}: unit or scope has no catalog words`);
-    if (c.of !== undefined && (!Number.isSafeInteger(c.of) || c.of < c.n)) bad(`count ${i}: of`);
-    if (c.breakdown && c.breakdown.reduce((n, p) => n + p.n, 0) !== c.n) bad(`count ${i}: breakdown does not sum`);
-    if (!c.recheck?.cli) bad(`count ${i}: no recheck command`);
-  }
+  if (!Array.isArray(doc.counts) || doc.counts.length > 64) bad('counts');
+  doc.counts.forEach((c, i) => {
+    if (!isRecord(c)) bad(`count ${i} is not an object`);
+    only(c as unknown as Record<string, unknown>, ['n', 'of', 'unit', 'bizUnit', 'scope', 'source', 'breakdown', 'recheck'], `count ${i}`);
+    if (!SCOPES.has(c.scope)) bad(`count ${i}: scope ${String(c.scope)}`);
+    if (c.breakdown !== undefined) {
+      if (!Array.isArray(c.breakdown)) bad(`count ${i}: breakdown`);
+      c.breakdown.forEach((p, j) => {
+        if (!isRecord(p) || typeof p.key !== 'string' || !Number.isSafeInteger(p.n) || p.n < 0) bad(`count ${i}: part ${j} is not a whole, non-negative part`);
+        only(p as unknown as Record<string, unknown>, ['key', 'n', 'label'], `count ${i} part ${j}`);
+      });
+    }
+    const problems = countedProblems(c as never, `count ${i}`);
+    if (problems.length) bad(problems[0]!);
+    if (!isRecord(c.recheck) || typeof c.recheck.cli !== 'string' || !c.recheck.cli) bad(`count ${i}: no recheck command`);
+  });
   return doc;
 }
 
