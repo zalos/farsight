@@ -30,7 +30,7 @@ try{
  const missing=await cli('plan');assert.deepEqual([missing.status,missing.body.reasonCode],[3,'sentinel.assets.missing']);
  for(const id of ['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor']){assert.equal((await cli('assets','adopt-tool',id)).status,4);assert.equal((await cli('assets','adopt-tool',id,'--confirm')).status,0);}
  assert.equal((await cli('assets','adopt-database','osv:npm','--license','MIT','--manifest',f.manifest,'--archive',f.db.path,'--confirm')).status,0);
- assert.equal((await cli('assets','adopt-database','trivy-checks','--manifest',f.trivyManifest,'--archive',f.checks.path,'--confirm')).status,0);
+ const trivy=await cli('assets','adopt-database','trivy-checks','--manifest',f.trivyManifest,'--archive',f.checks.path,'--confirm');assert.equal(trivy.status,0);assert.equal(trivy.body.facts.entry.rights.spdx,'MIT');
  const planned=await cli('plan');assert.equal(planned.status,0,JSON.stringify(planned.body));assert.equal(planned.body.facts.label,'deterministic');const id=planned.body.facts.runId;
  assert.equal((await cli('run',id,'--detach')).status,4);const start=await cli('run',id,'--detach','--confirm');assert.deepEqual([start.status,start.body.outcome],[0,'submitted'],JSON.stringify(start.body));
  const joined=await cli('run',id,'--detach','--confirm');assert.equal(joined.body.facts.runId,id);

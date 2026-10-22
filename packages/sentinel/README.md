@@ -225,7 +225,8 @@ Images must already be installed at the shipped immutable pins. `assets adopt-to
 runtime and exact image; it never pulls or starts a scanner. Database adoption reads the explicitly named archive
 and provenance through bounded descriptors, verifies their hashes and metadata, and retains independent private
 copies outside the checkout. OSV adoption requires the owner to state its published license expression; this command
-does not infer a blanket license for all advisory sources. The receipt binds the exact candidate, provenance, rights
+does not infer a blanket license for all advisory sources. The pinned Trivy checks bundle retains its MIT license,
+separately from the engine's Apache-2.0 license. The receipt binds the exact candidate, provenance, rights
 and previous lock revision. A scan uses the admitted lock, including older retained revisions, rather than whatever
 lock happens to be current. Missing or changed required assets refuse before any scanner attempt.
 
