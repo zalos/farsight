@@ -431,3 +431,36 @@ test('a staged file or a published name replaced by another inode yields no rece
     assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath', 'winner replaced before its fsync');
   }
 });
+
+test('an alias outside objects/tmp created during publication refuses the receipt', async t => {
+  const id = identify(SOURCE);
+  {
+    // A new publication: the extra name appears after link(2), while the staged copy is being removed.
+    const dir = scratch(t);
+    const outside = scratch(t);
+    const final = join(dir, objectRelPath(id.rawDigest, 'gzip'));
+    const io: ObjectStoreIo = { ...NODE_OBJECT_IO, unlink: async p => { await NODE_OBJECT_IO.unlink(p); linkSync(final, join(outside, 'alias')); } };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath');
+    assert.equal(new ObjectStore(owner(dir)).checkSync({ rawDigest: id.rawDigest, codec: 'gzip' }).status, 'unsafe', 'receipt and check agree');
+  }
+  {
+    // An existing winner that gains the extra name between its verification and its fsync.
+    const dir = scratch(t);
+    const outside = scratch(t);
+    await new ObjectStore(owner(dir)).put(SOURCE);
+    const final = join(dir, objectRelPath(id.rawDigest, 'gzip'));
+    let done = false;
+    const io: ObjectStoreIo = {
+      ...NODE_OBJECT_IO,
+      open: async (p, f, m) => { if (!done && p === final) { done = true; linkSync(final, join(outside, 'alias')); } return NODE_OBJECT_IO.open(p, f, m); },
+    };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath');
+  }
+  {
+    // A mode opened to other accounts during publication is refused the same way.
+    const dir = scratch(t);
+    const final = join(dir, objectRelPath(id.rawDigest, 'gzip'));
+    const io: ObjectStoreIo = { ...NODE_OBJECT_IO, unlink: async p => { await NODE_OBJECT_IO.unlink(p); chmodSync(final, 0o644); } };
+    assert.equal(await code(new ObjectStore(owner(dir), { io }).put(SOURCE)), 'sentinel.object.unsafePath');
+  }
+});

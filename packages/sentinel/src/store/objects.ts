@@ -399,6 +399,18 @@ export class ObjectStore {
     if (real !== finalPath) fail('sentinel.object.unsafePath', 'the published object no longer resolves inside the store');
     const last = await this.#lstatOrFail(rel);
     if (!sameIdent(winner.ident, last)) fail('sentinel.object.unsafePath', 'the published name changed before the receipt');
+    // The receipt promises exactly what checkSync() accepts: run that same verification (directories, owner-only
+    // modes, no alias outside objects/tmp, sizes and digests) on the final name, and refuse on any difference.
+    let final: Verified;
+    try {
+      final = this.#readVerifiedSync({ rawDigest: id.rawDigest, codec, rawSize: id.rawSize, encodedDigest: winner.encodedDigest, encodedSize: winner.encodedSize });
+    } catch (e) {
+      if (e instanceof ObjectStoreError && e.code !== 'sentinel.object.unsafePath') {
+        return fail('sentinel.object.unsafePath', `the published object changed before the receipt: ${e.message}`, e);
+      }
+      throw e;
+    }
+    if (!sameIdent(winner.ident, final.ident)) fail('sentinel.object.unsafePath', 'the published name changed before the receipt');
     await this.#owner.assertHeld();
     return Object.freeze({
       kind: 'sentinel-object-receipt', version: 1, storeId: this.#owner.storeId,
