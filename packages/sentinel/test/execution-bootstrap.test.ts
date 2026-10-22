@@ -29,7 +29,7 @@ const REPO = {
 };
 const RULE = 'sentinel.ts.eval';
 
-function trusted(root: string, bootstrap = true) {
+function trusted(root: string, bootstrap = true, stage: Record<string, Record<string, number>> = {}) {
   const dir = join(root, 'adapters');
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const module = join(dir, 'pattern.mjs');
@@ -46,7 +46,8 @@ function trusted(root: string, bootstrap = true) {
   ]);
   const profile = { id: 'profile-local', registry, capabilities, permits: ['source-bytes', 'pattern-match'],
     ...(bootstrap ? { operations: { capture: 'sentinel-capture', parse: 'sentinel-parse', inventory: 'sentinel-inventory' } } : {}) };
-  const record = executionProfileRecord(profile as any, { capture: RESOURCES, parse: RESOURCES, inventory: RESOURCES, check: RESOURCES } as any, PARSE);
+  const record = executionProfileRecord(profile as any, { capture: { ...RESOURCES, ...stage.capture }, parse: { ...RESOURCES, ...stage.parse },
+    inventory: { ...RESOURCES, ...stage.inventory }, check: RESOURCES } as any, PARSE);
   return { registry, profile, record };
 }
 
@@ -194,4 +195,56 @@ test('capture refuses a run whose snapshot holds other sources than the plan par
   const capture = boot.units.find(u => u.stage === 'capture')!;
   const [a] = store.ledger.listAttempts({ id: capture.id, revision: 1 });
   assert.equal(store.ledger.getAttempt(a!.id)!.envelope.error?.code, 'sentinel.execution.bootstrapEvidence');
+});
+
+for (const [label, parse, code, field] of [
+  ['its deadline', { deadlineMs: 1 }, 'sentinel.execution.deadlineExceeded', 'deadlineMs'],
+  ['its output bound', { maxOutputBytes: 1 }, 'sentinel.execution.outputTooLarge', 'bytes'],
+  ['its memory bound', { memoryBytes: 1 }, 'sentinel.execution.resourceExceeded', 'resource'],
+] as const) {
+  test(`a bootstrap operation is held to ${label}: the attempt fails and nothing of it is published`, needsStore, async t => {
+    const dir = scratch(t, 'sentinel-exec-boot-grant-');
+    const work = join(dir, 'work');
+    mkdirSync(work, { mode: 0o700 });
+    const { store, snapshot } = await captured(t, dir);
+    t.after(() => store.close());
+    const { registry, profile, record } = trusted(dir, true, { parse });
+    const { pin } = lockedRules([{ familyId: RULE, adapterId: 'sentinel-pattern' }], []);
+    const { policy } = policyView([RULE]);
+    const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
+    await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
+    const summary = await (await Coordinator.open({ store, runId: 'run-boot', run: runEnvelope(snapshot.id, pin, policy.revision, profile.id), registry,
+      scratchRoot: work, retry: { maxAttempts: 1 } })).run();
+    const parseUnit = boot.units.find(u => u.stage === 'parse')!;
+    assert.equal(store.ledger.getPublication({ id: parseUnit.id, revision: 1 }), null, 'the parse published nothing');
+    const [a] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
+    const ended = store.ledger.getAttempt(a!.id)!;
+    assert.equal(ended.state, 'failed');
+    assert.equal(ended.envelope.error?.code, code);
+    assert.ok(ended.errorDetail && field in ended.errorDetail, JSON.stringify(ended.errorDetail));
+    assert.equal(summary.outcome, 'execution-failure');
+    assert.deepEqual(store.ledger.listOpenStages(500), [], 'nothing was staged for it');
+  });
+}
+
+test('a bootstrap operation canceled while it runs publishes nothing, though it finished its work', needsStore, async t => {
+  const dir = scratch(t, 'sentinel-exec-boot-cancel-');
+  const work = join(dir, 'work');
+  mkdirSync(work, { mode: 0o700 });
+  const { store, snapshot } = await captured(t, dir);
+  t.after(() => store.close());
+  const { registry, profile, record } = trusted(dir);
+  const { pin } = lockedRules([{ familyId: RULE, adapterId: 'sentinel-pattern' }], []);
+  const { policy } = policyView([RULE]);
+  const boot = planBootstrap({ runId: 'run-boot', sourceIds: ['app'], profile: profile as any });
+  await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: record });
+  const parseUnit = boot.units.find(u => u.stage === 'parse')!;
+  let c: any;
+  const hooks = { at: (b: string, ctx: any) => { if (b === 'after-attempt-start' && ctx.work.id === parseUnit.id) c.cancel(); } };
+  c = await Coordinator.open({ store, runId: 'run-boot', run: runEnvelope(snapshot.id, pin, policy.revision, profile.id), registry, scratchRoot: work, hooks });
+  const summary = await c.run();
+  assert.equal(summary.state, 'canceled');
+  assert.equal(store.ledger.getPublication({ id: parseUnit.id, revision: 1 }), null);
+  const [a] = store.ledger.listAttempts({ id: parseUnit.id, revision: 1 });
+  assert.equal(store.ledger.getAttempt(a!.id)!.state, 'canceled');
 });
