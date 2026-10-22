@@ -469,7 +469,8 @@ and `page` (a UI route); a handler is the function a route reaches, not a surfac
 when a capability table Sentinel's own code built records that an adapter in the trusted adapter registry (PR 07)
 establishes it, that adapter is still registered with the same digest, and the profile permits relying on it; a
 profile, caller or settings label cannot make an unestablished capability available. A rule runs only through a
-registered adapter, and an external one only when the rule lock also pins it. The bootstrap stages run only through
+registered adapter, and an external one only when the rule lock approves exactly that tool: an entry with the
+registered version and the registered image's digest (`sentinel.plan.toolMismatch` otherwise). The bootstrap stages run only through
 registered operations bound by the profile; an unbound stage stays in the plan and its work is handed off blocked
 (`sentinel.plan.operationUnbound`), never run by a generic worker. A whole-repository check reads the source's complete
 captured file set (bounded; a larger source is not planned as a whole), and every entry it cannot read, excluded,
@@ -506,7 +507,9 @@ covers; `verifyWorkEnvelope` refuses a work envelope whose fingerprint, manifest
 the plan's unit, and `capturedInputsOf` refuses bytes other than the pinned ones. The boundary also carries the sealed
 plan and each work's exact checks. Required coverage is computed by `evaluateRequiredCoverage` from
 `sentinel-coverage/draft-1` records alone: a required check is complete only through a `complete` record for this run,
-this check and its assigned work revision, executed or reusing a publication the plan lists. Imported evidence,
+this check and its assigned work revision, executed, at per-file-per-rule granularity (an aggregate record
+completes only a whole-repository check). Reuse does not count until a reuse derivation records the exact prior
+check, scope, rule, inputs and environment (PR 27). Imported evidence,
 unrelated reuse and work merely finishing never count; an unplanned required check or a required rule gap keeps
 coverage incomplete. Persistence and admission of a plan stay with the coordinator and the policy
 gate (`run.start` on the plan digest). Not decided here: the capability registry that states what each stage

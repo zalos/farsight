@@ -3,8 +3,11 @@
 //
 // - it is for this run, this check and the exact work revision the plan assigned the check to;
 // - its status is `complete`;
-// - its basis is `executed`, or `reused` with a publication the plan itself lists as reused (explicit provenance).
-//   Imported evidence and reuse of work the plan does not name never count; neither does work having finished.
+// - its basis is `executed`. Reuse does not count yet: no contract records a reused result's exact prior check,
+//   scope, rule, inputs, environment and derivation, so a reused record keeps the check incomplete rather than
+//   borrowing coverage (PR 27 adds that derivation). Imported evidence never counts; neither does work finishing;
+// - its granularity is fine enough for the check: a file, surface, manifest or CI check needs per-file-per-rule
+//   coverage; only a whole-repository check may be completed by an aggregate record.
 //
 // A required check the plan could not plan (unsupported, applicability unknown, scope unavailable or unknown) and a
 // required rule gap are incomplete by definition. Records for other runs are ignored; a record for this run that
@@ -43,7 +46,6 @@ export interface RequiredCoverage {
 
 export function evaluateRequiredCoverage(plan: PlanRevision, records: readonly CoverageEnvelope[]): RequiredCoverage {
   if (!validateEnvelope('plan', plan).ok || !verifyPlanRevision(plan)) throw new PlanError('sentinel.plan.pinMismatch', 'the plan revision does not validate or match its digest');
-  const reused = new Set(plan.reused.map(r => `${r.id}@${r.revision}`));
   const byCheck = new Map<string, CoverageEnvelope[]>();
   const known = new Set(plan.checks.map(c => c.id));
   const unknownRecords: Id[] = [];
@@ -61,7 +63,11 @@ export function evaluateRequiredCoverage(plan: PlanRevision, records: readonly C
     for (const r of byCheck.get(c.id) ?? []) {
       if (r.workId !== c.unit!.id || r.workRevision !== c.unit!.revision) { refused = 'sentinel.plan.coverageWrongUnit'; continue; }
       if (r.basis.kind === 'imported') { refused = 'sentinel.plan.coverageImported'; continue; }
-      if (r.basis.kind === 'reused' && !reused.has(`${r.basis.publication.id}@${r.basis.publication.revision}`)) { refused = 'sentinel.plan.coverageReuseUnproven'; continue; }
+      if (r.basis.kind === 'reused') { refused = 'sentinel.plan.coverageReuseUnproven'; continue; }
+      if (r.basis.kind !== 'executed') { refused = 'sentinel.plan.coverageMissing'; continue; }
+      if (r.granularity !== 'per-file-per-rule' && !(c.scopeKind === 'repository' && r.granularity === 'aggregate')) {
+        refused = 'sentinel.plan.coverageTooCoarse'; continue;
+      }
       counting.push(r);
     }
     if (counting.length === 0) return { ...base, status: null, complete: false, reasonCode: refused ?? 'sentinel.plan.coverageMissing' };

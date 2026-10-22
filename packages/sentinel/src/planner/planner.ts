@@ -275,12 +275,20 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
     checkDigest(r.packDigest, `${r.familyId} pack`);
     locked.set(r.familyId, r);
   }
-  const tools = new Map(lock.tools.map(t => [t.adapterId, t.artifactDigest]));
-  /** A rule's adapter must be registered; an external one must also be pinned by the lock. */
+  /**
+   * A rule's adapter must be registered. An external adapter runs only when the lock approved exactly that tool: a lock
+   * entry for the adapter whose version is the registered version and whose artifact digest is the registered image's
+   * digest. The registry's own digest is not the lock's approval of the tool.
+   */
   const adapterAnswer = (id: Id): { digest: Digest } | { reasonCode: string } => {
     if (!profile.registry.ids.includes(id)) return { reasonCode: 'sentinel.plan.adapterNotRegistered' };
     const adapter = profile.registry.get(id);
-    if (adapter.kind === 'external' && !tools.has(id)) return { reasonCode: 'sentinel.plan.adapterNotLocked' };
+    if (adapter.kind === 'external') {
+      const entries = lock.tools.filter(t => t.adapterId === id);
+      if (entries.length === 0) return { reasonCode: 'sentinel.plan.adapterNotLocked' };
+      const image = `sha256:${adapter.image.slice(adapter.image.lastIndexOf('@sha256:') + 8)}`;
+      if (!entries.some(t => t.version === adapter.version && t.artifactDigest === image)) return { reasonCode: 'sentinel.plan.toolMismatch' };
+    }
     return { digest: adapter.digest };
   };
   const usedFacts = new Map<string, { capability: string; adapterId: Id; adapterDigest: Digest }>();

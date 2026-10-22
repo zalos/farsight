@@ -50,7 +50,7 @@ test('imported, wrongly assigned, unrelated or conflicting evidence never counts
   assert.deepEqual(reasons([record(p, a, { basis: { kind: 'reused', publication: { id: 'work-unrelated', revision: 1 }, derivationArtifact: d('x') } }), record(p, b)]),
     ['sentinel.plan.coverageReuseUnproven', 'complete'], 'reuse of work the plan does not name');
   assert.deepEqual(reasons([record(p, a, { basis: { kind: 'reused', publication: inventory, derivationArtifact: d('x') } }), record(p, b)]),
-    ['complete', 'complete'], 'reuse of work the plan names counts');
+    ['sentinel.plan.coverageReuseUnproven', 'complete'], 'not even reuse of work the plan names: no check-specific derivation is recorded yet');
   assert.deepEqual(reasons([record(p, a), record(p, a, { status: 'error' }), record(p, b)]), ['sentinel.plan.coverageConflict', 'complete']);
   const other = evaluateRequiredCoverage(p, [record(p, a, { runId: 'run-9' }), record(p, b)]);
   assert.equal(other.checks[0]!.reasonCode, 'sentinel.plan.coverageMissing', 'another run’s records are ignored');
@@ -77,4 +77,22 @@ test('a work envelope that differs from its plan unit in any declared input is r
     assert.throws(() => verifyWorkEnvelope(p, { ...envelope, ...over } as never), (e: unknown) => e instanceof PlanError, JSON.stringify(over));
   }
   assert.deepEqual(p.units[0]!.inputs.map(i => i.content), [d('src/a.ts'), d('src/b.ts')], 'inputs pin the captured bytes');
+});
+
+test('a coarser record never completes a finer check; only a whole-repository check takes an aggregate record', () => {
+  const p = plan([rule('sentinel.ts.eval'), rule('sentinel.repo.policy', { scopeKind: 'repository' })], ['sentinel.ts.eval', 'sentinel.repo.policy']);
+  const byScope = (id: string) => p.checks.find(c => c.id === id)!;
+  const records = p.checks.filter(c => c.state === 'planned').map(c => record(p, c.id, { granularity: 'aggregate' }));
+  const result = evaluateRequiredCoverage(p, records);
+  for (const c of result.checks.filter(x => x.planState === 'planned')) {
+    const kind = byScope(c.checkId).scopeKind;
+    assert.equal(c.complete, kind === 'repository', `${kind}: ${c.reasonCode ?? 'complete'}`);
+    if (kind !== 'repository') assert.equal(c.reasonCode, 'sentinel.plan.coverageTooCoarse');
+  }
+  assert.equal(evaluateRequiredCoverage(p, p.checks.filter(c => c.state === 'planned').map(c => record(p, c.id, { granularity: 'per-file' })))
+    .checks.filter(c => byScope(c.checkId).scopeKind === 'source-file').every(c => c.reasonCode === 'sentinel.plan.coverageTooCoarse'), true, 'per file is not per rule');
+  // SOL's probe: aggregate reuse of the bootstrap inventory for every check completes nothing.
+  const reuse = p.checks.filter(c => c.state === 'planned').map(c => record(p, c.id, { granularity: 'aggregate', basis: { kind: 'reused', publication: inventory, derivationArtifact: d('inventory') } }));
+  const probe = evaluateRequiredCoverage(p, reuse);
+  assert.deepEqual([probe.complete, probe.requiredComplete], [false, 0]);
 });

@@ -51,6 +51,11 @@ test('a rule runs only through a registered adapter, and an external one only wh
   const deps = rule('sentinel.deps.vuln', { scopeKind: 'dependency-manifest', requires: ['dependency-manifest', 'advisory-database'], adapterId: 'osv', languages: ['typescript'] });
   assert.deepEqual(states(plan([deps])), ['planned']);
   assert.deepEqual(states(plan([deps], { tools: [] })), ['unsupported sentinel.plan.adapterNotLocked']);
+  // The lock must approve exactly the registered tool: its version and its image digest.
+  assert.deepEqual(states(plan([deps], { tools: [{ adapterId: 'osv', version: '999-unapproved', artifactDigest: `sha256:${'a'.repeat(64)}` }] })), ['unsupported sentinel.plan.toolMismatch']);
+  assert.deepEqual(states(plan([deps], { tools: [{ adapterId: 'osv', version: '2.0.0', artifactDigest: d('an unrelated build') }] })), ['unsupported sentinel.plan.toolMismatch']);
+  assert.deepEqual(states(plan([deps], { tools: [{ adapterId: 'osv', version: '999-unapproved', artifactDigest: d('x'), platform: 'darwin-arm64' }, { adapterId: 'osv', version: '2.0.0', artifactDigest: `sha256:${'a'.repeat(64)}` }] })),
+    ['planned'], 'one exact entry among others approves it');
   const p = plan([deps]);
   assert.equal(p.units[0]!.implementationDigest, registry.get('osv').digest);
   assert.deepEqual(p.pins.adapters, [{ adapterId: 'osv', digest: registry.get('osv').digest }]);

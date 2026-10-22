@@ -58,7 +58,9 @@ export const definitionOf = (r: RuleSpec) => ({
 });
 
 /** A validated pack of `rules`, a lock entry for it as promotion writes it, and the planner's lock view. */
-export function lockedRules(rules: RuleSpec[], tools: { adapterId: string; version: string; artifactDigest: string }[] = [{ adapterId: 'osv', version: '2.0.0', artifactDigest: D('osv') }]) {
+export const OSV_TOOL = { adapterId: 'osv', version: '2.0.0', artifactDigest: `sha256:${'a'.repeat(64)}` };
+
+export function lockedRules(rules: RuleSpec[], tools: { adapterId: string; version: string; artifactDigest: string; platform?: string }[] = [OSV_TOOL]) {
   const files = new Map<string, Uint8Array>();
   const defs = rules.map(definitionOf);
   files.set('sentinel-pack.json', Buffer.from(JSON.stringify({ schema: 'sentinel-rulepack/draft-1', packId: 'fixture-pack', version: '1.0.0', rights: { spdx: 'MIT', origin: 'sentinel-original' }, rules: defs })));
@@ -69,7 +71,7 @@ export function lockedRules(rules: RuleSpec[], tools: { adapterId: string; versi
   const lock = { ...emptyLock(NOW), revision: 2, previous: lockDigest(emptyLock(NOW)),
     packs: [{ ...structuredClone((pack as any).entry), promotion: { receipt: D('receipt'), at } }],
     databases: [{ databaseId: 'osv-db', snapshotDigest: D('osv db snapshot'), capturedAt: '2026-10-22T00:00:00Z', rights: { spdx: 'CC-BY-4.0', origin: 'third-party' as const, upstream: { name: 'osv', revision: '2026-10-22' } }, promotion: { receipt: D('receipt'), at } }],
-    tools: tools.map(t => ({ ...t, platform: 'linux-x64', rights: { spdx: 'Apache-2.0', origin: 'third-party' as const, upstream: { name: t.adapterId, revision: t.version } }, promotion: { receipt: D('receipt'), at } })) };
+    tools: tools.map(t => ({ platform: 'linux-x64', ...t, rights: { spdx: 'Apache-2.0', origin: 'third-party' as const, upstream: { name: t.adapterId, revision: t.version } }, promotion: { receipt: D('receipt'), at } })) };
   return { pack, lock, pin: lockDigest(lock as never), view: plannerLockFrom(lock as never, [pack], lockDigest(lock as never)) };
 }
 
