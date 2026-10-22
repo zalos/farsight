@@ -1,0 +1,7 @@
+name: sentinel fixture setup
+description: synthetic composite action
+runs:
+  using: composite
+  steps:
+    - run: echo "${{ github.event.issue.title }}"
+      shell: bash

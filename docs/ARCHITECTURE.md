@@ -552,3 +552,35 @@ and scheduling for model review.
 
     Not decided here: registering the adapter in the production registry and planning its checks (PR 08/09),
     Terraform variable files and plans, Helm rendering, and any additional configuration type.
+
+34. **Sentinel audits CI configuration with zizmor offline, and the audits that need the network are a stated gap
+    (2026-10-22).** `src/adapters/zizmor/` (PR 13) runs the official zizmor 1.31.1 image index (its build provenance
+    names `refs/tags/v1.31.1` at commit effdb35; MIT) behind an original POSIX shell worker, only through PR 07's
+    isolated execution service: no pull, no network, no token (the GitHub token variables are unset as well).
+
+    - **Inputs.** GitHub Actions workflows directly in any `.github/workflows` folder, `action.yml`/`action.yaml`, and
+      `.github/dependabot.yml`; files keep their paths so zizmor collects them by its own layout. Pre-commit
+      configuration, remote repositories and other CI systems are listed as unsupported.
+    - **The repository cannot suppress a finding.** `--no-config` and `--no-ignores`: neither a repository
+      `zizmor.yml` nor an ignore comment changes what is reported. The regular persona is selected and recorded.
+    - **Offline is explicit.** zizmor 1.31.1 skips five audits without the GitHub API (impostor-commit,
+      known-vulnerable-actions, ref-confusion, ref-version-mismatch, stale-action-refs) and runs three with less
+      information (artipacked, typosquat-uses, unpinned-uses). The worker reports the engine's own "skipping" lines; the
+      coordinator requires exactly the pinned online set, so every workflow and action is `partial` with
+      `onlineAuditsSkipped` and `offlineDegraded`, never complete; any other audit failing to load is `auditNotLoaded`.
+    - **Coverage and consistency need the engine's own evidence.** A file the engine reported completing is covered; one
+      it collected but did not audit (unparseable, schema-invalid or empty, all at exit 0) is `notAudited`; one it
+      never collected is `notCollected`. The exit code is zizmor's own summary of its highest finding (11–14, or 0 with
+      none): a report that disagrees with it, or a run where an online audit loaded, counts nothing.
+    - **Findings are CI configuration facts at captured paths.** A finding keeps the audit, severity, confidence and
+      its primary and related locations as UTF-8 byte spans checked against the captured bytes; never the engine's
+      annotations, quoted features, descriptions or fixes, and never a new graph node.
+    - **Platforms.** linux/arm64 is measured; linux/amd64 is unmeasured until the native `sentinel-iac-qualification`
+      workflow passes with zero skips.
+
+    The worker change found here applies to every shell worker: a frame binding built in a command substitution never
+    advances the sequence number, so a diagnostic followed by a result repeats it and PR 07 refuses the attempt. Both
+    PR 13 workers build it in their own shell.
+
+    Not decided here: online audits with an owner-supplied token, pre-commit inputs, other personas, registration and
+    planning (PR 08/09).

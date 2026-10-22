@@ -1,0 +1,15 @@
+name: sentinel fixture hardened
+on:
+  push:
+    branches: [main]
+permissions: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@0123456789abcdef0123456789abcdef01234567 # v9.9.9
+        with:
+          persist-credentials: false
+      - run: echo "build"

@@ -35,3 +35,14 @@ export const TRIVY_LAYOUT: Record<string, string> = {
   'infra/network/main.tf': 'trivy/tf-remote-module.fixture',
   'infra/network/terraform.tfvars': 'trivy/tfvars.fixture',
 };
+
+/** The zizmor fixture tree: positives, a true negative, an action, Dependabot, and two files it cannot audit. */
+export const ZIZMOR_LAYOUT: Record<string, string> = {
+  '.github/workflows/triage.yml': 'zizmor/workflow-injection.fixture',
+  '.github/workflows/build.yaml': 'zizmor/workflow-hardened.fixture',
+  '.github/workflows/broken.yml': 'zizmor/workflow-broken.fixture',
+  '.github/workflows/notes.yml': 'zizmor/workflow-not-workflow.fixture',
+  '.github/actions/setup/action.yml': 'zizmor/action-injection.fixture',
+  '.github/dependabot.yml': 'zizmor/dependabot.fixture',
+  'services/api/.github/workflows/ci.yml': 'zizmor/workflow-hardened.fixture',
+};

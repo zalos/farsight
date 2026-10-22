@@ -58,6 +58,11 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/trivy/job.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/trivy/normalize.js': ['node:crypto'],
   'adapters/trivy/run.js': ['node:fs', 'node:path'],
+  // The zizmor CI-configuration adapter (PR 13): its job file and hashing; the engine runs through execution/.
+  'adapters/zizmor/adapter.js': ['node:crypto'],
+  'adapters/zizmor/job.js': ['node:crypto', 'node:fs', 'node:path'],
+  'adapters/zizmor/normalize.js': ['node:crypto'],
+  'adapters/zizmor/run.js': ['node:fs', 'node:path'],
   'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', 'node:fs'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/errors.js': ['@farsight/core/dist/strings-sentinel-execution.js'],
