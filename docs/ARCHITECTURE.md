@@ -690,7 +690,7 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
 
-27. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
+29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
 where the engine proves it matched (2026-10-22).**
 
 `src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official

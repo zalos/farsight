@@ -217,7 +217,7 @@ checks the linux/amd64 manifest the adapter records; scans run through PR 07's i
 and synthetic advisory snapshots built from the original fixtures. It runs the OSV unit and real-engine conformance
 suites with `SENTINEL_OSV_QUALIFY=linux/amd64` (results accepted as candidate, not refused) and the packed tarball's
 shipped worker; any skipped, failed or cancelled test, a container left behind or a daemon that cannot be asked fails it.
-A green run is the evidence for marking linux/amd64 measured in `src/adapters/osv/adapter.ts` (ADR 27).
+A green run is the evidence for marking linux/amd64 measured in `src/adapters/osv/adapter.ts` (ADR 29).
 
 The individual Pattern and OSV qualification jobs select their own installed worker with
 `SENTINEL_PACKAGE_ENGINE`; both asset manifests and their exact bytes are still checked. A local package smoke
