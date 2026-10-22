@@ -57,7 +57,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   runs in the optional, path-filtered CI job, while Echo unit tests remain in required validation.
 
 - `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
-  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern and advisory adapters remain unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
+  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The explicit scanner CLI composes pattern, dependency, infrastructure and CI adapters; model runtime is not implemented. `src/store/index.ts` is the store's
   public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
@@ -114,7 +114,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
-  `test/store-integration.test.ts` drives the facade end to end across processes. The pattern adapter (PR 10,
+  The pattern adapter (PR 10,
   `src/adapters/pattern/`, composed by the explicit scanner CLI): `adapter.ts` (Semgrep 1.181.0 pinned by image digest
   with its measured and unmeasured platforms, the fixed engine arguments, `buildPatternAdapter` for the registry
   definition and test variants, and the support statement), `resolved.ts` (PR 06 resolved rules → adapter rules, or

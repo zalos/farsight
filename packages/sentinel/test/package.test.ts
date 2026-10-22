@@ -61,7 +61,6 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/pattern/normalize.js': ['node:crypto'],
   'adapters/pattern/resolved.js': ['node:crypto'],
   'adapters/pattern/run.js': ['node:fs', 'node:path'],
-
   // The OSV advisory adapter (PR 12): hashing, its own job and snapshot files; the engine runs through execution/.
   'adapters/osv/acquire.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/osv/adapter.js': ['node:crypto'],

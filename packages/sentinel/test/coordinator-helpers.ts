@@ -38,14 +38,14 @@ export interface SyntheticOptions {
   registry?: any;
   adapterPrefix?: string;
   deadlineMs?: number;
-  /** An effective policy to admit the plan under (an adopted one), instead of one made here for its rules. */
-  policy?: any;
-  /** Where the synthetic repository is committed; `<root>/repo` by default. */
-  repo?: string;
   /** A child run: its parent, an admitted snapshot to reuse instead of capturing, and published work A depends on. */
   parentId?: string;
   snapshotId?: string;
   reuse?: Array<{ id: string; revision: number }>;
+  /** An effective policy to admit the plan under (an adopted one), instead of one made here for its rules. */
+  policy?: any;
+  /** Where the synthetic repository is committed; `<root>/repo` by default. */
+  repo?: string;
 }
 
 /** The trusted registry for these behaviours: one built-in adapter each, wrapper modules written once under root. */

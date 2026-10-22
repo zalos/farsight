@@ -232,20 +232,20 @@ try {
     files.push('schemas');
     exportsMap['./schemas/*'] = './schemas/*';
   }
-  // The rule packs Sentinel ships (data only: a manifest, detector descriptions, fixtures), promoted by the owner.
-  if (existsSync(join(dir, 'rules'))) { cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true }); files.push('rules'); }
-  // Provenance of the files the package starts by path rather than imports (the launch gate): where and which bytes.
-  const assets = {};
-  for (const [asset] of ASSETS) {
-    const emitted = join(out, 'dist', `${asset}.mjs`);
-    if (existsSync(emitted)) assets[asset] = { path: `dist/${asset}.mjs`, sha256: createHash('sha256').update(readFileSync(emitted)).digest('hex') };
-  }
   // Non-code assets the package owns (in-container workers and their digest manifests), each staged by its own hook,
   // scripts/package-assets*.mjs, in name order.
   for (const hook of (existsSync(join(dir, 'scripts')) ? readdirSync(join(dir, 'scripts')) : []).filter((f) => /^package-assets.*\.mjs$/.test(f)).sort()) {
     const staged = await (await import(pathToFileURL(join(dir, 'scripts', hook)).href)).stageAssets(dir, out);
     for (const f of staged.files) if (!files.includes(f)) files.push(f);
     Object.assign(exportsMap, staged.exports);
+  }
+  // The rule packs Sentinel ships (data only: a manifest, detector descriptions, fixtures), promoted by the owner.
+  if (existsSync(join(dir, 'rules'))) { cpSync(join(dir, 'rules'), join(out, 'rules'), { recursive: true }); if (!files.includes('rules')) files.push('rules'); }
+  // Provenance of the files the package starts by path rather than imports (the launch gate): where and which bytes.
+  const assets = {};
+  for (const [asset] of ASSETS) {
+    const emitted = join(out, 'dist', `${asset}.mjs`);
+    if (existsSync(emitted)) assets[asset] = { path: `dist/${asset}.mjs`, sha256: createHash('sha256').update(readFileSync(emitted)).digest('hex') };
   }
   for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
   writeFileSync(join(out, 'package.json'), JSON.stringify({
