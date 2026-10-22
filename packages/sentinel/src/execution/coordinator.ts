@@ -1,22 +1,25 @@
 // The coordinator: one plan revision executed against a store opened through openStore(), durably, so that a
 // crash at any point can be finished by a later coordinator with no lost and no duplicate accepted output.
 //
-// Every decision is made from the ledger's committed state (scheduler.ts) and every effect goes through it:
-// a work revision is created when it becomes ready; an attempt is recorded (and so fenced by attempt and epoch)
+// Every decision is made from the ledger's typed, committed state (getRun, getWork, listAttempts; scheduler.ts)
+// and every effect goes through it: a work revision is created when it becomes ready, or held (blocked by a failed
+// dependency, disabled by policy) with its reason; an attempt is recorded (and so fenced by attempt and epoch)
 // after its worker exists and before it may act; a result is published through staging (publication.ts); a failure
-// ends the attempt, leaving the work ready for a bounded retry or failed. Pause stops admitting new work while
+// ends the attempt with its recorded error, leaving the work ready for a bounded retry or failed. Each attempt runs
+// under its work's resource policy intersected with the adapter's limits. Pause stops admitting new work while
 // in-flight attempts may still finish and publish; cancel stops the workers and the ledger then refuses any
 // publication for the run. The plan comes from PR 06 through PlanBoundary; this module does not plan.
 import { createHash } from 'node:crypto';
-import type { Id, WorkRef } from '../contracts/common.js';
+import type { CatalogKey, Id, WorkRef } from '../contracts/common.js';
 import type { RunEnvelope, RunOutcome, RunState } from '../contracts/run.js';
 import type { WorkEnvelope } from '../contracts/work.js';
 import type { SentinelStore } from '../store/index.js';
+import { canonicalJsonBytes } from '../store/objects.js';
 import { LedgerError } from '../store/store-types.js';
 import { ExecutionError, isExecutionError } from './errors.js';
 import { publishOutcome, PUBLICATION_BOUNDARIES, type BoundaryContext } from './publication.js';
-import { IntentFiles, readHistory, recoverStore, type LedgerHistory, type RecoveryReport } from './recovery.js';
-import { TRUSTED_ADAPTERS, type AdapterRegistry } from './registry.js';
+import { IntentFiles, recoverStore, WorkerFiles, type RecoveryReport } from './recovery.js';
+import { effectiveLimits, TRUSTED_ADAPTERS, type AdapterRegistry } from './registry.js';
 import {
   checkRetryPolicy, decide, DEFAULT_CAPACITY, DEFAULT_RETRY, orderPlan, ReservationPool, retryable,
   type Capacity, type CommittedUnit, type RetryPolicy, type UnitDecision,
@@ -27,6 +30,7 @@ import { releaseWorkDir, type CapturedInput, type WorkerOutcome } from './superv
 /** What PR 06's planner hands the coordinator: canonical envelopes plus the two lookups execution needs. */
 export interface PlanBoundary {
   readonly run: RunEnvelope;
+  /** Each pending or ready, or held (blocked / disabled-by-policy, with its reasonCode) by the plan itself. */
   readonly works: readonly WorkEnvelope[];
   /** The trusted adapter that executes this work's stage. */
   adapterFor(work: WorkEnvelope): Id;
@@ -63,45 +67,44 @@ export interface RunSummary {
   units: UnitDecision[];
   failures: UnitFailure[];
   recovery: RecoveryReport;
-  /** Accepted publications for this plan's work revisions, counted from the ledger. */
+  /** Accepted publications for this plan's work revisions, read from the ledger. */
   published: number;
+  /** False while recovery holds an obligation, a pending intent, an unreadable journal record or an uncertain container. */
+  clean: boolean;
 }
 
 const key = (r: WorkRef) => `${r.id}@${r.revision}`;
 const now = () => new Date().toISOString();
 const attemptIdFor = (ref: WorkRef, ordinal: number): Id =>
   `att-${createHash('sha256').update(`${ref.id}@${ref.revision}#${ordinal}`).digest('hex').slice(0, 40)}`;
+const MAX_DETAIL_BYTES = 3_072;
+const DEPENDENCY_FAILED: CatalogKey = 'sentinel.execution.dependencyFailed';
 
 export class Coordinator {
   readonly #store: SentinelStore;
   readonly #plan: PlanBoundary;
   readonly #service: ExecutionService;
-  readonly #journal: IntentFiles;
+  readonly #intents: IntentFiles;
+  readonly #workers: WorkerFiles;
   readonly #pool: ReservationPool;
   readonly #retry: RetryPolicy;
   readonly #hooks?: CoordinatorHooks;
   readonly #registry: AdapterRegistry;
   readonly #cancel = new AbortController();
   readonly #failures: UnitFailure[] = [];
-  /** Units that failed without an attempt in the ledger (refused before the worker existed). */
+  /** Units refused before any worker existed (no attempt in the ledger): not retried in this coordinator. */
   readonly #failedUnstarted = new Map<string, string>();
-  readonly #stale = new Map<string, Id>();
   readonly recovery: RecoveryReport;
-  #history: LedgerHistory;
   #pauseRequested = false;
   #cancelRequested = false;
-  /** Set when this coordinator completed the run; the ledger's events do not carry the outcome. */
-  #outcome: RunOutcome | undefined;
 
-  private constructor(o: CoordinatorOptions, service: ExecutionService, journal: IntentFiles, history: LedgerHistory, recovery: RecoveryReport) {
-    this.#store = o.store; this.#plan = o.plan; this.#service = service; this.#journal = journal;
+  private constructor(o: CoordinatorOptions, service: ExecutionService, intents: IntentFiles, workers: WorkerFiles, recovery: RecoveryReport) {
+    this.#store = o.store; this.#plan = o.plan; this.#service = service; this.#intents = intents; this.#workers = workers;
     this.#pool = new ReservationPool(o.capacity ?? DEFAULT_CAPACITY);
     this.#retry = checkRetryPolicy(o.retry ?? DEFAULT_RETRY);
     this.#registry = o.registry ?? TRUSTED_ADAPTERS;
     if (o.hooks) this.#hooks = o.hooks;
-    this.#history = history;
     this.recovery = recovery;
-    for (const s of recovery.staleAttempts) this.#stale.set(key(s.work), s.attemptId);
   }
 
   /** Validate the plan, bind to the store, and recover whatever an earlier epoch left. Starts no new work. */
@@ -114,10 +117,10 @@ export class Coordinator {
       }
     }
     const service = await createExecutionService(o.store, { scratchRoot: o.scratchRoot, ...(o.registry ? { registry: o.registry } : {}), ...(o.containers ? { containers: true } : {}) });
-    const journal = new IntentFiles(o.store.storePath);
-    const history = readHistory(o.store);
-    const recovery = await recoverStore(o.store, { journal, history, ...(service.backend ? { backend: service.backend } : {}) });
-    return new Coordinator(o, service, journal, readHistory(o.store), recovery);
+    const intents = new IntentFiles(o.store.storePath);
+    const workers = new WorkerFiles(o.store.storePath);
+    const recovery = await recoverStore(o.store, { intents, workers, ...(service.backend ? { backend: service.backend } : {}) });
+    return new Coordinator(o, service, intents, workers, recovery);
   }
 
   /** Stop admitting new work; attempts in flight may finish and publish. The run becomes paused once they end. */
@@ -159,14 +162,14 @@ export class Coordinator {
     const inflight = new Map<string, Promise<void>>();
     for (;;) {
       const decisions = this.progress();
+      this.#persistHolds(decisions);
       const admitting = !this.#pauseRequested && !this.#cancelRequested && this.#runState() === 'running';
       let admitted = 0;
       if (admitting) {
         for (const d of decisions) {
-          if (d.state !== 'ready' && !(d.state === 'running' && this.#stale.has(key(d.ref)))) continue;
-          if (inflight.has(key(d.ref))) continue;
-          const work = this.#plan.works.find(w => w.id === d.ref.id && w.revision === d.ref.revision)!;
-          const limits = this.#registry.get(this.#plan.adapterFor(work)).limits;
+          if (d.state !== 'ready' || inflight.has(key(d.ref))) continue;
+          const work = this.#work(d.ref);
+          const limits = effectiveLimits(this.#registry.get(this.#plan.adapterFor(work)).limits, work.resources);
           const reservation = this.#pool.tryReserve(key(d.ref), { memoryBytes: limits.memoryBytes, cpus: limits.cpus });
           if (!reservation) break;
           const task = this.#unit(work).finally(() => { this.#pool.release(reservation); inflight.delete(key(d.ref)); });
@@ -178,10 +181,11 @@ export class Coordinator {
         if (this.#cancelRequested) { this.#finishRunState('canceled'); break; }
         if (this.#pauseRequested || this.#runState() === 'pausing') { this.#finishRunState('paused'); break; }
         const final = this.progress();
-        if (final.every(d => ['published', 'failed', 'blocked'].includes(d.state))) {
-          const outcome: RunOutcome = final.every(d => d.state === 'published') ? 'complete-coverage' : 'execution-failure';
+        if (final.every(d => ['published', 'failed', 'blocked', 'disabled'].includes(d.state))) {
+          this.#persistHolds(final);
+          const outcome: RunOutcome = final.every(d => d.state === 'published') ? 'complete-coverage'
+            : final.every(d => d.state === 'published' || d.state === 'disabled') ? 'partial-coverage' : 'execution-failure';
           this.#store.ledger.setRunState(runId, 'completed', { outcome });
-          this.#outcome = outcome;
           break;
         }
         // Not finished, nothing in flight and nothing admitted: stop rather than spin; the summary shows what waits.
@@ -193,6 +197,24 @@ export class Coordinator {
     return this.#summary();
   }
 
+  /** Record in the ledger each hold the plan or the scheduler decided: disabled by policy, blocked by a dependency. */
+  #persistHolds(decisions: UnitDecision[]): void {
+    const runState = this.#runState();
+    if (runState === 'completed' || runState === 'canceled' || runState === undefined) return;
+    for (const d of decisions) {
+      if (d.state !== 'blocked' && d.state !== 'disabled') continue;
+      const want = d.state === 'disabled' ? 'disabled-by-policy' : 'blocked';
+      let row = this.#store.ledger.getWork(d.ref);
+      if (row?.state === want) continue;
+      const work = this.#work(d.ref);
+      // A revision names its dependencies, which must already be in the ledger; a later pass records it then.
+      if (!row && work.dependencies.some(dep => !this.#store.ledger.getWork(dep))) continue;
+      if (!row) { this.#create(work, 'pending'); row = this.#store.ledger.getWork(d.ref)!; }
+      const reason = want === 'disabled-by-policy' ? planReason(work) ?? 'sentinel.execution.planInvalid' : DEPENDENCY_FAILED;
+      if (['pending', 'ready', 'blocked'].includes(row.state)) this.#store.ledger.setWorkState(d.ref, want, { reasonCode: reason });
+    }
+  }
+
   #finishRunState(to: 'paused' | 'canceled'): void {
     const s = this.#runState();
     if (to === 'paused' && s === 'running') this.#store.ledger.setRunState(this.#plan.run.id, 'pausing');
@@ -200,29 +222,33 @@ export class Coordinator {
     if (this.#runState() !== to) this.#store.ledger.setRunState(this.#plan.run.id, to);
   }
 
+  /** Create a plan unit's revision in the ledger under this epoch; a plan-held unit is created pending, then held. */
+  #create(work: WorkEnvelope, state: 'pending' | 'ready'): void {
+    const { reasonCode: _held, ...rest } = work as WorkEnvelope & { reasonCode?: string };
+    void _held;
+    this.#store.ledger.createWork({ ...rest, state, activeAttemptId: null, coordinatorEpoch: this.#store.epoch, createdAt: now() } as WorkEnvelope);
+  }
+
   /** One attempt of one unit, from creating its work revision to publishing or ending it. Never throws. */
   async #unit(work: WorkEnvelope): Promise<void> {
     const ref: WorkRef = { id: work.id, revision: work.revision };
-    const supersede = this.#stale.get(key(ref));
     let attemptId: Id | null = null;
     let outcome: WorkerOutcome | undefined;
     try {
-      if (!this.#store.ledger.getWork(ref)) {
-        this.#store.ledger.createWork({ ...work, state: 'ready', activeAttemptId: null, coordinatorEpoch: this.#store.epoch, createdAt: now() } as WorkEnvelope);
-      }
-      const ordinal = (this.#history.attemptCount.get(key(ref)) ?? 0) + 1;
+      const row = this.#store.ledger.getWork(ref);
+      if (!row) this.#create(work, 'ready');
+      else if (row.state === 'pending') this.#store.ledger.setWorkState(ref, 'ready');
+      const ordinal = this.#store.ledger.listAttempts(ref).length + 1;
       const id = attemptIdFor(ref, ordinal);
       outcome = await this.#service.run({
         adapterId: this.#plan.adapterFor(work), attemptId: id, work: ref, inputs: this.#plan.inputsFor(work),
-        signal: this.#cancel.signal, intents: this.#journal,
+        signal: this.#cancel.signal, intents: this.#intents, workers: this.#workers, resources: work.resources,
         onWorker: worker => {
           this.#store.ledger.startAttempt({
             schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
             worker, startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running',
-          }, { supersede: supersede !== undefined });
+          });
           attemptId = id;
-          this.#history.attemptCount.set(key(ref), ordinal);
-          this.#stale.delete(key(ref));
           this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
         },
       });
@@ -249,11 +275,14 @@ export class Coordinator {
 
   #end(ref: WorkRef, attemptId: Id, state: 'failed' | 'canceled', code: string, detail?: Readonly<Record<string, unknown>>): void {
     this.#failures.push({ work: ref, attemptId, code, ...(detail ? { detail } : {}) });
-    const attempts = this.#history.attemptCount.get(key(ref)) ?? 1;
+    let attempts = 1;
+    try { attempts = this.#store.ledger.listAttempts(ref).length; } catch { /* the store is gone; the end below fails too */ }
+    const again = retryable(code, attempts, this.#retry);
     // A canceled attempt leaves its work ready: cancellation is the run's decision, not the work's failure.
-    const workState = state === 'canceled' || retryable(code, attempts, this.#retry) ? 'ready' : 'failed';
+    const workState = state === 'canceled' || again ? 'ready' : 'failed';
     try {
-      this.#store.ledger.endAttempt({ work: ref, attemptId, state, endedAt: now(), workState });
+      this.#store.ledger.endAttempt({ work: ref, attemptId, state, endedAt: now(), workState,
+        error: { code: catalogCode(code), retryable: again, ...(detail ? { detail: boundedDetail(detail) } : {}) } });
     } catch (error) {
       // Fenced off (a newer epoch, or the attempt already ended): that coordinator's recovery owns it now.
       this.#failures.push({ work: ref, attemptId, code: codeOf(error) });
@@ -266,32 +295,47 @@ export class Coordinator {
     if (!this.#cancelRequested && !this.#pauseRequested) this.#failedUnstarted.set(key(ref), code);
   }
 
+  #work(ref: WorkRef): WorkEnvelope {
+    return this.#plan.works.find(w => w.id === ref.id && w.revision === ref.revision)!;
+  }
+
   #committed(): Map<string, CommittedUnit> {
     const m = new Map<string, CommittedUnit>();
     for (const w of this.#plan.works) {
       const ref = { id: w.id, revision: w.revision };
       const row = this.#store.ledger.getWork(ref);
+      const attempts = row ? this.#store.ledger.listAttempts(ref).length : 0;
       const unstarted = this.#failedUnstarted.get(key(ref));
-      const attempts = this.#history.attemptCount.get(key(ref)) ?? 0;
+      const planHold = (w.state === 'disabled-by-policy' || w.state === 'blocked') ? w.state : undefined;
       if (unstarted) { m.set(key(ref), { created: !!row, workState: 'failed', attempts, lastFailure: unstarted }); continue; }
+      if (!row && planHold) { m.set(key(ref), { created: false, workState: planHold, attempts: 0 }); continue; }
       m.set(key(ref), row ? { created: true, workState: row.state, attempts } : { created: false, attempts });
     }
     return m;
   }
 
   #runState(): RunState | undefined {
-    this.#history = readHistory(this.#store);
-    return this.#history.runs.get(this.#plan.run.id) as RunState | undefined;
+    return this.#store.ledger.getRun(this.#plan.run.id)?.state;
   }
 
   #summary(): RunSummary {
     const units = this.progress();
-    const state = this.#runState() ?? 'planned';
+    const run = this.#store.ledger.getRun(this.#plan.run.id);
     let published = 0;
     for (const w of this.#plan.works) if (this.#store.ledger.getPublication({ id: w.id, revision: w.revision })) published++;
-    return { runId: this.#plan.run.id, state, ...(this.#outcome ? { outcome: this.#outcome } : {}), units, failures: [...this.#failures], recovery: this.recovery, published };
+    return { runId: this.#plan.run.id, state: run?.state ?? 'planned', ...(run?.outcome ? { outcome: run.outcome } : {}), units,
+      failures: [...this.#failures], recovery: this.recovery, published, clean: this.recovery.clean };
   }
 }
 
+const CATALOG = /^sentinel\.[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)+$/;
+const catalogCode = (code: string): string => (CATALOG.test(code) ? code : 'sentinel.execution.workerExited');
+const planReason = (w: WorkEnvelope): string | undefined => ('reasonCode' in w && typeof w.reasonCode === 'string' ? w.reasonCode : undefined);
 const codeOf = (e: unknown): string => (isExecutionError(e) || e instanceof LedgerError ? e.code : (e as { code?: string })?.code) ?? 'sentinel.execution.workerExited';
 const detailOf = (e: unknown): Readonly<Record<string, unknown>> | undefined => (isExecutionError(e) ? e.detail : undefined);
+
+/** The detail as recorded: safe structured context only, cut to a bound rather than refused. */
+function boundedDetail(detail: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const plain = JSON.parse(JSON.stringify(detail)) as Record<string, unknown>;
+  return canonicalJsonBytes(plain).byteLength <= MAX_DETAIL_BYTES ? plain : { truncated: true, keys: Object.keys(plain).slice(0, 16) };
+}

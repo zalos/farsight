@@ -12,7 +12,7 @@ import type { WorkEnvelope } from '../contracts/work.js';
 import { ExecutionError, type ExecutionErrorCode } from './errors.js';
 import { ACCEPTED_CEILINGS } from './registry.js';
 
-export type UnitState = 'waiting' | 'ready' | 'running' | 'published' | 'failed' | 'blocked';
+export type UnitState = 'waiting' | 'ready' | 'running' | 'published' | 'failed' | 'blocked' | 'disabled';
 
 /** What the ledger has committed about one plan unit (absent from the ledger: not created yet). */
 export interface CommittedUnit {
@@ -97,10 +97,12 @@ export function decide(works: readonly WorkEnvelope[], committed: ReadonlyMap<st
     const deps = w.dependencies.map(d => out.get(key(d))!);
     if (c?.workState === 'published') { out.set(key(ref), { ref, state: 'published' }); continue; }
     if (c?.workState === 'running') { out.set(key(ref), { ref, state: 'running' }); continue; }
+    if (c?.workState === 'disabled-by-policy') { out.set(key(ref), { ref, state: 'disabled', reason: 'disabled by policy' }); continue; }
+    if (c?.workState === 'blocked') { out.set(key(ref), { ref, state: 'blocked', reason: 'held in the ledger' }); continue; }
     if (c?.workState === 'failed' || (c?.created && c.workState === 'ready' && c.attempts >= policy.maxAttempts)) {
       out.set(key(ref), { ref, state: 'failed', reason: String(c.lastFailure ?? 'sentinel.execution.workerExited') }); continue;
     }
-    const blocker = deps.find(d => d.state === 'failed' || d.state === 'blocked');
+    const blocker = deps.find(d => d.state === 'failed' || d.state === 'blocked' || d.state === 'disabled');
     if (blocker) { out.set(key(ref), { ref, state: 'blocked', reason: `dependency ${key(blocker.ref)} ${blocker.state}` }); continue; }
     out.set(key(ref), { ref, state: deps.every(d => d.state === 'published') ? 'ready' : 'waiting' });
   }

@@ -315,3 +315,22 @@ test('an ambiguous create is reconciled by its owner nonce, and nothing else is 
     assert.equal(docker('ps', '--all', '--quiet', '--filter', `label=${LABELS.owner}=${owner2}`).stdout.trim(), '', `canceled at ${ms} ms`);
   }
 });
+
+test('a work resource policy lowers the container limits, and the kernel enforces them', { skip }, async t => {
+  const policy = (p: Record<string, number>) => ({ deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304, ...p });
+  const runWith = (behaviour: string, resources: Record<string, number>) =>
+    runAttempt(store, s.work, registryFor(behaviour), { adapterId: `canary-${behaviour}`, attemptId: `attempt-p${++n}`, work, inputs: captured, resources: policy(resources) }, true);
+  // The adapter allows 256 MiB; the policy's 64 MiB is what the container gets, and the worker is stopped by it.
+  const memory = await runWith('memory', { memoryBytes: 64 * 1024 * 1024 });
+  assert.equal(memory.code, 'sentinel.execution.resourceExceeded');
+  assert.equal(memory.invocation.record.limits.memoryBytes, 64 * 1024 * 1024);
+  // A fractional CPU quota: three busy processes get about half a CPU.
+  const cpu = await runWith('cpu', { cpuQuota: 0.5 });
+  const ratio = canary(cpu.diagnostics.text).cpuRatio;
+  assert.ok(ratio > 0.2 && ratio <= 0.65, `used ${ratio} CPUs under a 0.5 quota`);
+  // Processes: the policy's 16 is below the adapter's 64.
+  const pids = await runWith('pids', { maxPids: 16 });
+  assert.ok(canary(pids.diagnostics.text).started < 16, JSON.stringify(canary(pids.diagnostics.text)));
+  t.diagnostic(`policy enforcement oom=${memory.container?.state?.oomKilled} cpu=${ratio}/0.5 forked=${canary(pids.diagnostics.text).started}/16`);
+  for (const o of [memory, cpu, pids]) assert.equal(o.cleanup, 'removed-owned-container');
+});

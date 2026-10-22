@@ -11,9 +11,9 @@ import { spawnSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { COORDINATOR_BOUNDARIES } from '../dist/execution/coordinator.js';
-import { processStartTime, readHistory } from '../dist/execution/recovery.js';
+import { argumentsOf, WorkerFiles } from '../dist/execution/recovery.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
-import { publications } from './coordinator-helpers.ts';
+import { ledgerState, publications, syntheticPlan } from './coordinator-helpers.ts';
 
 const full = process.env.SENTINEL_RECOVERY_FULL === '1';
 const smoke = process.env.SENTINEL_RECOVERY_SMOKE === '1';
@@ -28,8 +28,9 @@ const runChild = (root: string, killAt: string, unit = 'work-B', behaviourB = ''
 
 test('the kill matrix has its prerequisites', { skip }, () => {
   // Recovery verifies a dead coordinator's child workers through the fixed process table reader.
-  accessSync('/bin/ps', constants.X_OK);
-  assert.notEqual(processStartTime(process.pid), null, 'the process table reader reports this process');
+  if (process.platform === 'darwin') accessSync('/bin/ps', constants.X_OK);
+  const argv = argumentsOf(process.pid);
+  assert.ok(Array.isArray(argv) && argv.length > 0, 'the kernel argument list of this process is readable');
 });
 
 for (const boundary of COORDINATOR_BOUNDARIES) {
@@ -49,17 +50,13 @@ for (const boundary of COORDINATOR_BOUNDARIES) {
         const counts = publications(store, 'run-e4');
         assert.deepEqual([...counts.keys()].sort(), ['work-A', 'work-B', 'work-C', 'work-D'], `rep ${rep}: nothing lost`);
         assert.ok([...counts.values()].every(n => n === 1), `rep ${rep}: nothing duplicated ${JSON.stringify([...counts])}`);
-        const h = readHistory(store);
-        assert.equal([...h.attempts.values()].filter(a => a.state === 'running').length, 0, `rep ${rep}: no attempt left running`);
-        assert.equal(h.openStages.size, 0, `rep ${rep}: no stage left open`);
-        // Every worker the dead coordinator started is gone (recovery stopped it, or it ended on its own).
-        for (const [id] of h.attempts) {
-          const w = store.ledger.getAttempt(id)?.envelope.worker;
-          if (w?.kind !== 'owned-child') continue;
-          const started = processStartTime(w.pid);
-          assert.ok(started === null || Math.abs(started - Date.parse(w.processStartedAt)) > 3_000, `rep ${rep}: worker ${w.pid} survived`);
-        }
-        if (rep === 0) t.diagnostic(`${boundary}: recovery ${JSON.stringify({ stale: summary.recovery.staleAttempts.length, stopped: summary.recovery.stoppedChildren.length, aborted: summary.recovery.abortedStages.length })}`);
+        const l = ledgerState(store, syntheticPlan(s.root).plan);
+        assert.equal(l.running, 0, `rep ${rep}: no attempt left running`);
+        assert.equal(l.openStages, 0, `rep ${rep}: no stage left open`);
+        // Every worker identity was settled: recovery proved it stopped, or the worker exited and was reaped.
+        assert.deepEqual(new WorkerFiles(store.storePath).list(), { records: [], unresolved: [] }, `rep ${rep}: no worker obligation left`);
+        assert.equal(summary.clean, true, `rep ${rep}: recovery is clean`);
+        if (rep === 0) t.diagnostic(`${boundary}: recovery ${JSON.stringify({ interrupted: summary.recovery.interrupted.length, stopped: summary.recovery.stoppedWorkers.length, aborted: summary.recovery.abortedStages.length })}`);
       } finally { store.close(); }
     }
   });
@@ -72,16 +69,17 @@ test(`a worker that outlives its dead coordinator is stopped by verified identit
     assert.equal(runChild(s.root, 'after-attempt-start', 'work-B', 'linger-ok').signal, 'SIGKILL');
     // The orphan is alive before recovery runs.
     const store0 = await storeIn(s.root);
-    const h0 = readHistory(store0);
-    const orphan = [...h0.attempts].find(([, a]) => a.work.id === 'work-B' && a.state === 'running');
-    const worker = orphan && store0.ledger.getAttempt(orphan[0])?.envelope.worker;
+    const orphan = store0.ledger.listAttempts({ id: 'work-B', revision: 1 }).find((a: any) => a.state === 'running');
+    const worker = orphan && store0.ledger.getAttempt(orphan.id)?.envelope.worker;
+    const [journaled] = new WorkerFiles(store0.storePath).list().records;
     store0.close();
-    assert.ok(worker?.kind === 'owned-child' && processStartTime(worker.pid) !== null, 'the orphaned worker is running');
+    assert.ok(worker?.kind === 'owned-child', 'the attempt recorded its worker');
+    assert.ok(argumentsOf(worker.pid)?.includes(`--sentinel-token=${journaled.token}`), 'the orphaned worker is running with its token');
     const finished = runChild(s.root, 'none', 'work-B', 'linger-ok');
     assert.equal(finished.status, 0, finished.stderr.slice(0, 500));
     const summary = JSON.parse(finished.stdout.trim().split('\n').at(-1)!);
-    assert.deepEqual(summary.recovery.stoppedChildren, [worker!.pid], 'recovery stopped exactly the recorded worker');
-    assert.equal(processStartTime(worker!.pid), null);
+    assert.deepEqual(summary.recovery.stoppedWorkers, [worker!.pid], 'recovery stopped exactly the recorded worker');
+    assert.ok(!argumentsOf(worker!.pid)?.includes(`--sentinel-token=${journaled.token}`), 'it is gone');
     assert.equal(summary.published, 4);
   }
 });

@@ -15,4 +15,4 @@ const hooks = killAt && killAt !== 'none'
 const c = await Coordinator.open({ store, plan, registry, scratchRoot: join(root!, 'work'), ...(hooks ? { hooks } : {}) });
 const summary = await c.run();
 store.close();
-process.stdout.write(`${JSON.stringify({ state: summary.state, published: summary.published, recovery: summary.recovery })}\n`);
+process.stdout.write(`${JSON.stringify({ state: summary.state, published: summary.published, clean: summary.clean, recovery: summary.recovery })}\n`);

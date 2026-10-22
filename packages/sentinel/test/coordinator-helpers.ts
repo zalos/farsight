@@ -6,7 +6,7 @@ import { builtInRegistry, inputs } from './execution-helpers.ts';
 
 const digest = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 
-export function syntheticPlan(root: string, behaviours: Record<string, string> = {}, options: { runId?: string; limits?: Record<string, number>; argument?: string } = {}) {
+export function syntheticPlan(root: string, behaviours: Record<string, string> = {}, options: { runId?: string; limits?: Record<string, number>; argument?: string; resources?: Record<string, Record<string, number>>; held?: Record<string, string> } = {}) {
   const runId = options.runId ?? 'run-e4';
   const units = ['A', 'B', 'C', 'D'];
   const deps: Record<string, string[]> = { A: [], B: ['A'], C: ['A'], D: ['B', 'C'] };
@@ -24,8 +24,9 @@ export function syntheticPlan(root: string, behaviours: Record<string, string> =
     stage: { contract: 'sentinel.stage.synthetic', contractVersion: 'draft-1', kind: 'coded', implementationDigest: digest(`stage-${u}`) },
     inputFingerprint: digest(`inputs-${u}`), influenceManifest: digest(`influence-${u}`),
     dependencies: deps[u]!.map(d => ({ id: `work-${d}`, revision: 1 })),
-    resources: { deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304 },
-    coordinatorEpoch: 'epoch-planning', createdAt: '2026-10-22T00:00:00Z', state: 'pending', activeAttemptId: null,
+    resources: { deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304, ...(options.resources?.[u] ?? {}) },
+    coordinatorEpoch: 'epoch-planning', createdAt: '2026-10-22T00:00:00Z', activeAttemptId: null,
+    ...(options.held?.[u] ? { state: 'disabled-by-policy', reasonCode: options.held[u] } : { state: 'pending' }),
   }));
   const plan = {
     run, works,
@@ -46,4 +47,16 @@ export function publications(store: any, runId: string) {
     after = page.cursor;
   }
   return counts;
+}
+
+/** What the ledger holds for the plan's units, through its typed reads only. */
+export function ledgerState(store: any, plan: any) {
+  const attempts: Array<{ work: string; id: string; state: string; epoch: string }> = [];
+  for (const w of plan.works) for (const a of store.ledger.listAttempts({ id: w.id, revision: w.revision })) attempts.push({ work: w.id, ...a });
+  return {
+    attempts,
+    running: attempts.filter(a => a.state === 'running').length,
+    openStages: store.ledger.listOpenStages(500).length,
+    work: Object.fromEntries(plan.works.map((w: any) => [w.id, store.ledger.getWork({ id: w.id, revision: w.revision })])),
+  };
 }

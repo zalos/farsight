@@ -115,6 +115,11 @@ switch (behavior) {
         if (!existsSync(argument)) { writeFileSync(argument, 'attempted'); process.exit(5); }
         result(start, honestWork(start)); break;
       }
+      case 'big-artifact': {
+        // One artifact larger than the object store's 16 MiB decoded cap: verified here, refused when stored.
+        const bytes = Buffer.alloc(17 * 1024 * 1024, 3);
+        result(start, [writeArtifact(bytes)]); break;
+      }
       case 'linger-ok': result(start, honestWork(start)); await sleep(20); process.exit(0);
       case 'slow-ok': await sleep(1500); result(start, honestWork(start)); break;
       case 'stderr-some': process.stderr.write('d'.repeat(2000)); result(start, honestWork(start)); break;

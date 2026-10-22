@@ -12,18 +12,22 @@
 // or framing error, an output or stdout budget, or the worker exiting. Every path stops the worker, removes its
 // container by exact identity and confirms the removal; the owner's close path does the same synchronously.
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, closeSync, constants, copyFileSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
 import type { AttemptWorker } from '../contracts/attempt.js';
 import type { ProtocolMessage, ResultMessage } from '../contracts/protocol.js';
+import type { ResourcePolicy } from '../contracts/work.js';
+import type { WorkerJournal, WorkerIdentity } from './recovery.js';
+import { kernelStartOf, tokenArgument } from './recovery.js';
+import { syncDirectory } from './durability.js';
 import type { OwnedResource } from '../store/owner.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError, isExecutionError, type ExecutionErrorCode } from './errors.js';
 import { ContainerBackend, containerUser, intentDetail, ownerNonce, type BackendFacts, type CleanupState, type ImagePin } from './isolation.js';
 import { BoundedCapture, spawnWorker, type WorkerProcess } from './processes.js';
 import { encodeFrame, FrameDecoder, WorkerSession } from './protocol.js';
-import { moduleDigestOf, type AdapterRegistry, type TrustedAdapter } from './registry.js';
+import { effectiveLimits, moduleDigestOf, type AdapterRegistry, type TrustedAdapter } from './registry.js';
 
 /** The part of the store owner the supervisor needs; a StoreOwner satisfies it. */
 export interface SupervisorOwner {
@@ -59,6 +63,10 @@ export interface AttemptRequest {
   onWorker?: (worker: AttemptWorker) => void;
   /** A durable journal of container intents (recovery, PR 08): recorded before a create, settled once removed. */
   intents?: IntentJournal;
+  /** A durable journal of built-in worker identities: recorded after spawn and before the worker acts. */
+  workers?: WorkerJournal;
+  /** The work's own resource policy; it lowers the adapter's limits (never raises them) for this attempt. */
+  resources?: ResourcePolicy;
 }
 
 export type OutcomeState = 'succeeded' | 'failed' | 'canceled' | 'timed-out';
@@ -153,7 +161,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   for (const input of request.inputs) copyVerified(input, join(inputDir, hexOf(input.id)));
   sealInputs(inputDir);
 
-  const limits = adapter.limits;
+  const limits = effectiveLimits(adapter.limits, request.resources);
+  const token = randomUUID();
   const deadlineAt = new Date(Date.now() + limits.timeoutMs).toISOString();
   const inputFingerprint = inputFingerprintOf(inputs);
   let image: ImagePin | undefined;
@@ -161,7 +170,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   if (adapter.kind === 'built-in' && moduleDigestOf(adapter.module) !== adapter.moduleDigest) {
     throw new ExecutionError('sentinel.execution.adapterIdentityMismatch', { adapter: adapter.id });
   }
-  const argv = adapter.kind === 'external' ? [...adapter.command] : [process.execPath, adapter.module, inputDir, outputDir];
+  const argv = adapter.kind === 'external' ? [...adapter.command] : [process.execPath, adapter.module, inputDir, outputDir, tokenArgument(token)];
   const environmentNames = adapter.kind === 'external'
     ? ['HOME', 'SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']
     : ['SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST'];
@@ -192,6 +201,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const labels = { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest };
   let containerId: string | undefined;
   let proc: WorkerProcess;
+  let identity: WorkerIdentity | undefined;
   const guard: { ownerClosed: boolean; createPending: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false, createPending: false };
   const backend = request.backend;
   const unregister = owner.registerResource({
@@ -252,17 +262,21 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     proc = b.startAttached(id);
   } else {
     // A built-in worker inherits nothing: its environment is exactly these four names.
-    proc = spawnWorker(process.execPath, [adapter.module, inputDir, outputDir], { cwd: workDir, env: {
+    proc = spawnWorker(process.execPath, [adapter.module, inputDir, outputDir, tokenArgument(token)], { cwd: workDir, env: {
       SENTINEL_INPUT: inputDir, SENTINEL_OUTPUT: outputDir, SENTINEL_ADAPTER_ID: adapter.id, SENTINEL_ADAPTER_DIGEST: adapter.digest,
     } });
     const pid = proc.child.pid;
     if (pid) outcome.worker = { kind: 'owned-child', pid, processStartedAt: proc.startedAt.toISOString() };
     try {
-      if (!outcome.worker) throw new ExecutionError('sentinel.execution.workerExited', { reason: 'no process id' });
+      if (!outcome.worker || !pid) throw new ExecutionError('sentinel.execution.workerExited', { reason: 'no process id' });
+      // The identity is durable before the attempt is recorded, so a crash at any later point leaves a verifiable worker.
+      identity = { attempt: request.attemptId, store: owner.storeId, epoch: owner.epoch, pid, token, kernelStart: kernelStartOf(pid) ?? '' };
+      request.workers?.record(identity);
       request.onWorker?.(outcome.worker);
     } catch (error) {
       proc.kill();
       await proc.exited;
+      if (identity) request.workers?.settle(identity);
       unregister();
       throw error;
     }
@@ -278,6 +292,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     proc.kill();
     const exit = await proc.exited;
     outcome.exit = { exitCode: exit.exitCode, exitSignal: exit.exitSignal };
+    // Reaped: the pid may now be anyone's, and the worker has no identity left to verify.
+    if (identity) request.workers?.settle(identity);
     if (containerId) {
       const backend = request.backend!;
       const state = await backend.state(containerId, labels).catch(() => null);
@@ -495,7 +511,7 @@ export function verifyOutputs(dir: string, result: ResultMessage, limit: number)
     if (digestFile(path) !== a.id) mismatch('output digest differs');
     outputs.push({ id: a.id, mediaType: a.mediaType, bytes: a.bytes, path });
   }
-  try { const fd = openSync(dir, constants.O_RDONLY); try { fsyncSync(fd); } finally { closeSync(fd); } } catch { /* best effort */ }
+  syncDirectory(dir);
   return outputs;
 }
 
