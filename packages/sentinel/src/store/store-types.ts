@@ -183,14 +183,32 @@ export interface EndAttemptInput {
   endedAt: Timestamp;
   /** The work's state afterwards: retry-eligible (`ready`) or terminal (`failed`). */
   workState: 'ready' | 'failed';
+  /**
+   * Why it ended, recorded in the final envelope (code, retryable) and, bounded, beside it (detail). The detail is
+   * safe structured context, at most 4 KiB as JSON; never an input's contents or a credential.
+   */
+  error?: AttemptError;
   /** The usage observed at the end; `canceled-after-spend` needs confirmed usage, here or from the start. */
   usage?: AttemptUsage;
   idempotency?: IdempotencyRef;
 }
 
+/** An ended attempt's recorded failure. */
+export interface AttemptError {
+  /** A catalog key (sentinel.<area>.<word>). */
+  code: string;
+  retryable: boolean;
+  /** An accepted artifact holding longer diagnostics, when there is one. */
+  diagnostics?: ArtifactId;
+  detail?: Record<string, unknown>;
+}
+
+/** A work revision's held or released state, set by the coordinator from the plan's dependency decisions. */
+export type WorkTransition = 'ready' | 'blocked' | 'disabled-by-policy';
+
 export const LEDGER_EVENT_KINDS = [
   'epoch-opened', 'run-created', 'run-state', 'work-created', 'attempt-started', 'attempt-ended',
-  'work-published', 'staging-registered', 'staging-aborted', 'report-pinned', 'snapshot-admitted',
+  'work-published', 'staging-registered', 'staging-aborted', 'report-pinned', 'snapshot-admitted', 'work-state',
 ] as const;
 export type LedgerEventKind = (typeof LEDGER_EVENT_KINDS)[number];
 

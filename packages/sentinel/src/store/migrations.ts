@@ -309,10 +309,40 @@ ${APPEND_ONLY('snapshots', 'DELETE')}
 ${APPEND_ONLY('snapshots', 'UPDATE')}
 `;
 
+// Durable execution (PR 08): a reason beside a held work state, a bounded error detail beside an ended attempt,
+// and the event log rebuilt (as in V2) to admit the work-state event.
+const EVENT_KINDS_V3 = `${EVENT_KINDS_V2},'work-state'`;
+const V3 = `
+ALTER TABLE work_units ADD COLUMN state_reason TEXT
+  CHECK (state_reason IS NULL OR (length(state_reason) BETWEEN 1 AND 128));
+ALTER TABLE attempts ADD COLUMN error_detail TEXT
+  CHECK (error_detail IS NULL OR (json_valid(error_detail) AND length(CAST(error_detail AS BLOB)) <= 4096));
+CREATE TABLE events_next (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN (${EVENT_KINDS_V3})),
+  run_id TEXT REFERENCES runs(id),
+  work_id TEXT,
+  work_revision INTEGER,
+  coordinator_epoch TEXT NOT NULL REFERENCES epochs(epoch),
+  at TEXT NOT NULL,
+  payload TEXT NOT NULL CHECK (json_valid(payload) AND length(CAST(payload AS BLOB)) <= 16384),
+  FOREIGN KEY (work_id, work_revision) REFERENCES work_units(id, revision),
+  CHECK ((work_id IS NULL) = (work_revision IS NULL))
+) STRICT;
+INSERT INTO events_next (sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload)
+  SELECT sequence, kind, run_id, work_id, work_revision, coordinator_epoch, at, payload FROM events ORDER BY sequence;
+DROP TABLE events;
+ALTER TABLE events_next RENAME TO events;
+CREATE INDEX events_by_run ON events(run_id, sequence);
+${APPEND_ONLY('events', 'DELETE')}
+${APPEND_ONLY('events', 'UPDATE')}
+`;
+
 /** The shipped migrations, in order. Never edit a released step: add the next number. */
 export const LEDGER_MIGRATIONS: readonly Migration[] = Object.freeze([
   { version: 1, name: 'foundation', sql: V1 },
   { version: 2, name: 'snapshot-admission', sql: V2 },
+  { version: 3, name: 'durable-execution', sql: V3 },
 ]);
 
 export const migrationChecksum = (m: Migration): string =>
