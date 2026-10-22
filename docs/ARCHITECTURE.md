@@ -1449,7 +1449,7 @@ appears. Refusal reasons never name a path. The minimal scanner report's other n
 uses the conservative projection above. The context-graph attestation limitation above is unchanged.
 
 44. **Sentinel runs the four framework packs as one supervised inspection, and their facts are never findings (2026-10-22).**
-`farsight-sentinel/frameworks/controls` turns the control facts the Next, Express, Nest and Spring packs (ADRs 30–32,
+The internal `frameworks/controls` adapter turns the control facts the Next, Express, Nest and Spring packs (ADRs 30–32,
 27) emit for one captured source into the coverage of three inspection rule families, `sentinel.controls.authentication`,
 `.authorization` and `.input-validation`. The checks are repository-scoped, one per family and source: the packs read
 configuration, manifests and code across the source, and a repository check's sealed inputs are every captured file,
@@ -1490,10 +1490,16 @@ Node path pins `oxc-parser` 0.138.0 and audits its three computed loaders (SHA-2
   supported native Node runtime and is not selected by the worker's fixed Node executable or four-name environment.
 
 Unused workspace fixture generators are byte-pinned data, not worker entry points. Changes to these dependency
-bytes require this audit and test pins to be reviewed. No arbitrary computed external loader is supported. Before
-canonical packaged execution is enabled, the actual generated chunks, require calls, worker path, entry naming and
-installed dependency closure must be audited and qualified again; the source-layout worker tests do not prove that
-future package layout.
+bytes require this audit and test pins to be reviewed. No arbitrary computed external loader is supported. In the canonical tarball, the fixed `dist/frameworks/controls/worker.mjs` is a separately hashed package asset.
+The closure pins every regular file and folder listing in the package's real `dist` tree, rejects inner links and
+nested dependency shadows there, and resolves all declared installed dependencies from every emitted module folder.
+Generated require aliases are therefore not a completeness boundary. The own-package resolver starts from this
+module and walks a bounded number of parents; it never pins the consumer's tree. Private generated entries live
+under the owner's trust directory, outside dist, with full entry-source SHA-256 names. They are atomically published
+without replacement. A second installation has another identity; moving or changing an installation requires a new
+plan. Root/store import and CLI help do not load the native parser; closure registration does. The installed npm-only
+consumer audits all emitted dist files and exercises real transitive dependency and chunk drift refusal before
+worker import. The dependency loader audit above still applies; this is no claim of arbitrary loader completeness.
 
 This detects a changed build or installation, not a writer racing the check and the import. The module runs through
 the launch gate with only the worker environment and its sealed inputs (the job, the snapshot envelope, the source's retained
@@ -1533,5 +1539,11 @@ this snapshot, takes the extent from the planner's own `surfacesFromIndex`, and 
 `sentinel-driver-report/draft-1` record (`kind: framework-inspection`) whose canonical digest every covered check
 names, plus each pack's envelopes, all source-derived. When no pack recognises a framework it models, every check is
 partial (`sentinel.controls.frameworkNotRecognized`), even over an empty extent: routes served another way were not
-inspected. Not decided here: the capability-table, profile, CLI and report wiring; per-surface checks and the
-assessments policy requires of them (PR 20). Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.
+inspected. Canonical availability requires the exact owner-promoted shipped pack and its definition digests, independently
+of merely registering the built-in code. External tools remain container-only. The canonical report authenticates
+the accepted attempt, invocation, sealed job, original source analysis ids, raw library output and normalized report,
+recomputes the fact fold and coverage, and carries one optional `inspections` section through JSON, Markdown,
+offline HTML and SARIF properties. Facts create no SARIF results. The minimal scanner slice uses that same
+privacy-projected section instead of raw controls envelopes. Every new source-controlled identity, version and
+frontier passes through the coarse secret-run projection before rendering; required partial checks remain gaps.
+Per-surface execution and assessment policy (PR 20) remain separate work. Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.

@@ -146,6 +146,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
   // This package's own executable and shipped rule packs, found from the module's folder upward.
   'service/package-paths.js': ['node:fs', 'node:path', 'node:url'],
+  'service/framework-adapter.js': ['node:path'],
+  'service/inspection-report.js': ['@farsight/core/dist/strings.js', '@farsight/graph'],
   // The CLI's canonical path: the planner, admission, bootstrap and coordinator in their order; digests only.
   'service/canonical.js': ['node:crypto'],
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
@@ -202,7 +204,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   // The framework inspection worker (ADR 44): sealed inputs by digest, one output file; it runs only as its own entry.
-  'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'oxc-parser'],
+  'frameworks/controls/closure.js': ['node:crypto', 'node:fs', 'node:module', 'node:path', 'node:url', 'require:oxc-parser'],
   'frameworks/controls/driver.js': ['node:url'],
   'frameworks/controls/worker.js': ['node:crypto', 'node:fs', 'node:url'],
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
@@ -223,6 +225,7 @@ test('the library imports only its reviewed modules, and nothing that could star
       text = text.replace(template, '');
     }
     const specs = new Set<string>();
+    for (const m of text.matchAll(/\bcreateRequire\(import\.meta\.url\)\(['"]([^'"]+)['"]\)/g)) specs.add(`require:${m[1]}`);
     for (const m of text.matchAll(/(?:^|[\s;])(?:import|export)\s[^;'"]*?from\s*['"]([^'"]+)['"]|^\s*import\s*['"]([^'"]+)['"]/gm)) {
       const spec = m[1] ?? m[2]!;
       if (!spec.startsWith('.')) specs.add(spec);

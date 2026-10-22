@@ -37,7 +37,7 @@ export const CONTROLS_ENVELOPE_SCHEMA = 'sentinel-controls/draft-1';
 const DRIVER_MODULE = fileURLToPath(import.meta.url);
 
 /** The exact versions each library models, from the libraries themselves. */
-const VERSIONS: Readonly<Record<FrameworkName, Readonly<Record<string, string>>>> = deepFreeze({
+export const CONTROLS_MODELED_VERSIONS: Readonly<Record<FrameworkName, Readonly<Record<string, string>>>> = deepFreeze({
   next: { ...NEXT_SUPPORT.versions }, express: { express: EXPRESS_SUPPORT.versions.express }, nest: { ...NEST_PACK.versions },
   spring: { 'spring-boot': SPRING_SUPPORT.versions.springBoot, 'spring-security': SPRING_SUPPORT.versions.springSecurity },
 });
@@ -144,7 +144,7 @@ export function frameworkControlsAdapter(options: { readonly entryDir: string; r
       }
       const checks = r.checks.map(c => (!recognised && c.state === 'complete' ? { ...c, state: 'partial' as const, reasons: ['sentinel.controls.frameworkNotRecognized'] } : c));
       const answered = (l: LibraryOutcome) => [...new Set(l.envelopes.flatMap(e => e.facts.map(f => f.property)))].sort();
-      const scope = Object.fromEntries(FRAMEWORKS.map(f => [f, { versions: VERSIONS[f], properties: answered(libraries.find(l => l.framework === f)!) }])) as Record<FrameworkName, { versions: Record<string, string>; properties: string[] }>;
+      const scope = Object.fromEntries(FRAMEWORKS.map(f => [f, { versions: CONTROLS_MODELED_VERSIONS[f], properties: answered(libraries.find(l => l.framework === f)!) }])) as Record<FrameworkName, { versions: Record<string, string>; properties: string[] }>;
       const report = {
         ...inspectionReport({ adapter: FRAMEWORK_CONTROLS_ADAPTER_ID, runId: ctx.plan.runId, snapshotId: ctx.plan.pins.snapshotId,
           work: { id: ctx.unit.id, revision: ctx.unit.revision }, attemptId: verified.result.attemptId, sourceId: a.sourceId,

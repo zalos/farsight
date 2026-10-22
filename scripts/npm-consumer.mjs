@@ -24,6 +24,8 @@ export function cleanNpmEnv(scratch, base = process.env) {
     npm_config_userconfig: userconfig, npm_config_globalconfig: globalconfig,
     npm_config_cache: join(scratch, 'npm-cache'), npm_config_update_notifier: 'false',
     npm_config_audit: 'false', npm_config_fund: 'false',
+    // Explicit offline acceptance uses an already populated cache; npm itself still resolves installed dependencies.
+    ...(base.FARSIGHT_NPM_OFFLINE_CACHE ? { npm_config_cache: base.FARSIGHT_NPM_OFFLINE_CACHE, npm_config_offline: 'true', npm_config_ignore_scripts: 'true' } : {}),
     ...(base.FARSIGHT_NPM_REGISTRY ? { npm_config_registry: base.FARSIGHT_NPM_REGISTRY } : {}),
   };
 }

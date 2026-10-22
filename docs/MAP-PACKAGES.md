@@ -189,7 +189,7 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   adapter over sealed inputs), `closure.ts` (the generated entry that pins and checks the worker's byte closure), `driver.ts` (the trusted check
   driver over the coordinator's retained parser evidence), `facts.ts` (control facts → repository-scoped inspection coverage and the `framework-inspection` report,
   never a finding); rule pack `rules/framework-controls/`, words in core's `strings-sentinel-framework-controls.ts`, tests
-  in `test/framework-controls-{facts,worker,closure,driver}.test.ts`.
+  in `test/framework-controls-{facts,worker,closure,driver}.test.ts`. `service/framework-adapter.ts` gates canonical availability on the exact promoted pack; `service/inspection-report.ts` authenticates accepted inspection evidence; `reports/inspection.ts` formats the one disclosed report section. `test/framework-{canonical,report}.test.ts` and the npm-only `scripts/test-sentinel-framework-consumer.mjs` cover this integration.
   `test/store-integration.test.ts` drives the facade end to end across processes. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the

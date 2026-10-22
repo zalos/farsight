@@ -10,17 +10,26 @@
 // every listed file, package folder and resolution and exits, writing nothing, if any byte, link, folder listing,
 // resolution or absence differs.
 //
+// Packed execution pins the fixed shipped dist tree in full plus installed dependency metadata/actual lookups
+// from every emitted module folder; generated require aliases are not a closure-completeness boundary.
+//
 // What this guarantees: a changed build or installation after registration is refused, and any change to the
 // closure is a different adapter identity. It is not a defence against a process that can write the installation
 // between that check and the import, which could equally rewrite Node itself.
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, writeFileSync } from 'node:fs';
-import { isBuiltin } from 'node:module';
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs';
+import { createRequire, isBuiltin } from 'node:module';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { parseSync } from 'oxc-parser';
+import { frameworkWorkerPath, packageRoot } from '../../execution/assets.js';
+import { publishOnce, readPublished } from '../../service/publish-once.js';
 
-export const FRAMEWORK_CONTROLS_WORKER = fileURLToPath(new URL('./worker.js', import.meta.url));
+export const FRAMEWORK_CONTROLS_WORKER = frameworkWorkerPath();
+const MAX_CLOSURE_ENTRIES = 20_000;
+const MAX_CLOSURE_FILES = 10_000;
+const MAX_CLOSURE_BYTES = 256 * 1024 * 1024;
+const MAX_ENTRY_BYTES = 8 * 1024 * 1024;
+let parser: typeof import('oxc-parser') | undefined;
 /** The exit status of an entry whose closure differs from its manifest: no protocol byte is written. */
 export const CLOSURE_REFUSED = 71;
 
@@ -40,17 +49,13 @@ export interface WorkerClosure {
 }
 
 const sha = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
-const SPECIFIERS = [
-  /(?:^|[\s;}])(?:import|export)\s[^'";]*?\sfrom\s*(['"])([^'"\n]+)\1/g,
-  /(?:^|[\s;}])import\s*(['"])([^'"\n]+)\1/g,
-  /\bimport\(\s*(['"])([^'"\n]+)\1\s*\)/g,
-];
 const packageName = (spec: string) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!);
 
 /** Literal module loads, including createRequire aliases. Only shipped dependency code is inspected here; computed
  * native loaders in the pinned dependencies are audited separately in ADR 44. This is not an arbitrary JS resolver. */
 function literalLoads(path: string, bytes: Uint8Array): string[] {
-  const parsed = parseSync(path, Buffer.from(bytes).toString('utf8'));
+  // Loading the native parser is registration work, never a side effect of importing the CLI or service.
+  const parsed = (parser ??= createRequire(import.meta.url)('oxc-parser')).parseSync(path, Buffer.from(bytes).toString('utf8'));
   const program = typeof parsed.program === 'string' ? JSON.parse(parsed.program) : parsed.program;
   // An invalid bundled fixture is still byte-pinned; Node cannot execute it as a module.
   if (parsed.errors.length) return [];
@@ -103,7 +108,17 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
   const portable = new Map<string, string>();
   const modulePackages = new Set<string>();
   const root = realpathSync(dirname(dirname(dirname(entry))));
-  const add = (path: string, kind: ClosureEntry[1], value: string, name: string) => { out.set(`${path}\u0000${kind}`, [path, kind, value]); portable.set(name, `${kind}:${value}`); };
+  const countedFiles = new Set<string>();
+  let fileBytes = 0;
+  const readPinned = (path: string) => {
+    if (!countedFiles.has(path)) {
+      const size = lstatSync(path).size;
+      if (countedFiles.size >= MAX_CLOSURE_FILES || fileBytes + size > MAX_CLOSURE_BYTES) throw new Error('the framework closure exceeds its bounded file inventory');
+      countedFiles.add(path); fileBytes += size;
+    }
+    return readFileSync(path);
+  };
+  const add = (path: string, kind: ClosureEntry[1], value: string, name: string) => { if (out.size >= MAX_CLOSURE_ENTRIES) throw new Error('the framework closure exceeds its bounded entry inventory'); out.set(`${path}\u0000${kind}`, [path, kind, value]); portable.set(name, `${kind}:${value}`); };
   const where = (p: string) => relative(root, p);
   // Node's package lookup from `from`, as it runs it: every `node_modules/<name>` from the importing folder up to the
   // root, the first that is a folder wins and is then used by its real path. Each candidate before it is bound as
@@ -160,7 +175,7 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
         for (const n of names) if (n !== 'node_modules') walk(join(abs, n));
       }
       else if (st.isFile()) {
-        const bytes = readFileSync(abs);
+        const bytes = readPinned(abs);
         add(abs, 'file', sha(bytes), `${name}/${relative(dir, abs)}`);
         if (/\.[cm]?js$/.test(abs)) for (const spec of literalLoads(abs, bytes)) {
           if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('file:')) {
@@ -196,21 +211,49 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
     // Node loads a module by its real path and resolves its imports from there: a path through a link is bound to it.
     const real = realpathSync(abs);
     if (real !== abs) { add(abs, 'resolves', real, `module:${where(abs)}`); visitFile(real); return; }
-    const bytes = readFileSync(abs);
+    const bytes = readPinned(abs);
     add(abs, 'file', sha(bytes), relative(root, abs));
     // Its own path must stay real: Node resolves its relative imports and its package lookups from there.
     add(abs, 'resolves', abs, `real:${where(abs)}`);
     if (!/\.[cm]?js$/.test(abs)) return;
-    const text = bytes.toString('utf8');
-    for (const re of SPECIFIERS) for (const m of text.matchAll(re)) {
-      const spec = m[2]!;
+    for (const spec of literalLoads(abs, bytes)) {
       if (spec.startsWith('node:') || isBuiltin(spec)) continue;
-      if (spec.startsWith('.') || spec.startsWith('/')) visitFile(resolve(dirname(abs), spec));
+      if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('file:')) visitFile(spec.startsWith('file:') ? fileURLToPath(spec) : resolve(dirname(abs), spec));
       else visitPackage(packageName(spec), dirname(abs));
     }
   };
-  visitFile(realpathSync(entry));
-  for (const e of extra) visitFile(realpathSync(e));
+  const packed = entry === FRAMEWORK_CONTROLS_WORKER && entry.endsWith('.mjs');
+  if (packed) {
+    const own = realpathSync(packageRoot());
+    const dist = join(own, 'dist');
+    if (realpathSync(dist) !== dist || realpathSync(entry) !== join(dist, 'frameworks/controls/worker.mjs')
+      || extra.some(p => !realpathSync(p).startsWith(dist + sep))) throw new Error('the framework worker is not in the fixed shipped dist tree');
+    const manifest = join(own, 'package.json');
+    add(manifest, 'file', sha(readPinned(manifest)), 'sentinel/package.json');
+    const pkg = JSON.parse(readPinned(manifest).toString('utf8'));
+    const names = Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies });
+    const folders = new Set<string>();
+    const walkDist = (path: string) => {
+      const st = lstatSync(path);
+      if (st.isSymbolicLink()) throw new Error('the shipped dist tree contains a link');
+      if (st.isDirectory()) {
+        if (path !== dist && path.endsWith(sep + 'node_modules')) throw new Error('the shipped dist tree contains a dependency shadow');
+        const children = readdirSync(path).sort();
+        add(path, 'dir', sha(JSON.stringify(children)), `sentinel/${relative(own, path)}/`);
+        for (const name of children) walkDist(join(path, name));
+      } else if (st.isFile()) {
+        add(path, 'file', sha(readPinned(path)), `sentinel/${relative(own, path)}`);
+        if (/\.[cm]?js$/.test(path)) folders.add(dirname(path));
+      } else throw new Error('the shipped dist tree contains a non-file');
+    };
+    walkDist(dist);
+    // Generated require aliases are not a completeness boundary. Every emitted chunk is pinned, and every declared
+    // external dependency is resolved from every emitted module folder (including absent optional candidates).
+    for (const from of folders) for (const name of names) visitPackage(name, from);
+  } else {
+    visitFile(realpathSync(entry));
+    for (const e of extra) visitFile(realpathSync(e));
+  }
   for (const dir of modulePackages) if (!packages.has(dir)) throw new Error('the worker package loads an unbound dependency outside its pinned package root');
   const entries = [...out.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const digest = `sha256:${sha(JSON.stringify([...portable].sort((a, b) => (a[0] < b[0] ? -1 : 1))))}`;
@@ -241,16 +284,17 @@ await worker.runFrameworkControlsWorker();
 
 /**
  * Writes the entry for the closure as it is now into `dir` (an owner-private folder) and returns its path and
- * closure digest, for the adapter definition's `module`. The file name carries the closure digest; an existing file
+ * closure digest, for the adapter definition's `module`. The file name carries the full entry-source SHA-256; an existing file
  * of that name is reused only when its bytes are identical.
  */
 export function writeClosureEntry(dir: string, worker: string = FRAMEWORK_CONTROLS_WORKER, extra: readonly string[] = []): { module: string; closureDigest: string; files: number } {
   const closure = workerClosure(worker, extra);
   const source = closureEntrySource(closure, worker);
-  const module = join(dir, `framework-controls-${closure.digest.slice(7, 23)}.mjs`);
-  try { writeFileSync(module, source, { flag: 'wx', mode: 0o600 }); }
-  catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || readFileSync(module, 'utf8') !== source) throw e;
-  }
+  const name = `framework-controls-${sha(source)}.mjs`;
+  const module = join(dir, name);
+  const bytes = Buffer.from(source);
+  if (bytes.length > MAX_ENTRY_BYTES) throw new Error('the generated framework entry exceeds its bound');
+  publishOnce(dir, name, bytes);
+  if (!readPublished(dir, name, MAX_ENTRY_BYTES)?.equals(bytes)) throw new Error('the generated framework entry is not its exact published bytes');
   return { module, closureDigest: closure.digest, files: closure.entries.length };
 }

@@ -554,3 +554,22 @@ Desktop (Engine 29.2.1) and native AMD64 on Ubuntu 24.04.5 with Node 24.22.0. Th
 without skips, including Gitleaks positive/negative, omission, malformed output and redaction cases. The same
 image index, default rules and worker bytes apply; other platforms remain refused. This qualification does not
 complete the public scan command integration or add Git-history scanning.
+
+### Captured-source framework inspection
+
+The owner may promote `builtin:framework-controls` and add `sentinel.controls.authentication`,
+`sentinel.controls.authorization` and `sentinel.controls.input-validation` to adopted `mandatoryRules`.
+The canonical plan then assigns repository-scoped checks to the built-in inspection worker. It reads only the
+captured source and the coordinator's retained parser evidence; it never imports or runs application code.
+No external image is required for this inspection. External scanner adapters still require their pinned containers.
+
+`report <run> --full --format json|md|html|sarif` includes the same control answers, modeled library versions,
+unknowns and frontiers. Applying or not applying a control is a configuration fact, never a finding or a policy
+assessment. Unsupported and unrecognized sources remain incomplete, including empty route/page extents.
+Selected reruns use the original retained capture and may run after source removal. Secret-run withholding applies
+before every rendering; raw source-derived artifacts remain private evidence.
+
+The trusted child has enforced wall-clock, cancellation and output bounds. It is not network-isolated and has no
+hard memory, CPU or process limit; it runs only Sentinel's shipped code. The worker closure pins the complete shipped
+build and installed dependency bytes/lookups. Reinstalling, moving or changing those bytes requires a new plan.
+Public GUI configuration and policy assessment remain separate work.

@@ -1,3 +1,4 @@
+import { publicRegistry } from './scanner-profile.js';
 // The owner's local operations: adopt settings, plan, run in the foreground, bounded status and the preview report.
 // Each runs in the owner's own process (the owner CLI entrypoint) against the workspace's store; the requester is
 // the entrypoint's, never a request's. Every action that changes something is decided by PR 06's admission (three
@@ -263,11 +264,11 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
     if (!isFinalRunState(runStateIn(store, plan.runId))) {
       // A plan this installation cannot execute (another build's adapters, a rule no shipped adapter implements):
       // refused before anything starts; canonicalResult says why.
-      if (await notExecutableHere(store, plan.runId)) return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
+      if (await notExecutableHere(store, plan.runId, publicRegistry(ws.trustDir))) return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts, registry:publicRegistry(ws.trustDir), trustDir:ws.trustDir });
       const work = scratchUnder(ws);
       try { await executeRun(store, plan.runId, { scratchRoot: work, trustDir: ws.trustDir }); } finally { removeScratch(work); }
     }
-    return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
+    return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts, registry:publicRegistry(ws.trustDir), trustDir:ws.trustDir });
   });
 }
 
@@ -394,7 +395,7 @@ const MAX_STATUS_EVENTS = 50;
 
 /** The run's state and a bounded page of its committed events. Reads only. */
 export async function runStatus(ws: Workspace, options: { runId: string; after?: number; limit?: number }): Promise<CommandResult> {
-  return withStore(ws, async store => statusIn(store, options));
+  return withStore(ws, async store => statusIn(store, {...options, registry:publicRegistry(ws.trustDir)}));
 }
 
 /** The last committed state of a run, read in bounded pages, or null when the store has no such run. */
@@ -463,7 +464,7 @@ export async function reportIn(store: SentinelStore, ws: Workspace, options: { r
   void ws;
   const recorded = store.ledger.getRun(options.runId);
   if (!recorded) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
-  const scanner = await scannerReportOf(store, options.runId, options.now);
+  const scanner = await scannerReportOf(store, options.runId, options.now, {trustDir:ws.trustDir});
   if (scanner) return scanner;
   const findings = recorded.state === 'completed' ? await previewFindingsOf(store, options.runId) : undefined;
   if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId, ...runFailureFacts(store, options.runId) } });

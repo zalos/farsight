@@ -2,6 +2,7 @@
 // registers, every finding with its place, comparison and evidence, every gap, and the definitions. Untrusted text is
 // escaped; excerpts are fenced with a fence longer than any backtick run inside them, so source cannot end the block.
 import type { ReportEnvelope, ReportEvidence, FindingPlace } from '../contracts/index.js';
+import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, wordOf, defineOf, labelKey } from './words.js';
 
 /** Escapes Markdown control characters and strips anything that could start HTML. */
@@ -62,6 +63,10 @@ export function renderMarkdown(doc: ReportEnvelope): string {
       lines.push(`- **Outcome:** ${md(wordOf(doc, labelKey(h.label), 'business'))} (${md(wordOf(doc, h.reasonCode, 'business'))})`, `- **Code:** ${md(h.title.code)}`, `- **Rule family:** ${md(h.ruleFamilyId)}`);
       lines.push(...placeLines(doc, h.place), '');
     }
+  }
+  if(doc.inspections?.length){
+    lines.push(`## ${md(wordOf(doc,'sentinel.controls.reportHeading','business'))}`, '');
+    for(const i of inspectionText(doc))lines.push(`### ${md(i.source)}`, '', ...i.lines.map(l=>`- ${md(l)}`), '');
   }
   lines.push('## Gaps in the checks', '');
   if (!doc.gaps.length) lines.push(doc.completeness === 'complete' ? 'Every planned check covered its scope.' : 'Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.', '');

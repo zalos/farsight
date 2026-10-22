@@ -25,6 +25,8 @@ test('inherited npm configuration is dropped; config, cache and state are task-l
     assert.equal(env.npm_config_globalconfig, join(scratch, 'global-npmrc'));
     assert.equal(readFileSync(env.npm_config_userconfig, 'utf8'), '');
     assert.ok(env.npm_config_cache.startsWith(scratch) && env.XDG_CONFIG_HOME.startsWith(scratch));
+    const offline=cleanNpmEnv(scratch,{FARSIGHT_NPM_OFFLINE_CACHE:'/existing/cache'});
+    assert.equal(offline.npm_config_offline,'true');assert.equal(offline.npm_config_cache,'/existing/cache');assert.equal(offline.npm_config_ignore_scripts,'true');
     assert.equal(cleanNpmEnv(scratch, { FARSIGHT_NPM_REGISTRY: 'https://mirror.example.invalid/' }).npm_config_registry,
       'https://mirror.example.invalid/', 'an explicit registry is carried over');
   } finally { rmSync(scratch, { recursive: true, force: true }); }

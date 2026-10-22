@@ -4,6 +4,7 @@
 // Every untrusted string is escaped; navigation is internal anchors; a print stylesheet lays it out on paper; withheld
 // evidence shows its reason in place, so a redacted report stays readable. Both registers are shown together.
 import type { FindingPlace, ReportEnvelope, ReportEvidence } from '../contracts/index.js';
+import { inspectionText } from './inspection.js';
 import { COUNT_ORDER, countText, defineOf, wordOf, labelKey } from './words.js';
 
 export function esc(text: string): string {
@@ -100,6 +101,7 @@ ${f.evidence.map(e => evidenceHtml(doc, e)).join('\n')}
 <h2 id="findings">Findings</h2>
 ${doc.findings.length ? `<ul>${toc}</ul>${findings}` : '<p>No findings. Read the counts and gaps: no finding is not proof that nothing was missed.</p>'}
 ${historical}
+${doc.inspections?.length ? `<h2 id="inspections">${esc(wordOf(doc,'sentinel.controls.reportHeading','business'))}</h2>${inspectionText(doc).map(i=>`<section class="card"><h3>${esc(i.source)}</h3><ul>${i.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></section>`).join('')}` : ''}
 <h2 id="gaps">Gaps in the checks</h2>
 ${gaps}
 <h2 id="words">Words used in this report</h2>

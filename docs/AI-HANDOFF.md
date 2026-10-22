@@ -6,6 +6,21 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Framework canonical wiring checkpoint — 2026-10-22
+
+The framework integration branch combines the retained analysis seam and bounded worker closure with the selected
+rerun foundation. It adds exact owner-promoted framework availability, separately packaged worker lookup, full shipped
+build/dependency pinning, and one authenticated inspection section across report formats. The installed npm-only
+consumer ran capture/parse/inspection, source-removed selected rerun and read-only replay; changing a shipped chunk or
+installed dependency refused before worker import. Facts remain observations/findings-free and unsupported sources
+remain partial. Focused coordinator/report fault probes, package import audit, schema and types pass.
+
+This is an implementation checkpoint, not final framework acceptance. Merge the final selected-rerun main ancestry,
+run genuine current/baseline/canceled-selected secret privacy controls over the inspection section, retain installed
+report delivery evidence, exercise interruption/resume and multi-source binding, then obtain independent review.
+The original framework source libraries are not thereby qualified for unmodeled versions or shapes. No target code,
+external host scanner, download or model call is part of this path. Public GUI work and policy assessment remain open.
+
 ## Full owner report integration — 2026-10-22
 
 Branch `codex/sentinel-final-report-integration` combines reviewed report projection `ce9130b0` with the merged
