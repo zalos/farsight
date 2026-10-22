@@ -85,12 +85,12 @@ test('unreadable workspace manifests select every check', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('Sentinel selects its package check without e2e; its build closure and the CLI layers select it too', () => {
+test('Sentinel code and tests select offline report delivery in the browser job; packaging alone stays separate', () => {
   for (const path of ['packages/sentinel/src/index.ts', 'packages/sentinel/schemas/report.schema.json',
     'packages/sentinel/package.json', 'packages/sentinel/tsconfig.json']) {
-    assert.deepEqual(selectChecks([path]), { ...none, validate: true, sentinel: true, isolation: true, recovery: true }, path);
+    assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, sentinel: true, isolation: true, recovery: true }, path);
   }
-  assert.deepEqual(selectChecks(['packages/sentinel/test/contracts.test.ts', 'packages/sentinel/test/fixtures/feasibility/a.ts']), { ...none, validate: true, isolation: true, recovery: true });
+  assert.deepEqual(selectChecks(['packages/sentinel/test/reports.test.ts', 'packages/sentinel/test/contracts.test.ts', 'packages/sentinel/test/fixtures/feasibility/a.ts']), { ...none, validate: true, e2e: true, isolation: true, recovery: true });
   assert.deepEqual(selectChecks(['packages/sentinel/README.md', 'scripts/pack-sentinel.mjs', 'scripts/test-sentinel-package.mjs']), { ...none, sentinel: true });
   assert.deepEqual(selectChecks(['packages/core/src/counts.ts']), full, 'core feeds Echo and Sentinel');
   assert.deepEqual(selectChecks(['packages/graph/src/graph.ts']), full);
