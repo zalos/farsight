@@ -218,9 +218,10 @@ and inherited controllers are `sentinel.nest.*` frontiers that leave the facts t
 is not yet called by the planner or the CLI.
 
 Framework constructors passed to ordinary helpers, returned, or hidden in unsupported alias expressions,
-aggregates or class fields leave an explicit `frameworkEscapes` frontier. The pack does not execute those helpers
+aggregates, tagged-template arguments or class fields leave an explicit `frameworkEscapes` frontier. The pack does not execute those helpers
 or assume they preserve the constructor: validation and absence remain unknown. Supported local aliases are still
 checked for mutation, and a separate shadowed parameter does not imply a mutation of the imported framework.
+Every other runtime use defaults to unknown until the pack explicitly models how it consumes the value.
 
 ## Versions and evolution
 

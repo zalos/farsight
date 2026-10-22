@@ -761,6 +761,12 @@ in the production registry, the planner's batching, the scan command (PR 09), an
       are also outside the modeled exports and factory call. Such code may mutate the actual framework, so every
       control fact stays unknown. Modeled registration arguments and framework decorators remain supported; type
       names, noncomputed property names and unused shadowed parameters do not pass the imported value anywhere.
+    - **Supported uses, with unknown as the default (fifth review, 2026-10-22).** Each runtime reference to a
+      framework value is followed only through supported local bindings, member/type wrappers and modeled receivers.
+      Any other consumer is `frameworkEscapes`, including tagged-template arguments, constructor instances handed
+      to helpers, subclasses, returns and exports. A new syntax form therefore stays unknown until explicitly
+      modeled. Types, declaration/property names, discarded reads and unused shadowed parameters are not escapes.
+      Existing registrations that cannot certainly run retain their precise `registrationNotFollowed` frontier.
     - **Digests.** `packDigest` covers the support manifest, `environmentDigest` the resolved versions and
       `registrationDigest` every cited registration span; a change to any invalidates the facts.
 

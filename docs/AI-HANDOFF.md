@@ -44,6 +44,19 @@ subject lint passed. The focused owner suite (37 tests) plus the independent cap
 13 failures for the escape cases and 2 passes for the harmless-name/shadow controls. No full suite, scanner,
 network engine, target application execution or primary checkout build was needed. Independent review is pending.
 
+### General framework reference uses (follow-up)
+
+The follow-up after `1b2494ae` replaces the syntax-specific escape list with a whitelist of supported runtime
+reference uses. Unmodeled consumers default to `frameworkEscapes`; tagged templates, instance/helper flows,
+subclasses, exports and assignment results cannot hide a framework value. Types, declaration/property names,
+discarded reads, supported local aliases and unused shadowed parameters remain harmless. Unfollowed global
+registrations keep their more specific reason.
+
+Validation: 75 focused captured-source cases passed, 0 failed, 0 skipped (45 durable owner cases plus 30
+independent probes). The eight new durable cases against a fresh immutable build of `1b2494ae` produced seven
+failures and one positive-control pass. Affected builds/types, catalog and exact commit subject lint passed.
+All fixtures remain inert capture/parse/analysis inputs; no target code is executed. Independent review is pending.
+
 ## Provider access
 
 - Codex: `.codex/config.toml` configures the workspace CLI over MCP stdio.

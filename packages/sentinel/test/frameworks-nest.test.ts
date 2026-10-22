@@ -653,3 +653,48 @@ test('framework escape: supported local alias and unrelated shadow retain valida
   assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
   assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkMutated'));
 });
+
+// Runtime reference uses that were not in the earlier syntax list must default to unknown. These are only
+// captured source fixtures: no tag, helper, constructor or target module is ever invoked by the test.
+const unmodeledUses = {
+  'tagged-template argument': 'function disable(_strings: TemplateStringsArray, Pipe: any) { Pipe.prototype.transform = async (v: unknown) => v; } disable`fixture ${ValidationPipe}`;',
+  'tagged-template rest argument': 'const disable = (_strings: TemplateStringsArray, ...pipes: any[]) => { pipes[0].prototype.transform = async (v: unknown) => v; }; disable`fixture ${ValidationPipe}`;',
+  'tagged-template local alias': 'const Alias = ValidationPipe; function disable(_strings: TemplateStringsArray, Pipe: any) { Pipe.prototype.transform = async (v: unknown) => v; } disable`fixture ${Alias}`;',
+  'instance handed to a helper': 'function disable(pipe: any) { Object.getPrototypeOf(pipe).transform = async (v: unknown) => v; } disable(new ValidationPipe());',
+  'subclass constructor': 'class Alias extends ValidationPipe {} Object.getPrototypeOf(Alias).prototype.transform = async (v: unknown) => v;',
+};
+for (const [name, source] of Object.entries(unmodeledUses)) {
+  test(`unmodeled framework use: ${name}`, needsStore, async t => {
+    const r = await run(t, { 'main.ts': mainWith(`  ${source}\n  app.useGlobalPipes(new ValidationPipe());`) });
+    assert.equal(validation(r.analysis).verdict, 'unknown');
+    assert.ok(reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+    assert.ok(r.analysis.controls.facts.every(f => f.verdict === 'unknown'));
+  });
+}
+test('unmodeled framework use: a framework re-export is an explicit boundary', needsStore, async t => {
+  const r = await run(t, { 'main.ts': mainWith('  app.useGlobalPipes(new ValidationPipe());'),
+    'framework-export.ts': "export { ValidationPipe } from '@nestjs/common';\n" });
+  assert.equal(validation(r.analysis).verdict, 'unknown');
+  assert.ok(reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+});
+test('unmodeled framework use: scalar tags, discarded reads and property/type names are harmless', needsStore, async t => {
+  const r = await run(t, { 'main.ts': mainWith(`
+  const fields = { ValidationPipe: 'sku' };
+  const scalar = label\`label\`;
+  text(fields.ValidationPipe);
+  typeof ValidationPipe;
+  ValidationPipe;
+  app.useGlobalPipes(new ValidationPipe());`, 'function text(x: string) { return x; }\nfunction label(s: TemplateStringsArray) { return s[0]; }') });
+  assert.equal(validation(r.analysis).verdict, 'applies');
+  assert.ok(!reasons(r.analysis).includes('sentinel.nest.frameworkEscapes'));
+});
+
+test('unmodeled framework use: reassigned local bindings still require proof at their eventual use', needsStore, async t => {
+  const head = 'function disable(_strings: TemplateStringsArray, Pipe: any) { Pipe.prototype.transform = async (v: unknown) => v; }';
+  const escaped = await run(t, { 'main.ts': mainWith('  let Alias;\n  disable`fixture ${Alias = ValidationPipe}`;\n  app.useGlobalPipes(new ValidationPipe());', head) });
+  assert.equal(validation(escaped.analysis).verdict, 'unknown');
+  assert.ok(reasons(escaped.analysis).includes('sentinel.nest.frameworkEscapes'));
+  const local = await run(t, { 'main.ts': mainWith('  let Alias; Alias = ValidationPipe;\n  app.useGlobalPipes(new ValidationPipe());') });
+  assert.equal(validation(local.analysis).verdict, 'applies');
+  assert.ok(!reasons(local.analysis).includes('sentinel.nest.frameworkEscapes'));
+});

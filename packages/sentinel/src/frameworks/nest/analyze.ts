@@ -302,42 +302,85 @@ function mayReferenceFramework(file: ParsedFile, target: AstNode, seen = new Set
   return values.some(value => mayReferenceFramework(file, value, seen));
 }
 
-/** Only these expression forms are followed by mayReferenceFramework when keeping a local alias. */
-function supportedFrameworkAlias(n: AstNode): boolean {
-  if (['TSAsExpression', 'TSTypeAssertion', 'TSNonNullExpression', 'TSSatisfiesExpression', 'TSInstantiationExpression', 'ParenthesizedExpression'].includes(n.type)) return supportedFrameworkAlias(n.expression);
-  if (n.type === 'ConditionalExpression') return supportedFrameworkAlias(n.consequent) && supportedFrameworkAlias(n.alternate);
-  if (n.type === 'LogicalExpression') return supportedFrameworkAlias(n.left) && supportedFrameworkAlias(n.right);
-  return ['Identifier', 'MemberExpression', 'StaticMemberExpression', 'ComputedMemberExpression',
-    'Literal', 'NullLiteral', 'BooleanLiteral', 'NumericLiteral', 'StringLiteral', 'ClassExpression'].includes(n.type);
+const RUNTIME_TS = new Set([
+  'TSAsExpression', 'TSTypeAssertion', 'TSNonNullExpression', 'TSSatisfiesExpression', 'TSInstantiationExpression',
+  'TSEnumDeclaration', 'TSEnumMember', 'TSModuleDeclaration', 'TSModuleBlock', 'TSParameterProperty',
+  'TSExportAssignment', 'TSImportEqualsDeclaration',
+]);
+const MEMBER = new Set(['MemberExpression', 'StaticMemberExpression', 'ComputedMemberExpression']);
+
+/** Declaration names, types and plain property names are not runtime values passed to another expression. */
+function valueReference(n: AstNode, anc: readonly AstNode[]): boolean {
+  if (anc.some(a => a.type === 'ImportDeclaration' || (a.type.startsWith('TS') && !RUNTIME_TS.has(a.type)))) return false;
+  const parent = anc[anc.length - 1];
+  if (!parent) return false;
+  if (parent.type === 'AssignmentExpression' && parent.left === n) return false;
+  if ((MEMBER.has(parent.type) && parent.property === n && !parent.computed)
+    || (['Property', 'MethodDefinition', 'PropertyDefinition', 'AccessorProperty'].includes(parent.type) && parent.key === n && !parent.computed)
+    || (['LabeledStatement', 'BreakStatement', 'ContinueStatement'].includes(parent.type) && parent.label === n)
+    || (parent.type === 'TSEnumMember' && parent.id === n)) return false;
+  let child = n;
+  for (let i = anc.length - 1; i >= 0; i--) {
+    const p = anc[i]!;
+    if ((p.type === 'AssignmentPattern' && p.left === child) || (p.type === 'RestElement' && p.argument === child)
+      || p.type === 'ArrayPattern' || p.type === 'ObjectPattern'
+      || (p.type === 'Property' && anc[i - 1]?.type === 'ObjectPattern')) { child = p; continue; }
+    if ((p.type === 'VariableDeclarator' && p.id === child) || (p.type === 'CatchClause' && p.param === child)
+      || (isFunction(p) && ((p.params ?? []).includes(child) || p.id === child))
+      || (['ClassDeclaration', 'ClassExpression'].includes(p.type) && p.id === child)) return false;
+    break;
+  }
+  return true;
 }
 
 /**
- * Whether an expression hands on an actual framework value, rather than merely spelling its name in a type or
- * property key. Calls and construction consume their callee; their arguments are still values handed to code.
- * This does not infer the result of a call. Unknown calls receiving a framework value are frontiers themselves.
+ * Follow a real framework reference only through proven bindings/receivers. Everything else is an escape by
+ * default, including syntax not modeled here (tagged templates, parameter defaults, exports, field storage, ...).
+ * Aggregate values may be consumed by a modeled framework decorator/registration, but never become a followed
+ * local alias. This is a whitelist of supported uses, not an enumeration of ways JavaScript can hide a value.
  */
-function carriesFrameworkValue(file: ParsedFile, expression: AstNode): boolean {
-  let found = false;
-  walkWithAncestors(expression, (n, anc) => {
-    if (found) return false;
-    if (['TSAsExpression', 'TSTypeAssertion', 'TSNonNullExpression', 'TSSatisfiesExpression', 'TSInstantiationExpression'].includes(n.type)) {
-      found = carriesFrameworkValue(file, n.expression);
-      return false;
+function frameworkReferenceEscapes(file: ParsedFile, n: AstNode, anc: readonly AstNode[], followed: ReadonlySet<AstNode>): boolean {
+  let child = n;
+  let opaque = false;
+  for (let i = anc.length - 1; i >= 0; i--) {
+    const p = anc[i]!;
+    if ((MEMBER.has(p.type) && p.object === child)
+      || (RUNTIME_TS.has(p.type) && p.expression === child) || (p.type === 'ParenthesizedExpression' && p.expression === child)
+      || (p.type === 'ConditionalExpression' && (p.consequent === child || p.alternate === child))
+      || (p.type === 'LogicalExpression' && (p.left === child || p.right === child))) { child = p; continue; }
+    if ((p.type === 'Property' && p.value === child) || ['ObjectExpression', 'ArrayExpression', 'SequenceExpression'].includes(p.type)
+      || (p.type === 'NewExpression' && p.callee === child)) { opaque = true; child = p; continue; }
+    if (p.type === 'VariableDeclarator' && p.init === child) return opaque || p.id.type !== 'Identifier';
+    if (p.type === 'AssignmentExpression' && p.right === child) {
+      if (opaque || p.left.type !== 'Identifier' || !['=', '||=', '&&=', '??='].includes(p.operator)) return true;
+      child = p;
+      continue;
     }
-    if (n.type.startsWith('TS')) return false;
-    if (n.type === 'CallExpression' || n.type === 'NewExpression') {
-      found = (n.arguments ?? []).some((a: AstNode) => carriesFrameworkValue(file, a));
-      return false;
+    if ((p.type === 'AssignmentExpression' && p.left === child) || (p.type === 'UpdateExpression' && p.argument === child)
+      || (p.type === 'UnaryExpression' && p.operator === 'delete' && p.argument === child)) return opaque || !MEMBER.has(child.type);
+    if (p.type === 'CallExpression' || p.type === 'NewExpression') {
+      const ref = refName(p.callee);
+      const imported = ref ? resolveAt(file, ref, p.start) : null;
+      const framework = !!imported?.module && FRAMEWORK.test(imported.module);
+      const decorator = anc[i - 1]?.type === 'Decorator' && framework;
+      // Every other global-registration call already has registrationNotFollowed below; preserve that more
+      // precise frontier rather than treating its literal constructor argument as an ordinary helper escape.
+      const registration = ref?.member && ref.member.startsWith('useGlobal') && STAGE_OF[ref.member];
+      if ((p.arguments ?? []).includes(child)) return !followed.has(p) && !decorator && !registration;
+      if (p.callee === child) return opaque || !(framework && (!imported!.name.includes('.')
+        || (imported!.module === '@nestjs/core' && imported!.name === 'NestFactory.create')));
     }
-    if (n.type === 'Identifier') {
-      const parent = anc[anc.length - 1];
-      if (parent && ((['MemberExpression', 'StaticMemberExpression'].includes(parent.type) && parent.property === n && !parent.computed)
-        || (parent.type === 'Property' && parent.key === n && !parent.computed && !parent.shorthand))) return false;
-      found = mayReferenceFramework(file, n);
+    if (p.type === 'Decorator' && p.expression === child) {
+      const ref = refName(child);
+      const imported = ref ? resolveAt(file, ref, p.start) : null;
+      return opaque || !imported?.module || !FRAMEWORK.test(imported.module);
     }
-    return undefined;
-  });
-  return found;
+    // These discard or inspect a reference without storing it or handing it to another function.
+    if ((p.type === 'ExpressionStatement' && p.expression === child)
+      || (p.type === 'UnaryExpression' && ['typeof', 'void', '!'].includes(p.operator) && p.argument === child)) return false;
+    return true;
+  }
+  return true;
 }
 
 /** True when a statement can leave its function: a return or throw outside any nested function. */
@@ -689,42 +732,9 @@ export async function analyzeNest(input: NestAnalysisInput): Promise<NestAnalysi
     walkWithAncestors(file.program, (n, anc) => {
       if (['MemberExpression', 'StaticMemberExpression', 'ComputedMemberExpression'].includes(n.type)
         && isWriteTarget([...anc, n], anc.length) && mayReferenceFramework(file, n)) frontier(ctx, file.path, 'frameworkMutated');
-      // Unsupported value forms can hide a constructor even without a variable initializer (for example a
-      // for-of list or a member write on a sequence). Only a modeled receiver may consume such a value safely.
-      if (['ArrayExpression', 'ObjectExpression', 'SequenceExpression', 'AwaitExpression', 'YieldExpression', 'ChainExpression'].includes(n.type) && carriesFrameworkValue(file, n)) {
-        let receiver = -1;
-        for (let i = anc.length - 1; i >= 0; i--) {
-          if (anc[i]!.type === 'CallExpression' || anc[i]!.type === 'NewExpression') { receiver = i; break; }
-          if (isFunction(anc[i])) break;
-        }
-        const call = anc[receiver];
-        const ref = call ? refName(call.callee) : null;
-        const imported = ref ? resolveAt(file, ref, call!.start) : null;
-        const decorator = receiver > 0 && anc[receiver - 1]!.type === 'Decorator' && imported?.module && FRAMEWORK.test(imported.module);
-        if (!call || (!followed.has(call) && !decorator)) frontier(ctx, file.path, 'frameworkEscapes');
-      }
-      // Alias expressions and aggregate storage that the binding pass cannot follow may hide later writes.
-      if (n.type === 'VariableDeclarator' && n.init && carriesFrameworkValue(file, n.init)
-        && (n.id.type !== 'Identifier' || !supportedFrameworkAlias(n.init) || !mayReferenceFramework(file, n.init))) frontier(ctx, file.path, 'frameworkEscapes');
-      if (n.type === 'AssignmentExpression' && carriesFrameworkValue(file, n.right)
-        && (n.left.type !== 'Identifier' || !supportedFrameworkAlias(n.right) || !mayReferenceFramework(file, n.right))) frontier(ctx, file.path, 'frameworkEscapes');
-      if (n.type === 'AssignmentPattern' && carriesFrameworkValue(file, n.right)) frontier(ctx, file.path, 'frameworkEscapes');
-      if (['PropertyDefinition', 'ClassProperty', 'AccessorProperty'].includes(n.type) && n.value && carriesFrameworkValue(file, n.value)) frontier(ctx, file.path, 'frameworkEscapes');
-      if ((n.type === 'ReturnStatement' || n.type === 'ThrowStatement') && n.argument && carriesFrameworkValue(file, n.argument)) frontier(ctx, file.path, 'frameworkEscapes');
-      if (n.type === 'ArrowFunctionExpression' && n.body.type !== 'BlockStatement' && carriesFrameworkValue(file, n.body)) frontier(ctx, file.path, 'frameworkEscapes');
-      if (n.type === 'CallExpression' || n.type === 'NewExpression') {
-        // Only modeled registrations and framework decorators have a supported meaning for constructor arguments.
-        // An ordinary helper (even a local one) can mutate a constructor through its parameter.
-        const ref = refName(n.callee);
-        const imported = ref ? resolveAt(file, ref, n.start) : null;
-        const decorator = anc[anc.length - 1]?.type === 'Decorator' && imported?.module && FRAMEWORK.test(imported.module);
-        if (!followed.has(n) && !decorator && (n.arguments ?? []).some((a: AstNode) => carriesFrameworkValue(file, a))) frontier(ctx, file.path, 'frameworkEscapes');
-        // A method such as bind/call/apply can expose or rewrite the constructor without receiving it as an
-        // argument. Direct framework exports are trusted code; the one modeled factory method is create.
-        const factory = imported?.module === '@nestjs/core' && imported.name === 'NestFactory.create';
-        const directExport = imported?.module && FRAMEWORK.test(imported.module) && !imported.name.includes('.');
-        if (n.type === 'CallExpression' && !decorator && !factory && !directExport && mayReferenceFramework(file, n.callee)) frontier(ctx, file.path, 'frameworkEscapes');
-      }
+      if (['ExportNamedDeclaration', 'ExportAllDeclaration'].includes(n.type) && FRAMEWORK.test(String(n.source?.value ?? ''))) frontier(ctx, file.path, 'frameworkEscapes');
+      if (n.type === 'Identifier' && valueReference(n, anc) && mayReferenceFramework(file, n)
+        && frameworkReferenceEscapes(file, n, anc, followed)) frontier(ctx, file.path, 'frameworkEscapes');
       if (n.type === 'CallExpression') {
         const r = refName(n.callee);
         const target = n.arguments?.[0];
