@@ -42,6 +42,8 @@ checks bundle through its bounded owner setup script. OSV tests use original syn
 advisory database, project package manager or host scanner runs. Runtime execution never pulls or acquires assets.
 
 The job runs driver/binding/asset/admission tests and the real public four-engine CLI with test-file concurrency one.
+The report authority regressions use genuine accepted publications, including malformed worker output, missing
+accepted objects, exact check/source/scope bindings and bounded special-file refusals.
 An empty suite, any skip, failure or cancellation fails acceptance. It then packs the npm artifact and runs
 `test-sentinel-scanner-consumer.mjs` from a clean consumer: init, adopt settings, promote exact packs, missing-asset
 refusal, owner-receipted tools/databases, plan, detach/join/wait, and report regeneration after service restart and

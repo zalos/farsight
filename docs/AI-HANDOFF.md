@@ -41,6 +41,24 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Full report accepted-evidence correction — 2026-10-22
+
+The isolated `codex/sentinel-full-report-authority-fixes` follow-on to the full-report command refuses missing,
+malformed or non-UTF-8 accepted report inputs. Scanner findings require nonempty unique assignments joined to the
+actual admitted check's family/revision, work revision, source, adapter and exact file scope. Each resulting
+observation cites only that check's captured locations. Context files use nonblocking no-follow regular descriptors,
+size ceilings and exact stable reads; current workspace inputs cannot exceed their captured size or traverse a
+replaced parent link. Matching context remains an owner attestation of a supplied graph against captured bytes,
+not independent verification of graph semantics or producer. The native scanner workflow includes these regressions.
+
+Validation: the expanded genuine-publication regressions produced ten failures and ten passing controls on the
+unchanged base; the corrected public four-engine CLI/context/compare, authority and finding-comparison checks pass
+31/31 with zero skips. Existing context, disclosure, official SARIF schema and offline browser/printing controls
+pass 19/19 with zero skips. Sentinel closure and parser builds, Sentinel types, catalog and exact commit-title lint
+pass. This local measurement used existing pinned Linux containers on the development host; native amd64 CI is a
+separate gate. No scanner acquisition, primary build, push or merge. Canonical Gitleaks full-report integration and
+retaining report/context artifacts for recipient replay remain separate follow-ons; full plan completion is not claimed.
+
 ## Sentinel Trivy/zizmor native qualification — 2026-10-22
 
 A separate follow-on records Linux amd64 as measured for the existing pinned Trivy and zizmor workers only.

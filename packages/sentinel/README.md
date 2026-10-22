@@ -303,7 +303,12 @@ farsight-sentinel report <runId> --full --context graph.json --confirm   # place
 farsight-sentinel compare <runId> <baselineRunId> [--format md|json|html|sarif]
 ```
 
-The report reads only the run's accepted evidence; a graph binds only while the files on disk are the captured bytes.
+The report reads only the run's accepted evidence. Missing or malformed accepted report inputs refuse the report;
+findings must name nonempty exact admitted check tuples and cite their assigned captured file scopes. Current
+workspace inputs are read only for an optional context, through bounded regular-file descriptors; links, special
+files and files that exceed their captured size cannot establish a binding. The supplied graph is bounded to 64 MiB.
+A matched context records the owner's confirmation of that graph against these captured bytes. It does not
+independently verify the supplied graph's relationships, labels or producer.
 
 ## Versions and evolution
 

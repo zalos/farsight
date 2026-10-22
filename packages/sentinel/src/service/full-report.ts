@@ -10,7 +10,7 @@
 // only with the owner's spent `context.pin` receipt and only when it binds to the captured bytes; its inputs are the
 // files as they are on disk now, so a graph made after the source changed does not bind.
 import { createHash } from 'node:crypto';
-import { closeSync, constants as FS, existsSync, fstatSync, openSync, readFileSync, readSync, writeSync } from 'node:fs';
+import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, CoverageEnvelope, ObservationEnvelope, PlanCheck, PlanWork, SnapshotEnvelope } from '../contracts/index.js';
 import { validateEnvelope } from '../validate.js';
@@ -93,6 +93,7 @@ function nodeAt(index: ParserIndex | undefined, path: string, content: string, s
 
 /** UTF-8 byte offsets of 1-based inclusive lines `start..end` in `bytes`. */
 function lineSpan(bytes: Uint8Array, start: number, end: number): { startByte: number; endByte: number } | undefined {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) return undefined;
   let line = 1, s = -1, e = bytes.length;
   if (start === 1) s = 0;
   for (let i = 0; i < bytes.length; i++) {
@@ -101,7 +102,7 @@ function lineSpan(bytes: Uint8Array, start: number, end: number): { startByte: n
     if (line === start && s < 0) s = i + 1;
     if (line === end + 1) { e = i; break; }
   }
-  return s < 0 || s > e ? undefined : { startByte: s, endByte: Math.max(e, s) };
+  return s < 0 || s > e || line < end ? undefined : { startByte: s, endByte: Math.max(e, s) };
 }
 
 /**
@@ -125,6 +126,7 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
   const indexOf = new Map(evidence.analyses.map(a => [a.sourceId, a.index]));
   const read = new Map<string, Promise<Buffer>>();
   const bytesOf = (id: string) => { let p = read.get(id); if (!p) read.set(id, p = store.readArtifact(id as never)); return p; };
+  const checkOf = new Map(plan.checks.map(c => [c.id, c]));
   const pinOf = (familyId: string, revision: number) => plan.pins.rules.find(r => r.familyId === familyId && r.revision === revision);
   const adapterDigest = (id: string) => admitted.profile.adapters.find((a: { adapterId: string }) => a.adapterId === id)?.digest;
   // A rule's own severity, from the exact packs the admitted lock names (a scanner that reports none is judged by it).
@@ -138,6 +140,15 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
     const pub = store.ledger.getPublication({ id: unit.id, revision: unit.revision });
     if (!pub) continue;
     const assigned = new Map(unit.inputs.map(i => [fileScope(i.sourceId, i.relativePath), i.content]));
+    // Resolve a finding's claim through the admitted check, never through an independently supplied family pin.
+    const assignedCheck = (id: string) => {
+      const check = checkOf.get(id);
+      const pin = check && pinOf(check.familyId, check.ruleRevision);
+      if (!check || !pin || check.state !== 'planned' || !unit.checks.includes(id)
+        || check.unit?.id !== unit.id || check.unit.revision !== unit.revision || check.sourceId !== unit.sourceId
+        || pin.adapterId !== unit.adapterId || !unit.scopes.includes(check.scopeId)) return unbound('a finding has no exact admitted check');
+      return { check, pin };
+    };
     // A citation is evidence only of bytes this unit was assigned and the capture holds under that path.
     const cite = async (sourceId: string, path: string, content: string | null, span: { startByte: number; endByte: number } | 'file' | { lines: [number, number] }) => {
       const key = fileScope(sourceId, path);
@@ -154,7 +165,9 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
     for (const output of pub.outputs) {
       if (output.schema !== COVERAGE_SCHEMA && output.schema !== FINDING_SCHEMA && output.schema !== PREVIEW_FINDINGS_SCHEMA && output.schema !== 'application/json') continue;
       let value: any;
-      try { value = JSON.parse((await store.readArtifact(output.id as never)).toString('utf8')); } catch { continue; }
+      try { value = JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(await store.readArtifact(output.id as never))); }
+      catch { return unbound('accepted report evidence is unavailable or is not UTF-8 JSON'); }
+      if (!isRecord(value)) unbound('accepted report evidence is not an object');
       if (output.schema === COVERAGE_SCHEMA) {
         if (value?.runId !== runId || value.workId !== unit.id || value.workRevision !== unit.revision || value.basis?.kind !== 'executed' || value.basis.attemptId !== pub.attemptId) unbound('accepted coverage is bound to another unit or attempt');
         if (!unitChecks.get(unit.id)!.has(value.checkId)) unbound('accepted coverage names a check its unit was not assigned');
@@ -167,18 +180,22 @@ export async function assessRun(store: SentinelStore, runId: string, options: { 
         if (!unit.adapterId || !SCANNER_ADAPTERS.has(unit.adapterId)) unbound('a scanner finding from a unit no scanner ran');
         if (value?.runId !== runId || value.snapshotId !== snapshot.id || value.work?.id !== unit.id || value.work?.revision !== unit.revision || value.attemptId !== pub.attemptId
           || value.sourceId !== unit.sourceId || value.adapter !== unit.adapterId) unbound('an accepted finding is bound to another run, unit or attempt');
-        observations.push(...await scannerObservations(value, unit, pub.attemptId, pub.acceptedAt, cite, pinOf, adapterDigest(unit.adapterId!), severityOf));
+        observations.push(...await scannerObservations(value, unit, pub.attemptId, pub.acceptedAt, cite, assignedCheck, adapterDigest(unit.adapterId!), severityOf));
         continue;
       }
       // The preview detector's own findings document (its checks are the unit's), when this unit ran it.
-      if (value?.schema !== PREVIEW_FINDINGS_SCHEMA) continue;
+      if (value?.schema !== PREVIEW_FINDINGS_SCHEMA) {
+        if (output.schema === PREVIEW_FINDINGS_SCHEMA) unbound('accepted preview evidence does not fit its declared schema');
+        continue;
+      }
       if (unit.adapterId !== PREVIEW_DETECTOR_ID) unbound('preview findings from a unit the preview detector did not run');
       if (canonicalJson([...(value.checks ?? [])].sort()) !== canonicalJson([...unit.checks].sort())) unbound('preview findings for other checks');
-      for (const f of value.findings ?? []) {
-        const check = plan.checks.find(c => c.id === unit.checks[0]);
-        const pin = check ? pinOf(check.familyId, check.ruleRevision) : undefined;
-        if (!check || !pin || !isRecord(f) || typeof f.path !== 'string' || !Number.isSafeInteger(f.line)) unbound('a preview finding without its check');
+      if (!Array.isArray(value.findings) || unit.checks.length !== 1) unbound('preview findings without their exact check');
+      for (const f of value.findings) {
+        const { check, pin } = assignedCheck(unit.checks[0]!);
+        if (!isRecord(f) || typeof f.path !== 'string' || !Number.isSafeInteger(f.line)) unbound('a preview finding without its check');
         const ev = await cite(unit.sourceId!, f.path, f.input, { lines: [f.line, f.line] });
+        if (check.scopeId !== fileScope(ev.sourceId, ev.relativePath)) unbound('a preview finding is outside its admitted check scope');
         observations.push(observation({
           schema: 'sentinel-observation/draft-1', id: `obs.${sha(canonicalJson({ unit: unit.id, path: f.path, line: f.line, rule: f.rule })).slice(7, 39)}`, snapshotId: snapshot.id,
           producer: { kind: 'scanner', adapterId: PREVIEW_DETECTOR_ID, adapterDigest: adapterDigest(PREVIEW_DETECTOR_ID)!, attemptId: pub.attemptId },
@@ -238,9 +255,21 @@ type Cite = (sourceId: string, path: string, content: string | null, span: { sta
 
 /** One observation per rule family a scanner finding was assigned to, citing only assigned captured bytes. */
 async function scannerObservations(f: any, unit: PlanWork, attemptId: string, observedAt: string, cite: Cite,
-  pinOf: (familyId: string, revision: number) => { familyId: string; definitionDigest: string } | undefined, adapterDigest: string | undefined,
+  assignedCheck: (id: string) => { check: PlanCheck; pin: { familyId: string; definitionDigest: string } }, adapterDigest: string | undefined,
   severityOf: ReadonlyMap<string, string>): Promise<ObservationEnvelope[]> {
   const src = unit.sourceId!;
+  const kinds: Record<string, string> = { 'pattern-semgrep': 'pattern', 'advisories-osv': 'advisory', 'iac-trivy': 'misconfiguration', 'ci-zizmor': 'ci-audit' };
+  if (kinds[unit.adapterId!] !== f.kind) unbound('an accepted finding has another adapter kind');
+  if (!Array.isArray(f.assignedChecks) || !f.assignedChecks.length || f.assignedChecks.length > unit.checks.length) unbound('a finding without assigned checks');
+  const seen = new Set<string>();
+  const assigned = f.assignedChecks.map((claim: any) => {
+    if (!isRecord(claim) || typeof claim.id !== 'string' || seen.has(claim.id)) return unbound('a finding repeats or omits an assigned check');
+    seen.add(claim.id);
+    const resolved = assignedCheck(claim.id);
+    if (claim.familyId !== resolved.check.familyId || claim.revision !== resolved.check.ruleRevision
+      || (f.kind === 'pattern' && (f.familyId !== claim.familyId || f.revision !== claim.revision))) unbound('a finding changes its admitted check tuple');
+    return resolved;
+  });
   const evidence: any[] = [];
   let producerRuleId: string, severity: string, message: string;
   switch (f.kind) {
@@ -276,14 +305,18 @@ async function scannerObservations(f: any, unit: PlanWork, attemptId: string, ob
   }
   if (!evidence.length) unbound('an accepted finding cites nothing');
   const out: ObservationEnvelope[] = [];
-  for (const check of f.assignedChecks ?? []) {
-    const pin = pinOf(check.familyId, check.revision);
-    if (!pin || !unit.checks.includes(check.id)) unbound('a finding assigned to a check its unit was not given');
+  // These scanner drivers admit exact file scopes. Unknown or wider scope strings do not prove a citation belongs
+  // to a check. Each observation cites only that check's scope; correlated findings can still combine occurrences.
+  const within = (check: PlanCheck, e: any) => check.sourceId === e.sourceId && check.scopeId === fileScope(e.sourceId, e.relativePath);
+  if (evidence.some(e => !assigned.some(({ check }: { check: PlanCheck }) => within(check, e)))) unbound('a finding cites bytes outside its assigned checks');
+  for (const { check, pin } of assigned) {
+    const scopedEvidence = evidence.filter(e => within(check, e));
+    if (!scopedEvidence.length) unbound('a finding is outside its admitted check scope');
     out.push(observation({
       schema: 'sentinel-observation/draft-1', id: `obs.${sha(canonicalJson({ finding: f.id, check: check.id })).slice(7, 39)}`, snapshotId: f.snapshotId,
       producer: { kind: 'scanner', adapterId: unit.adapterId!, adapterDigest: adapterDigest as never, attemptId },
       producerRuleId: producerRuleId.slice(0, 256), rule: { familyId: pin!.familyId, revisionDigest: pin!.definitionDigest as never },
-      originalSeverity: (severity === 'unspecified' ? severityOf.get(pin!.familyId) ?? severity : severity).slice(0, 200), message: message.slice(0, 4000), evidence: evidence.slice(0, 256), limitationKeys: [], observedAt,
+      originalSeverity: (severity === 'unspecified' ? severityOf.get(pin!.familyId) ?? severity : severity).slice(0, 200), message: message.slice(0, 4000), evidence: scopedEvidence.slice(0, 256), limitationKeys: [], observedAt,
     } as ObservationEnvelope));
   }
   return out;
@@ -350,17 +383,30 @@ export interface FullReportRequest {
   readonly context?: { readonly graph: ContextGraph; readonly repo: string; readonly authorization?: unknown };
 }
 
+/** One bounded regular descriptor. A FIFO cannot block open; links, short reads and a changing file are refused. */
+function readRegularBounded(path: string, maxBytes: number): Buffer {
+  const fd = openSync(path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0) | (FS.O_NONBLOCK ?? 0));
+  try {
+    const before = fstatSync(fd, { bigint: true });
+    if (!before.isFile() || before.size > BigInt(maxBytes)) throw new Error('not a bounded regular file');
+    const bytes = Buffer.alloc(Number(before.size));
+    for (let off = 0; off < bytes.length;) {
+      const n = readSync(fd, bytes, off, bytes.length - off, off);
+      if (!n) throw new Error('short read');
+      off += n;
+    }
+    const after = fstatSync(fd, { bigint: true });
+    if (after.size !== before.size || after.mtimeNs !== before.mtimeNs || after.ctimeNs !== before.ctimeNs
+      || readSync(fd, Buffer.alloc(1), 0, 1, bytes.length) !== 0) throw new Error('file changed');
+    return bytes;
+  } finally { closeSync(fd); }
+}
+
 /** Reads an owner-supplied graph file, bounded, and the repository name its nodes use. */
 export function readContextGraph(file: ContextFile): { graph: ContextGraph; repo: string } {
-  const fd = openSync(file.path, FS.O_RDONLY | (FS.O_NOFOLLOW ?? 0));
   let text: string;
-  try {
-    const st = fstatSync(fd);
-    if (!st.isFile() || st.size > MAX_CONTEXT_BYTES) throw new FullReportError('sentinel.report.contextInvalid', { reason: 'not a regular file within the size bound' });
-    const buf = Buffer.alloc(st.size);
-    for (let off = 0; off < st.size;) { const n = readSync(fd, buf, off, st.size - off, off); if (n === 0) break; off += n; }
-    text = buf.toString('utf8');
-  } finally { closeSync(fd); }
+  try { text = new TextDecoder('utf8', { fatal: true }).decode(readRegularBounded(file.path, MAX_CONTEXT_BYTES)); }
+  catch { throw new FullReportError('sentinel.report.contextInvalid', { reason: 'not a readable regular UTF-8 file within the size bound' }); }
   let v: unknown;
   try { v = JSON.parse(text); } catch { throw new FullReportError('sentinel.report.contextInvalid', { reason: 'not JSON' }); }
   if (!isRecord(v) || !Array.isArray(v.nodes) || !Array.isArray(v.edges)) throw new FullReportError('sentinel.report.contextInvalid', { reason: 'no nodes and edges' });
@@ -380,9 +426,22 @@ export function workspaceInputs(snapshot: SnapshotEnvelope, sourceId: string, ro
   const out: { relativePath: string; content: string }[] = [];
   for (const e of snapshot.entries) {
     if (e.sourceId !== sourceId || e.kind !== 'file' || e.disposition !== 'included') continue;
-    const path = join(root, e.relativePath);
-    if (!existsSync(path)) continue;
-    try { out.push({ relativePath: e.relativePath, content: sha(readFileSync(path)) }); } catch { /* unreadable now: not an input */ }
+    // Current bytes can only confirm this capture when their hash matches. Never read past its captured size. Check every
+    // folder as well: replacing a captured parent with a link must not read a different tree. As in capture,
+    // identity checks detect swaps between observations, not a swap restored between those checks.
+    try {
+      const parts = e.relativePath.split('/');
+      if (parts.some(p => !p || p === '.' || p === '..') || e.relativePath.includes('\\')) continue;
+      const folders = [root, ...parts.slice(0, -1).map((_, i) => join(root, ...parts.slice(0, i + 1)))];
+      const chain = folders.map(path => ({ path, stat: lstatSync(path, { bigint: true }) }));
+      if (chain.some(d => !d.stat.isDirectory() || d.stat.isSymbolicLink())) continue;
+      const bytes = readRegularBounded(join(root, e.relativePath), e.bytes);
+      if (chain.some(d => {
+        const after = lstatSync(d.path, { bigint: true });
+        return !after.isDirectory() || after.isSymbolicLink() || after.dev !== d.stat.dev || after.ino !== d.stat.ino;
+      })) continue;
+      out.push({ relativePath: e.relativePath, content: sha(bytes) });
+    } catch { /* unreadable, replaced or outside the captured bound now: not an input */ }
   }
   return out;
 }
