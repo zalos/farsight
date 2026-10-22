@@ -1,0 +1,40 @@
+import type { StringEntry } from './strings.js';
+
+// Sentinel's pattern adapter (PR 10): its errors, per-file coverage reasons, refused results, limitations, rule titles
+// and the in-container worker's diagnostics. Both registers carry the same words until the PR 09 vocabulary freeze.
+const same = (text: string, define: string): StringEntry => ({ hud: text, professional: text, define });
+
+export const SENTINEL_PATTERN_STRINGS: Record<string, StringEntry> = {
+  'sentinel.pattern.ruleInvalid': same('a pattern rule cannot be run faithfully by this adapter', 'Pattern rules are declarative and limited to the matching and local taint features this adapter was measured with. A rule with path filters, fixes, engine options or another mode is refused.'),
+  'sentinel.pattern.targetInvalid': same('a scan target is unsafe or does not match its captured bytes', 'Every target is named by a safe relative path and identified by the digest of its captured bytes. A mismatch stops the job before anything runs.'),
+  'sentinel.pattern.outputInvalid': same('the pattern scanner output could not be trusted', 'The output must name the job that was supplied, come from the pinned engine version and be well formed. Anything else is refused rather than partly read.'),
+  'sentinel.pattern.coverage.complete': same('scanned completely', 'The engine reported scanning this file with every rule whose language applies, without a parse error or timeout.'),
+  'sentinel.pattern.coverage.partialParse': same('scanned with parse errors', 'The engine could parse only part of this file. Results it reported stand, but parts of the file were not checked.'),
+  'sentinel.pattern.coverage.ruleTimeout': same('a rule timed out on this file', 'At least one rule stopped at its time limit on this file, so the file was not completely checked.'),
+  'sentinel.pattern.coverage.tooLarge': same('skipped: larger than the scanner’s file size limit', 'Files larger than the fixed size limit are not scanned. They are listed as gaps, never counted as clean.'),
+  'sentinel.pattern.coverage.engineSkipped': same('skipped by the scanner', 'The engine reported skipping this file for a reason of its own. It is a gap, not a clean result.'),
+  'sentinel.pattern.coverage.omitted': same('not scanned: the scanner neither scanned nor skipped it', 'The file was requested, but the engine reported neither scanning nor skipping it, even though it finished normally. It is a gap.'),
+  'sentinel.pattern.coverage.noRuleLanguage': same('no rule applies to this language', 'None of the selected pattern rules is written for this file’s language, so it is outside this check rather than clean.'),
+  'sentinel.pattern.coverage.ignoreFileExcluded': same('an ignore file from the repository, not scanned and not applied', 'Ignore files from the repository are left out of the scan so they cannot remove files the owner asked to check.'),
+  'sentinel.pattern.coverage.attemptFailed': same('the scan attempt failed', 'The isolated scan did not complete, so no file in it counts as checked.'),
+  'sentinel.pattern.coverage.attemptTimedOut': same('the scan attempt reached its deadline', 'The isolated scan was stopped at its deadline, so no file in it counts as checked.'),
+  'sentinel.pattern.coverage.attemptCanceled': same('the scan attempt was canceled', 'The isolated scan was canceled before it finished, so no file in it counts as checked.'),
+  'sentinel.pattern.coverage.engineTimedOut': same('the scanner reached its time limit', 'The engine run was stopped at its time limit inside the container. Partial output is not used.'),
+  'sentinel.pattern.coverage.outputTruncated': same('the scanner output was larger than its limit', 'The engine’s output exceeded its fixed limit, so it was not read and no file counts as checked.'),
+  'sentinel.pattern.coverage.engineFailed': same('the scanner reported a failure', 'The engine ended with an error status, so no file in this run counts as completely checked.'),
+  'sentinel.pattern.refused.unknownRule': same('a result names a rule that was not requested', 'Only results of the rules the job supplied are kept.'),
+  'sentinel.pattern.refused.unknownTarget': same('a result names a file that was not a target', 'Only results on the job’s own targets are kept.'),
+  'sentinel.pattern.refused.ruleLanguage': same('a result is outside its rule’s language', 'A result on a file whose language the rule does not declare is not kept.'),
+  'sentinel.pattern.refused.spanInvalid': same('a result’s location does not match the captured file', 'Every location is checked as byte offsets, lines and columns against the captured bytes. A location that does not match is not kept.'),
+  'sentinel.pattern.refused.crossFile': same('a result claims a flow across files, which this adapter does not support', 'Only flows inside one file are supported. A result that relies on another file is not credited as taint evidence.'),
+  'sentinel.pattern.refused.malformed': same('a result is malformed', 'A result that does not have the expected shape is not kept.'),
+  'sentinel.pattern.limitation.locatorNotProof': same('a matched pattern locates code to review; it does not prove a vulnerability', 'A structural match says the code has a shape worth reviewing. It does not show that an attacker controls the input or that the code runs.'),
+  'sentinel.pattern.limitation.localTaintOnly': same('taint is followed only inside one function of one file', 'The engine connected a source and a sink in the same function. Flows through other files or functions are not followed, and the engine did not report the path it used.'),
+  'sentinel.pattern.limitation.perFileGranularity': same('coverage is reported per file, not per rule', 'The engine reports which files it scanned, not which rule completed on which file, so a file’s status stands for every rule written for its language.'),
+  'sentinel.pattern.rule.concatenatedQuery': same('database query built by joining strings', 'A query whose text is built with string concatenation, a common shape of injection.'),
+  'sentinel.pattern.rule.requestToQuery': same('request value used in a database query', 'A value read from a request reaches a database query in the same function.'),
+  'sentinel.pattern.jobAmbiguous': same('the scan job could not be identified', 'The isolated worker expects exactly one job description among its inputs. More than one, or none, stops the scan, so a captured file cannot stand in for the job.'),
+  'sentinel.pattern.rulesMissing': same('the scan rules were not among the inputs', 'The rules the job names must be supplied with it, byte for byte.'),
+  'sentinel.pattern.unsafePath': same('a target path is unsafe', 'Target paths are relative and cannot reach outside the scan folder.'),
+  'sentinel.pattern.targetMissing': same('a target was not among the inputs', 'Every target the job names must be supplied with it, byte for byte.'),
+};

@@ -236,3 +236,24 @@ and location), exact-limit bounds, version refusal, the drift check, the enum pi
 boundary, and the store: runtime gate, owner lock across real processes, ledger, objects, reachability and the
 facade end to end (`test/store-integration.test.ts`). They need no scanner, container, network or credential. `test/fixtures/` holds PR 01's feasibility
 inputs, which this package leaves untouched.
+
+## Pattern adapter (draft, not registered)
+
+`src/adapters/pattern/` runs Semgrep 1.181.0 (`semgrep/semgrep@sha256:81474464…304b`, installed ahead, never pulled)
+through the PR 07 execution service only. Semgrep cannot speak the worker protocol, so an original shim
+(`worker-source.ts`, Python standard library) runs inside the pinned image as `/usr/bin/python3 -I -S -B
+/input/<shim digest>`: it reads the one job among its inputs, materializes the targets under the container's noexec
+`/tmp` by their relative paths (never repository ignore files, plus its own empty `.semgrepignore` so the engine's
+default ignores cannot drop requested files), runs the fixed engine arguments (`--json --verbose --dataflow-traces
+--metrics=off --disable-version-check --jobs 1 --timeout 20 --max-target-bytes 1000000 --disable-nosem --no-git-ignore
+--no-rewrite-rule-ids --oss-only`) and returns the raw JSON and a run record as outputs. `normalize.ts` then decides,
+coordinator-side: job rules on job targets in declared languages only, byte spans checked against the captured bytes,
+Sentinel's own finding identity, structural locators kept apart from local taint, cross-file flows refused, and
+per-file coverage (complete, partial, skipped, omitted even on exit zero, error, not applicable, excluded).
+
+Measured scope (conformance, darwin-arm64 with Docker Desktop, the pinned image): the original pack in `rules/pattern/`
+finds its three direct positives (TS, JS, Java) as structural locators and its three local positives as local taint,
+none of its six negatives, and no cross-file flow. Semgrep 1.181.0's open-source engine reported no dataflow trace for
+those taint results, so local-taint evidence names its sink and records the trace as not reported. Coverage is per
+file, not per rule. Integration still open: registering the adapter in the production registry, the planner supplying
+the shim, job, rules and targets as inputs, and the scan command (PR 09).

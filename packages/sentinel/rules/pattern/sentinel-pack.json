@@ -1,0 +1,185 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-pattern",
+  "version": "0.1.0",
+  "rights": {
+    "spdx": "MIT",
+    "origin": "sentinel-original"
+  },
+  "rules": [
+    {
+      "familyId": "sentinel.sql.concatenated-query-tsjs",
+      "revision": 1,
+      "titleKey": "sentinel.pattern.rule.concatenatedQuery",
+      "applicability": {
+        "languages": [
+          "typescript",
+          "javascript"
+        ],
+        "scopeKind": "source-file"
+      },
+      "requires": [
+        "source-bytes",
+        "pattern-match",
+        "source-span"
+      ],
+      "implementation": {
+        "adapterId": "pattern-semgrep",
+        "rulePath": "detectors/sql-concatenated-query-tsjs.json"
+      },
+      "meaning": "candidate",
+      "severity": "high",
+      "evidenceRequired": [
+        "source-span",
+        "matched-pattern"
+      ],
+      "limitationKeys": [
+        "sentinel.pattern.limitation.locatorNotProof"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-89"
+        ]
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/typescript/direct.ts.fixture",
+          "fixtures/javascript/direct.js.fixture"
+        ],
+        "negative": [
+          "fixtures/typescript/direct-safe.ts.fixture",
+          "fixtures/javascript/direct-safe.js.fixture"
+        ]
+      }
+    },
+    {
+      "familyId": "sentinel.sql.concatenated-query-java",
+      "revision": 1,
+      "titleKey": "sentinel.pattern.rule.concatenatedQuery",
+      "applicability": {
+        "languages": [
+          "java"
+        ],
+        "scopeKind": "source-file"
+      },
+      "requires": [
+        "source-bytes",
+        "pattern-match",
+        "source-span"
+      ],
+      "implementation": {
+        "adapterId": "pattern-semgrep",
+        "rulePath": "detectors/sql-concatenated-query-java.json"
+      },
+      "meaning": "candidate",
+      "severity": "high",
+      "evidenceRequired": [
+        "source-span",
+        "matched-pattern"
+      ],
+      "limitationKeys": [
+        "sentinel.pattern.limitation.locatorNotProof"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-89"
+        ]
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/java/Direct.java.fixture"
+        ],
+        "negative": [
+          "fixtures/java/DirectSafe.java.fixture"
+        ]
+      }
+    },
+    {
+      "familyId": "sentinel.sql.request-to-query-tsjs",
+      "revision": 1,
+      "titleKey": "sentinel.pattern.rule.requestToQuery",
+      "applicability": {
+        "languages": [
+          "typescript",
+          "javascript"
+        ],
+        "scopeKind": "source-file"
+      },
+      "requires": [
+        "source-bytes",
+        "pattern-match",
+        "source-span"
+      ],
+      "implementation": {
+        "adapterId": "pattern-semgrep",
+        "rulePath": "detectors/sql-request-to-query-tsjs.json"
+      },
+      "meaning": "candidate",
+      "severity": "high",
+      "evidenceRequired": [
+        "source-span",
+        "matched-pattern"
+      ],
+      "limitationKeys": [
+        "sentinel.pattern.limitation.localTaintOnly"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-89"
+        ]
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/typescript/local.ts.fixture",
+          "fixtures/javascript/local.js.fixture"
+        ],
+        "negative": [
+          "fixtures/typescript/local-safe.ts.fixture",
+          "fixtures/javascript/local-safe.js.fixture"
+        ]
+      }
+    },
+    {
+      "familyId": "sentinel.sql.request-to-query-java",
+      "revision": 1,
+      "titleKey": "sentinel.pattern.rule.requestToQuery",
+      "applicability": {
+        "languages": [
+          "java"
+        ],
+        "scopeKind": "source-file"
+      },
+      "requires": [
+        "source-bytes",
+        "pattern-match",
+        "source-span"
+      ],
+      "implementation": {
+        "adapterId": "pattern-semgrep",
+        "rulePath": "detectors/sql-request-to-query-java.json"
+      },
+      "meaning": "candidate",
+      "severity": "high",
+      "evidenceRequired": [
+        "source-span",
+        "matched-pattern"
+      ],
+      "limitationKeys": [
+        "sentinel.pattern.limitation.localTaintOnly"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-89"
+        ]
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/java/Local.java.fixture"
+        ],
+        "negative": [
+          "fixtures/java/LocalSafe.java.fixture"
+        ]
+      }
+    }
+  ]
+}

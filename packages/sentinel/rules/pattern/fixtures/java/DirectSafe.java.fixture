@@ -1,0 +1,6 @@
+// Original synthetic fixture: a parameterized query.
+class DirectSafe {
+  Object find(Db db, String id) {
+    return db.query("SELECT * FROM invoices WHERE id = ?", id);
+  }
+}

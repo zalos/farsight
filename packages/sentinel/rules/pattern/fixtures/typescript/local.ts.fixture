@@ -1,0 +1,6 @@
+// Original synthetic fixture: a request value flows into a query in one function.
+export function search(req: { value(): string }, db: { query(sql: string, args?: unknown[]): unknown }) {
+  const term = req.value();
+  const sql = `SELECT * FROM invoices WHERE note = '${term}'`;
+  return db.query(sql);
+}

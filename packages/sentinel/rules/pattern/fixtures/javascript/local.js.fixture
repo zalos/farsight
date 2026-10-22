@@ -1,0 +1,6 @@
+// Original synthetic fixture: a request value flows into a query in one function.
+export function lookup(req, db) {
+  const name = req.value();
+  const sql = "SELECT * FROM vendors WHERE name = '" + name + "'";
+  return db.query(sql);
+}

@@ -1,0 +1,4 @@
+// Original synthetic fixture: a query built by concatenation.
+export function findInvoice(db: { query(sql: string, args?: unknown[]): unknown }, id: string) {
+  return db.query("SELECT * FROM invoices WHERE id = " + id);
+}

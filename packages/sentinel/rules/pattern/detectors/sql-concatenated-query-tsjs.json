@@ -1,0 +1,14 @@
+{
+  "rules": [
+    {
+      "id": "sentinel.sql.concatenated-query-tsjs",
+      "languages": [
+        "typescript",
+        "javascript"
+      ],
+      "severity": "WARNING",
+      "message": "Sentinel original locator: a query built by concatenation. A candidate location to review, not proof of injection.",
+      "pattern": "$DB.query($LEFT + $RIGHT)"
+    }
+  ]
+}
