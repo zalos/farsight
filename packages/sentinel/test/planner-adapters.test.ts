@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { emptyLock, lockDigest, validatePack } from '../dist/rules/index.js';
 import { DEFAULT_SETTINGS, effectivePolicy } from '../dist/policy/index.js';
 import { validateEnvelope } from '../dist/validate.js';
-import { registry, trustedProfile } from './planner-helpers.ts';
+import { analysisView, registry, snapshotView, trustedProfile } from './planner-helpers.ts';
 import {
   PlanError, adapterOf, canonicalArtifactId, capturedInputsOf, checksCoveredBy, influenceManifestOf,
   planAnalysis, planBootstrap, plannerLockFrom, plannerPolicyFrom, workEnvelopesFor,
@@ -61,8 +61,8 @@ test('a plan converts to canonical work envelopes that cover exactly its checks'
   const file = (p: string) => ({ sourceId: 'web', relativePath: p, kind: 'file' as const, disposition: 'included' as const, content: D(p), bytes: 1, generated: false });
   const snapshot = { id: 'snap-1', entries: [file('src/a.ts'), file('src/b.ts')] };
   const plan = planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: [{ id: boot.units.at(-1)!.id, revision: 1 }], profile,
-    snapshot: { ...snapshot, inventoryDigest: D('inv'), environmentProfileDigest: D('env'), sources: [{ sourceId: 'web' }], frameworkVersions: [] },
-    analyses: [{ sourceId: 'web', analysisFingerprint: 'fp', files: [], surfaces: [] }], lock: plannerLockFrom(lock, [pack], pin), policy: plannerPolicyFrom(policy) });
+    snapshot: snapshotView(['web'], snapshot.entries).view,
+    analyses: [analysisView('web', [])], lock: plannerLockFrom(lock, [pack], pin), policy: plannerPolicyFrom(policy) });
   const L = { deadlineMs: 1000, memoryBytes: 1 << 26, cpuQuota: 1, maxPids: 8, maxOutputBytes: 1 << 16 };
   const execution = { resources: { capture: L, parse: L, inventory: L, check: L } };
   const conversion = { coordinatorEpoch: 'epoch-1', createdAt: '2026-10-22T12:00:00Z', execution };

@@ -7,6 +7,8 @@ import type { ValidatedPack } from '../rules/pack.js';
 import { resolveLockedRules } from '../rules/resolve.js';
 import type { SourceAnalysis } from '../snapshot/parser.js';
 import { PlanError } from './errors.js';
+import { trustedView } from './identity.js';
+import { validateEnvelope } from '../validate.js';
 import { SURFACE_NODE_KINDS, surfacesFromIndex } from './planner.js';
 import type { PlannerAnalysis, PlannerPolicy, PlannerRuleLock, PlannerSnapshot } from './types.js';
 
@@ -19,7 +21,7 @@ const mismatch = (detail: string) => new PlanError('sentinel.plan.pinMismatch', 
  */
 export function plannerLockFrom(lock: RuleLockEnvelope, packs: readonly ValidatedPack[], pin: string): PlannerRuleLock {
   const resolved = resolveLockedRules(lock, pin, packs);
-  return {
+  return trustedView({
     digest: pin,
     rules: resolved.map(({ definition: d, definitionDigest, packDigest }) => ({
       familyId: d.familyId, revision: d.revision, definitionDigest, packDigest,
@@ -29,34 +31,35 @@ export function plannerLockFrom(lock: RuleLockEnvelope, packs: readonly Validate
     })),
     tools: lock.tools.map(t => ({ adapterId: t.adapterId, version: t.version, artifactDigest: t.artifactDigest })),
     databases: lock.databases.map(d => ({ databaseId: d.databaseId, snapshotDigest: d.snapshotDigest })),
-  };
+  });
 }
 
 /** The planning view of the effective policy. It pins `revision`, the digest receipts and admission bind to. */
 export function plannerPolicyFrom(policy: EffectivePolicy): PlannerPolicy {
   if (!isEffectivePolicy(policy)) throw mismatch('the policy is accepted only as effectivePolicy returned it');
-  return {
+  return trustedView({
     digest: policy.revision,
     rules: policy.view.rules.map(r => ({ familyId: r.familyId, source: r.source })),
     requireCompleteCoverage: policy.thresholds.requireCompleteCoverage,
     requiredCapabilities: [...policy.thresholds.requiredCapabilities],
-  };
+  });
 }
 
 /** The planning view of a snapshot envelope. */
 export function plannerSnapshotFrom(snapshot: SnapshotEnvelope): PlannerSnapshot {
-  return {
+  if (!validateEnvelope('snapshot', snapshot).ok) throw mismatch('the snapshot is not a valid sentinel-snapshot/draft-1 envelope');
+  return trustedView({
     id: snapshot.id, inventoryDigest: snapshot.inventoryDigest, environmentProfileDigest: snapshot.environmentProfileDigest,
     sources: snapshot.sources.map(s => ({ sourceId: s.sourceId })), entries: snapshot.entries, frameworkVersions: snapshot.frameworkVersions,
-  };
+  });
 }
 
 /** One source's parser evidence: each captured path's class, and surfaces from the index by graph kind. */
 export function plannerAnalysisFrom(source: SourceAnalysis, surfaceKinds: readonly string[] = SURFACE_NODE_KINDS): PlannerAnalysis {
-  return {
+  return trustedView({
     sourceId: source.sourceId,
     analysisFingerprint: source.result.analysisFingerprint,
     files: source.result.entries.map(e => ({ path: e.path, class: e.class })),
     surfaces: surfacesFromIndex(source.index, surfaceKinds),
-  };
+  });
 }

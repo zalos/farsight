@@ -475,7 +475,12 @@ registered operations bound by the profile; an unbound stage stays in the plan a
 captured file set (bounded; a larger source is not planned as a whole), and every entry it cannot read, excluded,
 refused, unreadable or unlisted, is kept as its own gap. Each unit binds its exact captured input set by digest,
 apart from its wider input fingerprint. An unresolved framework version is unknown for the source it names, or for
-every source when it names none.
+every source when it names none. A surface rule also keeps, as required gaps, every file of its languages that did
+not parse and every folder capture could not list: surfaces nobody could discover never disappear from coverage.
+Planner inputs carry trusted identity only as the deep-frozen views the adapters derive; a copy or an edited view
+is refused. The contract's validator re-derives every check and unit id from its content and enforces the pin
+graph (each check's rule revision and adapter, its analysed source, the canonical bootstrap shape), so a resealed
+revision with a recomputed digest is still refused; every binding handed to the coordinator is a deep-frozen copy.
 
 A bootstrap revision captures once, parses each source and builds the inventory. An analysis revision derives one
 check per scope a selected rule names, identified by (scope, rule revision, environment, mode). A check the profile

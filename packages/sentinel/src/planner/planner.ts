@@ -17,6 +17,7 @@ import { validateEnvelope } from '../validate.js';
 import type { NodeKind } from '@farsight/graph';
 import { PlanError, type PlanReasonCode } from './errors.js';
 import { capabilityOf, isCapabilityTable } from './capabilities.js';
+import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf, deepFreeze, isTrustedView } from './identity.js';
 import {
   CHECK_STATES, DEFAULT_PLANNER_LIMITS, PLAN_SCHEMA,
   type CheckState, type PlanPins, type PlanRevision, type PlanStage, type PlannedCheck, type PlannedWork, type PlannerAnalysis,
@@ -26,7 +27,6 @@ import {
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
-const shortHash = (value: unknown) => digestOf(value).slice(7, 31);
 const invalid = (detail: string) => new PlanError('sentinel.plan.invalidInput', detail);
 
 function checkId(value: unknown, what: string): string {
@@ -38,13 +38,6 @@ function checkDigest(value: unknown, what: string): string {
   return value;
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
-    for (const v of Object.values(value as Record<string, unknown>)) deepFreeze(v);
-    Object.freeze(value);
-  }
-  return value;
-}
 
 const byKey = <T>(key: (t: T) => string) => (a: T, b: T) => { const x = key(a), y = key(b); return x < y ? -1 : x > y ? 1 : 0; };
 
@@ -195,7 +188,7 @@ export function planBootstrap(request: BootstrapRequest): PlanRevision {
     // An unbound stage keeps a deterministic identity of "no operation" and is blocked at hand-off, never run.
     const implementationDigest = bound?.digest ?? digestOf({ unbound: `sentinel.stage.${stage}` });
     const inputFingerprint = digestOf({ stage, sourceId, sources, implementationDigest, adapterId: bound?.adapterId ?? null, dependencies });
-    return { id: `work-${stage}-${shortHash({ runId, revision, stage, sourceId })}`, revision: 1, stage, contract: `sentinel.stage.${stage}`,
+    return { id: bootstrapUnitIdOf({ runId, revision, stage, sourceId }), revision: 1, stage, contract: `sentinel.stage.${stage}`,
       implementationDigest, sourceId, adapterId: bound?.adapterId ?? null, dependencies, inputFingerprint, checks: [], scopes: [], inputs: [],
       inputSetDigest: digestOf([]) };
   };
@@ -230,7 +223,7 @@ export interface AnalysisRequest {
   readonly limits?: Partial<PlannerLimits>;
 }
 
-interface Candidate { scopeKind: PlannerScopeKind; scopeId: string; sourceId: string; path: string | null; entry?: CaptureEntry; boundary?: boolean; repositoryGap?: boolean }
+interface Candidate { scopeKind: PlannerScopeKind; scopeId: string; sourceId: string; path: string | null; entry?: CaptureEntry; boundary?: boolean; repositoryGap?: boolean; undiscovered?: boolean }
 
 /** Every check the policy's locked rules imply over the snapshot, in a frozen analysis revision. */
 export function planAnalysis(request: AnalysisRequest): PlanRevision {
@@ -240,6 +233,10 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const limits = { ...DEFAULT_PLANNER_LIMITS, ...request.limits };
   for (const [k, v] of Object.entries(limits)) if (!Number.isSafeInteger(v) || v < 1 || v > (DEFAULT_PLANNER_LIMITS as unknown as Record<string, number>)[k]!) throw invalid(`${k} must be 1..${(DEFAULT_PLANNER_LIMITS as unknown as Record<string, number>)[k]}`);
   const { snapshot, lock, policy } = request;
+  // Only the adapters' frozen derivations may carry a lock pin, a policy revision, a snapshot or analysis identity.
+  for (const [what, view] of [['rule lock', lock], ['policy', policy], ['snapshot', snapshot], ...request.analyses.map(a => ['parser analysis', a] as const)] as const) {
+    if (!isTrustedView(view)) throw new PlanError('sentinel.plan.pinMismatch', `the ${what} is accepted only as its planner adapter derived it`);
+  }
   const profile = checkProfile(request.profile);
   const operations = operationPins(profile);
   const permits = new Set(profile.permits);
@@ -312,7 +309,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   for (const list of repositoryFiles.values()) list.sort();
   const add = (c: Omit<PlannedCheck, 'id' | 'environment' | 'mode'>, path: string | null) => {
     if (checks.length >= limits.maxChecks) throw new PlanError('sentinel.plan.tooManyChecks', String(limits.maxChecks));
-    const id = `chk-${shortHash({ scope: c.scopeId, family: c.familyId, revision: c.ruleRevision, environment, mode: 'deterministic' })}`;
+    const id = checkIdOf({ scopeId: c.scopeId, familyId: c.familyId, ruleRevision: c.ruleRevision, environment });
     checks.push({ ...c, id, environment, mode: 'deterministic' });
     if (c.state === 'planned' && path !== null) readsFile.set(id, path);
   };
@@ -337,6 +334,24 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
         for (const s of analyses.get(sourceId)!.surfaces) {
           const l = languageOf(s.path);
           if (l && rule.languages.includes(l)) candidates.push({ scopeKind: 'surface', scopeId: s.nodeId, sourceId, path: s.path });
+        }
+        // Surfaces are discovered only in parsed files. A file of the rule's languages that did not parse, could not
+        // be captured, or a folder capture could not list may hold surfaces nobody found: each stays a gap.
+        for (const entry of snapshot.entries) {
+          if (entry.sourceId !== sourceId || entry.disposition === 'excluded') continue;
+          if (entry.kind === 'directory-boundary') {
+            if (entry.knownDescendants !== 0) candidates.push({ scopeKind: 'surface', scopeId: `${sourceId}:${entry.relativePath}/`, sourceId, path: entry.relativePath, entry, boundary: true });
+            continue;
+          }
+          const l = entry.kind === 'file' ? languageOf(entry.relativePath) : undefined;
+          if (!l || !rule.languages.includes(l)) continue;
+          if (entry.kind === 'file' && entry.disposition === 'included') {
+            if (fileClass.get(sourceId)!.get(entry.relativePath) !== 'parsed') {
+              candidates.push({ scopeKind: 'surface', scopeId: `${sourceId}:${entry.relativePath}`, sourceId, path: entry.relativePath, undiscovered: true });
+            }
+          } else {
+            candidates.push({ scopeKind: 'surface', scopeId: `${sourceId}:${entry.relativePath}`, sourceId, path: entry.relativePath, entry });
+          }
         }
       }
     }
@@ -375,6 +390,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
           continue;
         }
       }
+      if (c.undiscovered) { state('scope-unknown', 'sentinel.plan.surfacesUndiscovered' satisfies PlanReasonCode); continue; }
       if (c.boundary) {
         if (c.repositoryGap && c.entry?.disposition === 'excluded') { state('scope-unavailable', c.entry.reasonCode); continue; }
         state('scope-unknown', 'sentinel.plan.unknownDescendants'); continue;
@@ -429,7 +445,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
         inputs: inputs.map(i => [i.relativePath, i.content]),
         databases: needsDatabases ? lock.databases.map(d => [d.databaseId, d.snapshotDigest]).sort() : [],
       });
-      const id = `work-check-${shortHash({ runId, revision, adapterId, sourceId, checks: ids })}`;
+      const id = checkUnitIdOf({ runId, revision, adapterId, sourceId, checks: ids });
       work.push({ id, revision: 1, stage: 'check', contract: `sentinel.stage.check.${adapterId}`, implementationDigest, sourceId, adapterId,
         dependencies: [...request.bootstrap].map(r => ({ id: r.id, revision: r.revision })).sort(byKey(r => `${r.id}@${r.revision}`)),
         inputFingerprint, checks: ids, scopes: [...scopes].sort(),
@@ -453,7 +469,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const pins: PlanPins = {
     snapshotId: snapshot.id, inventoryDigest: snapshot.inventoryDigest, environment, ruleLockDigest: lock.digest, policyDigest: policy.digest,
     profileId: checkId(profile.id, 'profile id'),
-    rules: selected.map(({ rule: r }) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: r.definitionDigest, packDigest: r.packDigest })),
+    rules: selected.map(({ rule: r }) => ({ familyId: r.familyId, revision: r.revision, definitionDigest: r.definitionDigest, packDigest: r.packDigest, adapterId: r.adapterId })),
     tools: [...lock.tools].map(t => ({ adapterId: t.adapterId, artifactDigest: t.artifactDigest })).sort(byKey(t => t.adapterId)),
     databases: [...lock.databases].map(d => ({ databaseId: d.databaseId, snapshotDigest: d.snapshotDigest })).sort(byKey(d => d.databaseId)),
     analyses: [...analyses.values()].map(a => ({ sourceId: a.sourceId, analysisFingerprint: a.analysisFingerprint })).sort(byKey(a => a.sourceId)),

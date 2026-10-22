@@ -345,13 +345,18 @@
         },
         "packDigest": {
           "$ref": "#/definitions/Digest"
+        },
+        "adapterId": {
+          "$ref": "#/definitions/Id",
+          "description": "The registered adapter the rule's definition names: the only adapter its checks may run under."
         }
       },
       "required": [
         "familyId",
         "revision",
         "definitionDigest",
-        "packDigest"
+        "packDigest",
+        "adapterId"
       ],
       "additionalProperties": false
     },

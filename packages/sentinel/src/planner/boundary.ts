@@ -14,6 +14,7 @@ import { canonicalJsonBytes } from '../store/objects.js';
 import { validateEnvelope } from '../validate.js';
 import { PlanError } from './errors.js';
 import { verifyPlanRevision } from './planner.js';
+import { deepFreeze } from './identity.js';
 import type { PlanRevision, PlanStage, PlannedWork } from './types.js';
 
 const invalid = (detail: string) => new PlanError('sentinel.plan.invalidInput', detail);
@@ -68,12 +69,12 @@ const unitOf = (plan: PlanRevision, ref: WorkRef): PlannedWork => {
 
 export function influenceManifestOf(plan: PlanRevision, ref: WorkRef): InfluenceManifest {
   const u = unitOf(sealedPlan(plan), ref);
-  return {
-    schema: 'sentinel-influence/draft-1', plan: { runId: plan.runId, revision: plan.revision, digest: plan.digest },
+  return deepFreeze(structuredClone({
+    schema: 'sentinel-influence/draft-1' as const, plan: { runId: plan.runId, revision: plan.revision, digest: plan.digest },
     unit: { id: u.id, revision: u.revision }, stage: u.stage, inputFingerprint: u.inputFingerprint,
     implementationDigest: u.implementationDigest, adapterId: u.adapterId, dependencies: u.dependencies.map(d => ({ ...d })),
     checks: [...u.checks], scopes: [...u.scopes], inputs: u.inputs.map(i => ({ ...i })), pins: plan.pins,
-  };
+  }));
 }
 
 /**
@@ -102,13 +103,14 @@ export function workEnvelopesFor(plan: PlanRevision, conversion: WorkConversion)
       : { ...common, state: u.dependencies.length ? 'pending' : 'ready' };
     const checked = validateEnvelope('work', envelope);
     if (!checked.ok) throw invalid(`${u.id} is not a valid work envelope: ${checked.errors[0]?.path || '/'} ${checked.errors[0]?.message ?? ''}`);
-    return Object.freeze({ envelope: checked.value, manifest });
+    // The whole binding is a private deep-frozen copy: neither the envelope nor the manifest it names can change.
+    return deepFreeze(structuredClone({ envelope: checked.value, manifest }));
   });
 }
 
 /** Exactly the checks the plan assigned to this unit: never more. */
 export function checksCoveredBy(plan: PlanRevision, ref: WorkRef): readonly Id[] {
-  return [...unitOf(sealedPlan(plan), ref).checks];
+  return Object.freeze([...unitOf(sealedPlan(plan), ref).checks]);
 }
 
 /** The registered adapter that runs a unit; null for a bootstrap stage with no bound operation (its work is blocked). */
@@ -126,12 +128,12 @@ export function capturedInputsOf(plan: PlanRevision, ref: WorkRef, snapshot: Pic
   if (plan.pins.snapshotId !== snapshot.id) throw mismatch('the snapshot is not the one the plan pins');
   const included = new Map<string, ArtifactId>();
   for (const e of snapshot.entries) if (e.kind === 'file' && e.disposition === 'included') included.set(`${e.sourceId}\u0000${e.relativePath}`, e.content);
-  return unit.inputs.map(i => {
+  return deepFreeze(unit.inputs.map(i => {
     const id = included.get(`${i.sourceId}\u0000${i.relativePath}`);
     if (!id) throw mismatch(`${i.sourceId}:${i.relativePath} is not an included file of the pinned snapshot`);
     if (id !== i.content) throw mismatch(`${i.sourceId}:${i.relativePath} holds other bytes than the plan pinned`);
     return { sourceId: i.sourceId, relativePath: i.relativePath, id };
-  });
+  }));
 }
 
 /** A captured input as the coordinator's supervisor takes it: the artifact and where its bytes are now. */
@@ -203,7 +205,7 @@ export function planBoundaryFor(plan: PlanRevision, request: BoundaryRequest): P
     return plan.units.find(u => u.id === w.id && u.revision === w.revision)!;
   };
   return Object.freeze({
-    run, works: Object.freeze(works), plan,
+    run: deepFreeze(structuredClone(checked.value)), works: Object.freeze(works), plan,
     checksFor: (w: WorkEnvelope) => Object.freeze([...known(w).checks]),
     adapterFor: (w: WorkEnvelope) => known(w).adapterId!,
     inputsFor: (w: WorkEnvelope) => Object.freeze(capturedInputsOf(plan, known(w), request.snapshot)

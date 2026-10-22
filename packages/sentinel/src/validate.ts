@@ -11,6 +11,7 @@ import type {
   PlanEnvelope,
 } from './contracts/index.js';
 import { digestOf } from './store/ledger-json.js';
+import { bootstrapUnitIdOf, checkIdOf, checkUnitIdOf } from './planner/identity.js';
 import { OWNER_ACTIONS } from './contracts/index.js';
 
 export interface EnvelopeTypes {
@@ -548,6 +549,45 @@ const plan: Check<PlanEnvelope> = (v, out) => {
     }
     w.inputs.forEach((p, j) => pathError(out, `/units/${i}/inputs/${j}/relativePath`, p.relativePath));
   });
+  // The pin graph: every id follows from its content, every check names a pinned rule and analysed source, and every
+  // check unit runs the adapter its checks' rules name.
+  const ruleKey = (f: string, r: number) => `${f}\u0000${r}`;
+  for (const i of duplicates(v.pins.rules, r => r.familyId)) out.add(err(`/pins/rules/${i}/familyId`, 'a plan pins each rule family once'));
+  const pinnedRules = new Map(v.pins.rules.map(r => [ruleKey(r.familyId, r.revision), r]));
+  v.ruleGaps.forEach((g, i) => { if (v.pins.rules.some(r => r.familyId === g.familyId)) out.add(err(`/ruleGaps/${i}`, 'a pinned rule is not a rule gap')); });
+  const analysed = new Set(v.pins.analyses.map(a => a.sourceId));
+  if (analysis && analysed.size === 0) out.add(err('/pins/analyses', 'an analysis revision pins the parser evidence it planned over'));
+  const ruleOf = new Map<string, string>();
+  v.checks.forEach((c, i) => {
+    const rule = pinnedRules.get(ruleKey(c.familyId, c.ruleRevision));
+    if (!rule) out.add(err(`/checks/${i}/familyId`, 'a check names a rule revision the plan pins'));
+    else ruleOf.set(c.id, rule.adapterId);
+    if (!analysed.has(c.sourceId)) out.add(err(`/checks/${i}/sourceId`, 'a check names a source whose analysis the plan pins'));
+    if (c.environment === v.pins.environment && c.id !== checkIdOf(c)) out.add(err(`/checks/${i}/id`, 'a check id is the digest of its scope, rule revision and environment'));
+  });
+  v.units.forEach((w, i) => {
+    if (w.stage === 'check') {
+      if (w.sourceId === null || w.adapterId === null || w.id !== checkUnitIdOf({ runId: v.runId, revision: v.revision, adapterId: w.adapterId, sourceId: w.sourceId, checks: w.checks })) {
+        out.add(err(`/units/${i}/id`, 'a check unit id is the digest of its run, revision, adapter, source and checks'));
+      }
+      if (w.checks.some(id => ruleOf.has(id) && ruleOf.get(id) !== w.adapterId)) out.add(err(`/units/${i}/adapterId`, 'a unit runs the adapter its checks\' rules name'));
+    } else if (w.id !== bootstrapUnitIdOf({ runId: v.runId, revision: v.revision, stage: w.stage, sourceId: w.sourceId })) {
+      out.add(err(`/units/${i}/id`, 'a bootstrap unit id is the digest of its run, revision, stage and source'));
+    }
+  });
+  if (!analysis) {
+    // The canonical bootstrap: one capture, one parse per source after it, one inventory after every parse.
+    const ref = (w: { id: string; revision: number }) => `${w.id}@${w.revision}`;
+    const captures = v.units.filter(w => w.stage === 'capture');
+    const parses = v.units.filter(w => w.stage === 'parse');
+    const inventories = v.units.filter(w => w.stage === 'inventory');
+    const shape = captures.length === 1 && inventories.length === 1 && parses.length >= 1 && v.units.length === parses.length + 2
+      && captures[0]!.sourceId === null && captures[0]!.dependencies.length === 0 && inventories[0]!.sourceId === null
+      && parses.every(p => p.sourceId !== null && p.dependencies.length === 1 && ref(p.dependencies[0]!) === ref(captures[0]!))
+      && new Set(parses.map(p => p.sourceId)).size === parses.length
+      && inventories[0]!.dependencies.map(ref).sort().join() === parses.map(ref).sort().join();
+    if (!shape) out.add(err('/units', 'a bootstrap revision is one capture, one parse per source after it and one inventory after every parse'));
+  }
   const tally: Record<string, number> = { 'planned': 0, 'unsupported': 0, 'applicability-unknown': 0, 'scope-unavailable': 0, 'scope-unknown': 0 };
   let required = 0, requiredNotPlanned = 0;
   const checkIds = new Set<string>();

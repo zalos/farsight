@@ -14,6 +14,7 @@ import type { CoverageEnvelope, CoverageStatus } from '../contracts/coverage.js'
 import { validateEnvelope } from '../validate.js';
 import { PlanError } from './errors.js';
 import { verifyPlanRevision } from './planner.js';
+import { deepFreeze } from './identity.js';
 import type { CheckState, PlanRevision } from './types.js';
 
 export interface CheckCoverage {
@@ -73,8 +74,8 @@ export function evaluateRequiredCoverage(plan: PlanRevision, records: readonly C
   const required = checks.filter(c => c.required);
   const requiredComplete = required.filter(c => c.complete).length;
   const ruleGaps = plan.ruleGaps.filter(g => g.required);
-  return Object.freeze({
+  return deepFreeze(structuredClone({
     complete: requiredComplete === required.length && ruleGaps.length === 0,
-    required: required.length, requiredComplete, checks: Object.freeze(checks), ruleGaps, unknownRecords: Object.freeze(unknownRecords),
-  });
+    required: required.length, requiredComplete, checks, ruleGaps, unknownRecords,
+  }));
 }

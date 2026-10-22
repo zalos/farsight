@@ -1641,7 +1641,7 @@
     "base": "plan-analysis",
     "ops": [
       {
-        "set": "/checks/2/state",
+        "set": "/checks/1/state",
         "value": "maybe"
       }
     ],
@@ -1655,7 +1655,7 @@
         "set": "/units/0/dependencies",
         "value": [
           {
-            "id": "work-check-18185317244879572760852e",
+            "id": "work-check-43fefefbcd7003955436e793",
             "revision": 1
           }
         ]
@@ -1684,7 +1684,7 @@
     "base": "plan-analysis",
     "ops": [
       {
-        "set": "/checks/1/unit",
+        "set": "/checks/0/unit",
         "value": {
           "id": "work-check-18185317244879572760852e",
           "revision": 1
@@ -1692,18 +1692,18 @@
       }
     ],
     "expect": "sentinel.contract.invariant",
-    "path": "/checks/1/unit"
+    "path": "/checks/0/unit"
   },
   {
     "name": "a plan check that is not planned says why",
     "base": "plan-analysis",
     "ops": [
       {
-        "delete": "/checks/1/reasonCode"
+        "delete": "/checks/0/reasonCode"
       }
     ],
     "expect": "sentinel.contract.invariant",
-    "path": "/checks/1/reasonCode"
+    "path": "/checks/0/reasonCode"
   },
   {
     "name": "a planned check no unit covers",
@@ -1715,7 +1715,7 @@
       }
     ],
     "expect": "sentinel.contract.invariant",
-    "path": "/checks/2/unit"
+    "path": "/checks/1/unit"
   },
   {
     "name": "a plan unit covering a check the plan does not have",

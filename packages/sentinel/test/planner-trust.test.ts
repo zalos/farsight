@@ -9,12 +9,11 @@ import { createAdapterRegistry } from '../dist/execution/registry.js';
 import {
   PlanError, createCapabilityTable, planAnalysis, planBootstrap, verifyInputSet, workEnvelopesFor,
 } from '../dist/planner/index.js';
-import { OSV_IMAGE, registry, trustedProfile } from './planner-helpers.ts';
+import { OSV_IMAGE, analysisView, lockedRules, policyView, registry, snapshotView, trustedProfile } from './planner-helpers.ts';
 
 const d = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const code = (c: string) => (e: unknown) => e instanceof PlanError && e.code === c;
-const rule = (familyId: string, over: Record<string, unknown> = {}) => ({ familyId, revision: 1, definitionDigest: d(familyId), packDigest: d('pack'),
-  languages: ['typescript', 'java'], scopeKind: 'source-file', requires: ['source-bytes', 'pattern-match'], adapterId: 'sentinel-pattern', ...over });
+const rule = (familyId: string, over: Record<string, unknown> = {}) => ({ familyId, languages: ['typescript', 'java'], ...over });
 const file = (s: string, p: string) => ({ sourceId: s, relativePath: p, kind: 'file' as const, disposition: 'included' as const, content: d(`${s}/${p}`), bytes: 1, generated: false });
 const L = { deadlineMs: 1000, memoryBytes: 1 << 26, cpuQuota: 1, maxPids: 8, maxOutputBytes: 1 << 16 };
 const conversion = { coordinatorEpoch: 'epoch-1', createdAt: '2026-10-22T12:00:00Z', execution: { resources: { capture: L, parse: L, inventory: L, check: L } } };
@@ -23,11 +22,11 @@ function plan(rules: ReturnType<typeof rule>[], over: Record<string, unknown> = 
   const profile = (over.profile as ReturnType<typeof trustedProfile>) ?? trustedProfile();
   const boot = planBootstrap({ runId: 'run-1', sourceIds: ['web', 'api'], profile });
   return planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: [{ id: boot.units.at(-1)!.id, revision: 1 }], profile,
-    snapshot: { id: 'snap-1', inventoryDigest: d('inv'), environmentProfileDigest: d('env'), sources: [{ sourceId: 'web' }, { sourceId: 'api' }],
-      frameworkVersions: [], entries: [file('web', 'src/a.ts'), file('web', 'src/b.ts'), file('api', 'App.java'), file('web', 'package.json')], ...(over.snapshot as object ?? {}) },
-    analyses: [{ sourceId: 'web', analysisFingerprint: 'fp-w', files: [], surfaces: [] }, { sourceId: 'api', analysisFingerprint: 'fp-a', files: [], surfaces: [] }],
-    lock: { digest: d('lock'), rules, tools: (over.tools as never) ?? [{ adapterId: 'osv', version: '2.0.0', artifactDigest: d('osv') }], databases: [] },
-    policy: { digest: d('policy'), rules: rules.map(r => ({ familyId: r.familyId, source: 'mandatory' as const })), requireCompleteCoverage: false, requiredCapabilities: [] },
+    snapshot: snapshotView(['web', 'api'], [file('web', 'src/a.ts'), file('web', 'src/b.ts'), file('api', 'App.java'), file('web', 'package.json')],
+      ((over.snapshot as { frameworkVersions?: unknown[] })?.frameworkVersions) ?? []).view,
+    analyses: [analysisView('web', []), analysisView('api', [])],
+    lock: lockedRules(rules as never, (over.tools as never) ?? undefined).view,
+    policy: policyView(rules.map(r => r.familyId)).view,
     ...(over.limits ? { limits: over.limits } : {}) });
 }
 const states = (p: ReturnType<typeof plan>) => [...new Set(p.checks.map(c => `${c.state}${c.reasonCode ? ` ${c.reasonCode}` : ''}`))];

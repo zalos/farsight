@@ -105,8 +105,12 @@ test('captured, parsed, locked and adopted inputs plan, admit and convert end to
   const byScope = (familyId: string) => Object.fromEntries(first.checks.filter(c => c.familyId === familyId).map(c => [c.scopeId, c.state]));
   assert.equal(byScope(EVAL.familyId)['app:src/util.ts'], 'planned');
   assert.equal(byScope(EVAL.familyId)['app:src/bad.ts'], 'planned', 'a pattern over bytes needs no parse');
-  assert.ok(first.checks.filter(c => c.familyId === ROUTE.familyId).every(c => c.state === 'unsupported' && c.required));
-  assert.equal(first.checks.filter(c => c.familyId === ROUTE.familyId).length, surfaces.filter(s => s.path.endsWith('.ts')).length);
+  const route = first.checks.filter(c => c.familyId === ROUTE.familyId);
+  assert.ok(route.every(c => c.required));
+  assert.deepEqual(route.filter(c => c.state === 'unsupported').map(c => c.scopeId).sort(), surfaces.filter(s => s.path.endsWith('.ts')).map(s => s.nodeId).sort(),
+    'each discovered route is a check, unsupported without framework order');
+  assert.deepEqual(route.filter(c => c.state !== 'unsupported').map(c => [c.scopeId, c.state, c.reasonCode]),
+    [['app:src/bad.ts', 'scope-unknown', 'sentinel.plan.surfacesUndiscovered']], 'a file that did not parse may hold routes nobody found');
   assert.deepEqual(first.ruleGaps, [{ familyId: CALL.familyId, required: true, reasonCode: 'sentinel.plan.ruleNotLocked' }]);
   assert.equal(first.requiredCoverageAchievable, false);
   assert.equal(first.pins.ruleLockDigest, lockDigest(lock2));

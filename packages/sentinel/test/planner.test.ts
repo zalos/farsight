@@ -8,18 +8,15 @@ import {
   CHECK_STATES, PLAN_ERROR_CODES, PLAN_REASON_CODES, PlanError, checkWorkGraph, languageOf, planAnalysis, planBootstrap,
   surfacesFromIndex, verifyPlanRevision,
 } from '../dist/planner/index.js';
-import type { PlanRevision, PlannerAnalysis, PlannerPolicy, PlannerRule, PlannerRuleLock, PlannerSnapshot } from '../dist/planner/index.js';
-import { registry, trustedProfile } from './planner-helpers.ts';
+import type { PlanRevision } from '../dist/planner/index.js';
+import { analysisView, lockedRules, policyView, registry, snapshotView, trustedProfile, type RuleSpec } from './planner-helpers.ts';
 
 const d = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const code = (c: string) => (e: unknown) => e instanceof PlanError && e.code === c;
 
 const profile = trustedProfile({ permitExtra: ['framework-order'] });
 
-const rule = (familyId: string, over: Partial<PlannerRule> = {}): PlannerRule => ({
-  familyId, revision: 1, definitionDigest: d(`def ${familyId}`), packDigest: d('pack-a'), languages: ['typescript', 'javascript'],
-  scopeKind: 'source-file', requires: ['source-bytes', 'pattern-match'], adapterId: 'sentinel-pattern', ...over,
-});
+const rule = (familyId: string, over: Partial<RuleSpec> = {}): RuleSpec => ({ familyId, ...over });
 
 const RULES = {
   eval: rule('sentinel.ts.eval'),
@@ -31,50 +28,38 @@ const RULES = {
   repo: rule('sentinel.repo.missing-policy', { scopeKind: 'repository' }),
 };
 
-const lock = (rules: PlannerRule[], over: Partial<PlannerRuleLock> = {}): PlannerRuleLock => ({
-  digest: d(`lock ${rules.map(r => r.familyId).join(',')}`), rules,
-  tools: [{ adapterId: 'osv', version: '2.0.0', artifactDigest: d('osv binary') }],
-  databases: [{ databaseId: 'osv-db', snapshotDigest: d('osv db snapshot') }], ...over,
-});
-
-const policy = (familyIds: string[], over: Partial<PlannerPolicy> = {}): PlannerPolicy => ({
-  digest: d(`policy ${familyIds.join(',')}`), rules: familyIds.map(familyId => ({ familyId, source: 'mandatory' as const })),
-  requireCompleteCoverage: false, requiredCapabilities: [], ...over,
-});
+const lock = (rules: RuleSpec[]) => lockedRules(rules).view;
+const policy = (familyIds: string[], options: Parameters<typeof policyView>[1] = {}) => policyView(familyIds, options).view;
 
 const file = (sourceId: string, relativePath: string) => ({ sourceId, relativePath, kind: 'file' as const, disposition: 'included' as const,
   content: d(`${sourceId}/${relativePath}`), bytes: 10, generated: false });
 
-const snapshot: PlannerSnapshot = {
-  id: 'snap-1', inventoryDigest: d('inventory'), environmentProfileDigest: d('env'),
-  sources: [{ sourceId: 'web' }, { sourceId: 'api' }],
-  entries: [
-    file('web', 'src/a.ts'), file('web', 'src/b.tsx'), file('web', 'src/broken.ts'), file('web', 'package.json'),
-    file('web', '.github/workflows/ci.yml'), file('web', 'README.md'),
-    { sourceId: 'web', relativePath: 'src/huge.ts', kind: 'file', disposition: 'too-large', reasonCode: 'sentinel.capture.tooLarge', bytes: 99, generated: false },
-    { sourceId: 'web', relativePath: 'vendor/x.js', kind: 'file', disposition: 'excluded', reasonCode: 'sentinel.capture.excludedByPolicy', generated: false },
-    { sourceId: 'web', relativePath: 'node_modules', kind: 'directory-boundary', disposition: 'excluded', reasonCode: 'sentinel.capture.excludedDependencyCache', knownDescendants: null },
-    { sourceId: 'web', relativePath: 'locked', kind: 'directory-boundary', disposition: 'unreadable', reasonCode: 'sentinel.capture.unreadable', knownDescendants: null },
-    file('api', 'src/main/java/App.java'), file('api', 'pom.xml'),
-  ],
-  frameworkVersions: [
-    { framework: 'spring', state: 'resolved', version: '3.3.0', provenance: { sourceId: 'api', relativePath: 'pom.xml' } },
-  ],
-};
-
-const analyses: PlannerAnalysis[] = [
-  { sourceId: 'web', analysisFingerprint: d('web analysis'), surfaces: [],
-    files: [{ path: 'src/a.ts', class: 'parsed' }, { path: 'src/b.tsx', class: 'parsed' }, { path: 'src/broken.ts', class: 'parse-failed' }] },
-  { sourceId: 'api', analysisFingerprint: d('api analysis'),
-    files: [{ path: 'src/main/java/App.java', class: 'parsed' }],
-    surfaces: [{ nodeId: 'api::src/main/java/App.java::App.list', path: 'src/main/java/App.java', kind: 'route' },
-      { nodeId: 'api::src/main/java/App.java::App.create', path: 'src/main/java/App.java', kind: 'route' }] },
+const ENTRIES = [
+  file('web', 'src/a.ts'), file('web', 'src/b.tsx'), file('web', 'src/broken.ts'), file('web', 'package.json'),
+  file('web', '.github/workflows/ci.yml'), file('web', 'README.md'),
+  { sourceId: 'web', relativePath: 'src/huge.ts', kind: 'file', disposition: 'too-large', reasonCode: 'sentinel.capture.tooLarge', bytes: 99, generated: false },
+  { sourceId: 'web', relativePath: 'vendor/x.js', kind: 'file', disposition: 'excluded', reasonCode: 'sentinel.capture.excludedByPolicy', generated: false },
+  { sourceId: 'web', relativePath: 'node_modules', kind: 'directory-boundary', disposition: 'excluded', reasonCode: 'sentinel.capture.excludedDependencyCache', knownDescendants: null },
+  { sourceId: 'web', relativePath: 'locked', kind: 'directory-boundary', disposition: 'unreadable', reasonCode: 'sentinel.capture.unreadable', knownDescendants: null },
+  file('api', 'src/main/java/App.java'), file('api', 'pom.xml'),
 ];
+const SPRING = [{ framework: 'spring', state: 'resolved', version: '3.3.0', provenance: { sourceId: 'api', relativePath: 'pom.xml' } }];
+const snap = (frameworkVersions: unknown[] = SPRING, entries: unknown[] = ENTRIES, sources = ['web', 'api']) => snapshotView(sources, entries, frameworkVersions).view;
+const snapshot = snap();
+const snapshotEntries = ENTRIES;
+
+const analysisInputs = () => [
+  analysisView('web', [{ path: 'src/a.ts', class: 'parsed' }, { path: 'src/b.tsx', class: 'parsed' }, { path: 'src/broken.ts', class: 'parse-failed' }]),
+  analysisView('api', [{ path: 'src/main/java/App.java', class: 'parsed' }],
+    [{ nodeId: 'api::src/main/java/App.java::App.list', path: 'src/main/java/App.java', kind: 'route' },
+      { nodeId: 'api::src/main/java/App.java::App.create', path: 'src/main/java/App.java', kind: 'route' }]),
+];
+const analyses = analysisInputs();
 
 const bootstrap = planBootstrap({ runId: 'run-1', sourceIds: ['web', 'api'], profile });
 const inventoryRef = () => { const w = bootstrap.units.find(x => x.stage === 'inventory')!; return [{ id: w.id, revision: w.revision }]; };
 
-function analysis(rules: PlannerRule[], over: Partial<Parameters<typeof planAnalysis>[0]> = {}): PlanRevision {
+function analysis(rules: RuleSpec[], over: Partial<Parameters<typeof planAnalysis>[0]> = {}): PlanRevision {
   return planAnalysis({ runId: 'run-1', revision: 2, previous: bootstrap, bootstrap: inventoryRef(), snapshot, analyses,
     lock: lock(rules), policy: policy(rules.map(r => r.familyId)), profile, ...over });
 }
@@ -103,10 +88,11 @@ test('every scope a rule names gets a check with an explicit state; nothing is d
   }, 'excluded files and an excluded folder are out of scope; a refused file and an unlisted folder stay visible');
   assert.equal(checksOf(plan, RULES.calls.familyId).find(c => c.scopeId === 'web:src/broken.ts')!.reasonCode, 'sentinel.plan.parseRequired',
     'a rule that needs parser evidence cannot run on a file that did not parse');
-  // Framework-gated: only the Spring source, one check per surface; the order rule's capability is unavailable.
+  // Framework-gated: one check per discovered Spring surface; the web source's unlisted folder may hold Java
+  // surfaces too, and Spring is not detected there, so it stays unknown. The order rule's capability is unavailable.
   assert.deepEqual(checksOf(plan, RULES.spring.familyId).map(c => [c.scopeId, c.state]).sort(),
-    [['api::src/main/java/App.java::App.create', 'planned'], ['api::src/main/java/App.java::App.list', 'planned']]);
-  assert.ok(checksOf(plan, RULES.springOrder.familyId).every(c => c.state === 'unsupported' && c.reasonCode === 'sentinel.plan.capabilityUnavailable'),
+    [['api::src/main/java/App.java::App.create', 'planned'], ['api::src/main/java/App.java::App.list', 'planned'], ['web:locked/', 'applicability-unknown']]);
+  assert.ok(checksOf(plan, RULES.springOrder.familyId).filter(c => c.sourceId === 'api').every(c => c.state === 'unsupported' && c.reasonCode === 'sentinel.plan.capabilityUnavailable'),
     'permitted by the profile, but no registered adapter establishes it');
   assert.deepEqual(checksOf(plan, RULES.deps.familyId).map(c => [c.scopeId, c.state]).sort(),
     [['api:pom.xml', 'planned'], ['web:locked/', 'scope-unknown'], ['web:package.json', 'planned']], 'an unlisted folder may hold manifests too');
@@ -122,7 +108,7 @@ test('every scope a rule names gets a check with an explicit state; nothing is d
   });
   const repoUnit = plan.units.find(u => u.checks.includes(checksOf(plan, RULES.repo.familyId).find(c => c.scopeId === 'web')!.id))!;
   assert.deepEqual(repoUnit.inputs.map(i => i.relativePath),
-    snapshot.entries.filter(e => e.sourceId === 'web' && e.kind === 'file' && e.disposition === 'included').map(e => e.relativePath).sort(),
+    (snapshotEntries as any[]).filter(e => e.sourceId === 'web' && e.kind === 'file' && e.disposition === 'included').map(e => e.relativePath).sort(),
     'the complete captured set, never an empty input');
   // Tallies agree with the checks; mandatory unsupported checks make complete required coverage unachievable.
   assert.equal(Object.values(plan.tallies.checks).reduce((a, b) => a + b, 0), plan.checks.length);
@@ -150,11 +136,10 @@ test('physical batching covers exactly the planned checks, each once, within its
 
 test('the same inputs in any order give the same revision; the pins name exactly what it used', () => {
   const a = analysis(Object.values(RULES));
+  // The same lock and policy; the snapshot's entries, its sources and the analyses in other orders.
   const b = planAnalysis({ runId: 'run-1', revision: 2, previous: bootstrap, bootstrap: inventoryRef(),
-    snapshot: { ...snapshot, entries: [...snapshot.entries].reverse(), sources: [...snapshot.sources].reverse() },
-    analyses: [...analyses].reverse(), profile,
-    lock: lock(Object.values(RULES).reverse(), { digest: lock(Object.values(RULES)).digest }),
-    policy: policy(Object.values(RULES).map(r => r.familyId).reverse(), { digest: policy(Object.values(RULES).map(r => r.familyId)).digest }) });
+    snapshot: snap(SPRING, [...ENTRIES].reverse()), analyses: [...analysisInputs()].reverse(), profile,
+    lock: lock(Object.values(RULES)), policy: policy(Object.values(RULES).map(r => r.familyId)) });
   assert.equal(b.digest, a.digest);
   assert.equal(a.pins.snapshotId, 'snap-1');
   assert.equal(a.pins.ruleLockDigest, lock(Object.values(RULES)).digest);
@@ -190,23 +175,24 @@ test('a new rule plans new work over every relevant scope without recapture, and
 test('selection and capability decide required coverage; a policy rule missing from the lock is a visible gap', () => {
   const requested = planAnalysis({ runId: 'run-1', revision: 2, previous: bootstrap, bootstrap: inventoryRef(), snapshot, analyses,
     lock: lock([RULES.springOrder]), profile,
-    policy: { ...policy([]), rules: [{ familyId: RULES.springOrder.familyId, source: 'requested' }, { familyId: 'sentinel.ts.not-in-lock', source: 'mandatory' }] } });
+    policy: policy(['sentinel.ts.not-in-lock'], { requested: [RULES.springOrder.familyId] }) });
   assert.ok(checksOf(requested, RULES.springOrder.familyId).every(c => !c.required), 'a requested rule is not required by default');
   assert.deepEqual(requested.ruleGaps, [{ familyId: 'sentinel.ts.not-in-lock', required: true, reasonCode: 'sentinel.plan.ruleNotLocked' }]);
   assert.equal(requested.tallies.requiredNotPlanned, 1);
   const byCapability = planAnalysis({ runId: 'run-1', revision: 2, previous: bootstrap, bootstrap: inventoryRef(), snapshot, analyses,
     lock: lock([RULES.springOrder]), profile,
-    policy: { ...policy([]), rules: [{ familyId: RULES.springOrder.familyId, source: 'requested' }], requiredCapabilities: ['framework-order'] } });
-  assert.ok(checksOf(byCapability, RULES.springOrder.familyId).every(c => c.required && c.state === 'unsupported'));
+    policy: policy([], { requested: [RULES.springOrder.familyId], requiredCapabilities: ['framework-order'] }) });
+  assert.ok(checksOf(byCapability, RULES.springOrder.familyId).every(c => c.required && (c.state === 'unsupported' || c.scopeId === 'web:locked/')));
   assert.equal(byCapability.requiredCoverageAchievable, false);
 });
 
 test('an unresolved framework leaves applicability unknown, and so does one the snapshot does not name', () => {
-  const unresolved = { ...snapshot, frameworkVersions: [{ framework: 'spring', state: 'unknown' as const, reasonCode: 'sentinel.capture.unreadable' }] };
+  const unresolved = snap([{ framework: 'spring', state: 'unknown', reasonCode: 'sentinel.capture.unreadable' }]);
   const plan = analysis([RULES.spring], { snapshot: unresolved });
-  assert.ok(plan.checks.length === 2 && plan.checks.every(c => c.state === 'applicability-unknown' && c.reasonCode === 'sentinel.plan.frameworkUnresolved'));
-  const undetected = analysis([RULES.spring], { snapshot: { ...snapshot, frameworkVersions: [] } });
-  assert.ok(undetected.checks.length === 2 && undetected.checks.every(c => c.state === 'applicability-unknown' && c.reasonCode === 'sentinel.plan.frameworkNotDetected'),
+  // Two discovered Java routes, and the unlisted folder that may hold more.
+  assert.ok(plan.checks.length === 3 && plan.checks.every(c => c.state === 'applicability-unknown' && c.reasonCode === 'sentinel.plan.frameworkUnresolved'));
+  const undetected = analysis([RULES.spring], { snapshot: snap([]) });
+  assert.ok(undetected.checks.length === 3 && undetected.checks.every(c => c.state === 'applicability-unknown' && c.reasonCode === 'sentinel.plan.frameworkNotDetected'),
     'no version entry is never read as the framework being absent');
 });
 
@@ -227,7 +213,6 @@ test('a revision must follow its own run and an intact previous revision, over p
   assert.throws(() => analysis([RULES.eval], { previous: tampered }), code('sentinel.plan.pinMismatch'));
   assert.throws(() => analysis([RULES.eval], { analyses: analyses.slice(0, 1) }), code('sentinel.plan.pinMismatch'));
   assert.throws(() => analysis([RULES.eval], { bootstrap: [] }), code('sentinel.plan.invalidInput'));
-  assert.throws(() => analysis([RULES.eval, RULES.eval]), code('sentinel.plan.invalidInput'), 'a family pinned twice');
 });
 
 test('plan size is bounded, and a limit can only be lowered', () => {

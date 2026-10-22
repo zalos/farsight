@@ -67,6 +67,8 @@ export interface PlanPinnedRule {
   revision: Ordinal;
   definitionDigest: Digest;
   packDigest: Digest;
+  /** The registered adapter the rule's definition names: the only adapter its checks may run under. */
+  adapterId: Id;
 }
 
 export interface PlanPins {

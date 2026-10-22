@@ -5,7 +5,7 @@ import { sentinelPlanWord } from '@farsight/core/dist/strings-sentinel-plan.js';
 /** Why a check is not planned, or a rule could not be scheduled. Recorded in the plan, never thrown. */
 export const PLAN_REASON_CODES = Object.freeze([
   'sentinel.plan.capabilityUnavailable', 'sentinel.plan.capabilityNotPermitted', 'sentinel.plan.adapterNotLocked', 'sentinel.plan.adapterNotRegistered',
-  'sentinel.plan.repositoryTooLarge', 'sentinel.plan.operationUnbound', 'sentinel.plan.parseRequired',
+  'sentinel.plan.repositoryTooLarge', 'sentinel.plan.surfacesUndiscovered', 'sentinel.plan.operationUnbound', 'sentinel.plan.parseRequired',
   'sentinel.plan.frameworkUnresolved', 'sentinel.plan.frameworkNotDetected', 'sentinel.plan.unknownDescendants', 'sentinel.plan.inputNotCaptured',
   'sentinel.plan.coverageMissing', 'sentinel.plan.coverageNotComplete', 'sentinel.plan.coverageWrongUnit', 'sentinel.plan.coverageImported',
   'sentinel.plan.coverageReuseUnproven', 'sentinel.plan.coverageConflict', 'sentinel.plan.ruleNotLocked',

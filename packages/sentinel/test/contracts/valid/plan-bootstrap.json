@@ -10,7 +10,7 @@
     "environment": null,
     "ruleLockDigest": null,
     "policyDigest": null,
-    "profileId": "profile-default",
+    "profileId": "profile-local",
     "rules": [],
     "tools": [],
     "databases": [],
@@ -110,5 +110,5 @@
     "units": 3
   },
   "requiredCoverageAchievable": true,
-  "digest": "sha256:d0ac74565734733cb60ffba211bd8991c8ab7aa25bb36d9a8f7aca620b302aaf"
+  "digest": "sha256:6f47a22b746ab609a5d9483b9f0aa1b5d842f693fa1804ddda2922d44f54d1eb"
 }

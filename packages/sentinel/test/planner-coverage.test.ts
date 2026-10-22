@@ -3,24 +3,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { trustedProfile } from './planner-helpers.ts';
+import { analysisView, lockedRules, policyView, snapshotView, trustedProfile } from './planner-helpers.ts';
 import { evaluateRequiredCoverage, planAnalysis, planBootstrap, verifyWorkEnvelope, workEnvelopesFor, PlanError } from '../dist/planner/index.js';
 
 const d = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
 const profile = trustedProfile({ permitExtra: ['framework-order'] });
-const rule = (familyId: string, over: Record<string, unknown> = {}) => ({ familyId, revision: 1, definitionDigest: d(familyId), packDigest: d('pack'),
-  languages: ['typescript'], scopeKind: 'source-file', requires: ['source-bytes', 'pattern-match'], adapterId: 'sentinel-pattern', ...over });
+const rule = (familyId: string, over: Record<string, unknown> = {}) => ({ familyId, languages: ['typescript'], ...over });
 const file = (p: string) => ({ sourceId: 'web', relativePath: p, kind: 'file' as const, disposition: 'included' as const, content: d(p), bytes: 1, generated: false });
 const boot = planBootstrap({ runId: 'run-1', sourceIds: ['web'], profile });
 const inventory = { id: boot.units.at(-1)!.id, revision: 1 };
 
 function plan(rules: ReturnType<typeof rule>[], mandatory: string[], gaps: string[] = []) {
   return planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: [inventory], profile,
-    snapshot: { id: 'snap-1', inventoryDigest: d('inv'), environmentProfileDigest: d('env'), sources: [{ sourceId: 'web' }], frameworkVersions: [],
-      entries: [file('src/a.ts'), file('src/b.ts')] },
-    analyses: [{ sourceId: 'web', analysisFingerprint: 'fp', files: [], surfaces: [] }],
-    lock: { digest: d('lock'), rules, tools: [], databases: [] },
-    policy: { digest: d('policy'), rules: [...mandatory, ...gaps].map(familyId => ({ familyId, source: 'mandatory' as const })), requireCompleteCoverage: false, requiredCapabilities: [] } });
+    snapshot: snapshotView(['web'], [file('src/a.ts'), file('src/b.ts')]).view,
+    analyses: [analysisView('web', [])],
+    lock: lockedRules(rules as never).view,
+    policy: policyView([...mandatory, ...gaps]).view });
 }
 
 let n = 0;
