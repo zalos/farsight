@@ -1357,7 +1357,15 @@ source's scope, so recorded coverage is the conservative union across them; each
 Version authority is the packs' own: each reads exact versions from the captured manifests and lockfiles, and the rules
 carry no `frameworks` gate (the snapshot's `frameworkVersions` is not populated). Spring runs with no active profile
 selected (`activeProfiles: null`), so profile-conditioned chains stay unknown. The result binds the whole job: the
-snapshot, the retained analysis and every captured file are its inputs, and nothing is reused across snapshots. Not
-decided here: the coordinator driver (`driver.ts`) that seals the job from the coordinator-derived retained analysis,
-which waits on its final types; the capability-table, profile and report wiring; per-surface checks and the
+snapshot, the retained analysis and every captured file are its inputs, and nothing is reused across snapshots. The
+coordinator driver (`driver.ts`) declares `reads: { analysis: true }` and never builds its own parse evidence: the job
+names the coordinator's retained snapshot manifest, parser result, index and artifact by id, and their original bytes
+reach the worker only through `retainedAuxiliary`. The generated entry's manifest also lists the driver and what it
+imports, so the implementation digest the driver is bound to covers the worker, the packs, the mapping and the
+driver. Normalization checks the one output against the sealed job, each envelope against the controls contract and
+this snapshot, takes the extent from the planner's own `surfacesFromIndex`, and publishes one
+`sentinel-driver-report/draft-1` record (`kind: framework-inspection`) whose canonical digest every covered check
+names, plus each pack's envelopes, all source-derived. When no pack recognises a framework it models, every check is
+partial (`sentinel.controls.frameworkNotRecognized`), even over an empty extent: routes served another way were not
+inspected. Not decided here: the capability-table, profile, CLI and report wiring; per-surface checks and the
 assessments policy requires of them (PR 20). Words are `strings-sentinel-framework-controls.ts`; the pack is `rules/framework-controls/`.

@@ -6,3 +6,5 @@ export { FRAMEWORK_CONTROLS_ADAPTER_ID, CONTROLS_JOB_SCHEMA, CONTROLS_OUTPUT_SCH
 export type { ControlsJob, ControlsOutput } from './worker.js';
 export { workerClosure, closureEntrySource, writeClosureEntry, FRAMEWORK_CONTROLS_WORKER, CLOSURE_REFUSED } from './closure.js';
 export type { WorkerClosure, ClosureEntry } from './closure.js';
+export { frameworkControlsAdapter, CONTROLS_SUPPORTED_RULES, CONTROLS_REPORT_SCHEMA, CONTROLS_ENVELOPE_SCHEMA } from './driver.js';
+export type { FrameworkControlsAdapter } from './driver.js';

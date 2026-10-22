@@ -50,8 +50,11 @@ function packageDir(name: string, from: string): string | null {
   }
 }
 
-/** The worker's closure as it is on disk now. Pure reads; nothing is imported or run. */
-export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER): WorkerClosure {
+/**
+ * The worker's closure as it is on disk now; `extra` modules (the coordinator-side driver) are pinned with theirs.
+ * Pure reads; nothing is imported or run.
+ */
+export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: readonly string[] = []): WorkerClosure {
   const out = new Map<string, ClosureEntry>();
   const portable = new Map<string, string>();
   const root = realpathSync(dirname(dirname(dirname(entry))));
@@ -101,6 +104,7 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER): Worker
     }
   };
   visitFile(realpathSync(entry));
+  for (const e of extra) visitFile(realpathSync(e));
   const entries = [...out.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const digest = `sha256:${sha(JSON.stringify([...portable].sort((a, b) => (a[0] < b[0] ? -1 : 1))))}`;
   return { entries, digest };
@@ -131,8 +135,8 @@ await worker.runFrameworkControlsWorker();
  * closure digest, for the adapter definition's `module`. The file name carries the closure digest; an existing file
  * of that name is reused only when its bytes are identical.
  */
-export function writeClosureEntry(dir: string, worker: string = FRAMEWORK_CONTROLS_WORKER): { module: string; closureDigest: string; files: number } {
-  const closure = workerClosure(worker);
+export function writeClosureEntry(dir: string, worker: string = FRAMEWORK_CONTROLS_WORKER, extra: readonly string[] = []): { module: string; closureDigest: string; files: number } {
+  const closure = workerClosure(worker, extra);
   const source = closureEntrySource(closure, worker);
   const module = join(dir, `framework-controls-${closure.digest.slice(7, 23)}.mjs`);
   try { writeFileSync(module, source, { flag: 'wx', mode: 0o600 }); }
