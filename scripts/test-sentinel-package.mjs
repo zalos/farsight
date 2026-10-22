@@ -214,21 +214,23 @@ try {
   `);
   const node = (file, args = []) => consumer.exec(process.execPath, ['--disable-warning=ExperimentalWarning', file, ...args]);
   // Only a qualified host and SQLite release opens a store; elsewhere the installed package must refuse cleanly.
-  const policy = JSON.parse(await evalModule("const { SQLITE_RELEASE_POLICY: p } = await import('farsight-sentinel/store'); console.log(JSON.stringify(p));"));
+  // The installed package's own answer for this exact host and SQLite pair.
   const host = `${process.platform}-${process.arch}`;
+  const pair = JSON.parse(await evalModule(`const { SQLITE_RELEASE_POLICY, qualificationFor } = await import('farsight-sentinel/store');
+    console.log(JSON.stringify(qualificationFor(SQLITE_RELEASE_POLICY, ${JSON.stringify(host)}, process.versions.sqlite) ?? null));`));
   let storeDemo;
   // On CI nothing falls back to the refusal branch: an unqualified CI host fails here, loudly.
-  if ((policy.hosts.includes(host) && policy.qualifiedSqlite.includes(process.versions.sqlite)) || process.env.CI) {
+  if (pair || process.env.CI) {
     const written = JSON.parse((await node('store-write.mjs')).stdout.trim());
     const read = JSON.parse((await node('store-read.mjs', [written.epoch])).stdout.trim());
     assert.notEqual(read.epoch, written.epoch, 'a new process owns the store under a new epoch');
     assert.equal(read.text, 'evidence written by the first process', 'the artifact reads back in a new process');
     assert.equal(read.stale, 'sentinel.store.staleEpoch', 'a record from the earlier epoch is refused');
     assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
-    storeDemo = 'store reopened across processes';
+    storeDemo = `store reopened across processes (${host} SQLite ${process.versions.sqlite}, ${pair?.status ?? 'unqualified on CI'})`;
   } else {
     const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
-    assert.match(refused ?? '', /sentinel\.store\.(platformUnqualified|runtimeUnqualified)/, `an unqualified host (${host}) is refused`);
+    assert.match(refused ?? '', /sentinel\.store\.(platformUnqualified|runtimeUnqualified)/, `an unqualified pair (${host}, SQLite ${process.versions.sqlite}) is refused`);
     assert.ok(!existsSync(storePath), 'no store folder was created on an unqualified host');
     storeDemo = `store refused on unqualified ${host} (not qualification evidence)`;
   }

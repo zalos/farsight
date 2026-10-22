@@ -24,13 +24,14 @@ import {
 } from './objects.js';
 import { acquireStoreOwner, type StoreOwner } from './owner.js';
 import type { FilesystemIdentity } from './paths.js';
-import { SQLITE_RELEASE_POLICY } from './runtime.js';
+import { SQLITE_RELEASE_POLICY, qualificationFor, type QualifiedRuntime, type QualificationStatus, type SqliteReleasePolicy } from './runtime.js';
 import {
   LEDGER_ERROR_CODES, LedgerError, type ArtifactCodec, type LedgerErrorCode, type MigrationReport,
   type ObjectReceipt as LedgerObjectReceipt,
 } from './store-types.js';
 
-export { StoreError, LedgerError, ObjectStoreError, SQLITE_RELEASE_POLICY };
+export { StoreError, LedgerError, ObjectStoreError, SQLITE_RELEASE_POLICY, qualificationFor };
+export type { QualifiedRuntime, QualificationStatus, SqliteReleasePolicy };
 export type { StoreErrorCode, LedgerErrorCode, ObjectStoreErrorCode, GcErrorCode, FilesystemIdentity, MigrationReport };
 export type { ReachabilityReport, PrunePlan, ObjectCheck, ArtifactCodec };
 export {

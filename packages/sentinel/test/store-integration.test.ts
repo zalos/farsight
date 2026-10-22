@@ -7,7 +7,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, realpath
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openStore, SQLITE_RELEASE_POLICY, STORAGE_ERROR_CODES, type SentinelStore } from '../dist/store/index.js';
+import { openStore, qualificationFor, SQLITE_RELEASE_POLICY, STORAGE_ERROR_CODES, type SentinelStore } from '../dist/store/index.js';
 import * as root from '../dist/index.js';
 
 const DIST = fileURLToPath(new URL('../dist/store/index.js', import.meta.url));
@@ -21,7 +21,8 @@ const coded = (code: string) => (e: unknown) => (e as { code?: unknown })?.code 
 // need an open store are skipped with that reason; a skip is never qualification evidence. On CI nothing skips: an
 // unqualified CI host or SQLite release runs every store test and fails at the gate, loudly.
 const HOST = `${process.platform}-${process.arch}`;
-const QUALIFIED = SQLITE_RELEASE_POLICY.hosts.includes(HOST) && SQLITE_RELEASE_POLICY.qualifiedSqlite.includes(process.versions.sqlite ?? '');
+// The exact host and SQLite pair, measured or a CI candidate; any other pair is refused by the runtime gate.
+const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, HOST, process.versions.sqlite ?? '') !== undefined;
 const needsStore = QUALIFIED || process.env.CI ? {} : { skip: `${HOST} with SQLite ${process.versions.sqlite ?? 'none'} is not a qualified store host` };
 
 /** A canonical, private scratch folder; the store is created inside it. */

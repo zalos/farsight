@@ -239,13 +239,14 @@ separately reviewed prune. Retained provenance is protected: every artifact a re
 (its influence manifest, invocation, outputs and diagnostics) is a root, so completed work is never a candidate
 while its records are kept.
 
-Qualification is bounded, and anything outside it is refused rather than assumed: SQLite 3.53.3 exactly (as linked
-by Node 24.19.0), on a host the runtime's release policy lists, in a canonical owner-only folder on a file system
-the path checks identify as local. Measured so far: darwin-arm64 on APFS. linux-x64 on ext4 is admitted only as a
+Qualification is bounded, and anything outside it is refused rather than assumed. The runtime's release policy lists
+exact host and SQLite pairs (`qualificationFor`); a store opens only for a listed pair, in a canonical owner-only
+folder on a file system the path checks identify as local. Measured: darwin-arm64 with SQLite 3.53.3 (Node 24.19.0)
+and 3.53.4 (Node 24.22.0), on APFS. linux-x64 with SQLite 3.53.4 (Node 24.22.0) on ext4 is admitted only as a
 candidate, so CI runs the real-owner store tests there and fails instead of skipping; it is not qualified until that
-CI evidence replaces the candidate note in the policy. The other local types the path checks accept (hfs on macOS;
-xfs, btrfs, tmpfs, zfs and f2fs by Linux statfs) are allowlisted, not measured. Any host the policy does not list
-is refused before a store file exists. Network, FUSE, overlay and unrecognised
+CI evidence replaces the candidate entry. The other local types the path checks accept (hfs on macOS; xfs, btrfs,
+tmpfs, zfs and f2fs by Linux statfs) are allowlisted, not measured. Any other pair is refused before a store file
+exists. Network, FUSE, overlay and unrecognised
 file systems are refused. Durability is claimed for **process death**: SQLite runs WAL with `synchronous=FULL`,
 objects are written, fsynced, verified and linked with their folders fsynced before a receipt exists, and the owner
 lock is an OS file lock the kernel releases when the holder dies. It is **not** claimed for physical power loss:
