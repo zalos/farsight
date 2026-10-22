@@ -848,17 +848,27 @@ sh and applets). The shim is the attempt's first input and runs as `/bin/sh /inp
 pins it, and with it the configuration and report template it writes. Only arm64 is measured; amd64, listed in the
 index, gives `candidate` results under an explicit qualification run and is otherwise refused. **Inputs:** the shim, a
 line job (`F <index> <content> <path>`) and each captured content once. Files over 8 MiB, names with a line break or
-another control character, and paths the release's own global allowlist skips are not sent; each is a skipped scope
-with its reason, never a silent omission. **No repository control:** the shim rebuilds the tree one folder below the
+another control character, and paths the release's own global allowlist skips — the file or any folder above it,
+since the engine prunes a matching folder whole (measured: `images.png/`, `package-lock.json/`, `node_modules/`) —
+are not sent; each is a skipped scope with its reason, never a silent omission. **No repository control:** the shim rebuilds the tree one folder below the
 scan root, so a captured root `.gitleaksignore` is an ordinary scanned file; Gitleaks gets the pinned configuration
 (the release's built-in rules, nothing allowed), an empty ignore folder, `--ignore-gitleaks-allow` and no baseline.
 Measured by a direct probe of the pinned image (2026-10-22): the same root ignore file suppresses a finding when the tree is the scan root, and
-nothing under the shim's layout. **Redaction:** Gitleaks runs with full redaction and writes its report through the
-pinned template, which names only the rule, the lines and the file; its stdout is discarded and its stderr stays in
-the tmpfs, only its digest leaving. The coordinator accepts a report line only as `F, rule, start, end, file` with the
-rule one of the 222 the pinned default configuration defines (`rules.ts`, generated from the release's own
-`config/gitleaks.toml`) and the file a sent path, then builds each observation from a closed field list: the rule, a
+nothing under the shim's layout. **Redaction:** Gitleaks runs with full redaction and renders its findings through the
+pinned template (rule, lines, file); inside the container an awk pass replaces each file with its job index and the
+rendering is deleted, so the report that leaves carries no path. Its stdout is discarded and its stderr stays in the
+tmpfs, only its digest leaving. The coordinator accepts a report line only as `F, rule, start, end, index` or
+`P, rule, line, line`, the rule one of the 222 the pinned default configuration defines (`rules.ts`, generated from
+the release's own `config/gitleaks.toml`), then builds each observation from a closed field list: the rule, a
 captured file, a whole-line byte span read from the sealed input copy, a fixed message and fixed limitation keys.
+**Names are not assumed safe:** the shim writes every target's name to `scan/paths.txt` beside the tree, so the same
+engine screens the names (`P` lines). A name it matches, a name a line cannot carry, every name when there are too
+many to screen, and every name in a failed scan are **withheld**: `relativePath`, scopes and IDs use the reference
+`.sentinel-withheld-name/<24 hex>` (a job-salted digest of the name, not reversible from results), the observation
+carries `sentinel.secrets.pathWithheld`, and the result's `withheld[]` maps each reference to the file's content
+digest, which the private captured snapshot resolves for an authorized local reader. A matched name is itself a
+finding (`sentinel.secrets.nameMatch`, a zero-length span: the value is not in the content). Other names are shown
+as captured: the engine found nothing secret-shaped in them, which is a detector judgement, not a guarantee.
 **Failure:** an engine error, a kill, a missing, oversized, malformed or inconsistent report (exit code and findings
 disagree), an unknown rule or file, lines a file does not have, an unmeasured platform, or a refused job makes the scan
 an `error` over every target with a coded reason; the shim itself reports only a catalog code. **Audit:** the result

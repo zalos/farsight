@@ -4,7 +4,14 @@
 // - `sentinel.secrets.fileTooLarge`: above the size limit;
 // - `sentinel.secrets.pathUnsupported`: a path the job's one-line format cannot carry (a line break or other control
 //   character other than a tab in a name);
-// - `sentinel.secrets.toolAllowlisted`: a path the pinned default configuration's global allowlist skips.
+// - `sentinel.secrets.toolAllowlisted`: a path the pinned default configuration's global allowlist skips — the file
+//   itself, or any folder above it, since Gitleaks prunes a matching folder and everything under it unreported.
+//
+// Every target's name is also screened: the shim writes the names, one per line, to `scan/paths.txt` beside the tree
+// (never inside it), so the pinned engine tells which names are themselves shaped like a secret. The job carries a
+// sent file as `F <index> <content> <path>` and the name of a file not sent as `N <path>`; the names file is those
+// paths in job order. A name too long for one line, or names too many for the engine's size limit, cannot be
+// screened and is withheld from every result (normalize.ts).
 import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,6 +33,9 @@ export interface SecretsTarget {
 export interface SecretsJobFile { readonly index: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly bytes: number }
 export interface SecretsUnsent { readonly relativePath: string; readonly artifact: ArtifactId; readonly reasonCode: CatalogKey }
 
+/** A name the engine screens: line `line` (1-based) of `scan/paths.txt`. */
+export interface SecretsJobName { readonly line: number; readonly relativePath: string; readonly artifact: ArtifactId }
+
 export interface SecretsJob {
   readonly schema: 'sentinel-gitleaks-job/draft-1';
   readonly snapshotId: Id;
@@ -33,6 +43,10 @@ export interface SecretsJob {
   readonly worker: ArtifactId;
   readonly files: readonly SecretsJobFile[];
   readonly unsent: readonly SecretsUnsent[];
+  /** The names the engine screens, in `scan/paths.txt` order; empty when they cannot all be screened. */
+  readonly names: readonly SecretsJobName[];
+  /** Whether the names were screened (they fit the engine's size limit). When false, every name is withheld. */
+  readonly namesScreened: boolean;
 }
 
 export interface BuiltSecretsJob {
@@ -49,6 +63,8 @@ export const SCANNER_PATH_PREFIX = 'scan/tree/';
 const sha256 = (b: Uint8Array): ArtifactId => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 // A tab is carried (the report's file field is last, so it may hold tabs); every other control character is not.
 const CONTROL = /[\u0000-\u0008\u000a-\u001f\u007f]/;
+/** Whether one line of the job (and of the names file) can carry this path. */
+export const lineSafe = (relativePath: string) => !CONTROL.test(relativePath);
 
 export class SecretsInputError extends Error {
   constructor(readonly code: CatalogKey, detail: string) { super(`${code}: ${detail}`); }
@@ -68,10 +84,15 @@ function measure(path: string): { digest: ArtifactId; bytes: number } {
   } finally { closeSync(fd); }
 }
 
-/** Whether the pinned default configuration's global allowlist skips this path. */
+/**
+ * Whether the pinned engine would skip this path: the global allowlist matches the file, or any folder above it
+ * (Gitleaks prunes a matching folder whole, e.g. `images.png/token.env` or `package-lock.json/x`). Matched against
+ * the paths as the engine walks them, `scan`, `scan/tree`, `scan/tree/<folder>…`, `scan/tree/<path>`.
+ */
 export function toolAllowlisted(relativePath: string): boolean {
-  const seen = `${SCANNER_PATH_PREFIX}${relativePath}`;
-  return GITLEAKS_GLOBAL_ALLOWLIST_PATHS.some(re => re.test(seen));
+  const parts = relativePath.split('/');
+  const seen = ['scan', 'scan/tree', ...parts.map((_, i) => `${SCANNER_PATH_PREFIX}${parts.slice(0, i + 1).join('/')}`)];
+  return seen.some(path => GITLEAKS_GLOBAL_ALLOWLIST_PATHS.some(re => re.test(path)));
 }
 
 export function buildSecretsJob(scope: { snapshotId: Id; sourceId: Id; targets: readonly SecretsTarget[] }, dir: string,
@@ -99,12 +120,21 @@ export function buildSecretsJob(scope: { snapshotId: Id; sourceId: Id; targets: 
   const folders = new Set<string>();
   for (const f of files) for (let i = f.relativePath.indexOf('/'); i >= 0; i = f.relativePath.indexOf('/', i + 1)) folders.add(f.relativePath.slice(0, i));
   if (files.some(f => folders.has(f.relativePath))) invalid('a target path is also a folder');
-  const lines = ['sentinel-gitleaks-job/1', ...files.map(f => `F ${f.index} ${f.artifact.slice(7)} ${f.relativePath}`)];
+  // Names to screen: every sent file, then every unsent one a line can carry; all of them, or none.
+  const screenable = [...files.map(f => ({ relativePath: f.relativePath, artifact: f.artifact })),
+    ...unsent.filter(u => !CONTROL.test(u.relativePath)).map(u => ({ relativePath: u.relativePath, artifact: u.artifact }))];
+  const nameBytes = screenable.reduce((n, x) => n + Buffer.byteLength(x.relativePath) + 1, 0);
+  // A name a line cannot carry is withheld on its own; past the engine's size limit none is screened.
+  const namesScreened = nameBytes <= GITLEAKS_MAX_FILE_BYTES;
+  const names: SecretsJobName[] = namesScreened ? screenable.map((x, i) => ({ line: i + 1, ...x })) : [];
+  const lines = ['sentinel-gitleaks-job/1', ...files.map(f => `F ${f.index} ${f.artifact.slice(7)} ${f.relativePath}`),
+    ...(namesScreened ? unsent.filter(u => !CONTROL.test(u.relativePath)).map(u => `N ${u.relativePath}`) : [])];
   const text = Buffer.from(`${lines.join('\n')}\n`, 'utf8');
   const jobDigest = sha256(text);
   const job: SecretsJob = Object.freeze({
     schema: 'sentinel-gitleaks-job/draft-1', snapshotId: scope.snapshotId, sourceId: scope.sourceId, worker: adapter.workerDigest,
     files: Object.freeze(files.map(f => Object.freeze(f))), unsent: Object.freeze(unsent.map(u => Object.freeze(u))),
+    names: Object.freeze(names.map(n => Object.freeze(n))), namesScreened,
   });
   const write = (name: string, bytes: Uint8Array) => { const p = join(dir, name); writeFileSync(p, bytes, { mode: 0o600, flag: 'wx' }); return p; };
   const inputs: CapturedInput[] = [{ id: adapter.workerDigest, path: write('worker.sh', adapter.workerBytes) }, { id: jobDigest, path: write('job.txt', text) }];
