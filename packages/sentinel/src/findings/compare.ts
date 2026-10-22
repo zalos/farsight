@@ -34,7 +34,7 @@ export interface CompatibilityMapping {
 
 export interface ComparableFinding extends MatchableFinding {
   readonly ruleFamilyId: string;
-  readonly anchors: readonly { readonly sourceId: string; readonly relativePath: string; readonly nodeId: string | null; readonly span: { readonly startByte: number; readonly endByte: number } }[];
+  readonly anchors: readonly { readonly sourceId: string; readonly relativePath: string | null; readonly withheld?: boolean; readonly content?: string; readonly nodeId: string | null; readonly span: { readonly startByte: number; readonly endByte: number } }[];
 }
 
 export interface AssessmentSide<F extends ComparableFinding = ComparableFinding> {
@@ -98,7 +98,7 @@ function checkOf(side: AssessmentSide, rule: string): CheckAssessment | 'none' |
   return hits.length === 0 ? 'none' : hits.length > 1 ? 'several' : hits[0]!;
 }
 
-const fileKey = (a: { sourceId: string; relativePath: string }) => `${a.sourceId}:${a.relativePath}`;
+const fileKey = (a: { sourceId: string; relativePath: string | null; content?: string }) => (a.relativePath === null ? `${a.sourceId}:withheld:${a.content ?? ''}` : `${a.sourceId}:${a.relativePath}`);
 
 export function compareAssessments<F extends ComparableFinding>(request: ComparisonRequest<F>): Comparison {
   const { baseline, current } = request;
@@ -154,20 +154,30 @@ export function compareAssessments<F extends ComparableFinding>(request: Compari
 
 function historicalOutcome(b: ComparableFinding, current: ComparisonRequest<ComparableFinding>['current'], baseline: AssessmentSide, mappings: readonly CompatibilityMapping[]): { label: HistoricalLabel; reasonCode: string } {
   const s = current.surfaces;
+  // A withheld location cannot be looked for: whether its code is still there is unknown, so it is never resolved.
+  if (b.anchors.some(a => a.relativePath === null)) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.locationWithheld' };
   const files = [...new Set(b.anchors.map(fileKey))];
   const underUnknown = (f: string) => s.unknownScope.some(u => f.startsWith(u));
   // A file under a folder capture could not list is unknown, never removed.
   if (files.some(underUnknown)) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.unknownScope' };
+  // Any anchor's code gone (all of it or part: a removed source with the sink still there) is a removed surface,
+  // never a clean recheck of the issue as it was.
   if (files.every(f => !s.files.has(f))) return { label: 'removed-surface', reasonCode: 'sentinel.compare.fileRemoved' };
+  if (files.some(f => !s.files.has(f))) return { label: 'removed-surface', reasonCode: 'sentinel.compare.partRemoved' };
   const symbols = [...new Set(b.anchors.map(a => a.nodeId).filter((n): n is string => !!n))];
-  if (s.graph && symbols.length && files.every(f => !s.files.has(f) || s.graph!.analysedFiles.has(f)) && symbols.every(n => !s.graph!.nodeIds.has(n))) {
-    return { label: 'removed-surface', reasonCode: 'sentinel.compare.symbolRemoved' };
+  const verifiable = !!s.graph && files.every(f => s.graph!.analysedFiles.has(f));
+  if (symbols.length && verifiable) {
+    const gone = symbols.filter(n => !s.graph!.nodeIds.has(n)).length;
+    if (gone === symbols.length) return { label: 'removed-surface', reasonCode: 'sentinel.compare.symbolRemoved' };
+    if (gone) return { label: 'removed-surface', reasonCode: 'sentinel.compare.partRemoved' };
   }
   const cc = checkOf(current, b.ruleFamilyId);
   if (cc === 'none') return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.noCurrentCheck' };
   if (cc === 'several') return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.checksConflict' };
   if (cc.status !== 'complete') return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.checkIncomplete' };
   if (!files.every(f => cc.files.has(f))) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.scopeNarrowed' };
+  // Resolution needs the issue's code shown to be still there; without a current analysis of its files it is not.
+  if (symbols.length && !verifiable) return { label: 'unassessed-in-current-scope', reasonCode: 'sentinel.compare.surfaceUnverified' };
   const bc = checkOf(baseline, b.ruleFamilyId);
   if (bc === 'none' || bc === 'several') return { label: 'incomparable-conditions', reasonCode: 'sentinel.compare.baselineConditionsUnknown' };
   if (!detectionEquivalent(b.ruleFamilyId, bc.conditions, cc.conditions, mappings)) return { label: 'changed-detection', reasonCode: 'sentinel.compare.detectionChanged' };

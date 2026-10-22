@@ -7,11 +7,11 @@ import { renderMarkdown } from './markdown.js';
 import { toSarif } from './sarif.js';
 import { canonicalJson } from '@farsight/graph';
 
-export { pinApplicationContext, PROJECTION_VERSION } from './context.js';
+export { pinApplicationContext, contextPinIntent, PROJECTION_VERSION } from './context.js';
 export type { ContextGraph, ContextInput, ContextRequest, PinnedContext, PlaceReason } from './context.js';
-export { placeNodes, unplaced } from './place.js';
+export { placeFiles, placeNodes, unplaced } from './place.js';
 export { buildReport, findingsOf, DISCLOSURE_PROFILES, REPORT_SOURCE, ReportError } from './document.js';
-export type { BaselineFindingSummary, DisclosureProfile, ReportBuild, ReportInput } from './document.js';
+export type { BaselineFindingSummary, DisclosureProfile, PlannedCheck, ReportBuild, ReportInput } from './document.js';
 export { renderMarkdown, md } from './markdown.js';
 export { renderHtml, esc } from './html.js';
 export { toSarif, SARIF_LIMITS } from './sarif.js';

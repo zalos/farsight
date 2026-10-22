@@ -3,11 +3,16 @@
 // built from with the content id of the bytes it read, and pinning checks each against the snapshot's capture. A
 // graph node located in a file the inputs do not name, an input whose bytes differ from the capture, or a captured
 // configuration or design manifest the inputs leave out makes the binding `mismatched`; no context, or a graph with
-// no journeys (a portable parser artifact), makes it `unavailable`. Either way the place is empty with its reason; a
-// current graph is never consulted in its stead, and nothing here enriches a graph or fetches anything.
+// no journeys (a portable parser artifact), makes it `unavailable`. Matching input hashes prove only which bytes the
+// context claims to describe, not that its relationships and labels are true, so a context is also authenticated: the
+// owner must have confirmed exactly this context document for exactly this snapshot and source (the owner-only
+// `context.pin` action, spent as a receipt). Without that it is `unavailable`. The verified graph is copied and frozen,
+// so nothing the caller changes afterwards reaches a report. Either way an empty place says why; a current graph is
+// never consulted in its stead, and nothing here enriches a graph or fetches anything.
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '@farsight/graph';
-import type { ArtifactId, SnapshotEnvelope } from '../contracts/index.js';
+import type { ActionIntent, ArtifactId, SnapshotEnvelope } from '../contracts/index.js';
+import { intentDigest, receiptAuthority } from '../policy/receipts.js';
 
 export interface ContextGraph {
   readonly nodes: readonly { readonly id: string; readonly kind: string; readonly name?: string; readonly loc?: { readonly repo: string; readonly path: string; readonly line?: number } | undefined; readonly [k: string]: unknown }[];
@@ -29,12 +34,15 @@ export interface ContextRequest {
   readonly inputs?: readonly ContextInput[];
   /** Who built the graph (recorded in the receipt, never trusted for the binding). */
   readonly producer?: { readonly tool: string; readonly version: string };
+  /** The owner's spent receipt for exactly `contextPinIntent(request)`; only `ReceiptBook.consume` makes one. */
+  readonly authorization?: unknown;
 }
 
 export type PlaceReason =
   | 'sentinel.place.noContext' | 'sentinel.place.noJourneys' | 'sentinel.place.inputMismatch' | 'sentinel.place.inputNotCaptured'
   | 'sentinel.place.unboundNode' | 'sentinel.place.inputOmitted' | 'sentinel.place.nodeNotInContext' | 'sentinel.place.truncated'
-  | 'sentinel.place.gapUnplaced' | 'sentinel.place.noAnchorSymbol' | 'sentinel.place.notOnScreen';
+  | 'sentinel.place.gapUnplaced' | 'sentinel.place.noAnchorSymbol' | 'sentinel.place.notOnScreen' | 'sentinel.place.notOwnerConfirmed'
+  | 'sentinel.place.secretWithheld';
 
 export interface PinnedContext {
   readonly binding: 'matched' | 'mismatched' | 'unavailable';
@@ -56,8 +64,34 @@ const bytesOf = (v: unknown) => Buffer.from(canonicalJson(v), 'utf8');
 /** Inputs that shape journeys and screens: if captured, a context must have read them. */
 const SHAPING = /(^|\/)(farsight\.config\.json|screens\.json)$/;
 
+/** A deep copy that no one can change: the verified context a report reads. */
+function seal<T>(value: T): T {
+  const copy = structuredClone(value);
+  const freeze = (v: unknown) => {
+    if (v && typeof v === 'object' && !Object.isFrozen(v)) { for (const k of Object.keys(v)) freeze((v as Record<string, unknown>)[k]); Object.freeze(v); }
+  };
+  freeze(copy);
+  return copy;
+}
+
+const contextDocument = (sourceId: string, repo: string, graph: ContextGraph, inputs: readonly ContextInput[]) =>
+  ({ schema: 'sentinel-app-context/draft-1', sourceId, repo, graph, inputs: [...inputs].sort((a, b) => (a.relativePath < b.relativePath ? -1 : 1)) });
+
+/** The exact owner action that authenticates a context: `context.pin` of this document for this snapshot and source. */
+export function contextPinIntent(request: Pick<ContextRequest, 'snapshot' | 'sourceId' | 'repo' | 'graph' | 'inputs'>): ActionIntent | undefined {
+  if (!request.graph || !request.inputs) return undefined;
+  return {
+    action: 'context.pin', input: idOf(bytesOf(contextDocument(request.sourceId, request.repo, request.graph, request.inputs))), effects: ['local-artifacts'],
+    budget: { maxTokens: null, maxCost: null, currency: null },
+    scope: { profile: null, provider: null, targets: [`snapshot:${request.snapshot.id}`, `source:${request.sourceId}`] },
+  };
+}
+
 export function pinApplicationContext(request: ContextRequest): PinnedContext {
-  const { snapshot, sourceId, repo, graph, inputs } = request;
+  const { snapshot, sourceId, repo } = request;
+  // Everything is read from a sealed copy: a caller's later change to its own objects reaches nothing here.
+  const graph = request.graph ? seal(request.graph) : undefined;
+  const inputs = request.inputs ? seal(request.inputs) : undefined;
   const reasons = new Set<PlaceReason>();
   let artifact: PinnedContext['artifact'];
   let verified = 0;
@@ -67,8 +101,7 @@ export function pinApplicationContext(request: ContextRequest): PinnedContext {
     binding = 'unavailable';
     reasons.add('sentinel.place.noContext');
   } else {
-    const doc = { schema: 'sentinel-app-context/draft-1', sourceId, repo, graph, inputs: [...inputs].sort((a, b) => (a.relativePath < b.relativePath ? -1 : 1)) };
-    const bytes = bytesOf(doc);
+    const bytes = bytesOf(contextDocument(sourceId, repo, graph, inputs));
     artifact = { id: idOf(bytes), bytes };
     const captured = new Map<string, string>();
     for (const e of snapshot.entries) if (e.sourceId === sourceId && e.kind === 'file' && e.disposition === 'included') captured.set(e.relativePath, e.content);
@@ -85,8 +118,11 @@ export function pinApplicationContext(request: ContextRequest): PinnedContext {
       checkedNodes++;
       if (!read.has(n.loc.path)) reasons.add('sentinel.place.unboundNode');
     }
+    const authority = receiptAuthority(request.authorization);
+    const intent = contextPinIntent({ snapshot, sourceId, repo, graph, inputs })!;
     if (reasons.size) binding = 'mismatched';
     else if (!graph.nodes.some(n => n.kind === 'flow')) { binding = 'unavailable'; reasons.add('sentinel.place.noJourneys'); }
+    else if (!authority || authority.action !== 'context.pin' || authority.intentDigest !== intentDigest(intent)) { binding = 'unavailable'; reasons.add('sentinel.place.notOwnerConfirmed'); }
     else binding = 'matched';
   }
   const receiptDoc = {
@@ -95,9 +131,9 @@ export function pinApplicationContext(request: ContextRequest): PinnedContext {
     producer: request.producer ?? null,
   };
   const receiptBytes = bytesOf(receiptDoc);
-  return {
-    binding, reasons: [...reasons].sort(), sourceId, repo,
-    ...(artifact ? { artifact } : {}), receipt: { id: idOf(receiptBytes), bytes: receiptBytes },
+  return Object.freeze({
+    binding, reasons: Object.freeze([...reasons].sort()), sourceId, repo,
+    ...(artifact ? { artifact: Object.freeze(artifact) } : {}), receipt: Object.freeze({ id: idOf(receiptBytes), bytes: receiptBytes }),
     ...(binding === 'matched' ? { graph: graph! } : {}),
-  };
+  });
 }

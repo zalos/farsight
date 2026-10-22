@@ -1,4 +1,4 @@
-import type { BoundedText, CatalogKey, Digest, Id, ShortText, SourceEvidence, Timestamp } from './common.js';
+import type { BoundedText, CatalogKey, Digest, Id, ObservationEvidence, ShortText, Timestamp } from './common.js';
 import type { IdentitySource } from './attempt.js';
 
 /** A model's identity at the strength it is actually known, never inferred from response text. */
@@ -52,8 +52,11 @@ export interface ObservationEnvelope {
   originalSeverity: ShortText;
   originalConfidence?: ShortText;
   message: BoundedText;
-  /** @maxItems 256 */
-  evidence: SourceEvidence[];
+  /**
+   * Ordinary citations, or citations whose location is withheld (`location: 'withheld'`); never both shapes in one.
+   * @maxItems 256
+   */
+  evidence: ObservationEvidence[];
   /** @maxItems 64 */
   limitationKeys: CatalogKey[];
   mappings?: {

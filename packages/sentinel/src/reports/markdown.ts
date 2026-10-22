@@ -64,7 +64,7 @@ export function renderMarkdown(doc: ReportEnvelope): string {
     }
   }
   lines.push('## Gaps in the checks', '');
-  if (!doc.gaps.length) lines.push('Every planned check covered its scope.', '');
+  if (!doc.gaps.length) lines.push(doc.completeness === 'complete' ? 'Every planned check covered its scope.' : 'Every planned check recorded its scope, but some captured files were seen by no check or some folders were never listed: read the counts.', '');
   for (const g of doc.gaps) lines.push(`- <a id="${anchor('gap', g.checkId)}"></a>${md(g.checkId)}: ${md(g.status)}; ${md(g.explanation.business)}`);
   lines.push('', '## Words used in this report', '');
   for (const d of doc.definitions ?? []) lines.push(`- **${md(d.text.business.replace('{n}', 'n').replace('{m}', 'm'))}** (${md(d.key)}): ${md(defineOf(doc, d.key) ?? '')}`);
