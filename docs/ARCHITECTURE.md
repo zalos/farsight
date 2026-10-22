@@ -690,6 +690,94 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
 
+27. **Sentinel's first framework pack reads Spring Security servlet chains from source, for one exact version (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./frameworks/spring` export: `analyzeSpring(input)`, which returns one validated
+`sentinel-controls/draft-1` envelope for one captured source's Spring routes, together with `SPRING_PACK`,
+`SPRING_ORDER`, `SPRING_SUPPORT`, `SPRING_REASON_CODES` and `matchTemplate`. It is a library: no scan runs it until the
+CLI (PR 09) integrates it, so PR 17's full acceptance depends on that work. The `framework-spring` capability is
+`available-draft` with reason `sentinel.capability.draftSpring`: source only, exactly the stated versions.
+
+**Scope.** Exactly Spring Boot 3.4.3 with the Spring Security 6.4.3 its dependency list pins, servlet stack. These are
+read from the captured `pom.xml` as XML structure (elements by name and nesting, never by child order).
+The envelope's version is `null`, and every fact `unknown`, for any of:
+- an explicit Spring Security version anywhere;
+- a Spring version property;
+- managed or imported dependencies;
+- profiles or modules;
+- WebFlux, a Gradle build, or a build that does not parse.
+
+Documentation for other versions is not evidence for these.
+
+**Registration.** A configuration class counts only when Spring Boot's default component scan registers it: the single
+`@SpringBootApplication`'s package and below, for a component class. Any explicit scan or import annotation, scan
+attribute or auto-configuration registration makes classes outside that scan `unknown`
+(`sentinel.spring.componentScanUnresolved`). A class Spring does not register enables nothing, so
+`@EnableMethodSecurity` must sit on a registered `@Configuration` or `@SpringBootApplication` class. Every `@Bean`
+whose type is a `SecurityFilterChain`, in any qualified spelling, is a chain. Any other `…FilterChain` bean is an
+unknown candidate, never omitted. Names resolve through imports, the package and qualified names in captured source:
+composed annotations, superclasses and interface default `@Bean` methods are followed there, and anything resolved
+outside Java's or Spring's own types is unknown. Java shadowing is honoured: a type the file declares, or a member
+type inherited from a captured supertype, shadows an import of the same name, so where it could, the name is unknown
+rather than the import. Spring merges meta-annotations, so `@Bean`, `@Order`, `@Profile` and `@Conditional` are read
+through captured composed annotations: a composed `@Bean` declares a chain, while a composed order or condition, or an
+annotation from uncaptured code that could carry one, leaves the chain's position or activity unknown
+(`sentinel.spring.chainOrderUnsupported`, `sentinel.spring.conditionComposed`, `sentinel.spring.beanDeclarationUnknown`).
+Spring registers an inherited `@Bean` but invokes the most specific method, so an inherited chain whose method name a
+subclass declares again without `@Bean` is unknown (`sentinel.spring.chainOverridden`), never read from the superclass.
+A chain the pack cannot see or place sorts ahead of every known one.
+A chain's configurer arguments must be provably inert: a lambda that only configures its own parameter and never
+continues past `disable()` (which returns the builder); Spring's own `AbstractHttpConfigurer::disable`; Spring's
+`withDefaults()`; Spring constants; or literals. An application method reference, or anything that could reach the
+`HttpSecurity` again (for example `removeConfigurer`), makes the chain unknown. The parent POM must be looked up from
+the repository (an empty `relativePath`); a relative parent could manage other versions.
+
+**Roles and the anonymous principal.** A role or authority check is always authorization. It is authentication only
+when the anonymous principal Spring gives unauthenticated requests cannot hold any authority it admits. By default that
+principal holds `ROLE_ANONYMOUS`, so `hasRole("ANONYMOUS")` does not require authentication. `anonymous(disable)`
+removes it, and a customised anonymous principal leaves authentication unknown. A `GrantedAuthorityDefaults` bean,
+which can change the `ROLE_` prefix, leaves role checks unknown.
+
+**Inputs and evidence.** The input is the captured snapshot, the PR 05 parser evidence for the source, a reader for
+captured bytes by content id, and the selected environment (`activeProfiles`, `null` when none was selected). The
+public graph supplies route identities only. Its route names are lossy: variables rewritten, the first path kept, and
+a method-less `@RequestMapping` named GET. So each route's mapping is read again from captured syntax. So are every
+`SecurityFilterChain` bean and its `@Order`, `@Profile`, `securityMatcher`, `authorizeHttpRequests` rules and added
+filters, `@EnableMethodSecurity`, method-security annotations, filter beans, `WebSecurityCustomizer` and MVC
+interceptors. Syntax comes from tree-sitter's Java grammar (`@vscode/tree-sitter-wasm`, the version the parser pins),
+loaded on first analysis. Nothing is compiled, resolved or run. Evidence spans are exact UTF-8 bytes of captured
+files; a file that is not exact UTF-8 gives no span, and its facts are unknown. Graph tags and the parser's guard nodes
+are never proof.
+
+**Semantics.** The facts follow Spring's own order:
+- order 0: filters, unknown when any are present;
+- order 1: the first matching chain's first matching rule;
+- order 2: MVC interceptors, unknown when present;
+- order 3: method security, resolved only with an active proxy-mode enablement for that annotation kind and a
+  proxyable handler.
+
+Chains are taken in `@Order`, and a chain without a `securityMatcher` matches every request. Path patterns are compared
+as templates: a result is `match` or `no-match` only when it holds for every request the route can receive. A trailing slash is never trimmed: Spring Framework 6.2's patterns do not equate `/x/` and `/x` by default, and configuration can change that, so a pattern or route ending in `/` is unknown. Partial
+matches, equal orders that could both match, profiles not selected, conditional beans, non-literal matchers and
+helper-built chains are `unknown`. A route no chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every
+chain matcher cited, and never protected: source alone cannot exclude a chain a dependency contributes. Missing or
+unlisted Java source, configuration that does not parse, or a configured servlet path leave chain selection unknown.
+
+**Keys.** `packDigest` covers the pack identity, its order and `SPRING_SUPPORT`. `environmentDigest` covers the
+selected profiles. `registrationDigest` covers the path and content id of every file read. A change to any of them
+changes the facts' key. Reason codes are catalog words (`strings-sentinel-spring.ts`).
+
+**Not in this decision:**
+- what Spring does when no rule in a selected chain matches;
+- Boot's default chain when no chain bean exists;
+- XML or adapter-style configuration;
+- async dispatch;
+- multi-module builds;
+- other Boot or Security versions.
+
+Each is unknown, not inferred. Later packs (PRs 14–16) follow the same envelope, positions-in-order and "unknown, never
+rounded" rules.
+
 29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
 where the engine proves it matched (2026-10-22).**
 

@@ -90,6 +90,9 @@ try {
   const sourceExports = JSON.parse(readFileSync(join(sourceDir, 'package.json'), 'utf8')).exports ?? {};
   const parserExported = Object.hasOwn(sourceExports, './parser');
   assert.equal(subpaths.includes('./parser'), parserExported, 'the installed ./parser export matches the source package');
+  const springExported = Object.hasOwn(sourceExports, './frameworks/spring');
+  assert.equal(subpaths.includes('./frameworks/spring'), springExported, 'the installed ./frameworks/spring export matches the source package');
+
   const expressExported = Object.hasOwn(sourceExports, './frameworks/express');
   assert.equal(subpaths.includes('./frameworks/express'), expressExported, 'the installed ./frameworks/express export matches the source package');
 
@@ -162,6 +165,14 @@ try {
       '    a.analysis.complete, input?.kind, limits.maxDurationMs, r.parserComplete, r.clearsChecks, r.counts.parsed,',
       '    r.counts.unknownScopeDescendants, r.inputs[0]?.outcome, r.entries[0]?.class, r.tree.before, i.occurrences[0]?.byteSpan?.startByte,',
       '    i.spanUnavailable.invalidUtf8, i.unplaced.count, i.omitted, reason, typeof parseSnapshot, typeof retainSnapshotAnalysis];',
+      '}',
+    ] : []),
+    ...(springExported ? [
+      "import { analyzeSpring, SPRING_PACK, SPRING_ORDER, SPRING_SUPPORT, SPRING_REASON_CODES, matchTemplate, type SpringPackInput, type SpringReason } from 'farsight-sentinel/frameworks/spring';",
+      'export function springFields(input: SpringPackInput): unknown[] {',
+      '  const reason: SpringReason = SPRING_REASON_CODES[0];',
+      '  const profiles: readonly string[] | null = input.environment.activeProfiles;',
+      "  return [SPRING_PACK.version, SPRING_ORDER.chain, SPRING_SUPPORT.stack, reason, profiles, matchTemplate('/a', '/a/**'), typeof analyzeSpring];",
       '}',
     ] : []),
     ...(expressExported ? [
@@ -285,6 +296,7 @@ try {
     assert.equal(read.stale, 'sentinel.store.staleEpoch', 'a record from the earlier epoch is refused');
     assert.ok(read.ok && read.integrity === 'ok', 'reachability and SQLite integrity hold after the reopen');
     storeDemo = `store reopened across processes (${host} SQLite ${process.versions.sqlite}, ${pair?.status ?? 'unqualified on CI'})`;
+    if (springExported) storeDemo += await springDemo();
     if (expressExported) storeDemo += await expressDemo();
   } else {
     const refused = await node('store-write.mjs').then(() => null, (error) => `${error.stderr}`);
@@ -365,6 +377,116 @@ second.listen(3001);
       'app::route::GET /maybe': '0:sentinel.express.registrationDynamic',
     }, 'a route before its check, one after it and a conditional registration, from the installed package alone');
     return ', Express pack analysed an installed fixture (before, after, conditional)';
+  }
+
+  /**
+   * The installed Spring pack, run for real: an original fixture with a deliberately open route (the earlier, narrower
+   * chain), a protected one and one no chain matches is captured, parsed and analysed through the installed package
+   * alone, so the bundled parser, its native binding and the Java grammar all resolve from the consumer's own install.
+   * git builds the fixture's repository only; nothing from the checkout or pnpm is used.
+   */
+  async function springDemo() {
+    const appDir = join(storeRoot, 'spring-app');
+    const files = {
+      'pom.xml': `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.4.3</version>
+    <relativePath/>
+  </parent>
+  <groupId>example</groupId>
+  <artifactId>smoke</artifactId>
+  <version>0.0.0</version>
+  <dependencies>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
+  </dependencies>
+</project>
+`,
+      'src/main/java/app/App.java': 'package app;\n\n@org.springframework.boot.autoconfigure.SpringBootApplication\npublic class App {}\n',
+      'src/main/java/app/SecurityConfig.java': `package app;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+public class SecurityConfig {
+  @Bean
+  @Order(1)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    http.securityMatcher("/api/public/**").authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();
+  }
+
+  @Bean
+  @Order(2)
+  public SecurityFilterChain secure(HttpSecurity http) throws Exception {
+    http.securityMatcher("/api/**").authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }
+}
+`,
+      'src/main/java/app/Routes.java': `package app;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+public class Routes {
+  @GetMapping("/api/public/info")
+  public String open() { return "open"; }
+
+  @GetMapping("/api/data")
+  public String secure() { return "secure"; }
+
+  @GetMapping("/other")
+  public String other() { return "other"; }
+}
+`,
+    };
+    for (const [path, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(appDir, path)), { recursive: true });
+      writeFileSync(join(appDir, path), text);
+    }
+    const gitEnv = { PATH: process.env.PATH ?? '', HOME: appDir, LANG: 'C', LC_ALL: 'C', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: 'dev@example.com', GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: 'dev@example.com' };
+    const gitRun = (args) => execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'init.defaultBranch=main', ...args], { cwd: appDir, env: gitEnv, stdio: 'ignore' });
+    gitRun(['init', '--quiet']);
+    gitRun(['add', '--all']);
+    gitRun(['commit', '--quiet', '--no-verify', '-m', 'fixture']);
+    const workDir = join(storeRoot, 'spring-work');
+    mkdirSync(workDir, { mode: 0o700 });
+    writeFileSync(join(consumer.dir, 'spring-demo.mjs'), `
+      import { openStore } from 'farsight-sentinel/store';
+      import { captureSnapshot } from 'farsight-sentinel/snapshot';
+      import { parseSnapshot } from 'farsight-sentinel/parser';
+      import { analyzeSpring, SPRING_ORDER } from 'farsight-sentinel/frameworks/spring';
+      const store = await openStore(${JSON.stringify(join(storeRoot, 'spring-store'))});
+      try {
+        const { snapshot } = await captureSnapshot(store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/smoke', root: ${JSON.stringify(appDir)} }] });
+        const parsed = await parseSnapshot(store, { snapshotId: snapshot.id, workDir: ${JSON.stringify(workDir)},
+          selection: { gitignore: true, testFiles: 'include' },
+          limits: { maxFiles: 100, maxFileBytes: 1 << 20, maxTotalBytes: 1 << 24, maxEntries: 1000, maxDurationMs: 60000 } });
+        const facts = await analyzeSpring({ snapshot, sourceId: 'app', analysis: parsed.sources[0], readContent: id => store.readArtifact(id),
+          environment: { activeProfiles: [] } });
+        const out = {};
+        for (const f of facts.facts) if (f.property === 'authentication' && f.order === SPRING_ORDER.chain) out[f.surfaceId] = f.verdict === 'unknown' ? f.reasonCode : f.verdict;
+        console.log(JSON.stringify({ version: facts.framework.version, out }));
+      } finally { store.close(); }
+    `);
+    const result = JSON.parse((await node('spring-demo.mjs')).stdout.trim());
+    assert.equal(result.version, 'boot-3.4.3+security-6.4.3');
+    assert.deepEqual(result.out, {
+      'app::route::GET /api/public/info': 'does-not-apply',
+      'app::route::GET /api/data': 'applies',
+      'app::route::GET /other': 'sentinel.spring.noChainMatches',
+    }, 'open, protected and unmatched routes, from the installed package alone');
+    return ', Spring pack analysed an installed fixture (open, protected, unknown)';
   }
 
   // Standalone: everything @farsight/* is inlined, and farsight-cli is not pulled in.
@@ -483,7 +605,7 @@ second.listen(3001);
     }
   }
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}npm consumer`);
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}${springExported ? ', Spring pack types compiled' : ''}${expressExported ? ', Express pack types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}${osvDemo}npm consumer`);
 } finally {
   consumer.cleanup();
 }

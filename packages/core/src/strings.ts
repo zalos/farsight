@@ -60,6 +60,8 @@ import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-error
 import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
+import { SENTINEL_SPRING_STRINGS } from './strings-sentinel-spring.js';
+
 import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
 
 import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
@@ -201,6 +203,9 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_SERVICE_STRINGS,
   // Sentinel's glossary: each code-register term and its business twin, sentinel.term.biz.* (strings-sentinel-glossary.ts)
   ...SENTINEL_GLOSSARY_STRINGS,
+  // Sentinel's Spring Security servlet pack: why a control fact is unknown (strings-sentinel-spring.ts)
+  ...SENTINEL_SPRING_STRINGS,
+
 
   // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)
   ...SENTINEL_OSV_STRINGS,

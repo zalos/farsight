@@ -75,6 +75,10 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
   LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
   write, recheck, admit), `materialize.ts` (reopen and restore from the store alone) and `reconcile.ts` (E1).
+  `src/frameworks/spring/` is the Spring Security servlet pack (ADR 27; `./frameworks/spring` only): `syntax.ts` (tree-sitter
+  Java over captured bytes, exact UTF-8 spans), `config.ts` (chains, rules, method security, frontiers), `patterns.ts`
+  (template matching), `support.ts` (the stated subset) and `pack.ts` (versions, mappings, selection, the envelope); its
+  reasons are `strings-sentinel-spring.ts`.
   `src/snapshot/parser.ts` is the parser-evidence facade (ADR 22; `./parser` only): the public code parser over a
   private restore, its reads reconciled by kind, file outcomes joined, an index of captured spans, and one retaining
   publication; its words are `strings-sentinel-parser.ts`. The
