@@ -233,6 +233,21 @@ test('an unqualified host or SQLite release is refused before any store file exi
   assert.equal(existsSync(storePath), false);
 });
 
+test('a caller cannot replace the ledger sequence check of an inspection or a prune plan', needsStore, async t => {
+  const store = await openStore(scratch(t));
+  t.after(() => store.close());
+  await begin(store);
+  let called = 0;
+  const forged = { readSequence: () => { called++; return -1; }, verify: false };
+  // JavaScript callers can pass anything; the facade takes no options, so the ledger's own sequence is always used.
+  const report = await (store.inspect as (o: unknown) => ReturnType<typeof store.inspect>)(forged);
+  const plan = await (store.planPrune as (o: unknown) => ReturnType<typeof store.planPrune>)(forged);
+  assert.equal(called, 0, 'the forged sequence reader was never consulted');
+  assert.equal(report.ok, true, JSON.stringify(report.errors));
+  assert.equal(plan.ok, true, JSON.stringify(plan.errors));
+  assert.equal(plan.validFor.sequence, store.ledger.currentSequence());
+});
+
 test('every storage reason code is a catalog entry with both registers and a define', async () => {
   const { STRINGS } = await import('@farsight/core/dist/strings.js');
   const all = Object.values(STORAGE_ERROR_CODES).flat();
