@@ -6,7 +6,7 @@
 // link(2) (which refuses to overwrite) → fsync of every directory on the path; a receipt is returned only after
 // all of it succeeded. Nothing here deletes a published object.
 import { createHash, randomBytes } from 'node:crypto';
-import { constants as FS } from 'node:fs';
+import { closeSync, constants as FS, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -223,6 +223,26 @@ async function decode(encoded: Buffer, codec: ObjectCodec, rawDigest: string, ra
       return fail('sentinel.object.corrupt', `gzip object does not decode within ${limit} bytes (${errno(e) ?? 'error'})`, e);
     }
   }
+  return checkDecoded(decoded, rawDigest, rawSize);
+}
+
+function decodeSync(encoded: Buffer, codec: ObjectCodec, rawDigest: string, rawSize: number | undefined): Buffer {
+  const limit = Math.min(rawSize ?? MAX_OBJECT_BYTES, MAX_OBJECT_BYTES);
+  let decoded: Buffer;
+  if (codec === 'raw') {
+    if (encoded.length > limit) fail('sentinel.object.corrupt', 'raw object is larger than its recorded size');
+    decoded = encoded;
+  } else {
+    try {
+      decoded = zlib.gunzipSync(encoded, { maxOutputLength: Math.max(limit, 1) });
+    } catch (e) {
+      return fail('sentinel.object.corrupt', `gzip object does not decode within ${limit} bytes (${errno(e) ?? 'error'})`, e);
+    }
+  }
+  return checkDecoded(decoded, rawDigest, rawSize);
+}
+
+function checkDecoded(decoded: Buffer, rawDigest: string, rawSize: number | undefined): Buffer {
   if (rawSize !== undefined && decoded.length !== rawSize) fail('sentinel.object.corrupt', `decoded ${decoded.length} bytes; expected ${rawSize}`);
   if (decoded.length > MAX_OBJECT_BYTES) fail('sentinel.object.corrupt', 'decoded object exceeds the size limit');
   if (sha256(decoded) !== rawDigest) fail('sentinel.object.corrupt', 'decoded bytes do not match the raw digest');
@@ -466,6 +486,35 @@ export class ObjectStore {
     }
   }
 
+  /**
+   * The same verification as `check()`, synchronously and always against the real filesystem, for callers that
+   * must decide inside a database transaction. It reads and hashes the bytes on disk every time; a receipt is
+   * never trusted on its own. Cost is one bounded read and decode of the object (at most 16 MiB).
+   */
+  checkSync(ref: ObjectRef): ObjectCheck {
+    try {
+      this.#checkRef(ref);
+      for (const rel of ['objects', 'objects/sha256', `objects/sha256/${ref.rawDigest.slice(0, 2)}`]) {
+        let st: ObjectStat;
+        try { st = lstatSync(this.#abs(rel)); } catch (e) {
+          if (errno(e) === 'ENOENT') fail('sentinel.object.missing', 'object not found');
+          return ioFail(`inspecting ${rel}`, e);
+        }
+        if (st.isSymbolicLink() || !st.isDirectory()) fail('sentinel.object.unsafePath', `${rel} is not a directory`);
+      }
+      const encoded = readEncodedSync(this.#abs(objectRelPath(ref.rawDigest, ref.codec)), ref.encodedSize);
+      if (ref.encodedDigest !== undefined && sha256(encoded) !== ref.encodedDigest) fail('sentinel.object.corrupt', 'encoded bytes do not match the recorded digest');
+      decodeSync(encoded, ref.codec, ref.rawDigest, ref.rawSize);
+      return { status: 'ok' };
+    } catch (e) {
+      if (!(e instanceof ObjectStoreError)) throw e;
+      if (e.code === 'sentinel.object.missing') return { status: 'missing', code: e.code, detail: e.message };
+      if (e.code === 'sentinel.object.corrupt') return { status: 'corrupt', code: e.code, detail: e.message };
+      if (e.code === 'sentinel.object.unsafePath') return { status: 'unsafe', code: e.code, detail: e.message };
+      throw e;
+    }
+  }
+
   async #checkParents(rawDigest: string): Promise<void> {
     for (const rel of ['objects', 'objects/sha256', `objects/sha256/${rawDigest.slice(0, 2)}`]) {
       let st: ObjectStat;
@@ -513,6 +562,36 @@ export class ObjectStore {
       }
     }
     return Object.freeze({ objects: Object.freeze(objects), staging: Object.freeze(staging), unexpected: Object.freeze(unexpected) });
+  }
+}
+
+function readEncodedSync(path: string, expectedSize: number | undefined): Buffer {
+  let fd: number;
+  try { fd = openSync(path, FS.O_RDONLY | NOFOLLOW); } catch (e) {
+    if (errno(e) === 'ENOENT') return fail('sentinel.object.missing', 'object not found');
+    if (errno(e) === 'ELOOP' || errno(e) === 'EMLINK') return fail('sentinel.object.unsafePath', 'object path is a symbolic link');
+    return ioFail('opening the object', e);
+  }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) fail('sentinel.object.unsafePath', 'object path is not a regular file');
+    if (st.size > MAX_ENCODED_BYTES) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; the limit is ${MAX_ENCODED_BYTES}`);
+    if (expectedSize !== undefined && st.size !== expectedSize) fail('sentinel.object.corrupt', `object file is ${st.size} bytes; expected ${expectedSize}`);
+    const buf = Buffer.alloc(st.size);
+    let off = 0;
+    while (off < st.size) {
+      const n = readSync(fd, buf, off, st.size - off, off);
+      if (n === 0) break;
+      off += n;
+    }
+    if (off !== st.size) fail('sentinel.object.corrupt', 'object file is shorter than it claimed');
+    if (readSync(fd, Buffer.alloc(1), 0, 1, st.size) !== 0) fail('sentinel.object.corrupt', 'object file grew while it was read');
+    return buf;
+  } catch (e) {
+    if (e instanceof ObjectStoreError) throw e;
+    return ioFail('reading the object', e);
+  } finally {
+    closeSync(fd);
   }
 }
 

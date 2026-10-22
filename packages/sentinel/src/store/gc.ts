@@ -1,13 +1,13 @@
 // Reachability inspection and a dry-run prune plan for the object store. Read-only by construction: this module
-// imports no filesystem function and calls only ObjectStore.list(). PR 03 deletes nothing and schedules no
+// imports no filesystem function and calls only ObjectStore.list() and ObjectStore.check(). PR 03 deletes nothing and schedules no
 // retention; a plan is evidence for a later, separately reviewed pruning step.
 //
 // Everything a root names is protected in every codec, and so is everything reachable from it through artifact
-// links (cycles and shared children included). An incomplete, malformed or moving snapshot fails closed: the
-// plan then lists no candidate at all.
-import { type ObjectStore, type PhysicalObject, artifactIdOf } from './objects.js';
+// links (cycles and shared children included). An incomplete, malformed or moving snapshot fails closed, and so
+// does any reachable or recorded object that is missing or does not verify: the plan then lists no candidate.
+import { type ObjectRef, type ObjectStore, type PhysicalObject, artifactIdOf } from './objects.js';
 
-export const GC_ROOT_KINDS = ['active', 'staged', 'report', 'pinned'] as const;
+export const GC_ROOT_KINDS = ['referenced', 'active', 'staged', 'report', 'pinned'] as const;
 export type GcRootKind = typeof GC_ROOT_KINDS[number];
 
 /** The minimal seam this module needs from the ledger (PR 03 lane B): one committed snapshot of roots and links. */
@@ -20,11 +20,14 @@ export interface ReachabilitySnapshot {
   readonly roots: readonly { readonly kind: GcRootKind; readonly id: string; readonly artifacts: readonly string[] }[];
   /** Parent → child artifact references (a report → its findings → their evidence, …). */
   readonly links: readonly { readonly from: string; readonly to: string }[];
+  /** Every physical representation the ledger recorded a receipt for; each must exist and verify. */
+  readonly recorded?: readonly ObjectRef[];
 }
 
 export type GcErrorCode =
   | 'sentinel.gc.incompleteSnapshot' | 'sentinel.gc.wrongStore' | 'sentinel.gc.invalidSnapshot'
-  | 'sentinel.gc.missingReachable' | 'sentinel.gc.snapshotMoved' | 'sentinel.gc.unreadableStore';
+  | 'sentinel.gc.missingReachable' | 'sentinel.gc.missingRecorded' | 'sentinel.gc.corruptObject'
+  | 'sentinel.gc.snapshotMoved' | 'sentinel.gc.unreadableStore';
 
 export interface GcError { readonly code: GcErrorCode; readonly detail: string }
 
@@ -66,6 +69,8 @@ export interface PrunePlan {
 export interface InspectOptions {
   /** Re-reads the ledger's committed sequence after enumeration; a change fails the inspection closed. */
   readonly readSequence?: () => number | Promise<number>;
+  /** Read and hash every reachable and recorded object (default true). False checks presence only. */
+  readonly verify?: boolean;
 }
 
 const ARTIFACT_ID = /^sha256:[0-9a-f]{64}$/;
@@ -93,6 +98,9 @@ function validate(store: ObjectStore, snapshot: ReachabilitySnapshot, errors: Gc
       errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `link ${i} names an invalid artifact id` });
     }
   });
+  if (snapshot.recorded !== undefined && !Array.isArray(snapshot.recorded)) {
+    errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'recorded must be a list' });
+  }
   return true;
 }
 
@@ -158,6 +166,33 @@ async function inspect(store: ObjectStore, snapshot: ReachabilitySnapshot, optio
     else errors.push({ code: 'sentinel.gc.missingReachable', detail: `${id} is referenced but has no published object` });
   }
 
+  if (listing && structured) {
+    const verify = options.verify !== false;
+    // Every physical file of a reachable artifact must verify: a corrupt protected object is an integrity failure.
+    if (verify) {
+      for (const obj of listing.objects) {
+        if (!reachable.has(artifactIdOf(obj.rawDigest))) continue;
+        const c = await checkOrError(store, { rawDigest: obj.rawDigest, codec: obj.codec, encodedSize: obj.encodedSize });
+        if (c) errors.push({ code: c.status === 'missing' ? 'sentinel.gc.missingReachable' : 'sentinel.gc.corruptObject', detail: `${obj.relPath}: ${c.detail}` });
+      }
+    }
+    // What the ledger says is stored must be stored, as recorded.
+    const files = new Set(listing.objects.map(o => `${o.rawDigest}.${o.codec}`));
+    for (const [i, ref] of (Array.isArray(snapshot.recorded) ? snapshot.recorded : []).entries()) {
+      if (!ref || typeof ref.rawDigest !== 'string' || !/^[0-9a-f]{64}$/.test(ref.rawDigest)) {
+        errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `recorded object ${i} has no valid digest` });
+        continue;
+      }
+      if (!files.has(`${ref.rawDigest}.${ref.codec}`)) {
+        errors.push({ code: 'sentinel.gc.missingRecorded', detail: `${artifactIdOf(ref.rawDigest)} (${String(ref.codec)}) is recorded but not stored` });
+        continue;
+      }
+      if (!verify) continue;
+      const c = await checkOrError(store, ref);
+      if (c) errors.push({ code: 'sentinel.gc.corruptObject', detail: `${artifactIdOf(ref.rawDigest)} (${ref.codec}): ${c.detail}` });
+    }
+  }
+
   if (options.readSequence && structured) {
     let after: number | undefined;
     try { after = await options.readSequence(); } catch (e) {
@@ -186,6 +221,16 @@ async function inspect(store: ObjectStore, snapshot: ReachabilitySnapshot, optio
     }),
   });
   return { report, objects: listing?.objects ?? [] };
+}
+
+/** A failed check, or undefined when the object verifies. Errors that are not about the object become failures too. */
+async function checkOrError(store: ObjectStore, ref: ObjectRef): Promise<{ status: string; detail: string } | undefined> {
+  try {
+    const c = await store.check(ref);
+    return c.status === 'ok' ? undefined : c;
+  } catch (e) {
+    return { status: 'corrupt', detail: (e as Error).message };
+  }
 }
 
 /** Lists what a prune would remove at this snapshot, and removes nothing. */

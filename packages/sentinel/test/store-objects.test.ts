@@ -112,6 +112,7 @@ test('missing, truncated, altered, oversize and wrong-store objects fail integri
   const original = readFileSync(path);
 
   assert.deepEqual(await store.check(receipt), { status: 'ok' });
+  assert.deepEqual(store.checkSync(receipt), { status: 'ok' });
   assert.equal(await code(store.read({ ...receipt, storeId: 'another-store' })), 'sentinel.object.wrongStore');
   const absent = identify(Buffer.from('never written'));
   assert.equal((await store.check({ rawDigest: absent.rawDigest, codec: 'gzip' })).status, 'missing');
@@ -120,6 +121,7 @@ test('missing, truncated, altered, oversize and wrong-store objects fail integri
   chmodSync(path, 0o600);
   writeFileSync(path, original.subarray(0, original.length - 3));
   assert.equal((await store.check(receipt)).status, 'corrupt', 'truncated (size mismatch)');
+  assert.equal(store.checkSync(receipt).status, 'corrupt', 'the synchronous check agrees');
   assert.equal((await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' })).status, 'corrupt', 'truncated gzip without a recorded size');
 
   const flipped = Buffer.from(original); flipped[flipped.length - 9]! ^= 0xff;
@@ -130,6 +132,7 @@ test('missing, truncated, altered, oversize and wrong-store objects fail integri
   // A valid gzip of other bytes under this name: decodes, but not to the digest.
   writeFileSync(path, gzipSync(Buffer.from('impostor')));
   assert.equal((await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' })).status, 'corrupt');
+  assert.equal(store.checkSync({ rawDigest: receipt.rawDigest, codec: 'gzip' }).status, 'corrupt');
 
   writeFileSync(path, Buffer.alloc(16 * 1024 * 1024 + 64 * 1024 + 1));
   assert.match((await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' }) as any).detail, /limit/);
@@ -137,6 +140,8 @@ test('missing, truncated, altered, oversize and wrong-store objects fail integri
   rmSync(path);
   symlinkSync(join(dir, 'elsewhere'), path);
   assert.equal((await store.check(receipt)).status, 'unsafe', 'a symbolic link is never followed');
+  assert.equal(store.checkSync(receipt).status, 'unsafe');
+  assert.equal(store.checkSync({ rawDigest: absent.rawDigest, codec: 'gzip' }).status, 'missing');
 });
 
 test('a gzip bomb stops at the recorded size and at the store limit', async t => {
@@ -153,6 +158,7 @@ test('a gzip bomb stops at the recorded size and at the store limit', async t =>
   assert.equal(r.status, 'corrupt');
   const r2 = await store.check({ rawDigest: receipt.rawDigest, codec: 'gzip' });
   assert.equal(r2.status, 'corrupt', 'without a recorded size the 16 MiB cap still applies');
+  assert.equal(store.checkSync({ rawDigest: receipt.rawDigest, codec: 'gzip' }).status, 'corrupt', 'the synchronous decode is bounded too');
   assert.ok(process.memoryUsage().arrayBuffers - before < 48 * 1024 * 1024, 'inflation never allocated the full bomb');
 });
 
