@@ -518,3 +518,56 @@ gate (`run.start` on the plan digest). Tool matching here establishes version an
 platform qualification remains an admission requirement and must use the full lock and qualified registry.
 Not decided here: framework control-fact work (framework-order stays unavailable until packs exist),
 and scheduling for model review.
+
+25. **Sentinel executes only admitted plan revisions, runs its own bootstrap operations, and takes coverage from coverage records (2026-10-22).**
+
+**Admission.** A plan revision runs only once the ledger has admitted it (schema 4, `plan-admission`). `admitPlan`
+in `execution/plans.ts` checks first:
+- the plan validates and matches its own digest;
+- the rule lock's digest and the effective policy's revision are the plan's pins;
+- the execution profile record (`sentinel-execution-profile/draft-1`) holds every adapter, capability and operation
+  the plan pins, at the same digests.
+
+It then stores all four records and admits them in one transaction. The revision chain must be exact. An analysis
+revision pins an admitted snapshot. The plan is a collection root linking the other three, and survives reopen and
+prune. A run advances one admitted revision at a time (`advanceRunPlan`); its creation envelope stays as recorded,
+and a run with admitted plans takes work only from an admitted revision no later than its current one.
+
+**Opening a run.** The coordinator opens a run by id. It reads the current revision back with `loadPlan`, repeats
+every check, and checks the profile again against the live registry. It then binds each unit through PR 06's
+canonical boundary: `planBoundaryFor` or `workEnvelopesFor`, then `verifyWorkEnvelope` and `verifyInputSet`.
+- Each work names the canonical `influenceManifestOf`, accepted with the work.
+- Check inputs come from a read-only restore of the pinned snapshot.
+- Work an earlier revision published and this one reuses must already be published, in this run.
+
+**Execution binding and invocation records.** What actually ran is a separate record,
+`sentinel-execution-binding/draft-1`: the canonical manifest's id, the adapter digest, the exact inputs and the
+protocol fingerprint, beside the plan's wider input fingerprint. The two fingerprints are never forced equal. Each
+attempt's invocation record links its binding and is accepted with the attempt's start, so failed, canceled and
+interrupted attempts keep both. The start message carries the unit's assigned checks and scopes.
+
+**Coverage.** Each assigned check gets one `sentinel-coverage/draft-1` record per attempt that published:
+`complete`, `partial` (scope skipped, unresolved or not scanned) or `not-run`. The record is never finer than the
+trusted adapter's registered `coverage` granularity (default `aggregate`); a result cannot claim finer coverage.
+The run's outcome is `evaluateRequiredCoverage` over these records alone. A worker's own claims, work finishing,
+unplanned required checks and rule gaps can never make it complete.
+
+**Bootstrap operations.** Capture, parse and inventory are registry adapters of kind `operation`, whose digest
+covers the Sentinel module that implements each. The coordinator runs them in its own process, under recorded
+attempts whose worker is `coordinator-operation`. Each attempt names the operation adapter the plan pinned, and its
+invocation record names the plan, the canonical manifest, the snapshot and the parse settings. Their authority:
+- **capture** verifies the run's snapshot, admitted in this store by PR 04 capture, and that its sources are
+  exactly the plan's and the run's. It publishes a record naming that snapshot; it never captures again.
+- **parse** runs the public parser over a restore (PR 05 `parseSnapshot`) with the profile's pinned selection and
+  limits, and retains the complete analysis.
+- **inventory** gathers exactly the plan's published parse results, each checked to be its own source's analysis
+  of this snapshot.
+
+`loadBootstrap` reads that evidence back for `planAnalysis`. A stage with no bound operation stays held, and no
+generic worker runs.
+
+**Tests.** `execution-bootstrap.test.ts` captures, runs the bootstrap, plans from what it published, admits and
+executes the analysis, and crashes and resumes in both revisions.
+
+**Not decided here:** the run's admission receipt (`run.start` on the plan digest) and its CLI, child runs over a
+parent's bootstrap, reuse derivations (PR 27), and planning in the coordinator itself.
