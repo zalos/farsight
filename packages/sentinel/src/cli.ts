@@ -76,8 +76,8 @@ function validate(kind: string | undefined, file: string | undefined, json: bool
   else if (result.ok) out(word('sentinel.cli.valid', { schema }));
   else {
     errOut(word('sentinel.cli.invalid', { schema }));
-    // The code's words come from the catalog; the message is the validator's safe diagnostic detail.
-    for (const e of result.errors.slice(0, 50)) errOut(`  ${e.code} ${e.path || '/'} ${word(e.code)}: ${e.message}`);
+    // Printed words come from the catalog only; the validator's diagnostic detail stays in --json output.
+    for (const e of result.errors.slice(0, 50)) errOut(`  ${e.code} ${e.path || '/'} ${word(e.code)}`);
     if (result.errors.length > 50) errOut(`  ${word('sentinel.cli.more', { count: result.errors.length - 50 })}`);
   }
   return result.ok ? EXIT.ok : EXIT.configuration;

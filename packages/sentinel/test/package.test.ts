@@ -111,6 +111,8 @@ test('validate checks a file against its draft schema', () => {
     assert.equal(body.ok, false);
     assert.equal(body.errors[0].code, 'sentinel.contract.unsupportedVersion');
     assert.deepEqual(body.errors[0].supported, ['sentinel-run/draft-1']);
+    const human = cli('validate', 'run', bad);
+    assert.equal(human.stderr, 'invalid sentinel-run/draft-1\n  sentinel.contract.unsupportedVersion /schema version not supported\n');
     assert.equal(cli('validate', 'run', dir).status, 3, 'a directory is refused');
     assert.equal(cli('validate', 'run', join(dir, 'missing.json')).status, 3);
     assert.equal(cli('validate', 'ledger', bad).status, 3, 'an unknown kind is refused');

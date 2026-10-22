@@ -58,8 +58,8 @@ segment. Money is a decimal string. Resource ceilings are the PR 01 proposed def
 
 Everything the executable prints comes from the shared two-register catalog in core
 (`packages/core/src/strings-sentinel-cli.ts`, keys `sentinel.cli.*`, `sentinel.capability.*`,
-`sentinel.contract.*` and `sentinel.protocol.*`). There is no catalog of Sentinel's own. The `message` beside each
-validation error is the validator's diagnostic detail; the words for its error code come from the catalog.
+`sentinel.contract.*` and `sentinel.protocol.*`). There is no catalog of Sentinel's own. Human output prints each validation error as its
+code, location and catalog words; the validator's diagnostic `message` appears only in `--json` output.
 
 ## Exit codes
 
