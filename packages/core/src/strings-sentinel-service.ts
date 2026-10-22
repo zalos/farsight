@@ -8,7 +8,7 @@ const same = (text: string, define: string): StringEntry => ({ hud: text, profes
 export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.cli.usageInit': same('farsight-sentinel init [--workspace <dir>] [--profile static] [--json]    create the private settings file once; never overwrites, downloads or scans', 'Writes the workspace\'s Sentinel settings from scrubbed defaults when the file is missing, and leaves an existing file exactly as it is.'),
 
-  'sentinel.capability.draftPreviewCli': same('foundation preview only: plan and run in the foreground', 'The command line can initialize a workspace, adopt its settings, plan and run one original preview check in the foreground and print its report. It is not scanner coverage; background runs and run controls are not built.'),
+  'sentinel.capability.draftPreviewCli': same('foundation preview only: plan and run in the foreground or in the background', 'The command line can initialize a workspace, adopt its settings, plan and run one original preview check in the foreground and print its report. It is not scanner coverage; background runs, waits and pause, resume and cancel go through the owner\'s local service.'),
 
   'sentinel.cli.unexpected': same('the command could not finish ({detail})', 'Something this command relies on failed in a way it does not name more precisely. Nothing was overwritten; the code in parentheses is the operating system\'s or the component\'s own.'),
   'sentinel.actor.payloadTooDeep': same('a request nests deeper than allowed', 'Request bodies nest at most 32 levels deep. A deeper one is refused rather than partly checked.'),
@@ -32,6 +32,7 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.outcome.prepared': same('prepared', 'The command wrote what it was asked to and nothing else.'),
   'sentinel.outcome.kept': same('already there; left unchanged', 'What the command would create already exists, so its bytes were left exactly as they were.'),
   'sentinel.outcome.answered': same('answered', 'The command answered from this installation alone: no store, service or scan was involved.'),
+  'sentinel.outcome.requested': same('requested; the run reaches it when its work in flight ends', 'The service accepted the control. A paused run finishes the work already started; a canceled one stops its workers.'),
   'sentinel.outcome.refused': same('refused', 'The command line or a local input could not be used. Nothing was started.'),
 
   // ---- verdicts ----
@@ -79,7 +80,24 @@ export const SENTINEL_SERVICE_STRINGS: Record<string, StringEntry> = {
   'sentinel.service.executionFailed': same('a planned check failed to execute', 'At least one check could not run to the end, so the run is an execution failure, not a scan result.'),
   'sentinel.service.previewNotCoverage': same('foundation preview complete: this is not required coverage', 'The preview detector ran to the end. A preview never satisfies the policy\'s required coverage, so the result is required coverage incomplete, with its findings kept.'),
   'sentinel.service.runUnknown': same('no run has that id in this store', 'Status reads a run this workspace\'s store has recorded.'),
-  'sentinel.service.detachUnavailable': same('running in the background is not available yet; run in the foreground', 'A detached run needs the owner\'s background service, which is not built yet. Nothing was started.'),
+  'sentinel.service.ownerReceipt': same('confirmed by the owner\'s receipt', 'The owner confirmed exactly this action in their own command line. The service spent that receipt once, after checking it names this action, plan and policy revision.'),
+  'sentinel.service.anotherRunActive': same('the service is running another plan; wait for it or cancel it first', 'One run executes at a time in a workspace\'s service. Nothing was started for this plan.'),
+  'sentinel.service.runNotActive': same('the run is not executing in the service', 'Pause applies to a run the service is executing now. Nothing was changed.'),
+  'sentinel.service.runInterrupted': same('the run stopped before it finished; resume it to continue', 'The run\'s last recorded state is not final and nothing is executing it, for example after its service stopped. Resuming recovers what was in flight and continues.'),
+  'sentinel.service.waitTimedOut': same('still running when the wait ended', 'The wait ended before the run did. The run continues; wait again or read its status.'),
+  'sentinel.service.ownerServiceRunning': same('the workspace\'s service holds the store; use run --detach, status, wait or report', 'While the owner\'s background service runs, it alone opens the workspace\'s store. Commands that read go through it; a new plan waits until it stops.'),
+  'sentinel.service.detachNeedsConfirm': same('a background run needs the owner\'s confirmation: add --confirm', 'Handing a run to the background service gives it the owner\'s receipt for exactly this plan. That happens only after the owner confirms. Nothing was started.'),
+  'sentinel.service.notRunning': same('the workspace\'s service is not running', 'Wait, pause and cancel talk to the owner\'s background service, which is not running for this workspace. Status and report still read the store directly.'),
+  'sentinel.service.startFailed': same('the background service did not start', 'The command started the owner\'s service and could not reach it in time. Nothing was handed to it.'),
+  'sentinel.service.alreadyServing': same('another process already holds this workspace\'s store', 'Only one service, or one foreground command, opens a store at a time.'),
+  'sentinel.service.unknownOperation': same('the service does not know that request', 'The local service answers a fixed set of requests; any other is refused.'),
+  'sentinel.service.requestInvalid': same('the request is not one the service accepts', 'A request names a plan or run by its id and carries only the fields that request takes.'),
+  'sentinel.service.serving': same('serving {workspace}; stops after {idle} ms with nothing to do', 'The owner\'s background service is listening on its private local socket.'),
+  'sentinel.service.servingForever': same('serving {workspace} until stopped', 'The owner\'s background service is listening on its private local socket and keeps running until it is stopped.'),
+  'sentinel.cli.usageServe': same('farsight-sentinel serve [--idle-ms <n>] [--json]    run the owner\'s background service for this workspace', 'Holds the workspace\'s store and answers its private local socket. It stops after the idle time with nothing to do, or never with --idle-ms 0.'),
+  'sentinel.cli.usageDetach': same('farsight-sentinel run <planId> --detach --confirm [--json]    hand a prepared plan to the background service', 'Confirms the run as its owner and hands it to the background service, starting the service when needed. A second request for the same plan joins the same run.'),
+  'sentinel.cli.usageWait': same('farsight-sentinel wait <runId> [--timeout <ms>] [--json]    wait for a background run and print its result', 'Waits for the run the service is executing and prints its final result, or that it is still running when the wait ends.'),
+  'sentinel.cli.usageControls': same('farsight-sentinel pause|cancel <runId> · resume <runId> --confirm    control a background run', 'Pause stops starting new work and lets work in flight finish; cancel stops the workers. Resume continues a paused or interrupted run and needs the owner\'s confirmation, as starting it did.'),
   'sentinel.cli.usageSettings': same('farsight-sentinel settings adopt [--confirm] [--json]    adopt this workspace\'s settings as their owner', 'Without --confirm it shows what would be adopted and waits (exit 4); with it the owner adopts the exact settings bytes.'),
   'sentinel.cli.usagePlan': same('farsight-sentinel plan [--confirm] [--json]    capture this workspace and prepare a foundation-preview plan', 'Captures the workspace and prepares a plan. Nothing runs.'),
   'sentinel.cli.usageRun': same('farsight-sentinel run <planId> [--confirm] [--json]    run a prepared plan in the foreground', 'Runs the plan to the end in this process. A preview ends required coverage incomplete (exit 2), never satisfied.'),

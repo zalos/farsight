@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 // The executable, the owner's entrypoint: help, version, capabilities, validation, workspace initialization,
-// settings adoption, and a foundation-preview plan → run → status → report in the foreground. The commands that need
-// the owner's background service (wait, pause, resume, cancel, retry, rerun, serve, run --detach) are refused as
-// unavailable; nothing is started for them. No command downloads a tool, starts a container or contacts a model
-// provider. Every result is typed (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
+// settings adoption, and a foundation-preview plan → run → status → report, in the foreground or handed to the owner's
+// background service (serve, run --detach, wait, pause, resume, cancel). Retry and rerun are refused as unavailable.
+// No command downloads a tool, starts a container or contacts a model provider. Every result is typed
+// (cli/outcome.ts); `--json` prints it whole, with the three verdicts.
 import { readFileSync, realpathSync, statSync } from 'node:fs';
-import { adoptWorkspaceSettings, planWorkspace, previewReport, runPlan, runStatus, workspaceOf, PolicyError } from './service/local.js';
+import {
+  adoptWorkspaceSettings, confirmRunForService, planWorkspace, previewReport, runPlan, runResultIn, runStatus, workspaceOf, PolicyError,
+  type Workspace,
+} from './service/local.js';
+import { connectService, serveWorkspace } from './service/owner-service.js';
+import { launchService } from './service/launch.js';
+import { ownExecutable } from './service/preview-plan.js';
+import { openStore } from './store/index.js';
+import type { ServiceClient } from './transport/ipc.js';
+import type { PreviewReport } from './reports/preview.js';
 import { renderPreviewJson, renderPreviewMarkdown } from './reports/preview.js';
 import { PREVIEW_DETECTOR_ID, runPreviewWorker } from './adapters/preview-detector.js';
 import { CAPABILITIES } from './capabilities.js';
@@ -42,8 +51,12 @@ function help(): string {
     `  ${word('sentinel.cli.usageSettings')}`,
     `  ${word('sentinel.cli.usagePlan')}`,
     `  ${word('sentinel.cli.usageRun')}`,
+    `  ${word('sentinel.cli.usageDetach')}`,
     `  ${word('sentinel.cli.usageStatus')}`,
+    `  ${word('sentinel.cli.usageWait')}`,
+    `  ${word('sentinel.cli.usageControls')}`,
     `  ${word('sentinel.cli.usageReport')}`,
+    `  ${word('sentinel.cli.usageServe')}`,
     '',
     word('sentinel.cli.planned', { commands: planned.join(', ') }),
     '',
@@ -146,11 +159,80 @@ function serviceOut(r: CommandResult, lines: string[] = []): number {
   return finish(r);
 }
 
+const SERVICE_START_MS = 15_000;
+const DETACHED_IDLE_MS = 15_000;
+const DEFAULT_WAIT_MS = 600_000;
+
+/** The workspace's running service, started detached (as this same executable, `serve`) when none answers. */
+async function ensureService(ws: Workspace): Promise<ServiceClient | undefined> {
+  const live = await connectService(ws);
+  if (live) return live;
+  launchService(ownExecutable(), ws.path, DETACHED_IDLE_MS);
+  // Two commands may start a service at once; the loser cannot open the store and exits, and both reach the winner.
+  for (const end = Date.now() + SERVICE_START_MS; Date.now() < end;) {
+    await new Promise(r => setTimeout(r, 100));
+    const c = await connectService(ws);
+    if (c) return c;
+  }
+  return undefined;
+}
+
+/** Sends one request and closes the connection: the run continues whatever happens to this command. */
+async function ask(client: ServiceClient, op: string, body: Record<string, unknown>, timeoutMs?: number): Promise<CommandResult> {
+  try { return await client.request(op, body, timeoutMs === undefined ? {} : { timeoutMs }) as CommandResult; } finally { client.close(); }
+}
+
 async function owner(p: ParsedCommand): Promise<number> {
   const now = new Date();
   const confirm = p.flags['--confirm'] === true;
   try {
     const ws = workspaceFor(p);
+    const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
+    if (p.command === 'report' && format !== 'md' && format !== 'json') {
+      errOut(word('sentinel.args.unexpectedArgument', { detail: format }));
+      return finish(result('report', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
+    }
+    if (p.command === 'serve') return await serve(p, ws);
+    if (p.command === 'wait') return await waitFor(p, ws);
+    if ((p.command === 'run' && p.flags['--detach'] === true) || p.command === 'resume') {
+      const planId = (p.args.planId ?? p.args.runId)!;
+      const confirmed = confirmRunForService(ws, { command: p.command, planId, confirm, now });
+      if ('result' in confirmed) return serviceOut(confirmed.result);
+      const client = await ensureService(ws);
+      if (!client) return serviceOut(result(p.command, 'configuration-failure', { verdicts: confirmed.verdicts, reasonCode: 'sentinel.service.startFailed', facts: { planId } }));
+      const r = await ask(client, 'run.start', { planId, receiptId: confirmed.receiptId });
+      return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)}${r.facts.joined === true ? ' · joined' : ''}`] : []);
+    }
+    if (p.command === 'pause' || p.command === 'cancel') {
+      // Pause needs a run the service is executing; cancel may also stop a paused or interrupted one.
+      const client = p.command === 'cancel' ? await ensureService(ws) : await connectService(ws);
+      if (!client) return serviceOut(result(p.command, 'refused', { reasonCode: p.command === 'cancel' ? 'sentinel.service.startFailed' : 'sentinel.service.notRunning', facts: { runId: p.args.runId } }));
+      const r = await ask(client, p.command === 'pause' ? 'run.pause' : 'run.cancel', { runId: p.args.runId! });
+      return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
+    }
+    // While the service runs it alone holds the store: reads go through it, and nothing new is planned or run here.
+    const live = await connectService(ws);
+    if (live && (p.command === 'plan' || p.command === 'run')) {
+      live.close();
+      return serviceOut(result(p.command, 'configuration-failure', { reasonCode: 'sentinel.service.ownerServiceRunning' }));
+    }
+    if (live && p.command === 'status') {
+      const num = (f: string) => (typeof p.flags[f] === 'string' ? Number(p.flags[f]) : undefined);
+      const after = num('--after');
+      const limit = num('--limit');
+      if ((after !== undefined && !(Number.isSafeInteger(after) && after >= 0)) || (limit !== undefined && !(Number.isSafeInteger(limit) && limit >= 0))) {
+        live.close();
+        errOut(word('sentinel.args.missingValue', { detail: '--after/--limit' }));
+        return finish(result('status', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
+      }
+      const r = await ask(live, 'run.status', { runId: p.args.runId!, ...(after === undefined ? {} : { after }), ...(limit === undefined ? {} : { limit }) });
+      return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
+    }
+    if (live && p.command === 'report') {
+      const doc = await ask(live, 'report', { runId: p.args.runId! }) as unknown as PreviewReport | CommandResult;
+      return printReport(p, doc);
+    }
+    live?.close();
     if (p.command === 'settings') {
       if (p.args.action !== 'adopt') {
         errOut(word('sentinel.args.unexpectedArgument', { detail: String(p.args.action) }));
@@ -164,10 +246,6 @@ async function owner(p: ParsedCommand): Promise<number> {
       return serviceOut(r, r.disclosure ? [`plan ${r.disclosure.planId} · ${r.disclosure.planDigest} · effects: ${r.disclosure.effects.join(', ')} · ${word('sentinel.report.previewOnly')}`] : []);
     }
     if (p.command === 'run') {
-      if (p.flags['--detach'] === true) {
-        errOut(word('sentinel.service.detachUnavailable'));
-        return finish(result('run', 'unavailable', { reasonCode: 'sentinel.service.detachUnavailable' }));
-      }
       const r = await runPlan(ws, { planId: p.args.planId!, confirm, now });
       return serviceOut(r, r.facts.runId ? [`run ${String(r.facts.runId)} · ${String(r.facts.state)} · preview findings: ${String(r.facts.previewFindings)}`] : []);
     }
@@ -183,17 +261,7 @@ async function owner(p: ParsedCommand): Promise<number> {
       return serviceOut(r, r.facts.state ? [`run ${p.args.runId} · ${String(r.facts.state)}`] : []);
     }
     // report
-    const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
-    if (format !== 'md' && format !== 'json') {
-      errOut(word('sentinel.args.unexpectedArgument', { detail: format }));
-      return finish(result('report', 'refused', { reasonCode: 'sentinel.args.unexpectedArgument' }));
-    }
-    const doc = await previewReport(ws, { runId: p.args.runId!, now });
-    if ('outcome' in doc) return serviceOut(doc);
-    // --json is the typed result with the report inside it; --format json alone prints the report document.
-    if (jsonOut) return finish(result('report', 'answered', { facts: { report: doc } }));
-    out(format === 'json' ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
-    return 0;
+    return printReport(p, await previewReport(ws, { runId: p.args.runId!, now }));
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (e instanceof PolicyError || (typeof code === 'string' && code.startsWith('sentinel.'))) {
@@ -201,6 +269,61 @@ async function owner(p: ParsedCommand): Promise<number> {
       return finish(result(p.command, 'configuration-failure', { reasonCode: code }));
     }
     throw e;
+  }
+}
+
+function printReport(p: ParsedCommand, doc: PreviewReport | CommandResult): number {
+  const format = typeof p.flags['--format'] === 'string' ? p.flags['--format'] : 'md';
+  {
+    if ('outcome' in doc) return serviceOut(doc);
+    // --json is the typed result with the report inside it; --format json alone prints the report document.
+    if (jsonOut) return finish(result('report', 'answered', { facts: { report: doc } }));
+    out(format === 'json' ? renderPreviewJson(doc) : renderPreviewMarkdown(doc));
+    return 0;
+  }
+}
+
+/** `serve`: the owner's background service for this workspace, until it is stopped or idle. */
+async function serve(p: ParsedCommand, ws: Workspace): Promise<number> {
+  const idle = typeof p.flags['--idle-ms'] === 'string' ? Number(p.flags['--idle-ms']) : 0;
+  if (!Number.isSafeInteger(idle) || idle < 0 || idle > 86_400_000) {
+    errOut(word('sentinel.args.missingValue', { detail: '--idle-ms' }));
+    return finish(result('serve', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
+  }
+  const stop = new AbortController();
+  const onSignal = () => stop.abort();
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  try {
+    await serveWorkspace(ws, { idleMs: idle, signal: stop.signal, onListening: () => {
+      if (!jsonOut) out(word(idle > 0 ? 'sentinel.service.serving' : 'sentinel.service.servingForever', { workspace: ws.path, idle }));
+    } });
+  } finally {
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  }
+  return finish(result('serve', 'answered', { facts: { workspace: ws.path, stopped: true } }));
+}
+
+/** `wait`: the run's result once it ends, or `submitted` (still running) when the wait does. */
+async function waitFor(p: ParsedCommand, ws: Workspace): Promise<number> {
+  const runId = p.args.runId!;
+  const total = typeof p.flags['--timeout'] === 'string' ? Number(p.flags['--timeout']) : DEFAULT_WAIT_MS;
+  if (!Number.isSafeInteger(total) || total < 0) {
+    errOut(word('sentinel.args.missingValue', { detail: '--timeout' }));
+    return finish(result('wait', 'refused', { reasonCode: 'sentinel.args.missingValue' }));
+  }
+  const end = Date.now() + total;
+  for (;;) {
+    const client = await connectService(ws);
+    if (!client) {
+      // Nothing is executing it: the store says whether it finished, stopped or was interrupted.
+      const store = await openStore(ws.storePath);
+      try { return serviceOut(await runResultIn(store, 'wait', runId, { executing: false })); } finally { store.close(); }
+    }
+    const slice = Math.max(0, Math.min(end - Date.now(), 20_000));
+    const r = await ask(client, 'run.wait', { runId, timeoutMs: slice }, slice + 10_000);
+    if (r.outcome !== 'submitted' || Date.now() >= end) return serviceOut(r, r.facts.state ? [`run ${runId} · ${String(r.facts.state)}`] : []);
   }
 }
 
@@ -234,7 +357,8 @@ async function dispatch(p: ParsedCommand): Promise<number> {
     case 'capabilities': return capabilities(p);
     case 'validate': return validate(p);
     case 'init': return init(p);
-    case 'settings': case 'plan': case 'run': case 'status': case 'report': return owner(p);
+    case 'settings': case 'plan': case 'run': case 'status': case 'report':
+    case 'serve': case 'wait': case 'pause': case 'resume': case 'cancel': return owner(p);
     default: {
       const change = plannedIn(p.command)!;
       errOut(word('sentinel.cli.unavailable', { command: p.command, change }));

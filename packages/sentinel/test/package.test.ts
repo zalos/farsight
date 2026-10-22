@@ -84,6 +84,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
   'service/preview-plan.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'service/local.js': ['node:crypto', 'node:fs', 'node:path'],
+  'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The owner's background service is the one process the command line starts itself (asserted below).
+  'service/launch.js': ['node:child_process'],
   // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
   'transport/ipc.js': ['node:crypto', 'node:fs', 'node:net', 'node:path'],
   // The report checks every count with core's own countedProblems, over the whole catalog.
@@ -142,6 +145,12 @@ test('the library imports only its reviewed modules, and nothing that could star
   const processes = readFileSync(`${dist}execution/processes.js`, 'utf8');
   assert.equal([...processes.matchAll(/shell: false/g)].length, 3);
   assert.doesNotMatch(processes, /shell: true|execSync|exec\(/);
+  // Outside it, only the service launcher starts a process: this executable's `serve`, an argument list, no shell.
+  const launch = readFileSync(`${dist}service/launch.js`, 'utf8');
+  assert.deepEqual([...launch.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`),
+    ['spawn(process.execPath']);
+  assert.match(launch, /shell: false/);
+  assert.match(launch, /'serve', '--workspace'/);
 });
 
 /** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */
@@ -216,7 +225,7 @@ test('draft contracts, store, capture, parser, policy and planner are available;
 });
 
 test('planned commands refuse with exit 3 and start nothing', () => {
-  for (const command of ['wait', 'pause', 'resume', 'cancel', 'retry', 'rerun', 'serve', 'compare', 'bundle', 'rules']) {
+  for (const command of ['retry', 'rerun', 'compare', 'bundle', 'rules']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
     assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));

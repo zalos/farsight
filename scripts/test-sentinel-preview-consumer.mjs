@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // The npm-only consumer's foundation-preview path (PR 09): install the packed Sentinel tarball into a clean npm
 // prefix and, with only Node and npm, initialize a synthetic workspace twice (keeping its settings), adopt them,
-// plan, run and read the report through the installed `farsight-sentinel` alone: no pnpm, no Farsight checkout.
+// plan, run and read the report through the installed `farsight-sentinel` alone: no pnpm, no Farsight checkout. Then
+// a second plan is handed to the owner's background service (`run --detach --confirm`, started on demand), joined
+// by a duplicate start, waited for and reported through the service, which is then stopped.
 // The run is the foundation preview: it must end required coverage incomplete (exit 2), never satisfied. No scanner,
 // container, model or network service is started; npm may fetch Sentinel's declared third-party dependencies.
 //
 //   pnpm pack:sentinel && node scripts/test-sentinel-preview-consumer.mjs [build/sentinel/farsight-sentinel-<v>.tgz]
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { npmConsumer } from './npm-consumer.mjs';
@@ -57,7 +59,26 @@ try {
   const report = await consumer.exec(bin, ['report', planId], { cwd: ws, env });
   assert.match(report.stdout, /foundation preview/i);
   assert.match(report.stdout, /1 finding in this report/);
-  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, plan ${planId}, run (exit 2, preview), report`);
+
+  // In the background: new content, a new plan, handed to the service only with the owner's confirmation.
+  writeFileSync(join(ws, 'src', 'accounts.ts'), 'export const q = (n: string) => `DELETE FROM accounts WHERE name = ${n}`;\n');
+  const second = (await sentinel('plan')).body.facts.planId;
+  assert.notEqual(second, planId);
+  assert.equal((await sentinel('run', second, '--detach')).status, 4, 'a background run waits for the owner');
+  const detached = await sentinel('run', second, '--detach', '--confirm');
+  assert.deepEqual([detached.status, detached.body.outcome], [0, 'submitted'], JSON.stringify(detached.body));
+  assert.equal((await sentinel('run', second, '--detach', '--confirm')).body.facts.runId, second, 'a duplicate start is the same run');
+  const waited = await sentinel('wait', second);
+  assert.deepEqual([waited.status, waited.body.facts.previewFindings], [2, 2], JSON.stringify(waited.body));
+  const viaService = await consumer.exec(bin, ['report', second], { cwd: ws, env });
+  assert.match(viaService.stdout, /2 findings in this report/);
+  const services = join(env.XDG_STATE_HOME, 'farsight', 'sentinel', 'trust', 'services');
+  for (const name of readdirSync(services)) {
+    const { pid } = JSON.parse(readFileSync(join(services, name), 'utf8'));
+    process.kill(pid, 'SIGTERM');
+    for (let i = 0; i < 200; i++) { try { process.kill(pid, 0); } catch { break; } await new Promise(r => setTimeout(r, 50)); }
+  }
+  console.log(`sentinel preview consumer ok: npm-only install, init twice, adopt, plan ${planId}, run (exit 2, preview), report; background run ${second} (detach, join, wait, report)`);
 } finally {
   consumer.cleanup();
 }

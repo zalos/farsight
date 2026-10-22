@@ -9,11 +9,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { qualificationFor, SQLITE_RELEASE_POLICY } from '../dist/store/index.js';
+import { readdirSync } from 'node:fs';
 import { unlock } from './snapshot-helpers.ts';
 
 const CLI = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 const QUALIFIED = qualificationFor(SQLITE_RELEASE_POLICY, `${process.platform}-${process.arch}`, process.versions.sqlite ?? '') !== undefined;
 const needsStore = QUALIFIED || process.env.CI ? {} : { skip: 'not a qualified store host' };
+
+/** Stops the workspace's background service (SIGTERM to the pid its private descriptor names) and waits for it. */
+function stopService(env: { XDG_STATE_HOME: string }) {
+  const dir = join(env.XDG_STATE_HOME, 'farsight', 'sentinel', 'trust', 'services');
+  let names: string[] = [];
+  try { names = readdirSync(dir).filter(n => n.endsWith('.json')); } catch { return; }
+  for (const n of names) {
+    const { pid } = JSON.parse(readFileSync(join(dir, n), 'utf8')) as { pid: number };
+    try { process.kill(pid, 'SIGTERM'); } catch { continue; }
+    for (let i = 0; i < 200; i++) {
+      try { process.kill(pid, 0); } catch { break; }
+      spawnSync('sleep', ['0.05']);
+    }
+  }
+}
 
 test('init → adopt → plan → run → status → report, twice where it matters', needsStore, t => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-e2e-')));
@@ -70,10 +86,54 @@ test('init → adopt → plan → run → status → report, twice where it matt
   assert.deepEqual([json.outcome, json.exitCode], ['answered', 0], 'with --json the report travels inside the typed result');
   assert.deepEqual({ ...json.facts.report, generatedAt: null }, { ...json2.facts.report, generatedAt: null }, 'the report regenerates from stored results alone');
 
-  assert.deepEqual([run('run', planId, '--detach').status, run('run', planId, '--detach').body.outcome], [3, 'unavailable'], 'no background run is pretended');
+  // In the background: only the owner's confirmation hands a run over; a finished run prints its result again.
+  const unconfirmed = run('run', planId, '--detach');
+  assert.deepEqual([unconfirmed.status, unconfirmed.body.reasonCode], [4, 'sentinel.service.detachNeedsConfirm']);
+  const detached = run('run', planId, '--detach', '--confirm');
+  assert.deepEqual([detached.status, detached.body.facts.state, detached.body.verdicts.policy.reasonCode], [2, 'completed', 'sentinel.service.ownerReceipt']);
+  assert.equal(run('plan').body.reasonCode, 'sentinel.service.ownerServiceRunning', 'the service alone holds the store while it runs');
+  assert.equal(run('status', planId).body.facts.state, 'completed', 'status reads through the service');
+  assert.equal(run('wait', planId).status, 2);
+  stopService(env);
   assert.equal(run('run', 'plan-' + '0'.repeat(32)).body.reasonCode, 'sentinel.service.planUnknown');
   // A settings change after planning invalidates the plan rather than running under other rules.
   const path = join(ws, '.farsight/sentinel/settings.json');
   writeFileSync(path, readFileSync(path, 'utf8').replace('"medium"', '"high"'));
   assert.equal(run('run', planId).body.reasonCode, 'sentinel.service.settingsNotAdopted');
+});
+
+test('run --detach: the service starts on demand, a duplicate joins, callers leave, wait and report read the result', needsStore, t => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-detach-')));
+  const env = { PATH: process.env.PATH ?? '', HOME: join(dir, 'home'), XDG_STATE_HOME: join(dir, 'state') };
+  t.after(() => { stopService(env); unlock(dir); rmSync(dir, { recursive: true, force: true }); });
+  const ws = join(dir, 'ws');
+  mkdirSync(join(ws, 'src'), { recursive: true });
+  writeFileSync(join(ws, 'src/users.ts'), 'export const find = (id: string) => db.query("SELECT * FROM users WHERE id = " + id);\n');
+  mkdirSync(env.HOME);
+  const run = (...args: string[]) => {
+    const r = spawnSync(process.execPath, [CLI, ...args, '--json'], { cwd: ws, env, encoding: 'utf8', timeout: 60_000 });
+    let body: any;
+    try { body = JSON.parse(r.stdout); } catch { body = r.stdout; }
+    return { status: r.status, body, stderr: r.stderr };
+  };
+  run('init');
+  run('settings', 'adopt', '--confirm');
+  const planId = run('plan').body.facts.planId;
+  assert.equal(run('pause', planId).body.reasonCode, 'sentinel.service.notRunning', 'no service, nothing to pause');
+
+  const first = run('run', planId, '--detach', '--confirm');
+  assert.deepEqual([first.status, first.body.outcome, first.body.facts.runId], [0, 'submitted', planId], first.stderr);
+  const second = run('run', planId, '--detach', '--confirm');
+  assert.equal(second.body.facts.runId, planId, 'one run for one plan');
+  assert.ok(second.body.outcome === 'submitted' ? second.body.facts.joined === true : second.body.facts.state === 'completed');
+  const waited = run('wait', planId);
+  assert.deepEqual([waited.status, waited.body.outcome, waited.body.facts.previewFindings], [2, 'required-coverage-incomplete', 1]);
+  const report = spawnSync(process.execPath, [CLI, 'report', planId], { cwd: ws, env, encoding: 'utf8' });
+  assert.match(report.stdout, /1 finding in this report/);
+  const events = run('status', planId, '--limit', '50').body.facts.events;
+  assert.equal(events.filter((e: { kind: string }) => e.kind === 'attempt-started').length, 1, 'executed once');
+
+  stopService(env);
+  assert.equal(run('plan').status, 0, 'a stopped service releases the store');
+  assert.equal(run('wait', planId).status, 2, 'wait reads a finished run from the store with no service');
 });

@@ -27,7 +27,7 @@ const digest = (v: unknown) => `sha256:${createHash('sha256').update(canonicalJs
  * This package's own executable: the manifest's `bin`, found from this module's folder upward. It is right both in
  * the workspace (`dist/cli.js`) and in the published bundle, whose shared code lives in chunk files beside it.
  */
-function ownExecutable(): string {
+export function ownExecutable(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 6; i++) {
     const manifest = join(dir, 'package.json');

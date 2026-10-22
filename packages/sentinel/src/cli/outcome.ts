@@ -9,6 +9,8 @@ import type { PolicyResult } from '../contracts/index.js';
 export type CommandEffectOutcome =
   /** `run --detach`: the run was admitted and handed to the coordinator; nothing about its result is known yet. */
   | 'submitted'
+  /** pause, cancel: the service accepted the control; the run reaches the state when its work in flight ends. */
+  | 'requested'
   /** A command this build does not run; nothing was started. */
   | 'unavailable'
   /** `init` wrote the private settings file. */
@@ -26,6 +28,7 @@ export type CommandOutcome = PolicyResult | CommandEffectOutcome;
 export const OUTCOME_EXIT_CODES: Readonly<Record<CommandOutcome, number>> = Object.freeze({
   ...POLICY_EXIT_CODES,
   submitted: 0,
+  requested: 0,
   answered: 0,
   prepared: 0,
   kept: 0,

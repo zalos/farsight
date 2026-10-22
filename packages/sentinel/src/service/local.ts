@@ -1,10 +1,8 @@
-// The owner's local service operations: adopt settings, plan, run in the foreground, bounded status and the preview
-// report. Each runs in the owner's own process (the owner CLI entrypoint) against the workspace's store; the
-// requester is the entrypoint's, never a request's. Every action that changes something is decided by PR 06's
-// admission (three verdicts) first, and a receipt is issued and spent only here, after the owner's own confirm.
-//
-// Not here yet, and refused as unavailable by the CLI: a detached owner process (`serve`, `run --detach`) and the
-// run controls (pause, resume, cancel, retry, rerun), which need that process.
+// The owner's local operations: adopt settings, plan, run in the foreground, bounded status and the preview report.
+// Each runs in the owner's own process (the owner CLI entrypoint) against the workspace's store; the requester is
+// the entrypoint's, never a request's. Every action that changes something is decided by PR 06's admission (three
+// verdicts) first, and a receipt is issued and spent only here, after the owner's own confirm. The background
+// service (owner-service.ts) reuses the store-level reads below; it holds the store while it runs.
 import { createHash } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -42,11 +40,11 @@ export function workspaceOf(path: string, env: NodeJS.ProcessEnv = process.env):
   });
 }
 
-const OWNER = requestedByOf({ kind: 'owner-cli' });
+export const OWNER = requestedByOf({ kind: 'owner-cli' });
 const sha = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const RECEIPT_TTL_MS = 10 * 60 * 1000;
 
-const printed = (r: AdmissionEnvelope): PrintedVerdicts => Object.freeze({
+export const printed = (r: AdmissionEnvelope): PrintedVerdicts => Object.freeze({
   policy: Object.freeze({ allowed: r.verdicts.policy.allowed, asked: r.verdicts.policy.asked, reasonCode: r.verdicts.policy.reasonCode }),
   capability: Object.freeze({ allowed: r.verdicts.capability.allowed, asked: r.verdicts.capability.asked, reasonCode: r.verdicts.capability.reasonCode }),
   credential: Object.freeze({ allowed: r.verdicts.credential.allowed, asked: r.verdicts.credential.asked, reasonCode: r.verdicts.credential.reasonCode }),
@@ -57,14 +55,14 @@ function trustFolder(ws: Workspace): string {
   return ws.trustDir;
 }
 
-function receiptBook(ws: Workspace): ReceiptBook {
+export function receiptBook(ws: Workspace): ReceiptBook {
   const dir = join(trustFolder(ws), 'receipts');
   mkdirSync(dir, { mode: 0o700, recursive: true });
   return new ReceiptBook(dir);
 }
 
 /** The adopted policy, or a refusal naming why there is none. */
-function adoptedPolicy(ws: Workspace): { policy: EffectivePolicy } | { refusal: CommandResult } {
+export function adoptedPolicy(ws: Workspace): { policy: EffectivePolicy } | { refusal: CommandResult } {
   const inputs = loadPolicyInputs({ workspace: ws.path, trustDir: trustFolder(ws) });
   if (inputs.trust !== 'adopted') {
     return { refusal: result('policy', 'configuration-failure', { reasonCode: 'sentinel.service.settingsNotAdopted', facts: { trust: inputs.trust } }) };
@@ -101,7 +99,7 @@ function decide(ws: Workspace, policy: EffectivePolicy, intent: ActionIntent, st
   };
 }
 
-const intentOf = (action: ActionIntent['action'], input: string, effects: ActionEffect[]): ActionIntent => ({
+export const intentOf = (action: ActionIntent['action'], input: string, effects: ActionEffect[]): ActionIntent => ({
   action, input, effects, budget: { maxTokens: null, maxCost: null, currency: null },
   scope: { profile: PREVIEW_PROFILE, provider: null, targets: [] },
 });
@@ -125,7 +123,7 @@ export function adoptWorkspaceSettings(ws: Workspace, options: { confirm: boolea
 
 // ---- plan ----
 
-function readPlanRecord(ws: Workspace, planId: string): PlanRecord | undefined {
+export function readPlanRecord(ws: Workspace, planId: string): PlanRecord | undefined {
   if (!/^plan-[0-9a-f]{32}$/.test(planId)) return undefined;
   try {
     const st = lstatSync(join(ws.planDir, `${planId}.json`));
@@ -135,13 +133,13 @@ function readPlanRecord(ws: Workspace, planId: string): PlanRecord | undefined {
   } catch { return undefined; }
 }
 
-function scratchUnder(ws: Workspace): string {
+export function scratchUnder(ws: Workspace): string {
   const root = join(ws.path, '.farsight', 'sentinel', 'scratch');
   mkdirSync(root, { recursive: true, mode: 0o700 });
   return mkdtempSync(join(root, 'w-'));
 }
 
-function removeScratch(dir: string): void {
+export function removeScratch(dir: string): void {
   const open = (p: string) => {
     try { chmodSync(p, 0o700); } catch { return; }
     for (const name of readdirSync(p)) {
@@ -235,35 +233,109 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
   });
 }
 
+// ---- the owner's confirmation, carried to the background service ----
+
+/**
+ * Confirms one run for the background service, as the owner, in this process: the plan's run is admitted here (three
+ * verdicts, the owner as requester), then, only with `confirm`, a receipt bound to `run.start`, this plan's digest
+ * and the adopted policy revision is issued and not spent. The service spends it once when it starts the run; a
+ * connection without one is an agent and gets what the adopted grants give agents, nothing implicit.
+ */
+export function confirmRunForService(ws: Workspace, options: { command: string; planId: string; confirm: boolean; now: Date }):
+  { receiptId: string; verdicts: PrintedVerdicts } | { result: CommandResult } {
+  const record = readPlanRecord(ws, options.planId);
+  if (!record) return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { planId: options.planId } }) };
+  const adopted = adoptedPolicy(ws);
+  if ('refusal' in adopted) return { result: adopted.refusal };
+  const { policy } = adopted;
+  if (policy.revision !== record.policyRevision) {
+    return { result: result(options.command, 'configuration-failure', { reasonCode: 'sentinel.service.policyChanged', facts: { planId: record.planId } }) };
+  }
+  const intent = intentOf('run.start', record.planDigest, ['local-artifacts']);
+  const decision = admit({
+    intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest: record.planDigest, now: options.now,
+    capability: () => ({ available: true, detail: 'built into this installation; runs locally' }),
+    credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
+  }).record;
+  const verdicts = printed(decision);
+  const facts = { planId: record.planId, action: intent.action, intentDigest: decision.intentDigest };
+  if (decision.outcome === 'denied') {
+    const v = decision.verdicts;
+    return { result: result(options.command, 'configuration-failure', { verdicts, facts,
+      reasonCode: v.policy.allowed ? (v.capability.allowed ? v.credential.reasonCode : v.capability.reasonCode) : v.policy.reasonCode }) };
+  }
+  if (!options.confirm) return { result: result(options.command, 'awaiting-confirmation', { verdicts, facts, reasonCode: 'sentinel.service.detachNeedsConfirm' }) };
+  assertMayConfirm(OWNER);
+  const receipt = issueReceipt(receiptBook(ws), OWNER, { intent, stateDigest: record.planDigest, policyRevision: policy.revision }, { now: options.now, ttlMs: RECEIPT_TTL_MS });
+  return { receiptId: receipt.id, verdicts };
+}
+
 // ---- status and report ----
 
 const MAX_STATUS_EVENTS = 50;
 
 /** The run's state and a bounded page of its committed events. Reads only. */
 export async function runStatus(ws: Workspace, options: { runId: string; after?: number; limit?: number }): Promise<CommandResult> {
-  return withStore(ws, async store => {
+  return withStore(ws, async store => statusIn(store, options));
+}
+
+/** The last committed state of a run, read in bounded pages, or null when the store has no such run. */
+export function runStateIn(store: SentinelStore, runId: string): string | null {
+  let state: string | null = null;
+  for (let after = 0; ;) {
+    const p = store.ledger.readEvents({ runId, after, limit: 500 });
+    for (const e of p.events) {
+      if (e.kind === 'run-created') state = String((e.payload as { state?: unknown }).state ?? state);
+      if (e.kind === 'run-state') state = String((e.payload as { to?: unknown }).to ?? state);
+    }
+    if (!p.more) return state;
+    after = p.cursor;
+  }
+}
+
+/** `runStatus` against a store this process already holds (the background service's). */
+export async function statusIn(store: SentinelStore, options: { runId: string; after?: number; limit?: number }): Promise<CommandResult> {
+  {
     const limit = Math.min(Math.max(1, options.limit ?? 20), MAX_STATUS_EVENTS);
     const page = store.ledger.readEvents({ runId: options.runId, after: options.after ?? 0, limit });
-    let state: string | null = null;
     // The state is the last committed run event's; the whole history is read in bounded pages without keeping it.
-    for (let after = 0; ;) {
-      const p = store.ledger.readEvents({ runId: options.runId, after, limit: 500 });
-      for (const e of p.events) {
-        if (e.kind === 'run-created') state = String((e.payload as { state?: unknown }).state ?? state);
-        if (e.kind === 'run-state') state = String((e.payload as { to?: unknown }).to ?? state);
-      }
-      if (!p.more) break;
-      after = p.cursor;
-    }
+    const state = runStateIn(store, options.runId);
     if (state === null) return result('status', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
     return result('status', 'answered', { facts: {
       runId: options.runId, state, cursor: page.cursor, more: page.more,
       events: page.events.map(e => ({ sequence: e.sequence, kind: e.kind, at: e.at })),
     } });
-  });
+  }
 }
 
-async function previewFindings(store: SentinelStore, planId: string): Promise<{ findings: unknown[]; checkedFiles: number } | undefined> {
+const FINAL_STATES = new Set(['completed', 'canceled']);
+export const isFinalRunState = (state: string | null) => state !== null && FINAL_STATES.has(state);
+
+/**
+ * A run's result from the ledger and its stored artifacts alone, as `wait` and a repeated start print it: a
+ * completed preview is required coverage incomplete (exit 2), a completed run without its findings an execution
+ * failure, a canceled or paused run not completed. A run still under way is `submitted`; `executing` says whether
+ * something is running it, so a run whose service stopped reads as interrupted, never as still running.
+ */
+export async function runResultIn(store: SentinelStore, command: string, planId: string, options: { executing: boolean; verdicts?: PrintedVerdicts; facts?: Record<string, unknown> }): Promise<CommandResult> {
+  const state = runStateIn(store, planId);
+  const base = { ...(options.verdicts ? { verdicts: options.verdicts } : {}) };
+  if (state === null) return result(command, 'configuration-failure', { ...base, reasonCode: 'sentinel.service.runUnknown', facts: { runId: planId } });
+  const findings = state === 'completed' ? await previewFindings(store, planId) : undefined;
+  const facts = { ...(options.facts ?? {}), runId: planId, state, previewFindings: findings?.findings.length ?? null, label: 'foundation-preview' };
+  if (state === 'completed') {
+    return findings
+      ? result(command, 'required-coverage-incomplete', { ...base, facts, reasonCode: 'sentinel.service.previewNotCoverage' })
+      : result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.executionFailed' });
+  }
+  if (state === 'canceled' || (state === 'paused' && !options.executing)) {
+    return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.runNotCompleted' });
+  }
+  if (!options.executing) return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.runInterrupted' });
+  return result(command, 'submitted', { ...base, facts });
+}
+
+export async function previewFindings(store: SentinelStore, planId: string): Promise<{ findings: unknown[]; checkedFiles: number } | undefined> {
   const pub = store.ledger.getPublication({ id: `work-${planId}`, revision: 1 });
   if (!pub) return undefined;
   for (const o of pub.outputs) {
@@ -287,9 +359,14 @@ function lastRunSequence(store: SentinelStore, runId: string): number {
 
 /** The preview report of a completed run, rendered from the ledger and the stored artifacts only; nothing executes. */
 export async function previewReport(ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | CommandResult> {
+  return withStore(ws, store => reportIn(store, ws, options));
+}
+
+/** `previewReport` against a store this process already holds (the background service's). */
+export async function reportIn(store: SentinelStore, ws: Workspace, options: { runId: string; now: Date }): Promise<PreviewReport | CommandResult> {
   const record = readPlanRecord(ws, options.runId);
   if (!record) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.planUnknown', facts: { runId: options.runId } });
-  return withStore(ws, async store => {
+  {
     const findings = await previewFindings(store, record.planId);
     if (!findings) return result('report', 'configuration-failure', { reasonCode: 'sentinel.service.runNotCompleted', facts: { runId: options.runId } });
     const opened = await openSnapshot(store, record.snapshotId);
@@ -306,7 +383,7 @@ export async function previewReport(ws: Workspace, options: { runId: string; now
       limitations: [...PREVIEW_LIMITATIONS],
     };
     return checkPreviewReport(doc);
-  });
+  }
 }
 
 export { PolicyError };

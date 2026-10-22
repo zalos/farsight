@@ -179,6 +179,8 @@ farsight-sentinel plan                     # captures the workspace; prints the 
 farsight-sentinel run <planId>             # foreground; a foundation preview ends exit 2 (never "satisfied")
 farsight-sentinel status <planId>          # the run's state and a bounded page of its events
 farsight-sentinel report <planId>          # Markdown (or --format json), from stored results only
+farsight-sentinel run <planId> --detach --confirm   # hand it to the background service (started on demand)
+farsight-sentinel wait <planId>            # its result once it ends; pause, cancel, resume <planId> --confirm
 ```
 
 `init` writes the settings file only when it is missing: PR 06's defaults plus one grant letting the owner (a
@@ -186,8 +188,11 @@ person, never an agent) capture and run the `static` profile. Settings name cred
 only (`keychain:farsight/<name>`). Nothing downloads a tool, installs a scanner, starts a container or contacts a
 model provider. The run is a **foundation preview**: one original coded check (SQL text assembled from strings in
 TypeScript, JavaScript and Java) shows the whole path working; it is not scanner or framework coverage, and its
-report says so. `run --detach`, `wait`, `pause`, `resume`, `cancel`, `retry` and `rerun` say *unavailable* (exit 3)
-until the background service exists. With `--json`, every result carries its `outcome`, `exitCode`, the three
+report says so. A background run survives the command that started it: the owner's service (`serve`, started on
+demand, stopping when idle) holds the store, a duplicate start joins the same run, and a run interrupted by the
+service stopping resumes with `resume <planId> --confirm`. Only the owner's `--confirm` hands a run over; another
+client of the service gets what the adopted grants give agents, which by default is nothing. `retry` and `rerun`
+say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 25 in `docs/ARCHITECTURE.md`.
 
 ## Versions and evolution

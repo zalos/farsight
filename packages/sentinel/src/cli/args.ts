@@ -5,9 +5,9 @@
 /** The commands this executable knows, and the planning change that delivers each one that is not built yet. */
 export const COMMANDS = {
   help: null, version: null, capabilities: null, validate: null, init: null, settings: null,
-  plan: null, run: null, status: null, report: null,
-  // These need the owner's background service, which is not built yet.
-  wait: 'PR 09', pause: 'PR 09', resume: 'PR 09', cancel: 'PR 09', retry: 'PR 09', rerun: 'PR 09', serve: 'PR 09',
+  plan: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
+  // A new attempt of failed work and a fresh run of a finished plan need plan revisions from PR 06's planner.
+  retry: 'PR 09', rerun: 'PR 09',
   compare: 'PR 19', rules: 'PR 06', bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
@@ -35,10 +35,11 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   run: { flags: { ...COMMON, ...STORE, '--detach': 'boolean', '--confirm': 'boolean' }, positional: ['planId'], min: 1 },
   status: { flags: { ...COMMON, ...STORE, '--after': 'value', '--limit': 'value' }, positional: ['runId'], min: 1 },
   wait: { flags: { ...COMMON, ...STORE, '--timeout': 'value' }, positional: ['runId'], min: 1 },
-  pause: RUN_REF, resume: RUN_REF, cancel: RUN_REF, retry: RUN_REF,
+  pause: RUN_REF, cancel: RUN_REF, retry: RUN_REF,
+  resume: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--idempotency-key': 'value' }, positional: ['runId'], min: 1 },
   report: { flags: { ...COMMON, ...STORE, '--format': 'value' }, positional: ['runId'], min: 1 },
-  serve: { flags: { ...COMMON, ...STORE }, positional: [], min: 0 },
+  serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
   compare: { flags: COMMON, positional: [], min: 0 },
   rules: { flags: COMMON, positional: [], min: 0 },
   bundle: { flags: COMMON, positional: [], min: 0 },

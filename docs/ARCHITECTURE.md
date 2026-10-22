@@ -596,7 +596,7 @@ carries the outcome, the exit code and the three verdicts.
 
 **Who asks is the entrypoint's, never the request's.** The owner channel is the command line in its own process. A
 client of the local service (`transport/ipc.ts`) is always a non-owner agent, whatever its hello names: `cli`,
-`mcp` and `http-bridge` only label the channel (`local-service`, proposed for `DecisionChannel`, until then mapped).
+`mcp` and `http-bridge` only label the channel (`local-service`, `mcp`, `http-bridge` in the draft `DecisionChannel`).
 A request body that names an actor, principal, channel or confirmer is refused, so owner authority can reach the
 service only as a receipt id the owner's own process minted, which the service verifies. The socket lives in a
 private runtime folder keyed by the canonical store path and an owner nonce (`$XDG_RUNTIME_DIR`, `$TMPDIR`, else a
@@ -612,7 +612,19 @@ stands behind PR 08's `PlanBoundary` and is replaced by PR 06's planner. A previ
 `required-coverage-incomplete` (exit 2), never satisfied, and its report says it is not scanner coverage. A plan's
 identity is its captured inventory, policy revision and adapter, so the same content plans to the same id; running a
 completed plan again executes nothing. The report is rendered from the ledger and stored artifacts, pinned to the
-run's last event. **Not in this decision:** the detached owner process (`serve`, `run --detach`, `wait`) and the
-run controls, refused as unavailable until built; a ledger read of a run (until then a private plan record sits
-beside the settings); the full report (PR 19). Same-account code is outside this boundary, as for the store.
+run's last event.
+
+**The owner's background service holds the store; authority reaches it as a receipt.** `serve` (or `run --detach`,
+starting it on demand as this same executable with a fixed argument list and an explicit environment) opens the
+store for its lifetime, listens on the socket and records its address and owner nonce in the owner's private user
+state, never the checkout. While it runs it alone opens the store: status, wait and report go through it; plan and
+foreground run refuse until it stops (after an idle period, or on SIGTERM, pausing work in flight). Starting or
+resuming a run needs either a receipt the owner's own CLI issued after `--confirm`, bound to `run.start`, the plan's
+digest and the policy revision and spent once by the service, or what the adopted grants give the connection's
+agent principal, by admission; the defaults give agents nothing. Pause and cancel only stop work and are answered
+for any client of the socket. One run executes at a time; a second start of the same plan joins it, a start of a
+finished run prints its result again, and a run whose service died reads as interrupted and resumes through the
+coordinator's recovery with each output accepted once. **Not in this decision:** retry and rerun, which need plan
+revisions from PR 06's planner; a ledger read of a run (until then a private plan record sits beside the settings);
+the full report (PR 19). Same-account code is outside this boundary, as for the store.
 

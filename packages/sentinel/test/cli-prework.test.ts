@@ -45,7 +45,11 @@ test('arguments: each command takes only its own flags; typos and repeats are re
   no(['capabilities', '--json=yes'], 'sentinel.args.unexpectedArgument');
   no(['scan-everything'], 'sentinel.args.unknownCommand');
   // A command this build does not run is refused as unavailable, whatever its arguments.
-  assert.equal(ok(['wait']).command, 'wait');
+  assert.equal(ok(['rerun']).command, 'rerun');
+  no(['wait'], 'sentinel.args.missingArgument');
+  no(['serve', '--idle-ms'], 'sentinel.args.missingValue');
+  no(['pause', 'r', '--confirm'], 'sentinel.args.unknownFlag');
+  assert.equal(ok(['resume', 'r', '--confirm']).flags['--confirm'], true);
   no(['run'], 'sentinel.args.missingArgument');
   assert.ok(parseArgs(['nonsense', '--json']).ok === false && (parseArgs(['nonsense', '--json']) as { json: boolean }).json);
 });
@@ -53,9 +57,9 @@ test('arguments: each command takes only its own flags; typos and repeats are re
 test('outcomes: Sentinel exit codes, and no confirmation or submission can read as a finished scan', () => {
   assert.deepEqual(OUTCOME_EXIT_CODES, {
     'satisfied': 0, 'finding-policy-failed': 1, 'required-coverage-incomplete': 2, 'configuration-failure': 3, 'awaiting-confirmation': 4,
-    submitted: 0, answered: 0, prepared: 0, kept: 0, unavailable: 3, refused: 3,
+    submitted: 0, requested: 0, answered: 0, prepared: 0, kept: 0, unavailable: 3, refused: 3,
   });
-  for (const o of ['awaiting-confirmation', 'submitted', 'unavailable', 'prepared', 'kept', 'answered', 'refused', 'configuration-failure'] as const) {
+  for (const o of ['awaiting-confirmation', 'submitted', 'requested', 'unavailable', 'prepared', 'kept', 'answered', 'refused', 'configuration-failure'] as const) {
     assert.equal(isFinalPolicyResult(o), false, o);
   }
   for (const o of ['satisfied', 'finding-policy-failed', 'required-coverage-incomplete'] as const) assert.equal(isFinalPolicyResult(o), true);
