@@ -287,6 +287,35 @@ export class ContainerBackend {
     return !succeeded(after) && /no such (container|object)/i.test(after.stderr.toString('utf8')) ? 'removed-owned-container' : 'cleanup-failed';
   }
 
+  /** Synchronous reconcileOwned, for the store owner's close path. */
+  reconcileOwnedSync(owner: string): { removed: string[]; uncertain: string[] } {
+    const opts = { env: this.#env, timeoutMs: 30_000, maxStdoutBytes: 1024 * 1024, maxStderrBytes: 65_536 };
+    const r = runBoundedSync(this.#docker, ['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner}`], opts);
+    if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner}`] };
+    const removed: string[] = [], uncertain: string[] = [];
+    for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)) {
+      (this.removeSync(id, owner) === 'cleanup-failed' ? uncertain : removed).push(id);
+    }
+    return { removed, uncertain };
+  }
+
+  /**
+   * Read-only, for recovery (PR 08): every container labelled with this store, with its attempt, epoch and owner
+   * nonce. Nothing is stopped or removed here; recovery decides, by those labels, under its own owner.
+   */
+  async listStoreContainers(store: Id, signal?: AbortSignal): Promise<Array<{ id: string; attempt: string; epoch: string; owner: string; running: boolean }>> {
+    const r = await this.#run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.store}=${store}`], signal);
+    if (!succeeded(r)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'list' });
+    const out = [];
+    for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(l => CONTAINER_ID.test(l))) {
+      const c = await this.#container(id, signal).catch(() => null) as { Config?: { Labels?: Record<string, string> }; State?: { Running?: boolean } } | null;
+      const labels = c?.Config?.Labels ?? {};
+      if (labels[LABELS.store] !== store) continue;
+      out.push({ id, attempt: labels[LABELS.attempt] ?? '', epoch: labels[LABELS.epoch] ?? '', owner: labels[LABELS.owner] ?? '', running: c?.State?.Running === true });
+    }
+    return out;
+  }
+
   /** The exact container if it carries this owner nonce; null when the daemon says it is absent; throws otherwise. */
   async #owned(id: string, owner: string, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
     if (!CONTAINER_ID.test(id)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'identity' });

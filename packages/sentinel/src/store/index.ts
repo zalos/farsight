@@ -23,6 +23,7 @@ import {
   ObjectStore, ObjectStoreError, canonicalJsonBytes, identify, rawDigestOf, type ObjectCheck, type ObjectStoreErrorCode,
 } from './objects.js';
 import { acquireStoreOwner, type StoreOwner } from './owner.js';
+import { bindOwner } from './owner-binding.js';
 import type { FilesystemIdentity } from './paths.js';
 import { SQLITE_RELEASE_POLICY, qualificationFor, type QualifiedRuntime, type QualificationStatus, type SqliteReleasePolicy } from './runtime.js';
 import {
@@ -196,7 +197,7 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
     arch: owner.runtime.arch, checks: owner.runtime.checks,
   });
 
-  return Object.freeze({
+  const sentinel: SentinelStore = Object.freeze({
     storePath: owner.storePath,
     storeId: owner.storeId,
     epoch: owner.epoch,
@@ -222,6 +223,9 @@ function facade(owner: StoreOwner, ledger: Ledger, store: ObjectStore): Sentinel
     planPrune: () => planPruneFromLedger(store, ledger),
     close: () => owner.close(),
   });
+  // Internal only (owner-binding.ts): lets package code bind worker execution to this store's lock.
+  bindOwner(sentinel, owner);
+  return sentinel;
 }
 
 // ---- error codes ----

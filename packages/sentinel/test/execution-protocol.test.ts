@@ -8,20 +8,23 @@ import { join } from 'node:path';
 import { SENTINEL_EXECUTION_STRINGS } from '@farsight/core/dist/strings-sentinel-execution.js';
 import { FrameDecoder, WorkerSession, encodeFrame } from '../dist/execution/protocol.js';
 import { superviseAttempt, inputFingerprintOf } from '../dist/execution/supervisor.js';
+import { createExecutionService } from '../dist/execution/service.js';
+import { boundOwner } from '../dist/store/owner-binding.js';
+import { spawnWorker } from '../dist/execution/processes.js';
 import { createAdapterRegistry, TRUSTED_ADAPTERS, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
 import { EXECUTION_ERROR_CODES, isExecutionError } from '../dist/execution/errors.js';
-import { builtInRegistry, inputs, ownerIn, removeScratch, scratch, work } from './execution-helpers.ts';
+import { builtInRegistry, inputs, removeScratch, runAttempt, scratch, storeIn, work, WORKER } from './execution-helpers.ts';
 
 const s = scratch('protocol');
-const owner = await ownerIn(s.root);
-after(() => { owner.close(); removeScratch(s.root); });
+const store = await storeIn(s.root);
+after(() => { try { store.close(); } catch { /* a test may have closed it */ } removeScratch(s.root); });
 const captured = inputs(s.root);
 const is = (code: string) => (e: unknown) => isExecutionError(e) && e.code === code;
 let n = 0;
 
 async function run(behaviour: string, limits: Record<string, number> = {}, extra: Record<string, unknown> = {}) {
   const registry = builtInRegistry(join(s.root, `r${++n}`), [behaviour], limits);
-  return superviseAttempt({ owner, registry, adapterId: `test-${behaviour}`, attemptId: `attempt-${n}`, work, inputs: captured, scratchRoot: s.work, ...extra });
+  return runAttempt(store, s.work, registry, { adapterId: `test-${behaviour}`, attemptId: `attempt-${n}`, work, inputs: captured, ...extra });
 }
 
 test('every execution code is a catalog entry and every catalog entry a code', () => {
@@ -70,13 +73,13 @@ test('framing: a multibyte character split across chunks decodes intact; a lone 
 });
 
 test('session: the coordinator binding is the only authority', () => {
-  const binding = { attemptId: 'att-1', work, coordinatorEpoch: owner.epoch, adapterId: 'a', adapterDigest: `sha256:${'a'.repeat(64)}`,
+  const binding = { attemptId: 'att-1', work, coordinatorEpoch: store.epoch, adapterId: 'a', adapterDigest: `sha256:${'a'.repeat(64)}`,
     inputFingerprint: inputFingerprintOf(captured.map(c => c.id)), inputs: captured.map(c => c.id), deadlineAt: '2099-01-01T00:00:00Z' };
   const session = new WorkerSession(binding);
   const step = session.receive({ protocol: 'sentinel-worker/draft-1', type: 'hello', supported: ['sentinel-worker/draft-1'], adapterId: 'a', adapterDigest: binding.adapterDigest });
   assert.deepEqual(step.send.map(m => m.type), ['welcome', 'start']);
   const start = step.send[1] as any;
-  assert.equal(start.coordinatorEpoch, owner.epoch);
+  assert.equal(start.coordinatorEpoch, store.epoch);
   assert.equal(start.seq, 0);
   assert.throws(() => session.receive({ protocol: 'sentinel-worker/draft-1', type: 'progress', attemptId: 'att-1', work, coordinatorEpoch: 'epoch-forged', seq: 0, completed: 0, planned: 1 }),
     (e: unknown) => is('sentinel.execution.protocolViolation')(e) && (e as any).detail.rule === 'coordinator-epoch');
@@ -99,20 +102,21 @@ test('the production registry is empty, and external tools may only be container
 
 test('an external adapter without a container backend is refused; nothing runs on the host instead', async () => {
   const registry = createAdapterRegistry([{ id: 'tool', version: '1', kind: 'external', isolation: 'container', image: `example/tool@sha256:${'a'.repeat(64)}`, command: ['tool'] }]);
-  await assert.rejects(superviseAttempt({ owner, registry, adapterId: 'tool', attemptId: 'attempt-ext', work, inputs: captured, scratchRoot: s.work }),
+  await assert.rejects(runAttempt(store, s.work, registry, { adapterId: 'tool', attemptId: 'attempt-ext', work, inputs: captured }),
     is('sentinel.execution.isolationUnavailable'));
 });
 
 test('an honest worker succeeds; outputs are re-hashed; the binding is the supervisor’s own', async () => {
   const o = await run('progress-then-ok');
   assert.equal(o.state, 'succeeded', JSON.stringify({ code: o.code, detail: o.detail, d: o.diagnostics.text }));
-  assert.equal(o.coordinatorEpoch, owner.epoch);
+  assert.equal(o.coordinatorEpoch, store.epoch);
   assert.equal(o.outputs.length, 1);
   const summary = JSON.parse(readFileSync(o.outputs[0].path, 'utf8'));
   assert.deepEqual(summary.read.map((r: any) => r.id), captured.map(c => c.id));
   assert.equal(o.worker?.kind, 'owned-child');
   assert.match(o.invocation.digest, /^sha256:[0-9a-f]{64}$/);
-  assert.equal(o.invocation.record.coordinatorEpoch, owner.epoch);
+  assert.equal(o.invocation.record.coordinatorEpoch, store.epoch);
+  assert.equal(o.invocation.record.store, store.storeId);
   assert.deepEqual(o.invocation.record.environmentNames, ['SENTINEL_INPUT', 'SENTINEL_OUTPUT', 'SENTINEL_ADAPTER_ID', 'SENTINEL_ADAPTER_DIGEST']);
 });
 
@@ -185,7 +189,7 @@ test('cancel: an acknowledging worker ends canceled; one that ignores it is stop
 test('an input whose bytes differ from its digest is refused before any worker starts', async () => {
   const bad = [{ ...captured[0]!, id: `sha256:${'3'.repeat(64)}` }];
   const registry = builtInRegistry(join(s.root, 'bad-input'), ['ok']);
-  await assert.rejects(superviseAttempt({ owner, registry, adapterId: 'test-ok', attemptId: 'attempt-bad', work, inputs: bad, scratchRoot: s.work }),
+  await assert.rejects(runAttempt(store, s.work, registry, { adapterId: 'test-ok', attemptId: 'attempt-bad', work, inputs: bad }),
     is('sentinel.execution.inputMismatch'));
 });
 
@@ -193,15 +197,53 @@ test('a built-in module changed after registration is refused', async () => {
   const dir = join(s.root, 'changed');
   const registry = builtInRegistry(dir, ['ok']);
   writeFileSync(join(dir, 'adapters', 'ok.mjs'), 'process.exit(0);\n');
-  await assert.rejects(superviseAttempt({ owner, registry, adapterId: 'test-ok', attemptId: 'attempt-changed', work, inputs: captured, scratchRoot: s.work }),
+  await assert.rejects(runAttempt(store, s.work, registry, { adapterId: 'test-ok', attemptId: 'attempt-changed', work, inputs: captured }),
     is('sentinel.execution.adapterIdentityMismatch'));
 });
 
-test('a closed owner refuses new attempts', async () => {
+test('a closed store refuses new attempts and new services', async () => {
   const other = scratch('closed');
-  const o = await ownerIn(other.root);
-  o.close();
-  await assert.rejects(superviseAttempt({ owner: o, registry: builtInRegistry(other.root, ['ok']), adapterId: 'test-ok', attemptId: 'attempt-x', work, inputs: inputs(other.root), scratchRoot: other.work }),
+  const st = await storeIn(other.root);
+  const service = await createExecutionService(st, { scratchRoot: other.work, registry: builtInRegistry(other.root, ['ok']) });
+  st.close();
+  await assert.rejects(service.run({ adapterId: 'test-ok', attemptId: 'attempt-x', work, inputs: inputs(other.root) } as any),
     (e: unknown) => (e as any).code === 'sentinel.store.ownerClosed');
+  await assert.rejects(createExecutionService(st, { scratchRoot: other.work }), (e: unknown) => (e as any).code === 'sentinel.store.ownerClosed');
+  removeScratch(other.root);
+});
+
+test('the public store exposes no owner or resource registration, and only a real opened store binds execution', async () => {
+  const keys = Object.keys(store);
+  assert.ok(!keys.some(k => /owner|registerResource|resource/i.test(k)), keys.join(', '));
+  assert.equal((store as any).registerResource, undefined);
+  assert.throws(() => boundOwner({ ...store }), TypeError, 'a copy of the facade is not the store');
+  await assert.rejects(createExecutionService({ ...store } as any, { scratchRoot: s.work }), TypeError);
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.ok(!Object.keys(manifest.exports).some(k => /execution|owner/.test(k)), 'execution and the owner binding stay internal');
+});
+
+test('a guard that cannot confirm container removal makes the owner close report it, never silently', async () => {
+  // A stand-in runtime whose removals cannot be confirmed; the worker is a real local process that hangs.
+  const other = scratch('uncertain');
+  const st = await storeIn(other.root);
+  const pin = { reference: `example/tool@sha256:${'e'.repeat(64)}`, id: 'sha256:x', os: 'linux', architecture: 'arm64' };
+  const fakeBackend = {
+    facts: { host: 'stand-in', backend: 'docker-engine', server: 'linux-arm64', serverVersion: '0', operatingSystem: 'stand-in', cgroupVersion: '2', qualification: {} },
+    inspectImage: async () => pin,
+    create: async () => 'f'.repeat(64),
+    startAttached: () => spawnWorker(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { env: {} }),
+    state: async () => null, kill: async () => false, remove: async () => 'cleanup-failed',
+    removeSync: () => 'cleanup-failed', reconcileOwnedSync: () => ({ removed: [], uncertain: ['f'.repeat(64)] }),
+  };
+  const registry = createAdapterRegistry([{ id: 'tool', version: '1', kind: 'external', isolation: 'container', image: pin.reference, command: ['tool'], limits: { timeoutMs: 20_000, helloTimeoutMs: 15_000 } }]);
+  const pending = superviseAttempt({ owner: boundOwner(st), registry, adapterId: 'tool', attemptId: 'attempt-uncertain', work, inputs: inputs(other.root), scratchRoot: other.work, backend: fakeBackend as any });
+  await new Promise(r => setTimeout(r, 300));
+  assert.throws(() => st.close(), (e: unknown) => (e as any).code === 'sentinel.store.resourceCloseFailed'
+    && (e as any).cause?.code === 'sentinel.execution.cleanupFailed' && (e as any).cause.detail.container === 'f'.repeat(64)
+    && typeof (e as any).cause.detail.owner === 'string');
+  const outcome = await pending;
+  assert.notEqual(outcome.state, 'succeeded');
+  assert.equal(outcome.code, 'sentinel.execution.cleanupFailed');
+  assert.equal(outcome.cleanup, 'cleanup-failed');
   removeScratch(other.root);
 });

@@ -10,9 +10,9 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { ContainerBackend, createArgs, validateContainer, LABELS, ISOLATION_POLICY, isolationQualification } from '../dist/execution/isolation.js';
 import { createAdapterRegistry, DEFAULT_ADAPTER_LIMITS } from '../dist/execution/registry.js';
-import { superviseAttempt } from '../dist/execution/supervisor.js';
+import { createExecutionService } from '../dist/execution/service.js';
 import { isExecutionError } from '../dist/execution/errors.js';
-import { inputs, ownerIn, removeScratch, scratch, work, WORKER } from './execution-helpers.ts';
+import { inputs, removeScratch, runAttempt, scratch, storeIn, work, WORKER } from './execution-helpers.ts';
 
 /** node:22-alpine as an OCI index pinned by digest (linux/arm64 and linux/amd64). Installed ahead; never pulled here. */
 export const CANARY_IMAGE = 'node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9';
@@ -82,7 +82,7 @@ test('isolation qualification is exact host, runtime and server triples', () => 
 
 // Real containers from here on.
 const s = scratch('isolation');
-let owner: Awaited<ReturnType<typeof ownerIn>>;
+let store: Awaited<ReturnType<typeof storeIn>>;
 let backend: ContainerBackend;
 const source = readFileSync(WORKER, 'utf8');
 const captured = inputs(s.root);
@@ -93,10 +93,10 @@ const PROXY_ENV = { HTTP_PROXY: 'http://192.0.2.1:3128', HTTPS_PROXY: 'http://19
 before(async () => {
   if (!enabled) return;
   Object.assign(process.env, PROXY_ENV);
-  owner = await ownerIn(s.root);
+  store = await storeIn(s.root);
   backend = await ContainerBackend.connect({ privateDir: s.root });
 });
-after(() => { owner?.close(); removeScratch(s.root); });
+after(() => { try { store?.close(); } catch { /* reported by its own test */ } removeScratch(s.root); });
 
 let n = 0;
 function registryFor(behaviour: string, limits: Record<string, number> = {}, argument?: string) {
@@ -107,8 +107,8 @@ function registryFor(behaviour: string, limits: Record<string, number> = {}, arg
   }]);
 }
 const run = (behaviour: string, limits: Record<string, number> = {}, argument?: string, signal?: AbortSignal) =>
-  superviseAttempt({ owner, registry: registryFor(behaviour, limits, argument), adapterId: `canary-${behaviour}`, attemptId: `attempt-c${++n}`,
-    work, inputs: captured, scratchRoot: s.work, backend, signal });
+  runAttempt(store, s.work, registryFor(behaviour, limits, argument),
+    { adapterId: `canary-${behaviour}`, attemptId: `attempt-c${++n}`, work, inputs: captured, ...(signal ? { signal } : {}) }, true);
 const docker = (...args: string[]) => spawnSync(backendDocker(), args, { encoding: 'utf8', env: { ...process.env } });
 const backendDocker = () => ['/usr/bin/docker', '/usr/local/bin/docker', '/opt/homebrew/bin/docker'].find(p => spawnSync(p, ['--version']).status === 0)!;
 const absent = (id: string) => /no such (container|object)/i.test(docker('inspect', '--type', 'container', id).stderr);
@@ -124,7 +124,7 @@ test('an honest worker in a container succeeds and its container is removed by e
   const o = await run('ok');
   assert.equal(o.state, 'succeeded', JSON.stringify({ code: o.code, detail: o.detail, stderr: o.diagnostics.text.slice(0, 400) }));
   assert.equal(o.worker?.kind, 'owned-container');
-  assert.deepEqual((o.worker as any).ownershipLabels, { store: owner.storeId, attempt: o.attemptId, epoch: owner.epoch });
+  assert.deepEqual((o.worker as any).ownershipLabels, { store: store.storeId, attempt: o.attemptId, epoch: store.epoch });
   assert.equal(o.cleanup, 'removed-owned-container');
   assert.ok(absent(o.container!.id));
   assert.equal(o.outputs.length, 1);
@@ -193,22 +193,44 @@ test('cleanup cannot target a container it does not own', { skip }, async () => 
   } finally { docker('rm', '--force', id); }
 });
 
-test('closing the store owner removes a running worker container before the lock is released', { skip }, async () => {
+test('closing the store removes a running worker container before the lock is released', { skip }, async () => {
   const other = scratch('owner-close');
-  const o2 = await ownerIn(other.root);
-  const pending = superviseAttempt({ owner: o2, registry: registryFor('hang'), adapterId: 'canary-hang', attemptId: 'attempt-close', work,
-    inputs: inputs(other.root), scratchRoot: other.work, backend });
+  const st = await storeIn(other.root);
+  const service = await createExecutionService(st, { scratchRoot: other.work, registry: registryFor('hang'), containers: true });
+  const pending = service.run({ adapterId: 'canary-hang', attemptId: 'attempt-close', work, inputs: inputs(other.root) } as any);
   let id: string | undefined;
   for (let i = 0; i < 100 && !id; i++) {
     await new Promise(r => setTimeout(r, 100));
     id = docker('ps', '-q', '--no-trunc', '--filter', `label=${LABELS.attempt}=attempt-close`).stdout.trim().split('\n')[0] || undefined;
   }
   assert.ok(id, 'the worker container started');
-  o2.close();
-  assert.ok(absent(id!), 'removed during owner close');
+  st.close();
+  assert.ok(absent(id!), 'removed during the store close');
   const outcome = await pending;
   assert.notEqual(outcome.state, 'succeeded');
   removeScratch(other.root);
+});
+
+test('closing the store at any moment around a container create leaves no container and no success', { skip }, async () => {
+  for (const delay of [0, 10, 30, 60, 100, 150, 250, 400]) {
+    const other = scratch(`close-${delay}`);
+    const st = await storeIn(other.root);
+    const service = await createExecutionService(st, { scratchRoot: other.work, registry: registryFor('ok'), containers: true });
+    const attemptId = `attempt-race-${delay}`;
+    let settledFirst = false;
+    const pending = service.run({ adapterId: 'canary-ok', attemptId, work, inputs: inputs(other.root) } as any)
+      .then(o => ({ o }), (e: unknown) => ({ e })).finally(() => { settledFirst = true; });
+    await new Promise(r => setTimeout(r, delay));
+    const closedFirst = !settledFirst;
+    try { st.close(); } catch (e) { assert.equal((e as any).code, 'sentinel.store.resourceCloseFailed'); }
+    const done = await pending;
+    // The create may still have been in flight when the store closed; once the attempt has settled, nothing remains.
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(docker('ps', '--all', '--quiet', '--filter', `label=${LABELS.attempt}=${attemptId}`).stdout.trim(), '', `closed at ${delay} ms`);
+    // An attempt that finished before the close may have succeeded; one the close interrupted never does.
+    if (closedFirst && 'o' in done) assert.notEqual(done.o.state, 'succeeded', `closed at ${delay} ms`);
+    removeScratch(other.root);
+  }
 });
 
 test('effective identity inside the container: non-root, no capabilities, no new privileges, loopback only, read-only root', { skip }, async t => {
@@ -249,7 +271,7 @@ test('output overflow, cancellation and a failed start each end with the contain
   assert.equal(cancelled.state, 'canceled');
   const registry = createAdapterRegistry([{ id: 'canary-absent', version: '0', kind: 'external', isolation: 'container', image: CANARY_IMAGE,
     command: ['/sentinel-executable-intentionally-absent'], limits: { timeoutMs: 20_000, helloTimeoutMs: 10_000 } }]);
-  const absentExe = await superviseAttempt({ owner, registry, adapterId: 'canary-absent', attemptId: 'attempt-absent', work, inputs: captured, scratchRoot: s.work, backend });
+  const absentExe = await runAttempt(store, s.work, registry, { adapterId: 'canary-absent', attemptId: 'attempt-absent', work, inputs: captured }, true);
   assert.equal(absentExe.code, 'sentinel.execution.workerExited');
   for (const o of [flood, cancelled, absentExe]) { assert.equal(o.cleanup, 'removed-owned-container'); assert.ok(absent(o.container!.id)); }
 });

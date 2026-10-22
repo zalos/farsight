@@ -164,22 +164,53 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     cleanup: 'not-applicable', workDir, ...(request.backend ? { backend: request.backend.facts } : {}),
   };
 
-  // Start the worker: a verified container, or a built-in child with no inherited environment.
+  // Start the worker: a verified container, or a built-in child with no inherited environment. The cleanup guard
+  // is registered with the owner before anything exists, so closing the owner at any moment (while a create is in
+  // flight, or while the worker runs) stops and removes what this attempt made. If that cannot be confirmed, the
+  // guard throws with the container and its owner nonce, and the owner's close reports it rather than staying
+  // silent; the labels let recovery (PR 08) find it later by store, attempt and epoch.
   const nonce = ownerNonce();
   let containerId: string | undefined;
   let proc: WorkerProcess;
-  let unregister: () => void = () => undefined;
+  const guard: { ownerClosed: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false };
+  const backend = request.backend;
+  const unregister = owner.registerResource({
+    name: `worker ${request.attemptId}${backend ? ` (container owner ${nonce})` : ''}`,
+    close: () => {
+      guard.ownerClosed = true;
+      guard.proc?.kill();
+      if (!backend) return;
+      const direct = guard.id ? backend.removeSync(guard.id, nonce) : 'already-absent';
+      const swept = backend.reconcileOwnedSync(nonce);
+      if (direct === 'cleanup-failed' || swept.uncertain.length) {
+        throw new ExecutionError('sentinel.execution.cleanupFailed', {
+          container: guard.id ?? swept.uncertain.join(', '), owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch,
+        });
+      }
+    },
+  });
   if (adapter.kind === 'external') {
-    const backend = request.backend!;
-    containerId = await backend.create({
-      image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(),
-      labels: { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest },
-    }, request.signal);
+    const b = backend!;
+    try {
+      containerId = await b.create({
+        image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(),
+        labels: { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest },
+      }, request.signal);
+      guard.id = containerId;
+      if (guard.ownerClosed) {
+        // The owner closed while the create was in flight; the guard swept what existed then. Remove this one too.
+        const late = await b.remove(containerId, nonce).catch(() => 'cleanup-failed' as const);
+        if (late === 'cleanup-failed') throw new ExecutionError('sentinel.execution.cleanupFailed', { container: containerId, owner: nonce });
+        owner.assertHeld();
+      }
+    } catch (error) {
+      unregister();
+      throw error;
+    }
     const id = containerId;
     outcome.container = { id, image: image! };
     outcome.worker = { kind: 'owned-container', containerId: id, ownershipLabels: { store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch } };
-    unregister = owner.registerResource({ name: `worker ${request.attemptId}`, close: () => { backend.removeSync(id, nonce); } });
-    proc = backend.startAttached(id);
+    proc = b.startAttached(id);
   } else {
     // A built-in worker inherits nothing: its environment is exactly these four names.
     proc = spawnWorker(process.execPath, [adapter.module, inputDir, outputDir], { cwd: workDir, env: {
@@ -187,8 +218,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     } });
     const pid = proc.child.pid;
     if (pid) outcome.worker = { kind: 'owned-child', pid, processStartedAt: proc.startedAt.toISOString() };
-    unregister = owner.registerResource({ name: `worker ${request.attemptId}`, close: () => proc.kill() });
   }
+  guard.proc = proc;
 
   try {
     await drive(proc, session, limits, outputDir, outcome, request.signal, async () => {

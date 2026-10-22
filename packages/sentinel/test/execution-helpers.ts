@@ -5,8 +5,9 @@ import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, chmodSync, readdir
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { acquireStoreOwner } from '../dist/store/owner.js';
+import { openStore } from '../dist/store/index.js';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
+import { createExecutionService } from '../dist/execution/service.js';
 
 export const WORKER = fileURLToPath(new URL('./fixtures/workers/hostile-worker.mjs', import.meta.url));
 
@@ -18,8 +19,15 @@ export function scratch(label: string) {
   return { root, work };
 }
 
-export async function ownerIn(root: string) {
-  return acquireStoreOwner(join(root, 'store'));
+/** A store opened the only way production opens one: the public openStore(). */
+export async function storeIn(root: string) {
+  return openStore(join(root, 'store'));
+}
+
+/** Run one attempt through the internal execution service bound to that public store. */
+export async function runAttempt(store: Awaited<ReturnType<typeof storeIn>>, scratchRoot: string, registry: any, attempt: Record<string, unknown>, containers = false) {
+  const service = await createExecutionService(store, { scratchRoot, registry, containers });
+  return service.run(attempt as any);
 }
 
 /** Synthetic captured inputs: small files whose ids are their SHA-256. */
