@@ -6,7 +6,10 @@
 // internally. Adapters from their published types build these inputs; nothing here reads a file, the ledger, a
 // clock or the network.
 import type { CaptureEntry, FrameworkVersion } from '../contracts/snapshot.js';
-import type { CatalogKey, Digest, Id, Ordinal, WorkRef } from '../contracts/common.js';
+import type { CatalogKey, Digest, Id, Ordinal } from '../contracts/common.js';
+import type {
+  PlanCheck, PlanCheckState, PlanEnvelope, PlanInput, PlanPins, PlanRuleGap, PlanStage, PlanTallies, PlanWork,
+} from '../contracts/plan.js';
 
 export type PlannerLanguage = 'typescript' | 'javascript' | 'java';
 export type PlannerScopeKind = 'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'repository';
@@ -104,108 +107,14 @@ export const DEFAULT_PLANNER_LIMITS: PlannerLimits = Object.freeze({
   maxChecks: 200_000, maxScopesPerWork: 256, maxChecksPerWork: 2048, maxWork: 10_000,
 });
 
-// ---- the plan revision (sentinel-plan/draft-1) ----
+// ---- the plan revision: the canonical sentinel-plan/draft-1 contract (contracts/plan.ts) ----
 
 export const PLAN_SCHEMA = 'sentinel-plan/draft-1' as const;
-
-/**
- * A check's planning state. Only `planned` is assigned to work; every other state is kept with its reason, so a
- * check the profile cannot run is never silently dropped and never counted as covered.
- */
-export type CheckState =
-  | 'planned'
-  /** A required capability or the rule's adapter is not available on this profile. */
-  | 'unsupported'
-  /** The rule is framework-gated and the framework's version is unresolved for this source. */
-  | 'applicability-unknown'
-  /** The scope exists but is unusable: not captured, or not parsed where the rule needs parser evidence. */
-  | 'scope-unavailable'
-  /** A folder whose descendants capture did not enumerate: how many scopes it holds is unknown. */
-  | 'scope-unknown';
+export type PlanRevision = PlanEnvelope;
+export type PlannedCheck = PlanCheck;
+export type PlannedWork = PlanWork;
+export type CheckState = PlanCheckState;
+export type RuleGap = PlanRuleGap;
+export type { PlanPins, PlanTallies, PlanStage, PlanInput };
 
 export const CHECK_STATES: readonly CheckState[] = Object.freeze(['planned', 'unsupported', 'applicability-unknown', 'scope-unavailable', 'scope-unknown']);
-
-/** One check: (scope, rule revision, environment, mode). Its id is a digest of exactly those. */
-export interface PlannedCheck {
-  readonly id: Id;
-  readonly familyId: string;
-  readonly ruleRevision: Ordinal;
-  readonly scopeKind: PlannerScopeKind;
-  readonly scopeId: string;
-  readonly sourceId: Id;
-  readonly environment: Digest;
-  readonly mode: 'deterministic';
-  readonly required: boolean;
-  readonly state: CheckState;
-  readonly reasonCode?: CatalogKey;
-  /** The work unit that covers it; only for `planned`. */
-  readonly workId?: Id;
-}
-
-export type PlanStage = 'capture' | 'parse' | 'inventory' | 'check';
-
-/** One physical work unit. It covers exactly `checks` and nothing else, however many rules or scopes it batches. */
-export interface PlannedWork {
-  readonly id: Id;
-  readonly revision: Ordinal;
-  readonly stage: PlanStage;
-  readonly contract: string;
-  readonly implementationDigest: Digest;
-  readonly sourceId: Id | null;
-  readonly adapterId: Id | null;
-  readonly dependencies: readonly WorkRef[];
-  /** Digest of every input that determines its output (inventory, analysis, rule pins, tool, scopes). */
-  readonly inputFingerprint: Digest;
-  readonly checks: readonly Id[];
-  readonly scopes: readonly string[];
-}
-
-export interface PlanPins {
-  readonly snapshotId: Id | null;
-  readonly inventoryDigest: Digest | null;
-  readonly environment: Digest | null;
-  readonly ruleLockDigest: Digest | null;
-  readonly policyDigest: Digest | null;
-  readonly profileId: Id;
-  readonly rules: readonly { readonly familyId: string; readonly revision: Ordinal; readonly definitionDigest: Digest; readonly packDigest: Digest }[];
-  readonly tools: readonly { readonly adapterId: Id; readonly artifactDigest: Digest }[];
-  readonly databases: readonly { readonly databaseId: Id; readonly snapshotDigest: Digest }[];
-  readonly analyses: readonly { readonly sourceId: Id; readonly analysisFingerprint: string }[];
-  readonly stages: PlannerProfile['stages'];
-}
-
-/** A rule the policy selects that the plan could not schedule at all. */
-export interface RuleGap {
-  readonly familyId: string;
-  readonly required: boolean;
-  readonly reasonCode: CatalogKey;
-}
-
-export interface PlanTallies {
-  readonly checks: Readonly<Record<CheckState, number>>;
-  readonly required: number;
-  /** Required checks in any state but `planned`, plus required rule gaps. */
-  readonly requiredNotPlanned: number;
-  readonly work: number;
-}
-
-/** sentinel-plan/draft-1 — one immutable plan revision. A change is a new revision; a revision never changes. */
-export interface PlanRevision {
-  readonly schema: typeof PLAN_SCHEMA;
-  readonly runId: Id;
-  readonly revision: Ordinal;
-  readonly kind: 'bootstrap' | 'analysis';
-  /** The digest of the revision this one follows in the same run, or null. */
-  readonly previous: Digest | null;
-  readonly pins: PlanPins;
-  /** Work published by an earlier plan (this or a parent run) that this revision depends on without redoing. */
-  readonly reused: readonly WorkRef[];
-  readonly work: readonly PlannedWork[];
-  readonly checks: readonly PlannedCheck[];
-  readonly ruleGaps: readonly RuleGap[];
-  readonly tallies: PlanTallies;
-  /** True only when every required check is planned: otherwise the run cannot report complete required coverage. */
-  readonly requiredCoverageAchievable: boolean;
-  /** Digest of every other field. */
-  readonly digest: Digest;
-}

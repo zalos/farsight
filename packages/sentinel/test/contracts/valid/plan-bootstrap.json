@@ -1,0 +1,95 @@
+{
+  "schema": "sentinel-plan/draft-1",
+  "runId": "run-1",
+  "revision": 1,
+  "kind": "bootstrap",
+  "previous": null,
+  "pins": {
+    "snapshotId": null,
+    "inventoryDigest": null,
+    "environment": null,
+    "ruleLockDigest": null,
+    "policyDigest": null,
+    "profileId": "profile-default",
+    "rules": [],
+    "tools": [],
+    "databases": [],
+    "analyses": [],
+    "stages": {
+      "capture": "sha256:460ee6aa3a80359181b794cc31a7185addba77626e9f719c10e3c8efb8668a1d",
+      "parse": "sha256:30c471f6aafbca7085640653eeef555e85eb0df1602c98a662814c27767d1188",
+      "inventory": "sha256:b11a85b296a90afc460430434a504e7acb04b064575b7277724688af0e59d189"
+    }
+  },
+  "reused": [],
+  "units": [
+    {
+      "id": "work-capture-649969ea8d410b3fadf9881a",
+      "revision": 1,
+      "stage": "capture",
+      "contract": "sentinel.stage.capture",
+      "implementationDigest": "sha256:460ee6aa3a80359181b794cc31a7185addba77626e9f719c10e3c8efb8668a1d",
+      "sourceId": null,
+      "adapterId": null,
+      "dependencies": [],
+      "inputFingerprint": "sha256:0705d1cd87e034b97f1f92336df6815dc8695530f9d0cc9417ab4b3834b1427d",
+      "checks": [],
+      "scopes": [],
+      "inputs": []
+    },
+    {
+      "id": "work-parse-5dd406969bf2cbeb59e9f629",
+      "revision": 1,
+      "stage": "parse",
+      "contract": "sentinel.stage.parse",
+      "implementationDigest": "sha256:30c471f6aafbca7085640653eeef555e85eb0df1602c98a662814c27767d1188",
+      "sourceId": "web",
+      "adapterId": null,
+      "dependencies": [
+        {
+          "id": "work-capture-649969ea8d410b3fadf9881a",
+          "revision": 1
+        }
+      ],
+      "inputFingerprint": "sha256:20fc72e71641df94dcf211797a9b9996b30ef5d54c4f8fe9d3ab289ed934993e",
+      "checks": [],
+      "scopes": [],
+      "inputs": []
+    },
+    {
+      "id": "work-inventory-84a8fbc7c9c6eb1cf7f0af7f",
+      "revision": 1,
+      "stage": "inventory",
+      "contract": "sentinel.stage.inventory",
+      "implementationDigest": "sha256:b11a85b296a90afc460430434a504e7acb04b064575b7277724688af0e59d189",
+      "sourceId": null,
+      "adapterId": null,
+      "dependencies": [
+        {
+          "id": "work-parse-5dd406969bf2cbeb59e9f629",
+          "revision": 1
+        }
+      ],
+      "inputFingerprint": "sha256:720027bb2f581c3118d7e8aac00e618902b6ed2e49a10f1e60aeb853097e356d",
+      "checks": [],
+      "scopes": [],
+      "inputs": []
+    }
+  ],
+  "checks": [],
+  "ruleGaps": [],
+  "tallies": {
+    "checks": {
+      "planned": 0,
+      "unsupported": 0,
+      "applicability-unknown": 0,
+      "scope-unavailable": 0,
+      "scope-unknown": 0
+    },
+    "required": 0,
+    "requiredNotPlanned": 0,
+    "units": 3
+  },
+  "requiredCoverageAchievable": true,
+  "digest": "sha256:022c35e5c205fdb04a7782033995dd6ade289e64333fe148322eb2ad96330688"
+}

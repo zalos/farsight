@@ -13,6 +13,7 @@ export type * from './protocol.js';
 export type * from './rules.js';
 export type * from './policy.js';
 export type * from './controls.js';
+export type * from './plan.js';
 
 /**
  * Every envelope: its kind, the one schema version this build reads and writes, and the generated type.
@@ -37,6 +38,7 @@ export const ENVELOPES = {
   receipt: { schema: 'sentinel-receipt/draft-1', type: 'ReceiptEnvelope' },
   admission: { schema: 'sentinel-admission/draft-1', type: 'AdmissionEnvelope' },
   controls: { schema: 'sentinel-controls/draft-1', type: 'ControlFactsEnvelope' },
+  plan: { schema: 'sentinel-plan/draft-1', type: 'PlanEnvelope' },
 } as const;
 
 export type EnvelopeKind = keyof typeof ENVELOPES;

@@ -58,7 +58,7 @@ test('policy and parser evidence map to the planner view, surfaces only from the
   const profile = { id: 'p', capabilities: [{ capability: 'source-bytes', available: true }, { capability: 'pattern-match', available: true }],
     builtInAdapters: [{ adapterId: 'sentinel-pattern', implementationDigest: d('pattern') }], stages: { capture: d('c'), parse: d('p'), inventory: d('i') } };
   const boot = planBootstrap({ runId: 'run-1', sourceIds: ['web'], profile });
-  const inv = boot.work.at(-1)!;
+  const inv = boot.units.at(-1)!;
   const plan = planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: [{ id: inv.id, revision: 1 }], profile,
     snapshot: { id: 'snap-1', inventoryDigest: d('inv'), environmentProfileDigest: d('env'), sources: [{ sourceId: 'web' }], frameworkVersions: [],
       entries: [{ sourceId: 'web', relativePath: 'src/a.ts', kind: 'file', disposition: 'included', content: d('a'), bytes: 1, generated: false }] },

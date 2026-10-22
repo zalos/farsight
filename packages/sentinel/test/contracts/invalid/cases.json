@@ -1623,5 +1623,169 @@
       }
     ],
     "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a plan whose content was edited after sealing fails its digest",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/pins/profileId",
+        "value": "profile-other"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/digest"
+  },
+  {
+    "name": "a plan check state outside the closed set",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/checks/2/state",
+        "value": "maybe"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a plan unit that depends on itself is a cycle",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/units/0/dependencies",
+        "value": [
+          {
+            "id": "work-check-18185317244879572760852e",
+            "revision": 1
+          }
+        ]
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/units"
+  },
+  {
+    "name": "a plan unit that depends on unknown work",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/units/0/dependencies/0",
+        "value": {
+          "id": "work-ghost",
+          "revision": 1
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/units/0/dependencies/0"
+  },
+  {
+    "name": "an unsupported plan check cannot be covered by work",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/checks/1/unit",
+        "value": {
+          "id": "work-check-18185317244879572760852e",
+          "revision": 1
+        }
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/checks/1/unit"
+  },
+  {
+    "name": "a plan check that is not planned says why",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "delete": "/checks/1/reasonCode"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/checks/1/reasonCode"
+  },
+  {
+    "name": "a planned check no unit covers",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/units/0/checks",
+        "value": []
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/checks/2/unit"
+  },
+  {
+    "name": "a plan unit covering a check the plan does not have",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "append": "/units/0/checks",
+        "from": "/runId"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/units"
+  },
+  {
+    "name": "plan tallies that do not recount",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/tallies/checks/planned",
+        "value": 99
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/tallies/checks/planned"
+  },
+  {
+    "name": "plan required coverage claimed achievable with a required check unsupported",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/requiredCoverageAchievable",
+        "value": true
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/requiredCoverageAchievable"
+  },
+  {
+    "name": "a later plan revision without its predecessor",
+    "base": "plan-analysis",
+    "ops": [
+      {
+        "set": "/previous",
+        "value": null
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/previous"
+  },
+  {
+    "name": "a bootstrap plan that schedules checks",
+    "base": "plan-bootstrap",
+    "ops": [
+      {
+        "append": "/checks",
+        "from": "/units/0"
+      }
+    ],
+    "expect": "sentinel.contract.invalid"
+  },
+  {
+    "name": "a bootstrap plan that pins a rule lock",
+    "base": "plan-bootstrap",
+    "ops": [
+      {
+        "set": "/pins/ruleLockDigest",
+        "value": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "expect": "sentinel.contract.invariant",
+    "path": "/pins/ruleLockDigest"
   }
 ]

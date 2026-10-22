@@ -13,6 +13,8 @@
 import type { Digest, Id, WorkRef } from '../contracts/common.js';
 import type { CaptureEntry } from '../contracts/snapshot.js';
 import { digestOf } from '../store/ledger-json.js';
+import { validateEnvelope } from '../validate.js';
+import type { NodeKind } from '@farsight/graph';
 import { PlanError, type PlanReasonCode } from './errors.js';
 import {
   CHECK_STATES, DEFAULT_PLANNER_LIMITS, PLAN_SCHEMA,
@@ -120,8 +122,12 @@ export function checkWorkGraph(work: readonly Pick<PlannedWork, 'id' | 'revision
 
 // ---- revisions ----
 
+/**
+ * Seals a revision: tallies, the digest, then the canonical contract's schema and invariants. A planner bug that
+ * produced an inconsistent plan is refused here rather than handed to the coordinator.
+ */
 function seal(body: Omit<PlanRevision, 'digest' | 'tallies' | 'requiredCoverageAchievable'>): PlanRevision {
-  checkWorkGraph(body.work, body.reused);
+  checkWorkGraph(body.units, body.reused);
   const checks = Object.fromEntries(CHECK_STATES.map(s => [s, 0])) as Record<CheckState, number>;
   let required = 0, requiredNotPlanned = 0;
   for (const c of body.checks) {
@@ -129,8 +135,11 @@ function seal(body: Omit<PlanRevision, 'digest' | 'tallies' | 'requiredCoverageA
     if (c.required) { required++; if (c.state !== 'planned') requiredNotPlanned++; }
   }
   requiredNotPlanned += body.ruleGaps.filter(g => g.required).length;
-  const full = { ...body, tallies: { checks, required, requiredNotPlanned, work: body.work.length }, requiredCoverageAchievable: requiredNotPlanned === 0 };
-  return deepFreeze({ ...full, digest: digestOf(full) });
+  const full = { ...body, tallies: { checks, required, requiredNotPlanned, units: body.units.length }, requiredCoverageAchievable: requiredNotPlanned === 0 };
+  const sealed = { ...full, digest: digestOf(full) };
+  const checked = validateEnvelope('plan', sealed);
+  if (!checked.ok) throw invalid(`the plan is not a valid ${PLAN_SCHEMA}: ${checked.errors[0]?.path || '/'} ${checked.errors[0]?.message ?? ''}`);
+  return deepFreeze(sealed);
 }
 
 function chainFrom(previous: PlanRevision | null, runId: string, revision: number): Digest | null {
@@ -166,7 +175,7 @@ export function planBootstrap(request: BootstrapRequest): PlanRevision {
     const implementationDigest = stages[stage as 'capture' | 'parse' | 'inventory'];
     const inputFingerprint = digestOf({ stage, sourceId, sources, implementationDigest, dependencies });
     return { id: `work-${stage}-${shortHash({ runId, revision, stage, sourceId })}`, revision: 1, stage, contract: `sentinel.stage.${stage}`,
-      implementationDigest, sourceId, adapterId: null, dependencies, inputFingerprint, checks: [], scopes: [] };
+      implementationDigest, sourceId, adapterId: null, dependencies, inputFingerprint, checks: [], scopes: [], inputs: [] };
   };
   const capture = unit('capture', null, []);
   const parses = sources.map(s => unit('parse', s, [{ id: capture.id, revision: 1 }]));
@@ -175,7 +184,7 @@ export function planBootstrap(request: BootstrapRequest): PlanRevision {
     schema: PLAN_SCHEMA, runId, revision, kind: 'bootstrap', previous,
     pins: { snapshotId: null, inventoryDigest: null, environment: null, ruleLockDigest: null, policyDigest: null,
       profileId: checkId(request.profile.id, 'profile id'), rules: [], tools: [], databases: [], analyses: [], stages: { ...stages } },
-    reused: [], work: [capture, ...parses, inventory], checks: [], ruleGaps: [],
+    reused: [], units: [capture, ...parses, inventory], checks: [], ruleGaps: [],
   });
 }
 
@@ -250,10 +259,13 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   }
 
   const checks: PlannedCheck[] = [];
-  const add = (c: Omit<PlannedCheck, 'id' | 'environment' | 'mode'>) => {
+  /** The captured file each planned check reads (none for a repository scope). */
+  const readsFile = new Map<string, string>();
+  const add = (c: Omit<PlannedCheck, 'id' | 'environment' | 'mode'>, path: string | null) => {
     if (checks.length >= limits.maxChecks) throw new PlanError('sentinel.plan.tooManyChecks', String(limits.maxChecks));
-    checks.push({ ...c, id: `chk-${shortHash({ scope: c.scopeId, family: c.familyId, revision: c.ruleRevision, environment, mode: 'deterministic' })}`,
-      environment, mode: 'deterministic' });
+    const id = `chk-${shortHash({ scope: c.scopeId, family: c.familyId, revision: c.ruleRevision, environment, mode: 'deterministic' })}`;
+    checks.push({ ...c, id, environment, mode: 'deterministic' });
+    if (c.state === 'planned' && path !== null) readsFile.set(id, path);
   };
 
   const fileClass = new Map<string, Map<string, string>>(
@@ -293,7 +305,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
     const adapterKnown = tools.has(rule.adapterId) || builtIn.has(rule.adapterId);
     for (const c of candidates.sort(byKey(x => x.scopeId))) {
       const base = { familyId: rule.familyId, ruleRevision: rule.revision, scopeKind: c.scopeKind, scopeId: c.scopeId, sourceId: c.sourceId, required };
-      const state = (s: CheckState, reasonCode?: string) => add(reasonCode ? { ...base, state: s, reasonCode } : { ...base, state: s });
+      const state = (s: CheckState, reasonCode?: string) => add(reasonCode ? { ...base, state: s, reasonCode } : { ...base, state: s }, c.path);
       if (rule.frameworks?.length) {
         const names = rule.frameworks.map(f => f.toLowerCase());
         const here = resolved.get(c.sourceId);
@@ -328,6 +340,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
     const members = groups.get(k)!.sort(byKey(c => `${c.scopeId}\u0000${c.familyId}`));
     let batch: PlannedCheck[] = [];
     let scopes = new Set<string>();
+    let files = new Set<string>();
     const flush = () => {
       if (!batch.length) return;
       if (work.length >= limits.maxWork) throw new PlanError('sentinel.plan.tooMuchWork', String(limits.maxWork));
@@ -344,18 +357,22 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
       const id = `work-check-${shortHash({ runId, revision, adapterId, sourceId, checks: ids })}`;
       work.push({ id, revision: 1, stage: 'check', contract: `sentinel.stage.check.${adapterId}`, implementationDigest, sourceId, adapterId,
         dependencies: [...request.bootstrap].map(r => ({ id: r.id, revision: r.revision })).sort(byKey(r => `${r.id}@${r.revision}`)),
-        inputFingerprint, checks: ids, scopes: [...scopes].sort() });
+        inputFingerprint, checks: ids, scopes: [...scopes].sort(),
+        inputs: [...files].sort().map(relativePath => ({ sourceId, relativePath })) });
       for (const c of ids) assigned.set(c, id);
-      batch = []; scopes = new Set();
+      batch = []; scopes = new Set(); files = new Set();
     };
     for (const c of members) {
-      if (batch.length >= limits.maxChecksPerWork || (!scopes.has(c.scopeId) && scopes.size >= limits.maxScopesPerWork)) flush();
+      const path = readsFile.get(c.id);
+      if (batch.length >= limits.maxChecksPerWork || (!scopes.has(c.scopeId) && scopes.size >= limits.maxScopesPerWork)
+        || (path !== undefined && !files.has(path) && files.size >= limits.maxScopesPerWork)) flush();
       batch.push(c);
       scopes.add(c.scopeId);
+      if (path !== undefined) files.add(path);
     }
     flush();
   }
-  const finalChecks = checks.map(c => (c.state === 'planned' ? { ...c, workId: assigned.get(c.id)! } : c));
+  const finalChecks = checks.map(c => (c.state === 'planned' ? { ...c, unit: { id: assigned.get(c.id)!, revision: 1 } } : c));
   work.sort(byKey(w => w.id));
 
   const pins: PlanPins = {
@@ -370,7 +387,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   return seal({
     schema: PLAN_SCHEMA, runId, revision, kind: 'analysis', previous, pins,
     reused: [...request.bootstrap].map(r => ({ id: r.id, revision: r.revision })).sort(byKey(r => `${r.id}@${r.revision}`)),
-    work, checks: finalChecks, ruleGaps,
+    units: work, checks: finalChecks, ruleGaps,
   });
 }
 
@@ -381,12 +398,16 @@ export function verifyPlanRevision(plan: PlanRevision): boolean {
 }
 
 /**
- * Surfaces from parser index nodes, by an explicit allowlist of graph kinds. Nothing outside the list becomes a
- * surface; the agreed list is an open interface question between the parser and rule owners.
+ * The graph kinds that are surfaces (`@farsight/graph` NodeKind): `route`, an HTTP endpoint, and `page`, an
+ * application/UI route. A handler is the function a route reaches, not a surface of its own; components, classes,
+ * guards and every other kind are not surfaces.
  */
+export const SURFACE_NODE_KINDS: readonly NodeKind[] = Object.freeze(['route', 'page'] as const);
+
+/** Surfaces from parser index nodes, by an explicit allowlist of graph kinds (default SURFACE_NODE_KINDS). */
 export function surfacesFromIndex(
   index: { readonly nodes: readonly { readonly nodeId: string; readonly kind: string; readonly path: string }[] },
-  kinds: readonly string[],
+  kinds: readonly string[] = SURFACE_NODE_KINDS,
 ): PlannerAnalysis['surfaces'] {
   const allowed = new Set(kinds);
   return index.nodes.filter(n => allowed.has(n.kind)).map(n => ({ nodeId: n.nodeId, path: n.path, kind: n.kind }))

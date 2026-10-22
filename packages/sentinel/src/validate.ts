@@ -8,7 +8,9 @@ import type {
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
   WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
   EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
+  PlanEnvelope,
 } from './contracts/index.js';
+import { digestOf } from './store/ledger-json.js';
 import { OWNER_ACTIONS } from './contracts/index.js';
 
 export interface EnvelopeTypes {
@@ -30,6 +32,7 @@ export interface EnvelopeTypes {
   receipt: ReceiptEnvelope;
   admission: AdmissionEnvelope;
   controls: ControlFactsEnvelope;
+  plan: PlanEnvelope;
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -502,9 +505,98 @@ const controls: Check<ControlFactsEnvelope> = (v, out) => {
   });
 };
 
+const BOOTSTRAP_STAGES: ReadonlySet<string> = new Set(['capture', 'parse', 'inventory']);
+
+/**
+ * A plan revision is internally consistent: checks and work agree exactly (no unplanned check is covered, no planned
+ * check is uncovered or covered twice), the work graph is acyclic over the plan and the work it reuses, the tallies
+ * recount, and the digest is the canonical digest of everything else, so any edit after sealing is refused.
+ */
+const plan: Check<PlanEnvelope> = (v, out) => {
+  if ((v.revision === 1) !== (v.previous === null)) out.add(err('/previous', 'only a run\'s first revision has no predecessor'));
+  const analysis = v.kind === 'analysis';
+  for (const field of ['snapshotId', 'inventoryDigest', 'environment', 'ruleLockDigest', 'policyDigest'] as const) {
+    if ((v.pins[field] === null) === analysis) out.add(err(`/pins/${field}`, analysis ? 'an analysis revision pins it' : 'a bootstrap revision has nothing to pin here'));
+  }
+  if (!analysis && (v.checks.length || v.ruleGaps.length || v.pins.rules.length)) out.add(err('/checks', 'a bootstrap revision plans no checks'));
+  for (let i = 1; i < v.checks.length; i++) if (v.checks[i]!.id <= v.checks[i - 1]!.id) out.add(err(`/checks/${i}/id`, 'checks are sorted by id, each once'));
+  for (let i = 1; i < v.units.length; i++) if (v.units[i]!.id <= v.units[i - 1]!.id && analysis) out.add(err(`/units/${i}/id`, 'work is sorted by id, each once'));
+  for (const i of duplicates(v.units, w => w.id)) out.add(err(`/units/${i}/id`, 'duplicate work'));
+  for (const i of duplicates(v.ruleGaps, g => g.familyId)) out.add(err(`/ruleGaps/${i}`, 'duplicate rule gap'));
+  const work = new Map(v.units.map(w => [w.id, w]));
+  const covered = new Map<string, string>();
+  v.units.forEach((w, i) => {
+    if (analysis !== (w.stage === 'check')) out.add(err(`/units/${i}/stage`, analysis ? 'an analysis revision schedules checks only' : 'a bootstrap revision schedules capture, parse and inventory'));
+    if (!analysis && !BOOTSTRAP_STAGES.has(w.stage)) out.add(err(`/units/${i}/stage`, 'unknown bootstrap stage'));
+    if ((w.stage === 'check') !== (w.adapterId !== null)) out.add(err(`/units/${i}/adapterId`, 'exactly check work names an adapter'));
+    if (w.stage === 'check' && w.checks.length === 0) out.add(err(`/units/${i}/checks`, 'a check unit covers at least one check'));
+    if (w.stage !== 'check' && (w.checks.length || w.scopes.length || w.inputs.length)) out.add(err(`/units/${i}/checks`, 'a bootstrap unit covers no check'));
+    for (const id of w.checks) {
+      if (covered.has(id)) out.add(err(`/units/${i}/checks`, `check ${id} is covered twice`));
+      covered.set(id, w.id);
+    }
+    w.inputs.forEach((p, j) => pathError(out, `/units/${i}/inputs/${j}/relativePath`, p.relativePath));
+  });
+  const tally: Record<string, number> = { 'planned': 0, 'unsupported': 0, 'applicability-unknown': 0, 'scope-unavailable': 0, 'scope-unknown': 0 };
+  let required = 0, requiredNotPlanned = 0;
+  const checkIds = new Set<string>();
+  v.checks.forEach((c, i) => {
+    checkIds.add(c.id);
+    tally[c.state]!++;
+    if (c.required) { required++; if (c.state !== 'planned') requiredNotPlanned++; }
+    if (c.environment !== v.pins.environment) out.add(err(`/checks/${i}/environment`, 'a check names the plan\'s environment'));
+    if (c.state === 'planned') {
+      if (c.reasonCode !== undefined) out.add(err(`/checks/${i}/reasonCode`, 'a planned check carries no reason'));
+      const w = c.unit === undefined ? undefined : work.get(c.unit.id);
+      if (!w || covered.get(c.id) !== c.unit!.id || w.revision !== c.unit!.revision) out.add(err(`/checks/${i}/unit`, 'a planned check is covered by the unit it names'));
+      else {
+        if (w.sourceId !== c.sourceId) out.add(err(`/checks/${i}/sourceId`, 'a unit covers checks of its own source'));
+        if (!w.scopes.includes(c.scopeId)) out.add(err(`/checks/${i}/scopeId`, 'the covering unit lists the check\'s scope'));
+      }
+    } else {
+      if (c.reasonCode === undefined) out.add(err(`/checks/${i}/reasonCode`, 'a check that is not planned says why'));
+      if (c.unit !== undefined || covered.has(c.id)) out.add(err(`/checks/${i}/unit`, 'a check that is not planned is covered by no work'));
+    }
+  });
+  for (const id of covered.keys()) if (!checkIds.has(id)) out.add(err('/units', `work covers ${id}, which is not a check of this plan`));
+  const scopeOf = new Map(v.checks.map(c => [c.id, c.scopeId]));
+  v.units.forEach((w, i) => {
+    const scopes = new Set(w.checks.map(id => scopeOf.get(id)));
+    if (w.scopes.length !== scopes.size || w.scopes.some(s => !scopes.has(s))) out.add(err(`/units/${i}/scopes`, 'a unit lists exactly the scopes of its checks'));
+  });
+  requiredNotPlanned += v.ruleGaps.filter(g => g.required).length;
+  for (const [state, n] of Object.entries(tally)) if (v.tallies.checks[state as keyof PlanEnvelope['tallies']['checks']] !== n) out.add(err(`/tallies/checks/${state}`, 'tallies recount the checks'));
+  if (v.tallies.required !== required || v.tallies.requiredNotPlanned !== requiredNotPlanned || v.tallies.units !== v.units.length) out.add(err('/tallies', 'tallies recount the checks and work'));
+  if (v.requiredCoverageAchievable !== (requiredNotPlanned === 0)) out.add(err('/requiredCoverageAchievable', 'achievable exactly when every required check is planned'));
+  // The work graph: dependencies inside the plan or among reused work, and no cycle.
+  const key = (r: { id: string; revision: number }) => `${r.id}@${r.revision}`;
+  const inPlan = new Set(v.units.map(key));
+  const reused = new Set(v.reused.map(key));
+  const indegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+  v.units.forEach((w, i) => {
+    let n = 0;
+    w.dependencies.forEach((d, j) => {
+      const k = key(d);
+      if (inPlan.has(k)) { n++; (dependents.get(k) ?? dependents.set(k, []).get(k)!).push(key(w)); }
+      else if (!reused.has(k)) out.add(err(`/units/${i}/dependencies/${j}`, 'a dependency names work in the plan or work it reuses'));
+    });
+    indegree.set(key(w), n);
+  });
+  const ready = [...indegree].filter(([, n]) => n === 0).map(([k]) => k);
+  let done = 0;
+  while (ready.length) {
+    const k = ready.pop()!; done++;
+    for (const d of dependents.get(k) ?? []) { const n = indegree.get(d)! - 1; indegree.set(d, n); if (n === 0) ready.push(d); }
+  }
+  if (done !== v.units.length) out.add(err('/units', 'the work graph has a cycle'));
+  const { digest, ...rest } = v;
+  if (digest !== digestOf(rest)) out.add(err('/digest', 'the digest is not the canonical digest of the revision'));
+};
+
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
-  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls, plan,
 };
 
 /**

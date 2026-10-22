@@ -1,0 +1,185 @@
+{
+  "schema": "sentinel-plan/draft-1",
+  "runId": "run-1",
+  "revision": 2,
+  "kind": "analysis",
+  "previous": "sha256:022c35e5c205fdb04a7782033995dd6ade289e64333fe148322eb2ad96330688",
+  "pins": {
+    "snapshotId": "snap-1",
+    "inventoryDigest": "sha256:89270a50341bb8e83734ee062603c63c219320ed4a40fb9fb8c2792358548e8a",
+    "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
+    "ruleLockDigest": "sha256:0c030586945fe504b604ecc2e875c38ede400cd5cd73da9730302162e6b02c6f",
+    "policyDigest": "sha256:823412d1eacb67956220e532959f0104603057c88704863ca38e7cd188fda812",
+    "profileId": "profile-default",
+    "rules": [
+      {
+        "familyId": "sentinel.ts.eval",
+        "revision": 1,
+        "definitionDigest": "sha256:258c82db1755635df44803109086f1e6dadb89d5acfbbf097740c142a35ce481",
+        "packDigest": "sha256:4862f447f2c7f272fa2f4aaf89dadb3b1ac09105bd5864f8d1a0c9452bb0a226"
+      },
+      {
+        "familyId": "sentinel.ts.filter-order",
+        "revision": 1,
+        "definitionDigest": "sha256:fca6ef2496931b50a71d167eb2cf693053e62fbe444b9ca99dcbd23f5e7998e2",
+        "packDigest": "sha256:4862f447f2c7f272fa2f4aaf89dadb3b1ac09105bd5864f8d1a0c9452bb0a226"
+      }
+    ],
+    "tools": [],
+    "databases": [],
+    "analyses": [
+      {
+        "sourceId": "web",
+        "analysisFingerprint": "fp-web"
+      }
+    ],
+    "stages": {
+      "capture": "sha256:460ee6aa3a80359181b794cc31a7185addba77626e9f719c10e3c8efb8668a1d",
+      "parse": "sha256:30c471f6aafbca7085640653eeef555e85eb0df1602c98a662814c27767d1188",
+      "inventory": "sha256:b11a85b296a90afc460430434a504e7acb04b064575b7277724688af0e59d189"
+    }
+  },
+  "reused": [
+    {
+      "id": "work-inventory-84a8fbc7c9c6eb1cf7f0af7f",
+      "revision": 1
+    }
+  ],
+  "units": [
+    {
+      "id": "work-check-18185317244879572760852e",
+      "revision": 1,
+      "stage": "check",
+      "contract": "sentinel.stage.check.sentinel-pattern",
+      "implementationDigest": "sha256:1fd38d5cbd2a997b91f725cb1cb0a710849db30dac491ee42e92443fd8e3c1a2",
+      "sourceId": "web",
+      "adapterId": "sentinel-pattern",
+      "dependencies": [
+        {
+          "id": "work-inventory-84a8fbc7c9c6eb1cf7f0af7f",
+          "revision": 1
+        }
+      ],
+      "inputFingerprint": "sha256:3b1ef30cea58a230a582e2cf18c530e3ccef04e6d3c9cbde40ce42540195b46f",
+      "checks": [
+        "chk-3921d5ff956235a8ef3ce502",
+        "chk-5b9dedafb82f11f117f9aee8"
+      ],
+      "scopes": [
+        "web:src/a.ts",
+        "web:src/b.ts"
+      ],
+      "inputs": [
+        {
+          "sourceId": "web",
+          "relativePath": "src/a.ts"
+        },
+        {
+          "sourceId": "web",
+          "relativePath": "src/b.ts"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "familyId": "sentinel.ts.filter-order",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:locked/",
+      "sourceId": "web",
+      "required": true,
+      "state": "scope-unknown",
+      "reasonCode": "sentinel.plan.unknownDescendants",
+      "id": "chk-0c2723d57dfeb66f3babfadb",
+      "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
+      "mode": "deterministic"
+    },
+    {
+      "familyId": "sentinel.ts.filter-order",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/a.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "unsupported",
+      "reasonCode": "sentinel.capability.notImplemented",
+      "id": "chk-1ea0a11ed755a64f07140658",
+      "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
+      "mode": "deterministic"
+    },
+    {
+      "familyId": "sentinel.ts.eval",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/a.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "planned",
+      "id": "chk-3921d5ff956235a8ef3ce502",
+      "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
+      "mode": "deterministic",
+      "unit": {
+        "id": "work-check-18185317244879572760852e",
+        "revision": 1
+      }
+    },
+    {
+      "familyId": "sentinel.ts.eval",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:locked/",
+      "sourceId": "web",
+      "required": true,
+      "state": "scope-unknown",
+      "reasonCode": "sentinel.plan.unknownDescendants",
+      "id": "chk-528c9bdef8a8afa325646970",
+      "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
+      "mode": "deterministic"
+    },
+    {
+      "familyId": "sentinel.ts.filter-order",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/b.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "unsupported",
+      "reasonCode": "sentinel.capability.notImplemented",
+      "id": "chk-568c37a16d3e941a923c1626",
+      "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
+      "mode": "deterministic"
+    },
+    {
+      "familyId": "sentinel.ts.eval",
+      "ruleRevision": 1,
+      "scopeKind": "source-file",
+      "scopeId": "web:src/b.ts",
+      "sourceId": "web",
+      "required": true,
+      "state": "planned",
+      "id": "chk-5b9dedafb82f11f117f9aee8",
+      "environment": "sha256:b77349bf1fa9b26d45d545d7d64dad96737e9cfbb3cbb5f5d10fb77b0fcc44ad",
+      "mode": "deterministic",
+      "unit": {
+        "id": "work-check-18185317244879572760852e",
+        "revision": 1
+      }
+    }
+  ],
+  "ruleGaps": [],
+  "tallies": {
+    "checks": {
+      "planned": 2,
+      "unsupported": 2,
+      "applicability-unknown": 0,
+      "scope-unavailable": 0,
+      "scope-unknown": 2
+    },
+    "required": 6,
+    "requiredNotPlanned": 4,
+    "units": 1
+  },
+  "requiredCoverageAchievable": false,
+  "digest": "sha256:40b2dcdf1b904e83c0bd62ab880ffda56c7cb87f683425241f43c844b35ba5be"
+}

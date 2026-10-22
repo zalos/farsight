@@ -84,7 +84,7 @@ const analyses: PlannerAnalysis[] = [
 ];
 
 const bootstrap = planBootstrap({ runId: 'run-1', sourceIds: ['web', 'api'], profile });
-const inventoryRef = () => { const w = bootstrap.work.find(x => x.stage === 'inventory')!; return [{ id: w.id, revision: w.revision }]; };
+const inventoryRef = () => { const w = bootstrap.units.find(x => x.stage === 'inventory')!; return [{ id: w.id, revision: w.revision }]; };
 
 function analysis(rules: PlannerRule[], over: Partial<Parameters<typeof planAnalysis>[0]> = {}): PlanRevision {
   return planAnalysis({ runId: 'run-1', revision: 2, previous: bootstrap, bootstrap: inventoryRef(), snapshot, analyses,
@@ -95,12 +95,12 @@ const checksOf = (plan: PlanRevision, familyId: string) => plan.checks.filter(c 
 
 test('the bootstrap revision captures once, parses each source after it, and inventories after every parse', () => {
   assert.equal(bootstrap.kind, 'bootstrap');
-  assert.deepEqual(bootstrap.work.map(w => w.stage), ['capture', 'parse', 'parse', 'inventory']);
-  const capture = bootstrap.work[0]!;
-  for (const p of bootstrap.work.filter(w => w.stage === 'parse')) assert.deepEqual(p.dependencies, [{ id: capture.id, revision: 1 }]);
-  assert.equal(bootstrap.work.at(-1)!.dependencies.length, 2);
+  assert.deepEqual(bootstrap.units.map(w => w.stage), ['capture', 'parse', 'parse', 'inventory']);
+  const capture = bootstrap.units[0]!;
+  for (const p of bootstrap.units.filter(w => w.stage === 'parse')) assert.deepEqual(p.dependencies, [{ id: capture.id, revision: 1 }]);
+  assert.equal(bootstrap.units.at(-1)!.dependencies.length, 2);
   assert.equal(verifyPlanRevision(bootstrap), true);
-  assert.ok(Object.isFrozen(bootstrap) && Object.isFrozen(bootstrap.work[0]));
+  assert.ok(Object.isFrozen(bootstrap) && Object.isFrozen(bootstrap.units[0]));
   assert.equal(planBootstrap({ runId: 'run-1', sourceIds: ['api', 'web'], profile }).digest, bootstrap.digest, 'source order does not matter');
 });
 
@@ -133,18 +133,18 @@ test('every scope a rule names gets a check with an explicit state; nothing is d
 test('physical batching covers exactly the planned checks, each once, within its bounds', () => {
   const plan = analysis(Object.values(RULES), { limits: { maxScopesPerWork: 2 } });
   const planned = new Set(plan.checks.filter(c => c.state === 'planned').map(c => c.id));
-  const covered = plan.work.flatMap(w => w.checks);
+  const covered = plan.units.flatMap(w => w.checks);
   assert.equal(covered.length, new Set(covered).size, 'no check in two units');
   assert.deepEqual(new Set(covered), planned, 'units cover the planned checks and nothing else');
-  for (const w of plan.work) {
+  for (const w of plan.units) {
     assert.equal(w.stage, 'check');
     assert.ok(w.scopes.length <= 2, `${w.id} covers ${w.scopes.length} scopes`);
-    for (const id of w.checks) assert.equal(plan.checks.find(c => c.id === id)!.workId, w.id);
+    for (const id of w.checks) assert.equal(plan.checks.find(c => c.id === id)!.unit?.id, w.id);
     assert.deepEqual(w.dependencies, inventoryRef(), 'checks wait for the published inventory');
     assert.ok(new Set(w.checks.map(id => plan.checks.find(c => c.id === id)!.sourceId)).size === 1, 'one source per unit');
   }
-  for (const c of plan.checks) if (c.state !== 'planned') assert.equal(c.workId, undefined, 'an unplanned check has no work');
-  const dbUnit = plan.work.find(w => w.adapterId === 'osv')!;
+  for (const c of plan.checks) if (c.state !== 'planned') assert.equal(c.unit, undefined, 'an unplanned check has no work');
+  const dbUnit = plan.units.find(w => w.adapterId === 'osv')!;
   assert.equal(dbUnit.implementationDigest, d('osv binary'), 'a locked tool runs by its pinned digest');
 });
 
@@ -172,7 +172,7 @@ test('a new rule plans new work over every relevant scope without recapture, and
     lock: lock([RULES.eval, added]), policy: policy([RULES.eval.familyId, added.familyId]), profile });
   assert.deepEqual(checksOf(second, added.familyId).filter(c => c.state === 'planned').map(c => c.scopeId).sort(),
     ['web:src/a.ts', 'web:src/b.tsx', 'web:src/broken.ts'], 'every relevant scope');
-  assert.ok(second.work.every(w => w.stage === 'check'), 'no capture or parse is planned again');
+  assert.ok(second.units.every(w => w.stage === 'check'), 'no capture or parse is planned again');
   assert.deepEqual(second.reused, inventoryRef(), 'it depends on the published inventory');
   assert.equal(second.previous, first.digest);
   assert.equal(JSON.stringify(first), frozen, 'the earlier revision is unchanged');
@@ -184,7 +184,7 @@ test('a new rule plans new work over every relevant scope without recapture, and
   assert.equal(child.revision, 1);
   assert.equal(child.previous, null);
   assert.deepEqual(child.reused, inventoryRef());
-  assert.ok(child.work.every(w => !first.work.some(x => x.id === w.id)), 'work ids are per run');
+  assert.ok(child.units.every(w => !first.units.some(x => x.id === w.id)), 'work ids are per run');
 });
 
 test('selection and capability decide required coverage; a policy rule missing from the lock is a visible gap', () => {
@@ -221,7 +221,7 @@ test('a revision must follow its own run and an intact previous revision, over p
   assert.throws(() => planAnalysis({ runId: 'run-9', revision: 2, previous: bootstrap, bootstrap: inventoryRef(), snapshot, analyses,
     lock: lock([RULES.eval]), policy: policy([RULES.eval.familyId]), profile }), code('sentinel.plan.pinMismatch'));
   assert.throws(() => analysis([RULES.eval], { revision: 5 }), code('sentinel.plan.invalidInput'));
-  const tampered = { ...bootstrap, work: bootstrap.work.slice(1) } as PlanRevision;
+  const tampered = { ...bootstrap, units: bootstrap.units.slice(1) } as PlanRevision;
   assert.throws(() => analysis([RULES.eval], { previous: tampered }), code('sentinel.plan.pinMismatch'));
   assert.throws(() => analysis([RULES.eval], { analyses: analyses.slice(0, 1) }), code('sentinel.plan.pinMismatch'));
   assert.throws(() => analysis([RULES.eval], { bootstrap: [] }), code('sentinel.plan.invalidInput'));
