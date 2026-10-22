@@ -28,7 +28,7 @@ The lead verified the final evidence and addressed Claude/SOL review findings be
 | Cross-file/deep | Reject the evaluated profiles | Neither finds the three cross-file positives or supplies qualifying boundary-crossing traces |
 | Framework ordering/matching | Accept bounded prototype evidence | Four original apps, 11 scenarios, 14 fixed HTTP expectations; production packs remain deferred |
 | Runtime | Propose the measured macOS ARM64/Docker Desktop combination | Other hosts, backends and architectures unmeasured |
-| Storage/resources | Propose gzip6/raw and the explicit bounded quotas/retention in the manifest | 54 synthetic codec trials; quotas are policy ceilings, not measured capacity guarantees |
+| Storage/resources | gzip6/raw and the explicit bounded quotas; retention windows mark prune eligibility only, never automatic deletion in v1 | 54 synthetic codec trials; quotas are policy ceilings, not measured capacity guarantees |
 | Advisory DB, crash recovery, models, incremental equivalence | Defer to named later gates | Synthetic absence and normal cleanup are not substitute implementation evidence |
 
 Validation on the integrated changes: all 154 script tests pass. Product build/type checks, graph schema,

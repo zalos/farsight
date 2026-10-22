@@ -114,6 +114,9 @@
     "scannerTimeoutMs": 120000,
     "scannerProcessOutputBytes": 4194304,
     "retention": {
+      "mode": "explicit-prune-eligibility",
+      "automaticDeletion": false,
+      "resolution": "2026-10-21: the implementation plan (no automatic deletion in v1; explicit inspect/pin/prune) governs. The age/count windows below only mark objects eligible for an explicit prune; nothing is deleted automatically unless the owner later opts in.",
       "completedUnpinnedSnapshots": 10,
       "completedDays": 30,
       "failedCancelledDays": 7,

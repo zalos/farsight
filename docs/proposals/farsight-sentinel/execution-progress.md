@@ -27,10 +27,24 @@ identifiers, not GitHub PR numbers.
 |---|---|---|
 | Implementation | Claude Opus | Each package in its own worktree and PR, through validation and an open PR |
 | Review | SOL reviewers | Review each PR against its backlog gate; findings in Conventional Comments |
-| Final cleanup review | Claude Fable 5.1 (the reviewer of the existing [implementation review](claude-review-implementation.md)) | One touch-up review across the delivered product before release |
+| Final cleanup review | Claude Fable (CLI alias `fable`, confirmed installed; the reviewer of the existing [implementation review](claude-review-implementation.md)) | One touch-up review across the delivered product before release |
 | Final fixes / verification | Claude Opus fixes Fable's findings; SOL verifies them | No release row moves until verification is recorded |
 
 All planned packages progress to the end of the backlog, then the end gates below, then release.
+
+## Resolutions and scope notes (2026-10-21)
+
+- **Retention:** the [implementation plan](implementation-plan.md) governs — no automatic deletion in v1;
+  inspect, pin and prune are explicit. PR 01's age/count windows (`resourceDefaults.retention` in the
+  [decision manifest](feasibility-decisions.json)) mark objects **eligible** for an explicit prune only.
+  Automatic deletion needs a later owner opt-in. Applies to PR 03 and PR 26.
+- **Live model evaluation (PR 22):** needs two models and 600 paired clean/canary cases. Only one local model
+  (`qwen3:4b`) is installed; the owner has been asked to choose a second local model or a hosted endpoint with a
+  spend cap. This is **pending live-evaluation configuration**, not a blocker for implementation of PR 21/22
+  or for the deterministic release.
+- **PR 29/30:** separate optional expansion designs, now in the to-the-end plan. Each still needs the design
+  review its backlog row names. Real build/runtime testing stays scoped to the original synthetic fixtures and
+  the local sample application, never an arbitrary or production target.
 
 ## Product requirements to carry (owner, captured 2026-10-21)
 
@@ -74,7 +88,7 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 19 | Finding identity, comparison, standalone report | 10–18 | pending | Identity stable under movement; standalone HTML/Markdown/JSON readable offline | — |
 | 20 | Dispositions, assertions, runtime-evidence import | 19 | pending | Decisions bound to scoped evidence and expiry | — |
 | 21 | Ollama and hosted transport | 08, 09 | pending | Redirects, truncation, cancellation, unpriced endpoints handled | — |
-| 22 | Guided and general model review | 18–21 | pending | E5/E8 under configured budgets and accepted thresholds | — |
+| 22 | Guided and general model review | 18–21 | pending | E5/E8 under configured budgets and accepted thresholds; live evaluation awaits the second-model configuration | — |
 | 23a | Deterministic MCP and placed evidence | 20, schema with 24 | pending | Read access cannot mutate or admit paid work | — |
 | 23b | Fenced external review claims | 22, 23a | pending | Cross-workspace, expired and duplicate submissions fail | — |
 | 24 | Optional Farsight host bridge | 09, 20 | pending | Origin/body/path guards, version mismatch, absent service handled | — |
@@ -83,8 +97,8 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 26 | Replay, retention, packaging, deterministic release gate | 01–20, 23a, 24, 25 | pending | Restored bundle works without the checkout; accepted E1–E4/E7/E8 | — |
 | 27 | Conservative differential selection | 26 | pending | Every reuse justified by explicit dependencies | — |
 | 28 | Differential/full audit and enablement | 27 | pending | Zero unexplained differences vs full scans | — |
-| 29 | Optional isolated Java builds | 26, new owner review | pending | Per backlog §PR 29 after its review | — |
-| 30 | Managed runtime scanning | 26, approved runtime design | pending | Per backlog §PR 30 after its design approval | — |
+| 29 | Optional isolated Java builds | 26, new owner review | pending | Per backlog §PR 29 after its review; builds only synthetic/sample sources | — |
+| 30 | Managed runtime scanning | 26, approved runtime design | pending | Per backlog §PR 30 after its design approval; targets only the local synthetic/sample app | — |
 
 ## End gates before release
 
@@ -93,7 +107,7 @@ skipped with its reason, never as passed.
 
 | Gate | Status | Acceptance test |
 |---|---|---|
-| Final Fable review | pending | Claude Fable 5.1 reviews the delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; findings fixed by Opus; SOL verifies each fix |
+| Final Fable review | pending | Claude Fable (`fable`) reviews the delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; findings fixed by Opus; SOL verifies each fix |
 | Java + Spring sample application | pending | A real Java/Spring Boot sample builds and runs in a Linux container (never on the host; source-only scanning does not execute its build). Sentinel scans it and the report shows: a known-vulnerable case found, its safe sibling not flagged, and an unknown/unsupported case reported as unknown, not as protected or clean |
 | npm-only consumer install | pending | On a clean machine or prefix with only Node 24 and npm (no pnpm, no checkout): install the published package, then `--help`, `init`, a scan, and a report all succeed; the report opens offline. Matches [RELEASING.md](../../RELEASING.md) § *Install a release (consumers)* |
 | Release | pending | The release PR flow in [RELEASING.md](../../RELEASING.md): gates, tarball smoke test, squash-merge, publish, then the consumer install from a clean prefix printing the release commit |

@@ -52,7 +52,11 @@ a final Claude Fable 5.1 touch-up review fixed by Opus and verified by SOL), the
 configuration/I-O/rerun/model-choice/visual requirements and the end gates (Java + Spring sample app,
 npm-only consumer install → help → init → scan → report, release) are in the
 [execution progress ledger](proposals/farsight-sentinel/execution-progress.md). Open owner choices there:
-registry vs release-tarball distribution, where `init` lives, and the Java sample's source. This change is
+registry vs release-tarball distribution, where `init` lives, and the Java sample's source. Resolved since: retention
+windows are explicit-prune eligibility, never automatic deletion in v1; the final reviewer is the installed
+`fable` alias. Pending live-evaluation configuration (not an implementation or deterministic-release blocker):
+a second model — only `qwen3:4b` is local — or a hosted endpoint with a spend cap for PR 22's two-model,
+600-paired-case evaluation. PR 29/30 runtime testing stays on the synthetic/sample local app only. This change is
 Markdown/JSON documentation only (no runtime checks selected); the two original Claude reviews are unchanged.
 
 ## Sentinel PR01 measured decisions — 2026-10-22
