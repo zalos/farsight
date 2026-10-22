@@ -63,7 +63,8 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and
   checks `--help`, the import, the packaged schemas and that no Farsight package arrives with it.
   `scripts/test-farsight-package.mjs` is the converse: `farsight-cli`, packed from the CLI's build closure alone
-  (`scripts/pack-preflight.mjs`), installs, ingests and serves with no Sentinel present. Both run in the
+  (`scripts/pack-preflight.mjs`), installs, ingests and serves with no Sentinel present;
+  `scripts/test-farsight-package-absent.mjs` repeats it in a temporary workspace copy without `packages/sentinel/`. Both run in the
   `sentinel-package` CI job; `scripts/npm-consumer.mjs` is their shared `npm init -y` consumer.
 
 - `packages/graph` — independently publishable canonical graph types (`graph.ts`, re-exported by core), generated v1 JSON schema, runtime validation, portable serialization, occurrence identities, pure indexing and traversal. The shared config-check predicates have an explicit `semantics` export. No application-package dependency.

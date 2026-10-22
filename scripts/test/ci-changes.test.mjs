@@ -38,7 +38,7 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     assert.deepEqual(selectChecks([path]), full, path);
   }
   assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true });
-  for (const path of ['scripts/pack.mjs', 'scripts/pack-preflight.mjs', 'scripts/npm-consumer.mjs', 'scripts/test-farsight-package.mjs']) {
+  for (const path of ['scripts/pack.mjs', 'scripts/pack-preflight.mjs', 'scripts/npm-consumer.mjs', 'scripts/test-farsight-package.mjs', 'scripts/test-farsight-package-absent.mjs']) {
     assert.deepEqual(selectChecks([path]), full, `${path} is shared packaging`);
   }
 });

@@ -23,7 +23,7 @@ from `.nvmrc` (24) and pnpm from `packageManager` (9.0.0), with the pnpm store c
 | **commits** | pull requests only: `scripts/lint-commits.mjs --message "$PR_TITLE"` (the title becomes the squash commit on `main` — type and scope must be on the lists) and `--range base..head --any-scope` (every branch commit has the conventional shape) | 5 min |
 | **parser-package (Linux/macOS)** (non-required) | parser package/workflow/dependency changes: actual tarballs installed outside the workspace, public types, native/WASM parsing, saved-graph query | 15 min |
 | **echo-package** | when relevant, `pnpm install --frozen-lockfile` → `pnpm test:echo:package` | 15 min |
-| **sentinel-package** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm pack:cli` (builds only the CLI's closure, so Sentinel stays unbuilt; the job fails if `packages/sentinel/dist` exists) → `scripts/test-farsight-package.mjs` → `pnpm test:sentinel:package` (below) | 15 min |
+| **sentinel-package** (not yet required) | when relevant, `pnpm install --frozen-lockfile` → `pnpm pack:cli` (builds only the CLI's closure, so Sentinel stays unbuilt; the job fails if `packages/sentinel/dist` exists) → `scripts/test-farsight-package.mjs` → `pnpm test:cli:package:absent` → `pnpm test:sentinel:package` (below) | 15 min |
 
 ### Which changes select which checks
 
@@ -39,7 +39,7 @@ union of the matching checks. Secrets and PR commit conventions always run, incl
 | `e2e/`, `scripts/e2e.mjs`, `scripts/e2e-perf.mjs`, `scripts/synth-graph.mjs` | `e2e` (including its typecheck and small perf suite) |
 | Package `test/` folders, `scripts/test/`, changelog/release/hook-install/commit-lint scripts | `validate` |
 | Package code/assets, `examples/`, `schemas/` | `validate` + `e2e`; graph, core and Echo changes also select `echo-package`; changes to a package in `farsight-cli`'s workspace dependency closure (cli, server, mcp, parsers, code-parser, core, graph, work and the work providers today, read from the manifests by `scripts/ci-changes.mjs`), Sentinel's own closure, or `examples/invoice-app/` also select `sentinel-package`; unreadable manifests select all |
-| Everything else, including dependencies, build config, workflows, the selector itself and the shared packaging scripts (`pack.mjs`, `pack-preflight.mjs`, `npm-consumer.mjs`, `test-farsight-package.mjs`) | all |
+| Everything else, including dependencies, build config, workflows, the selector itself and the shared packaging scripts (`pack.mjs`, `pack-preflight.mjs`, `npm-consumer.mjs`, `test-farsight-package.mjs`, `test-farsight-package-absent.mjs`) | all |
 
 Markdown inside fixtures is test input, not automatically documentation. Graph and core are Echo build dependencies, so its
 whole package is watched, not just a few currently imported helpers. PRs compare merge-base → head, excluding
@@ -88,7 +88,9 @@ before removing any prior artifact. `scripts/test-farsight-package.mjs` installs
 bundle names no Sentinel module, that no Sentinel package is installed and that the tarball's `engines.node` equals
 the workspace's, prints `--version`, ingests the
 invoice example and serves it read-only on a free port until `/api/version` answers, then stops its own server
-by pid. Then `pnpm test:sentinel:package` builds `@farsight/sentinel...`, packs `farsight-sentinel` and installs
+by pid. `pnpm test:cli:package:absent` (`scripts/test-farsight-package-absent.mjs`) repeats that pack, install and
+startup in a temporary copy of the workspace with `packages/sentinel/` removed (installed from the pnpm store, not a
+Git checkout). Then `pnpm test:sentinel:package` builds `@farsight/sentinel...`, packs `farsight-sentinel` and installs
 it: every bin answers `--help`; the root and each subpath export import and ship declarations; a strict TypeScript
 consumer compiles against the installed types, naming every runtime export and each envelope's contract type; the
 installed schemas are exactly the source set, byte for byte, one per envelope version and resolvable through the
@@ -125,6 +127,7 @@ pnpm test:scripts
 pnpm lint:strings
 pnpm test:echo:package                  # optional network integration check for Echo changes
 pnpm test:cli:package                   # farsight-cli from its closure alone, in a clean npm consumer
+pnpm test:cli:package:absent            # the same with packages/sentinel removed from a temporary workspace copy
 pnpm test:sentinel:package              # farsight-sentinel, separately, in a clean npm consumer
 pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
