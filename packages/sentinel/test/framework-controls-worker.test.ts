@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { captureSnapshot } from '../dist/snapshot/index.js';
@@ -201,5 +201,26 @@ test('the shipped pack validates: three inspection families, candidate meaning, 
     assert.deepEqual(r.requires, ['framework-order']);
     assert.deepEqual(r.evidenceRequired, ['control-fact']);
     assert.equal(r.implementation.adapterId, FRAMEWORK_CONTROLS_ADAPTER_ID);
+  }
+});
+
+
+test('the actual launch gate excludes native-library overrides from the worker environment', needsStore, async t => {
+  const fx = await sealed(t, ORDER);
+  const marker = join(fx.dir, 'override-loaded');
+  const override = join(fx.dir, 'override.cjs');
+  writeFileSync(override, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'unexpected'); throw new Error('native override reached');`);
+  const previous = process.env.NAPI_RS_NATIVE_LIBRARY_PATH;
+  process.env.NAPI_RS_NATIVE_LIBRARY_PATH = override;
+  try {
+    const o = await child(fx, {}, 'native-env');
+    assert.equal(o.state, 'succeeded', JSON.stringify({code:o.code, detail:o.detail}));
+    assert.equal(existsSync(marker), false, 'the inherited native override never executes');
+    assert.ok(!o.invocation.record.environmentNames.includes('NAPI_RS_NATIVE_LIBRARY_PATH'));
+    const out = JSON.parse(readFileSync(o.outputs[0].path, 'utf8'));
+    assert.ok(out.libraries.find((l: any) => l.framework === 'express').envelopes[0].facts.length > 0, 'the pinned native parser ran');
+  } finally {
+    if (previous === undefined) delete process.env.NAPI_RS_NATIVE_LIBRARY_PATH;
+    else process.env.NAPI_RS_NATIVE_LIBRARY_PATH = previous;
   }
 });

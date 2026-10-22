@@ -1325,13 +1325,43 @@ page surface the parser indexed, and each surface keeps its own row in the repor
 built-in adapter the supervisor starts as a child process. The supervisor pins a built-in adapter by the digest of
 its one module file, and the worker's behaviour lives in the files it imports, so the registered module is a generated
 entry (`closure.ts`) that embeds the byte manifest of the worker's whole closure: every Sentinel file reached by
-static or literal dynamic imports, and every package used, whole (an installed package's folder with its folder
-listings, a workspace package's published files), with each package's dependencies in turn and an absent optional
-dependency's lookup recorded too. It also binds how Node finds each package: every `node_modules` candidate Node
+static or literal dynamic imports, and every package used, whole (each resolved package's folder with its folder
+listings, including workspace folders rather than trusting their publish files list), with each package's dependencies
+in turn and an absent optional dependency's lookup recorded too. It also binds how Node finds each package: every `node_modules` candidate Node
 would try before the one it takes holds no folder, the one it takes resolves to exactly the recorded real path, and
-each Sentinel module stays at its own real path; a link inside a package is bound to its text, the real path it
-resolves to and that target's bytes or folder, wherever it lies. So a retargeted link, a changed link target or a
+each Sentinel module stays at its own real path. An inner package link must stay within its resolved package root;
+its text, resolution and target bytes or folder are bound. Inner links and literal module loads escaping that root
+refuse registration, including lazy imports, CommonJS require and ordinary createRequire aliases. Literal loads
+through excluded nested node_modules paths or into bare dependencies outside the independently pinned metadata
+closure are refused too. Each module's actual lookup is bound, including absent optional loads; a nearer shadow
+or a later installation is a change. An unused fixture may name a package already fully bound elsewhere in the
+metadata closure, but cannot add an unbound dependency. Builtins and package self references remain supported;
+package-import aliases are unsupported. A legacy main outside the package root is refused too. A syntax-invalid unused fixture remains hashed data: it cannot execute as
+a Node module. This conservative folder pin includes unused fixtures and generated files; changing them may require
+a new registration even when runtime behavior would be unchanged. So a retargeted link, a changed link target or a
 nearer new package is a change even when no listed byte moved. A change anywhere in the closure is a different module digest and so a different adapter; an entry whose closure changed after it was written exits before importing the worker, writing nothing.
+
+The boundary is the shipped trusted worker and its audited dependencies, not general JavaScript loader validation.
+Computed module paths and arbitrary loader indirection are not resolved by the literal-load check. The current native
+Node path pins `oxc-parser` 0.138.0 and audits its three computed loaders (SHA-256, fixed by a regression test):
+
+- `src-js/bindings.js`: `34c500cd0841b07a44d7f41d6394d3692913aa2217425e3d470af5c7dbd92279`.
+  Its external override requires `NAPI_RS_NATIVE_LIBRARY_PATH`, which the supervisor does not pass: a real supervised
+  worker test sets an executable parent override and proves it never loads. The normal native binding is a literal
+  in-package file or a declared optional platform package, whose bytes/resolution/absence are pinned.
+- `src-js/raw-transfer/eager.js`: `e2741c33200b644091c6ad3bb365ea7df373c8b7d5e55deef9844bac1d96a465`.
+  Its computed deserializer name is one of eight fixed strings selected by three booleans; every selection stays
+  inside the pinned package. Missing optional internal files cannot produce a successful analysis.
+- `src-js/webcontainer-fallback.cjs`: `e54193c063b0359e5108dd3b3673491cc35b558611278380506fc9f95c46f757`.
+  Its download and external temporary-directory loader require `process.versions.webcontainer`. This is not the
+  supported native Node runtime and is not selected by the worker's fixed Node executable or four-name environment.
+
+Unused workspace fixture generators are byte-pinned data, not worker entry points. Changes to these dependency
+bytes require this audit and test pins to be reviewed. No arbitrary computed external loader is supported. Before
+canonical packaged execution is enabled, the actual generated chunks, require calls, worker path, entry naming and
+installed dependency closure must be audited and qualified again; the source-layout worker tests do not prove that
+future package layout.
+
 This detects a changed build or installation, not a writer racing the check and the import. The module runs through
 the launch gate with only the worker environment and its sealed inputs (the job, the snapshot envelope, the source's retained
 parser artifact, result and index, and its captured files, each read only by id and checked against its digest). The

@@ -3,7 +3,7 @@
 // mapping and their packages, so a change to any of those would change what the adapter does without changing that
 // pin. The registered module is therefore a generated entry that embeds the byte manifest of the closure: every
 // Sentinel file the worker reaches through static or literal dynamic imports, and every package it or they import,
-// whole (an installed package's directory; a workspace package's published files), with each package's own
+// whole (each resolved package's directory, including workspace packages), with each package's own
 // dependencies in turn. The entry's digest, which the supervisor pins and the plan records, covers every byte of the
 // manifest, including how Node finds each package (every `node_modules` candidate it would try, and the real path the
 // one it takes resolves to). At start, under the launch gate and before the worker is imported, the entry re-reads
@@ -18,6 +18,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpat
 import { isBuiltin } from 'node:module';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseSync } from 'oxc-parser';
 
 export const FRAMEWORK_CONTROLS_WORKER = fileURLToPath(new URL('./worker.js', import.meta.url));
 /** The exit status of an entry whose closure differs from its manifest: no protocol byte is written. */
@@ -46,13 +47,61 @@ const SPECIFIERS = [
 ];
 const packageName = (spec: string) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!);
 
+/** Literal module loads, including createRequire aliases. Only shipped dependency code is inspected here; computed
+ * native loaders in the pinned dependencies are audited separately in ADR 44. This is not an arbitrary JS resolver. */
+function literalLoads(path: string, bytes: Uint8Array): string[] {
+  const parsed = parseSync(path, Buffer.from(bytes).toString('utf8'));
+  const program = typeof parsed.program === 'string' ? JSON.parse(parsed.program) : parsed.program;
+  // An invalid bundled fixture is still byte-pinned; Node cannot execute it as a module.
+  if (parsed.errors.length) return [];
+  const nodes: any[] = [];
+  const walk = (n: any) => {
+    if (!n || typeof n !== 'object') return;
+    if (typeof n.type === 'string') nodes.push(n);
+    for (const v of Object.values(n)) if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') walk(v);
+  };
+  walk(program);
+  const factories = new Set(['createRequire']);
+  const namespaces = new Set(['module']);
+  for (const n of nodes) if (n.type === 'ImportDeclaration' && ['module', 'node:module'].includes(n.source?.value)) {
+    for (const spec of n.specifiers) {
+      if (spec.imported?.name === 'createRequire') factories.add(spec.local.name);
+      if (['ImportNamespaceSpecifier', 'ImportDefaultSpecifier'].includes(spec.type)) namespaces.add(spec.local.name);
+    }
+  }
+  const isFactory = (n: any) => n?.type === 'Identifier' ? factories.has(n.name)
+    : n?.type === 'MemberExpression' && namespaces.has(n.object?.name) && (n.property?.name ?? n.property?.value) === 'createRequire';
+  const loaders = new Set(['require']);
+  for (const n of nodes) if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' && n.init?.type === 'CallExpression' && isFactory(n.init.callee)) loaders.add(n.id.name);
+  // Simple aliases are conservative name sets, not a claim to resolve arbitrary JavaScript data flow.
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const n of nodes) if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' && n.init?.type === 'Identifier'
+      && loaders.has(n.init.name) && !loaders.has(n.id.name)) { loaders.add(n.id.name); grew = true; }
+  }
+  const isLoader = (n: any): boolean => n?.type === 'Identifier' ? loaders.has(n.name)
+    : n?.type === 'CallExpression' ? isFactory(n.callee)
+    : n?.type === 'MemberExpression' && ((n.object?.name === 'module' && (n.property?.name ?? n.property?.value) === 'require')
+      || (loaders.has(n.object?.name) && (n.property?.name ?? n.property?.value) === 'resolve'));
+  const literals: string[] = [];
+  for (const n of nodes) {
+    const value = ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration', 'ImportExpression'].includes(n.type) ? n.source
+      : n.type === 'CallExpression' && isLoader(n.callee) ? n.arguments[0] : null;
+    if (typeof value?.value === 'string') literals.push(value.value);
+    else if (value?.type === 'TemplateLiteral' && value.expressions.length === 0) literals.push(value.quasis[0].value.cooked);
+  }
+  return literals;
+}
+
 /**
  * The worker's closure as it is on disk now; `extra` modules (the coordinator-side driver) are pinned with theirs.
- * Pure reads; nothing is imported or run.
+ * Reads the installed build as data with the pinned parser; nothing from the target is imported or run.
  */
 export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: readonly string[] = []): WorkerClosure {
   const out = new Map<string, ClosureEntry>();
   const portable = new Map<string, string>();
+  const modulePackages = new Set<string>();
   const root = realpathSync(dirname(dirname(dirname(entry))));
   const add = (path: string, kind: ClosureEntry[1], value: string, name: string) => { out.set(`${path}\u0000${kind}`, [path, kind, value]); portable.set(name, `${kind}:${value}`); };
   const where = (p: string) => relative(root, p);
@@ -77,22 +126,31 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
     return found;
   };
   const listPackage = (dir: string, name: string, pkg: any) => {
-    const installed = dir.split(sep).includes('node_modules');
-    // An installed package holds only what its publisher packed; a workspace package ships its `files`.
-    const tops: string[] = !installed && Array.isArray(pkg.files) ? ['package.json', ...pkg.files] : readdirSync(dir).filter(n => n !== 'node_modules');
+    // A workspace's files list does not constrain Node's reads: its runtime may load an unlisted internal helper.
+    // Bind the whole resolved folder for both installed and workspace packages, rather than trusting that list.
+    const tops = readdirSync(dir).filter(n => n !== 'node_modules');
     const followed = new Set<string>();
+    const inside = (path: string) => path === dir || path.startsWith(dir + sep);
+    const refuseEscape = (path: string) => {
+      if (!inside(path) || relative(dir, path).split(sep).includes('node_modules')) throw new Error('the worker package loads outside its pinned package root or through an unbound node_modules path');
+    };
+    // A legacy package main can point outside its folder even without an inner link.
+    if (typeof pkg.main === 'string') refuseEscape(resolve(dir, pkg.main));
     const walk = (abs: string) => {
       let st;
       try { st = lstatSync(abs); } catch { add(abs, 'absent', '', `${name}/${relative(dir, abs)}`); return; }
       if (st.isSymbolicLink()) {
         // Node loads through a link: bind the link, the real path it resolves to, and the target's own bytes or
-        // folder, wherever it is. A dangling link stays bound to its text and its target's absence.
+        // folder within this package. An escaped target is unsupported: binding one file would not bind its imports.
+        // A dangling link stays bound to its text and its target's absence.
         const label = `${name}/${relative(dir, abs)}`;
         const text = readlinkSync(abs);
+        refuseEscape(resolve(dirname(abs), text));
         add(abs, 'link', text, label);
         let real: string | null = null;
         try { real = realpathSync(abs); } catch { real = null; }
         if (real === null) { add(resolve(dirname(abs), text), 'absent', '', `${label}->absent`); return; }
+        refuseEscape(real);
         add(abs, 'resolves', real, `${label}->`);
         if (!followed.has(real)) { followed.add(real); walk(real); }
       }
@@ -101,9 +159,23 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
         add(abs, 'dir', sha(JSON.stringify(names)), `${name}/${relative(dir, abs)}/`);
         for (const n of names) if (n !== 'node_modules') walk(join(abs, n));
       }
-      else if (st.isFile()) add(abs, 'file', sha(readFileSync(abs)), `${name}/${relative(dir, abs)}`);
+      else if (st.isFile()) {
+        const bytes = readFileSync(abs);
+        add(abs, 'file', sha(bytes), `${name}/${relative(dir, abs)}`);
+        if (/\.[cm]?js$/.test(abs)) for (const spec of literalLoads(abs, bytes)) {
+          if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('file:')) {
+            refuseEscape(spec.startsWith('file:') ? fileURLToPath(spec) : resolve(dirname(abs), spec));
+          } else if (!isBuiltin(spec) && packageName(spec) !== pkg.name) {
+            if (spec.startsWith('#')) throw new Error('the worker package uses an unsupported package import alias');
+            // Record lookup at the actual module folder, including absent optional loads. Check after the metadata
+            // closure is complete: unused fixture imports may name another package already fully pinned there.
+            const actual = packageDir(packageName(spec), dirname(abs));
+            if (actual !== null) modulePackages.add(actual);
+          }
+        }
+      }
     };
-    if (installed || !Array.isArray(pkg.files)) add(dir, 'dir', sha(JSON.stringify(readdirSync(dir).sort())), `${name}/`);
+    add(dir, 'dir', sha(JSON.stringify(readdirSync(dir).sort())), `${name}/`);
     for (const t of [...new Set(tops)].sort()) walk(join(dir, t));
   };
   const packages = new Set<string>();
@@ -139,6 +211,7 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
   };
   visitFile(realpathSync(entry));
   for (const e of extra) visitFile(realpathSync(e));
+  for (const dir of modulePackages) if (!packages.has(dir)) throw new Error('the worker package loads an unbound dependency outside its pinned package root');
   const entries = [...out.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const digest = `sha256:${sha(JSON.stringify([...portable].sort((a, b) => (a[0] < b[0] ? -1 : 1))))}`;
   return { entries, digest };

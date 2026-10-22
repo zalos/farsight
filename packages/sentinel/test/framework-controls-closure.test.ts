@@ -4,7 +4,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CLOSURE_REFUSED, FRAMEWORK_CONTROLS_WORKER, workerClosure, writeClosureEntry } from '../dist/frameworks/controls/index.js';
@@ -148,9 +150,11 @@ test('an installed (copied, not linked) package closure runs unchanged and binds
   assert.equal(run(entry.module).status, CLOSURE_REFUSED, 'the same bytes reached another way are another resolution');
 });
 
-test('a link inside a package whose external target changes is refused, though the link itself did not move (review blocker)', t => {
+test('a package-internal link binds target bytes and its exact resolution', t => {
   const fx = linked(t);
-  const external = join(fx.root, 'outside-target.mjs');
+  const external = join(fx.root, 'workspace-a', 'target.mjs');
+  const copy = join(fx.root, 'workspace-a', 'copy-target.mjs');
+  writeFileSync(copy, 'export default "original-target";\n');
   writeFileSync(external, 'export default "original-target";\n');
   rmSync(join(fx.root, 'workspace-a', 'index.js'));
   symlinkSync(external, join(fx.root, 'workspace-a', 'index.js'));
@@ -162,11 +166,111 @@ test('a link inside a package whose external target changes is refused, though t
   const r = run(entry.module);
   assert.deepEqual([r.status, r.stdout], [CLOSURE_REFUSED, '']);
   // Retargeting the inner link to another file with the original bytes is refused too.
-  const copy = join(fx.root, 'copy-target.mjs');
-  writeFileSync(copy, 'export default "original-target";\n');
+
   writeFileSync(external, 'export default "original-target";\n');
   assert.equal(run(entry.module).stdout, 'original-target', 'restored bytes run again');
   unlinkSync(join(fx.root, 'workspace-a', 'index.js'));
   symlinkSync(copy, join(fx.root, 'workspace-a', 'index.js'));
   assert.equal(run(entry.module).status, CLOSURE_REFUSED);
+});
+
+
+test('an inner package link escaping its root is refused before an entry exists', t => {
+  const fx = linked(t);
+  const external = join(fx.root, 'external.mjs');
+  writeFileSync(external, 'export default "outside";');
+  unlinkSync(join(fx.root, 'workspace-a', 'index.js'));
+  symlinkSync(external, join(fx.root, 'workspace-a', 'index.js'));
+  const entries = join(fx.root, 'escape-entry');
+  mkdirSync(entries);
+  assert.throws(() => writeClosureEntry(entries, fx.worker), /outside its pinned package root/);
+});
+
+const ESCAPED_LOADS = {
+  static: "import word from '../external.mjs'; export default word;",
+  reexport: "export {default} from '../external.mjs';",
+  lazy: "export default (await import('../external.mjs')).default;",
+  require: "import {createRequire} from 'node:module'; const require=createRequire(import.meta.url); export default require('../external.cjs');",
+  factoryAlias: "import {createRequire as factory} from 'node:module'; const load=factory(import.meta.url); export default load('../external.cjs');",
+  namespace: "import * as m from 'node:module'; const load=m.createRequire(import.meta.url); export default load('../external.cjs');",
+  inline: "import {createRequire} from 'node:module'; export default createRequire(import.meta.url)('../external.cjs');",
+  escapedLiteral: "export default (await import('..\\u002fexternal.mjs')).default;",
+};
+for (const [name, code] of Object.entries(ESCAPED_LOADS)) test(`an escaped ${name} load is refused before startup`, t => {
+  const fx = linked(t);
+  writeFileSync(join(fx.root, 'external.mjs'), 'export default "before";');
+  writeFileSync(join(fx.root, 'external.cjs'), 'module.exports="before";');
+  writeFileSync(join(fx.root, 'workspace-a', 'index.js'), code);
+  const entries = join(fx.root, 'escape-entry');
+  mkdirSync(entries);
+  assert.throws(() => writeClosureEntry(entries, fx.worker), /outside its pinned package root/);
+});
+
+test('an escaped legacy package main is refused', t => {
+  const fx = linked(t);
+  writeFileSync(join(fx.root, 'workspace-a', 'package.json'), '{"name":"dep-a","version":"1.0.0","main":"../external.mjs"}');
+  assert.throws(() => workerClosure(fx.worker), /outside its pinned package root/);
+});
+
+test('a finite internal computed loader and unlisted workspace helper stay byte-bound; unused malformed fixtures are data', t => {
+  const fx = linked(t);
+  const pkg = join(fx.root, 'workspace-a');
+  writeFileSync(join(pkg, 'helper.cjs'), 'module.exports="finite";');
+  writeFileSync(join(pkg, 'unused-fixture.js'), 'intentionally invalid JavaScript {');
+  writeFileSync(join(pkg, 'index.js'), "import {createRequire} from 'node:module'; const load=createRequire(import.meta.url); const names=['helper.cjs']; export default load('./'+names[0]);");
+  const entries = join(fx.root, 'finite-entry');
+  mkdirSync(entries);
+  const entry = writeClosureEntry(entries, fx.worker);
+  assert.deepEqual([run(entry.module).status, run(entry.module).stdout], [0, 'finite']);
+  writeFileSync(join(pkg, 'helper.cjs'), 'module.exports="changed";');
+  assert.deepEqual([run(entry.module).status, run(entry.module).stdout], [CLOSURE_REFUSED, '']);
+});
+
+test('the audited computed native loaders remain at their reviewed Oxc bytes', () => {
+  const root = join(createRequire(import.meta.url).resolve('oxc-parser/package.json'), '..');
+  assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '0.138.0');
+  for (const [file, hash] of [
+    ['src-js/bindings.js', '34c500cd0841b07a44d7f41d6394d3692913aa2217425e3d470af5c7dbd92279'],
+    ['src-js/raw-transfer/eager.js', 'e2741c33200b644091c6ad3bb365ea7df373c8b7d5e55deef9844bac1d96a465'],
+    ['src-js/webcontainer-fallback.cjs', 'e54193c063b0359e5108dd3b3673491cc35b558611278380506fc9f95c46f757'],
+  ]) assert.equal(createHash('sha256').update(readFileSync(join(root, file))).digest('hex'), hash, file);
+});
+
+
+test('a literal path through excluded node_modules and an undeclared bare dependency refuse registration', t => {
+  const fx = linked(t);
+  const pkg = join(fx.root, 'workspace-a');
+  const helper = join(pkg, 'node_modules', 'private-helper');
+  mkdirSync(helper, {recursive:true});
+  writeFileSync(join(helper, 'package.json'), '{"name":"private-helper","version":"1.0.0","type":"module","main":"index.js"}');
+  writeFileSync(join(helper, 'index.js'), 'export default "unbound";');
+  for (const spec of ['./node_modules/private-helper/index.js', 'private-helper']) {
+    writeFileSync(join(pkg, 'index.js'), `import word from ${JSON.stringify(spec)}; export default word;`);
+    assert.throws(() => workerClosure(fx.worker), /outside its pinned package root|unbound node_modules/);
+  }
+});
+
+test('a nearer dependency inside a package cannot shadow its declared dependency', t => {
+  const fx = linked(t);
+  const pkg = join(fx.root, 'workspace-a');
+  writeFileSync(join(pkg, 'package.json'), '{"name":"dep-a","version":"1.0.0","type":"module","main":"index.js","dependencies":{"dep-b":"1.0.0"}}');
+  fx.target(join(pkg, 'node_modules', 'dep-b'), 'bound');
+  mkdirSync(join(pkg, 'sub'), {recursive:true});
+  writeFileSync(join(pkg, 'index.js'), "export {default} from './sub/module.js';");
+  writeFileSync(join(pkg, 'sub/module.js'), "import value from 'dep-b'; export default value;");
+  fx.target(join(pkg, 'sub/node_modules/dep-b'), 'shadow');
+  assert.throws(() => workerClosure(fx.worker), /unbound dependency outside its pinned package root/);
+});
+
+test('an unused undeclared optional load stays absent; installation after registration is drift', t => {
+  const fx = linked(t);
+  const pkg = join(fx.root, 'workspace-a');
+  mkdirSync(join(pkg, 'node_modules'));
+  writeFileSync(join(pkg, 'index.js'), "export async function optional(){ return import('optional-helper'); } export default 'original';");
+  const entries = join(fx.root, 'optional-entry');
+  mkdirSync(entries);
+  const entry = writeClosureEntry(entries, fx.worker);
+  assert.deepEqual([run(entry.module).status, run(entry.module).stdout], [0, 'original']);
+  fx.target(join(pkg, 'node_modules/optional-helper'), 'new');
+  assert.deepEqual([run(entry.module).status, run(entry.module).stdout], [CLOSURE_REFUSED, '']);
 });
