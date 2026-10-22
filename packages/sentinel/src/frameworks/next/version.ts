@@ -232,7 +232,8 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
   const indent = (l: string) => l.length - l.trimStart().length;
   const blockOf = (from: number, depth: number): [number, number] => {
     let end = from + 1;
-    while (end < lines.length && (lines[end]!.trim() === '' || indent(lines[end]!) > depth)) end++;
+    // YAML comments never close a block, even at column zero or less indentation than its entries.
+    while (end < lines.length && (lines[end]!.trim() === '' || lines[end]!.trimStart().startsWith('#') || indent(lines[end]!) > depth)) end++;
     return [from + 1, end];
   };
   const findKeys = (range: [number, number], depth: number, match: (key: string) => boolean): number[] => {
@@ -271,6 +272,8 @@ function fromPnpmLock(text: string, rel: string, pkg: PackageName): Found {
         if (patchTargets(selector, pkg)) return { state: 'unknown', reason: 'identity-mismatch', detail: `pnpm-lock.yaml records a patch for ${pkg}; the unmodified registry package was measured` };
         n = blockOf(n, entryDepth)[1] - 1;
       }
+      // An absent block value is YAML null, not an explicit empty mapping. Do not certify unfamiliar patch config.
+      if (entryDepth === undefined) return { state: 'unknown', reason: 'lockfile-invalid', detail: 'pnpm patchedDependencies is null rather than an explicit empty map' };
     }
   }
   const importers = findKey(top, 0, 'importers');

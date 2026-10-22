@@ -54,6 +54,19 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Next pnpm comment-boundary follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `696d96fb` and makes the shared YAML block reader
+ignore comment-only lines at every indentation. Two actual capture/parse probes reproduced the remaining defect on
+that frozen head: a column-zero comment before the first patch entry, or between an unrelated entry and Next's entry,
+truncated the map and incorrectly retained the registry identity. The existing YAML parser confirms both placements
+preserve the same patch-map meaning. The pack revision advances to 5 so the old identity answer cannot be reused.
+
+Comment-only declarations parse as YAML null and are conservatively unknown, while explicit empty maps remain
+supported. New retained-source regressions cover both hidden-entry cases and that null-versus-empty distinction;
+ordinary peer suffixes and unrelated patch positives remain in the focused suite. No target code is executed and
+no author, primary or integrating-owner tree is changed. Independent review remains required before integration.
+
 ## Next pnpm patch-map indentation correction — 2026-10-22
 
 Branch `codex/sentinel-next-patch-indent` follows reviewed patch-identity correction `c9972d84`. The lockfile reader

@@ -348,3 +348,46 @@ ${pad}  hash: target-fixture
     assert.deepEqual(verdicts(unrelated.result, SURFACE.info), ['does-not-apply']);
   });
 }
+
+
+for (const [label, patchMap] of [
+  ['before the first entry', `patchedDependencies:
+# Original inert comment at column zero does not end a YAML mapping.
+    next@14.2.25:
+        path: patches/next.patch
+        hash: next-fixture
+
+`],
+  ['between patch entries', `patchedDependencies:
+    left-pad@1.0.0:
+        path: patches/unrelated.patch
+        hash: unrelated-fixture
+# Original inert comment at column zero does not end a YAML mapping.
+    next@14.2.25:
+        path: patches/next.patch
+        hash: next-fixture
+
+`],
+] as const) {
+  test(`captured pnpm patch comments ${label} cannot hide relevant entries`, needsStore, async t => {
+    const files = { ...APP, 'pnpm-lock.yaml': pnpmLock({ '.': '14.2.25' }).replace('importers:', patchMap + 'importers:'),
+      'patches/next.patch': '# Original inert Next patch\n', 'patches/unrelated.patch': '# Original inert unrelated patch\n' };
+    delete (files as Record<string, string>)['package-lock.json'];
+    const { result } = await analyzed(t, files);
+    assert.deepEqual({ supported: result.projects[0]!.supported, verdicts: verdicts(result, SURFACE.info) },
+      { supported: false, verdicts: ['unknown'] });
+  });
+}
+
+test('captured pnpm patch comments alone are not an explicit empty patch map', needsStore, async t => {
+  const files = { ...APP, 'pnpm-lock.yaml': pnpmLock({ '.': '14.2.25' }) };
+  delete (files as Record<string, string>)['package-lock.json'];
+  const empty = await analyzed(t, { ...files,
+    'pnpm-lock.yaml': files['pnpm-lock.yaml'].replace('importers:', 'patchedDependencies: {}\n# Original inert comment\nimporters:') });
+  assert.equal(empty.result.projects[0]!.supported, true);
+  assert.deepEqual(verdicts(empty.result, SURFACE.info), ['does-not-apply']);
+  const nullMap = await analyzed(t, { ...files,
+    'pnpm-lock.yaml': files['pnpm-lock.yaml'].replace('importers:', 'patchedDependencies:\n# Original inert comment\n\nimporters:') });
+  assert.deepEqual({ supported: nullMap.result.projects[0]!.supported, verdicts: verdicts(nullMap.result, SURFACE.info) },
+    { supported: false, verdicts: ['unknown'] });
+});
