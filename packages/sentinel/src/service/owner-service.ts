@@ -31,7 +31,7 @@ import {
 } from '../transport/ipc.js';
 import {
   adoptedPolicy, isFinalRunState, runWriteBinding, printed, receiptBook, reportIn, retainedFact,
-  runStateIn, statusIn, type Workspace,
+  runStateIn, statusIn, checkWorkspaceLayout, type Workspace,
 } from './local.js';
 import { assertSupportedRules, canonicalResult, currentPlan, rerunEnvelopeOf } from './canonical.js';
 import { loadPlan } from '../execution/plans.js';
@@ -416,6 +416,8 @@ export interface ServeOptions {
 
 /** Runs the service for one workspace until it is stopped or idle. Resolves after the store is released. */
 export async function serveWorkspace(ws: Workspace, options: ServeOptions): Promise<void> {
+  // Before the store, the framework entry or the socket: trust state and the runtime folder stay out of the source.
+  checkWorkspaceLayout(ws);
   let store: SentinelStore;
   try { store = await openStore(ws.storePath); } catch (e) {
     if ((e as { code?: unknown }).code === 'sentinel.store.ownedElsewhere') throw new ServiceError('sentinel.service.alreadyServing');
@@ -426,7 +428,7 @@ export async function serveWorkspace(ws: Workspace, options: ServeOptions): Prom
   let inflight = 0;
   let lastRequest = Date.now();
   try {
-    const address = runtimeAddress({ storePath: store.storePath, ownerNonce });
+    const address = runtimeAddress({ storePath: store.storePath, ownerNonce, sources: [ws.path] });
     const socket = await listenOwnerSocket(address, { storeId: store.storeId, ownerNonce }, async (op, body, by) => {
       inflight++;
       try { return await service.handle(op, body, by); } finally { inflight--; lastRequest = Date.now(); }

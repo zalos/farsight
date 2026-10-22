@@ -5,10 +5,10 @@
 // as the owner can change user state, and that is outside this boundary (as for the store, ADR 19).
 import { randomBytes } from 'node:crypto';
 import {
-  closeSync, constants as FS, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, renameSync, unlinkSync,
+  closeSync, constants as FS, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, renameSync, unlinkSync,
   writeSync, type Stats,
 } from 'node:fs';
-import { basename, dirname, isAbsolute, join, normalize } from 'node:path';
+import { basename, dirname, isAbsolute, join, normalize, sep } from 'node:path';
 import { policyFail, type PolicyErrorCode } from './errors.js';
 
 const UID = typeof process.getuid === 'function' ? process.getuid() : undefined;
@@ -153,6 +153,35 @@ function removeTemporaryAliases(dir: string, name: string, file: Stats): void {
     } catch { /* removed by its writer meanwhile */ }
   }
 }
+
+/**
+ * The canonical path a folder would have, without creating anything: its deepest existing ancestor must be a real
+ * folder spelled canonically (no link, the case the file system stores), and the rest is joined normalised. A link
+ * or a non-folder on the way is refused, so a check made here holds for what a later create makes.
+ */
+export function prospectiveCanonical(path: string, code: PolicyErrorCode): string {
+  if (!isAbsolute(path) || normalize(path) !== path) policyFail(code, 'a user-state folder is an absolute, normalised path');
+  const parts = path.split(sep).filter(Boolean);
+  let existing: string = sep;
+  let i = 0;
+  for (; i < parts.length; i++) {
+    const next = join(existing, parts[i]!);
+    let st: Stats;
+    try { st = lstatSync(next); } catch (e) {
+      if (errno(e) === 'ENOENT') break;
+      return policyFail(code, `a user-state folder cannot be inspected (${errno(e) ?? 'error'})`, e);
+    }
+    if (st.isSymbolicLink() || !st.isDirectory()) policyFail(code, 'a user-state folder passes through a link or a file');
+    existing = next;
+  }
+  let real: string;
+  try { real = realpathSync.native(existing); } catch (e) { return policyFail(code, 'a user-state folder cannot be resolved', e); }
+  if (real !== existing) policyFail(code, 'a user-state folder is not spelled canonically');
+  return parts.length === i ? existing : join(existing, ...parts.slice(i));
+}
+
+/** True when either canonical path is the other or lies below it. */
+export const overlaps = (a: string, b: string): boolean => isWithin(a, b) || isWithin(b, a);
 
 /** True when `inner` is `outer` or below it, comparing canonical absolute paths. */
 export function isWithin(inner: string, outer: string): boolean {

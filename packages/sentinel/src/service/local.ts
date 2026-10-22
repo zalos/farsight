@@ -13,6 +13,7 @@ import {
   type EffectivePolicy,
 } from '../policy/index.js';
 import { issueReceipt } from '../policy/owner-receipts.js';
+import { assertTrustOutside } from '../policy/adoption.js';
 import { checkPreviewReport, PREVIEW_LIMITATIONS, PREVIEW_REPORT_SCHEMA, type PreviewReport } from '../reports/preview.js';
 import { scannerReportOf, type ScannerReport } from '../reports/scanner.js';
 import { openSnapshot } from '../snapshot/materialize.js';
@@ -58,7 +59,16 @@ export const printed = (r: AdmissionEnvelope): PrintedVerdicts => Object.freeze(
   credential: Object.freeze({ allowed: r.verdicts.credential.allowed, asked: r.verdicts.credential.asked, reasonCode: r.verdicts.credential.reasonCode }),
 });
 
+/**
+ * Refuses, creating nothing, a layout whose owner trust state would sit in the workspace it captures: the trust
+ * folder is, contains or lies inside the checkout. Called before anything writes trust state or starts a service.
+ */
+export function checkWorkspaceLayout(ws: Workspace): void {
+  assertTrustOutside(ws.trustDir, ws.path);
+}
+
 function trustFolder(ws: Workspace): string {
+  checkWorkspaceLayout(ws);
   mkdirSync(ws.trustDir, { recursive: true, mode: 0o700 });
   return ws.trustDir;
 }
