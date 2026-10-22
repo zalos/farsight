@@ -50,6 +50,22 @@ error and absence of a publication; the neighbor checks successful publication. 
 Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
 reviewed separately against the native CI evidence.
 
+## Spring PR149 integration rebase — 2026-10-22
+
+Branch `codex/sentinel-spring-integration` is rebased onto fetched main `5196dc70`, including the independently
+approved balanced generic correction `a951674b` (rebased runtime head `1eb1f22e`). Every Spring implementation,
+fixture and framework catalog byte is identical to that reviewed head. Conflict resolution retained main's Pattern
+ADR, adapter, rule assets, packaging hook and installed asset verification alongside the Spring export and fixture.
+Main's Pattern implementation and asset-hook bytes were checked unchanged; no OSV changes were present at this base.
+
+Affected dependency build and typecheck, catalog lint and the exact existing PR title lint passed. Nine focused
+Spring generic/inherited cases and ten package-boundary cases passed with no skips. A fresh npm-only consumer
+validated nine typed exports, 19 contract types and schemas, 53 contract fixtures, cross-process store reopen,
+17 Pattern pack files, and actual installed Spring capture/parse/analysis returning open, protected and unknown.
+The existing broad suites were not repeated for this byte-preserving rebase. No primary build, graph refresh,
+application execution, container invocation, push or merge occurred. Public Spring command integration and the
+end-of-plan Java sample runtime gates remain open. The integrating lead owns review, push and merge.
+
 ## Spring generic superclass shadow correction — 2026-10-22
 
 Branch `codex/sentinel-spring-generic-fix` follows reviewed Spring head `ff13168c`. Its type index now erases each
