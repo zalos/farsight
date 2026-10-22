@@ -60,11 +60,24 @@ by assigning the built application to UID 65534. It did not justify weakening re
 
 ## Final integrated measurement
 
-The final integrated acquisition and confirming runtime measurement are pending. Earlier outputs below are
-historical and do not stand in for the hardened runner. The decision manifest remains proposed for owner
-acceptance before PR02.
+The lead ran explicit acquisition and then offline execution at clean committed revision
+`74eec663d4e32311dd919deb7d78e95504e81ab9`, after independent label and integrated-source review. All four
+cases measured successfully: 11 scenarios and all 14 fixed status fields agreed. Every one of the 14 owned
+containers (five acquisition dependency readers, five runtime dependency readers and four app probes) passed
+pre/post isolation and completion checks and was verified removed. No dependency acquisition occurred during
+`--run`. The host used Node 24.19.0 on macOS ARM64 and Docker Engine 29.2.1 with Linux ARM64 containers.
 
-The fixed expectations to be checked are:
+[Final acquisition](evidence/2026-10-22-decisions/framework-acquisition-final.json) SHA-256:
+`9966a8c62af6ee8399e78adcdd8191702cbc4c7cedcfdb885cf01150f9797f2a`.
+[Final runtime](evidence/2026-10-22-decisions/framework-run-final.json) SHA-256:
+`e57bfd5a49c4feaae3f044a40da39c4c2c04a00709759e3ae15075a031d1d1ac`.
+[The input archive](evidence/2026-10-22-decisions/framework-acquisition-files.tgz) retains all 32 exact source,
+generated and dependency-evidence files with a manifest. The four final acquisition tags were then removed
+without force and each image ID was independently confirmed absent; [disposal evidence](evidence/2026-10-22-decisions/framework-disposal-final.json)
+retains those checks. Earlier acquisition images are separate historical resources, not reported as removed.
+The decision manifest remains proposed for owner acceptance before PR02.
+
+Every observed result matched the following fixed expectation:
 
 | Case | Scenario | Static label | Expected status |
 |---|---|---|---|

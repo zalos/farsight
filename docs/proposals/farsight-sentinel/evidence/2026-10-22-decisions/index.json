@@ -1,6 +1,6 @@
 {
   "format": "sentinel-feasibility-evidence-index/draft-1",
-  "scope": "Original synthetic experiment evidence. Historical records remain unchanged and are not substituted for final measurements. Framework evidence is pending final integration.",
+  "scope": "Original synthetic experiment evidence. Historical records remain unchanged and do not replace the final measurements. Owner acceptance remains pending.",
   "records": [
     {
       "path": "engine-initial.json",
@@ -91,6 +91,30 @@
       "bytes": 231440,
       "sha256": "ebc637bf2cd7c43b2514b7dd582214294b041f0893cbfede2f6df100686a12c5",
       "note": "Corpus corrected at 0cb1a3c; dependencies acquired but no run was executed. Predates final SOL acquisition/lifecycle hardening."
+    },
+    {
+      "path": "framework-acquisition-final.json",
+      "bytes": 345715,
+      "sha256": "9966a8c62af6ee8399e78adcdd8191702cbc4c7cedcfdb885cf01150f9797f2a",
+      "note": "Final explicit acquisition at 74eec663d4e32311dd919deb7d78e95504e81ab9; all four acquired, five dependency readers removed, exact resolved bytes retained."
+    },
+    {
+      "path": "framework-run-final.json",
+      "bytes": 469343,
+      "sha256": "e57bfd5a49c4feaae3f044a40da39c4c2c04a00709759e3ae15075a031d1d1ac",
+      "note": "Final offline run at 74eec663d4e32311dd919deb7d78e95504e81ab9; all four measured, eleven scenarios/fourteen expected statuses agree, nine runtime dependency/app containers removed."
+    },
+    {
+      "path": "framework-acquisition-files.tgz",
+      "bytes": 37070,
+      "sha256": "2ec8042f42e24be4f810a5da70f1f207fdfe27190aacc02da2c9007aac0086af",
+      "note": "Exact32retained acquisition files:19originalsources,8generated Dockerfiles/drivers,5resolved lock/tree/POM evidence files. No installed dependencies or binaries."
+    },
+    {
+      "path": "framework-disposal-final.json",
+      "bytes": 25044,
+      "sha256": "4b157e6f9955b897735ff63c14e7cdd1a826eb35deae063f718d687e46cbd99c",
+      "note": "Exact final acquisition tags removed without force; independent image-ID verification records each resulting image state. Unrelated image tags preserved."
     }
   ]
 }

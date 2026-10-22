@@ -113,8 +113,52 @@
     ]
   },
   "frameworks": {
-    "state": "review-in-progress",
-    "record": "framework-feasibility.md"
+    "state": "qualified-only-for-reviewed-synthetic-scenarios",
+    "record": "framework-feasibility.md",
+    "candidates": {
+      "express": "4.21.2",
+      "nest": "10.4.15",
+      "classValidator": "0.14.1",
+      "classTransformer": "0.5.1",
+      "next": "14.2.25",
+      "react": "18.3.1",
+      "reactDom": "18.3.1",
+      "springBoot": "3.4.3",
+      "springSecurityCore": "6.4.3"
+    },
+    "scenarios": 11,
+    "fixedHttpStatusExpectations": 14,
+    "independentLabelReview": {
+      "state": "reviewed-before-final-trial",
+      "indexSha256": "3fd763363d2f1168b9fe61e1c651ed522a286cc8fae6ca086bcf5bccf86aac36",
+      "record": "feasibility-acceptance.md"
+    },
+    "measurementRevision": "74eec663d4e32311dd919deb7d78e95504e81ab9",
+    "images": [
+      {
+        "caseId": "express-order",
+        "id": "sha256:d0b77c85c43aa0b0366f9b48e70946f18778d93eb8195af1b8e1f3e181262d5d"
+      },
+      {
+        "caseId": "nest-validation",
+        "id": "sha256:286f531dd0f261b10a16785eedf577e15380393e89099f739173a7d615c00a83"
+      },
+      {
+        "caseId": "next-matcher",
+        "id": "sha256:5844649ea7d3b80d32727532e0479bd0725c4f1d140a4c63e66db522321a33a1"
+      },
+      {
+        "caseId": "spring-chains",
+        "id": "sha256:ca899d0589980258d8893726604fe4b93213ba0519dfaca35c2866d32835f9b9"
+      }
+    ],
+    "acquisitionEvidence": "evidence/2026-10-22-decisions/framework-acquisition-final.json",
+    "runtimeEvidence": "evidence/2026-10-22-decisions/framework-run-final.json",
+    "limitations": [
+      "One configured run per scenario; no flake-rate or general framework conformance claim.",
+      "Static unknown-enforcement remains unknown; HTTP status alone establishes neither vulnerability nor all-filter execution.",
+      "Production source-analysis packs and their supported-version matrices remain PR14-17."
+    ]
   },
   "deferredGates": [
     {

@@ -5,6 +5,30 @@ It evaluates the remaining early feasibility choices before the optional product
 The original records in [feasibility results](feasibility-results.md) remain historical evidence.
 No production Sentinel contract, framework pack, scanner adapter or UI is introduced here.
 
+## Proposed decisions and completion boundary
+
+The [machine-readable decision draft](feasibility-decisions.json) is ready for owner acceptance. The lead
+verified the final evidence and addressed Claude/SOL review findings. This completes the measured proposal;
+PR01 acceptance and PR02 dispatch remain separate until the owner accepts or revises its scoped matrix and
+resource defaults. The owner's container-only/no-host-fallback decision remains binding.
+
+| Capability | Proposed disposition | Evidence boundary |
+|---|---|---|
+| Pattern default | Semgrep 1.181.0 | Three direct positives and nine safe symbols under two original rules; equal cases to Opengrep, with noexec temporary storage |
+| Local taint | Qualified only for six original direct/local positives | Both candidates find six; no general application accuracy claim |
+| Cross-file/deep | Reject the evaluated profiles | Neither finds the three cross-file positives or supplies qualifying boundary-crossing traces |
+| Framework ordering/matching | Accept bounded prototype evidence | Four original apps, 11 scenarios, 14 fixed HTTP expectations; production packs remain deferred |
+| Runtime | Propose the measured macOS ARM64/Docker Desktop combination | Other hosts, backends and architectures unmeasured |
+| Storage/resources | Propose gzip6/raw and the explicit bounded quotas/retention in the manifest | 54 synthetic codec trials; quotas are policy ceilings, not measured capacity guarantees |
+| Advisory DB, crash recovery, models, incremental equivalence | Defer to named later gates | Synthetic absence and normal cleanup are not substitute implementation evidence |
+
+Validation on the integrated changes: all 153 script tests pass. Product build/type checks, graph schema,
+1,615 package tests (two opt-in live skips), catalog lint, Echo package smoke, 345 browser/MCP tests and 11
+small performance checks passed earlier in this branch before the final experiment-only changes. No product
+source changed afterward; the PR's required CI checks validate the submitted revision. Original review files
+and earlier evidence remain byte-identical. Actual experiments ran from committed input revisions identified
+in [the evidence index](evidence/2026-10-22-decisions/index.json), with final owned-container cleanup verified.
+
 ## Definition of done
 
 - Original engine labels and inclusive spans are independently reviewed before trials; candidates use the
