@@ -424,6 +424,41 @@ test('a pause asked for before run() holds that run; the next run() resumes it',
   } finally { store.close(); }
 });
 
+test('a pause asked for right after run() starts holds the run, and the next run() resumes it', async () => {
+  const s = fresh('pause-race');
+  const store = await storeIn(s.root);
+  try {
+    const { plan, registry } = syntheticPlan(s.root);
+    const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work });
+    // The review's sequence: the pause arrives while run() is still in its set-up awaits.
+    const running = c.run();
+    c.pause();
+    const paused = await running;
+    assert.equal(paused.state, 'paused');
+    assert.equal(paused.published, 0, 'nothing was admitted');
+    assert.equal(store.ledger.getRun('run-e4')!.state, 'paused');
+    // The pause was honoured, so it is cleared: the next run() resumes to completion, each output once.
+    const resumed = await c.run();
+    assert.equal(resumed.state, 'completed');
+    assert.equal(resumed.published, 4);
+    assert.ok([...publications(store, 'run-e4').values()].every(n => n === 1));
+  } finally { store.close(); }
+});
+
+test('a run() while a drive is active returns that drive; it never starts a second one', async () => {
+  const s = fresh('run-twice');
+  const store = await storeIn(s.root);
+  try {
+    const { plan, registry } = syntheticPlan(s.root);
+    const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work });
+    const first = c.run();
+    assert.equal(c.run(), first);
+    const done = await first;
+    assert.equal(done.published, 4);
+    assert.ok([...publications(store, 'run-e4').values()].every(n => n === 1), 'each output accepted once');
+  } finally { store.close(); }
+});
+
 test('the retry policy, capacity and plan are copied at open; changing the caller\'s objects later changes nothing', async () => {
   const s = fresh('frozen-config');
   const store = await storeIn(s.root);
