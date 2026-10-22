@@ -52,3 +52,64 @@ benchmarks remain unacquired for this bounded run: no acquisition or fixture dep
 is needed for the original micro-corpus. Tool/rule installation and redistribution terms remain a
 lead decision; this experiment makes no legal approval claim. Candidate choice must remain scoped
 to measured pattern-location behavior, with unsupported flow and input gaps reported alongside it.
+
+## Observed result and scoped recommendation
+
+The final explicit run used clean probe revision `5ae10228761a46379a82a59c0751014db7f5f0f3`.
+The corpus index SHA-256 was
+`90b38d88da136cc9d3f9fbab11fba1da4d84ffa2c958359a984c2f5b10e738bf`.
+The retained `results.json` is 551,588 bytes, SHA-256
+`4374398798f306fabe03d4478bcffac6424c5867eafa498a1d74c8f3360061e6`.
+It retains bounded scrubbed stdout/stderr, their hashes, exact argument arrays, pinned images,
+container inspections, rule/input identities, labels, thresholds and timestamps. All 14 trial
+controls passed; all 14 materialized source/rule hashes and the copied binary stayed unchanged;
+all 14 exact owned containers were removed. Candidate version commands matched Semgrep 1.181.0
+and Opengrep 1.31.0. This was native ARM64 Docker; it establishes no other host/runtime matrix.
+
+| Actual result on the same original inputs | Semgrep 1.181.0 | Opengrep 1.31.0 |
+|---|---:|---:|
+| Pattern: direct positive symbols hit | 3 / 3 | 3 / 3 |
+| Pattern: local positive symbols hit | 0 / 3 | 0 / 3 |
+| Pattern: cross-file positive symbols hit | 0 / 3 | 0 / 3 |
+| Pattern: safe sibling symbols hit | 0 / 9 | 0 / 9 |
+| Taint: direct positive symbols hit | 3 / 3 | 3 / 3 |
+| Taint: local positive symbols hit | 3 / 3 | 3 / 3 |
+| Taint: cross-file positive symbols hit | 0 / 3 | 0 / 3 |
+| Taint: safe sibling symbols hit | 0 / 9 | 0 / 9 |
+| Valid input paths reported scanned, each ruleset | 9 / 9 | 9 / 9 |
+| Valid-input diagnostics / unattributed findings, each ruleset | 0 / 0 | 0 / 0 |
+
+Both candidates meet the proposed direct-pattern and local-taint criteria on this micro-corpus.
+Neither qualifies for cross-file/deep capability: neither found any of the three cross-file
+positives or emitted a qualifying source-to-sink trace across those file boundaries. This is
+bounded evidence about these rules and invocations, not proof that either engine can never
+perform cross-file analysis. The experiment does not measure realistic vulnerability precision
+or recall. Constant-only concatenations and other safe SQL constructions were not tested.
+
+| Control outside the symbol denominator | Observed for both candidates |
+|---|---|
+| Partial TS with valid prefix and malformed tail | Exit 0; 1 / 1 path reported scanned; one prefix match; `PartialParsing` warning; the same file also reported skipped with `analysis_failed_parser_or_internal_error`. Partial analysis remains a gap. |
+| Rust outside the selected rule languages | Exit 0; 0 / 1 paths scanned, 1 / 1 omitted; no findings, diagnostics or skip reasons. The harness retains the silent omission. This does not claim Rust is unsupported by either engine. |
+| TS over the 4,096-byte target limit | Exit 0; 0 / 1 scanned, 1 / 1 omitted; explicit `exceeded_size_limit`; no finding. |
+| Required rule absent | Exit 7; 0 / 9 requested valid paths scanned, 9 / 9 omitted; explicit missing-rule diagnostics. This is the expected offline failure control. |
+
+The initial run is retained unchanged as a prior artifact, SHA-256
+`898b121c5aa97de388f1a2bb6957752bf8058c0c78f09f8e03ad30834a51603e`.
+It found the same capability results but its missing-rule stage incorrectly printed zero
+requested files. Commit `5ae1022` corrected that report denominator; the final run was an
+explicit fresh measurement with identical frozen corpus/rules/thresholds. There was no automatic
+scanner retry or fallback. Ten focused engine-matrix tests and the 26 existing scanner-control
+tests passed together; exact commit titles were linted. These checks require no product build.
+
+Recommend Semgrep 1.181.0 as the scoped syntax-location default for the two original pattern rules:
+both candidates produced the same bounded result, and Semgrep retained the stronger non-executable
+tmpfs control while the pinned Opengrep package required the already disclosed executable-tmpfs
+exception. This is an operational tie-breaker, not a general engine ranking. Local taint behavior
+is qualified only for the six direct/local facade cases; deep/cross-file checks stay unsupported
+for this evaluated profile. The lead/owner records acceptance and any production decision separately.
+
+For version-specific source-term references, the tagged root licenses for
+[Semgrep v1.181.0](https://github.com/semgrep/semgrep/blob/v1.181.0/LICENSE) and
+[Opengrep v1.31.0](https://github.com/opengrep/opengrep/blob/v1.31.0/LICENSE) contain LGPL 2.1 text.
+Those references alone do not establish terms for every bundled component, image, hosted service
+or future redistribution. This experiment makes no legal approval or redistribution decision.
