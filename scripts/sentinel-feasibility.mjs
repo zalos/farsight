@@ -10,6 +10,22 @@ const REPO=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 export const EXPERIMENTS=Object.freeze(Array.from({length:8},(_,i)=>`E${i+1}`));
 const PROBES=Object.freeze({E1:{name:'parser',module:'./sentinel-feasibility/parser.mjs',entry:'runParserProbe'},E4:{name:'storage',module:'./sentinel-feasibility/storage.mjs',entry:'runStorageProbe'},E8:{name:'codec',module:'./sentinel-feasibility/codec.mjs',entry:'runCodecProbe'}});
 const PINS={'@farsight/graph':'0.3.1','@farsight/code-parser':'0.3.1','oxc-parser':'0.138.0','@vscode/tree-sitter-wasm':'0.3.1'};
+// Keep failures useful without retaining stacks, local paths or credential payloads.
+export function formatProbeFailure(error) {
+  const scrub=value=> {
+    if(typeof value!=='string') return null;
+    // Bound work as well as output. Redact whole home-path tails, including spaces.
+    return value.slice(0,8192)
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)/g,'')
+      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g,'')
+      .replace(/(?:\/Users\/|\/home\/|[A-Za-z]:[\\/]Users[\\/])[^\r\n]*/gi,'[home path redacted]')
+      .replace(/\bBearer\s+[^\s,;]+/gi,'Bearer [redacted]')
+      .replace(/\b(?:password|passwd|token|secret|api[_-]?key|authorization)\b["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)/gi,'[credential redacted]')
+      .replace(/https?:\/\/[^\s/@]+:[^\s/@]+@/gi,'https://[credentials redacted]@')
+      .replace(/[\x00-\x1f\x7f-\x9f]/g,' ').slice(0,512);
+  };
+  return {name:scrub(error?.name)??'Error',code:scrub(error?.code),message:scrub(error?.message)??'Probe threw a non-error value'};
+}
 export function validateManifest(value) {
   if (value?.format!=='sentinel-feasibility-manifest/draft-1') throw new Error('Wrong manifest format');
   inside(REPO,value.fixtureRoot);
@@ -140,7 +156,7 @@ export async function runHarness(options,{repoRoot=REPO}={}) {
           const builtin=PROBES[experiment.id],module=await import(builtin.module);
           result=await validateProbeResult(await module[builtin.entry]({fixtureRoot,workDir,artifactDir}),experiment.id,artifactDir);
         }
-      } catch {result={...result,status:'failed',limitations:['Built-in probe failed or returned invalid evidence; inspect retained stage artifacts.']};}
+      } catch (error) {result={...result,status:'failed',failure:formatProbeFailure(error),limitations:['Built-in probe failed or returned invalid evidence; inspect retained stage artifacts.']};}
     }
     await fs.mkdir(resolve(out,experiment.id),{recursive:true});
     await fs.writeFile(resolve(out,experiment.id,'result.json'),JSON.stringify(result,null,2)+'\n',{flag:'wx'});

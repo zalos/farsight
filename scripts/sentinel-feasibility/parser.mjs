@@ -136,6 +136,12 @@ export function reconcileInputs(rows, analysis) {
     return {...input,expected,matched:expected!==null && input.digest===expected};
   });
 }
+// Observes parser selection only; neither omission nor parser completion establishes security coverage.
+export function notAnalyzedCheck(id, path, analysis) {
+  const actual=analysis.files.find(file=>file.path===path)??null;
+  const diagnostics=analysis.diagnostics.filter(row=>row.path===path);
+  return {id:`${id}:not-analyzed:${path}`,passed:actual?.status!=='analyzed',evidence:{path,actual,reporting:actual?(actual.status==='analyzed'?'reported-analyzed':'reported-not-analyzed'):'not-reported',diagnostics,diagnosticPresence:diagnostics.length?'present':'absent',securityCoverage:'not-established',coverageDisposition:'unknown-gap'}};
+}
 export async function runParserProbe({fixtureRoot,workDir,artifactDir}) {
   const artifacts=[], checks=[], measurements=[];
   const save=async(name,value)=> { const body=JSON.stringify(value,null,2)+'\n'; await fs.writeFile(resolve(artifactDir,name),body,{flag:'wx'}); artifacts.push({path:name,sha256:sha256(body),bytes:Buffer.byteLength(body)}); };
@@ -159,7 +165,7 @@ export async function runParserProbe({fixtureRoot,workDir,artifactDir}) {
     checks.push({id:`${item.id}:source-unchanged`,passed:canonical(before)===canonical(after),evidence:{before:sha256(canonical(before)),after:sha256(canonical(after))}});
     checks.push({id:`${item.id}:input-digests`,passed:reconciliation.every(row=>row.matched),evidence:{checked:reconciliation.length,mismatches:reconciliation.filter(row=>!row.matched)}});
     for (const path of item.expected?.parserCandidates??[]) checks.push({id:`${item.id}:candidate:${path}`,passed:reported.has(path),evidence:{path,actual:reported.get(path)??null}});
-    for (const path of item.expected?.parserExcluded??[]) checks.push({id:`${item.id}:excluded:${path}`,passed:!reported.has(path)||reported.get(path).status!=='analyzed',evidence:{path,actual:reported.get(path)??null}});
+    for (const path of item.expected?.parserExcluded??[]) checks.push(notAnalyzedCheck(item.id,path,artifact.analysis));
     for(const file of [...item.files,...(item.generated??[])]) {
       if(file.inventory==='malformed') checks.push({id:`${item.id}:malformed:${file.path}`,passed:!artifact.analysis.complete&&artifact.analysis.diagnostics.some(row=>row.code==='parse-error'&&row.path===file.path),evidence:{file:reported.get(file.path),diagnostics:artifact.analysis.diagnostics.filter(row=>row.path===file.path)}});
       if(file.inventory==='unsupported') checks.push({id:`${item.id}:unsupported:${file.path}`,passed:reported.get(file.path)?.status!=='analyzed',evidence:{inventory:'unsupported',parser:reported.get(file.path)??null}});

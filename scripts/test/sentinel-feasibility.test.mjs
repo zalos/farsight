@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { EXPERIMENTS, parseArgs, validateManifest, validateProbeResult, runHarness, runHasFailures } from '../sentinel-feasibility.mjs';
+import { formatProbeFailure, EXPERIMENTS, parseArgs, validateManifest, validateProbeResult, runHarness, runHasFailures } from '../sentinel-feasibility.mjs';
 import { sha256 } from '../sentinel-feasibility/parser.mjs';
 
 function manifest() {return {format:'sentinel-feasibility-manifest/draft-1',fixtureRoot:'fixtures',candidates:[['@farsight/graph','0.3.1'],['@farsight/code-parser','0.3.1'],['oxc-parser','0.138.0'],['@vscode/tree-sitter-wasm','0.3.1']].map(([id,version])=>({id,version})),effects:{network:false,sourceExecution:false,providerDisclosure:false,acquisition:false},prerequisites:[],experiments:EXPERIMENTS.map(id=>({id,probe:({E1:'parser',E4:'storage',E8:'codec'})[id]??null,decision:'deferred',reason:'Test only',prerequisites:[]}))};}
@@ -101,4 +101,34 @@ test('output comparison rejects fixture equality, child names and aliased ancest
   assert.equal(result.experiments.find(row=>row.experiment==='E2').status,'blocked');
   assert.equal(JSON.parse(await fs.readFile(resolve(out,'results.json'))).format,'sentinel-feasibility-results/draft-1');
   assert.deepEqual(await fs.readdir(fixtures),before);
+});
+
+test('probe failures retain bounded scrubbed name, code and message without stacks',()=>{
+  const error=Object.assign(new Error('module failed'),{code:'ERR_MODULE_NOT_FOUND'});
+  assert.deepEqual(formatProbeFailure(error),{name:'Error',code:'ERR_MODULE_NOT_FOUND',message:'module failed'});
+  for(const message of [
+    '/Users/private person/work/file.js secret', '/home/private/work/file.js',
+    String.raw`C:\Users\private person\work\file.js`,
+    'Bearer abc.def.secret password=hunter2 token="private token" api_key=hidden',
+    'https://user:private@example.com/resource',
+  ]) {
+    const result=JSON.stringify(formatProbeFailure(new Error(message)));
+    for(const secret of ['private','hunter2','abc.def.secret','hidden']) assert.equal(result.includes(secret),false,result);
+  }
+  const huge=formatProbeFailure({name:'X'.repeat(10000),code:'Y'.repeat(10000),message:'\x1b[31mvalidation\x00 failed\n'+'z'.repeat(1000000)});
+  assert.ok(Object.values(huge).every(value=>value.length<=512));
+  assert.equal(/[\x00-\x1f\x7f-\x9f]/.test(huge.message),false);assert.match(huge.message,/validation/);
+});
+test('a real storage IO failure retains scrubbed details and fails the run',async t=>{
+  const root=await scratch(t),fixtures=resolve(root,'fixtures');await fs.mkdir(fixtures);
+  await fs.writeFile(resolve(fixtures,'cases.json'),JSON.stringify({schemaVersion:'sentinel-feasibility-corpus-v1',cases:[{id:'one',gates:['E4'],files:[],gatesNote:'inert'}]}));
+  const path=resolve(root,'manifest.json');await fs.writeFile(path,JSON.stringify(manifest()));
+  // Exercise the catch through actual ENOENT during retained-artifact validation.
+  const lstat=fs.lstat;
+  t.mock.method(fs,'lstat',async(path,...args)=>String(path).includes('/E4/artifacts/')
+    ?lstat.call(fs,resolve(root,'missing-artifact'),...args):lstat.call(fs,path,...args));
+  const result=await runHarness({manifest:path,run:true,experiments:['E4'],out:resolve(root,'out')},{repoRoot:root});
+  const failure=result.experiments.find(row=>row.experiment==='E4');
+  assert.equal(failure.status,'failed');assert.equal(runHasFailures(result),true);
+  assert.equal(failure.failure.code,'ENOENT');assert.match(failure.failure.message,/ENOENT/);assert.equal('stack' in failure.failure,false);
 });

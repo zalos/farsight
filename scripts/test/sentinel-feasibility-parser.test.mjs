@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inventory, loadCorpus, reconcileInputs, runParserProbe, sha256, CORPUS_LIMITS } from '../sentinel-feasibility/parser.mjs';
+import { notAnalyzedCheck, inventory, loadCorpus, reconcileInputs, runParserProbe, sha256, CORPUS_LIMITS } from '../sentinel-feasibility/parser.mjs';
 const REPO=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 async function scratch(t) {const root=await fs.mkdtemp(resolve(tmpdir(),'sentinel-parser-test-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));return root;}
 test('independent inventory never follows symbolic links and hashes hidden files',async t=>{
@@ -32,6 +32,13 @@ test('actual public TS and Java probe retains independent inventories and negati
   for(const id of ['ignored-complete-trap','gitignore-change','symlink-refused','oversize-not-clean','missing-recorded']) assert.equal(result.checks.find(row=>row.id===id)?.passed,true,id);
   assert.ok(result.metrics.cases.some(row=>row.id==='java-injection-pair'));
   assert.ok(result.metrics.cases.some(row=>row.complete&&row.omittedFiles.length));
+  const silent=result.checks.find(row=>row.id.includes(':not-analyzed:')&&row.evidence.reporting==='not-reported'&&row.evidence.diagnosticPresence==='absent');
+  assert.ok(silent,'real ignored/config omitted file has no diagnostic');
+  assert.equal(silent.evidence.coverageDisposition,'unknown-gap');assert.equal(silent.evidence.securityCoverage,'not-established');
+  const retained=JSON.parse(await fs.readFile(resolve(root,'artifacts',silent.id.split(':')[0]+'.json')));
+  assert.ok(retained.selection.some(row=>row.path===silent.evidence.path&&row.parser===null));
+  assert.equal(retained.artifact.analysis.diagnostics.some(row=>row.path===silent.evidence.path),false);
+
   for(const row of result.artifacts) {const bytes=await fs.readFile(resolve(root,'artifacts',row.path));assert.equal(sha256(bytes),row.sha256);assert.equal(bytes.length,row.bytes);}
   assert.ok(result.checks.filter(row=>row.id.endsWith(':source-unchanged')).every(row=>row.passed));
   assert.ok(result.checks.filter(row=>row.id.endsWith(':input-digests')).every(row=>row.passed));
@@ -88,4 +95,15 @@ test('independent inventory rejects an excessive real directory entry count',asy
   const root=await scratch(t);
   for(let i=0;i<CORPUS_LIMITS.entries+1;i+=128) await Promise.all(Array.from({length:Math.min(128,CORPUS_LIMITS.entries+1-i)},(_,j)=>fs.writeFile(resolve(root,`entry${i+j}`),'')));
   await assert.rejects(inventory(root),/inventory entry limit/);
+});
+
+test('not-analyzed observes omissions and diagnostics without claiming scan coverage',()=>{
+  const analysis={files:[{path:'ok.ts',status:'analyzed'},{path:'bad.ts',status:'failed'}],diagnostics:[{path:'bad.ts',code:'parse-error'}]};
+  const omitted=notAnalyzedCheck('case','silent.ts',analysis);
+  assert.equal(omitted.passed,true);assert.equal(omitted.evidence.reporting,'not-reported');
+  assert.equal(omitted.evidence.diagnosticPresence,'absent');assert.deepEqual(omitted.evidence.diagnostics,[]);
+  assert.equal(omitted.evidence.securityCoverage,'not-established');assert.equal(omitted.evidence.coverageDisposition,'unknown-gap');
+  assert.equal(notAnalyzedCheck('case','ok.ts',analysis).passed,false);
+  const failed=notAnalyzedCheck('case','bad.ts',analysis);
+  assert.equal(failed.evidence.reporting,'reported-not-analyzed');assert.equal(failed.evidence.diagnosticPresence,'present');
 });
