@@ -1,0 +1,337 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/SettingsEnvelope",
+  "definitions": {
+    "SettingsEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-settings/draft-1"
+        },
+        "mandatoryRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleFamilyId"
+          },
+          "maxItems": 1024
+        },
+        "thresholds": {
+          "$ref": "#/definitions/PolicyThresholds"
+        },
+        "grants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SentinelGrant"
+          },
+          "maxItems": 64
+        },
+        "agentActions": {
+          "type": "string",
+          "enum": [
+            "confirm",
+            "allow"
+          ],
+          "description": "`confirm` (the default for untrusted settings): an agent's allowed action still waits for a person."
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ProviderSettings"
+          },
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "schema",
+        "mandatoryRules",
+        "thresholds",
+        "grants",
+        "agentActions",
+        "providers"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-settings/draft-1 — `.farsight/sentinel/settings.json`. Its place in a checkout does not make it trusted: only an owner adoption of these exact bytes for this workspace does."
+    },
+    "RuleFamilyId": {
+      "type": "string",
+      "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
+      "maxLength": 128
+    },
+    "PolicyThresholds": {
+      "type": "object",
+      "properties": {
+        "failOnSeverity": {
+          "$ref": "#/definitions/Severity",
+          "description": "Findings at or above this severity fail the policy. Lower is stricter."
+        },
+        "requireCompleteCoverage": {
+          "type": "boolean",
+          "description": "Required checks that do not complete fail the policy with exit 2."
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleCapability"
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "failOnSeverity",
+        "requireCompleteCoverage",
+        "requiredCapabilities"
+      ],
+      "additionalProperties": false
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "The severity a rule assigns. Ordered: info < low < medium < high < critical."
+    },
+    "RuleCapability": {
+      "type": "string",
+      "enum": [
+        "source-bytes",
+        "pattern-match",
+        "source-span",
+        "call-occurrence",
+        "resolved-receiver-type",
+        "framework-order",
+        "interprocedural-flow",
+        "runtime-observation",
+        "dependency-manifest",
+        "advisory-database"
+      ],
+      "description": "A property a stage must establish before the rule can be checked. A profile that lacks one leaves the check unsupported; nothing weaker runs under the rule's identity."
+    },
+    "SentinelGrant": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SentinelAction"
+          },
+          "minItems": 1,
+          "maxItems": 9
+        },
+        "principals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Principal"
+          },
+          "maxItems": 2
+        },
+        "confirm": {
+          "type": "string",
+          "enum": [
+            "always",
+            "agent",
+            "never"
+          ]
+        },
+        "scope": {
+          "type": "object",
+          "properties": {
+            "profiles": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "maxItems": 32
+            },
+            "providers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Id"
+              },
+              "maxItems": 32
+            },
+            "effects": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ActionEffect"
+              },
+              "maxItems": 5
+            }
+          },
+          "additionalProperties": false,
+          "description": "Narrows the grant: profiles and providers it covers, effects it permits. Absent means not narrowed."
+        }
+      },
+      "required": [
+        "actions"
+      ],
+      "additionalProperties": false,
+      "description": "A grant over Sentinel actions, read by core's shared matcher (`decideGrants`)."
+    },
+    "SentinelAction": {
+      "type": "string",
+      "enum": [
+        "run.start",
+        "capture.source",
+        "disposition.propose",
+        "disposition.approve",
+        "rule.promote",
+        "tool.acquire",
+        "paid.admit",
+        "disclosure.send",
+        "settings.adopt"
+      ],
+      "description": "Every action the Sentinel gate decides."
+    },
+    "Principal": {
+      "type": "string",
+      "enum": [
+        "human",
+        "agent"
+      ],
+      "description": "Who asks. A claimed name grants nothing; the channel the request arrived on is what is recorded."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "ActionEffect": {
+      "type": "string",
+      "enum": [
+        "local-artifacts",
+        "source-disclosure",
+        "paid-inference",
+        "network",
+        "tool-execution"
+      ],
+      "description": "What an admitted action may do beyond reading captured artifacts."
+    },
+    "ProviderSettings": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ollama",
+            "openai-compatible"
+          ]
+        },
+        "endpoint": {
+          "$ref": "#/definitions/EndpointOrigin"
+        },
+        "credential": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/KeychainRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disclosure": {
+          "type": "string",
+          "enum": [
+            "local-only",
+            "hosted"
+          ],
+          "description": "`local-only` keeps source on this machine; `hosted` sends permitted context off it."
+        },
+        "budget": {
+          "$ref": "#/definitions/Budget",
+          "description": "The most one admitted action may reserve."
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "endpoint",
+        "credential",
+        "disclosure",
+        "budget"
+      ],
+      "additionalProperties": false
+    },
+    "EndpointOrigin": {
+      "type": "string",
+      "description": "A provider endpoint origin: scheme, host and optional port, no path, query or credentials.",
+      "pattern": "^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$",
+      "maxLength": 300
+    },
+    "KeychainRef": {
+      "type": "string",
+      "description": "An OS-keychain reference. Settings hold references only, never secret values or environment names.",
+      "pattern": "^keychain:farsight/[a-z0-9][a-z0-9-]{0,62}$"
+    },
+    "Budget": {
+      "type": "object",
+      "properties": {
+        "maxTokens": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxCost": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DecimalAmount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CurrencyCode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "maxTokens",
+        "maxCost",
+        "currency"
+      ],
+      "additionalProperties": false,
+      "description": "A spending bound. A paid action needs both a token and a cost bound."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "DecimalAmount": {
+      "type": "string",
+      "description": "A non-negative decimal amount written as a string, so money is never a binary float.",
+      "pattern": "^(0|[1-9][0-9]{0,15})(\\.[0-9]{1,9})?$"
+    },
+    "CurrencyCode": {
+      "type": "string",
+      "description": "An ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$"
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-settings.draft-1.schema.json",
+  "title": "sentinel-settings/draft-1"
+}

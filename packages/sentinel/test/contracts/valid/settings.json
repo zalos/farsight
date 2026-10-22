@@ -1,0 +1,8 @@
+{
+  "schema": "sentinel-settings/draft-1",
+  "mandatoryRules": ["sentinel.sql.dynamic-query"],
+  "thresholds": { "failOnSeverity": "high", "requireCompleteCoverage": true, "requiredCapabilities": [] },
+  "grants": [{ "actions": ["run.start"], "principals": ["human", "agent"], "scope": { "profiles": ["static"] } }],
+  "agentActions": "allow",
+  "providers": []
+}

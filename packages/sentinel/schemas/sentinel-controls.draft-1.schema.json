@@ -1,0 +1,289 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/ControlFactsEnvelope",
+  "definitions": {
+    "ControlFactsEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-controls/draft-1"
+        },
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "framework": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/FrameworkId"
+            },
+            "version": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/ShortText"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "additionalProperties": false
+        },
+        "packDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "environmentDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "registrationDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "capability": {
+          "type": "string",
+          "const": "framework-order",
+          "description": "The capability these facts provide to checks that require it."
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ControlFact"
+          },
+          "maxItems": 100000
+        },
+        "frontiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScopedReason"
+          },
+          "description": "Registrations the pack met and could not follow (a dynamic mount, a runtime factory).",
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "schema",
+        "snapshotId",
+        "framework",
+        "packDigest",
+        "environmentDigest",
+        "registrationDigest",
+        "capability",
+        "facts",
+        "frontiers"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-controls/draft-1 — one framework pack's control facts for one snapshot and environment. Keyed by the resolved framework version, the environment, the registration/configuration bytes and the pack digest; a change to any of them invalidates the facts."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "FrameworkId": {
+      "type": "string",
+      "enum": [
+        "next",
+        "express",
+        "nest",
+        "spring"
+      ],
+      "description": "Frameworks with planned control-fact packs (PRs 14–17)."
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ControlFact": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Id"
+        },
+        "property": {
+          "$ref": "#/definitions/ControlProperty"
+        },
+        "surfaceId": {
+          "$ref": "#/definitions/NodeId",
+          "description": "The route, handler or page the fact is about."
+        },
+        "order": {
+          "$ref": "#/definitions/Count",
+          "description": "Zero-based position of the control in the chain the framework evaluates for this surface."
+        },
+        "verdict": {
+          "$ref": "#/definitions/ControlVerdict"
+        },
+        "controlId": {
+          "$ref": "#/definitions/NodeId",
+          "description": "The control's own graph identity, when it has one."
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SourceEvidence"
+          },
+          "description": "Required for `applies` and `does-not-apply`: the registration, configuration or matcher bytes that establish it.",
+          "maxItems": 64
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey",
+          "description": "Required for `unknown`: why the pack could not resolve it."
+        }
+      },
+      "required": [
+        "id",
+        "property",
+        "surfaceId",
+        "order",
+        "verdict",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "ControlProperty": {
+      "type": "string",
+      "enum": [
+        "authentication",
+        "authorization",
+        "csrf",
+        "input-validation",
+        "rate-limit",
+        "security-headers",
+        "cors"
+      ],
+      "description": "The security property a control fact is about. There is no catch-all property."
+    },
+    "NodeId": {
+      "type": "string",
+      "description": "A canonical application-graph identity (`repo::path/to/File.tsx::Component`), a screen or a journey ID from pinned context. Unlike a ledger `Id` it may contain `/` and `::`; it is bounded and free of control characters.",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "ControlVerdict": {
+      "type": "string",
+      "enum": [
+        "applies",
+        "does-not-apply",
+        "unknown"
+      ],
+      "description": "Whether the control takes effect for the surface. `unknown` is never rounded to either side."
+    },
+    "SourceEvidence": {
+      "type": "object",
+      "properties": {
+        "snapshotId": {
+          "$ref": "#/definitions/Id"
+        },
+        "sourceId": {
+          "$ref": "#/definitions/Id"
+        },
+        "relativePath": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "content": {
+          "$ref": "#/definitions/ArtifactId"
+        },
+        "span": {
+          "$ref": "#/definitions/ByteSpan"
+        },
+        "quoteDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "nodeId": {
+          "$ref": "#/definitions/NodeId"
+        },
+        "occurrenceId": {
+          "type": "string",
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "snapshotId",
+        "sourceId",
+        "relativePath",
+        "content",
+        "span"
+      ],
+      "additionalProperties": false,
+      "description": "A citation into captured snapshot bytes. Source ID is part of identity: equal paths in two repositories differ."
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "ArtifactId": {
+      "$ref": "#/definitions/Digest",
+      "description": "An immutable object-store identity: the digest of canonical uncompressed bytes."
+    },
+    "ByteSpan": {
+      "type": "object",
+      "properties": {
+        "startByte": {
+          "$ref": "#/definitions/Count"
+        },
+        "endByte": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "startByte",
+        "endByte"
+      ],
+      "additionalProperties": false,
+      "description": "Zero-based, half-open UTF-8 byte offsets."
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "ScopedReason": {
+      "type": "object",
+      "properties": {
+        "scopeId": {
+          "$ref": "#/definitions/ScopeId"
+        },
+        "reasonCode": {
+          "$ref": "#/definitions/CatalogKey"
+        }
+      },
+      "required": [
+        "scopeId",
+        "reasonCode"
+      ],
+      "additionalProperties": false,
+      "description": "A coded reason attached to a scope (a skipped file, an unresolved frontier)."
+    },
+    "ScopeId": {
+      "type": "string",
+      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
+      "maxLength": 4300
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-controls.draft-1.schema.json",
+  "title": "sentinel-controls/draft-1"
+}

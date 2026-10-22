@@ -15,6 +15,15 @@ const ENVELOPES = {
   disposition: ['sentinel-disposition/draft-1', 'DispositionEnvelope'],
   report: ['sentinel-report/draft-1', 'ReportEnvelope'],
   protocol: ['sentinel-worker/draft-1', 'ProtocolMessage'],
+  rulepack: ['sentinel-rulepack/draft-1', 'RulePackManifest'],
+  rulelock: ['sentinel-rulelock/draft-1', 'RuleLockEnvelope'],
+  settings: ['sentinel-settings/draft-1', 'SettingsEnvelope'],
+  repoconfig: ['sentinel-repoconfig/draft-1', 'RepoConfigEnvelope'],
+  policy: ['sentinel-policy/draft-1', 'EffectivePolicyEnvelope'],
+  adoption: ['sentinel-adoption/draft-1', 'AdoptionEnvelope'],
+  receipt: ['sentinel-receipt/draft-1', 'ReceiptEnvelope'],
+  admission: ['sentinel-admission/draft-1', 'AdmissionEnvelope'],
+  controls: ['sentinel-controls/draft-1', 'ControlFactsEnvelope'],
 };
 
 const generator = createGenerator({

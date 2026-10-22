@@ -1,0 +1,48 @@
+{
+  "schema": "sentinel-policy/draft-1",
+  "settingsTrust": "adopted",
+  "settingsDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "repoConfigDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "rules": [
+    {
+      "familyId": "sentinel.sql.dynamic-query",
+      "source": "both"
+    }
+  ],
+  "thresholds": {
+    "failOnSeverity": "high",
+    "requireCompleteCoverage": true,
+    "requiredCapabilities": [
+      "source-bytes"
+    ]
+  },
+  "agentActions": "confirm",
+  "grants": [
+    {
+      "actions": [
+        "run.start"
+      ],
+      "principals": [
+        "human",
+        "agent"
+      ],
+      "confirm": "default",
+      "scoped": false
+    }
+  ],
+  "providers": [
+    {
+      "id": "local-review",
+      "kind": "ollama",
+      "disclosure": "local-only",
+      "credential": "none"
+    }
+  ],
+  "refused": [
+    {
+      "request": "weaken-threshold",
+      "subject": "failOnSeverity",
+      "reasonCode": "sentinel.policy.thresholdNotWeakened"
+    }
+  ]
+}

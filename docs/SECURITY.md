@@ -21,7 +21,7 @@ Sentinel (`packages/sentinel`, ADR 18) is optional and ships as its own `farsigh
 `farsight-cli` does not bundle, import or start it, so installing Farsight installs no scanner, container client
 or model SDK; the `sentinel-package` CI job checks the CLI bundle and a clean consumer for that. The current
 package defines draft contracts, a draft local store and a placeholder command that claims no scanning support.
-It reads no settings, credentials or source and makes no network calls.
+It reads no source, resolves no credential and makes no network calls; the policy library reads only the settings, repository intent, rule-pack files and user-state records it is pointed at (below).
 
 The store (`openStore`, ADR 19) writes only inside the folder it is given, and only after checking it: absolute and
 already canonical (no link, alias, dot segment or other letter case), every folder above it owned by the user or
@@ -33,7 +33,22 @@ else; `owner.json` only describes the holder. Records from an earlier owner's ep
 are immutable and content-addressed; a publication is accepted only after their bytes are re-read and hashed, and
 the ledger keeps schema, privacy class and links per reference, so shared bytes cannot lower a reference's class.
 Nothing is deleted automatically; the prune plan is a dry run, and never lists the provenance (manifest, invocation, outputs, diagnostics) of a retained work or attempt record. The store holds no credential and no settings, and
-durability is claimed against process death, not power loss (ADR 19). The local runtime folder
+durability is claimed against process death, not power loss (ADR 19).
+
+Trusted policy (ADR 21) reads `.farsight/sentinel/settings.json` and the repository's `sentinel.config.json` as data,
+never following a link. The settings hold keychain references only (`keychain:farsight/<name>`); a value shaped like a
+credential anywhere else is refused and not repeated in the error. The file grants nothing until the owner adopts its
+exact bytes for the canonical workspace; the adoption record and every receipt are owner-only files in user state
+outside the checkout, and a changed byte, clone, moved checkout or re-created folder loses the adoption. Repository
+files can request rules and stricter thresholds; they cannot remove a mandatory rule, weaken a threshold, approve a
+suppression or select a provider. Only a redacted effective policy (no endpoint, credential reference or raw bytes) is
+served. Admission ANDs policy, adapter capability and credential authority, asks nothing after a policy denial, and
+keeps owner actions (approvals, rule promotion, tool and database records, settings adoption) away from agents. A
+human receipt is bound to one exact action, input, effect set, budget, scope, state and policy revision, lives at
+most an hour and is spent once; no package export can issue one, so agent-facing surfaces can only ask. Rule packs
+are data: a script-shaped rule implementation, a link or an escaping path is refused, nothing in a pack is executed,
+and recording a tool digest in the lock authorizes no download or execution. As with the store, code running as the
+owner's own account is outside this boundary. The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
 providers are opt-in per run. The package smokes install from npm into temporary directories with their own npm

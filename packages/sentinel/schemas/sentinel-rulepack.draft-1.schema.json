@@ -1,0 +1,357 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/RulePackManifest",
+  "definitions": {
+    "RulePackManifest": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-rulepack/draft-1"
+        },
+        "packId": {
+          "$ref": "#/definitions/Id"
+        },
+        "version": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "rights": {
+          "$ref": "#/definitions/Rights"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleDefinition"
+          },
+          "minItems": 1,
+          "maxItems": 1024
+        }
+      },
+      "required": [
+        "schema",
+        "packId",
+        "version",
+        "rights",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-rulepack/draft-1 — `sentinel-pack.json` at a pack's root."
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "Rights": {
+      "type": "object",
+      "properties": {
+        "spdx": {
+          "$ref": "#/definitions/ShortText",
+          "description": "An SPDX license expression as published by the origin."
+        },
+        "origin": {
+          "$ref": "#/definitions/RuleOrigin"
+        },
+        "upstream": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/definitions/ShortText"
+            },
+            "revision": {
+              "$ref": "#/definitions/ShortText"
+            }
+          },
+          "required": [
+            "name",
+            "revision"
+          ],
+          "additionalProperties": false,
+          "description": "Third-party only: the upstream name and revision it was taken from."
+        },
+        "licenseFile": {
+          "$ref": "#/definitions/RelativePath",
+          "description": "A license file inside the pack, when the license requires one to travel with it."
+        }
+      },
+      "required": [
+        "spdx",
+        "origin"
+      ],
+      "additionalProperties": false,
+      "description": "Rights recorded for a pack, a tool or a database. Third-party content names where it came from."
+    },
+    "RuleOrigin": {
+      "type": "string",
+      "enum": [
+        "sentinel-original",
+        "third-party"
+      ],
+      "description": "Where a pack's content came from."
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "RuleDefinition": {
+      "type": "object",
+      "properties": {
+        "familyId": {
+          "$ref": "#/definitions/RuleFamilyId"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "titleKey": {
+          "$ref": "#/definitions/CatalogKey"
+        },
+        "applicability": {
+          "$ref": "#/definitions/RuleApplicability"
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleCapability"
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "implementation": {
+          "type": "object",
+          "properties": {
+            "adapterId": {
+              "$ref": "#/definitions/Id"
+            },
+            "rulePath": {
+              "$ref": "#/definitions/RelativePath"
+            }
+          },
+          "required": [
+            "adapterId",
+            "rulePath"
+          ],
+          "additionalProperties": false,
+          "description": "The registered adapter that reads `rulePath`. The file is data for that adapter, never a script."
+        },
+        "meaning": {
+          "$ref": "#/definitions/RuleMeaning"
+        },
+        "severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "evidenceRequired": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleEvidence"
+          },
+          "minItems": 1,
+          "maxItems": 8
+        },
+        "limitationKeys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CatalogKey"
+          },
+          "maxItems": 16
+        },
+        "mappings": {
+          "type": "object",
+          "properties": {
+            "cwe": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/CweId"
+              },
+              "maxItems": 16
+            }
+          },
+          "required": [
+            "cwe"
+          ],
+          "additionalProperties": false,
+          "description": "Versioned mappings. A mapping is never evidence that the check ran."
+        },
+        "fixtures": {
+          "type": "object",
+          "properties": {
+            "positive": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/RelativePath"
+              },
+              "minItems": 1,
+              "maxItems": 64
+            },
+            "negative": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/RelativePath"
+              },
+              "minItems": 1,
+              "maxItems": 64
+            }
+          },
+          "required": [
+            "positive",
+            "negative"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "familyId",
+        "revision",
+        "titleKey",
+        "applicability",
+        "requires",
+        "implementation",
+        "meaning",
+        "severity",
+        "evidenceRequired",
+        "limitationKeys",
+        "mappings",
+        "fixtures"
+      ],
+      "additionalProperties": false
+    },
+    "RuleFamilyId": {
+      "type": "string",
+      "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
+      "maxLength": 128
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "CatalogKey": {
+      "type": "string",
+      "description": "A stable code from the Sentinel catalog, never free text (`sentinel.reason.tooLarge`).",
+      "pattern": "^sentinel\\.[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+      "maxLength": 128
+    },
+    "RuleApplicability": {
+      "type": "object",
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleLanguage"
+          },
+          "minItems": 1,
+          "maxItems": 3
+        },
+        "scopeKind": {
+          "$ref": "#/definitions/RuleScopeKind"
+        },
+        "frameworks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/FrameworkId"
+          },
+          "description": "When present, the rule applies only where one of these frameworks resolved; unresolved stays unknown.",
+          "maxItems": 4
+        }
+      },
+      "required": [
+        "languages",
+        "scopeKind"
+      ],
+      "additionalProperties": false,
+      "description": "Bounded declarative applicability. There is no code here, and a pack cannot supply an evaluator."
+    },
+    "RuleLanguage": {
+      "type": "string",
+      "enum": [
+        "typescript",
+        "javascript",
+        "java"
+      ],
+      "description": "Languages a rule can apply to in the first release."
+    },
+    "RuleScopeKind": {
+      "type": "string",
+      "enum": [
+        "source-file",
+        "surface",
+        "dependency-manifest",
+        "ci-config",
+        "repository"
+      ],
+      "description": "What one check of the rule is about: one file, one surface (route/handler), a manifest, CI config, or the whole repository."
+    },
+    "FrameworkId": {
+      "type": "string",
+      "enum": [
+        "next",
+        "express",
+        "nest",
+        "spring"
+      ],
+      "description": "Frameworks with planned control-fact packs (PRs 14–17)."
+    },
+    "RuleCapability": {
+      "type": "string",
+      "enum": [
+        "source-bytes",
+        "pattern-match",
+        "source-span",
+        "call-occurrence",
+        "resolved-receiver-type",
+        "framework-order",
+        "interprocedural-flow",
+        "runtime-observation",
+        "dependency-manifest",
+        "advisory-database"
+      ],
+      "description": "A property a stage must establish before the rule can be checked. A profile that lacks one leaves the check unsupported; nothing weaker runs under the rule's identity."
+    },
+    "RuleMeaning": {
+      "type": "string",
+      "enum": [
+        "candidate",
+        "finding"
+      ],
+      "description": "What a result means: a candidate location to review, or a finding the rule's evidence establishes."
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "The severity a rule assigns. Ordered: info < low < medium < high < critical."
+    },
+    "RuleEvidence": {
+      "type": "string",
+      "enum": [
+        "source-span",
+        "matched-pattern",
+        "control-fact",
+        "dependency-version",
+        "advisory-id"
+      ],
+      "description": "Evidence a result of the rule must carry."
+    },
+    "CweId": {
+      "type": "string",
+      "pattern": "^CWE-[1-9][0-9]{0,4}$"
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-rulepack.draft-1.schema.json",
+  "title": "sentinel-rulepack/draft-1"
+}

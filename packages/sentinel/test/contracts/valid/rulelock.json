@@ -1,0 +1,79 @@
+{
+  "schema": "sentinel-rulelock/draft-1",
+  "revision": 2,
+  "previous": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "packs": [
+    {
+      "packId": "sentinel-core",
+      "version": "0.1.0",
+      "packDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "rights": {
+        "spdx": "MIT",
+        "origin": "sentinel-original"
+      },
+      "files": [
+        {
+          "path": "sentinel-pack.json",
+          "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "size": 812
+        },
+        {
+          "path": "detectors/dynamic-query.yml",
+          "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "size": 120
+        }
+      ],
+      "rules": [
+        {
+          "familyId": "sentinel.sql.dynamic-query",
+          "revision": 1,
+          "definitionDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+        }
+      ],
+      "promotion": {
+        "receipt": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "at": "2026-10-22T10:00:00.000000000Z"
+      }
+    }
+  ],
+  "tools": [
+    {
+      "adapterId": "pattern-engine",
+      "version": "1.2.3",
+      "artifactDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "platform": "linux-x64",
+      "rights": {
+        "spdx": "LGPL-2.1-only",
+        "origin": "third-party",
+        "upstream": {
+          "name": "engine",
+          "revision": "1.2.3"
+        }
+      },
+      "promotion": {
+        "receipt": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "at": "2026-10-22T10:00:00.000000000Z"
+      }
+    }
+  ],
+  "databases": [
+    {
+      "databaseId": "osv-snapshot",
+      "snapshotDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+      "capturedAt": "2026-10-22T10:00:00.000000000Z",
+      "rights": {
+        "spdx": "CC-BY-4.0",
+        "origin": "third-party",
+        "upstream": {
+          "name": "osv",
+          "revision": "2026-10-21"
+        }
+      },
+      "promotion": {
+        "receipt": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "at": "2026-10-22T10:00:00.000000000Z"
+      }
+    }
+  ],
+  "createdAt": "2026-10-22T10:00:00.000000000Z"
+}

@@ -1,0 +1,34 @@
+{
+  "schema": "sentinel-admission/draft-1",
+  "action": "paid.admit",
+  "intentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "requestedBy": {
+    "principal": "agent",
+    "channel": "mcp"
+  },
+  "policyRevision": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "verdicts": {
+    "policy": {
+      "allowed": false,
+      "asked": true,
+      "reasonCode": "sentinel.admission.noGrant",
+      "detail": "x"
+    },
+    "capability": {
+      "allowed": false,
+      "asked": false,
+      "reasonCode": "sentinel.admission.notAsked",
+      "detail": "x"
+    },
+    "credential": {
+      "allowed": false,
+      "asked": false,
+      "reasonCode": "sentinel.admission.notAsked",
+      "detail": "x",
+      "basis": "not-asked"
+    }
+  },
+  "outcome": "denied",
+  "receipt": null,
+  "decidedAt": "2026-10-22T10:00:00.000000000Z"
+}

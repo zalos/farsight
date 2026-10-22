@@ -1,0 +1,9 @@
+{
+  "schema": "sentinel-rulelock/draft-1",
+  "revision": 1,
+  "previous": null,
+  "packs": [],
+  "tools": [],
+  "databases": [],
+  "createdAt": "2026-10-22T10:00:00.000000000Z"
+}

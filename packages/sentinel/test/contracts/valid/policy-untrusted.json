@@ -1,0 +1,16 @@
+{
+  "schema": "sentinel-policy/draft-1",
+  "settingsTrust": "changed",
+  "settingsDigest": null,
+  "repoConfigDigest": null,
+  "rules": [],
+  "thresholds": {
+    "failOnSeverity": "medium",
+    "requireCompleteCoverage": true,
+    "requiredCapabilities": []
+  },
+  "agentActions": "confirm",
+  "grants": [],
+  "providers": [],
+  "refused": []
+}

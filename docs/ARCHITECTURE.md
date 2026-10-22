@@ -402,3 +402,43 @@ An object over 16 MiB is refused before a byte is written; splitting a large ana
 publication fails, the call aborts its own stage while the store is still held, so a retry can register it again,
 and reports the original error. Without the owner, the stage stays pinned for recovery. Parser words are
 catalog keys (`strings-sentinel-parser.ts`).
+
+21. **Sentinel's rule packs, rule lock and trusted policy are data and decisions, never pack code (2026-10-22).**
+
+`@farsight/sentinel` gains `./rules` and `./policy` exports (also re-exported from the root) and nine draft envelopes
+generated like the others: `sentinel-rulepack`, `sentinel-rulelock`, `sentinel-settings`, `sentinel-repoconfig`,
+`sentinel-policy`, `sentinel-adoption`, `sentinel-receipt`, `sentinel-admission` and `sentinel-controls`, all
+`draft-1`. **Rule packs** are read as plain files under one canonical folder (no link, device or escaping name;
+bounded file count and size), validated against their manifest, and digested: the pack digest covers the sorted
+inventory of every file, and each rule's definition digest covers its definition, rule file and fixtures. A rule
+implementation is declarative data for a registered adapter; one shaped like a script is refused, and nothing in a
+pack is imported, evaluated or spawned. **The lock** is immutable and content-addressed. Promoting a pack (`rule.promote`)
+or recording a tool or database digest (`tool.acquire`) needs the owner's spent receipt for exactly that candidate
+against exactly that lock revision, and returns a new revision naming its predecessor's digest; a plan pins a lock
+digest, so a pack update never changes an existing plan. A rule family is locked by one pack. Rights (SPDX
+expression, origin, upstream for third-party content) travel with every pack, tool and database. Recording a tool
+digest authorizes no download and no execution. **Policy:** `.farsight/sentinel/settings.json` is the owner's file
+(scrubbed twin `settings.example.json`), holding keychain references only; a credential-shaped value anywhere else
+is refused without being echoed. Its place in a checkout grants nothing: an adoption record in the owner's user
+state (`$XDG_STATE_HOME/farsight/sentinel/trust`, else the platform user-state folder, never inside the checkout)
+binds the settings digest to the canonical workspace path and folder identity, after the owner's receipt for exactly
+those bytes and that workspace. Changed bytes, a clone, a moved checkout or a re-created folder fall back to the
+built-in defaults, which grant nothing. The repository's `sentinel.config.json` requests: the effective rules are the
+mandatory rules united with the requested ones, each threshold takes the stricter side, and a request to remove a
+mandatory rule, weaken a threshold, suppress a finding or use an undefined provider is recorded as refused. Only the
+redacted effective policy (no endpoint, keychain reference or raw byte) is served. **Admission** records three ANDed
+verdicts: policy (core's shared `decideGrants`, ADR 20, plus owner-action, provider and budget bounds), the adapter's
+capability, and credential authority (a checked keychain scope, or an explicit local-only reason; unknown denies).
+Nothing after a policy denial is asked, so a denied action contacts nothing. Owner actions (approving a disposition,
+promoting rules, recording tools, adopting settings) are never granted to an agent and always need a receipt. A
+**receipt** binds the intent's canonical digest (action, input, effects, budget, scope), the state and the policy
+revision, expires within an hour and is spent once across processes. Issuing one is not reachable through the
+package's exports, so MCP tools, the HTTP bridge, model output and other packages can ask and never confirm.
+**Control facts** (`sentinel-controls`) are the shared contract for the framework packs of PRs 14–17: per surface
+(a canonical graph identity), property and chain position, a verdict of applies, does-not-apply or unknown; a
+resolved verdict needs evidence spans and a resolved framework version, an unknown one names its reason, and there is
+no protected-surface flag. **Not decided here:** the planner (rule applicability over discovered surfaces, plan
+revisions, batching) waits for PR 05's parser interface; bounded preauthorization of a run or profile, pack staging
+commands and durable receipts in the store ledger are later work. **Cost:** nine more draft formats to review, and
+owner receipts kept in user state rather than the ledger until the coordinator exists. Same-account code is outside
+this boundary, as for the store.
