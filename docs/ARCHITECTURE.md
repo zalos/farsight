@@ -587,3 +587,68 @@ keychain entry is read.
 Not decided here: the evidence broker, prompts and review lanes (PR 22); the coordinator stage that opens envelopes
 and fences epochs (PR 08 integration); a settings-contract home for profiles and capability records; live
 model acceptance; and a second model configuration.
+
+39. **Sentinel's model review is a fixed grammar over pinned evidence, recorded apart from coverage (2026-10-22).**
+
+`@farsight/sentinel/review` runs rule-guided review (one session per planned check, over its scope files and pinned
+rule text) and general review (one session per partition of the inventory). Both use one bounded loop and the PR 21
+broker (ADR 35) through `providerCaller`.
+
+**Scope is decided before the model, and independently of findings.** `partitionInventory` sorts one source's
+captured TS/JS/Java files and cuts them by file and byte bounds. Its only inputs are the snapshot entries and the
+bounds, so a file without a detector hit is reviewed like any other. Uncaptured, too-large and unlisted entries are
+gaps with reasons.
+
+**The model sees source only through the evidence broker.** The broker serves bounded line slices of files in the
+session's scope, read by content id and hash-checked, each with an evidence id, the exact UTF-8 byte span and a
+quote digest. It also serves the pinned rule text and, when given, recorded call reachability. The reachability is
+a structural view of PR 18's `sentinel-paths/draft-1` results, explicitly not data flow. Anything else is refused
+as data and recorded: out of scope, an unknown tool, over budget, or a span a `DisclosureFilter` withholds (the
+seam for opaque secret-location refs). Evidence goes to the model as JSON marked `untrusted`.
+
+**Replies are a closed grammar.** A reply is `list`, `read`, `rule`, `paths` (each only when the session offers it)
+or `final`, with no other key. So no text in the reviewed code, however it is worded, can add a tool, a target, a
+disclosure, an approval, a suppression or a promotion: a reply carrying any of them is a shape error, answered once
+with the rejection and bounded by `maxInvalidReplies`.
+- Every claim cites ids this session served, re-verified against the captured bytes.
+- A finding needs a cited claim.
+- `inspected` must name only files actually served.
+- Valid citations make a claim well formed, not right; correctness is evaluated against labels.
+
+**Bounds and checkpoints.** A session stops, with its own frontier, at its call limit, cumulative serialized input,
+deadline, cancellation, invalid replies, provider budget, a provider error, or uncertain usage. Each model call is
+one operation with a stable id. The checkpoint (`sentinel-review-checkpoint/draft-1`, behind a `CheckpointStore`
+seam with a private-file default) records it settled, with its reply and broker result, before the next call. A
+resumed session continues after its last settled operation and never re-sends one, and the PR 21 ledger refuses a
+repeat anyway. A checkpoint resumes only for the same scope, prompt, budget and tools (`specDigest`).
+
+**Records are not coverage.** The session record (`sentinel-review-record/draft-1`) lists what was served, by file
+and line range, and every in-scope file never read, as a `notInspected` frontier. It states `establishes:
+model-review-inspection` and `deterministicCoverage: false`; no formal check is completed by it. Claims of a finding
+become `sentinel-observation/draft-1` envelopes from a `model-review` producer, carrying:
+- the model identity at its actual strength and the prompt digest;
+- the planned rule, for guided review;
+- `sentinel.review.limitation.modelClaim`.
+
+They are proposals; nothing in review approves or promotes.
+
+**E5/E8.** `planEvaluation` enumerates models × cases × trials × {clean, canary}: 600 evaluations for two models,
+the 30-case corpus and five trials. `runEvaluation` runs each through the same session and validator, scoring
+verdicts against labels. It counts invalid and unfinished runs, canary-induced verdict changes and canary-token
+leaks per model and case, and computes Wilson intervals for precision and recall. `e5Gate` never says qualified. It
+lists what is missing:
+- two provider-backed models (mock runs report `mockOnly`);
+- 30 cases and five trials;
+- a label review by someone other than the author;
+- owner thresholds;
+- unfinished evaluations.
+
+Only when nothing is missing does it say whether the thresholds were met; owner acceptance is a separate decision.
+The corpus (`test/fixtures/model-review/e5-corpus.json`) is original synthetic text with author-draft labels.
+`estimatePlan` gives E8 upper bounds labeled `estimate`; observed usage lives in session records and the budget
+ledger.
+
+Not decided here: the live E5 run, labels review, thresholds and the second model's configuration (owner); the
+coordinator stage that plans, admits and fences review work (PR 08/09 integration); a registered JSON schema for the
+record and checkpoint drafts; report rendering (PR 19); and feeding PR 18 path envelopes and secret-location refs
+through the two seams.

@@ -87,6 +87,12 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   lock and validated packs, the effective policy, the snapshot and parser evidence), `boundary.ts` (canonical work
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
+  `src/review/` is bounded model review (PR 22, ADR 39), exported as `./review`: `evidence.ts` (deterministic
+  `partitionInventory` and the scoped `EvidenceBroker`), `validator.ts` (the closed reply grammar and citation checks),
+  `session.ts` (the bounded, checkpointed loop and the review record), `guided.ts` and `general.ts` (the two lanes),
+  `caller.ts` (sessions over the PR 21 broker), `prompts.ts` (the pinned prompt artifacts), `evaluation.ts` (the E5
+  harness and gate, E8 estimates) and `errors.ts`; its words are `strings-sentinel-review.ts`; `test/review.test.ts`
+  and `test/fixtures/model-review/` (the original 30-case clean/canary corpus).
   `src/review/providers/` is the opt-in model broker (PR 21, ADR 35), exported as `./review/providers`: `profile.ts`
   (model profiles and the owner-bound provider binding), `kinds.ts` (Ollama and OpenAI-compatible wire formats and
   `probeCapability`), `transport.ts` (one bounded node:http/https exchange, no redirects, verified TLS),
