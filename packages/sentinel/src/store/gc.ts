@@ -1,0 +1,209 @@
+// Reachability inspection and a dry-run prune plan for the object store. Read-only by construction: this module
+// imports no filesystem function and calls only ObjectStore.list(). PR 03 deletes nothing and schedules no
+// retention; a plan is evidence for a later, separately reviewed pruning step.
+//
+// Everything a root names is protected in every codec, and so is everything reachable from it through artifact
+// links (cycles and shared children included). An incomplete, malformed or moving snapshot fails closed: the
+// plan then lists no candidate at all.
+import { type ObjectStore, type PhysicalObject, artifactIdOf } from './objects.js';
+
+export const GC_ROOT_KINDS = ['active', 'staged', 'report', 'pinned'] as const;
+export type GcRootKind = typeof GC_ROOT_KINDS[number];
+
+/** The minimal seam this module needs from the ledger (PR 03 lane B): one committed snapshot of roots and links. */
+export interface ReachabilitySnapshot {
+  readonly storeId: string;
+  /** The ledger's committed snapshot sequence the roots and links were read at. */
+  readonly sequence: number;
+  /** False when the ledger could not enumerate every root or link; the plan then fails closed. */
+  readonly complete: boolean;
+  readonly roots: readonly { readonly kind: GcRootKind; readonly id: string; readonly artifacts: readonly string[] }[];
+  /** Parent → child artifact references (a report → its findings → their evidence, …). */
+  readonly links: readonly { readonly from: string; readonly to: string }[];
+}
+
+export type GcErrorCode =
+  | 'sentinel.gc.incompleteSnapshot' | 'sentinel.gc.wrongStore' | 'sentinel.gc.invalidSnapshot'
+  | 'sentinel.gc.missingReachable' | 'sentinel.gc.snapshotMoved' | 'sentinel.gc.unreadableStore';
+
+export interface GcError { readonly code: GcErrorCode; readonly detail: string }
+
+export interface ReachabilityReport {
+  readonly ok: boolean;
+  readonly storeId: string;
+  readonly sequence: number | null;
+  readonly errors: readonly GcError[];
+  /** Every logical artifact protected by a root, sorted. */
+  readonly reachable: readonly string[];
+  readonly rootCounts: Readonly<Record<GcRootKind, number>>;
+  /** Staged artifacts not written yet: registration precedes the write, so this is expected and protected. */
+  readonly pendingStaged: readonly string[];
+  readonly physical: {
+    readonly objects: number;
+    readonly protectedObjects: number;
+    readonly unreachableObjects: number;
+    readonly staging: readonly string[];
+    readonly unexpected: readonly string[];
+  };
+}
+
+export interface PrunePlan {
+  readonly dryRun: true;
+  /** Always zero: nothing in PR 03 removes an object. */
+  readonly deleted: 0;
+  readonly ok: boolean;
+  /** The plan is valid only for this store at this snapshot sequence. */
+  readonly validFor: { readonly storeId: string; readonly sequence: number | null };
+  readonly errors: readonly GcError[];
+  /** Unreachable published objects. Empty whenever `ok` is false. */
+  readonly candidates: readonly PhysicalObject[];
+  readonly candidateBytes: number;
+  /** Never candidates: staged partial files and anything outside the layout. */
+  readonly retained: { readonly staging: readonly string[]; readonly unexpected: readonly string[] };
+  readonly report: ReachabilityReport;
+}
+
+export interface InspectOptions {
+  /** Re-reads the ledger's committed sequence after enumeration; a change fails the inspection closed. */
+  readonly readSequence?: () => number | Promise<number>;
+}
+
+const ARTIFACT_ID = /^sha256:[0-9a-f]{64}$/;
+
+function validate(store: ObjectStore, snapshot: ReachabilitySnapshot, errors: GcError[]): boolean {
+  if (!snapshot || typeof snapshot !== 'object') {
+    errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'no snapshot' });
+    return false;
+  }
+  if (snapshot.storeId !== store.storeId) errors.push({ code: 'sentinel.gc.wrongStore', detail: 'the snapshot names another store' });
+  if (!Number.isSafeInteger(snapshot.sequence) || snapshot.sequence < 0) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'sequence is not a non-negative integer' });
+  if (snapshot.complete !== true) errors.push({ code: 'sentinel.gc.incompleteSnapshot', detail: 'the ledger did not enumerate every root and link' });
+  if (!Array.isArray(snapshot.roots) || !Array.isArray(snapshot.links)) {
+    errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: 'roots and links must be lists' });
+    return false;
+  }
+  snapshot.roots.forEach((root, i) => {
+    if (!root || !GC_ROOT_KINDS.includes(root.kind)) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} has an unknown kind` });
+    if (!root || typeof root.id !== 'string' || !root.id) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} has no id` });
+    if (!root || !Array.isArray(root.artifacts)) { errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} has no artifact list` }); return; }
+    for (const a of root.artifacts) if (typeof a !== 'string' || !ARTIFACT_ID.test(a)) errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `root ${i} names an invalid artifact id` });
+  });
+  snapshot.links.forEach((link, i) => {
+    if (!link || typeof link.from !== 'string' || !ARTIFACT_ID.test(link.from) || typeof link.to !== 'string' || !ARTIFACT_ID.test(link.to)) {
+      errors.push({ code: 'sentinel.gc.invalidSnapshot', detail: `link ${i} names an invalid artifact id` });
+    }
+  });
+  return true;
+}
+
+/** Walks the snapshot against what is on disk. Never writes. */
+export async function inspectReachability(store: ObjectStore, snapshot: ReachabilitySnapshot, options: InspectOptions = {}): Promise<ReachabilityReport> {
+  return (await inspect(store, snapshot, options)).report;
+}
+
+async function inspect(store: ObjectStore, snapshot: ReachabilitySnapshot, options: InspectOptions): Promise<{ report: ReachabilityReport; objects: readonly PhysicalObject[] }> {
+  const errors: GcError[] = [];
+  const structured = validate(store, snapshot, errors);
+  const rootCounts = Object.fromEntries(GC_ROOT_KINDS.map(k => [k, 0])) as Record<GcRootKind, number>;
+  const reachable = new Set<string>();
+  const stagedOnly = new Set<string>();
+  const accepted = new Set<string>();
+
+  if (structured) {
+    const children = new Map<string, string[]>();
+    for (const link of snapshot.links) {
+      if (!link || typeof link.from !== 'string' || typeof link.to !== 'string') continue;
+      const list = children.get(link.from);
+      if (list) list.push(link.to); else children.set(link.from, [link.to]);
+    }
+    const queue: string[] = [];
+    for (const root of snapshot.roots) {
+      if (!root || !Array.isArray(root.artifacts)) continue;
+      if (GC_ROOT_KINDS.includes(root.kind)) rootCounts[root.kind]++;
+      for (const a of root.artifacts) {
+        if (typeof a !== 'string') continue;
+        if (root.kind === 'staged') stagedOnly.add(a); else accepted.add(a);
+        if (!reachable.has(a)) { reachable.add(a); queue.push(a); }
+      }
+    }
+    // Iterative breadth-first walk with a visited set: cycles terminate, shared children are visited once.
+    while (queue.length) {
+      const next = queue.shift()!;
+      for (const child of children.get(next) ?? []) {
+        accepted.add(child);
+        if (!reachable.has(child)) { reachable.add(child); queue.push(child); }
+      }
+    }
+    for (const a of accepted) stagedOnly.delete(a);
+  }
+
+  let listing: Awaited<ReturnType<ObjectStore['list']>> | undefined;
+  try {
+    listing = await store.list();
+  } catch (e) {
+    errors.push({ code: 'sentinel.gc.unreadableStore', detail: (e as Error).message });
+  }
+
+  const present = new Set<string>();
+  let protectedObjects = 0;
+  for (const obj of listing?.objects ?? []) {
+    const id = artifactIdOf(obj.rawDigest);
+    present.add(id);
+    if (reachable.has(id)) protectedObjects++;
+  }
+  const pendingStaged: string[] = [];
+  for (const id of [...reachable].sort()) {
+    if (present.has(id) || !listing) continue;
+    if (stagedOnly.has(id)) pendingStaged.push(id);
+    else errors.push({ code: 'sentinel.gc.missingReachable', detail: `${id} is referenced but has no published object` });
+  }
+
+  if (options.readSequence && structured) {
+    let after: number | undefined;
+    try { after = await options.readSequence(); } catch (e) {
+      errors.push({ code: 'sentinel.gc.snapshotMoved', detail: `the committed sequence could not be re-read: ${(e as Error).message}` });
+    }
+    if (after !== undefined && after !== snapshot.sequence) {
+      errors.push({ code: 'sentinel.gc.snapshotMoved', detail: `the ledger moved from sequence ${snapshot.sequence} to ${after} during inspection` });
+    }
+  }
+
+  const objectCount = listing?.objects.length ?? 0;
+  const report: ReachabilityReport = Object.freeze({
+    ok: errors.length === 0,
+    storeId: store.storeId,
+    sequence: structured && Number.isSafeInteger(snapshot.sequence) ? snapshot.sequence : null,
+    errors: Object.freeze(errors),
+    reachable: Object.freeze([...reachable].sort()),
+    rootCounts: Object.freeze(rootCounts),
+    pendingStaged: Object.freeze(pendingStaged),
+    physical: Object.freeze({
+      objects: objectCount,
+      protectedObjects,
+      unreachableObjects: objectCount - protectedObjects,
+      staging: listing?.staging ?? [],
+      unexpected: listing?.unexpected ?? [],
+    }),
+  });
+  return { report, objects: listing?.objects ?? [] };
+}
+
+/** Lists what a prune would remove at this snapshot, and removes nothing. */
+export async function planPrune(store: ObjectStore, snapshot: ReachabilitySnapshot, options: InspectOptions = {}): Promise<PrunePlan> {
+  const { report, objects } = await inspect(store, snapshot, options);
+  const reachable = new Set(report.reachable);
+  // One listing, taken after the snapshot was read. An object published after the snapshot is registered as a
+  // staged root first, which advances the sequence: pass `readSequence` and that race fails the plan closed.
+  const candidates = report.ok ? objects.filter(o => !reachable.has(artifactIdOf(o.rawDigest))) : [];
+  return Object.freeze({
+    dryRun: true,
+    deleted: 0,
+    ok: report.ok,
+    validFor: Object.freeze({ storeId: report.storeId, sequence: report.sequence }),
+    errors: report.errors,
+    candidates: Object.freeze(candidates),
+    candidateBytes: candidates.reduce((n, o) => n + o.encodedSize, 0),
+    retained: Object.freeze({ staging: report.physical.staging, unexpected: report.physical.unexpected }),
+    report,
+  });
+}
