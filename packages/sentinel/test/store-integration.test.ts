@@ -268,7 +268,7 @@ const STORE_DIST = fileURLToPath(new URL('../dist/store/', import.meta.url));
 const PROBE_MIGRATION = { version: 2, name: 'upgrade-probe', sql: 'CREATE TABLE upgrade_probe (x INTEGER NOT NULL) STRICT;' };
 
 /** Opens the ledger with the shipped migrations plus the probe step, under a real owner, failing at `point`. */
-function upgradeScript(storePath: string, point: string, how: 'kill' | 'throw'): string {
+function upgradeScript(storePath: string, point: string, how: 'kill' | 'throw' | 'release'): string {
   return `
     const { acquireStoreOwner } = await import(${JSON.stringify(`${STORE_DIST}owner.js`)});
     const { openLedger } = await import(${JSON.stringify(`${STORE_DIST}ledger.js`)});
@@ -283,7 +283,7 @@ function upgradeScript(storePath: string, point: string, how: 'kill' | 'throw'):
         migrations: [...LEDGER_MIGRATIONS, ${JSON.stringify(PROBE_MIGRATION)}],
         failpoint: p => {
           if (p !== ${JSON.stringify(point)}) return;
-          ${how === 'kill' ? "process.kill(process.pid, 'SIGKILL');" : "throw new Error('injected failure at ' + p);"}
+          ${{ kill: "process.kill(process.pid, 'SIGKILL');", throw: "throw new Error('injected failure at ' + p);", release: 'owner.close();' }[how]}
         },
       });
       report = ledger.migration;
@@ -326,7 +326,7 @@ async function assertTakeover(storePath: string, artifact: { id: string; text: s
   return existsSync(backups) ? readdirSync(backups) : [];
 }
 
-function runUpgrade(storePath: string, point: string, how: 'kill' | 'throw') {
+function runUpgrade(storePath: string, point: string, how: 'kill' | 'throw' | 'release') {
   return spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', '--input-type=module', '-e', upgradeScript(storePath, point, how)],
     { encoding: 'utf8', timeout: 30_000 });
 }
@@ -350,6 +350,19 @@ for (const point of ['backup:after-copy', 'migrate:after-sql'] as const) {
     assert.equal(done.code, null);
     assert.deepEqual({ from: done.report.from, to: done.report.to }, { from: 1, to: 2 });
     assert.ok(existsSync(done.report.backupPath), 'the upgrade kept its verified backup');
+  });
+
+  test(`ownership lost at ${point} stops the upgrade, and the next owner takes over`, needsStore, async t => {
+    const storePath = scratch(t);
+    const artifact = await storeWithArtifact(storePath);
+    // The upgrader's own owner is released in the middle of the upgrade: the next ownership check refuses it.
+    const lost = runUpgrade(storePath, point, 'release');
+    assert.equal(lost.status, 0, lost.stderr);
+    assert.equal(JSON.parse(lost.stdout.trim()).code, 'sentinel.store.ownerNotHeld');
+    const backups = await assertTakeover(storePath, artifact);
+    assert.deepEqual(backups.filter(f => f.endsWith('.partial')), [], 'the refused upgrade removed its partial copy');
+    assert.equal(backups.filter(f => f.endsWith('.bak')).length, point === 'backup:after-copy' ? 0 : 1,
+      point === 'backup:after-copy' ? 'no backup is published without the owner' : 'the verified pre-upgrade backup is kept');
   });
 
   test(`a failure at ${point} rolls the upgrade back and releases the owner`, needsStore, async t => {
