@@ -20,6 +20,7 @@ import { retainedBootstrapForReport, type RetainedAncestorRevision } from '../ex
 import type { ParserIndex, ParserResult } from '../snapshot/parser.js';
 import { PREVIEW_DETECTOR_ID, PREVIEW_FINDINGS_SCHEMA, PREVIEW_RULE } from '../adapters/preview-detector.js';
 import { secretObservation } from '../reports/accepted-secrets.js';
+import { selectedSecretPrivacy } from '../reports/selected-privacy.js';
 import { resolveWithheldLocation } from '../snapshot/locations.js';
 import type { WithheldLocationEvidence } from '../contracts/index.js';
 import { compareAssessments, type CheckAssessment, type Comparison } from '../findings/compare.js';
@@ -704,22 +705,11 @@ export interface FullReport {
  * same-capture selection chain, never an arbitrary parent id or a store-wide search. Their observations are checked
  * by the existing reader and used only as a withholding flag, never as the child's findings, coverage or comparison.
  */
-async function knownSecretMatches(store: SentinelStore, assessment: RunAssessment, trustDir?: string): Promise<boolean> {
-  const secret = (a: RunAssessment) => a.observations.some(o => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER);
-  if (secret(assessment)) return true;
-  for (const pin of assessment.selectedAncestors) {
-    const id = pin.runId;
-    const admitted = await loadPlan(store, id, pin.revision);
-    if (admitted.plan.digest !== pin.planDigest) return unbound('selected-ancestor privacy plan is not its proven revision');
-    if (!admitted.plan.units.some(u => u.adapterId === SECRETS_ADAPTER && store.ledger.getPublication({ id: u.id, revision: u.revision }))) continue;
-    // A canceled ancestor can retain accepted results, but the completed-run reader cannot authenticate that report.
-    // Refuse conservatively rather than discard potential privacy evidence or broaden report eligibility here.
-    if (store.ledger.getRun(id)?.state !== 'completed') return unbound('accepted selected-ancestor privacy evidence cannot be assessed');
-    const ancestor = await assessRun(store, id, { trustDir });
-    if (ancestor.planRevision !== pin.revision || ancestor.snapshot.id !== assessment.snapshot.id) return unbound('selected-ancestor privacy evidence is another capture');
-    if (secret(ancestor)) return true;
-  }
-  return false;
+async function knownSecretMatches(store: SentinelStore, assessment: RunAssessment): Promise<boolean> {
+  if (assessment.observations.some(o => o.producer.kind === 'scanner' && o.producer.adapterId === SECRETS_ADAPTER)) return true;
+  const admitted = await loadPlan(store, assessment.runId, assessment.planRevision);
+  try { return (await selectedSecretPrivacy(store, assessment.runId, admitted)).hasMatches; }
+  catch { return unbound('accepted selected-ancestor privacy evidence is unavailable, malformed or unbound'); }
 }
 
 /** Builds the full report of a completed run, optionally placed and compared, from accepted evidence alone. */
@@ -741,7 +731,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   let baselineSecret: boolean | undefined;
   if (req.baselineRunId) {
     const baseline = await assessRun(store, req.baselineRunId, { trustDir: req.trustDir });
-    baselineSecret = await knownSecretMatches(store, baseline, req.trustDir);
+    baselineSecret = await knownSecretMatches(store, baseline);
     const b = await sideOf(store, baseline);
     const c = await sideOf(store, current);
     currentFindings = c.findings;
@@ -771,7 +761,7 @@ export async function fullReport(req: FullReportRequest): Promise<FullReport> {
   }, currentFindings ?? await findingsOf(current.observations, readContent, { withheldKey: current.withheldKey }));
   // Accepted secret matches in either run or its proven same-capture selected ancestry make every source/context
   // string unproved (the scanner reports whole lines), so all of it is withheld. Clean ancestry keeps normal detail.
-  const secretRun = (baselineSecret ?? false) || await knownSecretMatches(store, current, req.trustDir);
+  const secretRun = (baselineSecret ?? false) || await knownSecretMatches(store, current);
   const doc = secretRun ? withholdSecretRun(build.document, ruleWords(req.trustDir, current.ruleLock)) : build.document;
   const valid = validateEnvelope('report', doc);
   if (!valid.ok) throw new FullReportError('sentinel.report.evidenceUnbound', { reason: 'the withheld report does not fit its contract' });

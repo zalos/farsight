@@ -249,3 +249,106 @@ test('under a changed policy the rerun is planned and admitted under that policy
   assert.equal(admitted.plan.pins.policyDigest, (adopted as any).policy.revision);
   assert.notEqual(rerun.disclosure.runId, (await rerunRun(store, parentId, [plan.units[0]!.id], terms) as any).disclosure.runId, 'another policy is another rerun');
 });
+
+
+test('whole-analysis reruns rejoin an active legacy id across upgrade, then advance generations after terminal states', needsStore, async t => {
+  const { store, parentId, plan, terms, work, ws } = await ranParent(t);
+  const { RuleLockBook } = await import('../dist/service/rule-locks.js');
+  const { publicProfile, publicRegistry } = await import('../dist/service/scanner-profile.js');
+  const { planBootstrap } = await import('../dist/planner/index.js');
+  const { admitPlan } = await import('../dist/execution/plans.js');
+  const { digestOf } = await import('../dist/store/ledger-json.js');
+  const { openSnapshot } = await import('../dist/snapshot/materialize.js');
+  const book = new RuleLockBook(ws.trustDir), current = book.current()!;
+  const profile = publicProfile(publicRegistry(), new Set(), book.packsOf(current.lock));
+  const snapshot = (await openSnapshot(store, plan.pins.snapshotId!)).snapshot;
+  const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: terms.policy.revision, profile: profile.digest, parent: parentId };
+  const legacyId = `run-${digestOf(key).slice(7, 39)}`;
+  // This is the pre-generation identity algorithm. Admit a genuine trusted bootstrap at that id, as an older
+  // installation could leave before execution; the new command must continue it rather than admit a parallel run.
+  await admitPlan(store, { plan: planBootstrap({ runId: legacyId, sourceIds: ['workspace'], profile: profile.planner }),
+    ruleLock: null, policy: null, profile: profile.record });
+  const first: any = await rerunRun(store, parentId, [], terms);
+  assert.equal(first.disclosure.runId, legacyId, 'joins the admitted legacy request before its run exists');
+  assert.equal(store.ledger.getRun(legacyId)!.state, 'running');
+  const again: any = await rerunRun(store, parentId, [], terms);
+  assert.equal(again.disclosure.runId, legacyId, 'joins the running legacy request');
+  assert.equal(again.outcome, 'kept');
+  assert.equal((await executeRun(store, legacyId, { scratchRoot: work })).state, 'completed');
+  const fresh: any = await rerunRun(store, parentId, [], terms);
+  assert.notEqual(fresh.disclosure.runId, legacyId, 'a completed legacy request is not active');
+  const canceled = await Coordinator.open({ store, runId: fresh.disclosure.runId, registry: publicRegistry(), scratchRoot: work });
+  canceled.cancel(); await canceled.run();
+  assert.equal(store.ledger.getRun(fresh.disclosure.runId)!.state, 'canceled');
+  const next: any = await rerunRun(store, parentId, [], terms);
+  assert.notEqual(next.disclosure.runId, legacyId);
+  assert.notEqual(next.disclosure.runId, fresh.disclosure.runId, 'a canceled generation cannot be rejoined either');
+  assert.equal((await rerunRun(store, parentId, [], terms) as any).disclosure.runId, next.disclosure.runId);
+});
+
+
+for (const mode of ['exact', 'other-analysis', 'missing-invocation', 'future-analysis'] as const) test(`legacy admit-before-advance recovery: ${mode}`, needsStore, async t => {
+  const f = await ranParent(t);
+  const { RuleLockBook } = await import('../dist/service/rule-locks.js');
+  const { publicProfile, publicRegistry } = await import('../dist/service/scanner-profile.js');
+  const { planBootstrap, planAnalysis, plannerSnapshotFrom, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom } = await import('../dist/planner/index.js');
+  const { admitPlan } = await import('../dist/execution/plans.js');
+  const { loadBootstrap } = await import('../dist/execution/bootstrap.js');
+  const { digestOf } = await import('../dist/store/ledger-json.js');
+  const { openSnapshot } = await import('../dist/snapshot/materialize.js');
+  const { currentPlan } = await import('../dist/service/canonical.js');
+  const book = new RuleLockBook(f.ws.trustDir), current = book.current()!, packs = book.packsOf(current.lock);
+  const profile = publicProfile(publicRegistry(), new Set(), packs);
+  const snapshot = (await openSnapshot(f.store, f.plan.pins.snapshotId!)).snapshot;
+  const legacyId = `run-${digestOf({ inventory: snapshot.inventoryDigest, lock: current.digest, policy: f.terms.policy.revision, profile: profile.digest, parent: f.parentId }).slice(7, 39)}`;
+  const boot = planBootstrap({ runId: legacyId, sourceIds: ['workspace'], profile: profile.planner });
+  await admitPlan(f.store, { plan: boot, ruleLock: null, policy: null, profile: profile.record });
+  const parent = f.store.ledger.getRun(f.parentId)!.envelope;
+  const run = { ...parent, id: legacyId, parentId: f.parentId, planRevision: 1, coordinatorEpoch: f.store.epoch, state: 'planned' as const };
+  assert.equal((await (await Coordinator.open({ store: f.store, runId: legacyId, run, registry: publicRegistry(), scratchRoot: f.work })).run()).kind, 'bootstrap');
+  const inventory = boot.units.find(u => u.stage === 'inventory')!;
+  const evidence = await loadBootstrap(f.store, legacyId, inventory);
+  const analysis = planAnalysis({ runId: legacyId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
+    snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a)),
+    lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(f.terms.policy), limits: { maxScopesPerWork: mode === 'other-analysis' ? 2 : 1 } });
+  await admitPlan(f.store, { plan: analysis, ruleLock: current.lock, policy: f.terms.policy, profile: profile.record });
+  assert.equal(f.store.ledger.getRun(legacyId)!.planRevision, 1, 'actual durable admit-before-advance crash boundary');
+  if (mode === 'future-analysis') {
+    f.store.ledger.advanceRunPlan(legacyId, 2);
+    const future = planAnalysis({ runId: legacyId, revision: 3, previous: analysis, bootstrap: analysis.reused, profile: profile.planner,
+      snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a)),
+      lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(f.terms.policy), limits: { maxScopesPerWork: 1 } });
+    await admitPlan(f.store, { plan: future, ruleLock: current.lock, policy: f.terms.policy, profile: profile.record });
+  }
+  if (mode === 'missing-invocation') {
+    const invocation = f.store.ledger.getAttempt(f.store.ledger.getPublication(inventory)!.attemptId)!.envelope.invocation!;
+    const { readdirSync, unlinkSync } = await import('node:fs');
+    const hex = invocation.slice(7), objectDir = join(f.store.storePath, 'objects', 'sha256', hex.slice(0, 2));
+    const copies = readdirSync(objectDir).filter(n => n.startsWith(hex + '.')); assert.ok(copies.length);
+    for (const name of copies) unlinkSync(join(objectDir, name));
+  }
+  f.store.close(); rmSync(join(f.path, 'src'), { recursive: true });
+  const reopened = await openStore(f.ws.storePath);
+  t.after(() => { try { reopened.close(); } catch { /* closed for CLI */ } });
+  const events = counts(reopened, legacyId);
+  if (mode === 'other-analysis' || mode === 'missing-invocation') {
+    await assert.rejects(rerunRun(reopened, f.parentId, [], f.terms), (e: any) => e.code === 'sentinel.service.planChanged');
+    assert.equal(reopened.ledger.getRun(legacyId)!.planRevision, 1);
+    assert.deepEqual(counts(reopened, legacyId), events, 'unproven continuation changes no records');
+    return;
+  }
+  const joined: any = await rerunRun(reopened, f.parentId, [], f.terms);
+  assert.equal(joined.outcome, 'kept'); assert.equal(joined.disclosure.runId, legacyId);
+  assert.deepEqual([(await currentPlan(reopened, legacyId))?.kind, reopened.ledger.getRun(legacyId)!.planRevision], ['analysis', 2]);
+  assert.equal(joined.disclosure.revision, 2, 'a future admitted plan is not the executed revision');
+  assert.equal(counts(reopened, legacyId)['run-plan-advanced'], (events['run-plan-advanced'] ?? 0) + (mode === 'future-analysis' ? 0 : 1));
+  if (mode === 'future-analysis') assert.equal(reopened.ledger.latestPlan(legacyId)!.revision, 3);
+  reopened.close();
+  const { spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const cli = spawnSync(process.execPath, [fileURLToPath(new URL('../dist/cli.js', import.meta.url)), 'run', legacyId, '--confirm', '--json'],
+    { cwd: f.path, env: { ...process.env, XDG_STATE_HOME: join(f.dir, 'state') }, encoding: 'utf8', timeout: 30000 });
+  const result = JSON.parse(cli.stdout);
+  assert.equal(cli.status, 2, 'actual installed-style CLI executes recovered preview analysis, with its honest incomplete label');
+  assert.equal(result.outcome, 'required-coverage-incomplete');
+});

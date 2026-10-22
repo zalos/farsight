@@ -137,9 +137,43 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
   // The run is what it would read and do: the captured inventory (not the capture's time), the lock, the policy and
   // the profile. The same content under the same terms plans to the same run.
   const key = { inventory: snapshot.inventoryDigest, lock: current.digest, policy: options.policy.revision, profile: profile.digest, parent: options.parentId ?? null };
-  const runId = options.parentId ? rerunIdOf(store, key) : `run-${digest(key).slice(7, 39)}`;
+  const runId = options.parentId ? rerunIdOf(store, key, true) : `run-${digest(key).slice(7, 39)}`;
   const latest = store.ledger.latestPlan(runId);
-  if (latest?.kind === 'analysis') return { outcome: 'kept', disclosure: disclose((await loadPlan(store, runId, latest.revision)).plan) };
+  const analysisFor = (boot: PlanRevision, evidence: BootstrapEvidence) => {
+    const inventory = boot.units.find(u => u.stage === 'inventory')!;
+    return planAnalysis({
+      runId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
+      snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
+      lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy),
+      limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
+    });
+  };
+  if (latest?.kind === 'analysis') {
+    const active = store.ledger.getRun(runId);
+    // Only the immediate, exact bootstrap continuation can repair admit-before-advance. A later admission alone
+    // never becomes current: an already active analysis keeps its recorded revision, including an unexecuted future.
+    if (active?.planRevision === 1 && !['completed', 'canceled', 'canceling'].includes(active.state)) {
+      let expected: PlanRevision;
+      try {
+        const first = await loadPlan(store, runId, 1), next = await loadPlan(store, runId, latest.revision);
+        if (first.plan.kind !== 'bootstrap' || next.plan.revision !== 2 || next.plan.previous !== first.plan.digest || next.selection
+          || !canonicalJsonBytes(first.profile).equals(canonicalJsonBytes(profile.record))
+          || !canonicalJsonBytes(next.profile).equals(canonicalJsonBytes(profile.record))) throw new Error('not the immediate current-terms bootstrap successor');
+        const evidence = await retainedBootstrapForReport(store, runId, next);
+        expected = analysisFor(first.plan, evidence);
+        if (expected.digest !== next.plan.digest || evidence.snapshot.id !== snapshot.id) throw new Error('not the canonical successor from accepted evidence');
+        assertSupportedRules(expected);
+        if (!options.profile) checkPlanDatabases(expected, current.lock);
+      } catch {
+        throw new ServiceError('sentinel.service.planChanged', { runId });
+      }
+      store.assertHeld();
+      store.ledger.advanceRunPlan(runId, expected.revision);
+      return { outcome: 'kept', disclosure: disclose(expected) };
+    }
+    const revision = active?.planRevision ?? latest.revision;
+    return { outcome: 'kept', disclosure: disclose((await loadPlan(store, runId, revision)).plan) };
+  }
 
   const boot = latest ? (await loadPlan(store, runId, 1)).plan : planBootstrap({ runId, sourceIds: [WORKSPACE_SOURCE], profile: profile.planner });
   if (!latest) await admitPlan(store, { plan: boot, ruleLock: null, policy: null, profile: profile.record });
@@ -158,11 +192,7 @@ export async function planWorkspaceCanonical(store: SentinelStore, options: {
 
   const inventory = boot.units.find(u => u.stage === 'inventory')!;
   const evidence = await loadBootstrap(store, runId, { id: inventory.id, revision: inventory.revision });
-  const analysis = planAnalysis({
-    runId, revision: 2, previous: boot, bootstrap: [{ id: inventory.id, revision: inventory.revision }], profile: profile.planner,
-    snapshot: plannerSnapshotFrom(evidence.snapshot), analyses: evidence.analyses.map(a => plannerAnalysisFrom(a as never)),
-    lock: plannerLockFrom(current.lock, packs, current.digest), policy: plannerPolicyFrom(options.policy), limits: options.policy.rules.includes(PREVIEW_RULE) ? ANALYSIS_LIMITS : { maxScopesPerWork: 32 },
-  });
+  const analysis = analysisFor(boot, evidence);
   // Before admission: a shipped check adapter runs only the exact rules it implements.
   assertSupportedRules(analysis);
   if (!options.profile) checkPlanDatabases(analysis, current.lock);
@@ -332,7 +362,7 @@ async function parentClosure(store: SentinelStore, parentId: string, selected: r
   const walkUp = (id: string) => { for (const d of units.get(id)?.dependencies ?? []) if (!rerun.has(d.id) && !prerequisites.has(d.id)) { prerequisites.add(d.id); walkUp(d.id); } };
   for (const id of rerun) walkUp(id);
   let bootstrap: BootstrapEvidence | undefined;
-  if (chosen.size < units.size) {
+  if (rerun.size < units.size) {
     try { bootstrap = await retainedBootstrapForReport(store, parentId, admitted); }
     catch { return { reasonCode: 'sentinel.service.bootstrapUnavailable', facts: { parentId } } as Refusal; }
   }
@@ -366,7 +396,14 @@ export async function previewRerun(store: SentinelStore, parentId: string, selec
  * resumes it. Once that run has ended, an explicit rerun of the same parent and selection is a fresh run with its own
  * id: an ended run is never handed back as a new one.
  */
-function rerunIdOf(store: SentinelStore, request: Record<string, unknown>): string {
+function rerunIdOf(store: SentinelStore, request: Record<string, unknown>, legacyWhole = false): string {
+  if (legacyWhole) {
+    const legacy = `run-${digest(request).slice(7, 39)}`;
+    if (store.ledger.latestPlan(legacy)) {
+      const state = store.ledger.getRun(legacy)?.state;
+      if (state !== 'completed' && state !== 'canceled') return legacy;
+    }
+  }
   for (let generation = 0; ; generation++) {
     const id = `run-${digest({ ...request, generation }).slice(7, 39)}`;
     if (!store.ledger.latestPlan(id)) return id;

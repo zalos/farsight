@@ -77,4 +77,3 @@ export async function retainedBootstrapForReport(store: SentinelStore, runId: st
   }
   return refuse('the retained bootstrap lineage exceeds its bound');
 }
-
