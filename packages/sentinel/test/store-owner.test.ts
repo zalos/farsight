@@ -2,7 +2,8 @@
 // takeover, cooperative release, closed and stale capabilities, resource ordering and identity binding.
 import { test as nodeTest, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireStoreOwner } from '../dist/store/owner.js';
@@ -196,4 +197,19 @@ test('a failed descriptor publication rolls the whole acquisition back: same-pro
   assert.deepEqual(probeOwnership(store), { outcome: 'refused', code: 'sentinel.store.ownedElsewhere' });
   retry.close();
   assert.equal(probeOwnership(store).outcome, 'acquired');
+});
+
+test('a lock file SQLite cannot read is a catalog error, and is never deleted or recreated', async () => {
+  const store = freshStore();
+  mkdirSync(store, { recursive: true, mode: 0o700 });
+  const lockPath = join(store, 'owner.sqlite');
+  writeFileSync(lockPath, Buffer.alloc(8192, 'synthetic-not-a-database '), { mode: 0o600 });
+  const before = { sha: createHash('sha256').update(readFileSync(lockPath)).digest('hex'), ino: lstatSync(lockPath).ino };
+  for (let i = 0; i < 2; i++) { // a same-process retry meets the same file, not a recreated one
+    await assert.rejects(acquireStoreOwner(store), (e: unknown) => isStoreError(e, 'sentinel.store.lockFileCorrupt')
+      && (e as any).detail.sqliteCode === 26 && (e as any).cause?.code === 'ERR_SQLITE_ERROR');
+  }
+  assert.deepEqual(probeOwnership(store), { outcome: 'refused', code: 'sentinel.store.lockFileCorrupt' });
+  assert.deepEqual({ sha: createHash('sha256').update(readFileSync(lockPath)).digest('hex'), ino: lstatSync(lockPath).ino }, before);
+  assert.deepEqual(readdirSync(store).sort(), ['owner.sqlite'], 'no journal, descriptor or replacement was written');
 });

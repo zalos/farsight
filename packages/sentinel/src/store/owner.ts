@@ -17,7 +17,7 @@
 import { randomUUID } from 'node:crypto';
 import { closeSync, constants, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import type { Id } from '../contracts/common.js';
-import { StoreError, ioFailure, isSqliteBusy } from './errors.js';
+import { StoreError, ioFailure, isSqliteBusy, sqlitePrimaryCode } from './errors.js';
 import {
   assertPrivateFileIfPresent, hasIdentity, preparePrivateFile, prepareStoreRoot, storeLayout,
   type FileIdentity, type FilesystemIdentity, type StoreLayout,
@@ -108,7 +108,7 @@ export async function acquireStoreOwner(storePath: string, options: AcquireOptio
   try { db = new runtime.sqlite.DatabaseSync(layout.owner); } catch (error) { throw ioFailure('open-owner', error); }
   const epoch: Id = `epoch-${randomUUID()}`;
   try {
-    const { storeId } = lock(db, waitMs, epoch);
+    const { storeId } = lock(db, waitMs, epoch, layout.owner);
     if (!hasIdentity(layout.owner, lockFile.identity) || !hasIdentity(layout.root, root.identity)) {
       throw new StoreError('sentinel.store.identityChanged', { path: layout.root });
     }
@@ -125,8 +125,19 @@ export async function acquireStoreOwner(storePath: string, options: AcquireOptio
   }
 }
 
-function lock(db: Db, waitMs: number, epoch: Id): { storeId: string } {
-  const busy = (error: unknown) => (isSqliteBusy(error) ? new StoreError('sentinel.store.ownedElsewhere', {}, { cause: error }) : error);
+// SQLITE_CORRUPT (11) and SQLITE_NOTADB (26): the lock file holds bytes SQLite cannot read as a database.
+const CORRUPT_CODES = new Set([11, 26]);
+
+/** Every failure of the lock protocol leaves as a StoreError with the SQLite error kept as its cause. */
+function lockFailure(error: unknown, path: string): StoreError {
+  if (error instanceof StoreError) return error;
+  if (isSqliteBusy(error)) return new StoreError('sentinel.store.ownedElsewhere', {}, { cause: error });
+  const sqliteCode = sqlitePrimaryCode(error) ?? null;
+  if (sqliteCode !== null && CORRUPT_CODES.has(sqliteCode)) return new StoreError('sentinel.store.lockFileCorrupt', { path, sqliteCode }, { cause: error });
+  return new StoreError('sentinel.store.ioFailure', { operation: 'owner-lock', sqliteCode }, { cause: error });
+}
+
+function lock(db: Db, waitMs: number, epoch: Id, path: string): { storeId: string } {
   const read = () => db.prepare('SELECT store_id AS storeId, generation, epoch FROM owner_store').get() as { storeId: string; generation: number; epoch: string | null };
   try {
     db.exec(`PRAGMA busy_timeout=${waitMs}`);
@@ -154,7 +165,7 @@ function lock(db: Db, waitMs: number, epoch: Id): { storeId: string } {
     }
     throw new StoreError('sentinel.store.ownershipUncertain', { attempts: MAX_ATTEMPTS });
   } catch (error) {
-    throw busy(error);
+    throw lockFailure(error, path);
   }
 }
 

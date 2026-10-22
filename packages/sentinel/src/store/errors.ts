@@ -18,6 +18,7 @@ export type StoreErrorCode =
   | 'sentinel.store.filesystemUnsupported'
   | 'sentinel.store.fileUnsafe'
   | 'sentinel.store.identityChanged'
+  | 'sentinel.store.lockFileCorrupt'
   | 'sentinel.store.ownedElsewhere'
   | 'sentinel.store.ownershipUncertain'
   | 'sentinel.store.ownerClosed'
@@ -31,7 +32,7 @@ export const STORE_ERROR_CODES: readonly StoreErrorCode[] = Object.freeze([
   'sentinel.store.platformUnqualified', 'sentinel.store.pathNotAbsolute', 'sentinel.store.pathNotCanonical',
   'sentinel.store.pathSymlink', 'sentinel.store.pathNotDirectory', 'sentinel.store.pathWrongOwner',
   'sentinel.store.pathPermissions', 'sentinel.store.ancestorUnsafe', 'sentinel.store.filesystemUnsupported',
-  'sentinel.store.fileUnsafe', 'sentinel.store.identityChanged', 'sentinel.store.ownedElsewhere',
+  'sentinel.store.fileUnsafe', 'sentinel.store.identityChanged', 'sentinel.store.lockFileCorrupt', 'sentinel.store.ownedElsewhere',
   'sentinel.store.ownershipUncertain', 'sentinel.store.ownerClosed', 'sentinel.store.ownerLost',
   'sentinel.store.resourceCloseFailed', 'sentinel.store.ioFailure',
 ] as const);
