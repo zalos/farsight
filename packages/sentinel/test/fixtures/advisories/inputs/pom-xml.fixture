@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Original synthetic Maven manifest: one exact, one property, one range and one managed version. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.example.sentinel</groupId>
+  <artifactId>fixture-app</artifactId>
+  <version>1.0.0</version>
+  <properties>
+    <fixture.version>3.2.1</fixture.version>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>org.example.sentinel</groupId>
+      <artifactId>fixture-direct</artifactId>
+      <version>1.4.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.example.sentinel</groupId>
+      <artifactId>fixture-property</artifactId>
+      <version>${fixture.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.example.sentinel</groupId>
+      <artifactId>fixture-ranged</artifactId>
+      <version>[1.0,2.0)</version>
+    </dependency>
+    <dependency>
+      <groupId>org.example.sentinel</groupId>
+      <artifactId>fixture-managed</artifactId>
+    </dependency>
+  </dependencies>
+</project>

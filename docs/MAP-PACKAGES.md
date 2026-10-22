@@ -57,12 +57,20 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   runs in the optional, path-filtered CI job, while Echo unit tests remain in required validation.
 
 - `packages/sentinel` — optional security review package (ADR 18). Draft contracts and generated schemas, and a
-  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern adapter remains unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
+  local store (ADR 19), immutable capture, parsing, policy/planning and isolated execution. The pattern and advisory adapters remain unregistered; model runtime is not implemented. `src/store/index.ts` is the store's
   public facade (`openStore`, also re-exported from the root and as `./store`); behind it `runtime.ts` (the SQLite
   release gate), `paths.ts` (canonical, local, owner-only folders), `owner.ts` (the lifetime owner lock and epoch),
   `ledger.ts` + `migrations.ts` + `store-types.ts` (the fenced WAL ledger), `objects.ts` (content-addressed objects),
   `objects-ledger.ts` (the ledger seam and verifier) and `gc.ts` (read-only reachability and the dry-run prune plan).
-  `test/store-integration.test.ts` drives the facade end to end across processes. `src/snapshot/index.ts` is the
+  `test/store-integration.test.ts` drives the facade end to end across processes. The OSV advisory adapter (PR 12, ADR 29,
+  `src/adapters/osv/`, not yet registered; `src/adapters/sealed-input.ts` is the shared sealed-copy reader): `adapter.ts` (OSV-Scanner 2.7.0 pins, offline arguments, support), `worker-source.ts`
+  (the original shell shim), `job.ts` (dependency-file kinds, snapshot inputs, the line job), `normalize.ts` (components with
+  certainty and transitive limits, findings once per component and advisory, per-file coverage, `explainAdvisoryChanges`),
+  `acquire.ts` (the separate, receipt-confirmed download of OSV archives and `loadAdvisorySnapshot`) and `run.ts` (one attempt
+  through the PR 07 service); `scripts/package-assets-osv.mjs` ships the worker with its digest manifest;
+  `scripts/qualify-osv-database.mjs` is the owner-run real-database qualification; tests `test/osv-adapter.test.ts` and, with
+  `SENTINEL_ISOLATION=1`, `test/osv-conformance.test.ts`; fixtures `test/fixtures/advisories/` (original, synthetic, `.fixture`
+  names). `src/snapshot/index.ts` is the
   capture facade (ADR 21; also `./snapshot` and the root): `git.ts` (a read-only Git object reader, no git process),
   `committed.ts` and `worktree.ts` (the two enumerations), `inventory.ts` (entries, budget, quota, case collisions,
   LFS), `policy.ts` (capture policy and path rules), `materialization.ts` (the provenance sidecar), `capture.ts` (stage,
@@ -103,6 +111,12 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   (`analyzeNest`: version, bootstrap, module graph, ordered chains, control facts and the scope report),
   `support.ts` (`NEST_PACK`, the support manifest) and `errors.ts` (reason codes, `strings-sentinel-nest.ts`);
   `test/frameworks-nest.test.ts` runs capture → parse → analyze over `test/fixtures/nest/` and the E2 corpus.
+  `src/frameworks/express/` is the Express 4.21.2 pack (PR 15, ADR 31), exported as `./frameworks/express`:
+  `syntax.ts` (Oxc over captured bytes, exact UTF-8 spans), `modules.ts` (bindings, imports, exports, relative
+  resolution), `model.ts` (applications, routers, layers in order, open objects), `effects.ts` (refusal, pass-through,
+  error-handler bodies), `patterns.ts` (Express 4 path and method matching), `version.ts` (manifest and npm lockfile),
+  `pack.ts` (`analyzeExpress`: dispatch simulation into `sentinel-controls/draft-1` facts) and `support.ts`; words in
+  core's `strings-sentinel-express.ts`, tests in `test/framework-express.test.ts`.
   Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the

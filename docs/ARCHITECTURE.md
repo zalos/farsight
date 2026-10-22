@@ -778,3 +778,74 @@ in the production registry, the planner's batching, the scan command (PR 09), an
 
     Not decided here: CLI and planner integration (PR 09 still pending), CSRF/CORS/rate-limit/header properties,
     guard bodies, Fastify, and versions other than 10.4.15.
+
+29. **Dependency advisories come from pinned, separately acquired OSV snapshots, matched fully offline, and counted only
+where the engine proves it matched (2026-10-22).**
+
+`src/adapters/osv/` runs OSV-Scanner 2.7.0 (`ghcr.io/google/osv-scanner@sha256:4f3b7e2c…69fcd0`, Apache-2.0, official
+multi-platform index; linux/arm64 and linux/amd64 measured) through PR 07's isolated execution
+service only. **Acquisition is separate:** the only network step is `acquireAdvisorySnapshots`, an owner action
+(`tool.acquire`) confirmed by a spent receipt for exactly the request (ecosystems, URLs, size bound). It fetches only
+`https://osv-vulnerabilities.storage.googleapis.com/<npm|Maven>/all.zip`, refuses redirects and anything over the stated
+bound (at most 512 MiB; the npm archive was 219 MB and Maven 10 MB on 2026-10-22), checks the origin's MD5 and stores
+each archive by SHA-256 beside a provenance manifest in an owner-only folder; `loadAdvisorySnapshot` re-hashes it before
+any scan. The request is a private frozen copy taken before validation, and one spent confirmation admits exactly one
+acquisition (a retry needs a new confirmation; a failed one stores nothing). The origin's date is read only as a strict
+HTTP date; anything else leaves the snapshot's age unknown, and a scan reports `database-age-unknown`, never fresh. A scan never downloads: snapshots are inputs by digest, the engine runs `--offline` with no network, and the
+owner's freshness bound turns an old snapshot into `database-stale`. **The worker:** the official image is
+golang:alpine (busybox sh, no Python) and inputs are sealed 0444, so an original POSIX shell shim runs as `/bin/sh
+/input/<digest>`; it reads only constrained values (ids, digests, an integer index and a dependency-file basename from a
+fixed list per file; real relative paths stay with the coordinator), links the snapshots read-only into the layout the
+engine expects, and never forwards engine stderr: it reports the exit code, a fixed failure category, the stderr digest,
+which databases the engine reported loading, and the count of packages it dropped. **What counts** (measured, each a
+silent false negative of the engine): a failed run still prints packages with no advisories, so a failed run counts
+nothing; a database that fails to load leaves the exit code at 1 when another ecosystem matched, so a component counts as
+matched only when the engine reported loading its ecosystem's database; and a lock entry without a registry source is
+listed with `source=LOCAL` and never matched (`lodash@4.17.11`: 0 advisories without `resolved`, 7 with it), so such a
+component is not assessed and its file is `partial`. **Certainty and limits:** lockfiles (npm, pnpm) give resolved
+versions and the transitive closure as locked; a CycloneDX SBOM gives components as its producer listed them; a
+`pom.xml` gives declared direct dependencies only, read by a deliberately small parser that says how each version was
+declared (exact, property, range, managed); ranges and managed versions are not assessed, and a match on a range's lower
+bound is refused. Offline, Maven transitives are never resolved (no deps.dev, no registry), so a POM file is always
+`partial`. Findings are one per component and advisory group across every file that names it; the assessment id
+includes the snapshot digest, so a new snapshot is a new assessment, and `explainAdvisoryChanges` says whether a change
+came from the snapshot (same captured bytes) or the source, and reports `unknown` when one side did not assess the
+component (a failed run is never a resolution). A component the adapter refuses (another ecosystem, malformed) keeps its
+file `partial`. Advisory text is not kept. Package matches never claim
+reachability. **Not decided here:** registering the adapter, the planner's scheduling of acquisition and scans, the
+command (PR 09). No database ships in the package. Native linux/amd64 qualification passed
+[21 tests with zero skips and the installed worker](https://github.com/zalos/farsight/actions/runs/39788785215);
+the adapter records that evidence, and the workflow rechecks the pinned image on affected changes.
+
+31. **Sentinel's Express pack reads registration order from source and never credits a refusal as authentication or authorization (2026-10-22).**
+`farsight-sentinel/frameworks/express` (PR 15) answers, for each Express route the public parser found, what runs
+before its handler and whether anything there can refuse the request, for exactly Express 4.21.2. It reads only captured
+source with Oxc; it installs, builds and runs nothing, and leaves the structural graph unchanged (its surfaces are the
+parser's route nodes, its registrations are re-derived from syntax). The version must be pinned exactly in the root
+manifest, or be a range the npm lockfile written for it resolves to exactly 4.21.2; overrides, another lockfile with a
+range or a path alias for `express` leave every fact unknown and `framework.version` null, and so does any registration
+on a route's path that sits under a nested package manifest. Every route the pack discovers is reconciled with the
+parser's surfaces: a `route()` chain, an `all()` route or a route on an object the parser does not index is a frontier
+(`registrationUnsupported` or `routeNotInGraph`), never a silent omission.
+Applications and routers are top-level `express()` / `Router()` constants; their layers are the top-level
+`use`, method, `all`, `route` and `param` statements of their own module, in order. Any other use of the object — a
+registration inside a function, branch or loop, the object handed to other code or registered on from another module —
+makes it open, and every route it could reach is unknown (`sentinel.express.registrationDynamic`): a skipped branch is
+never read as either outcome. Dispatch is simulated as Express runs it: for a route's effective path (mount paths
+joined, case-insensitive, non-strict), the matching layers registered before it on the application and on every router
+on its path, earlier routers whose prefix matches (their own layers), earlier routes matching the same method and path,
+then the route's own handlers before the last. A layer registered after the route is never on its path, so late
+middleware cannot clear a finding. A partial match is unknown, not either side. Middleware effects come from bodies,
+never names: a non-async `(req, res, next)` whose body is one guarded refusal with a literal 401 or 403 on a request
+value, then `next()`; a pass-through; or an error handler. A refusal is cited as evidence at its position but never
+credited: its status code and the request value it reads (which the client may control) do not establish a principal
+or a permission, so both properties stay unknown there (`sentinel.express.refusalUnproven`). Everything else —
+third-party or unresolved functions, `next('route')`/`next('router')`, async bodies, param callbacks, router options or
+routing settings that change matching, sub-applications — is unknown with its reason. Because Express skips ordinary
+layers after an error until an error handler, a refusal followed by an error handler that may resume with `next()`, or
+by a layer whose arity is unknown, is unknown (`sentinel.express.errorPathResumes`). Facts per route and property:
+never `applies`; `unknown` at each refusal and each unreadable position; and `does-not-apply` at the handler's
+position only when every earlier layer was read and none can refuse. Node's `require` is read only where the file does
+not bind its own, and only Node's `http`/`https` `createServer` may receive an application without opening it. Proving
+a principal or permission would need the provenance of the value a refusal reads, which this pack does not model; it is a draft, source-only capability until PR 09 wires it into a
+scan. Reason words are `strings-sentinel-express.ts`.

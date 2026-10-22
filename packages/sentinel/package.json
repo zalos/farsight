@@ -50,6 +50,10 @@
       "types": "./dist/frameworks/nest/index.d.ts",
       "import": "./dist/frameworks/nest/index.js"
     },
+    "./frameworks/express": {
+      "types": "./dist/frameworks/express/index.d.ts",
+      "import": "./dist/frameworks/express/index.js"
+    },
     "./schemas/*": "./schemas/*",
     "./package.json": "./package.json"
   },

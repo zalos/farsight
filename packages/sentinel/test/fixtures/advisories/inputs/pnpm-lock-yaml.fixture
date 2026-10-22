@@ -1,0 +1,29 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      sentinel-fixture-alpha:
+        specifier: 1.0.0
+        version: 1.0.0
+
+packages:
+
+  sentinel-fixture-alpha@1.0.0:
+    resolution: {integrity: sha512-AAAA}
+
+  sentinel-fixture-gamma@0.3.0:
+    resolution: {integrity: sha512-CCCC}
+
+snapshots:
+
+  sentinel-fixture-alpha@1.0.0:
+    dependencies:
+      sentinel-fixture-gamma: 0.3.0
+
+  sentinel-fixture-gamma@0.3.0: {}

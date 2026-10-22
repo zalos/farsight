@@ -61,6 +61,10 @@ import { SENTINEL_PATTERN_STRINGS } from './strings-sentinel-pattern.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_NEST_STRINGS } from './strings-sentinel-nest.js';
+
+import { SENTINEL_OSV_STRINGS } from './strings-sentinel-osv.js';
+
+import { SENTINEL_EXPRESS_STRINGS } from './strings-sentinel-express.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
 import { AGENT_STRINGS } from './strings-agents.js';
 import { TOUR_STRINGS } from './strings-tour.js';
@@ -201,6 +205,13 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_GLOSSARY_STRINGS,
   // Sentinel's Nest framework pack: why a control fact is unknown, and the registrations it could not follow (strings-sentinel-nest.ts)
   ...SENTINEL_NEST_STRINGS,
+
+
+  // Sentinel's OSV advisory adapter: coverage, refusals, engine failures and acquisition (strings-sentinel-osv.ts)
+  ...SENTINEL_OSV_STRINGS,
+
+  // the Express framework pack: why a control fact about an Express route is unknown (strings-sentinel-express.ts)
+  ...SENTINEL_EXPRESS_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)

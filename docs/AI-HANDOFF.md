@@ -6,6 +6,38 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Nest library merged with main foundations — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges main `6bf00a7d` into reviewed Nest head `17ac292e`.
+The Nest implementation, its test and fixture tree, and its catalog are byte-identical to that reviewed head.
+Express, Pattern and OSV adapter source, execution runtime and OOM controls are byte-identical to incoming main.
+The export map, catalog registration, package import audit, documentation and standalone consumer retain both
+framework libraries and both scanner asset sets. Capability expectations retain main's Express draft library;
+no framework operation is added to the planner or preview command.
+
+Validation on Node 24.19.0: Sentinel dependency-closure build, typecheck, schema check and catalog lint passed.
+The focused Nest, Express and package suites passed 104 tests, and two capability controls passed, all without
+skips. A clean npm-only consumer exercised both installed framework APIs, compiled ten public exports and 19
+contract types, validated 19 schemas and 53 fixtures, and reopened storage across processes. It verified all 17
+Pattern pack files and the Pattern/OSV worker digests, with no advisory database bundled. No scanner or target
+code was executed. Broader historical suite and graph measurements remain qualified to their recorded heads;
+canonical framework command integration and new native qualification are separate gates.
+
+## Delayed OOM canary correction — 2026-10-22
+
+Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
+first two terminal exit-137 observations, including naturally false flags, instead of hiding the first two true
+OOM flags. The old adapter compounds natural daemon delay and can exhaust the actual backend's four-read bound;
+a deterministic backend regression fails with the old adapter and passes with the correction. Production
+classification, the 500 ms bound, cancellation and exact ownership/cleanup are unchanged. Exit 137 with no
+affirmative OOM evidence remains `workerExited`. Required native positives still require genuine daemon evidence.
+
+Validation: Sentinel dependency-closure build; four pure state controls plus all 20 native isolation checks pass
+with zero skips on Docker Desktop Engine 29.2.1 / Linux arm64. Ten additional focused native OOM/plain-SIGKILL
+trials pass. Native inspect diagnostics retain at most 16 bounded state/timing rows, without paths or source.
+The original Linux CI failure lacked raw inspect observations, so its exact daemon sequence remains unproven;
+required native CI on the corrected head must pass before integration.
+
 ## Start here
 
 Read `AGENTS.md` for project rules and architecture. Codex loads it as project instructions; `CLAUDE.md` imports it and this handoff. Keep durable facts in those repository files so both providers receive updates. This is project memory, not ChatGPT account memory or a synchronization of private conversation histories.
@@ -82,6 +114,25 @@ catalog and exact subject lint passed. No target application code was executed. 
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel offline advisory foundation rebased — 2026-10-22
+
+Branch `codex/sentinel-osv-integration` rebases the independently reviewed advisory adapter from `30b618f1`
+onto merged PR 145 (`5196dc70`), preserving PR 158's execution repair. Adapter source, sealed input reader, original
+fixtures, tests and asset hook are byte-identical to that reviewed version. Integration retains both Pattern and
+OSV catalogs, security/ADR sections, asset hooks and installed-worker checks; OSV is ADR 29 on this main branch.
+
+Checked on the rebased source: Sentinel dependency-closure build and typecheck; 54 affected OSV, package, Pattern,
+preview and actual detached-CLI tests, zero skips; 181 script tests, zero skips; catalog and exact-title lint.
+The clean npm consumer validated eight typed exports, 19 schemas, 53 fixtures and cross-process storage. Actual
+installed worker checks passed for Pattern (six original findings), OSV (one original finding), and both together.
+The individual native qualification jobs select their own provisioned worker; both asset sets are always validated,
+and the default local smoke still runs both workers. No image was acquired for these checks.
+
+This is a mergeable adapter foundation, not full PR 12 completion: production scanner command/registry admission,
+owner acquisition CLI and installed public-command acceptance remain integration work. Earlier fixed-source ingest
+and browser evidence below belongs to its named head; this rebase does not alter parser/core graph behavior.
+No primary checkout build, graph replacement or server restart occurred.
+
 ## Sentinel sampled-memory test — 2026-10-22
 
 Branch `codex/sol-memory-test` changes only the bootstrap resource regression: the real parse and store now receive
@@ -137,6 +188,31 @@ batching and actual installed-command acceptance pass. The scheduler, detached C
 advisories and framework packs remain in implementation/review. SOL found secrets allowlist omissions and a
 filename redaction channel; those findings must be closed before acceptance. npm release packaging prework is
 underway; no release has been cut.
+
+## Sentinel advisory integration; native qualification pending — 2026-10-22
+
+The canonical planner merged as [#144](https://github.com/zalos/farsight/pull/144), `a690cc9`, after all eight
+checks. The pattern adapter has a draft qualification PR [#145](https://github.com/zalos/farsight/pull/145);
+its native amd64 diagnostic qualification test needs the explicit candidate-platform input before rerunning.
+
+Offline advisories are integrated on `codex/sentinel-osv-integration`. The OSV-Scanner 2.7.0 adapter uses the pinned
+official container and separately acquired, digest-bound advisory snapshots. Scans cannot fetch databases.
+Missing, stale, refused and skipped inputs remain explicit. SOL verified the final refusal and comparison fixes:
+a failed or partially listed counterpart cannot make an earlier finding appear resolved.
+
+The integration passed full build/typecheck, 351 Sentinel tests (23 explicit opt-in/platform skips), 21 focused
+real-container tests with zero skips, core 404, scripts 181, catalog lint (3,814 entries), and a clean npm consumer
+with eight typed exports, 19 contracts/schemas and 53 fixtures. The installed OSV worker ran through the workspace
+execution service and found the original synthetic advisory; that is not yet acceptance through the installed CLI.
+Fresh fixed-source ingests at runtime head `c537e51` against main `a690cc9` agree on every node and edge value:
+7,917 nodes, 16,387 edges, source digest `16f951b42b53`, 21,904,177 graph bytes and 29,835,264 database bytes in both.
+Fresh front-door, Map and code-map screenshots were inspected with zero page errors; known fixture design-image
+404s remain on the first two surfaces. No primary build or dogfood refresh occurred.
+
+PR 12 remains incomplete until native amd64 qualification and production scheduler/installed CLI wiring.
+Scheduler/CLI admission, receipt scope and crash durability findings remain under correction. Framework packs
+are being checked for false protection claims. Release packaging remains prework; mandatory acceptance gates
+must pass before publication, and no release has been cut.
 
 ## Sentinel policy merged; planner integration verified — 2026-10-22
 
