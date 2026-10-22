@@ -4,7 +4,7 @@
 before implementation, revision 2.** It addresses the first SOL review's five blocking findings and adopts the
 integration lead's accepted defaults (§2). It is not an implementation, admits no build, and does not move PR 29
 in the [progress ledger](execution-progress.md). Nothing here has been executed. What remains open is in
-[§12](#12-remaining-decisions-and-measurements).
+[§12](#12-measurements-and-resolved-choices).
 
 It builds on the reviewed PR 03 store (ledger, staging, verified objects, retained roots, the 16 MiB object cap,
 4096 staged artifacts per stage) and on the PR 02/07 contracts:
@@ -205,20 +205,20 @@ memory cgroup. Both are measured on the sample (§12, M2).
 
 The `maven.repo.local.tail` option of Maven 3.9 keeps the closure read-only and puts Maven's tracking files in the
 head repository. Whether the image's Maven honours it read-only is measurement M1. The requested phases come only
-from the approved profile. Proposed: `compile` for the sample, or `test-compile` when its tests are part of the
-analysed scope.
+from the approved profile. The original sample's profile requests `compile` only (D3); there is no implicit phase
+expansion.
 
 The environment is an explicit allowlist: `HOME`, `TMPDIR`, `JAVA_HOME`, `LANG`, and `MAVEN_OPTS` set by Sentinel.
 Nothing is inherited from the host, and `MAVEN_ARGS` is unset.
 
-**Effective configuration.** An approved `.mvn/maven.config` adds arguments, and an approved `.mvn/jvm.config` adds
-JVM options. The entry script records:
-- the exact argv it ran;
-- the bytes of each approved `.mvn` file;
-- Maven's own report of active settings and properties, from `help:effective-settings`. This is only if that plugin
-  is in the closure, and it runs before the build in the same offline container.
+**Invocation.** An approved `.mvn/maven.config` adds arguments, and an approved `.mvn/jvm.config` adds JVM options.
+The invocation is defined by trusted facts the coordinator constructed or verified:
+- the exact argv;
+- the environment allowlist;
+- the digests of the accepted `.mvn` files (the original sample has none).
 
-The build record therefore shows the configured command, not only the requested one.
+No plugin is added to report Maven's effective settings (D2). Anything observed from the run, such as the build's
+own log lines, is recorded as a claim, not as the invocation.
 
 **Multi-module and custom output.**
 - A reactor build writes under each module's directory inside `/work`; capture finds those writes by comparing
@@ -438,10 +438,11 @@ Each step is its own reviewable commit or PR, building only synthetic fixtures u
 | 29g | Original sample: integration lead writes the bounded authorization record; closure assembled and reviewed (§5 P1); build, capture, scan | Only the original sample's captured snapshot |
 | 29h | Report and operator docs; progress row updated only with merged evidence | — |
 
-## 12. Remaining decisions and measurements
+## 12. Measurements and resolved choices
 
-Root has accepted the defaults in §2. What is still open is evidence to collect during implementation (M), and a
-small number of decisions (D). None of these is a new approval gate.
+Root has accepted the defaults in §2 and resolved D1–D4 as routine choices within the existing authorization. They
+are recorded below as **resolved**, not as approval gates. M1–M5 remain **empirical gates**: actual measurements during
+implementation, each with the stated fallback.
 
 - **M1 — read-only closure tail.** Does the image's Maven 3.9 resolve offline from a read-only
   `maven.repo.local.tail` without writing to it? If not, the coordinator instead copies the verified closure into a
@@ -454,16 +455,17 @@ small number of decisions (D). None of these is a new approval gate.
 - **M4 — volume behaviour on Docker Desktop.** That a `local`-driver tmpfs volume keeps its contents after the build
   container is removed and before the capture container mounts it. Labelled removal must also be verifiable.
 - **M5 — closure jar sizes.** Confirm no closure file exceeds 16 MiB. If one does, that closure is unsupported in v1.
-- **D1 — the image.** Which pinned image: an upstream JDK + Maven image by digest, or a Sentinel-built image from a
-  pinned Dockerfile acquired the same way. Either way, licence and SBOM facts are recorded with the digest.
-- **D2 — `help:effective-settings`.** Whether that plugin joins the sample's closure so the effective configuration
-  is recorded by Maven itself. Otherwise it is recorded from argv plus the approved `.mvn` bytes only, and the build
-  record says so.
-- **D3 — requested phases for the sample.** `compile` only, or `test-compile` so test sources' generated code is
-  analysed. A10 applies either way.
-- **D4 — build-derived findings and CI policy.** A build-only finding is reported and never clears or upgrades a
-  source verdict. Whether it can fail CI policy (exit 1) follows the run's normal policy configuration; the default
-  proposal is yes, labelled build-derived.
+- **D1 — image (resolved).** An official upstream Maven + JDK image, selected at implementation time. It is
+  identified by its actual pinned digest and recorded provenance (publisher, source, licence and SBOM facts where the
+  image publishes them). This design names no tag or digest.
+- **D2 — effective settings (resolved).** `help:effective-settings` is kept out of the first sample's closure. The
+  invocation is the trusted argv and environment plus the accepted `.mvn` digests (the sample has none). Records
+  observed from the run remain claims where appropriate.
+- **D3 — requested phases (resolved).** The original sample's profile requests `compile`. Runtime behaviour, such as
+  a plugin running tests or starting a server (A10), is validated separately by owned synthetic fixture checks.
+  There is no implicit phase expansion.
+- **D4 — CI policy (resolved).** A build-derived finding may fail an explicit, trusted CI policy (exit 1), only with
+  its build-derived label and accepted §6 provenance. It never clears or upgrades a source finding.
 
 ## 13. What this document does not do
 
