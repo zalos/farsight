@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
 export const CANDIDATES = Object.freeze([
-  Object.freeze({ id: 'semgrep', version: '1.181.0', image: 'semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b', entrypoint: 'semgrep' }),
-  Object.freeze({ id: 'opengrep', version: '1.31.0', image: 'debian@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8', entrypoint: '/tool/opengrep', binarySha256: '2b713a29a00237f85408b83002fc111db5b94c7fa8d263f0a93184a960655d9d' }),
+  Object.freeze({ id: 'semgrep', version: '1.181.0', tmpfs: '/tmp:rw,noexec,nosuid,size=256m,mode=1777', image: 'semgrep/semgrep@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b', entrypoint: 'semgrep' }),
+  Object.freeze({ id: 'opengrep', version: '1.31.0', tmpfs: '/tmp:rw,exec,nosuid,size=256m,mode=1777', tmpfsException: 'Pinned binary packaging compatibility: noexec trial failed with child launch Permission denied; internal cause unverified. Executable temporary storage weakens this control.', image: 'debian@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8', entrypoint: '/tool/opengrep', binarySha256: '2b713a29a00237f85408b83002fc111db5b94c7fa8d263f0a93184a960655d9d' }),
 ]);
 const OWNER_LABEL = 'org.farsight.sentinel-feasibility.owner';
 const CORPUS = resolve(dirname(fileURLToPath(import.meta.url)), '../packages/sentinel/test/fixtures/feasibility');
@@ -156,7 +156,7 @@ export function containerArgs({ candidate, name, owner, scenario, source, rules,
     '--label', `${OWNER_LABEL}=${owner}`, '--label', `org.farsight.sentinel-feasibility.scenario=${scenario}`,
     '--platform', 'linux/arm64', '--network', 'none', '--read-only', '--user', '65534:65534', '--cap-drop', 'ALL',
     '--security-opt', 'no-new-privileges:true', '--memory', '2g', '--cpus', '2', '--pids-limit', '128',
-    '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m,mode=1777', '--workdir', '/input',
+    '--tmpfs', CANDIDATES.find(pin => pin.id === candidate.id).tmpfs, '--workdir', '/input',
     '--env', 'HOME=/tmp', '--env', 'SEMGREP_SEND_METRICS=off', '--env', 'SEMGREP_ENABLE_VERSION_CHECK=0',
     '--env', 'OPENGREP_SEND_METRICS=off', '--env', 'OPENGREP_ENABLE_VERSION_CHECK=0',
     '--env', 'SEMGREP_APP_TOKEN=', '--env', 'OPENGREP_APP_TOKEN=',
@@ -214,7 +214,7 @@ export async function runContainer(spec, runner = execute, signal) {
     record.isolation = { id, imageId: container.Image, image: container.Config.Image, networkMode: container.HostConfig.NetworkMode,
       user: container.Config.User, readOnlyRootfs: container.HostConfig.ReadonlyRootfs,
       capDrop: container.HostConfig.CapDrop, securityOpt: container.HostConfig.SecurityOpt,
-      memory: container.HostConfig.Memory, nanoCpus: container.HostConfig.NanoCpus, pidsLimit: container.HostConfig.PidsLimit,
+      tmpfs: container.HostConfig.Tmpfs, memory: container.HostConfig.Memory, nanoCpus: container.HostConfig.NanoCpus, pidsLimit: container.HostConfig.PidsLimit,
       mounts: container.Mounts?.map(m => ({ destination: m.Destination, readWrite: m.RW, type: m.Type })) };
     record.execution = await runner('docker', ['start', '--attach', id], { signal });
     const after = await inspectOwned(runner, id, owner);
@@ -265,9 +265,9 @@ export async function materialize(root, corpusRoot = CORPUS) {
   }
   const sourceTexts = {};
   for (const input of inputs) sourceTexts[input.path] = await readFile(join(source, input.path), 'utf8');
-  validateSpans(index.rules.map(r => ({ matches: r.expectedMatches, noMatches: r.expectedNoMatches })), sourceTexts);
   const expectedRules = ['sentinel-fixture-sql-concat-tsjs', 'sentinel-fixture-sql-concat-java'];
   if (!Array.isArray(index.rules) || index.rules.length !== 2 || expectedRules.some(id => !index.rules.some(rule => rule.id === id))) throw new Error('Unexpected rule inventory');
+  validateSpans(index.rules.map(r => ({ matches: r.expectedMatches, noMatches: r.expectedNoMatches })), sourceTexts);
   for (const rule of index.rules) {
     const bytes = await readFixture(corpusRoot, rule.source);
     if (digest(bytes) !== rule.sha256) throw new Error('Rule source hash mismatch');
@@ -382,12 +382,11 @@ export function evaluateControls(result) {
 export function preview(options = {}) {
   return { schemaVersion: 'sentinel-feasibility-scanners-v1', mode: options.run ? 'run' : 'preview',
     platformRestriction: 'Native arm64 macOS/Linux host; Linux/arm64 Docker server and pinned images only; no emulation',
-    tmpfs: '/tmp:rw,noexec,nosuid,size=256m,mode=1777',
     candidates: CANDIDATES, cases: selectedCases, scenarios: ['version', 'paired-baseline', 'oversized', 'missing-rules', 'network-denial'],
     effects: { acquisition: false, hostScannerExecution: false, providerCalls: false, network: 'none inside each container',
       localWrites: options.run ? 'fresh --out directory; synthetic inputs and retained evidence' : 'none',
       programs: options.run ? ['docker; scanners and network control only inside owned containers'] : [] },
-    limitations: ['Narrow synthetic rules only; label review and capability acceptance are recorded separately.', 'Container flags and a denied socket trial do not prove hostile-code isolation.',
+    limitations: ['Opengrep alone uses executable tmpfs for pinned binary packaging compatibility after an observed noexec child-launch permission failure; no automatic retry or fallback.', 'Narrow synthetic rules only; label review and capability acceptance are recorded separately.', 'Container flags and a denied socket trial do not prove hostile-code isolation.',
       'No support ranking, production orphan recovery, deep-flow or dependency coverage claim.'] };
 }
 
