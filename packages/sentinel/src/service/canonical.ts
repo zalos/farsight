@@ -18,6 +18,7 @@ import { Coordinator, type RunSummary } from '../execution/coordinator.js';
 import { admitPlan, loadPlan } from '../execution/plans.js';
 import { loadBootstrap } from '../execution/bootstrap.js';
 import type { AdapterRegistry } from '../execution/registry.js';
+import { checkProfileRegistry } from '../execution/profile.js';
 import { planAnalysis, planBootstrap, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom } from '../planner/index.js';
 import type { EffectivePolicy } from '../policy/index.js';
 import { captureSnapshot } from '../snapshot/capture.js';
@@ -186,7 +187,31 @@ export async function previewFindingsOf(store: SentinelStore, runId: string): Pr
  * complete coverage still prints required coverage incomplete with the reason that the finding policy is not
  * evaluated here. Never `satisfied`.
  */
-export async function canonicalResult(store: SentinelStore, command: string, runId: string, options: { executing: boolean; verdicts?: PrintedVerdicts; facts?: Record<string, unknown> }): Promise<CommandResult> {
+/**
+ * Whether this installation can execute the run's current admitted revision: every check adapter is told only rules
+ * it implements, and every adapter the admitted profile recorded is registered here with the same digest. Derived
+ * from the store and this installation alone, so it reads the same after a disconnect or a restart. Undefined when it
+ * can; otherwise why not, as the refusal a start would meet.
+ */
+export async function notExecutableHere(store: SentinelStore, runId: string, registry: AdapterRegistry = foundationRegistry()):
+  Promise<{ error: string; reason?: string } | undefined> {
+  const plan = await currentPlan(store, runId);
+  if (!plan) return undefined;
+  const admitted = await loadPlan(store, runId, plan.revision);
+  try {
+    assertSupportedRules(admitted.plan);
+    checkProfileRegistry(admitted.profile, registry);
+  } catch (e) {
+    const code = (e as { code?: unknown }).code;
+    const reason = (e as { detail?: { reason?: unknown } }).detail?.reason;
+    return { error: typeof code === 'string' ? code : 'sentinel.execution.planInvalid', ...(typeof reason === 'string' ? { reason } : {}) };
+  }
+  return undefined;
+}
+
+export async function canonicalResult(store: SentinelStore, command: string, runId: string, options: { executing: boolean; verdicts?: PrintedVerdicts; facts?: Record<string, unknown>;
+  /** The registry that would execute it (this installation's by default). */
+  registry?: AdapterRegistry }): Promise<CommandResult> {
   const base = options.verdicts ? { verdicts: options.verdicts } : {};
   const recorded = store.ledger.getRun(runId);
   const plan = await currentPlan(store, runId);
@@ -205,6 +230,10 @@ export async function canonicalResult(store: SentinelStore, command: string, run
   }
   if (state === 'canceled' || (state === 'paused' && !options.executing)) return result(command, 'configuration-failure', { ...base, facts, reasonCode: 'sentinel.service.runNotCompleted' });
   if (!options.executing) {
+    // Not executing and not ended: `run` would execute it, unless this installation cannot. Then saying it waits (or
+    // was interrupted) would mislead; it needs a new plan made by this installation.
+    const blocked = await notExecutableHere(store, runId, options.registry);
+    if (blocked) return result(command, 'configuration-failure', { ...base, facts: { ...facts, ...blocked }, reasonCode: 'sentinel.service.runNotExecutable' });
     // Planned and admitted, with none of its analysis started yet: waiting for `run`, not interrupted.
     const untouched = admitted.plan.kind === 'analysis' && admitted.plan.units.every(u => !store.ledger.getWork({ id: u.id, revision: u.revision }));
     return result(command, untouched ? 'prepared' : 'configuration-failure', { ...base, facts, reasonCode: untouched ? 'sentinel.service.runAwaiting' : 'sentinel.service.runInterrupted' });

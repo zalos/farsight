@@ -23,7 +23,8 @@ import { candidateDigest, emptyLock, lockDigest, promote, promotionIntent, readP
 import { RuleLockBook } from './rule-locks.js';
 import { loadPlan } from '../execution/plans.js';
 import { ServiceError } from './owner-service.js';
-import { canonicalResult, currentPlan, executeRun, rerunRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
+import type { AdapterRegistry } from '../execution/registry.js';
+import { canonicalResult, currentPlan, executeRun, notExecutableHere, rerunRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
 export interface Workspace {
   readonly path: string;
@@ -252,6 +253,9 @@ export async function runPlan(ws: Workspace, options: { planId: string; confirm:
     if (!decided.admitted) return decided.result;
     const verdicts = printed(decided.record);
     if (!isFinalRunState(runStateIn(store, plan.runId))) {
+      // A plan this installation cannot execute (another build's adapters, a rule no shipped adapter implements):
+      // refused before anything starts; canonicalResult says why.
+      if (await notExecutableHere(store, plan.runId)) return canonicalResult(store, 'run', plan.runId, { executing: false, verdicts });
       const work = scratchUnder(ws);
       try { await executeRun(store, plan.runId, { scratchRoot: work }); } finally { removeScratch(work); }
     }
@@ -400,16 +404,21 @@ export function runStateIn(store: SentinelStore, runId: string): string | null {
 }
 
 /** `runStatus` against a store this process already holds (the background service's). */
-export async function statusIn(store: SentinelStore, options: { runId: string; after?: number; limit?: number }): Promise<CommandResult> {
+export async function statusIn(store: SentinelStore, options: { runId: string; after?: number; limit?: number;
+  /** Something executes it now (the service says so); otherwise whether this installation could is part of the answer. */
+  executing?: boolean; registry?: AdapterRegistry }): Promise<CommandResult> {
   {
     const limit = Math.min(Math.max(1, options.limit ?? 20), MAX_STATUS_EVENTS);
     const page = store.ledger.readEvents({ runId: options.runId, after: options.after ?? 0, limit });
     // The state is the last committed run event's; the whole history is read in bounded pages without keeping it.
     const state = runStateIn(store, options.runId);
     if (state === null) return result('status', 'configuration-failure', { reasonCode: 'sentinel.service.runUnknown', facts: { runId: options.runId } });
-    return result('status', 'answered', { facts: {
+    // Not ended and not executing: a run this installation cannot execute says so here, not only once `run` is tried.
+    const blocked = !options.executing && !isFinalRunState(state) ? await notExecutableHere(store, options.runId, options.registry) : undefined;
+    return result('status', 'answered', { ...(blocked ? { reasonCode: 'sentinel.service.runNotExecutable' } : {}), facts: {
       runId: options.runId, state, cursor: page.cursor, more: page.more,
       events: page.events.map(e => ({ sequence: e.sequence, kind: e.kind, at: e.at })),
+      ...(blocked ? { notExecutable: blocked } : {}),
     } });
   }
 }

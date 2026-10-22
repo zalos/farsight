@@ -40,7 +40,8 @@ export type ServiceErrorCode =
   | 'sentinel.service.unknownOperation' | 'sentinel.service.requestInvalid' | 'sentinel.service.planUnknown'
   | 'sentinel.service.planChanged' | 'sentinel.service.alreadyServing' | 'sentinel.service.startFailed'
   | 'sentinel.service.recordUnsafe' | 'sentinel.service.lockChanged' | 'sentinel.service.packUnavailable'
-  | 'sentinel.service.noRuleLock' | 'sentinel.service.bootstrapFailed' | 'sentinel.service.ruleUnsupported';
+  | 'sentinel.service.noRuleLock' | 'sentinel.service.bootstrapFailed' | 'sentinel.service.ruleUnsupported'
+  | 'sentinel.service.runNotExecutable';
 
 export class ServiceError extends Error {
   constructor(readonly code: ServiceErrorCode, readonly facts: Readonly<Record<string, unknown>> = {}) { super(code); this.name = 'ServiceError'; }
@@ -52,6 +53,8 @@ interface ActiveRun {
   pause: boolean;
   cancel: boolean;
   task: Promise<void>;
+  /** Settles once the coordinator is open (the run is accepted) or could not be (nothing was accepted). */
+  opened: Promise<{ error: string; reason?: string } | undefined>;
   /** Why the run could not be executed, when it could not. */
   error?: string;
 }
@@ -62,6 +65,10 @@ const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typ
 const codeOf = (e: unknown) => {
   const code = (e as { code?: unknown })?.code;
   return typeof code === 'string' && code.startsWith('sentinel.') ? code : 'sentinel.service.executionFailed';
+};
+const failureOf = (e: unknown): { error: string; reason?: string } => {
+  const reason = (e as { detail?: { reason?: unknown } })?.detail?.reason;
+  return { error: codeOf(e), ...(typeof reason === 'string' ? { reason } : {}) };
 };
 
 /** Reads one request body: an object with exactly the named fields, each an id (or a bounded integer). */
@@ -100,6 +107,8 @@ export class OwnerService {
   readonly #runEnvelope: (runId: string) => RunEnvelope | undefined;
   readonly #now: () => Date;
   readonly #active = new Map<string, ActiveRun>();
+  /** The last error each run met in this service, kept after its task ended (until a later launch succeeds). */
+  readonly #lastError = new Map<string, string>();
   #idleSince = Date.now();
   #stopping = false;
 
@@ -131,7 +140,7 @@ export class OwnerService {
       }
       case 'run.status': {
         const f = fields(body, ['runId'], ['after', 'limit']);
-        return statusIn(this.#store, { runId: f.runId as string, ...(f.after === undefined ? {} : { after: f.after as number }), ...(f.limit === undefined ? {} : { limit: f.limit as number }) });
+        return statusIn(this.#store, { runId: f.runId as string, executing: this.#active.has(f.runId as string), registry: this.#registry, ...(f.after === undefined ? {} : { after: f.after as number }), ...(f.limit === undefined ? {} : { limit: f.limit as number }) });
       }
       case 'run.wait': {
         const f = fields(body, ['runId'], ['timeoutMs']);
@@ -202,16 +211,30 @@ export class OwnerService {
     const decided = await this.#authorize('run', 'run.start', planId, receiptId, by);
     if ('refusal' in decided) return decided.refusal;
     const { verdicts, facts } = decided;
-    // One run per plan: a second start joins the run already executing.
-    if (this.#active.has(planId)) return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) } });
+    // One run per plan: a second start joins the run already executing, once it is accepted.
+    const active = this.#active.get(planId);
+    if (active) {
+      const failed = await active.opened;
+      if (failed) return this.#notAccepted('run', planId, failed, verdicts, facts);
+      return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: true, state: runStateIn(this.#store, planId) } });
+    }
     if (this.#stopping || this.#active.size > 0) return result('run', 'configuration-failure', { verdicts, facts, reasonCode: 'sentinel.service.anotherRunActive' });
-    if (isFinalRunState(runStateIn(this.#store, planId))) return canonicalResult(this.#store, 'run', planId, { executing: false, verdicts, facts });
-    this.#launch(planId, { pause: false, cancel: false });
+    if (isFinalRunState(runStateIn(this.#store, planId))) return canonicalResult(this.#store, 'run', planId, { executing: false, verdicts, facts, registry: this.#registry });
+    // Accepted only once the coordinator has opened the admitted revision under this installation's registry: a plan
+    // this installation cannot execute is refused here, with why, never answered `submitted` and left looking queued.
+    const failed = await this.#launch(planId, { pause: false, cancel: false }).opened;
+    if (failed) return this.#notAccepted('run', planId, failed, verdicts, facts);
     return result('run', 'submitted', { verdicts, facts: { ...facts, runId: planId, joined: false, state: runStateIn(this.#store, planId) } });
   }
 
+  #notAccepted(command: string, runId: string, failed: { error: string; reason?: string }, verdicts: PrintedVerdicts, facts: Record<string, unknown>): CommandResult {
+    return result(command, 'configuration-failure', { verdicts, reasonCode: 'sentinel.service.runNotExecutable',
+      facts: { ...facts, runId, ...failed, state: runStateIn(this.#store, runId) } });
+  }
+
   #launch(planId: string, flags: { pause: boolean; cancel: boolean }): ActiveRun {
-    const run: ActiveRun = { planId, ...flags, task: Promise.resolve() };
+    let settle!: (v: { error: string; reason?: string } | undefined) => void;
+    const run: ActiveRun = { planId, ...flags, task: Promise.resolve(), opened: new Promise(r => { settle = r; }) };
     this.#active.set(planId, run);
     run.task = (async () => {
       const work = scratchUnder(this.#ws);
@@ -224,14 +247,18 @@ export class OwnerService {
         if (admitted) assertSupportedRules((await loadPlan(this.#store, planId, admitted.revision)).plan);
         const coordinator = await Coordinator.open({ store: this.#store, runId: planId, scratchRoot: scratch, registry: this.#registry, ...(first ? { run: first } : {}) });
         run.coordinator = coordinator;
+        settle(undefined);
         if (run.cancel) coordinator.cancel();
         else if (run.pause) coordinator.pause();
         await coordinator.run();
       } catch (e) {
         run.error = codeOf(e);
+        // Before the coordinator opened, nothing was accepted: the start (and any joiner) is refused with this.
+        settle(failureOf(e));
       } finally {
         try { removeScratch(work); } catch { /* left for an explicit cleanup */ }
         this.#active.delete(planId);
+        if (run.error) this.#lastError.set(planId, run.error); else this.#lastError.delete(planId);
         if (this.#active.size === 0) this.#idleSince = Date.now();
       }
     })();
@@ -246,7 +273,10 @@ export class OwnerService {
       clearTimeout(timer);
     }
     const executing = this.#active.has(runId);
-    const r = await canonicalResult(this.#store, 'wait', runId, { executing, ...(run?.error ? { facts: { error: run.error } } : {}) });
+    // An error this service met executing it is a fact for its lifetime; what the store and this installation say
+    // (canonicalResult, including whether this installation can execute it at all) holds after any restart too.
+    const error = run?.error ?? this.#lastError.get(runId);
+    const r = await canonicalResult(this.#store, 'wait', runId, { executing, registry: this.#registry, ...(error ? { facts: { error } } : {}) });
     return executing ? result('wait', 'submitted', { facts: r.facts, reasonCode: 'sentinel.service.waitTimedOut' }) : r;
   }
 
@@ -275,7 +305,8 @@ export class OwnerService {
     } else {
       // A paused or interrupted run: canceled through a coordinator so its ledger fences any late publication.
       if (this.#stopping || this.#active.size > 0) return result('cancel', 'configuration-failure', { verdicts, reasonCode: 'sentinel.service.anotherRunActive', facts: { runId } });
-      this.#launch(runId, { pause: false, cancel: true });
+      const failed = await this.#launch(runId, { pause: false, cancel: true }).opened;
+      if (failed) return this.#notAccepted('cancel', runId, failed, verdicts, decided.facts);
     }
     return result('cancel', 'requested', { verdicts, facts: { ...decided.facts, runId, state: runStateIn(this.#store, runId) } });
   }

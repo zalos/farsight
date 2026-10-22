@@ -177,3 +177,65 @@ test('a promoted pack that names the preview detector for any other rule, or for
   assert.deepEqual(unsupportedRules({ pins: { rules: [{ ...shipped, packDigest: 'x' }] } } as any), []);
   assert.equal(unsupportedRules({ pins: { rules: [{ ...shipped, packDigest: 'x', definitionDigest: `sha256:${'0'.repeat(64)}` }] } } as any).length, 1);
 });
+
+test('a run planned by another installation is refused at start, never submitted, and wait and status say why after a restart', needsStore, async t => {
+  const { OwnerService } = await import('../dist/service/owner-service.js');
+  const { confirmForService, statusIn } = await import('../dist/service/local.js');
+  const { currentPlan } = await import('../dist/service/canonical.js');
+  const { createAdapterRegistry } = await import('../dist/execution/registry.js');
+  const { ownExecutable } = await import('../dist/service/package-paths.js');
+  const { PREVIEW_DETECTOR_ID } = await import('../dist/adapters/preview-detector.js');
+  const { OPERATIONS } = await import('../dist/service/trusted-profile.js');
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'sentinel-other-install-')));
+  t.after(() => { unlock(dir); rmSync(dir, { recursive: true, force: true }); });
+  const path = join(dir, 'ws');
+  mkdirSync(join(path, 'src'), { recursive: true });
+  writeFileSync(join(path, 'src/users.ts'), 'export const find = (id: string) => db.query("SELECT * FROM users WHERE id = " + id);\n');
+  const ws = workspaceOf(path, { ...process.env, XDG_STATE_HOME: join(dir, 'state') });
+  initWorkspace({ workspace: path });
+  adoptWorkspaceSettings(ws, { confirm: true, now: new Date() });
+  promoteRulePack(ws, { packDir: realpathSync.native(builtinPackDir('foundation-preview')!), confirm: true, now: new Date() });
+  const adopted = adoptedPolicy(ws);
+  assert.ok('policy' in adopted);
+  // The same adapters, but the detector is another build's: its registered digest differs from the one planned under.
+  const other = createAdapterRegistry([
+    { id: PREVIEW_DETECTOR_ID, version: 'preview-1-other-build', kind: 'built-in', isolation: 'child', module: ownExecutable(), coverage: 'per-file-per-rule' },
+    { id: OPERATIONS.capture, version: '1', kind: 'operation', operation: 'capture' },
+    { id: OPERATIONS.parse, version: '1', kind: 'operation', operation: 'parse' },
+    { id: OPERATIONS.inventory, version: '1', kind: 'operation', operation: 'inventory' },
+  ]);
+  const by = { principal: 'agent', channel: 'local-service' } as const;
+
+  const store = await openStore(ws.storePath);
+  t.after(() => { try { store.close(); } catch { /* closed */ } });
+  const work = scratchUnder(ws);
+  let runId: string;
+  try {
+    const planned = await planWorkspaceCanonical(store, { workspace: path, trustDir: ws.trustDir, policy: adopted.policy, scratchRoot: work, now: new Date() });
+    runId = planned.disclosure.runId;
+  } finally { removeScratch(work); }
+  const plan = await currentPlan(store, runId);
+
+  for (const attempt of [1, 2]) {
+    // A fresh service each time: the second stands for a restart. Neither accepts the run.
+    const service = new OwnerService(store, ws, { registry: other });
+    const confirmed = confirmForService(ws, { command: 'run', action: 'run.start', plan, planId: runId, confirm: true, now: new Date(), storeId: store.storeId });
+    assert.ok('receiptId' in confirmed);
+    const started: any = await service.handle('run.start', { planId: runId, receiptId: confirmed.receiptId }, by);
+    assert.equal(started.outcome, 'configuration-failure', `attempt ${attempt}: ${JSON.stringify(started)}`);
+    assert.equal(started.reasonCode, 'sentinel.service.runNotExecutable');
+    assert.match(String(started.facts.reason), /another digest/);
+    const waited: any = await service.handle('run.wait', { runId, timeoutMs: 300 }, by);
+    assert.deepEqual([waited.outcome, waited.reasonCode], ['configuration-failure', 'sentinel.service.runNotExecutable'], 'never awaiting');
+    const status: any = await service.handle('run.status', { runId }, by);
+    assert.equal(status.reasonCode, 'sentinel.service.runNotExecutable');
+    assert.match(String(status.facts.notExecutable.reason), /another digest/);
+    await service.stop();
+  }
+  // Nothing of the analysis started (awaiting means no unit has work), and the installation that planned it can still
+  // execute it: there, it waits to run.
+  const here = await canonicalResult(store, 'wait', runId, { executing: false });
+  assert.deepEqual([here.outcome, here.reasonCode], ['prepared', 'sentinel.service.runAwaiting']);
+  const status = await statusIn(store, { runId });
+  assert.equal(status.reasonCode, undefined);
+});
