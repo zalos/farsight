@@ -87,6 +87,8 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'service/owner-service.js': ['node:crypto', 'node:fs', 'node:path'],
   // The owner's rule locks: content-addressed revisions and one pointer in private state, through policy/user-state.
   'service/rule-locks.js': ['node:path'],
+  // The CLI's trusted profile: its canonical document's digest.
+  'service/trusted-profile.js': ['node:crypto'],
   // The owner's background service is the one process the command line starts itself (asserted below).
   'service/launch.js': ['node:child_process'],
   // The local service socket: an owner-only Unix socket, used only when a service runs; nothing at import.
