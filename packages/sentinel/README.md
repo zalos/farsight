@@ -10,6 +10,20 @@ depend on it nor import it (a test checks this).
 Plan: [`docs/proposals/farsight-sentinel/implementation-plan.md`](../../docs/proposals/farsight-sentinel/implementation-plan.md),
 PR 02 in [`implementation-prs.md`](../../docs/proposals/farsight-sentinel/implementation-prs.md).
 
+## Install
+
+With Node 24 or newer and npm only, from the GitHub Release that carries it. Its version is its own (the release
+notes name it); it is never farsight-cli's, and neither package needs the other:
+
+```sh
+npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-sentinel-A.B.C.tgz
+farsight-sentinel --version
+farsight-sentinel capabilities
+```
+
+`dist/build-stamp.json` in the installed package names its version, build time and commit. Uninstalling it removes
+the package only; a store it wrote stays where it is. Project initialization and scanning arrive with their PRs.
+
 ## Envelopes
 
 | Kind | Version | What it records |

@@ -1,7 +1,10 @@
-# Releasing farsight-cli
+# Releasing farsight-cli and farsight-sentinel
 
 A release is a version commit `chore(release): vX.Y.Z`, an annotated tag `vX.Y.Z` on that commit, a
-`CHANGELOG.md` section and a GitHub Release carrying the installable tarball `farsight-cli-X.Y.Z.tgz`.
+`CHANGELOG.md` section and a GitHub Release carrying two independently versioned, installable tarballs:
+`farsight-cli-X.Y.Z.tgz` (its version is the tag's) and `farsight-sentinel-A.B.C.tgz` (its own version, named
+explicitly for every release and never derived from farsight-cli's), plus `release-manifest.json`, which names
+each package's version, file, URL, size and SHA-256. Each installs on its own with only Node and npm.
 
 `main` is protected: no direct pushes, pull requests only, the `validate` and `e2e` checks required, enforced
 for admins and for the Actions token. So a release goes through a **release PR**, in two workflows:
@@ -9,7 +12,8 @@ for admins and for the Actions token. So a release goes through a **release PR**
 | workflow | trigger | permissions | what it does |
 |---|---|---|---|
 | **release** (`.github/workflows/release.yml`) | `workflow_dispatch`, from `main` | `contents: write` (pushes `release/vX.Y.Z`, never `main`) · `pull-requests: write` | gates → version commit on a new branch `release/vX.Y.Z` → pack + smoke test → push the branch → open the PR `chore(release): vX.Y.Z` labelled `release`, the release notes as its body |
-| **publish** (`.github/workflows/publish.yml`) | every `push` to `main`; does real work only when the push brings in `chore(release): vX.Y.Z` for the version `package.json` now carries | `contents: write` (tag + Release) · `id-token: write` (npm provenance) | gates → pack + smoke test → annotated tag `vX.Y.Z` on the release commit → GitHub Release with the tarball → npm (optional) |
+| **publish** (`.github/workflows/publish.yml`) | every `push` to `main`; does real work only when the push brings in `chore(release): vX.Y.Z` for the version `package.json` now carries | `contents: write` (tag + Release) · `id-token: write` (npm provenance) | gates → pack both + smoke test + npm-only acceptance → annotated tag `vX.Y.Z` on the release commit → GitHub Release with both tarballs and `release-manifest.json` → npm for farsight-cli (optional) → verify-release |
+| **verify-release** (`.github/workflows/verify-release.yml`) | called by publish; `workflow_dispatch` with a tag, any time | `contents: read` | reads the published `release-manifest.json`, checks each tarball's size and digest, installs the published URLs in clean npm-only consumers |
 
 Nothing releases on an ordinary push: publish's `detect` job finds no release commit and stops in seconds.
 
@@ -19,7 +23,8 @@ From the repository's **Actions** tab: *release* → *Run workflow* on `main`, p
 terminal with `gh`:
 
 ```sh
-gh workflow run release.yml -f bump=patch                 # 0.1.0 → 0.1.1
+gh workflow run release.yml -f bump=patch -f sentinel_version=0.1.0   # farsight-cli 0.1.0 → 0.1.1, farsight-sentinel at 0.1.0
+gh workflow run release.yml -f bump=patch                 # 0.1.0 → 0.1.1 (refused while packages/sentinel exists: name its version)
 gh workflow run release.yml -f bump=minor                 # 0.1.0 → 0.2.0
 gh workflow run release.yml -f version=1.0.0              # an explicit version
 gh workflow run release.yml -f bump=minor -f prerelease=beta.1   # 0.2.0-beta.1, marked pre-release
@@ -35,6 +40,8 @@ push, tags that commit and creates the Release; `gh run watch` follows it too.
 |---|---|
 | `bump` | `patch` (default) · `minor` · `major`, applied to the root `package.json` version; ignored when `version` is set. A bump from a prerelease finishes it (`1.0.0-beta.1` + patch → `1.0.0`). |
 | `version` | an explicit `X.Y.Z`; must be after the current version |
+| `sentinel_version` | farsight-sentinel's own release version `A.B.C`; **required** while the checkout has `packages/sentinel`, must be after Sentinel's current version, and is never taken from farsight-cli's. It is written to `packages/sentinel/package.json` and the release manifest. |
+| `allow_pending_gates` | open the PR although acceptance gates are pending (a Sentinel feature the release needs is not built yet); a failed gate still stops it. Off by default: a real release needs every gate passed. |
 | `prerelease` | a tag such as `beta.1`, appended as `X.Y.Z-beta.1`; the GitHub Release is marked pre-release and an npm publish goes to the `next` dist-tag |
 | `dry_run` | run the gates, make the version commit on the runner, pack and smoke-test, print the version and the notes (job summary), and stop: no branch pushed, no PR. Can be dispatched from any branch; a real release refuses any branch but `main`. |
 
@@ -46,13 +53,16 @@ push, tags that commit and creates the Release; `gh run watch` follows it too.
 3. Gates: `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, `pnpm test` (every package's suite
    plus `scripts/test`; the live tracker tests skip — they are opt-in by `FARSIGHT_LIVE`), `pnpm lint:strings`.
    Any failure stops the release before anything is written.
-4. `node scripts/release.mjs … --no-tag --branch 'release/v{version}' --commit-notes` as `github-actions[bot]`:
-   creates `release/vX.Y.Z`, bumps the root `package.json`, prepends the section to `CHANGELOG.md`, writes the
-   notes to `.github/release-notes/vX.Y.Z.md` and commits all three as `chore(release): vX.Y.Z`. No tag.
+4. `node scripts/release.mjs … --sentinel-version A.B.C --no-tag --branch 'release/v{version}' --commit-notes` as
+   `github-actions[bot]`: creates `release/vX.Y.Z`, bumps the root `package.json` and `packages/sentinel/package.json`
+   (each to its own version), prepends the section to `CHANGELOG.md`, writes the notes (with one install line per
+   package) to `.github/release-notes/vX.Y.Z.md` and the release manifest to `.github/release-manifests/vX.Y.Z.json`,
+   and commits them as `chore(release): vX.Y.Z`. No tag.
 5. Refuses if `release/vX.Y.Z` or the tag `vX.Y.Z` already exists on `origin`.
-6. `node scripts/pack.mjs` and the smoke test: installs the tarball into a temporary npm prefix, checks that
+6. `node scripts/pack.mjs`, and `node scripts/pack-sentinel.mjs --expect-version A.B.C` (the manifest's version;
+   any other is refused), then the smoke test: installs farsight-cli into a temporary npm prefix, checks that
    `farsight --version` prints the new version and the release commit, and ingests `examples/invoice-app` from a
-   temporary directory.
+   temporary directory. Then the [npm-only acceptance](#the-npm-only-acceptance) of both tarballs.
 7. Pushes `release/vX.Y.Z` and opens the PR. Its body is the release notes plus a footer saying the gates and
    the smoke test already ran on that exact commit (with a link to the run), and — when it was opened with
    `GITHUB_TOKEN` — that CI has not started yet and how to start it.
@@ -65,10 +75,14 @@ push, tags that commit and creates the Release; `gh run watch` follows it too.
    found too. None → not a release, stop. Tag `vX.Y.Z` already on `origin` → nothing to do, stop (re-running is
    safe).
 2. `publish`: checks out **the release commit** (the squash commit on `main`), runs the same gates, reads the notes from
-   `.github/release-notes/vX.Y.Z.md`, packs, smoke-tests exactly as above, creates the annotated tag `vX.Y.Z`
-   (message = the notes) on the release commit and pushes it, `gh release create vX.Y.Z
-   build/farsight-cli-X.Y.Z.tgz --verify-tag` with the notes, the optional npm publish, and the job summary with
-   the install line.
+   `.github/release-notes/vX.Y.Z.md`, validates `.github/release-manifests/vX.Y.Z.json` against both packages'
+   own manifests, packs both, smoke-tests and runs the npm-only acceptance exactly as above, writes
+   `release-manifest.json` (each tarball's URL, size and SHA-256), creates the annotated tag `vX.Y.Z` (message =
+   the notes) on the release commit and pushes it, `gh release create vX.Y.Z release-manifest.json
+   build/farsight-cli-X.Y.Z.tgz build/sentinel/farsight-sentinel-A.B.C.tgz --verify-tag` with the notes, the
+   optional npm publish of farsight-cli, and the job summary with one install line per package, read from the
+   uploaded manifest.
+3. `verify`: [verify-release](#verify-a-published-release) on the new tag.
 
 The squash commit is a new commit, so its sha differs from the one the release workflow smoke-tested on the
 branch; publish packs again on the squash commit, and the tag, the tarball's build stamp (`farsight --version`
@@ -120,6 +134,47 @@ publish.yml needs neither: it pushes only a tag and creates a Release with `GITH
    `npm install -g --prefix "$(mktemp -d)" https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz`,
    then that prefix's `bin/farsight --version` prints `farsight X.Y.Z · … · commit <the release commit>`.
 
+## The npm-only acceptance
+
+`scripts/npm-acceptance.mjs` is one runner for every place a tarball is checked: CI's `sentinel-package` job (the
+freshly packed tarballs), the release and publish workflows, and verify-release (the published URLs). Local files are
+served over a loopback URL, so npm installs and locks a URL exactly as it would a release asset. Six consumers:
+farsight-cli alone, farsight-sentinel alone and both, each with a global `--prefix` and in a project. Each has a
+toolchain of exactly `node`, `npm` and `npx` (no pnpm, corepack, yarn or other global bins on `PATH`), no inherited
+npm configuration or `NODE_PATH`, its own `HOME`, and no way to resolve a workspace package.
+
+| gate | what it shows |
+|---|---|
+| `consumer.*` | only node/npm/npx reachable; installed from the URLs; no `@farsight/*` workspace package, pnpm or corepack; only the chosen packages present; in a project, the lockfile records each URL with an integrity and `npm ci` reinstalls the same packages |
+| `farsight.*` | `--version` with the version and commit; `farsight.config.json` → ingest twice, the config unchanged and applied; read-only `serve` answers `/api/version`; `farsight mcp` answers an MCP stdio handshake |
+| `sentinel.*` | `--version` with Sentinel's own version (never farsight-cli's); `--help`; `capabilities --json`; `dist/build-stamp.json` names the version and commit; a store is created and reopened under a new epoch |
+| `combined.uninstall-sentinel-keeps-data-and-farsight` | uninstalling farsight-sentinel leaves its store byte for byte and farsight-cli working; a reinstalled Sentinel reopens the store |
+| pending until built | `sentinel.init-twice-preserves-config`, `sentinel.adopt-plan-run`, `sentinel.interrupt-resume` (PR 09); `sentinel.report-offline`, `sentinel.compare` (PR 19); `sentinel.replay` (PR 26); `sentinel.mcp-handshake` (PR 23a); `combined.host-handshake` (PR 24) |
+
+A pending gate is never reported as passed. Each names the capability the installed Sentinel reports for it; when
+the package reports that capability available, the gate **fails** until its check is written in the runner, so a
+release cannot claim a feature nothing verified. Exit 0 when nothing failed, 1 when a gate failed, 2 under
+`--require-complete` when a gate is pending.
+
+```sh
+pnpm pack:cli && pnpm pack:sentinel
+node scripts/npm-acceptance.mjs --farsight build/farsight-cli-X.Y.Z.tgz --sentinel build/sentinel/farsight-sentinel-A.B.C.tgz \
+  --expect-farsight X.Y.Z --expect-sentinel A.B.C [--expect-commit <sha>] [--only farsight|sentinel|both] [--modes global,local] \
+  [--require-complete] [--report acceptance.json]
+```
+
+## Verify a published release
+
+```sh
+gh workflow run verify-release.yml -f tag=vX.Y.Z      # in Actions: Node and npm only, no pnpm, no build
+node scripts/verify-release.mjs --tag vX.Y.Z         # locally; any machine with Node 24 and npm
+```
+
+It reads `https://github.com/zalos/farsight/releases/download/vX.Y.Z/release-manifest.json`, downloads each tarball
+from the URL the manifest names for it and checks its size and SHA-256, then runs the acceptance on those URLs. It
+changes nothing and can be re-run at any time; it does not depend on publish.yml running again (a re-run of publish
+skips a tag that exists).
+
 If publish fails after the merge (say, a flaky smoke test), fix the cause and re-run the failed run
 (`gh run rerun <id> --failed`): detect still finds the release commit until the tag exists. If it must be fixed
 in code, the release commit itself is broken: leave `vX.Y.Z` untagged, merge the fix by PR and cut the next
@@ -127,12 +182,18 @@ patch release — its changelog runs from the last tag, so it lists everything `
 
 ## Install a release (consumers)
 
-Each Release's notes carry the line; for `v0.1.1` it is:
+Each Release's notes carry one line per package, each from that package's own version; for a release `vX.Y.Z`
+carrying farsight-sentinel `A.B.C`:
 
 ```sh
-npm install -g https://github.com/zalos/farsight/releases/download/v0.1.1/farsight-cli-0.1.1.tgz
-farsight --version   # farsight 0.1.1 · built <time> · commit <sha> · packed
+npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz
+farsight --version   # farsight X.Y.Z · built <time> · commit <sha> · packed
+# optional, installed separately:
+npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-sentinel-A.B.C.tgz
+farsight-sentinel --version
 ```
+
+Releases before Sentinel was published carry farsight-cli alone.
 
 `farsight --version` (and MCP `graph_overview`, `/api/version`, the HUD sync chip) prints `version · built ·
 commit`; the commit is the `chore(release)` commit the tag points at, so `git show <sha>` finds the exact
@@ -167,9 +228,13 @@ as before; under protection that tag cannot reach `main`'s history by a push, so
   `## [Unreleased]` head), `--notes <file>`, `--dry-run`. Before the first tag the range starts after the commit
   that seeded `CHANGELOG.md`'s newest section (history: releases before 2026-10-04 were merged with merge commits).
 - `release.mjs` refuses a dirty tree, a branch other than `main` (without `--allow-branch`), a tag that exists,
-  a `--branch` that exists, and a version that does not move forward. Only the root `package.json` version
-  moves: `pack.mjs` gives it to the tarball and core's `buildInfo()` reads it in a workspace build; `packages/*`
-  keep their private workspace versions. `--no-tag` commits without tagging; `--branch <name>` creates and
+  a `--branch` that exists, and a version that does not move forward. The root `package.json` version moves:
+  `pack.mjs` gives it to the tarball and core's `buildInfo()` reads it in a workspace build. While
+  `packages/sentinel` exists, `--sentinel-version A.B.C` is required (after Sentinel's current version) and moves
+  `packages/sentinel/package.json`, which `pack-sentinel.mjs` packs from; it is refused without that package. The
+  other `packages/*` keep their private workspace versions. Both versions go into
+  `.github/release-manifests/vX.Y.Z.json`; `node scripts/release-manifest.mjs validate --tag vX.Y.Z` checks it
+  against the packages. `--no-tag` commits without tagging; `--branch <name>` creates and
   switches to that branch first (`{version}` and `{tag}` are filled in); `--commit-notes` writes the notes to
   `.github/release-notes/vX.Y.Z.md` and commits them, which is where publish.yml reads them;
   `--trailer "Key: value"` adds a commit trailer.
@@ -186,9 +251,13 @@ publish.yml already has the step; it prints *npm publish skipped: no NPM_TOKEN* 
    `id-token: write`, and the packed `package.json` names the repository, which provenance requires), on the
    `latest` dist-tag, or `next` for a prerelease. Consumers can then `npm install -g farsight-cli`.
 
+farsight-sentinel is not published to a registry: its manifest is `private`, so npm refuses to publish it. Its
+GitHub Release tarball installs with npm all the same. Registry publication for it is a separate decision.
+
 ## Install a selected release in CI
 
-Each published GitHub Release carries `farsight-cli-X.Y.Z.tgz`. A CI job can install a pinned release directly:
+Each published GitHub Release carries `farsight-cli-X.Y.Z.tgz` (and, from the first release that ships it,
+`farsight-sentinel-A.B.C.tgz`). A CI job can install a pinned release directly:
 
 ```sh
 npm install -g https://github.com/zalos/farsight/releases/download/v0.3.0/farsight-cli-0.3.0.tgz
