@@ -28,10 +28,13 @@ export interface SecretsTarget {
   readonly artifact: ArtifactId;
   /** Where the captured bytes are now; re-hashed here and again when the execution service copies them. */
   readonly path: string;
+  /** The capture entry this file is, when the caller has one: kept privately, so identical files stay distinct. */
+  readonly entryId?: string;
 }
 
-export interface SecretsJobFile { readonly index: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly bytes: number }
-export interface SecretsUnsent { readonly relativePath: string; readonly artifact: ArtifactId; readonly reasonCode: CatalogKey }
+/** `ordinal`: the target's place in path order over every target of the job, the basis of its opaque reference. */
+export interface SecretsJobFile { readonly index: number; readonly ordinal: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly bytes: number; readonly entryId?: string }
+export interface SecretsUnsent { readonly ordinal: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly reasonCode: CatalogKey; readonly entryId?: string }
 
 /** A name the engine screens: line `line` (1-based) of `scan/paths.txt`. */
 export interface SecretsJobName { readonly line: number; readonly relativePath: string; readonly artifact: ArtifactId }
@@ -103,17 +106,18 @@ export function buildSecretsJob(scope: { snapshotId: Id; sourceId: Id; targets: 
   const files: SecretsJobFile[] = [];
   const unsent: SecretsUnsent[] = [];
   const sorted = [...scope.targets].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
-  for (const t of sorted) {
+  for (const [ordinal, t] of sorted.entries()) {
+    const entry = t.entryId !== undefined ? { entryId: t.entryId } : {};
     if (!isSafeRelativePath(t.relativePath)) invalid('unsafe target path');
     if (seen.has(t.relativePath)) invalid('duplicate target path');
     seen.add(t.relativePath);
     const { digest, bytes } = measure(t.path);
     if (digest !== t.artifact) invalid('a target does not match its artifact id');
-    const skip = (reasonCode: CatalogKey) => unsent.push({ relativePath: t.relativePath, artifact: t.artifact, reasonCode });
+    const skip = (reasonCode: CatalogKey) => unsent.push({ ordinal, relativePath: t.relativePath, artifact: t.artifact, reasonCode, ...entry });
     if (CONTROL.test(t.relativePath)) { skip('sentinel.secrets.pathUnsupported'); continue; }
     if (bytes > GITLEAKS_MAX_FILE_BYTES) { skip('sentinel.secrets.fileTooLarge'); continue; }
     if (toolAllowlisted(t.relativePath)) { skip('sentinel.secrets.toolAllowlisted'); continue; }
-    files.push({ index: files.length, relativePath: t.relativePath, artifact: t.artifact, bytes });
+    files.push({ index: files.length, ordinal, relativePath: t.relativePath, artifact: t.artifact, bytes, ...entry });
   }
   // A file whose path is also a folder of another cannot be rebuilt (the container's tmpfs is case-sensitive, so only
   // exact names collide); the shim would refuse the whole job, so it is refused here first.

@@ -8,9 +8,9 @@ import { join } from 'node:path';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import {
   GITLEAKS_ADAPTER, GITLEAKS_CONFIG, GITLEAKS_ENGINE, GITLEAKS_REPORT_TEMPLATE, GITLEAKS_RULE_IDS, GITLEAKS_WORKER_BYTES, GITLEAKS_WORKER_DIGEST,
-  OBSERVATION_MESSAGE, NAME_MESSAGE, WITHHELD_PREFIX, buildGitleaksAdapter, buildSecretsJob, lineSpan, normalizeSecretsRun, readReport, toolAllowlisted, GITLEAKS_MAX_FILE_BYTES,
+  OBSERVATION_MESSAGE, NAME_MESSAGE, OPAQUE_PREFIX, LOCATION_OPAQUE, buildGitleaksAdapter, buildSecretsJob, lineSpan, normalizeSecretsRun, readReport, toolAllowlisted, GITLEAKS_MAX_FILE_BYTES,
 } from '../dist/adapters/gitleaks/index.js';
-import { VALUE, absent, captured, sha, treeFiles } from './secrets-helpers.ts';
+import { GENERIC_VALUE, VALUE, absent, captured, sha, treeFiles } from './secrets-helpers.ts';
 
 const root = mkdtempSync(join(tmpdir(), 'sentinel-secrets-unit-'));
 after(() => rmSync(root, { recursive: true, force: true }));
@@ -128,8 +128,16 @@ test('findings become redacted observations citing whole lines; existing finding
   const r = synthetic();
   assert.equal(r.status, 'complete');
   absent(JSON.stringify(r), 'the scan result');
-  assert.deepEqual(r.observations.map(o => `${o.producerRuleId} ${o.evidence[0]!.relativePath} ${o.evidence[0]!.span.startByte}-${o.evidence[0]!.span.endByte}`).sort(),
+  // Every location is an opaque reference; the private table resolves it exactly.
+  const where = new Map(r.privateLocations.map(l => [l.reference, l.relativePath]));
+  assert.deepEqual(r.observations.map(o => `${o.producerRuleId} ${where.get(o.evidence[0]!.relativePath)} ${o.evidence[0]!.span.startByte}-${o.evidence[0]!.span.endByte}`).sort(),
     ['github-pat config/service.env 43-108', 'github-pat notes/allowed.md 0-63']);
+  assert.ok(r.observations.every(o => o.evidence[0]!.relativePath.startsWith(OPAQUE_PREFIX) && o.limitationKeys.includes(LOCATION_OPAQUE)));
+  for (const path of ['config/service.env', 'notes/allowed.md', 'src/clean.ts', '.gitleaksignore']) {
+    assert.ok(!JSON.stringify(r).includes(path), 'no captured path is in what the result exports');
+  }
+  assert.equal('privateLocations' in { ...r }, false, 'a spread or JSON leaves the private table out');
+  assert.equal(Object.keys(r).includes('privateLocations'), false);
   assert.ok(r.observations.every(o => o.message === OBSERVATION_MESSAGE && o.originalSeverity === 'unrated' && !('quoteDigest' in o.evidence[0]!)));
   assert.equal(r.scanned.length, 4);
   assert.equal(r.audit.engine, 'gitleaks 8.30.1');
@@ -172,39 +180,40 @@ test('every failure is an error over every target with a coded reason, never zer
   }
 });
 
-test('a name shaped like a secret is withheld everywhere, reported as a finding, and resolvable by its content digest', () => {
-  const named = `keys/${VALUE}.txt`;
-  // the names file lists job.files then the unsent names: .gitleaksignore, config/service.env, keys/<value>.txt, notes/allowed.md, src/clean.ts
-  const r = synthetic({ files: { [named]: `again ${VALUE}\n` }, report: 'F\tgithub-pat\t2\t2\t1\nF\tgithub-pat\t1\t1\t2\nF\tgithub-pat\t1\t1\t3\nP\tgithub-pat\t3\t3\n' });
-  absent(JSON.stringify(r.observations), 'the observations');
-  absent(JSON.stringify(r), 'the scan result');
+test('a name the detector cannot see out of context is never printed: every location is opaque', () => {
+  // generic-api-key matches GENERIC_VALUE only as an assignment; as a file name no detector sees it
+  const files = { 'config/keys.env': `api_key = "${GENERIC_VALUE}"\n`, [`cache/${GENERIC_VALUE}`]: 'clean\n', [`keys/${VALUE}.txt`]: 'x\n' };
+  // job.files: .gitleaksignore, cache/<generic>, config/keys.env, config/service.env, keys/<ghp>.txt, notes/allowed.md, src/clean.ts
+  const r = synthetic({ files, report: 'F\tgeneric-api-key\t1\t1\t2\nF\tgithub-pat\t2\t2\t3\nF\tgithub-pat\t1\t1\t5\nP\tgithub-pat\t5\t5\n' });
+  absent(JSON.stringify(r), 'the exported result', GENERIC_VALUE);
+  absent(JSON.stringify(r), 'the exported result');
   assert.equal(r.status, 'complete');
-  assert.equal(r.withheld.length, 1);
-  const w = r.withheld[0]!;
-  assert.ok(w.reference.startsWith(WITHHELD_PREFIX));
-  assert.equal(w.reasonCode, 'sentinel.secrets.nameMatch');
-  assert.equal(w.artifact, sha(`again ${VALUE}\n`), 'the content digest the private snapshot resolves');
+  const loc = new Map(r.privateLocations.map(l => [l.reference, l]));
+  assert.equal(loc.size, 7, 'every target has a reference');
+  assert.ok([...loc.keys()].every(k => k.startsWith(OPAQUE_PREFIX)));
+  const generic = r.observations.find(o => o.producerRuleId === 'generic-api-key')!;
+  assert.equal(loc.get(generic.evidence[0]!.relativePath)!.relativePath, 'config/keys.env');
   const name = r.observations.find(o => o.message === NAME_MESSAGE)!;
-  assert.deepEqual(name.evidence[0]!.span, { startByte: 0, endByte: 0 });
-  assert.equal(name.evidence[0]!.relativePath, w.reference);
-  assert.ok(name.limitationKeys.includes('sentinel.secrets.pathWithheld'));
-  const inside = r.observations.find(o => o.message === OBSERVATION_MESSAGE && o.evidence[0]!.content === w.artifact)!;
-  assert.equal(inside.evidence[0]!.relativePath, w.reference, 'a content finding in that file cites the reference too');
-  assert.ok(inside.limitationKeys.includes('sentinel.secrets.pathWithheld'));
-  assert.ok(r.scanned.includes(`src-1:${w.reference}`));
-  assert.ok(r.scanned.includes('src-1:config/service.env'), 'other names are shown as captured');
+  assert.ok(loc.get(name.evidence[0]!.relativePath)!.relativePath === `keys/${VALUE}.txt`, 'the private table resolves exactly');
+  assert.ok(name.limitationKeys.includes(LOCATION_OPAQUE) && name.limitationKeys.includes('sentinel.secrets.nameMatch'));
+  assert.ok(r.scanned.every(s => s.startsWith(`src-1:${OPAQUE_PREFIX}`)));
 });
 
-test('names that cannot be screened are withheld; a failed scan withholds every name', () => {
-  const odd = synthetic({ files: { 'odd\nname.env': 'x\n' } });
-  assert.equal(odd.withheld.length, 1);
-  assert.equal(odd.withheld[0]!.reasonCode, 'sentinel.secrets.nameUnscreened');
-  assert.ok(odd.skipped.some(s => s.scopeId === `src-1:${odd.withheld[0]!.reference}` && s.reasonCode === 'sentinel.secrets.pathUnsupported'));
-  assert.ok(!JSON.stringify(odd).includes('odd\\nname'), 'the unscreened name is not printed');
-  const failed = synthetic({ files: { [`k/${VALUE}.txt`]: 'x\n' }, failure: 'engineError', exitCode: 1, report: null });
-  absent(JSON.stringify(failed), 'a failed result');
-  assert.equal(failed.withheld.length, 5);
-  assert.ok(failed.skipped.every(s => s.scopeId.startsWith(`src-1:${WITHHELD_PREFIX}`)));
+test('identical files stay distinct; unsent and failed scopes are opaque too; capture entries are kept privately', () => {
+  const targets = captured(dir(), treeFiles({ 'a/same.txt': 'same\n', 'b/same.txt': 'same\n', 'odd\nname.env': 'x\n' }))
+    .map(t => ({ ...t, entryId: `entry-${t.relativePath.length}-${t.relativePath.charCodeAt(0)}` }));
+  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+  const outcome: any = { state: 'failed', code: 'sentinel.execution.workerExited', attemptId: 'a', adapter: { id: 'x', digest: sha('x') }, invocation: { digest: sha('i') },
+    outputs: [], diagnostics: { text: '' }, container: { image: { architecture: 'arm64', reference: 'r', id: 'i' } } };
+  const r = normalizeSecretsRun({ job: built.job, jobDigest: built.jobDigest, outcome, observedAt: '2026-10-22T00:00:00.000Z', outputBytes: () => undefined, targetBytes: () => undefined });
+  assert.equal(r.status, 'error');
+  assert.ok(r.skipped.every(s => s.scopeId.startsWith(`src-1:${OPAQUE_PREFIX}`)));
+  assert.ok(!JSON.stringify(r).includes('same.txt') && !JSON.stringify(r).includes('odd'));
+  const same = r.privateLocations.filter(l => l.relativePath.endsWith('same.txt'));
+  assert.equal(same.length, 2);
+  assert.equal(same[0]!.artifact, same[1]!.artifact, 'the same content');
+  assert.notEqual(same[0]!.reference, same[1]!.reference, 'two references');
+  assert.ok(same.every(l => l.entryId?.startsWith('entry-')), 'their capture entries are kept');
 });
 
 test('the job lists sent files, then the names of unsent ones, so the engine screens every name', () => {

@@ -10,9 +10,15 @@ import { join } from 'node:path';
 export const VALUE = ['ghp', '_', 'SentinelSynthetic', 'InertFixture', '0000001'].join('');
 export const sha = (b: string | Uint8Array) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
+/**
+ * A high-entropy inert value for Gitleaks' generic-api-key rule, which matches only in an assignment context
+ * (`api_key = "…"`), never on its own: used as a file name, no detector sees it.
+ */
+export const GENERIC_VALUE = ['Sntl', 'Fxt9q2', 'Lr7Wv4', 'Zk8Jm3', 'Pd6Hy1', 'Tb5Qe0'].join('');
+
 /** Fails with a message naming the place only; the value and the haystack are never printed. */
-export function absent(haystack: string | Uint8Array, where: string): void {
-  const found = typeof haystack === 'string' ? haystack.includes(VALUE) : Buffer.from(haystack).includes(VALUE);
+export function absent(haystack: string | Uint8Array, where: string, value: string = VALUE): void {
+  const found = typeof haystack === 'string' ? haystack.includes(value) : Buffer.from(haystack).includes(value);
   assert.equal(found, false, `${where} contains the synthetic value`);
 }
 
