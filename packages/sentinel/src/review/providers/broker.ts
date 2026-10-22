@@ -168,6 +168,9 @@ export class ModelBroker {
     if (!held) return fail('sentinel.provider.notAdmitted', 'only an envelope openEnvelope returned is accepted');
     const { binding, credential } = held;
     if (!isProviderBinding(current) || current.digest !== binding.digest) fail('sentinel.provider.bindingChanged', 'the provider’s binding is not the one approved');
+    // The binding is re-made under the policy in force for every call: any policy change, a revoked grant included,
+    // stops the envelope until the owner approves again.
+    if (current.policyRevision !== binding.policyRevision) fail('sentinel.provider.bindingChanged', 'the policy changed since this budget was approved');
     const L = binding.limits;
     if (!Number.isSafeInteger(call.maxOutputTokens) || call.maxOutputTokens < 1 || call.maxOutputTokens > L.maxOutputTokens) fail('sentinel.provider.invalidProfile', 'maxOutputTokens is outside the profile');
     if (!Array.isArray(call.messages) || call.messages.length < 1 || call.messages.length > L.maxMessages
