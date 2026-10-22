@@ -4,7 +4,8 @@
 // never ran or a failed attempt all stay incomplete; finishing work, or a worker's own claims, prove nothing alone.
 //
 // For each assigned check: `complete` when the result names the check, its scope is in the scanned set and no
-// skipped or unresolved entry names the scope; `partial` when the result names the check but the scope was skipped,
+// skipped or unresolved entry bears on it (its own scope, any part of a whole repository it covers, a folder holding
+// it, or a scope the result names that bears on none of the unit's checks, which is never dropped); `partial` when the result names the check but the scope was skipped,
 // unresolved or not scanned; `not-run` when the result does not name it. The granularity is the coarser of the
 // trusted adapter's (registry `coverage`) and the result's: an adapter never gains per-file coverage by claiming it.
 // The assessed scope and the limitations behind each record are stored artifacts it names.
@@ -23,6 +24,18 @@ const ORDER: readonly CoverageGranularity[] = ['per-file-per-rule', 'per-file', 
 export const coarser = (a: CoverageGranularity, b: CoverageGranularity): CoverageGranularity => (ORDER.indexOf(a) >= ORDER.indexOf(b) ? a : b);
 const idOf = (v: unknown): ArtifactId => `sha256:${createHash('sha256').update(canonicalJsonBytes(v)).digest('hex')}`;
 
+/**
+ * Whether a scope a result names bears on a check, by PR 06's canonical scope ids (`<source>` for a whole repository,
+ * `<source>:<path>` for a file, `<source>:<folder>/` for a folder boundary, a graph node id for a surface):
+ * the check's own scope; any scope of its source for a whole-repository check; a folder boundary that contains the
+ * check's scope.
+ */
+export function bearsOn(scope: string, c: Pick<PlanCheck, 'scopeId' | 'scopeKind' | 'sourceId'>): boolean {
+  if (scope === c.scopeId) return true;
+  if (c.scopeKind === 'repository' && c.scopeId === c.sourceId) return scope === c.sourceId || scope.startsWith(`${c.sourceId}:`);
+  return scope.endsWith('/') && c.scopeId.startsWith(scope);
+}
+
 export interface CoverageRecords {
   envelopes: CoverageEnvelope[];
   /** The records to publish with the result, in order: each assessed scope and limitations, then each envelope. */
@@ -37,9 +50,15 @@ export function coverageRecords(input: { runId: Id; attemptId: Id; work: { id: I
   const granularity = coarser(input.adapterGranularity, result.granularity);
   const envelopes: CoverageEnvelope[] = [];
   const records: CoverageRecords['records'] = [];
+  // A limitation the result reports for a scope that bears on none of the unit's checks cannot be attributed: it is
+  // kept as a limitation of every check, never dropped.
+  const unattributed = (xs: readonly ScopedReason[]) => xs.filter(x => !input.checks.some(c => bearsOn(x.scopeId, c)));
+  const strayRows = { skipped: unattributed(result.skipped), unresolved: unattributed(result.unresolvedFrontiers) };
   for (const c of input.checks) {
-    const skipped: ScopedReason[] = result.skipped.filter(s => s.scopeId === c.scopeId).map(s => ({ scopeId: s.scopeId, reasonCode: s.reasonCode }));
-    const unresolved = result.unresolvedFrontiers.filter(s => s.scopeId === c.scopeId).map(s => ({ scopeId: s.scopeId, reasonCode: s.reasonCode }));
+    const pick = (xs: readonly ScopedReason[], stray: readonly ScopedReason[]) =>
+      [...xs.filter(x => bearsOn(x.scopeId, c)), ...stray].map(x => ({ scopeId: x.scopeId, reasonCode: x.reasonCode }));
+    const skipped: ScopedReason[] = pick(result.skipped, strayRows.skipped);
+    const unresolved = pick(result.unresolvedFrontiers, strayRows.unresolved);
     const status: CoverageStatus = !covered.has(c.id) ? 'not-run'
       : scanned.has(c.scopeId) && skipped.length === 0 && unresolved.length === 0 ? 'complete' : 'partial';
     const scope = { schema: ASSESSED_SCOPE_SCHEMA, checkId: c.id, scopeKind: c.scopeKind, scopeId: c.scopeId, scanned: scanned.has(c.scopeId) };
