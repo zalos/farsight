@@ -18,6 +18,8 @@ const QUALIFY = process.env.SENTINEL_IAC_QUALIFY?.replace(/^linux\//, '');
 // not the offline mode the adapter states, and a report saying they loaded would be refused.
 const STRICT = buildZizmorAdapter({ id: 'ci-zizmor-strict', engineArgs: ['--offline', '--no-config', '--no-ignores', '--collect=workflows,actions,dependabot', '--format=json', '--no-progress', '--color=never', '--persona=regular', '--strict-collection', '-vv'] });
 
+const TINY = buildZizmorAdapter({ id: 'ci-zizmor-tiny', maxOutputBytes: 100 });
+
 let root: { root: string; work: string };
 let store: any;
 let service: any;
@@ -26,7 +28,7 @@ before(async () => {
   if (!enabled) return;
   root = scratch('zizmor');
   store = await storeIn(root.root);
-  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([ZIZMOR_ADAPTER, STRICT.definition]), containers: true });
+  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([ZIZMOR_ADAPTER, STRICT.definition, TINY.definition]), containers: true });
 });
 after(async () => { if (enabled) { await store.close(); removeScratch(root.root); } });
 
@@ -96,4 +98,11 @@ test('changing or deleting the caller’s files after the worker copied them cha
   const r = await pending;
   assert.ok(audits(r, '.github/workflows/triage.yml').includes('template-injection'));
   assert.equal(row(r, '.github/dependabot.yml'), 'complete:');
+});
+
+test('SOL: an over-long report is a truncation gap bound to the bytes actually published, not an invalid output', { skip }, async () => {
+  const r = await run(capturedTree(join(root.root, `tree-${n++}`), { '.github/workflows/triage.yml': 'zizmor/workflow-injection.fixture' }), { adapter: TINY });
+  assert.equal(r.attempt, 'succeeded');
+  assert.equal(r.findings.length, 0);
+  assert.equal(row(r, '.github/workflows/triage.yml'), 'error:outputTruncated');
 });

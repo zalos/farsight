@@ -60,10 +60,11 @@ export interface ZizmorAdapterBuild {
 }
 
 /** Builds the adapter around the shim; a test variant (other id or arguments) gets its own digests. */
-export function buildZizmorAdapter(options: { id?: string; engineArgs?: readonly string[] } = {}): ZizmorAdapterBuild {
+export function buildZizmorAdapter(options: { id?: string; engineArgs?: readonly string[]; maxOutputBytes?: number } = {}): ZizmorAdapterBuild {
   const args = options.engineArgs ?? ZIZMOR_ENGINE_ARGS;
+  if (options.maxOutputBytes !== undefined && (!Number.isSafeInteger(options.maxOutputBytes) || options.maxOutputBytes < 0 || options.maxOutputBytes > ZIZMOR_MAX_OUTPUT_BYTES)) throw new Error('sentinel.zizmor: the output bound is an integer up to the default');
   for (const a of args) if (!/^[A-Za-z0-9=.,_/-]+$/.test(a)) throw new Error('sentinel.zizmor: engine arguments are fixed plain tokens');
-  const workerBytes = Buffer.from(ZIZMOR_WORKER_SOURCE.replace('[MAX_OUT]', String(ZIZMOR_MAX_OUTPUT_BYTES)).replace('[ENGINE_ARGS]', args.join(' ')), 'utf8');
+  const workerBytes = Buffer.from(ZIZMOR_WORKER_SOURCE.replace('[MAX_OUT]', String(options.maxOutputBytes ?? ZIZMOR_MAX_OUTPUT_BYTES)).replace('[ENGINE_ARGS]', args.join(' ')), 'utf8');
   const workerDigest = `sha256:${createHash('sha256').update(workerBytes).digest('hex')}`;
   const definition = Object.freeze({
     id: options.id ?? 'ci-zizmor', version: ZIZMOR_ENGINE.version, kind: 'external', isolation: 'container', image: ZIZMOR_ENGINE.image,

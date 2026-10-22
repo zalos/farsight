@@ -102,6 +102,9 @@ esac
 SIZE=$(wc -c < "$W/out.json" | tr -d ' ')
 TRUNC=false
 if [ "$SIZE" -gt "$MAX_OUT" ]; then TRUNC=true; fi
+# An over-long report is not published: an empty file is, and the record names those bytes, the original size and
+# the truncation, so what the coordinator reads is exactly what the record describes.
+if [ "$TRUNC" = true ]; then : > "$W/out.json"; fi
 # Positive evidence from the engine's own log, as fixed words, digits and the job's own paths only.
 DISK=false; grep -q "Checks successfully loaded from disk" "$W/err.txt" && DISK=true
 FALLBACK=false; grep -q "Falling back to embedded checks" "$W/err.txt" && FALLBACK=true
@@ -125,7 +128,6 @@ printf '{"schema":"sentinel-trivy-run/draft-1","job":"sha256:%s","exitCode":%s,"
   "$JOB" "$CODE" "$TIMED" "$SIZE" "$TRUNC" "$OUT" "$ERRD" "$FAILURE" "$BUNDLE" "$DISK" "$FALLBACK" "\${CHECKS:-null}" "\${DETECTED:-null}" "$SCANNED" "$UNPARSED" "$MODULES" > "$W/record.json"
 REC=$(sha256sum "$W/record.json" | cut -c1-64)
 RSIZE=$(wc -c < "$W/record.json" | tr -d ' ')
-if [ "$TRUNC" = true ]; then : > "$W/out.json"; OUT=$(sha256sum "$W/out.json" | cut -c1-64); fi
 cp "$W/out.json" "/output/$OUT" && cp "$W/record.json" "/output/$REC" || exit 2
 OSIZE=$(wc -c < "/output/$OUT" | tr -d ' ')
 bound

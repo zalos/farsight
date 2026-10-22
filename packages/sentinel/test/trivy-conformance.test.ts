@@ -21,6 +21,8 @@ const NO_DISK = buildTrivyAdapter({ id: 'iac-trivy-nodisk', engineArgs: ['config
 
 // A variant whose engine refuses its arguments: the worker reports a diagnostic and then its result, and the failure
 // must arrive as an engine failure (not a protocol violation) that counts nothing.
+// A variant whose report bound is far below what the engine writes.
+const TINY = buildTrivyAdapter({ id: 'iac-trivy-tiny', maxOutputBytes: 100 });
 const BAD_ARGS = buildTrivyAdapter({ id: 'iac-trivy-badargs', engineArgs: ['config', '--no-such-sentinel-flag'] });
 
 let root: { root: string; work: string };
@@ -36,7 +38,7 @@ before(async () => {
   assert.ok(bundle, 'the pinned checks bundle has been acquired');
   root = scratch('trivy');
   store = await storeIn(root.root);
-  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([TRIVY_ADAPTER, NO_DISK.definition, BAD_ARGS.definition]), containers: true });
+  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([TRIVY_ADAPTER, NO_DISK.definition, BAD_ARGS.definition, TINY.definition]), containers: true });
 });
 after(async () => { if (enabled) { await store.close(); removeScratch(root.root); } });
 
@@ -140,4 +142,11 @@ test('SOL: a captured folder named like one the engine skips is still scanned; w
   assert.equal(row(r, 'tools/.git/deploy/pod.yaml'), 'error:notReported');
   assert.equal(row(r, 'tools/.git/deploy/settings.yaml'), 'not-applicable:notRecognized', 'the near neighbour: provably not a manifest');
   assert.deepEqual(r.refused, []);
+});
+
+test('SOL: an over-long report is a truncation gap bound to the bytes actually published, not an invalid output', { skip }, async () => {
+  const r = await run(capturedTree(join(root.root, `tree-${n++}`), { 'deploy/pod.yaml': 'trivy/k8s-privileged-pod.fixture' }), { adapter: TINY });
+  assert.equal(r.attempt, 'succeeded');
+  assert.equal(r.findings.length, 0);
+  assert.equal(row(r, 'deploy/pod.yaml'), 'error:outputTruncated');
 });

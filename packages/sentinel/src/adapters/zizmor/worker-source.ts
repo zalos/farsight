@@ -87,6 +87,9 @@ esac
 SIZE=$(wc -c < "$W/out.json" | tr -d ' ')
 TRUNC=false
 if [ "$SIZE" -gt "$MAX_OUT" ]; then TRUNC=true; fi
+# An over-long report is not published: an empty file is, and the record names those bytes, the original size and
+# the truncation, so what the coordinator reads is exactly what the record describes.
+if [ "$TRUNC" = true ]; then : > "$W/out.json"; fi
 # Positive evidence from the engine's own log, as the job's own paths and audit identifiers only.
 paths() { sed -n "$1" "$W/err.txt" | grep -Fx -f "$W/allowed" | sort -u | sed 's/.*/"&"/' | tr '\\n' ',' | sed 's/,$//'; }
 REGISTERED=$(paths "s/.* input as with key file:\\/\\/\\/tmp\\/sentinel-zizmor\\/src\\/\\([A-Za-z0-9._/-]*\\)$/\\1/p")
@@ -106,7 +109,6 @@ printf '{"schema":"sentinel-zizmor-run/draft-1","job":"sha256:%s","exitCode":%s,
   "$JOB" "$CODE" "$TIMED" "$SIZE" "$TRUNC" "$OUT" "$ERRD" "$FAILURE" "$VERSION" "$REGISTERED" "$COMPLETED" "$SKIPPED" > "$W/record.json"
 REC=$(sha256sum "$W/record.json" | cut -c1-64)
 RSIZE=$(wc -c < "$W/record.json" | tr -d ' ')
-if [ "$TRUNC" = true ]; then : > "$W/out.json"; OUT=$(sha256sum "$W/out.json" | cut -c1-64); fi
 cp "$W/out.json" "/output/$OUT" && cp "$W/record.json" "/output/$REC" || exit 2
 OSIZE=$(wc -c < "/output/$OUT" | tr -d ' ')
 bound
