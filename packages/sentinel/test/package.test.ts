@@ -70,6 +70,14 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'store/paths.js': ['node:child_process', 'node:fs', 'node:path'],
   // node:sqlite is imported lazily, by the first store open, never at module load.
   'store/runtime.js': ['dynamic:node:sqlite'],
+  // Source capture reads files and Git objects itself: no child process, so no git, hook, filter or fetch.
+  'snapshot/capture.js': ['node:crypto', 'node:fs', 'node:path'],
+  'snapshot/errors.js': ['@farsight/core/dist/strings-sentinel-capture.js'],
+  'snapshot/git.js': ['node:crypto', 'node:fs', 'node:path', 'node:zlib'],
+  'snapshot/inventory.js': ['node:crypto', 'node:fs', 'node:path'],
+  'snapshot/materialize.js': ['node:fs', 'node:path'],
+  'snapshot/policy.js': ['node:crypto', 'node:path'],
+  'snapshot/worktree.js': ['node:fs'],
 };
 
 test('the library imports only its reviewed modules, and nothing that could start work at import', () => {
@@ -130,7 +138,7 @@ function probe(code: string): { spawns: string[]; sqlite: boolean; files: string
 }
 
 test('importing the root and the store, and asking the CLI for help, start nothing', () => {
-  const lib = probe(`await import(${JSON.stringify(`${pkgDir}dist/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/store/index.js`)});`);
+  const lib = probe(`await import(${JSON.stringify(`${pkgDir}dist/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/store/index.js`)}); await import(${JSON.stringify(`${pkgDir}dist/snapshot/index.js`)});`);
   assert.deepEqual(lib.spawns, [], 'no child process at import');
   assert.equal(lib.sqlite, false, 'node:sqlite is not loaded until a store is opened');
   assert.deepEqual(lib.files, [], 'no file is created at import');
@@ -157,12 +165,12 @@ test('help and version say plainly that no scanner exists', () => {
   assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
-test('every analysis capability is explicitly unavailable; only contracts and the draft store are available', () => {
+test('every analysis capability is explicitly unavailable; only contracts, the draft store and draft capture are available', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture']);
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
   assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.reasonCode, 'sentinel.capability.noQualifiedEngine');

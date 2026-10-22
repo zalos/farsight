@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openStore, qualificationFor, SQLITE_RELEASE_POLICY, STORAGE_ERROR_CODES, type SentinelStore } from '../dist/store/index.js';
 import * as root from '../dist/index.js';
+import { LEDGER_MIGRATIONS } from '../dist/store/migrations.js';
 
 const DIST = fileURLToPath(new URL('../dist/store/index.js', import.meta.url));
 const VALID = fileURLToPath(new URL('./contracts/valid/', import.meta.url));
@@ -223,7 +224,7 @@ test('the facade exposes domain operations only', needsStore, async t => {
   assert.equal(typeof store.runtime.sqlite, 'string', 'the SQLite release, not the module');
   assert.equal(root.openStore, openStore, 'the root export is the same facade');
   assert.equal(root.CAPABILITIES.find(c => c.id === 'ledger')?.state, 'available-draft');
-  assert.ok(root.CAPABILITIES.filter(c => c.id !== 'ledger' && c.id !== 'contract-validation').every(c => c.state === 'unavailable'),
+  assert.ok(root.CAPABILITIES.filter(c => !['ledger', 'contract-validation', 'source-capture'].includes(c.id)).every(c => c.state === 'unavailable'),
     'no scan capability is claimed');
 });
 
@@ -284,7 +285,7 @@ test('importing the facade opens nothing', () => {
 // real owner lock, the real object verifier and a real second process: a crash or failure at each point leaves the
 // earlier schema, and the next owner takes over and reads what was accepted before.
 const STORE_DIST = fileURLToPath(new URL('../dist/store/', import.meta.url));
-const PROBE_MIGRATION = { version: 2, name: 'upgrade-probe', sql: 'CREATE TABLE upgrade_probe (x INTEGER NOT NULL) STRICT;' };
+const PROBE_MIGRATION = { version: LEDGER_MIGRATIONS.length + 1, name: 'upgrade-probe', sql: 'CREATE TABLE upgrade_probe (x INTEGER NOT NULL) STRICT;' };
 
 /** Opens the ledger with the shipped migrations plus the probe step, under a real owner, failing at `point`. */
 function upgradeScript(storePath: string, point: string, how: 'kill' | 'throw' | 'release'): string {
@@ -323,7 +324,7 @@ async function storeWithArtifact(storePath: string): Promise<{ id: string; text:
     store.ledger.registerStaging('stage-up', [{ id: id.id, schema: 'text/plain', privacy: 'metadata' }], { work: W1, attemptId: 'att-1' });
     const receipt = await store.objects.put(bytes, { expect: id });
     store.ledger.publish({ work: W1, attemptId: 'att-1', stageId: 'stage-up', receipts: [receipt], outputs: [id.id], endedAt: ENDED });
-    assert.equal(store.migration.to, 1);
+    assert.equal(store.migration.to, LEDGER_MIGRATIONS.length);
     return { id: id.id, text };
   } finally {
     store.close();
@@ -334,7 +335,7 @@ async function storeWithArtifact(storePath: string): Promise<{ id: string; text:
 async function assertTakeover(storePath: string, artifact: { id: string; text: string }) {
   const store = await openStore(storePath);
   try {
-    assert.deepEqual({ from: store.migration.from, to: store.migration.to }, { from: 1, to: 1 }, 'the upgrade left nothing applied');
+    assert.deepEqual({ from: store.migration.from, to: store.migration.to }, { from: LEDGER_MIGRATIONS.length, to: LEDGER_MIGRATIONS.length }, 'the upgrade left nothing applied');
     assert.equal((await store.readArtifact(artifact.id)).toString('utf8'), artifact.text);
     assert.deepEqual(store.checkIntegrity(), { integrity: 'ok', foreignKeyViolations: 0 });
     assert.equal((await store.inspect()).ok, true);
@@ -367,7 +368,7 @@ for (const point of ['backup:after-copy', 'migrate:after-sql'] as const) {
     // With nothing injected, a later owner completes the same upgrade, with a verified backup first.
     const done = JSON.parse(runUpgrade(storePath, 'none', 'throw').stdout.trim());
     assert.equal(done.code, null);
-    assert.deepEqual({ from: done.report.from, to: done.report.to }, { from: 1, to: 2 });
+    assert.deepEqual({ from: done.report.from, to: done.report.to }, { from: LEDGER_MIGRATIONS.length, to: LEDGER_MIGRATIONS.length + 1 });
     assert.ok(existsSync(done.report.backupPath), 'the upgrade kept its verified backup');
   });
 

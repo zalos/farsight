@@ -88,6 +88,32 @@ canonical owner-only folder on a file system the path checks identify as local. 
 `docs/ARCHITECTURE.md`). A store is a library facility in this draft: the `capabilities` list shows `ledger` as
 `available-draft` and every scan capability as unavailable; there is no store command until the CLI (PR 09).
 
+## Source capture (draft)
+
+```ts
+import { captureSnapshot, openSnapshot, restoreSnapshot } from 'farsight-sentinel/snapshot'; // also from 'farsight-sentinel'
+
+const result = await captureSnapshot(store, {
+  mode: 'committed-tree',                                   // or 'working-copy' (stability-checked)
+  sources: [{ sourceId: 'app', repositoryId: 'example/app', root: '/canonical/path/to/app' }],
+});
+result.snapshot;                                            // sentinel-snapshot/draft-1, admitted by the ledger
+const { snapshot, materialization } = await openSnapshot(store, result.record.snapshotId); // any process, later
+await restoreSnapshot(store, result.record.snapshotId, '/canonical/parent/new-folder'); // read-only, from the store alone
+```
+
+A committed tree is read object by object from the local repository; no `git` process, hook, filter or fetch runs,
+and missing objects are recorded, not fetched. A working copy is read, stored and read again; a change retries the
+capture and one that never settles is refused. Every enumerated entry is recorded: hidden configuration is included,
+`.git`, the store, dependency caches and policy exclusions are boundaries whose contents are unknown, and links,
+special files, unsafe or colliding names, unreadable, too-large and over-quota files are recorded with their reason
+(`CAPTURE_REASON_CODES`). LFS content and submodules come only from local inputs you name. Each artifact is staged
+before it is written, and the whole snapshot is admitted in one ledger transaction, without a run. A materialization
+sidecar keeps every listed folder (empty ones too), executable bits, Git and LFS provenance, link targets and
+gitlink commits, so a restore reproduces the tree. Parser artifacts, framework versions and scan coverage are not
+part of a snapshot yet. A restore is never executable: files are 0400 (0600 when writable), whatever their mode was;
+the original mode stays provenance in the sidecar. A capture stores at most 512 MiB. See ADR 21 in `docs/ARCHITECTURE.md`.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent

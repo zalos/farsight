@@ -1,5 +1,5 @@
 // What this build can do, said explicitly. Draft contract validation and the draft local store (ledger, owner lock,
-// content-addressed objects, reachability inspection) exist; every analysis capability is unavailable with its
+// content-addressed objects, reachability inspection) and draft source capture exist; every analysis capability is unavailable with its
 // reason, so nothing presents an empty adapter or a store as scan support.
 
 export type CapabilityState = 'available-draft' | 'unavailable';
@@ -17,7 +17,7 @@ const NOT_BUILT = 'sentinel.capability.notImplemented';
 export const CAPABILITIES: readonly Capability[] = Object.freeze([
   { id: 'contract-validation', state: 'available-draft', reasonCode: 'sentinel.capability.draftContracts', plannedIn: 'PR 02' },
   { id: 'ledger', state: 'available-draft', reasonCode: 'sentinel.capability.draftStore', plannedIn: 'PR 03' },
-  { id: 'source-capture', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 04' },
+  { id: 'source-capture', state: 'available-draft', reasonCode: 'sentinel.capability.draftCapture', plannedIn: 'PR 04' },
   { id: 'parser-reconciliation', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 05' },
   { id: 'rules-and-planning', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 06' },
   { id: 'worker-isolation', state: 'unavailable', reasonCode: NOT_BUILT, plannedIn: 'PR 07' },

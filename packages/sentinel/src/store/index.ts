@@ -37,9 +37,11 @@ export type { StoreErrorCode, LedgerErrorCode, ObjectStoreErrorCode, GcErrorCode
 export type { ReachabilityReport, PrunePlan, ObjectCheck, ArtifactCodec };
 export {
   ARTIFACT_CODECS, ARTIFACT_PRIVACY, LEDGER_EVENT_KINDS, ATTEMPT_END_STATES, MAX_ARTIFACT_BYTES, MAX_EVENT_PAGE,
+  MAX_SNAPSHOT_ARTIFACTS,
 } from './store-types.js';
 export type {
   ArtifactPrivacy, StagedArtifact, StageId, PublishInput, PublicationReceipt, EndAttemptInput, AttemptEndState,
+  AdmitSnapshotInput, SnapshotRecord,
   IdempotencyRef, LedgerEvent, LedgerEventKind, EventPage, GcSnapshot,
 } from './store-types.js';
 
@@ -66,7 +68,7 @@ export interface OpenStoreOptions {
 export type StoreLedger = Pick<Ledger,
   | 'createRun' | 'setRunState' | 'createWork' | 'startAttempt' | 'endAttempt' | 'registerStaging' | 'abortStaging'
   | 'publish' | 'pinReport' | 'readEvents' | 'getWork' | 'getAttempt' | 'getPublication' | 'objectsOf'
-  | 'currentSequence'>;
+  | 'currentSequence' | 'admitSnapshot' | 'getSnapshot'>;
 
 export interface StoreObjects {
   /** The artifact id and size of bytes, computed without writing. */
@@ -158,6 +160,7 @@ export async function openStore(storePath: string, options: OpenStoreOptions = {
 const LEDGER_METHODS = [
   'createRun', 'setRunState', 'createWork', 'startAttempt', 'endAttempt', 'registerStaging', 'abortStaging',
   'publish', 'pinReport', 'readEvents', 'getWork', 'getAttempt', 'getPublication', 'objectsOf', 'currentSequence',
+  'admitSnapshot', 'getSnapshot',
 ] as const satisfies readonly (keyof StoreLedger)[];
 
 const objectRef = (receipt: StoredObject) => {

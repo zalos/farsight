@@ -271,3 +271,72 @@ target check (`miss`), and its own capability and credential verdicts: Work's `c
 `provider.can()` stay in Work and are not a model or scanner credential check. Confirmation receipts, budgets and
 Sentinel's settings adoption are not part of this boundary. **Cost:** a public core export that Work, code hosts and
 Sentinel must all keep compatible; a change to its rules is a change to every gate at once, which is the point.
+
+21. **Sentinel captures source with its own Git object reader, stages before it writes, and records what it cannot read (2026-10-22).**
+
+`@farsight/sentinel` gains a public `./snapshot` export (also re-exported from the root): `captureSnapshot(store,
+request)`, `openSnapshot(store, snapshotId)`, `restoreSnapshot(store, snapshotId, target)`, `readSnapshot` and
+`reconcileInventory`. Capture works through the store facade only; it never opens the ledger database or the owner
+lock.
+
+*Committed-tree* capture reads the pinned commit's objects with a plain TypeScript reader (`snapshot/git.ts`): loose
+objects and version-2 pack indexes and packs, offset and reference deltas, SHA-1 and SHA-256 object formats, file-based
+refs and `packed-refs`, annotated tags, and a linked worktree's Git directory when the request names it. No `git`
+process is started, so no hook, filter, attribute, textconv, replace ref, fsmonitor, configured command or promisor
+(lazy) fetch can run, and the repository's own configuration is read for its object and ref formats only. Every object
+is size-bounded before it is inflated and hash-verified against its id. An object that is not stored locally (a partial
+clone, an alternate the capture does not follow, a pruned pack) is recorded as missing, never fetched; reftable refs
+and other formats are refused. The alternative, spawning `git cat-file` with hardened flags, was rejected: it trusts the
+repository's configuration and git version for every guarantee above, and it would add a second process to a library
+whose only spawn is the macOS mount table. *Working-copy* capture reads every file without following a link, stores it,
+then enumerates the tree again; any difference discards the attempt (its stages aborted) and retries, and a tree that
+never holds still is reported unstable rather than mixed. Its mode says so (`working-copy-stability-checked`); it
+never claims an atomic revision, and `dirty` is false only when every tracked file was captured with its committed
+blob id and nothing else was.
+
+The inventory is the owner's policy, never the repository's ignore files. Hidden workflow and configuration files are
+captured like any source. `.git`, the store itself, dependency caches and policy exclusions are folder boundaries with
+unknown (null) descendants, never zero. Links, special files, unsafe names (dot segments, slashes, NUL, backslash, a
+committed `.git`), names that are not UTF-8 and case- or normalisation-colliding restore paths are refused; unreadable,
+too-large and over-quota files keep their sizes. Missing or corrupt Git objects, LFS content and submodule commits are
+recorded; LFS content and submodules are read only from local inputs the request names, and a captured submodule is
+a separate source with its own repository identity and commit. `reconcileInventory` accounts every path an
+independent walk finds, by its own entry or a boundary above it (E1).
+
+A snapshot is not a run's output, so it is not published under an attempt: the ledger gains **snapshot admission**
+(schema step 2). Before a byte is written, the envelope is checked against its contract and every artifact is
+registered as *unbound* staging: source bytes as `source`, in stages of at most 4096, then a roots stage holding the
+manifest (`source-derived`, linking every content artifact) and the materialization sidecar (`source`, linking the
+manifest). An unbound stage may link to content another open unbound stage of the same epoch holds; an attempt's
+stage still may not. Bytes are re-read and re-hashed against the inventory as they are stored. `admitSnapshot` then
+re-verifies every object through the object store's verifier and, in one transaction, records the artifacts, their
+representations and links, an immutable `snapshots` row (manifest, materialization, inventory digest, epoch,
+sequence) and a `snapshot-admitted` event, and releases every stage. The manifest and the materialization join the
+GC snapshot's accepted references, so a snapshot is never a prune candidate; its content is reachable through
+their links. A failure before admission aborts every stage. Adding the event kind needs the event log's CHECK
+changed, which SQLite cannot alter in place: step 2 rebuilds the table by SQLite's documented procedure, and the
+migration runner now applies every step with foreign keys off (the pragma is a no-op inside a transaction), runs
+`foreign_key_check` before commit and switches enforcement back on whatever happens.
+
+The envelope records dispositions only. The **materialization sidecar** (`sentinel-capture-materialization/draft-1`,
+canonical JSON, bound to its snapshot by the ledger row and checked against the manifest on every open) records what
+a restore and PR 05's reconciliation need beyond it: every listed folder, empty ones included; each included file's
+executable bit and provenance (its Git mode and blob id, or the LFS pointer it was resolved from); each recorded
+link's target; and every gitlink's commit. A sidecar keeps the root-owned contract unchanged while those facts are
+draft. The inventory digest covers those facts too (without the snapshot id derived from it), so equal bytes with a
+different mode, folder set or link target are a different inventory; `openSnapshot` recomputes it. `restoreSnapshot`
+writes a new read-only tree from the store alone (folders and files), reads it back and lists files and folders
+again; any difference fails it. No restored file is executable, whatever its source mode: the original mode is
+provenance only, and no option makes restored project code runnable.
+
+Bounds: a capture stores at most the accepted 512 MiB budget (`maxTotalBytes`, the default) and 16 MiB per file; the
+manifest must fit the 4 MiB envelope limit, checked on its bytes. The schema's 200 000 entries is a bound only; the
+default entry limit is 20 000, and it counts every recorded entry and every listed folder across all sources, reserved
+before a folder is listed, so a tree of empty folders cannot outgrow it; a folder that does not fit is an unknown
+boundary, and a source root that does not fit refuses the capture. Folders deeper than 256 levels, or whose entries
+would have paths over 4096 characters, are unknown boundaries too, never deeper recursion. Folders that collide by case or Unicode normalisation with a file or another folder are
+recorded as refused boundaries, not dropped. Working-copy reads go through folders whose identities are checked again
+before each listing and before and after each read, and LFS content only through real folders under the permitted
+root: these detect a swap between observations; they are not an OS-level audit of every read. The capture reason codes are catalog keys
+(`strings-sentinel-capture.ts`); the `source-capture` capability is `available-draft`. Not in this decision: parser
+artifacts and file outcomes (PR 05), framework versions from lockfiles (left empty), and any scan coverage.

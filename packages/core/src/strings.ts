@@ -51,6 +51,7 @@ import { ECHO_INSTALLATION_STRINGS } from './strings-echo-installation.js';
 import { SENTINEL_CLI_STRINGS } from './strings-sentinel-cli.js';
 import { SENTINEL_REPORT_STRINGS } from './strings-sentinel-report.js';
 import { SENTINEL_STORE_STRINGS } from './strings-sentinel-store.js';
+import { SENTINEL_CAPTURE_STRINGS } from './strings-sentinel-capture.js';
 import { SENTINEL_STORAGE_ERROR_STRINGS } from './strings-sentinel-storage-errors.js';
 import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { COMPARE_STRINGS } from './strings-compare.js';
@@ -176,6 +177,8 @@ export const STRINGS: Record<string, StringEntry> = {
   ...SENTINEL_STORAGE_ERROR_STRINGS,
   // Sentinel worker execution: protocol, adapter registry, container isolation, supervisor (strings-sentinel-execution.ts)
   ...SENTINEL_EXECUTION_STRINGS,
+  // Sentinel source capture: entry reasons and capture/restore refusals (strings-sentinel-capture.ts)
+  ...SENTINEL_CAPTURE_STRINGS,
   // the gate card's words live in strings-gate.ts (gate.*, the gate and config-check counts)
   ...GATE_STRINGS,
   // who may do what — the role × action table's words live in strings-roles.ts (roles.*, gate.roles.*, its counts)
