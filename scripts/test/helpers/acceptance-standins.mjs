@@ -88,9 +88,10 @@ export function standIns({ sentinelCaps = CAPABILITIES(), sentinelVersionLine, s
     'bin/sentinel.mjs': SENTINEL_BIN(sentinelCaps, sentinelVersionLine),
     'dist/store/index.mjs': SENTINEL_STORE,
     'dist/build-stamp.json': JSON.stringify({ name: 'farsight-sentinel', version: stampVersion ?? sentinelVersion, built: '2026-10-22T00:00:00Z', commit: 'abc1234' }),
+    // an inert marker: a script file of its own (no shell quoting), proving whether this tarball's install script ran
+    ...(postinstallMarker ? { 'postinstall.cjs': `require('node:fs').writeFileSync(${JSON.stringify(postinstallMarker)}, 'ran');\n` } : {}),
   }, { bin: { 'farsight-sentinel': 'bin/sentinel.mjs' }, exports: { './store': { import: './dist/store/index.mjs' }, './package.json': './package.json' },
-    // an inert marker: proves whether a substituted tarball's install script ever ran
-    ...(postinstallMarker ? { scripts: { postinstall: `node -e "require('fs').writeFileSync(${JSON.stringify(postinstallMarker)}, 'ran')"` } } : {}) });
+    ...(postinstallMarker ? { scripts: { postinstall: 'node postinstall.cjs' } } : {}) });
   return { dir, farsight, sentinel, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 

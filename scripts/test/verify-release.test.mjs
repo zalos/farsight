@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { basename } from 'node:path';
 import { verifyRelease, checkPublished } from '../verify-release.mjs';
 import { standIns } from './helpers/acceptance-standins.mjs';
+import { npmConsumer } from '../npm-consumer.mjs';
 
 const sha = (b) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 
@@ -66,6 +67,12 @@ test('a server that answers later requests with other bytes cannot change what i
   const s = standIns();
   // the same name and version, a valid tarball, with an install script that leaves an inert marker
   const other = standIns({ postinstallMarker: marker });
+  // Positive control: the substitute's script really runs when it is installed, so a missing marker below means
+  // it was not installed, not that the fixture was broken.
+  const control = await npmConsumer('verify-swap-control-', [other.sentinel]);
+  control.cleanup();
+  assert.equal(existsSync(marker) && readFileSync(marker, 'utf8'), 'ran', 'the positive control installs the substitute and its script runs');
+  rmSync(marker);
   const r = await release(s, { swapLater: readFileSync(other.sentinel) });
   try {
     const result = await verifyRelease({ tag: 'v0.4.0', repoUrl: r.repoUrl, loopback: true, log: () => {} });
