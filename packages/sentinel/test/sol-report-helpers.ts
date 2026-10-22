@@ -21,7 +21,8 @@ import { createCheckDriverRegistry } from '../dist/execution/check-drivers.js';
 import { VALUE, GENERIC_VALUE, absent } from './secrets-helpers.ts';
 import { unlock } from './snapshot-helpers.ts';
 
-const skip = process.env.SENTINEL_ISOLATION !== '1' && 'requires the existing pinned local Gitleaks image; no acquisition';
+// Native evidence fixtures run only in the explicitly opted-in scanner job. Pure projection tests stay ungated.
+export const nativeSecrets = { skip: process.env.SENTINEL_ISOLATION !== '1' && 'requires the existing pinned local Gitleaks image; no acquisition' };
 const DUPLICATE = `api_key = "${GENERIC_VALUE}"\n`;
 
 /** Every rendering and fact of a report, checked for both synthetic values and the secret-shaped file name. */
