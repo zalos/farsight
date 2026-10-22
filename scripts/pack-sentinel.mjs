@@ -19,7 +19,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { builtinModules } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { dirname, isAbsolute, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertTarball, buildClosure, missingBuildOutputs, npmPackEnv } from './pack-preflight.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -220,6 +220,13 @@ try {
     cpSync(schemaDir, join(out, 'schemas'), { recursive: true });
     files.push('schemas');
     exportsMap['./schemas/*'] = './schemas/*';
+  }
+  // Non-code assets the package owns (in-container workers and their digest manifests), each staged by its own hook,
+  // scripts/package-assets*.mjs, in name order.
+  for (const hook of (existsSync(join(dir, 'scripts')) ? readdirSync(join(dir, 'scripts')) : []).filter((f) => /^package-assets.*\.mjs$/.test(f)).sort()) {
+    const staged = await (await import(pathToFileURL(join(dir, 'scripts', hook)).href)).stageAssets(dir, out);
+    for (const f of staged.files) if (!files.includes(f)) files.push(f);
+    Object.assign(exportsMap, staged.exports);
   }
   for (const doc of ['README.md']) if (existsSync(join(dir, doc))) { cpSync(join(dir, doc), join(out, doc)); files.push(doc); }
   writeFileSync(join(out, 'package.json'), JSON.stringify({
