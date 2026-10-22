@@ -254,3 +254,20 @@ lock is an OS file lock the kernel releases when the holder dies. It is **not** 
 run. The store's reason codes are catalog keys
 (`strings-sentinel-store.ts`, `strings-sentinel-storage-errors.ts`). The `ledger` capability is `available-draft`;
 no scan capability changes, and the store's draft formats can still change before the contract review.
+
+20. **The grant matcher is one pure core function shared by every gate (2026-10-22).**
+
+`decideGrants()` and its generic types (`GrantLike`, `GrantDecision`, `GrantVerdict`, `GrantPrincipal`,
+`GrantConfirm`, `AgentWritesPolicy`) move from `packages/work/src/gate.ts` to `packages/core/src/grants.ts` and are
+exported from `@farsight/core`. The function is unchanged: default deny, additive grants with no deny grant, a
+grant without principals is for people only, an agent waits for a person unless the policy allows agent writes or
+the grant says `confirm: 'never'`, and of the grants that allow an action the first that needs no confirmation
+wins. `@farsight/work` re-exports the same function object and types under the names it always had, so tracker
+writes (`evaluatePolicy`), code-host posts (`codeHostPolicy`) and their callers keep their imports and behaviour.
+**Why core:** Sentinel (PR 06) must apply the same policy matcher to its own actions without importing Work's
+tracker sessions, providers or cache, and a second copy of the ordering rules would drift. The core module imports
+nothing. **Boundary:** only verdict 1, the consumer's policy, is shared. Each consumer keeps its own grant shape and
+target check (`miss`), and its own capability and credential verdicts: Work's `credentialVerdict(Session)` and
+`provider.can()` stay in Work and are not a model or scanner credential check. Confirmation receipts, budgets and
+Sentinel's settings adoption are not part of this boundary. **Cost:** a public core export that Work, code hosts and
+Sentinel must all keep compatible; a change to its rules is a change to every gate at once, which is the point.

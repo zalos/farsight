@@ -39,3 +39,4 @@ export * from './storyline-diff.js';
 export * from './tour.js';
 export * from './ask.js';
 export * from './decisions.js';
+export * from './grants.js';
