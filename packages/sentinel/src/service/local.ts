@@ -26,6 +26,8 @@ import { loadPlan } from '../execution/plans.js';
 import { ServiceError } from './owner-service.js';
 import { runFailureFacts } from './run-failure.js';
 import type { AdapterRegistry } from '../execution/registry.js';
+import { assessRun, contextIntentFor, fullReport, FullReportError, readContextGraph, renderingOf, writeNewFile, type ReportFormat } from './full-report.js';
+import type { DisclosureProfile } from '../reports/index.js';
 import { canonicalResult, currentPlan, executeRun, notExecutableHere, rerunRun, planWorkspaceCanonical, previewFindingsOf, type CanonicalDisclosure, type CurrentPlan } from './canonical.js';
 
 export interface Workspace {
@@ -468,6 +470,89 @@ export async function reportIn(store: SentinelStore, ws: Workspace, options: { r
     limitations: [...PREVIEW_LIMITATIONS],
   };
   return checkPreviewReport(doc);
+}
+
+// ---- the full report (PR 19 over this command path) ----
+
+export interface FullReportOptions {
+  readonly runId: string;
+  readonly baselineRunId?: string;
+  readonly disclosure: DisclosureProfile;
+  readonly format: ReportFormat;
+  /** An application graph the owner supplies, pinned only with the owner's confirmation of exactly it. */
+  readonly contextFile?: string;
+  readonly repo?: string;
+  /** Write the rendering to this new file (never over an existing one) instead of returning it. */
+  readonly out?: string;
+  readonly confirm: boolean;
+  readonly now: Date;
+}
+
+/**
+ * The full report (or comparison) of a completed run, from its accepted evidence alone (full-report.ts). An owner
+ * graph is placed only after the owner confirms the exact `context.pin` intent for this snapshot and source (exit 4
+ * without `--confirm`, nothing is read into the report); the spent receipt is the pin's authority and lives only in
+ * this process. The counts, gaps and placement verdict are in the result's facts; the rendering is returned (or
+ * written once to `out`).
+ */
+export async function fullReportIn(ws: Workspace, options: FullReportOptions): Promise<{ result: CommandResult; text?: string }> {
+  const command = options.baselineRunId ? 'compare' : 'report';
+  return withStore(ws, async store => {
+    let context: { graph: any; repo: string; authorization?: unknown } | undefined;
+    let verdicts: PrintedVerdicts | undefined;
+    if (options.contextFile) {
+      const adopted = adoptedPolicy(ws);
+      if ('refusal' in adopted) return { result: adopted.refusal };
+      const { policy } = adopted;
+      const { graph, repo } = readContextGraph({ path: options.contextFile, ...(options.repo ? { repo: options.repo } : {}) });
+      const current = await assessRun(store, options.runId, { trustDir: trustFolder(ws) });
+      const sourceIds = [...new Set(current.snapshot.entries.map(e => e.sourceId))];
+      const sourceId = sourceIds.length === 1 ? sourceIds[0]! : 'workspace';
+      const { intent } = contextIntentFor(current.snapshot, sourceId, ws.path, graph, repo);
+      const stateDigest = sha(Buffer.from(`${current.snapshot.id}\u0000${sourceId}`));
+      const request = {
+        intent, requestedBy: OWNER as { principal: 'human'; channel: 'owner-cli' }, policy, stateDigest, now: options.now,
+        capability: () => ({ available: true, detail: 'a local application graph checked against the captured bytes; nothing is executed' }),
+        credential: () => ({ basis: 'local-only' as const, detail: 'no provider is contacted' }),
+      };
+      let decision = admit(request);
+      const facts = { runId: options.runId, contextIntent: decision.record.intentDigest, repo, sourceId };
+      if (decision.record.outcome === 'denied') {
+        const v = decision.record.verdicts;
+        return { result: result(command, 'configuration-failure', { verdicts: printed(decision.record), facts,
+          reasonCode: v.policy.allowed ? (v.capability.allowed ? v.credential.reasonCode : v.capability.reasonCode) : v.policy.reasonCode }) };
+      }
+      if (!options.confirm) return { result: result(command, 'awaiting-confirmation', { verdicts: printed(decision.record), facts }) };
+      assertMayConfirm(OWNER);
+      const receipts = receiptBook(ws);
+      const receipt = issueReceipt(receipts, OWNER, { intent, stateDigest, policyRevision: policy.revision }, { now: options.now, ttlMs: RECEIPT_TTL_MS });
+      decision = admit({ ...request, receipt: { book: receipts, id: receipt.id } });
+      if (decision.record.outcome !== 'admitted' || !decision.receipt) {
+        return { result: result(command, 'configuration-failure', { verdicts: printed(decision.record), facts, reasonCode: decision.record.verdicts.policy.reasonCode }) };
+      }
+      verdicts = printed(decision.record);
+      context = { graph, repo, authorization: decision.receipt };
+    }
+    try {
+      const r = await fullReport({ store, runId: options.runId, workspace: ws.path, trustDir: trustFolder(ws), disclosure: options.disclosure, now: options.now,
+        ...(options.baselineRunId ? { baselineRunId: options.baselineRunId } : {}), ...(context ? { context } : {}) });
+      const doc = r.document;
+      const text = renderingOf(r, options.format);
+      if (options.out) writeNewFile(options.out, text);
+      const facts = {
+        runId: options.runId, reportId: doc.id, disclosure: doc.disclosure.profile, completeness: doc.completeness, counts: doc.counts,
+        gaps: doc.gaps.length, findings: doc.findings.length, format: options.format, context: r.context,
+        ...(options.baselineRunId ? { baselineRunId: options.baselineRunId, comparison: r.comparison } : {}),
+        ...(options.out ? { written: options.out } : {}),
+        // Never a policy result: findings are not judged against a finding policy here, and dispositions are PR 20.
+        limitations: ['sentinel.service.policyNotEvaluated'],
+      };
+      return { result: result(command, 'answered', { ...(verdicts ? { verdicts } : {}), facts }), ...(options.out ? {} : { text }) };
+    } catch (e) {
+      if (e instanceof FullReportError) return { result: result(command, 'configuration-failure', { reasonCode: e.code, facts: { runId: options.runId, ...e.facts } }) };
+      throw e;
+    }
+  });
 }
 
 export { PolicyError };

@@ -293,6 +293,18 @@ does not preserve authority. Direct `placeNodes` and `placeFiles` calls also req
 `{ snapshotId, sourceId }`; report generation supplies and checks this binding for findings and gaps. The HTML file works offline with
 JavaScript disabled and loads nothing; Markdown, JSON and SARIF carry the same counts. ADR 38.
 
+From the command line, over a completed scanner run:
+
+```sh
+farsight-sentinel report <runId> --full                                  # Markdown, shareable (no source excerpts)
+farsight-sentinel report <runId> --full --format html --out report.html  # one offline file, written once
+farsight-sentinel report <runId> --full --disclosure private --format json
+farsight-sentinel report <runId> --full --context graph.json --confirm   # place findings through an application graph you confirm
+farsight-sentinel compare <runId> <baselineRunId> [--format md|json|html|sarif]
+```
+
+The report reads only the run's accepted evidence; a graph binds only while the files on disk are the captured bytes.
+
 ## Versions and evolution
 
 - **Draft until review.** Every name ends in `/draft-1`. A name moves to `/v1` only after an independent

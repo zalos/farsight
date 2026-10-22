@@ -229,6 +229,11 @@ Sentinel public scanner dispatch extends the CLI/service boundary: `service/scan
 reviewed external drivers and the exact preview driver (`service/preview-driver.ts`), `service/scanner-assets.ts`
 handles explicit bounded owner acquisition/adoption and receipt-bound private asset records, and
 `reports/scanner.ts` projects only accepted current-plan observations through the shared coverage evaluator.
+`service/full-report.ts` builds the full `sentinel-report/draft-1` document of a completed scanner run (and a comparison
+with a baseline run) from accepted publications bound to their run, unit and attempt, pins an owner-confirmed
+application graph against the captured bytes, and writes a rendering once (`report --full`, `compare`, ADR 38).
+`test/cli-full-report-e2e.test.ts` and `scripts/test-sentinel-report-browser.mjs` cover the command path and offline
+delivery.
 `test/cli-scanners-e2e.test.ts`, `test/scanner-assets.test.ts` and
 `scripts/test-sentinel-scanner-consumer.mjs` cover the public command path, strict asset boundaries and installed
 npm-only detached execution. These are executable internals, not new JavaScript package exports.

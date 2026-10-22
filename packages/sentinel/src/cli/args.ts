@@ -8,7 +8,7 @@ export const COMMANDS = {
   plan: null, run: null, status: null, report: null, wait: null, pause: null, resume: null, cancel: null, serve: null,
   retry: null, rerun: null,
   rules: null, assets: null,
-  compare: 'PR 19', bundle: 'PR 26',
+  compare: null, bundle: 'PR 26',
 } as const satisfies Record<string, string | null>;
 export type CommandName = keyof typeof COMMANDS;
 
@@ -22,6 +22,10 @@ interface CommandSpec {
 
 const COMMON: Record<string, FlagKind> = { '--json': 'boolean' };
 const STORE: Record<string, FlagKind> = { '--workspace': 'value' };
+/** The full report's choices: disclosure, format, an owner-confirmed application graph, and a new file to write. */
+const FULL_REPORT: Record<string, FlagKind> = {
+  '--format': 'value', '--disclosure': 'value', '--context': 'value', '--repo': 'value', '--out': 'value', '--confirm': 'boolean',
+};
 const RUN_REF: CommandSpec = { flags: { ...COMMON, ...STORE }, positional: ['runId'], min: 1 };
 
 const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
@@ -40,9 +44,9 @@ const SPECS: Readonly<Record<CommandName, CommandSpec>> = {
   retry: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   resume: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['runId'], min: 1 },
   rerun: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--stage': 'value' }, positional: ['runId'], min: 1 },
-  report: { flags: { ...COMMON, ...STORE, '--format': 'value' }, positional: ['runId'], min: 1 },
+  report: { flags: { ...COMMON, ...STORE, ...FULL_REPORT, '--full': 'boolean' }, positional: ['runId'], min: 1 },
   serve: { flags: { ...COMMON, ...STORE, '--idle-ms': 'value' }, positional: [], min: 0 },
-  compare: { flags: COMMON, positional: [], min: 0 },
+  compare: { flags: { ...COMMON, ...STORE, ...FULL_REPORT }, positional: ['runId', 'baselineRunId'], min: 2 },
   rules: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean' }, positional: ['action', 'packDir'], min: 1 },
   assets: { flags: { ...COMMON, ...STORE, '--confirm': 'boolean', '--archive': 'value', '--manifest': 'value', '--max-bytes': 'value', '--license': 'value' }, positional: ['action', 'assetId'], min: 2 },
   bundle: { flags: COMMON, positional: [], min: 0 },

@@ -145,7 +145,7 @@ jobs:
           node --disable-warning=ExperimentalWarning --experimental-strip-types --test --test-concurrency=1 --test-timeout=600000 \
             --test-reporter=spec --test-reporter-destination=stdout --test-reporter=tap --test-reporter-destination=scanner-cli.tap \
             test/drivers.test.ts test/drivers-boundary.test.ts test/drivers-canonical.test.ts test/drivers-conformance.test.ts \
-            test/scanner-assets.test.ts test/scanner-admission.test.ts test/cli-scanners-e2e.test.ts
+            test/scanner-assets.test.ts test/scanner-admission.test.ts test/cli-scanners-e2e.test.ts test/cli-full-report-e2e.test.ts
           grep -Eq '^# tests [1-9][0-9]*$' scanner-cli.tap
           grep -qx '# skipped 0' scanner-cli.tap
           grep -qx '# fail 0' scanner-cli.tap
@@ -155,8 +155,17 @@ jobs:
           set -euo pipefail
           umask 022
           pnpm pack:sentinel
-          node scripts/test-sentinel-scanner-consumer.mjs | tee scanner-consumer.log
+          mkdir -m 700 "$RUNNER_TEMP/report-delivery"
+          SENTINEL_REPORT_DELIVERY="$RUNNER_TEMP/report-delivery" node scripts/test-sentinel-scanner-consumer.mjs | tee scanner-consumer.log
           grep -q '^sentinel scanner consumer ok: npm-only init twice' scanner-consumer.log
+      - name: View the installed command's delivered reports offline in a browser
+        run: |
+          set -euo pipefail
+          pnpm exec playwright install --with-deps chromium
+          node scripts/test-sentinel-report-browser.mjs "$RUNNER_TEMP/report-delivery/shareable.html" "$RUNNER_TEMP/report-delivery/private.html" | tee report-browser.log
+          grep -q '^sentinel report browser ok: 2 file' report-browser.log
+          # Only the shareable rendering is retained: it carries locations but no source excerpt.
+          cp "$RUNNER_TEMP"/report-delivery/shareable.html.*.png .
       - name: Verify supervised container cleanup
         if: always()
         run: |
@@ -173,5 +182,7 @@ jobs:
           path: |
             packages/sentinel/scanner-cli.tap
             scanner-consumer.log
+            report-browser.log
+            shareable.html.*.png
             docker-server.json
             scanner-cli-pins.json

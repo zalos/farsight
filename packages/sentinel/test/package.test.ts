@@ -107,7 +107,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
   // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
   'rules/pack.js': ['node:fs', 'node:path'],
-  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs'],
+  'cli.js': ['@farsight/core/dist/strings-sentinel-cli.js', '@farsight/core/dist/strings-sentinel-service.js', 'node:fs', 'node:path'],
+  // The full report: reads the store's accepted evidence, an owner-supplied graph file, and writes one new file.
+  'service/full-report.js': ['@farsight/core/dist/strings.js', '@farsight/graph', 'node:crypto', 'node:fs', 'node:path'],
   'cli/init.js': ['node:crypto', 'node:fs', 'node:path'],
   // The foundation-preview detector, a built-in worker: it reads its copied inputs and writes one artifact.
   'adapters/preview-detector.js': ['node:crypto', 'node:fs'],
@@ -273,7 +275,7 @@ test('public scanner command support is conditional on explicit adopted pinned a
 });
 
 test('planned commands refuse with exit 3 and start nothing', () => {
-  for (const command of ['compare', 'bundle']) {
+  for (const command of ['bundle']) {
     const r = cli(command, '--json');
     assert.equal(r.status, 3, command);
     assert.match(r.stderr, new RegExp(`^unavailable: ${command} is not implemented in this draft build \\(planned in PR \\d+\\)\\. Nothing was started\\.`));

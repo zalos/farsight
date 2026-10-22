@@ -22,7 +22,7 @@ export function initialSettings(profile: string) {
   // planned only once the owner promotes its pack, and a run resting on it is never required coverage met.
   return { ...DEFAULT_SETTINGS, mandatoryRules: profile === 'scanners' ? [...PATTERN_SUPPORTED_RULES, ...OSV_SUPPORTED_RULES, ...TRIVY_SUPPORTED_RULES, ...ZIZMOR_SUPPORTED_RULES].map(r => r.familyId) : [PREVIEW_RULE], grants: [
     { actions: ['capture.source', 'run.start', 'run.pause', 'run.cancel'], principals: ['human'], scope: { profiles: ['static'] } },
-    { actions: ['rule.promote', 'tool.acquire'], principals: ['human'] },
+    { actions: ['rule.promote', 'tool.acquire', 'context.pin'], principals: ['human'] },
   ] };
 }
 

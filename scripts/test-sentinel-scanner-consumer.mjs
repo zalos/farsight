@@ -2,7 +2,7 @@
 // An npm-only installed CLI performs every owner/planner/service/report action. The test harness supplies only
 // original inert source and a tiny synthetic advisory archive; existing pinned images/checks are never pulled.
 import assert from 'node:assert/strict';
-import {existsSync,readFileSync,readdirSync,realpathSync,rmSync} from 'node:fs';
+import {cpSync,existsSync,mkdirSync,readFileSync,readdirSync,realpathSync,rmSync} from 'node:fs';
 import {join,dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {npmConsumer} from './npm-consumer.mjs';
@@ -38,5 +38,18 @@ try{
  const report=(await cli('report',id)).body.facts.report;assert.equal(report.schema,'sentinel-scanner-report/draft-1');const adapters=new Set(report.observations.map(o=>o.value.adapter));for(const adapter of ['pattern-semgrep','advisories-osv','iac-trivy','ci-zizmor'])assert.ok(adapters.has(adapter));
  for(const path of Object.keys(f.files))rmSync(join(f.ws,path),{force:true});await stopOwnService();
  const regenerated=(await cli('report',id)).body.facts.report;assert.deepEqual(regenerated.observations,report.observations);assert.deepEqual(regenerated.coverage,report.coverage);assert.equal(regenerated.ledgerSequence,report.ledgerSequence);
- console.log('sentinel scanner consumer ok: npm-only init twice, adoption, exact original packs, missing-asset refusal, owner-receipted tool/database adoption, plan, detach/join/wait through four real pinned containers, retained report after service restart and source removal; incomplete required coverage stays exit 2');
+ // The full report from the installed command alone, with the source deleted and the service stopped: shareable and
+ // private offline HTML and the JSON document, each written once to a new file; a second write to a path is refused.
+ const delivered=join(realpathSync.native(consumer.scratch),'delivered');mkdirSync(delivered,{mode:0o700});
+ const full=await cli('report',id,'--full');assert.equal(full.status,0,JSON.stringify(full.body));assert.equal(full.body.facts.completeness,'partial');assert.ok(full.body.facts.findings>0&&full.body.facts.gaps>0);
+ for(const [name,extra] of [['shareable.html',[]],['private.html',['--disclosure','private']],['report.json',['--format','json']]]){
+  const args=['report',id,'--full',...(name.endsWith('.html')?['--format','html']:[]),...extra,'--out',join(delivered,name)];
+  assert.equal((await cli(...args)).status,0,name);assert.equal((await cli(...args)).body.reasonCode,'sentinel.report.outExists',name);
+ }
+ const doc=JSON.parse(readFileSync(join(delivered,'report.json'),'utf8'));assert.equal(doc.schema,'sentinel-report/draft-1');assert.equal(doc.disclosure.profile,'shareable');
+ const shareable=readFileSync(join(delivered,'shareable.html'),'utf8');const priv=readFileSync(join(delivered,'private.html'),'utf8');
+ for(const html of [shareable,priv]){assert.match(html,/Content-Security-Policy/);assert.match(html,/@media print/);assert.doesNotMatch(html,/<script|src="http|href="http|@import/i);}
+ assert.ok(!shareable.includes('SELECT * FROM users WHERE id = ')&&priv.includes('SELECT * FROM users WHERE id = '),'only the private report embeds source');
+ if(process.env.SENTINEL_REPORT_DELIVERY)cpSync(delivered,process.env.SENTINEL_REPORT_DELIVERY,{recursive:true});
+ console.log('sentinel scanner consumer ok: npm-only init twice, adoption, exact original packs, missing-asset refusal, owner-receipted tool/database adoption, plan, detach/join/wait through four real pinned containers, retained report after service restart and source removal; full report written once as shareable and private offline HTML and JSON from the installed command alone; incomplete required coverage stays exit 2');
 }finally{await stopOwnService();consumer.cleanup();}

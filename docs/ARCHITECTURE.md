@@ -890,3 +890,26 @@ and a print stylesheet; SARIF 2.1.0 uses the rule family as `ruleId`, Sentinel's
 delivered report needs neither product nor the source. Not decided here: dispositions and imported evidence in the
 same document (PR 20), the CLI's report command (PR 09), the integrated view (PR 25), and building a context from
 captured configuration rather than verifying a retained one.
+
+**ADR 38 extension — the full report through the command path (2026-10-22).** `report <run> --full` and
+`compare <run> <baseline>` build the `sentinel-report/draft-1` document from a completed scanner run's accepted
+evidence only (`service/full-report.ts`), never from a report file, a structural record a caller supplies, or the
+workspace. Each work unit's accepted publication is read for its coverage records (bound to this run, unit, revision
+and publishing attempt, and to a check the unit was assigned) and its scanner findings (bound to this run, snapshot,
+source, unit, attempt and adapter). A finding becomes one observation per assigned rule family; every location it
+cites must be a captured file the unit was assigned, with exactly those bytes, and its span is checked against them
+(line ranges and whole-file citations are turned into byte spans over the captured bytes); the canonical symbol is
+the innermost bootstrap parser-index node over those bytes containing the span. Anything else refuses the whole
+report (`sentinel.report.evidenceUnbound`). Severity is the producer's, else the rule definition's from the exact
+packs the run's admitted lock names. Every plan check is a planned check (its files from its scope, symbol or unit);
+compare recomputes both sides' findings and per-family check assessments (rule revision, engine and image pins,
+trusted capabilities, environment, limits) and the current surfaces from the current run's capture and parse.
+An application graph the owner supplies (`--context`) is pinned only after the owner confirms the exact
+`context.pin` intent (exit 4 without `--confirm`; `init` grants it to the owner only), and its inputs are the
+captured files' bytes as they are on disk now, so a graph of a tree that changed after the capture is `mismatched`,
+whatever is confirmed; the spent receipt is the pin's authority and never leaves the process. Shareable is the
+default disclosure; `--out` writes one new owner-private file and never replaces one. The command is a read, never a
+policy result: its outcome is `answered` with `sentinel.service.policyNotEvaluated` among its limitations. The
+minimal `sentinel-scanner-report/draft-1` and the preview report are unchanged. While the background service holds
+the store the full report is refused (`ownerServiceRunning`). The HTML policy names only directives a `<meta>`
+policy honours, so a delivered file opens with no console error.

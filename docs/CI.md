@@ -45,7 +45,10 @@ The job runs driver/binding/asset/admission tests and the real public four-engin
 An empty suite, any skip, failure or cancellation fails acceptance. It then packs the npm artifact and runs
 `test-sentinel-scanner-consumer.mjs` from a clean consumer: init, adopt settings, promote exact packs, missing-asset
 refusal, owner-receipted tools/databases, plan, detach/join/wait, and report regeneration after service restart and
-source removal. Required coverage gaps stay exit 2. Tests stop only their own supervised resources; the final step
+source removal; with the source and service gone it also writes the full report once as shareable and private HTML
+and JSON, and a browser step opens both HTML files from disk with no network and JavaScript off, failing on any
+request, page or console error, and prints them (only the shareable screenshots are retained). Required coverage
+gaps stay exit 2. Tests stop only their own supervised resources; the final step
 queries the daemon directly and fails if Sentinel containers remain. It never deletes an unowned container or hides
 a failed daemon query. The tested commit/image/worker pins, TAP result, installed-consumer success log and daemon identity are retained as CI evidence.
 
