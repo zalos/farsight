@@ -54,7 +54,10 @@ bundle is fetched only by the owner's confirmed acquisition, by digest, from the
 login (an anonymous pull token that is never sent to the blob host); scans never download. The engine's log stays in
 the container: only fixed words, digits and the job's own paths leave it. The zizmor adapter (ADR 34) runs offline
 with no token, no repository configuration and no ignore comments; the audits that would need the GitHub API are
-reported as skipped, never as passed. The local runtime folder
+reported as skipped, never as passed.
+The Nest framework pack (ADR 32) reads only captured bytes from the store and the parser's artifact; it parses them
+as data and never imports, installs or runs the target or its package manager. Guard and pipe names are never read
+as protection, and a registration it cannot follow is reported as a frontier, not resolved. The local runtime folder
 (`.farsight/sentinel/*`) is ignored by git. Later scanner, container and model work arrives with its
 own trust-boundary section here: external scanners run only in containers, with no host fallback, and model
 providers are opt-in per run. The pattern adapter (PR 10) is the first external scanner: Semgrep 1.181.0, the image pinned by

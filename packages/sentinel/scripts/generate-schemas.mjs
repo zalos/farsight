@@ -25,6 +25,8 @@ const ENVELOPES = {
   admission: ['sentinel-admission/draft-1', 'AdmissionEnvelope'],
   controls: ['sentinel-controls/draft-1', 'ControlFactsEnvelope'],
   plan: ['sentinel-plan/draft-1', 'PlanEnvelope'],
+  paths: ['sentinel-paths/draft-1', 'PathEvidenceEnvelope'],
+  deepimport: ['sentinel-deep-import/draft-1', 'DeepImportEnvelope'],
 };
 
 const generator = createGenerator({

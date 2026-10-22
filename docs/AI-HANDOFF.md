@@ -6,6 +6,123 @@ here. Examples use `example.atlassian.net`, `dev.azure.com/example-org`, `dev@ex
 `keychain:farsight/jira-example` / `keychain:farsight/ado-example`, and *the reference app* for the real application
 Farsight was dogfooded on.
 
+## Nest with provider and paths libraries — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges reviewed provider/path integration `2ab52485` into Nest
+`b3ddfb2c`. Nest implementation, tests, fixtures and catalog (14 files) remain byte-identical to `b3ddfb2c`;
+all 217 incoming implementation, schema, rule, asset, packaging and selected test/control files remain
+byte-identical to `2ab52485`. Additive resolutions retain every framework, provider and analysis export,
+catalog registration, precise import audit and package consumer fixture. No new runtime behavior is introduced.
+
+Validation: Sentinel dependency-closure build and typecheck, generated-schema check and catalog lint (4,203
+entries), ten package-boundary cases and two capability-union controls pass with zero skips. A clean npm-only
+consumer compiles 14 exports and 21 contract types, validates 21 schemas and 55 fixtures, verifies retained
+Pattern/OSV assets, reopens the store, runs the captured call path/import refusal and analyzes installed Nest,
+Spring and Express fixtures. No advisory database ships and no scanner or target code runs. The unchanged Nest
+behavioral suites are not repeated. The provider-only installed type/budget probe remains bound to the unchanged
+`2ab52485` provider implementation; no hosted/model call or real keychain read is performed. Canonical framework
+commands, public provider dispatch and deep-engine qualification remain separate completion gates.
+
+## Nest integration retains the reviewed Next and Spring aggregate — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges reviewed aggregate `467a13b1` into `f78f3ce8`.
+Nest source, tests, fixtures and catalog remain byte-identical to `f78f3ce8`; Next, Spring and Express source,
+tests and catalogs, plus the adapter and execution runtime, remain byte-identical to `467a13b1`. All four public
+framework library exports and existing installed-package checks are retained. Next's command capability remains
+unavailable; Spring and Express keep their incoming draft library capabilities. No operation is registered here.
+
+Validation on Node 24.19.0: dependency-closure build, Sentinel typecheck, schemas and catalog passed. Ten package
+checks and two capability checks passed with zero skips. A fresh npm consumer imports twelve typed exports,
+compiles 19 contract types, validates 19 schemas and 53 fixtures, reopens storage across processes, analyses Nest,
+Spring (open/protected/unknown) and Express (before/after/conditional), and verifies Pattern/OSV assets. The
+unchanged Nest suite was not repeated after its 104-test combined framework/package run at `f78f3ce8`.
+No target code or scanner was run. Final native CI and canonical framework command integration remain open.
+
+## Nest library merged with main foundations — 2026-10-22
+
+Branch `codex/sentinel-nest-integration` merges main `6bf00a7d` into reviewed Nest head `17ac292e`.
+The Nest implementation, its test and fixture tree, and its catalog are byte-identical to that reviewed head.
+Express, Pattern and OSV adapter source, execution runtime and OOM controls are byte-identical to incoming main.
+The export map, catalog registration, package import audit, documentation and standalone consumer retain both
+framework libraries and both scanner asset sets. Capability expectations retain main's Express draft library;
+no framework operation is added to the planner or preview command.
+
+Validation on Node 24.19.0: Sentinel dependency-closure build, typecheck, schema check and catalog lint passed.
+The focused Nest, Express and package suites passed 104 tests, and two capability controls passed, all without
+skips. A clean npm-only consumer exercised both installed framework APIs, compiled ten public exports and 19
+contract types, validated 19 schemas and 53 fixtures, and reopened storage across processes. It verified all 17
+Pattern pack files and the Pattern/OSV worker digests, with no advisory database bundled. No scanner or target
+code was executed. Broader historical suite and graph measurements remain qualified to their recorded heads;
+canonical framework command integration and new native qualification are separate gates.
+
+## Provider foundation with paths and framework libraries — 2026-10-22
+
+Branch `codex/sentinel-providers-integration` merges frozen paths/framework integration `58cd029c` into provider
+integration `04da438d`. All 12 provider implementation/test/helper/catalog files remain byte-identical to reviewed
+`d7a55530`; all 206 incoming Sentinel implementation, contract/schema, rule, asset, packaging and selected OOM/path
+control files remain byte-identical to `58cd029c`. Additive resolutions retain both public exports, both catalog
+registrations and package-map descriptions. The precise capability assertions still list drafts only where the
+library is available; public provider dispatch and deep-engine qualification remain open.
+
+Validation: Sentinel dependency-closure build and typecheck, generated-schema check and catalog lint (4,162
+entries); ten package-boundary cases plus two capability-union controls pass with zero skips. A clean npm-only
+consumer compiles 13 exports and 21 contract types, validates 21 schemas and 55 fixtures, verifies Pattern/OSV
+assets, reopens the store, runs the installed path query/import refusal and analyzes Spring and Express fixtures.
+A separate npm-only consumer compiles all 27 named provider types and verifies durable budget reopening,
+uncertain-charge retention and excess-reservation refusal without invoking an endpoint. The unchanged
+35-case provider/package behavioral run remains bound to its earlier named head; no broad repeat is claimed.
+No hosted/model call or real keychain read is used for this integration.
+
+## Bounded paths with Next and Spring integration — 2026-10-22
+
+Branch `codex/sentinel-paths-integration` combines the reviewed paths/import foundation `41de557d` with frozen
+Next/Spring integration `467a13b1`. The paths implementation, contracts, schemas and schema generator (45 files)
+remain byte-identical to `41de557d`; Next, Spring, Express, OSV, execution, capture and asset implementations
+(71 files), plus the delayed-OOM controls, retain the incoming bytes. Both catalogs and export maps are preserved.
+The package consumer retains the actual path query/import refusal and both Spring and Express source fixtures.
+Capabilities list the exact available drafts while deep flow and unintegrated commands remain unavailable.
+
+Validation: Sentinel dependency-closure build and typecheck, generated-schema check and catalog lint (4,130
+entries); 48 paths/contracts/package cases and two capability-union controls pass with zero skips. A clean
+npm-only consumer compiles 12 typed exports and 21 contract types, validates 21 schemas and 55 fixtures, verifies
+17 Pattern assets and the OSV worker, reopens the store across processes, runs the installed path query/import
+refusal, and analyzes the installed Spring (open, protected, unknown) and Express (before, after, conditional)
+fixtures. No advisory database ships. The prior
+full-suite, ingest and browser measurements below remain bound to their named historical candidates. No scanner,
+deep engine or target application code is run for this integration. Full PR 18 public command/deep qualification
+remains open.
+
+## Bounded paths integration on merged foundations — 2026-10-22
+
+Branch `codex/sentinel-paths-integration` rebases the five reviewed path/import commits ending at `09bd0b64`
+onto merged Pattern main `5196dc70`, then includes merged Express main `95387a4e` with a feature-branch merge.
+The path implementation and its two contracts are byte-identical to `09bd0b64`; merged Pattern rules/adapter and
+Express implementation bytes are retained unchanged. Catalogs, ADRs, exports, precise import-audit entries,
+capability assertions and the clean npm consumer retain all three boundaries. `evidence.import` remains an
+owner-only verb, imported observations remain imported, and no qualified deep engine or public command wiring is
+claimed. The consumer runs both the installed path query/import refusal and Express source-only fixture analysis.
+
+Validation on the combined candidate: Sentinel dependency-closure build and typecheck, generated schemas and
+catalog lint; 110 affected path/contract/policy/package/Pattern/Express tests plus two capability-union controls
+passed, zero skips. A fresh npm-only consumer compiled ten typed exports and 21 contract types, checked 21 schemas,
+55 fixtures and all 17 Pattern assets, reopened the store across processes, ran a captured cross-file call query,
+refused import without an owner receipt, and analyzed the Express before/after/conditional fixture. No target code,
+scanner or deep engine ran. Earlier full-suite, fixed-source ingest and browser results belong to `09bd0b64` against
+`e25424fb`, not this merged candidate. Full PR 18 command/deep qualification remains open.
+
+## Next patch identity correction — 2026-10-22
+
+Branch `codex/sentinel-next-patched-identity` refuses recorded pnpm patches for Next, React and React DOM,
+including lock patch maps, importer/package patch hashes and project/workspace-root package declarations.
+Nested projects read only captured root declaration bytes; absent recorded bytes or malformed declarations leave
+versions unknown. Ancestor declaration identities contribute to registration and surface influence digests. Pack
+revision 3 invalidates facts produced with the earlier package identity semantics. Ordinary peer suffixes and
+unrelated patches still qualify. This is source-only installation evidence, not a runtime package attestation.
+
+Validation: Sentinel dependency-closure build; Next matcher/pack suites (23 tests, no skips), including actual
+capture → delete checkout → parse → analyze patched fixtures and a nested workspace control. The original
+independent patched-package probe was replayed unchanged. Public CLI integration remains separately pending.
+
 ## Delayed OOM canary correction — 2026-10-22
 
 Branch `codex/sentinel-oom-settling-investigation` corrects the test-only Docker visibility adapter: it hides the
@@ -64,6 +181,47 @@ pnpm lint:strings
 
 Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .farsight/settings.example.json .farsight/settings.json` (or nothing — the server falls back to a one-source workspace) and an ingest or `/api/sync` before `serve`/`mcp` have a graph.
 
+## Sentinel Nest framework escapes — 2026-10-22
+
+Branch `codex/sentinel-nest-escape-fixes`, based on `910acbb6`, adds `frameworkEscapes` where a framework value
+leaves supported local aliases: sequences, aggregates, class fields, parameter/default passing, returns and
+unsupported constructor methods. These frontiers prevent validation credit and absence claims. Existing alias
+mutation checks retain lexical shadowing, and the registration-origin dependency-copy resolution is unchanged.
+Type and noncomputed property names do not count as runtime value passing. ADR 32 and the package README record
+the boundary; fixtures are captured and parsed, never executed.
+
+Validation: the graph/core/code-parser/Sentinel build and typecheck closure passed; catalog lint and exact commit
+subject lint passed. The focused owner suite (37 tests) plus the independent captured-source probes (23) passed:
+60 passed, 0 failed, 0 skipped. Running the 15 new durable cases against unchanged baseline output produced
+13 failures for the escape cases and 2 passes for the harmless-name/shadow controls. No full suite, scanner,
+network engine, target application execution or primary checkout build was needed. Independent review is pending.
+
+### General framework reference uses (follow-up)
+
+The follow-up after `1b2494ae` replaces the syntax-specific escape list with a whitelist of supported runtime
+reference uses. Unmodeled consumers default to `frameworkEscapes`; tagged templates, instance/helper flows,
+subclasses, exports and assignment results cannot hide a framework value. Types, declaration/property names,
+discarded reads, supported local aliases and unused shadowed parameters remain harmless. Unfollowed global
+registrations keep their more specific reason.
+
+Validation: 75 focused captured-source cases passed, 0 failed, 0 skipped (45 durable owner cases plus 30
+independent probes). The eight new durable cases against a fresh immutable build of `1b2494ae` produced seven
+failures and one positive-control pass. Affected builds/types, catalog and exact commit subject lint passed.
+All fixtures remain inert capture/parse/analysis inputs; no target code is executed. Independent review is pending.
+
+### Export, namespace and runtime-import boundaries (follow-up)
+
+The follow-up after `d2bfd655` proves a supported alias stays in a local, nonexported declaration outside an
+unmodeled namespace. Later assignments to exported live bindings are escapes too. Qualified runtime
+import-equals references are no longer erased as types. Framework CommonJS/dynamic loads and retained host or
+Node loader capabilities are unknown; actual lexical/module declarations shadow those host loader names.
+Valid type-only imports, unrelated namespace member names and a shadowed local `require` remain positive controls.
+
+Validation: 91 focused captured-source cases passed, 0 failed, 0 skipped (58 durable owner cases plus 33
+independent probes, including all three new review failures). Thirteen new durable cases against a fresh
+immutable `d2bfd655` build produced 10 negative failures and 3 positive-control passes. Sentinel build/typecheck,
+catalog and exact subject lint passed. No target application code was executed. Independent review is pending.
+
 ## Provider access
 
 - Codex: `.codex/config.toml` configures the workspace CLI over MCP stdio.
@@ -76,6 +234,25 @@ Tests import compiled `dist/`, so build first. A fresh checkout also needs `cp .
 
 Codex project instruction and MCP conventions were checked against [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md) and [official MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## Sentinel scanner/library integration — 2026-10-22
+
+The final `codex/sentinel-scanner-integration` aggregate normally merges the reviewed Nest/provider/path/Next/Spring
+foundations into `a26ca4a4`. All 85 recorded scanner/execution/driver/service/planner implementation files remain
+exactly that candidate's bytes, and all 42 incoming framework/path/provider implementation files match the supplied
+aggregate. The package retains every asset hook, now invoked once; public exports, catalogs, schema registrations,
+dependencies, import audits and capability assertions combine both sides. Capability words remain scoped to proved
+library or explicit four-scanner command behavior; full framework/model/policy/report integration is still open.
+
+The package consumer now permanently checks Next peer identity, patched/unsupported identity and dynamic matchers
+from retained capture after source removal, plus offline provider budget reservation, overspend refusal and reopen.
+These child probes import only installed public exports, use original inert fixtures and contact no provider.
+Fresh npm validation compiles 14 exports and 21 contract types, checks 21 schemas and 55 fixtures, exercises installed
+Nest/Spring/Express/paths/Next/provider behavior, and verifies all four scanner asset sets. A separate true installed
+four-scanner CLI consumer passes owner adoption, missing-asset refusal, plan/detach/join/wait and report replay after
+service restart/source removal; incomplete coverage stays exit 2. Build/types/schema/catalog and focused
+package/contract/capability/workflow checks pass. Prior native CI and 20-repetition recovery results belong to exact
+`a26ca4a4`; the new integration still needs its own selected CI. No primary build, push or merge into main.
+
 ## Sentinel Trivy/zizmor native qualification — 2026-10-22
 
 A separate follow-on records Linux amd64 as measured for the existing pinned Trivy and zizmor workers only.
@@ -87,6 +264,73 @@ bytes, source digests and the exact job. No broader engine, runtime, architectur
 implied; zizmor's offline limits still apply. The workflow now expects the measured platform word.
 Local follow-on validation: build and typecheck passed, all 35 unit/container conformance cases passed with zero
 skips on the existing arm64 runtime, and the installed package ran both unchanged workers successfully.
+
+## Next fix-stack integration with merged foundations — 2026-10-22
+
+Branch `codex/sentinel-next-integration` incorporates the reviewed patch-identity correction and follow-ups through
+`89323726`, then merges main `95387a4e`. The merge preserves the complete Pattern and Express implementations,
+reserved ADRs, catalogs, package exports, audit entries and installed-consumer hooks alongside Next. The Next runtime
+is unchanged from the frozen root-shape correction; other framework/scanner/runtime implementations come unchanged
+from merged main. The root-shape slice passed 46 focused Next/package tests with zero skips before integration.
+
+Production coordinator and CLI dispatch for framework packs remain open. The merge is a library foundation and
+makes no framework effect or full-plan acceptance claim. Integration build, focused checks and fresh installed npm
+consumer evidence are verified separately before handoff; no target application code is executed or installed.
+No primary build, dogfood replacement, server restart or push is part of this integration.
+
+## Next pnpm root-shape preflight — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `c8c3f160` and validates every meaningful lockfile root
+key before reading individual sections. Supported keys are plain, single-quoted or double-quoted simple identifiers;
+unknown ordinary identifiers may remain inert configuration. Tagged, anchored, complex, escaped or duplicate root
+keys and document directives are refused conservatively. Patch-head detection consumes those normalized roots,
+rather than a separate spelling-specific search. No YAML dependency is added; the pack revision advances to 7.
+
+A captured tagged `patchedDependencies` key reproduced the identity bypass on frozen `c8c3f160`; the existing YAML
+parser confirms it names the same map as an ordinary key. An original ordinary-config/unrelated-patch fixture keeps
+its measured peer identity. Focused checks also cover quoted known sections and unsupported root/document forms.
+No target code is executed. Independent review remains required before integration or publication.
+
+## Next pnpm modification-metadata key follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `464c6734` and reads package metadata field names as
+plain or quoted identifiers. A `patched` field in either form refuses the measured registry identity; escaped or
+unsupported key forms are unknown instead of silently ignored. Ordinary quoted `engines` and `hasBin` metadata
+still qualify. No YAML dependency is added. The pack revision advances to 6 to invalidate the earlier decision.
+
+Actual capture/parse probes reproduced all three quoted/escaped modification-key failures on frozen `464c6734`;
+the existing YAML parser confirms each spelling means the same `patched: true` field. The ordinary metadata positive
+passed that baseline. Final validation passed all 43 focused Next/package tests with zero skips, Sentinel build and
+typecheck, catalog lint and diff checks. Target code was never installed, compiled or executed. Independent review
+and integration remain with the coordinating owner; author, primary and integrating-owner trees are untouched.
+
+## Next pnpm comment-boundary follow-up — 2026-10-22
+
+The follow-up on `codex/sentinel-next-patch-indent` preserves `696d96fb` and makes the shared YAML block reader
+ignore comment-only lines at every indentation. Two actual capture/parse probes reproduced the remaining defect on
+that frozen head: a column-zero comment before the first patch entry, or between an unrelated entry and Next's entry,
+truncated the map and incorrectly retained the registry identity. The existing YAML parser confirms both placements
+preserve the same patch-map meaning. The pack revision advances to 5 so the old identity answer cannot be reused.
+
+Comment-only declarations parse as YAML null and are conservatively unknown, while explicit empty maps remain
+supported. New retained-source regressions cover both hidden-entry cases and that null-versus-empty distinction;
+ordinary peer suffixes and unrelated patch positives remain in the focused suite. No target code is executed and
+no author, primary or integrating-owner tree is changed. Independent review remains required before integration.
+
+## Next pnpm patch-map indentation correction — 2026-10-22
+
+Branch `codex/sentinel-next-patch-indent` follows reviewed patch-identity correction `c9972d84`. The lockfile reader
+infers the direct-entry indentation of `patchedDependencies` instead of assuming two spaces, and skips each entry's
+complete metadata block before reading its sibling. Relevant patches remain unknown; unsupported selector/map shapes
+are refused rather than ignored. Ordinary peer suffixes and patches for unrelated packages still qualify. The pack
+revision advances to 4 so prior analysis cannot reuse this changed identity decision.
+
+Three original capture/parse regressions (one-, four- and eight-space patch maps) fail on frozen `c9972d84`.
+Each corrected case checks both relevant-patch refusal and an unrelated-patch positive through retained bytes after
+source removal. The original four-space probe is valid YAML: the existing YAML parser produces the same object as
+for the ordinary two-space form. Target code is never installed, compiled or executed. Build, typecheck and catalog
+checks passed; all 36 focused Next/package tests and both exact review probes passed with zero skips. Independent review and integration
+remain with the coordinating owner; no primary build, graph replacement or push occurred.
 
 ## Sentinel offline advisory foundation rebased — 2026-10-22
 
@@ -115,6 +359,74 @@ must grow process memory after allocation reuse or garbage collection. The refus
 error and absence of a publication; the neighbor checks successful publication. Runtime grants are unchanged.
 Validation: dependency-closure build and all 10 bootstrap tests passed with no skips. Native platform metadata is
 reviewed separately against the native CI evidence.
+
+## Provider PR156 integration rebase — 2026-10-22
+
+Branch `codex/sentinel-providers-integration` was rebased onto fetched main `5196dc70`, then includes the newer
+merged Express foundation `95387a4e` through feature-branch merge `5dad0a61`. All reviewed provider implementation,
+test/helper and provider catalog bytes remain identical to `979d7146`; policy-revision, per-call and budget-fence
+corrections are unchanged. Conflict resolutions retain Pattern, Express and provider ADR/package map, catalogs
+and exports. Incoming Express/Pattern implementations, rules, asset hook, packer and consumer are byte-identical
+to main `95387a4e`.
+
+The provider/package suites passed 35 tests with no skips on the byte-identical provider foundation before the
+Express merge, using only original local mock endpoints. After the merge, affected dependency build/typecheck,
+catalog lint and ten affected package checks passed, with no broad suite repeat. A fresh npm-only consumer
+verified ten exports, 19 contract types and schemas, 53 fixtures, cross-process store reopen, 17 Pattern pack files
+and actual installed Express capture/parse/analysis. Another installed-only consumer compiled all 27 named
+provider types and verified durable uncertain-budget accounting and excess-reservation refusal without invoking
+an endpoint. Exact existing PR and authored commit subjects passed lint.
+
+No hosted/model request, model download, real keychain read, primary build, graph refresh, push or merge to main
+occurred. This is the reviewed provider foundation. Trusted capability production, provider settings/selection
+and public owner-CLI dispatch remain open. Ledger reconciliation is a host primitive; its owner command,
+spent-receipt validation and coordinator fencing path are not supplied here. Live model/E5 qualification and
+model-review orchestration remain separate gates. The integrating lead owns review and push.
+
+## Sentinel provider transport integration — 2026-10-22
+
+The independently reviewed model transport on `codex/sentinel-providers-integration` adds the opt-in Ollama and
+OpenAI-compatible broker, exact provider/profile binding, bounded response parsing and a durable shared budget.
+Input mutation across an asynchronous boundary, changed policies, operation identity collisions and uncertain
+charges are covered by the final corrections. Integrated full build, workspace typecheck and catalog lint pass;
+Sentinel has 446 passing tests and 32 explicit platform/opt-in skips. A clean npm consumer loads nine typed exports,
+19 contract types/schemas and 53 fixtures and reopens the store across processes. Fresh fixed-source ingests against
+main `2587eb16` match on every node/edge value and digest: 8,196 nodes, 17,054 edges, digest `b47eaf940580`,
+22,785,052 graph bytes and 31,117,312 database bytes. Three inspected browser views have zero page errors, with only
+existing missing design-image fixture requests. Test endpoints are local mocks; no paid provider request or live
+model qualification occurred. Public model settings/dispatch and the model-review stage remain separate work.
+No primary build, dogfood refresh or global install occurred; the validation server was stopped.
+
+## Spring PR149 integration rebase — 2026-10-22
+
+Branch `codex/sentinel-spring-integration` is rebased onto fetched main `5196dc70`, including the independently
+approved balanced generic correction `a951674b` (rebased runtime head `1eb1f22e`). Every Spring implementation,
+fixture and framework catalog byte is identical to that reviewed head. Conflict resolution retained main's Pattern
+ADR, adapter, rule assets, packaging hook and installed asset verification alongside the Spring export and fixture.
+Main's Pattern implementation and asset-hook bytes were checked unchanged; no OSV changes were present at this base.
+
+Affected dependency build and typecheck, catalog lint and the exact existing PR title lint passed. Nine focused
+Spring generic/inherited cases and ten package-boundary cases passed with no skips. A fresh npm-only consumer
+validated nine typed exports, 19 contract types and schemas, 53 contract fixtures, cross-process store reopen,
+17 Pattern pack files, and actual installed Spring capture/parse/analysis returning open, protected and unknown.
+The existing broad suites were not repeated for this byte-preserving rebase. No primary build, graph refresh,
+application execution, container invocation, push or merge occurred. Public Spring command integration and the
+end-of-plan Java sample runtime gates remain open. The integrating lead owns review, push and merge.
+
+## Spring generic superclass shadow correction — 2026-10-22
+
+Branch `codex/sentinel-spring-generic-fix` follows reviewed Spring head `ff13168c`. Its type index now erases each
+balanced generic argument group separately, preserving qualified member types between groups. Comments and quoted
+annotation values cannot alter bracket depth. Both direct type resolution and inherited-shadow discovery share the
+same erasure; unsupported spelling remains conservative. A captured nested helper named `AbstractHttpConfigurer`
+therefore makes the configurer method reference unknown, instead of proving authentication from a helper that could
+remove that configurer.
+
+The original capture/parse regression and three neighbors failed on the frozen baseline; its harmless generic
+inheritance neighbor passed. The corrected suite includes nested and package-qualified type paths, comment and
+annotation delimiters, and retains the harmless positive. Sentinel closure build, typecheck, catalog lint and the
+package-boundary audit passed. All tests capture and parse original Java fixtures; no target code is compiled or run.
+Independent review and integration belong to the coordinating owner. No primary build or graph refresh occurred.
 
 ## Sentinel scheduler merged; CLI integration — 2026-10-22
 
@@ -2053,3 +2365,16 @@ now accepts an unstarted parse only when the coordinator records a run-deadline 
 ancestor chain; a dependency hold specifically needs an ancestor cause. A delayed-capture case exercises the
 ancestor path directly. Runtime code, grants and resource limits are unchanged. Dependency-closure build passed;
 the three affected suites passed 47 cases with one existing qualified-host-only negative-case skip and no failures.
+
+## Nest built-in module loader follow-up (2026-10-22)
+
+Branch `codex/sol-nest-builtin-loader`, based on the frozen Nest framework implementation:
+validation stays unknown when captured source can extract Node's `process.getBuiltinModule` loader capability,
+including real process imports, aliases, destructuring, computed access and the global process properties.
+Fixed reads of unrelated process properties, type references and local shadows preserve the existing analysis.
+Target source is captured and parsed only; the fixture code is never executed.
+
+Before correction, all 12 original/neighbor loader regressions falsely reported validation applies, while seven
+harmless controls passed. After correction, the complete focused Nest suite passed 77 tests with no skips.
+The affected dependency build, Sentinel typecheck, diff check and exact Conventional Commit subject lint passed.
+Independent review and parent integration remain with the integrating lead; no push or merge was performed.

@@ -86,6 +86,7 @@
         "paid.admit",
         "disclosure.send",
         "settings.adopt",
+        "evidence.import",
         "run.pause",
         "run.cancel"
       ],

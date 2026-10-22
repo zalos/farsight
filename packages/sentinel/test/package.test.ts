@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CAPABILITIES, POLICY_ERROR_CODES, POLICY_REASON_CODES } from '../dist/index.js';
+import { NEST_REASON_CODES } from '../dist/frameworks/nest/index.js';
 
 const pkgDir = fileURLToPath(new URL('../', import.meta.url));
 const packagesDir = fileURLToPath(new URL('../../', import.meta.url));
@@ -22,8 +23,9 @@ test('the package is optional, private and exports only files that exist', () =>
   assert.match(manifest.version, /-draft\./);
   // core supplies the shared catalog (and later counts/placement/grants); @types/node because the public store
   // declarations name Node built-ins. No scanner, container client or model SDK dependency.
+
   // oxc-parser (the version the public parser pins) because the Express pack reads source syntax itself (ADR 31).
-  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', 'ajv', 'oxc-parser']);
+  assert.deepEqual(Object.keys(manifest.dependencies ?? {}).sort(), ['@farsight/code-parser', '@farsight/core', '@farsight/graph', '@types/node', '@vscode/tree-sitter-wasm', 'ajv', 'oxc-parser']);
   assert.equal(manifest.bin['farsight-sentinel'], './dist/cli.js');
   for (const [key, target] of Object.entries(manifest.exports as Record<string, any>)) {
     if (key.includes('*')) continue;
@@ -98,7 +100,26 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/scratch.js': ['node:fs', 'node:path'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // The Nest pack (PR 16) reads captured bytes with the parser's own pinned oxc-parser, loaded on first analysis only.
+  'frameworks/nest/analyze.js': ['node:crypto'],
+  'frameworks/nest/errors.js': ['@farsight/core/dist/strings-sentinel-nest.js'],
+  'frameworks/nest/syntax.js': ['dynamic:oxc-parser'],
+
+  // Model providers (PR 21): the only network client in the package, and the keychain read through core's reader.
+  'review/providers/broker.js': ['node:crypto'],
+  'review/providers/budget.js': ['node:crypto', 'node:path'],
+  'review/providers/credentials.js': ['@farsight/core/dist/keychain.js'],
+  'review/providers/errors.js': ['@farsight/core/dist/strings-sentinel-providers.js'],
+  'review/providers/transport.js': ['node:http', 'node:https'],
+
+  // The Next pack (PR 14) reads literal syntax with Oxc, loaded on first read only; it never runs application code.
+  'frameworks/next/analyze.js': ['node:crypto'],
+  'frameworks/next/config.js': ['dynamic:oxc-parser'],
+  'frameworks/next/errors.js': ['@farsight/core/dist/strings-sentinel-next.js'],
   // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
+  // The Spring pack: tree-sitter's Java grammar, loaded on first analysis only; graph is pure JSON helpers.
+  'frameworks/spring/pack.js': ['@farsight/graph', 'node:crypto'],
+  'frameworks/spring/syntax.js': ['dynamic:@vscode/tree-sitter-wasm', 'node:path', 'node:url'],
   'policy/admission.js': ['@farsight/core/dist/grants.js'],
   'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
   'policy/digest.js': ['node:crypto'],
@@ -157,6 +178,9 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'snapshot/parser.js': ['@farsight/core/dist/strings-sentinel-parser.js', '@farsight/graph', 'dynamic:@farsight/code-parser', 'dynamic:@farsight/code-parser/adapters/java',
     'dynamic:@farsight/code-parser/adapters/tsjs', 'node:crypto', 'node:fs', 'node:path'],
   'snapshot/policy.js': ['node:crypto', 'node:path'],
+  // Bounded call paths and attested deep import (ADR 36): pure over parser evidence and captured bytes; no engine, no process.
+  'analysis/paths/paths.js': ['@farsight/graph', 'node:crypto'],
+  'analysis/deep/import.js': ['@farsight/graph', 'node:crypto'],
   // The Express pack (ADR 31): Oxc loaded by the first analysis, never at import; graph for canonical digests.
   'frameworks/express/pack.js': ['@farsight/graph', 'node:crypto'],
   'frameworks/express/syntax.js': ['dynamic:oxc-parser'],
@@ -259,10 +283,12 @@ test('public scanner command support is conditional on explicit adopted pinned a
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).facts.capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning', 'worker-isolation', 'coordinator', 'scan-cli', 'pattern-scan', 'dependency-advisories', 'infrastructure-ci-checks', 'framework-express', 'framework-spring', 'bounded-call-paths', 'deep-import']);
   assert.equal(listed.find(c => c.id === 'framework-express')?.reasonCode, 'sentinel.capability.draftExpress');
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   for (const id of ['secrets-scan', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.state, 'unavailable', 'no deep engine is claimed');
+  assert.equal(listed.find(c => c.id === 'framework-spring')?.reasonCode, 'sentinel.capability.draftSpring');
   assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
@@ -317,7 +343,8 @@ test('every printed word is a registered catalog entry with a definition', async
   for (const c of CAPABILITIES) used.add(c.reasonCode);
   for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant', 'errorLimit']) used.add(`sentinel.contract.${code}`);
   used.add('sentinel.protocol.noSharedVersion');
-  for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES]) used.add(code);
+  for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES, ...NEST_REASON_CODES]) used.add(code);
+  assert.deepEqual(Object.keys(STRINGS).filter(k => k.startsWith('sentinel.nest.')).sort(), [...NEST_REASON_CODES].sort(), 'the Nest catalog and the pack\'s codes are one list');
   assert.ok(used.size > 30);
   for (const key of used) {
     const entry = STRINGS[key];
