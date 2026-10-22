@@ -546,6 +546,14 @@ protocol fingerprint, beside the plan's wider input fingerprint. The two fingerp
 attempt's invocation record links its binding and is accepted with the attempt's start, so failed, canceled and
 interrupted attempts keep both. The start message carries the unit's assigned checks and scopes.
 
+Trusted check drivers prepare the scanner job and normalize verified outputs under the same absolute unit deadline
+as the worker and its publication. Drivers receive the combined unit/run/cancel signal; every awaited preparation,
+execution, normalization and object write is checked again before continuing. The worker receives only the budget
+left after preparation, and durable acceptance rechecks both unit and run deadlines without an intervening await.
+Opening the coordinator checks each selected driver's implementation digest against both the live executing
+adapter and the admitted unit, even when its driver registry was constructed against another adapter registry.
+
+
 **Coverage.** Each assigned check gets one `sentinel-coverage/draft-1` record per attempt that published:
 `complete`, `partial` (scope skipped, unresolved or not scanned) or `not-run`. The record is never finer than the
 trusted adapter's registered `coverage` granularity (default `aggregate`); a result cannot claim finer coverage.

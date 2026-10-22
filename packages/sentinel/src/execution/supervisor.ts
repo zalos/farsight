@@ -241,6 +241,10 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       }
     },
   });
+  const releaseStopped = () => {
+    // No outcome returns a refused pre-start folder to the coordinator. A fenced owner leaves recovery in charge.
+    try { owner.assertHeld(); releaseWorkDir(workDir); } catch { /* recovery owns a lost epoch or failed cleanup */ }
+  };
   if (adapter.kind === 'external') {
     const b = backend!;
     const intent = intentDetail({ labels });
@@ -272,7 +276,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       // A container that exists is removed before the error leaves; its intent is settled only when that is confirmed.
       if (containerId) {
         const gone = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
-        if (gone !== 'cleanup-failed') request.intents?.settle(intent);
+        if (gone !== 'cleanup-failed') { request.intents?.settle(intent); releaseStopped(); }
       } else if (!isExecutionError(error, 'sentinel.execution.reconciliationPending') && !isExecutionError(error, 'sentinel.execution.cleanupFailed')) {
         // The create was refused or reconciled (found and removed); nothing remains under this intent.
         if (isExecutionError(error, 'sentinel.execution.commandFailed') || isExecutionError(error, 'sentinel.execution.canceled')) request.intents?.settle(intent);
@@ -313,6 +317,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       await proc.exited;
       if (identity) request.workers?.settle(identity);
       unregister();
+      // An awaited invocation write may exhaust the unit deadline. The exact child is reaped before releasing.
+      releaseStopped();
       throw error;
     }
   }
