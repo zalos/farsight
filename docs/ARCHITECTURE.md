@@ -490,8 +490,8 @@ A bootstrap revision captures once, parses each source and builds the inventory.
 check per scope a selected rule names, identified by (scope, rule revision, environment, mode). A check the profile
 can run is `planned` and assigned to exactly one work unit (one adapter over one source, bounded); every other check
 stays in the plan with its state and reason: unsupported, applicability unknown (a framework whose version is
-unresolved, which counts for every source because an unresolved entry names none, or one the snapshot does not
-name at all, which is never read as absent), scope unavailable (not captured, or not parsed where the rule needs parser evidence) or scope unknown
+unresolved for the source it names, or every source if it names none; a framework the snapshot does not
+name at all is never read as absent), scope unavailable (not captured, or not parsed where the rule needs parser evidence) or scope unknown
 (a folder capture could not list). A policy rule missing from the lock is a rule gap. Required coverage follows
 mandatory rules, complete-coverage policy and required capabilities; `requiredCoverageAchievable` says whether a
 run can complete it. The contract's invariants refuse a plan in which any unplanned check is covered, any planned
@@ -514,6 +514,7 @@ completes only a whole-repository check). Reuse does not count until a reuse der
 check, scope, rule, inputs and environment (PR 27). Imported evidence,
 reuse and work merely finishing never count; an unplanned required check or a required rule gap keeps
 coverage incomplete. Persistence and admission of a plan stay with the coordinator and the policy
-gate (`run.start` on the plan digest). Not decided here: the capability registry that states what each stage
-establishes (the profile carries it explicitly), framework control-fact work (framework-order stays unavailable
-until packs exist), and scheduling for model review.
+gate (`run.start` on the plan digest). Tool matching here establishes version and image support; execution
+platform qualification remains an admission requirement and must use the full lock and qualified registry.
+Not decided here: framework control-fact work (framework-order stays unavailable until packs exist),
+and scheduling for model review.

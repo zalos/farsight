@@ -1,6 +1,6 @@
-// Draft contracts, store, capture, parser reconciliation and trusted policy exist;
-// planning and scanner execution remain unavailable with their
-// reason, so nothing presents an empty adapter or a store as scan support.
+// Draft contracts, store, capture, parser reconciliation, trusted policy and planning exist.
+// Scanner execution remains unavailable with its reason, so a plan or store
+// is never presented as completed scan coverage.
 
 export type CapabilityState = 'available-draft' | 'unavailable';
 
