@@ -308,3 +308,39 @@ test('every OSV reason code is a catalog entry with both registers and a definit
     assert.ok(e && e.hud && e.professional && e.define, key);
   }
 });
+
+test('SOL: a counterpart that refused or skipped components is no proof the component was removed', t => {
+  const before = run(t, ENGINE);
+  const without = (mutate: (e: typeof ENGINE) => void, record: Record<string, unknown> = {}) => {
+    const e = structuredClone(ENGINE);
+    mutate(e);
+    return run(t, e, record);
+  };
+  const removed = (e: typeof ENGINE) => { e.results[0]!.packages.shift(); e.results[1]!.packages.shift(); };
+  // Refused: alpha's entries are now malformed, so both files are partial with nothing listed for alpha.
+  const refused = without(e => {
+    removed(e);
+    (e.results[0]!.packages as any[]).push({ package: { name: '', version: '1.0.0', ecosystem: 'npm' } });
+    (e.results[1]!.packages as any[]).push({ package: { name: '', version: '1.0.0', ecosystem: 'npm' } });
+  });
+  assert.equal(row(refused, 'web/package-lock.json'), 'partial:componentsRefused');
+  assert.equal(row(refused, 'web/pnpm-lock.yaml'), 'partial:componentsRefused');
+  assert.ok(!refused.components.some((c: any) => c.name === 'sentinel-fixture-alpha'));
+  const changes = (next: any) => explainAdvisoryChanges(before, next).map(c => `${c.change}:${c.because}`);
+  assert.deepEqual(changes(refused), ['unknown:not-comparable']);
+  // Skipped: the engine dropped packages it does not name, so the files are partial and alpha may be among them.
+  const skipped = without(removed, { filtered: 2 });
+  assert.equal(row(skipped, 'web/package-lock.json'), 'partial:componentsSkipped');
+  assert.deepEqual(changes(skipped), ['unknown:not-comparable']);
+  // Skipped by name (a local source): listed but not assessed, so not comparable either.
+  const local = without(e => {
+    for (const r of [e.results[0]!, e.results[1]!]) r.packages[0]!.package.purl = 'pkg:npm/sentinel-fixture-alpha@1.0.0?source=LOCAL';
+  });
+  assert.deepEqual(changes(local), ['unknown:not-comparable']);
+  // Only a stale advisory snapshot: the listing is intact, so the removal is still a source change.
+  const stale = run(t, (() => { const e = structuredClone(ENGINE); removed(e); return e; })(), {}, { dbAge: '2026-09-01T00:00:00.000000000Z' });
+  assert.equal(row(stale, 'web/package-lock.json'), 'database-stale:databaseStale');
+  assert.deepEqual(changes(stale), ['resolved:source-changed']);
+  // And in the other direction: a finding is not new because the earlier side refused the component.
+  assert.deepEqual(explainAdvisoryChanges(refused, before).map(c => `${c.change}:${c.because}`), ['unknown:not-comparable']);
+});
