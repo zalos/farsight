@@ -27,8 +27,8 @@ export function sentinelPackageInputs(root = repoRoot) {
 }
 
 /**
- * The package directories `sentinel-isolation` depends on: Sentinel's own workspace build closure (core and
- * graph today), read from the manifests. Sentinel itself has its own rule below.
+ * The package directories `sentinel-isolation` depends on: Sentinel's own workspace build closure (public parser,
+ * core and graph today), read from the manifests. Sentinel itself has its own rule below.
  */
 export function sentinelIsolationInputs(root = repoRoot) {
   const { closure, missing } = buildClosure(root, '@farsight/sentinel');

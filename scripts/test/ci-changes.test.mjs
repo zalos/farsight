@@ -27,7 +27,7 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true }, path);
   }
   for (const path of ['packages/server/public/app/main.js', 'packages/cli/src/cli.ts', 'packages/mcp/src/run.ts',
-    'packages/code-parser/src/tsjs.ts', 'packages/parsers/src/tsjs.ts', 'packages/parsers/package.json',
+    'packages/parsers/src/tsjs.ts', 'packages/parsers/package.json',
     'packages/work/src/gate.ts', 'packages/work-fixture/src/index.ts', 'packages/work-jira/package.json',
     'packages/work-azdo/src/index.ts', 'examples/invoice-app/docs/flow.md']) {
     assert.deepEqual(selectChecks([path]), { ...none, validate: true, e2e: true, sentinel: true }, path);
@@ -37,6 +37,7 @@ test('runtime, fixtures and shared build inputs retain their affected checks', (
     'scripts/ci-changes.mjs', 'new-build-input.json', 'docs/fixture.json']) {
     assert.deepEqual(selectChecks([path]), full, path);
   }
+  assert.deepEqual(selectChecks(['packages/code-parser/src/tsjs.ts']), { ...none, validate: true, e2e: true, sentinel: true, isolation: true }, 'the public parser now belongs to Sentinel’s own build closure');
   assert.deepEqual(selectChecks(['scripts/pack-echo.mjs']), { ...none, echo: true });
   for (const path of ['scripts/pack.mjs', 'scripts/pack-preflight.mjs', 'scripts/npm-consumer.mjs', 'scripts/test-farsight-package.mjs', 'scripts/test-farsight-package-absent.mjs']) {
     assert.deepEqual(selectChecks([path]), full, `${path} is shared packaging`);
@@ -59,9 +60,10 @@ test("every package in farsight-cli's real build closure selects sentinel-packag
 });
 
 test('sentinel-isolation runs for Sentinel and its own build closure only', () => {
-  assert.deepEqual([...sentinelIsolationInputs()].sort(), ['core', 'graph']);
+  assert.deepEqual([...sentinelIsolationInputs()].sort(), ['code-parser', 'core', 'graph']);
   for (const path of ['packages/sentinel/src/execution/supervisor.ts', 'packages/sentinel/test/execution-isolation.test.ts',
-    'packages/sentinel/test/fixtures/workers/hostile-worker.mjs', 'packages/core/src/strings-sentinel-execution.ts']) {
+    'packages/sentinel/test/fixtures/workers/hostile-worker.mjs', 'packages/core/src/strings-sentinel-execution.ts',
+    'packages/code-parser/src/tsjs.ts']) {
     assert.equal(selectChecks([path]).isolation, true, path);
   }
   for (const path of ['packages/parsers/src/tsjs.ts', 'packages/echo/src/cli.ts', 'e2e/tests/chrome.pw.spec.ts', 'docs/CI.md', 'packages/sentinel/README.md']) {
