@@ -136,7 +136,7 @@ pnpm test:cli:package:absent            # the same with packages/sentinel remove
 pnpm test:sentinel:package              # farsight-sentinel, separately, in a clean npm consumer
 docker pull node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9   # once: the canary image
 (cd packages/sentinel && SENTINEL_ISOLATION=1 node --disable-warning=ExperimentalWarning --experimental-strip-types \
-  --test test/execution-isolation.test.ts test/execution-protocol.test.ts)   # real-container canaries
+  --test test/execution-isolation.test.ts test/execution-protocol.test.ts test/execution-container-faults.test.ts)   # real-container canaries
 pnpm exec playwright install chromium   # once per @playwright/test version
 pnpm e2e
 ```

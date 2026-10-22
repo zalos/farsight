@@ -15,19 +15,23 @@ import type { Digest, Id } from '../contracts/common.js';
 import { canonicalJsonBytes } from '../store/objects.js';
 import { ExecutionError } from './errors.js';
 
-/** Ceilings for one attempt. Defaults are PR 01's accepted proposal (feasibility-decisions.json resourceDefaults). */
+/**
+ * Limits for one attempt. The ceilings are PR 01's accepted resource defaults (feasibility-decisions.json
+ * resourceDefaults): an adapter may lower any of them and raise none. stdout and stderr together are held to
+ * the accepted 4 MiB of process output.
+ */
 export interface AdapterLimits {
   memoryBytes: number;
   cpus: number;
   pids: number;
   tmpfsBytes: number;
   timeoutMs: number;
-  /** Total protocol bytes on stdout. */
+  /** Protocol bytes on stdout. */
   stdoutBytes: number;
   /** Diagnostic bytes kept from stderr; more is counted and dropped, never parsed. */
   stderrBytes: number;
   maxFrameBytes: number;
-  /** Total bytes the worker may leave in its output folder. */
+  /** Total bytes the worker may leave in its output folder, and the per-file size ceiling. */
   outputBytes: number;
   /** How long a canceled worker has to acknowledge before it is stopped. */
   cancelGraceMs: number;
@@ -35,16 +39,20 @@ export interface AdapterLimits {
   helloTimeoutMs: number;
 }
 
-export const DEFAULT_ADAPTER_LIMITS: Readonly<AdapterLimits> = Object.freeze({
+/** The accepted ceilings (and the defaults). */
+export const ACCEPTED_CEILINGS: Readonly<AdapterLimits> = Object.freeze({
   memoryBytes: 2_147_483_648, cpus: 2, pids: 128, tmpfsBytes: 268_435_456, timeoutMs: 120_000,
-  stdoutBytes: 4_194_304, stderrBytes: 262_144, maxFrameBytes: 1_048_576, outputBytes: 268_435_456,
-  cancelGraceMs: 5_000, helloTimeoutMs: 15_000,
+  stdoutBytes: 3_932_160, stderrBytes: 262_144, maxFrameBytes: 1_048_576,
+  // No accepted figure exists for the output folder; the per-object ceiling (maxDecodedObjectBytes, 16 MiB) bounds
+  // what the store can accept, and this is held to the scratch figure the matrix accepted for temporary storage.
+  outputBytes: 268_435_456, cancelGraceMs: 5_000, helloTimeoutMs: 15_000,
 });
+export const DEFAULT_ADAPTER_LIMITS: Readonly<AdapterLimits> = ACCEPTED_CEILINGS;
+export const MAX_PROCESS_OUTPUT_BYTES = 4_194_304;
 
-const LIMIT_BOUNDS: Record<keyof AdapterLimits, [number, number]> = {
-  memoryBytes: [16 * 1024 * 1024, 16 * 1024 ** 3], cpus: [1, 64], pids: [8, 4096], tmpfsBytes: [1024 * 1024, 4 * 1024 ** 3],
-  timeoutMs: [100, 24 * 3_600_000], stdoutBytes: [1024, 1024 ** 3], stderrBytes: [0, 64 * 1024 * 1024],
-  maxFrameBytes: [1024, 4 * 1024 * 1024], outputBytes: [0, 16 * 1024 ** 3], cancelGraceMs: [0, 120_000], helloTimeoutMs: [100, 300_000],
+const LIMIT_FLOORS: Record<keyof AdapterLimits, number> = {
+  memoryBytes: 16 * 1024 * 1024, cpus: 1, pids: 8, tmpfsBytes: 1024 * 1024, timeoutMs: 100, stdoutBytes: 1024,
+  stderrBytes: 0, maxFrameBytes: 1024, outputBytes: 0, cancelGraceMs: 0, helloTimeoutMs: 100,
 };
 
 export const IMAGE_REFERENCE = /^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$/;
@@ -87,12 +95,21 @@ const sha256 = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).diges
 const invalid = (reason: string): never => { throw new ExecutionError('sentinel.execution.adapterInvalid', { reason }); };
 
 function limitsOf(partial: Partial<AdapterLimits> | undefined): Readonly<AdapterLimits> {
-  const limits = { ...DEFAULT_ADAPTER_LIMITS, ...(partial ?? {}) };
-  for (const [key, [min, max]] of Object.entries(LIMIT_BOUNDS) as [keyof AdapterLimits, [number, number]][]) {
+  for (const key of Object.keys(partial ?? {})) if (!(key in ACCEPTED_CEILINGS)) invalid(`unknown limit ${key}`);
+  const given = partial ?? {};
+  const limits = { ...ACCEPTED_CEILINGS, ...given };
+  // Defaults that depend on a lowered limit follow it; an explicit contradiction is still refused below.
+  if (given.helloTimeoutMs === undefined) limits.helloTimeoutMs = Math.min(limits.helloTimeoutMs, limits.timeoutMs);
+  if (given.cancelGraceMs === undefined) limits.cancelGraceMs = Math.min(limits.cancelGraceMs, limits.timeoutMs);
+  if (given.maxFrameBytes === undefined) limits.maxFrameBytes = Math.min(limits.maxFrameBytes, limits.stdoutBytes);
+  for (const key of Object.keys(ACCEPTED_CEILINGS) as (keyof AdapterLimits)[]) {
     const v = limits[key];
-    if (!Number.isSafeInteger(v) || v < min || v > max) invalid(`limit ${key}`);
+    // May lower an accepted ceiling, never raise one.
+    if (!Number.isSafeInteger(v) || v < LIMIT_FLOORS[key] || v > ACCEPTED_CEILINGS[key]) invalid(`limit ${key}`);
   }
-  if (Object.keys(limits).length !== Object.keys(DEFAULT_ADAPTER_LIMITS).length) invalid('unknown limit');
+  if (limits.stdoutBytes + limits.stderrBytes > MAX_PROCESS_OUTPUT_BYTES) invalid('stdout and stderr exceed the process output ceiling');
+  if (limits.maxFrameBytes > limits.stdoutBytes) invalid('limit maxFrameBytes');
+  if (limits.helloTimeoutMs > limits.timeoutMs || limits.cancelGraceMs > limits.timeoutMs) invalid('limit timeouts');
   return Object.freeze(limits);
 }
 

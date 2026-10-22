@@ -93,6 +93,14 @@ test('the production registry is empty, and external tools may only be container
   assert.throws(() => createAdapterRegistry([{ ...ext, isolation: 'child' } as any]), is('sentinel.execution.adapterIsolationRefused'));
   assert.throws(() => createAdapterRegistry([{ ...ext, image: 'example/tool:latest' }]), is('sentinel.execution.adapterInvalid'));
   assert.throws(() => createAdapterRegistry([{ ...ext, limits: { memoryBytes: 1 } }]), is('sentinel.execution.adapterInvalid'));
+  // Limits may lower the accepted ceilings, never raise them.
+  for (const raise of [{ memoryBytes: 2_147_483_649 }, { cpus: 3 }, { pids: 129 }, { tmpfsBytes: 268_435_457 }, { timeoutMs: 120_001 },
+    { stdoutBytes: 4_194_304 }, { outputBytes: 268_435_457 }, { helloTimeoutMs: 20_000, timeoutMs: 10_000 }, { surprise: 1 } as any]) {
+    assert.throws(() => createAdapterRegistry([{ ...ext, limits: raise }]), is('sentinel.execution.adapterInvalid'), JSON.stringify(raise));
+  }
+  const lowered = createAdapterRegistry([{ ...ext, limits: { memoryBytes: 64 * 1024 * 1024, cpus: 1, timeoutMs: 10_000 } }]).get('tool');
+  assert.equal(lowered.limits.memoryBytes, 64 * 1024 * 1024);
+  assert.ok(lowered.limits.stdoutBytes + lowered.limits.stderrBytes <= 4_194_304, 'the process output ceiling is 4 MiB combined');
   assert.throws(() => createAdapterRegistry([ext, ext]), is('sentinel.execution.adapterInvalid'));
   const a = createAdapterRegistry([ext]).get('tool');
   const b = createAdapterRegistry([{ ...ext, command: ['tool', '--other'] }]).get('tool');
@@ -226,7 +234,7 @@ test('a guard that cannot confirm container removal makes the owner close report
   // A stand-in runtime whose removals cannot be confirmed; the worker is a real local process that hangs.
   const other = scratch('uncertain');
   const st = await storeIn(other.root);
-  const pin = { reference: `example/tool@sha256:${'e'.repeat(64)}`, id: 'sha256:x', os: 'linux', architecture: 'arm64' };
+  const pin = { reference: `example/tool@sha256:${'e'.repeat(64)}`, id: `sha256:${'e'.repeat(64)}`, os: 'linux', architecture: 'arm64', env: [] };
   const fakeBackend = {
     facts: { host: 'stand-in', backend: 'docker-engine', server: 'linux-arm64', serverVersion: '0', operatingSystem: 'stand-in', cgroupVersion: '2', qualification: {} },
     inspectImage: async () => pin,

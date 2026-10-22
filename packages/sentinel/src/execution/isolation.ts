@@ -101,9 +101,12 @@ export interface BackendFacts {
 
 export interface ImagePin {
   reference: string;
+  /** The installed image's own id, which a created container must name as its image. */
   id: string;
   os: string;
   architecture: string;
+  /** The image's own environment; a container may carry nothing beyond it and Sentinel's names. */
+  env: readonly string[];
 }
 
 export interface ContainerSpec {
@@ -127,29 +130,54 @@ export interface ContainerState {
 
 export type CleanupState = 'removed-owned-container' | 'already-absent' | 'cleanup-failed';
 
+/**
+ * How the backend talks to the Docker client. Production uses the fixed client with its pinned environment;
+ * package-internal tests substitute a daemon stand-in to reproduce lost output, refused removals and similar
+ * faults. Never part of the public API (the execution modules are not exported).
+ */
+export interface DockerRunner {
+  run(args: readonly string[], signal?: AbortSignal): Promise<BoundedResult>;
+  runSync(args: readonly string[]): BoundedResult;
+  start(id: string): WorkerProcess;
+}
+
+/** The labels an attempt's container carries; all of them must match before it is stopped or removed. */
+export type OwnershipLabels = ContainerSpec['labels'];
+
+const absentContainer = (r: BoundedResult) => !succeeded(r) && /no such (container|object)/i.test(r.stderr.toString('utf8'));
+
+function labelsMatch(c: { Id?: string; Config?: { Labels?: Record<string, string> } } | null | undefined, id: string | null, expected: Partial<OwnershipLabels>): boolean {
+  if (!c || !CONTAINER_ID.test(String(c.Id ?? '')) || (id !== null && c.Id !== id)) return false;
+  const labels = c.Config?.Labels ?? {};
+  return Object.entries(expected).every(([k, v]) => labels[LABELS[k as keyof typeof LABELS]] === v);
+}
+
 /** A qualified local Docker runtime. Every method addresses one container by its exact 64-hex identity. */
 export class ContainerBackend {
   readonly facts: Readonly<BackendFacts>;
-  readonly #docker: string;
-  readonly #env: Record<string, string>;
+  readonly #runner: DockerRunner;
   readonly #serverArch: string;
 
-  private constructor(docker: string, env: Record<string, string>, facts: BackendFacts, serverArch: string) {
-    this.#docker = docker; this.#env = env; this.facts = Object.freeze(facts); this.#serverArch = serverArch;
+  private constructor(runner: DockerRunner, facts: BackendFacts, serverArch: string) {
+    this.#runner = runner; this.facts = Object.freeze(facts); this.#serverArch = serverArch;
   }
 
   /**
    * Connect to the local runtime and qualify it. `privateDir` is a private folder for the empty client
    * configuration. Refuses a remote endpoint, an unqualified combination or missing resource controllers.
+   * `runner` is the package-internal test seam (see DockerRunner); production never passes one.
    */
-  static async connect(options: { privateDir: string; policy?: IsolationPolicy; docker?: string; signal?: AbortSignal }): Promise<ContainerBackend> {
-    const docker = options.docker ?? locateDocker();
-    const endpoint = await resolveEndpoint(docker, options.signal);
-    const config = mkdtempSync(join(options.privateDir, 'docker-config-'));
-    const env = { PATH: SAFE_PATH, DOCKER_HOST: endpoint, DOCKER_CONFIG: config };
-    const version = await runBounded(docker, ['version', '--format', '{{json .Server}}'], { env, timeoutMs: 15_000, maxStdoutBytes: 65_536, maxStderrBytes: 16_384, signal: options.signal });
+  static async connect(options: { privateDir: string; policy?: IsolationPolicy; docker?: string; signal?: AbortSignal; runner?: DockerRunner }): Promise<ContainerBackend> {
+    let runner = options.runner;
+    if (!runner) {
+      const docker = options.docker ?? locateDocker();
+      const endpoint = await resolveEndpoint(docker, options.signal);
+      const config = mkdtempSync(join(options.privateDir, 'docker-config-'));
+      runner = clientRunner(docker, { PATH: SAFE_PATH, DOCKER_HOST: endpoint, DOCKER_CONFIG: config });
+    }
+    const version = await runner.run(['version', '--format', '{{json .Server}}'], options.signal);
     if (!succeeded(version)) unavailable('docker server unreachable');
-    const info = await runBounded(docker, ['info', '--format', '{{json .}}'], { env, timeoutMs: 15_000, maxStdoutBytes: 1_048_576, maxStderrBytes: 16_384, signal: options.signal });
+    const info = await runner.run(['info', '--format', '{{json .}}'], options.signal);
     if (!succeeded(info)) unavailable('docker info unavailable');
     let server: { Os?: string; Arch?: string; Version?: string }, i: Record<string, unknown>;
     try { server = JSON.parse(version.stdout.toString('utf8')); i = JSON.parse(info.stdout.toString('utf8')); } catch (e) { return unavailable('docker answer unreadable', e); }
@@ -161,7 +189,7 @@ export class ContainerBackend {
     const qualification = isolationQualification(options.policy ?? ISOLATION_POLICY, host, backend, serverId);
     if (!qualification) throw new ExecutionError('sentinel.execution.backendUnqualified', { backend: `${backend} (${serverId})`, host });
     if (![i.MemoryLimit, i.SwapLimit, i.CpuCfsQuota, i.PidsLimit].every(v => v === true)) unavailable('required resource controllers missing');
-    return new ContainerBackend(docker, env, {
+    return new ContainerBackend(runner, {
       host, backend, server: serverId, serverVersion: String(server.Version ?? ''), operatingSystem: os,
       cgroupVersion: String(i.CgroupVersion ?? ''), qualification,
     }, arch);
@@ -170,61 +198,85 @@ export class ContainerBackend {
   /** The installed image for a pin; refuses a missing or mismatched image and never pulls. */
   async inspectImage(reference: string, signal?: AbortSignal): Promise<ImagePin> {
     if (!IMAGE_REFERENCE.test(reference)) throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference.slice(0, 200) });
-    const r = await this.#run(['image', 'inspect', '--format', '{{json .}}', reference], signal);
+    const r = await this.#runner.run(['image', 'inspect', '--format', '{{json .}}', reference], signal);
     if (!succeeded(r)) {
       if (/no such image/i.test(r.stderr.toString('utf8'))) throw new ExecutionError('sentinel.execution.imageMissing', { image: reference });
       throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'image inspect' });
     }
-    let v: { Id?: string; Os?: string; Architecture?: string; RepoDigests?: string[] };
+    let v: { Id?: string; Os?: string; Architecture?: string; RepoDigests?: string[]; Config?: { Env?: unknown } };
     try { v = JSON.parse(r.stdout.toString('utf8')); } catch { throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference }); }
     const digest = reference.slice(reference.indexOf('@') + 1);
     const repo = reference.slice(0, reference.indexOf('@'));
     const pinned = v.Id === digest || (v.RepoDigests ?? []).some(d => d === reference || d === `docker.io/${repo}@${digest}` || d === `docker.io/library/${repo}@${digest}`);
-    if (!pinned || v.Os !== 'linux' || v.Architecture !== this.#serverArch) throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference });
-    return { reference, id: String(v.Id), os: v.Os, architecture: v.Architecture };
+    if (!pinned || !/^sha256:[0-9a-f]{64}$/.test(String(v.Id)) || v.Os !== 'linux' || v.Architecture !== this.#serverArch) {
+      throw new ExecutionError('sentinel.execution.imageMismatch', { image: reference });
+    }
+    const env = Array.isArray(v.Config?.Env) ? (v.Config!.Env as unknown[]).map(String) : [];
+    return { reference, id: String(v.Id), os: v.Os, architecture: v.Architecture, env };
   }
 
   /**
    * Create (not start) the container, then read it back and compare every isolation setting.
    *
-   * A create request is never cut short: an aborted client does not stop the daemon, which may still create the
-   * container after the client has gone. So the request runs to completion under its own bound; a cancellation
-   * that arrived meanwhile removes what it made. A failed or timed-out create is reconciled by the attempt's owner
-   * nonce over a settle window; anything whose removal cannot be confirmed makes the failure a cleanupFailed.
+   * The intent is recorded before the request: the generated name (`sentinel-<owner nonce>`) and every ownership
+   * label. A create request is never cut short, since an aborted client does not stop the daemon. Whatever the
+   * request's answer (failure, timeout, lost or unreadable output, a cancellation meanwhile), what the daemon made
+   * is found again by that name and those labels and removed only by its verified exact ID. Anything whose
+   * removal cannot be confirmed is reported as cleanupFailed with its identity.
    */
   async create(spec: ContainerSpec, signal?: AbortSignal): Promise<string> {
     if (signal?.aborted) throw new ExecutionError('sentinel.execution.canceled', {});
-    const r = await this.#run(createArgs(spec, this.#serverArch));
-    const id = r.stdout.toString('utf8').trim();
-    if (!succeeded(r) || !CONTAINER_ID.test(id)) {
-      const uncertain = new Set<string>();
-      for (let pass = 0; pass < 3; pass++) {
-        if (pass) await new Promise(resolve => setTimeout(resolve, 500));
-        const leftover = await this.reconcileOwned(spec.labels.owner);
-        leftover.uncertain.forEach(u => uncertain.add(u));
-      }
-      if (uncertain.size) throw new ExecutionError('sentinel.execution.cleanupFailed', { container: [...uncertain].join(', ') });
+    const r = await this.#runner.run(createArgs(spec, this.#serverArch));
+    const answered = r.stdout.toString('utf8').trim();
+    const id = succeeded(r) && CONTAINER_ID.test(answered) ? answered : undefined;
+    if (!id) {
+      await this.#reconcileIntent(spec);
       throw new ExecutionError('sentinel.execution.commandFailed', { operation: r.timedOut ? 'create timed out' : 'create' });
     }
     try {
       if (signal?.aborted) throw new ExecutionError('sentinel.execution.canceled', {});
-      const image = await this.#inspectJson(['image', 'inspect', '--format', '{{json .Config.Env}}', spec.image.reference]);
-      validateContainer(await this.#container(id), spec, Array.isArray(image) ? image.map(String) : []);
+      validateContainer(await this.#container(id), spec);
     } catch (error) {
-      const removed = await this.remove(id, spec.labels.owner).catch(() => 'cleanup-failed' as const);
-      if (removed === 'cleanup-failed') throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id }, { cause: error });
+      const removed = await this.remove(id, spec.labels).catch(() => 'cleanup-failed' as const);
+      if (removed === 'cleanup-failed') throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, owner: spec.labels.owner }, { cause: error });
       throw error;
     }
     return id;
   }
 
+  /** Find a create's container by its generated name and by its labels, over a settle window, and remove it. */
+  async #reconcileIntent(spec: ContainerSpec): Promise<void> {
+    const uncertain = new Set<string>();
+    const name = containerName(spec.labels.owner);
+    for (let pass = 0; pass < 3; pass++) {
+      if (pass) await new Promise(resolve => setTimeout(resolve, 500));
+      const byName = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', name]);
+      if (succeeded(byName)) {
+        let c: { Id?: string } | undefined;
+        try { c = JSON.parse(byName.stdout.toString('utf8')); } catch { /* unreadable: the label pass decides */ }
+        if (c && labelsMatch(c as never, null, spec.labels)) {
+          if (await this.remove(String(c.Id), spec.labels) === 'cleanup-failed') uncertain.add(String(c.Id));
+        } else uncertain.add(name);
+      } else if (!absentContainer(byName)) uncertain.add(name);
+      const leftover = await this.reconcileOwned(spec.labels);
+      leftover.uncertain.forEach(u => uncertain.add(u));
+      if (uncertain.size === 0 && pass > 0 && absentContainer(byName)) break;
+      if (pass < 2) uncertain.clear();
+    }
+    if (uncertain.size) {
+      throw new ExecutionError('sentinel.execution.cleanupFailed', {
+        container: [...uncertain].join(', '), name, owner: spec.labels.owner, store: spec.labels.store, attempt: spec.labels.attempt, epoch: spec.labels.epoch,
+      });
+    }
+  }
+
   /** Start the created container attached: stdin carries coordinator frames, stdout worker frames, stderr diagnostics. */
   startAttached(id: string): WorkerProcess {
     if (!CONTAINER_ID.test(id)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'start' });
-    return spawnWorker(this.#docker, ['start', '--attach', '--interactive', id], { env: this.#env });
+    return this.#runner.start(id);
   }
 
-  async state(id: string, owner: string, signal?: AbortSignal): Promise<ContainerState | null> {
+  async state(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<ContainerState | null> {
     const c = await this.#owned(id, owner, signal);
     if (!c) return null;
     const s = (c.State ?? {}) as { Status?: string; ExitCode?: number; OOMKilled?: boolean };
@@ -235,24 +287,23 @@ export class ContainerBackend {
    * Stop a running owned container and confirm the daemon reports it stopped. Ending the attached client proves
    * nothing about the container, so this asks the daemon. Returns false when the stop cannot be confirmed.
    */
-  async kill(id: string, owner: string, signal?: AbortSignal): Promise<boolean> {
+  async kill(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<boolean> {
     const running = (c: Record<string, unknown> | null) => (c?.State as { Running?: boolean } | undefined)?.Running === true;
     let c = await this.#owned(id, owner, signal);
     for (let attempt = 0; attempt < 3 && running(c); attempt++) {
-      await this.#run(['kill', id], signal);
+      await this.#runner.run(['kill', id], signal);
       c = await this.#owned(id, owner, signal);
     }
     return !running(c);
   }
 
   /**
-   * Remove every container that carries this owner nonce, each checked by exact identity and label before
-   * removal. The nonce is random per attempt, so no unrelated container can match. Containers whose removal
-   * cannot be confirmed are returned as uncertain; nothing else is touched.
+   * Remove every container carrying these labels (at least the random owner nonce), each checked by exact
+   * identity and every label before removal. Containers whose removal cannot be confirmed come back uncertain.
    */
-  async reconcileOwned(owner: string, signal?: AbortSignal): Promise<{ removed: string[]; uncertain: string[] }> {
-    const r = await this.#run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner}`], signal);
-    if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner}`] };
+  async reconcileOwned(owner: Partial<OwnershipLabels> & { owner: string }, signal?: AbortSignal): Promise<{ removed: string[]; uncertain: string[] }> {
+    const r = await this.#runner.run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner.owner}`], signal);
+    if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner.owner}`] };
     const removed: string[] = [], uncertain: string[] = [];
     for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)) {
       if (!CONTAINER_ID.test(id)) { uncertain.push(id.slice(0, 64)); continue; }
@@ -262,36 +313,33 @@ export class ContainerBackend {
     return { removed, uncertain };
   }
 
-  /** Remove an owned container and confirm the daemon no longer knows it. */
-  async remove(id: string, owner: string, signal?: AbortSignal): Promise<CleanupState> {
+  /** Remove an owned container (exact ID, every given label) and confirm the daemon no longer knows it. */
+  async remove(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<CleanupState> {
     const c = await this.#owned(id, owner, signal).catch(() => undefined);
     if (c === null) return 'already-absent';
     if (!c) return 'cleanup-failed';
-    const r = await this.#run(['rm', '--force', '--volumes', id], signal);
+    const r = await this.#runner.run(['rm', '--force', '--volumes', id], signal);
     if (!succeeded(r)) return 'cleanup-failed';
-    const after = await this.#run(['inspect', '--type', 'container', id], signal);
-    return !succeeded(after) && /no such (container|object)/i.test(after.stderr.toString('utf8')) ? 'removed-owned-container' : 'cleanup-failed';
+    const after = await this.#runner.run(['inspect', '--type', 'container', id], signal);
+    return absentContainer(after) ? 'removed-owned-container' : 'cleanup-failed';
   }
 
-  /** Synchronous removal for the store owner's close path, with the same ownership check. */
-  removeSync(id: string, owner: string): CleanupState {
+  /** Synchronous removal for the store owner's close path, with the same identity and label checks. */
+  removeSync(id: string, owner: Partial<OwnershipLabels>): CleanupState {
     if (!CONTAINER_ID.test(id)) return 'cleanup-failed';
-    const opts = { env: this.#env, timeoutMs: 30_000, maxStdoutBytes: 4 * 1024 * 1024, maxStderrBytes: 65_536 };
-    const r = runBoundedSync(this.#docker, ['inspect', '--type', 'container', '--format', '{{json .}}', id], opts);
-    if (!succeeded(r)) return /no such (container|object)/i.test(r.stderr.toString('utf8')) ? 'already-absent' : 'cleanup-failed';
-    let c: { Id?: string; Config?: { Labels?: Record<string, string> } };
+    const r = this.#runner.runSync(['inspect', '--type', 'container', '--format', '{{json .}}', id]);
+    if (!succeeded(r)) return absentContainer(r) ? 'already-absent' : 'cleanup-failed';
+    let c;
     try { c = JSON.parse(r.stdout.toString('utf8')); } catch { return 'cleanup-failed'; }
-    if (c.Id !== id || c.Config?.Labels?.[LABELS.owner] !== owner) return 'cleanup-failed';
-    if (!succeeded(runBoundedSync(this.#docker, ['rm', '--force', '--volumes', id], opts))) return 'cleanup-failed';
-    const after = runBoundedSync(this.#docker, ['inspect', '--type', 'container', id], opts);
-    return !succeeded(after) && /no such (container|object)/i.test(after.stderr.toString('utf8')) ? 'removed-owned-container' : 'cleanup-failed';
+    if (!labelsMatch(c, id, owner)) return 'cleanup-failed';
+    if (!succeeded(this.#runner.runSync(['rm', '--force', '--volumes', id]))) return 'cleanup-failed';
+    return absentContainer(this.#runner.runSync(['inspect', '--type', 'container', id])) ? 'removed-owned-container' : 'cleanup-failed';
   }
 
-  /** Synchronous reconcileOwned, for the store owner's close path. */
-  reconcileOwnedSync(owner: string): { removed: string[]; uncertain: string[] } {
-    const opts = { env: this.#env, timeoutMs: 30_000, maxStdoutBytes: 1024 * 1024, maxStderrBytes: 65_536 };
-    const r = runBoundedSync(this.#docker, ['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner}`], opts);
-    if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner}`] };
+  /** Synchronous reconcile by owner nonce and labels, for the store owner's close path. */
+  reconcileOwnedSync(owner: Partial<OwnershipLabels> & { owner: string }): { removed: string[]; uncertain: string[] } {
+    const r = this.#runner.runSync(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.owner}=${owner.owner}`]);
+    if (!succeeded(r)) return { removed: [], uncertain: [`label ${owner.owner}`] };
     const removed: string[] = [], uncertain: string[] = [];
     for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(Boolean)) {
       (this.removeSync(id, owner) === 'cleanup-failed' ? uncertain : removed).push(id);
@@ -304,7 +352,7 @@ export class ContainerBackend {
    * nonce. Nothing is stopped or removed here; recovery decides, by those labels, under its own owner.
    */
   async listStoreContainers(store: Id, signal?: AbortSignal): Promise<Array<{ id: string; attempt: string; epoch: string; owner: string; running: boolean }>> {
-    const r = await this.#run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.store}=${store}`], signal);
+    const r = await this.#runner.run(['ps', '--all', '--no-trunc', '--quiet', '--filter', `label=${LABELS.store}=${store}`], signal);
     if (!succeeded(r)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'list' });
     const out = [];
     for (const id of r.stdout.toString('utf8').split('\n').map(l => l.trim()).filter(l => CONTAINER_ID.test(l))) {
@@ -316,37 +364,43 @@ export class ContainerBackend {
     return out;
   }
 
-  /** The exact container if it carries this owner nonce; null when the daemon says it is absent; throws otherwise. */
-  async #owned(id: string, owner: string, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
+  /** The exact container if it carries every given label; null when the daemon says it is absent; throws otherwise. */
+  async #owned(id: string, owner: Partial<OwnershipLabels>, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
     if (!CONTAINER_ID.test(id)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'identity' });
-    const r = await this.#run(['inspect', '--type', 'container', '--format', '{{json .}}', id], signal);
+    if (!owner.owner) throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, reason: 'no owner nonce' });
+    const r = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', id], signal);
     if (!succeeded(r)) {
-      if (/no such (container|object)/i.test(r.stderr.toString('utf8'))) return null;
+      if (absentContainer(r)) return null;
       throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' });
     }
-    const c = JSON.parse(r.stdout.toString('utf8')) as { Id?: string; Config?: { Labels?: Record<string, string> } };
-    if (c.Id !== id || c.Config?.Labels?.[LABELS.owner] !== owner) {
-      throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, reason: 'ownership mismatch' });
-    }
+    let c;
+    try { c = JSON.parse(r.stdout.toString('utf8')); } catch { throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' }); }
+    if (!labelsMatch(c, id, owner)) throw new ExecutionError('sentinel.execution.cleanupFailed', { container: id, reason: 'ownership mismatch' });
     return c as Record<string, unknown>;
   }
 
   async #container(id: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
-    const v = await this.#inspectJson(['inspect', '--type', 'container', '--format', '{{json .}}', id], signal);
-    if (!v || typeof v !== 'object') throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' });
-    return v as Record<string, unknown>;
-  }
-
-  async #inspectJson(args: string[], signal?: AbortSignal): Promise<unknown> {
-    const r = await this.#run(args, signal);
-    if (!succeeded(r)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: args[0]! });
-    try { return JSON.parse(r.stdout.toString('utf8')); } catch { throw new ExecutionError('sentinel.execution.commandFailed', { operation: args[0]! }); }
-  }
-
-  #run(args: string[], signal?: AbortSignal): Promise<BoundedResult> {
-    return runBounded(this.#docker, args, { env: this.#env, timeoutMs: 30_000, maxStdoutBytes: 4 * 1024 * 1024, maxStderrBytes: 65_536, signal });
+    const r = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', id], signal);
+    if (!succeeded(r)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' });
+    try {
+      const v = JSON.parse(r.stdout.toString('utf8'));
+      if (v && typeof v === 'object') return v as Record<string, unknown>;
+    } catch { /* below */ }
+    throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'inspect' });
   }
 }
+
+/** The production runner: the fixed client, its pinned environment, bounded output, no shell. */
+function clientRunner(docker: string, env: Record<string, string>): DockerRunner {
+  const bounds = { env, timeoutMs: 30_000, maxStdoutBytes: 4 * 1024 * 1024, maxStderrBytes: 65_536 };
+  return Object.freeze({
+    run: (args: readonly string[], signal?: AbortSignal) => runBounded(docker, args, { ...bounds, ...(signal ? { signal } : {}) }),
+    runSync: (args: readonly string[]) => runBoundedSync(docker, args, bounds),
+    start: (id: string) => spawnWorker(docker, ['start', '--attach', '--interactive', id], { env }),
+  });
+}
+
+export const containerName = (owner: string): string => `sentinel-${owner}`;
 
 /** The local unix socket the client should talk to. A tcp/ssh endpoint is a remote daemon and is refused. */
 async function resolveEndpoint(docker: string, signal?: AbortSignal): Promise<string> {
@@ -369,7 +423,7 @@ async function resolveEndpoint(docker: string, signal?: AbortSignal): Promise<st
 /** The exact `docker create` argument list. Pure, so a test can pin every isolation flag. */
 export function createArgs(spec: ContainerSpec, serverArch: string): string[] {
   const l = spec.limits;
-  const name = `sentinel-${spec.labels.owner}`;
+  const name = containerName(spec.labels.owner);
   return [
     'create', '--pull', 'never', '--interactive', '--init', '--name', name,
     '--label', `${LABELS.owner}=${spec.labels.owner}`, '--label', `${LABELS.store}=${spec.labels.store}`,
@@ -396,7 +450,7 @@ export const expectedEnv = (spec: Pick<ContainerSpec, 'adapter'>): string[] => [
 ];
 
 /** Compare a created container against its spec. Any difference is an isolationMismatch naming the setting. */
-export function validateContainer(c: Record<string, unknown>, spec: ContainerSpec, imageEnv: readonly string[]): void {
+export function validateContainer(c: Record<string, unknown>, spec: ContainerSpec): void {
   const fail = (setting: string): never => { throw new ExecutionError('sentinel.execution.isolationMismatch', { setting }); };
   const config = (c.Config ?? {}) as Record<string, any>;
   const host = (c.HostConfig ?? {}) as Record<string, any>;
@@ -407,6 +461,8 @@ export function validateContainer(c: Record<string, unknown>, spec: ContainerSpe
     if (labels[LABELS[key as keyof typeof LABELS]] !== value) fail(`label ${key}`);
   }
   if (config.Image !== spec.image.reference) fail('image');
+  // The image the daemon actually created it from, not only the reference it was asked for.
+  if (c.Image !== spec.image.id) fail('image id');
   if (config.User !== spec.user || /^0(:|$)/.test(spec.user)) fail('user');
   if (config.Tty === true || config.OpenStdin !== true) fail('stdio');
   if (host.NetworkMode !== 'none') fail('network');
@@ -427,13 +483,19 @@ export function validateContainer(c: Record<string, unknown>, spec: ContainerSpe
   const tmpfs = host.Tmpfs ?? {};
   const expectedTmpfs = ['rw', 'noexec', 'nosuid', 'nodev', `size=${l.tmpfsBytes}`, 'mode=1777'].sort().join(',');
   if (Object.keys(tmpfs).length !== 1 || String(tmpfs['/tmp'] ?? '').split(',').sort().join(',') !== expectedTmpfs) fail('tmpfs');
-  const mounts = (c.Mounts ?? []) as Array<{ Type?: string; Destination?: string; RW?: boolean }>;
+  const mounts = (c.Mounts ?? []) as Array<{ Type?: string; Source?: string; Destination?: string; RW?: boolean }>;
   const byTarget = new Map(mounts.map(m => [m.Destination, m]));
   if (mounts.length !== 2 || byTarget.get(INPUT_MOUNT)?.RW !== false || byTarget.get(OUTPUT_MOUNT)?.RW !== true
     || mounts.some(m => m.Type !== 'bind')) fail('mounts');
+  // The exact canonical folders of this attempt (the supervisor also re-checks their inode identity).
+  if (byTarget.get(INPUT_MOUNT)?.Source !== spec.inputDir || byTarget.get(OUTPUT_MOUNT)?.Source !== spec.outputDir) fail('mount source');
+  const ulimits = ((host.Ulimits ?? []) as Array<{ Name?: string; Soft?: number; Hard?: number }>)
+    .map(u => `${u.Name}=${u.Soft}:${u.Hard}`).sort().join(',');
+  const fsize = Math.max(l.outputBytes, 1);
+  if (ulimits !== [`core=0:0`, `fsize=${fsize}:${fsize}`].sort().join(',')) fail('ulimits');
   const env = (config.Env ?? []) as string[];
   const expected = expectedEnv(spec);
-  const allowed = new Set([...imageEnv, ...expected]);
+  const allowed = new Set([...spec.image.env, ...expected]);
   if (expected.some(e => !env.includes(e)) || env.some(e => !allowed.has(e))) fail('environment');
 }
 

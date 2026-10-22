@@ -21,7 +21,7 @@ const skip = !enabled && 'real-container canary: set SENTINEL_ISOLATION=1 with a
 const is = (code: string) => (e: unknown) => isExecutionError(e) && e.code === code;
 
 const spec = {
-  image: { reference: CANARY_IMAGE, id: 'sha256:x', os: 'linux', architecture: 'arm64' },
+  image: { reference: CANARY_IMAGE, id: `sha256:${'9'.repeat(64)}`, os: 'linux', architecture: 'arm64', env: ['PATH=/usr/bin'] },
   command: ['node', '-e', '0'], limits: { ...DEFAULT_ADAPTER_LIMITS }, inputDir: '/private/in', outputDir: '/private/out',
   labels: { owner: 'nonce', store: 'store-1', attempt: 'att-1', epoch: 'epoch-1', invocation: `sha256:${'a'.repeat(64)}` },
   adapter: { id: 'tool', digest: `sha256:${'b'.repeat(64)}` }, user: '501:20',
@@ -45,15 +45,16 @@ test('the create arguments pin every isolation control and never pull', () => {
 
 test('a container whose settings differ from the spec is refused, naming the setting', () => {
   const good = {
-    Id: 'c'.repeat(64),
+    Id: 'c'.repeat(64), Image: `sha256:${'9'.repeat(64)}`,
     Config: { Image: CANARY_IMAGE, User: '501:20', OpenStdin: true, Tty: false, Env: ['PATH=/usr/bin', 'HOME=/tmp', 'SENTINEL_INPUT=/input', 'SENTINEL_OUTPUT=/output', 'SENTINEL_ADAPTER_ID=tool', `SENTINEL_ADAPTER_DIGEST=sha256:${'b'.repeat(64)}`],
       Labels: { [LABELS.owner]: 'nonce', [LABELS.store]: 'store-1', [LABELS.attempt]: 'att-1', [LABELS.epoch]: 'epoch-1', [LABELS.invocation]: `sha256:${'a'.repeat(64)}` } },
     HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], IpcMode: 'none',
       Memory: spec.limits.memoryBytes, MemorySwap: spec.limits.memoryBytes, NanoCpus: spec.limits.cpus * 1e9, PidsLimit: spec.limits.pids,
-      LogConfig: { Type: 'none' }, Init: true, Tmpfs: { '/tmp': `rw,noexec,nosuid,nodev,size=${spec.limits.tmpfsBytes},mode=1777` } },
-    Mounts: [{ Type: 'bind', Destination: '/input', RW: false }, { Type: 'bind', Destination: '/output', RW: true }],
+      LogConfig: { Type: 'none' }, Init: true, Tmpfs: { '/tmp': `rw,noexec,nosuid,nodev,size=${spec.limits.tmpfsBytes},mode=1777` },
+      Ulimits: [{ Name: 'fsize', Soft: spec.limits.outputBytes, Hard: spec.limits.outputBytes }, { Name: 'core', Soft: 0, Hard: 0 }] },
+    Mounts: [{ Type: 'bind', Source: '/private/in', Destination: '/input', RW: false }, { Type: 'bind', Source: '/private/out', Destination: '/output', RW: true }],
   };
-  validateContainer(good, spec, ['PATH=/usr/bin']);
+  validateContainer(good, spec);
   const variants: Array<[string, (c: any) => void]> = [
     ['network', c => { c.HostConfig.NetworkMode = 'bridge'; }],
     ['read-only root', c => { c.HostConfig.ReadonlyRootfs = false; }],
@@ -65,10 +66,17 @@ test('a container whose settings differ from the spec is refused, naming the set
     ['capabilities', c => { c.HostConfig.CapAdd = ['NET_ADMIN']; }],
     ['memory', c => { c.HostConfig.MemorySwap = -1; }],
     ['user', c => { c.Config.User = '0:0'; }],
+    ['image id', c => { c.Image = `sha256:${'8'.repeat(64)}`; }],
+    ['mount source', c => { c.Mounts[0].Source = '/private/elsewhere'; }],
+    ['mount source', c => { c.Mounts[1].Source = '/private/in'; }],
+    ['ulimits', c => { c.HostConfig.Ulimits = []; }],
+    ['ulimits', c => { c.HostConfig.Ulimits[0].Hard = spec.limits.outputBytes * 2; }],
+    ['ulimits', c => { c.HostConfig.Ulimits.push({ Name: 'nofile', Soft: 1_000_000, Hard: 1_000_000 }); }],
+    ['environment', c => { c.Config.Env.push('NODE_OPTIONS=--inspect'); }],
   ];
   for (const [setting, change] of variants) {
     const c = structuredClone(good); change(c);
-    assert.throws(() => validateContainer(c, spec, ['PATH=/usr/bin']), (e: unknown) => is('sentinel.execution.isolationMismatch')(e) && (e as any).detail.setting === setting, setting);
+    assert.throws(() => validateContainer(c, spec), (e: unknown) => is('sentinel.execution.isolationMismatch')(e) && (e as any).detail.setting === setting, setting);
   }
 });
 
@@ -99,11 +107,12 @@ before(async () => {
 after(() => { try { store?.close(); } catch { /* reported by its own test */ } removeScratch(s.root); });
 
 let n = 0;
+const clamp = (l: Record<string, number>) => ({ ...l, helloTimeoutMs: Math.min(l.helloTimeoutMs!, l.timeoutMs!), cancelGraceMs: Math.min(l.cancelGraceMs!, l.timeoutMs!) });
 function registryFor(behaviour: string, limits: Record<string, number> = {}, argument?: string) {
   return createAdapterRegistry([{
     id: `canary-${behaviour}`, version: '0.0.0-test', kind: 'external', isolation: 'container', image: CANARY_IMAGE,
     command: ['node', '--input-type=module', '-e', source, behaviour, ...(argument ? [argument] : [])],
-    limits: { timeoutMs: 30_000, cancelGraceMs: 2_000, helloTimeoutMs: 15_000, memoryBytes: 256 * 1024 * 1024, pids: 64, tmpfsBytes: 16 * 1024 * 1024, ...limits },
+    limits: clamp({ timeoutMs: 30_000, cancelGraceMs: 2_000, helloTimeoutMs: 15_000, memoryBytes: 256 * 1024 * 1024, pids: 64, tmpfsBytes: 16 * 1024 * 1024, ...limits }),
   }]);
 }
 const run = (behaviour: string, limits: Record<string, number> = {}, argument?: string, signal?: AbortSignal) =>
@@ -186,9 +195,9 @@ test('cleanup cannot target a container it does not own', { skip }, async () => 
   assert.equal(created.status, 0, created.stderr);
   const id = created.stdout.trim();
   try {
-    assert.equal(await backend.remove(id, 'not-the-owner'), 'cleanup-failed');
-    await assert.rejects(backend.kill(id, 'not-the-owner'), is('sentinel.execution.cleanupFailed'));
-    assert.equal(backend.removeSync(id, 'not-the-owner'), 'cleanup-failed');
+    assert.equal(await backend.remove(id, { owner: 'not-the-owner' }), 'cleanup-failed');
+    await assert.rejects(backend.kill(id, { owner: 'not-the-owner' }), is('sentinel.execution.cleanupFailed'));
+    assert.equal(backend.removeSync(id, { owner: 'not-the-owner' }), 'cleanup-failed');
     assert.equal(absent(id), false, 'the unrelated container is untouched');
   } finally { docker('rm', '--force', id); }
 });
@@ -254,8 +263,10 @@ test('CPU and per-file size ceilings are enforced, not only configured', { skip 
   const fsize = await run('fsize', { outputBytes: 4 * 1024 * 1024 });
   const big = join(fsize.workDir, 'output', 'big');
   const bytes = (() => { try { return statSync(big).size; } catch { return 0; } })();
-  t.diagnostic(`enforcement cpu=${ratio} cores-used-of-1 fsize=${canary(fsize.diagnostics.text).fsize ?? `signal ${fsize.exit?.exitSignal ?? fsize.container?.state?.exitCode}`} bytes=${bytes}`);
+  t.diagnostic(`enforcement cpu=${ratio} cores-used-of-1 throttled=${canary(cpu.diagnostics.text).throttled} periods fsize=${canary(fsize.diagnostics.text).fsize ?? `signal ${fsize.exit?.exitSignal ?? fsize.container?.state?.exitCode}`} bytes=${bytes}`);
+  const throttled = canary(cpu.diagnostics.text).throttled;
   assert.ok(typeof ratio === 'number' && ratio > 0.5 && ratio <= 1.25, `three busy processes used ${ratio} CPUs under a 1-CPU ceiling`);
+  assert.ok(typeof throttled === 'number' && throttled > 0, `the kernel throttled the cgroup ${throttled} times`);
   assert.notEqual(fsize.state, 'succeeded');
   assert.ok(bytes <= 4 * 1024 * 1024, `the file stopped at ${bytes} bytes`);
   for (const o of [cpu, fsize]) assert.equal(o.cleanup, 'removed-owned-container');
@@ -281,7 +292,7 @@ test('an ambiguous create is reconciled by its owner nonce, and nothing else is 
   const mine = docker('create', '--pull', 'never', '--label', `${LABELS.owner}=${nonce}`, CANARY_IMAGE, 'true').stdout.trim();
   const unrelated = docker('create', '--pull', 'never', '--label', `${LABELS.owner}=${randomUUID()}`, CANARY_IMAGE, 'true').stdout.trim();
   try {
-    const result = await backend.reconcileOwned(nonce);
+    const result = await backend.reconcileOwned({ owner: nonce });
     assert.deepEqual(result, { removed: [mine], uncertain: [] });
     assert.ok(absent(mine));
     assert.equal(absent(unrelated), false);
@@ -298,7 +309,7 @@ test('an ambiguous create is reconciled by its owner nonce, and nothing else is 
     // Canceled at any moment: the create completes, the cancellation removes it, and the call says canceled.
     // (A cancellation that comes after the create returns is the supervisor's to act on; here the id is removed.)
     const outcome = await backend.create(specCut, AbortSignal.timeout(Math.max(ms, 1))).then(id => ({ id }), (e: unknown) => ({ e }));
-    if ('id' in outcome) assert.equal(await backend.remove(outcome.id, owner2), 'removed-owned-container');
+    if ('id' in outcome) assert.equal(await backend.remove(outcome.id, specCut.labels), 'removed-owned-container');
     else assert.ok(is('sentinel.execution.canceled')(outcome.e), String(outcome.e));
     await new Promise(r => setTimeout(r, 300));
     assert.equal(docker('ps', '--all', '--quiet', '--filter', `label=${LABELS.owner}=${owner2}`).stdout.trim(), '', `canceled at ${ms} ms`);

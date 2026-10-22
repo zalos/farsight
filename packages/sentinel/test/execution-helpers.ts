@@ -48,7 +48,10 @@ export function builtInRegistry(root: string, behaviours: string[], limits: Reco
   return createAdapterRegistry(behaviours.map(b => {
     const module = join(dir, `${b}.mjs`);
     writeFileSync(module, `globalThis.SENTINEL_BEHAVIOR = ${JSON.stringify(b)}; globalThis.SENTINEL_ARGUMENT = ${JSON.stringify(argument ?? null)};\nawait import(${JSON.stringify(new URL(`file://${WORKER}`).href)});\n`);
-    return { id: `test-${b}`, version: '0.0.0-test', kind: 'built-in' as const, isolation: 'child' as const, module, limits: { timeoutMs: 15_000, cancelGraceMs: 1_000, helloTimeoutMs: 5_000, ...limits } };
+    const merged: Record<string, number> = { timeoutMs: 15_000, cancelGraceMs: 1_000, helloTimeoutMs: 5_000, ...limits };
+    merged.helloTimeoutMs = Math.min(merged.helloTimeoutMs!, merged.timeoutMs!);
+    merged.cancelGraceMs = Math.min(merged.cancelGraceMs!, merged.timeoutMs!);
+    return { id: `test-${b}`, version: '0.0.0-test', kind: 'built-in' as const, isolation: 'child' as const, module, limits: merged };
   }));
 }
 

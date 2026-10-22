@@ -12,7 +12,7 @@
 // or framing error, an output or stdout budget, or the worker exiting. Every path stops the worker, removes its
 // container by exact identity and confirms the removal; the owner's close path does the same synchronously.
 import { createHash, randomUUID } from 'node:crypto';
-import { chmodSync, closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, rmSync } from 'node:fs';
+import { chmodSync, closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, Digest, Id, WorkRef } from '../contracts/common.js';
 import type { AttemptWorker } from '../contracts/attempt.js';
@@ -129,6 +129,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   const inputs = [...new Set(request.inputs.map(i => i.id))];
   if (inputs.length !== request.inputs.length) throw new ExecutionError('sentinel.execution.inputMismatch', { reason: 'duplicate input' });
   const workDir = prepareWorkDir(request.scratchRoot, request.attemptId);
+  const folders = { input: identityOfDir(join(workDir, 'input')), output: identityOfDir(join(workDir, 'output')) };
   const inputDir = join(workDir, 'input');
   const outputDir = join(workDir, 'output');
   for (const input of request.inputs) copyVerified(input, join(inputDir, hexOf(input.id)));
@@ -170,6 +171,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
   // guard throws with the container and its owner nonce, and the owner's close reports it rather than staying
   // silent; the labels let recovery (PR 08) find it later by store, attempt and epoch.
   const nonce = ownerNonce();
+  const labels = { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest };
   let containerId: string | undefined;
   let proc: WorkerProcess;
   const guard: { ownerClosed: boolean; id?: string; proc?: WorkerProcess } = { ownerClosed: false };
@@ -180,8 +182,8 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
       guard.ownerClosed = true;
       guard.proc?.kill();
       if (!backend) return;
-      const direct = guard.id ? backend.removeSync(guard.id, nonce) : 'already-absent';
-      const swept = backend.reconcileOwnedSync(nonce);
+      const direct = guard.id ? backend.removeSync(guard.id, labels) : 'already-absent';
+      const swept = backend.reconcileOwnedSync(labels);
       if (direct === 'cleanup-failed' || swept.uncertain.length) {
         throw new ExecutionError('sentinel.execution.cleanupFailed', {
           container: guard.id ?? swept.uncertain.join(', '), owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch,
@@ -193,15 +195,20 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     const b = backend!;
     try {
       containerId = await b.create({
-        image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(),
-        labels: { owner: nonce, store: owner.storeId, attempt: request.attemptId, epoch: owner.epoch, invocation: invocationDigest },
+        image: image!, command: adapter.command, limits, inputDir, outputDir, adapter: { id: adapter.id, digest: adapter.digest }, user: containerUser(), labels,
       }, request.signal);
       guard.id = containerId;
       if (guard.ownerClosed) {
         // The owner closed while the create was in flight; the guard swept what existed then. Remove this one too.
-        const late = await b.remove(containerId, nonce).catch(() => 'cleanup-failed' as const);
+        const late = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
         if (late === 'cleanup-failed') throw new ExecutionError('sentinel.execution.cleanupFailed', { container: containerId, owner: nonce });
         owner.assertHeld();
+      }
+      // The mounts were read back by path; the paths must still be the folders this attempt created.
+      if (!sameIdentity(inputDir, folders.input) || !sameIdentity(outputDir, folders.output)) {
+        const gone = await b.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
+        throw new ExecutionError(gone === 'cleanup-failed' ? 'sentinel.execution.cleanupFailed' : 'sentinel.execution.isolationMismatch',
+          gone === 'cleanup-failed' ? { container: containerId, owner: nonce } : { setting: 'mount identity' });
       }
     } catch (error) {
       unregister();
@@ -223,7 +230,7 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
 
   try {
     await drive(proc, session, limits, outputDir, outcome, request.signal, async () => {
-      if (containerId) outcome.stopConfirmed = await request.backend!.kill(containerId, nonce).catch(() => false);
+      if (containerId) outcome.stopConfirmed = await request.backend!.kill(containerId, labels).catch(() => false);
       proc.kill();
     });
   } finally {
@@ -232,10 +239,10 @@ export async function superviseAttempt(request: AttemptRequest): Promise<WorkerO
     outcome.exit = { exitCode: exit.exitCode, exitSignal: exit.exitSignal };
     if (containerId) {
       const backend = request.backend!;
-      const state = await backend.state(containerId, nonce).catch(() => null);
+      const state = await backend.state(containerId, labels).catch(() => null);
       if (state) outcome.container!.state = { exitCode: state.exitCode, oomKilled: state.oomKilled };
       if (state?.oomKilled && outcome.state === 'failed') setFailure(outcome, 'sentinel.execution.resourceExceeded', {}, true);
-      outcome.cleanup = await backend.remove(containerId, nonce).catch(() => 'cleanup-failed' as const);
+      outcome.cleanup = await backend.remove(containerId, labels).catch(() => 'cleanup-failed' as const);
     }
     unregister();
   }
@@ -343,10 +350,14 @@ function drive(proc: WorkerProcess, session: WorkerSession, limits: TrustedAdapt
   });
 }
 
+const identityOfDir = (path: string): string => { const s = lstatSync(path, { bigint: true }); return `${s.dev}:${s.ino}`; };
+const sameIdentity = (path: string, identity: string): boolean => { try { return identityOfDir(path) === identity; } catch { return false; } };
+
 function prepareWorkDir(scratchRoot: string, attemptId: Id): string {
-  let s;
-  try { s = lstatSync(scratchRoot); } catch { throw new ExecutionError('sentinel.execution.scratchUnsafe', {}); }
-  if (!s.isDirectory() || s.isSymbolicLink() || s.uid !== process.getuid?.() || (s.mode & 0o077) !== 0) {
+  let s, real;
+  try { s = lstatSync(scratchRoot); real = realpathSync.native(scratchRoot); } catch { throw new ExecutionError('sentinel.execution.scratchUnsafe', {}); }
+  // Canonical, so the mount sources the daemon reports can be compared with the folders as created.
+  if (real !== scratchRoot || !s.isDirectory() || s.isSymbolicLink() || s.uid !== process.getuid?.() || (s.mode & 0o077) !== 0) {
     throw new ExecutionError('sentinel.execution.scratchUnsafe', {});
   }
   const dir = join(scratchRoot, `${attemptId.replace(/[^A-Za-z0-9._-]/g, '_')}-${randomUUID()}`);

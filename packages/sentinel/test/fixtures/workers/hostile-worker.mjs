@@ -153,7 +153,8 @@ switch (behavior) {
         const busy = Array.from({ length: 3 }, () => spawn(process.execPath, ['-e', 'const e=Date.now()+2000;while(Date.now()<e){}'], { stdio: 'ignore' }));
         await Promise.all(busy.map(c => new Promise(r => c.on('close', r))));
         const wallUs = (Date.now() - t0) * 1000;
-        process.stderr.write(`canary ${JSON.stringify({ cpuRatio: Number(((usage() - before) / wallUs).toFixed(2)), wallMs: wallUs / 1000 })}\n`);
+        const throttled = Number(/nr_throttled (\d+)/.exec(readFileSync('/sys/fs/cgroup/cpu.stat', 'utf8'))?.[1]);
+        process.stderr.write(`canary ${JSON.stringify({ cpuRatio: Number(((usage() - before) / wallUs).toFixed(2)), throttled, wallMs: wallUs / 1000 })}\n`);
         process.exit(3);
       }
       case 'fsize': {

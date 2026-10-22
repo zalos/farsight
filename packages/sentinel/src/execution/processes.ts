@@ -70,16 +70,23 @@ export function runBounded(program: string, args: readonly string[], options: Bo
   });
 }
 
-/** Synchronous bounded run, for cleanup paths that must finish before a lock is released. */
+/**
+ * Synchronous bounded run, for cleanup paths that must finish before a lock is released. Each stream is held to
+ * its own limit: the child is stopped once either stream passes the larger one, and a stream over its own limit
+ * is cut to it and flagged, so the result is never a success.
+ */
 export function runBoundedSync(program: string, args: readonly string[], options: Omit<BoundedOptions, 'signal' | 'input'>): BoundedResult {
   const s = spawnSync(program, [...args], {
     env: options.env, cwd: options.cwd, timeout: options.timeoutMs, killSignal: 'SIGKILL', shell: false, windowsHide: true,
-    maxBuffer: Math.max(options.maxStdoutBytes, options.maxStderrBytes), stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: Math.max(options.maxStdoutBytes, options.maxStderrBytes) + 1, stdio: ['ignore', 'pipe', 'pipe'],
   });
   const code = (s.error as NodeJS.ErrnoException | undefined)?.code;
+  const stdout = s.stdout ?? Buffer.alloc(0), stderr = s.stderr ?? Buffer.alloc(0);
   return {
-    exitCode: s.status, exitSignal: s.signal, stdout: s.stdout ?? Buffer.alloc(0), stderr: s.stderr ?? Buffer.alloc(0),
-    stdoutExceeded: code === 'ENOBUFS', stderrExceeded: false, timedOut: code === 'ETIMEDOUT', canceled: false,
+    exitCode: s.status, exitSignal: s.signal,
+    stdout: stdout.subarray(0, options.maxStdoutBytes), stderr: stderr.subarray(0, options.maxStderrBytes),
+    stdoutExceeded: stdout.byteLength > options.maxStdoutBytes, stderrExceeded: stderr.byteLength > options.maxStderrBytes,
+    timedOut: code === 'ETIMEDOUT', canceled: false,
     spawnError: code && code !== 'ETIMEDOUT' && code !== 'ENOBUFS' ? code : null,
   };
 }
