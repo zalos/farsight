@@ -58,7 +58,7 @@ skips on the existing arm64 runtime, and the installed package ran both unchange
 Branch `codex/sentinel-osv-integration` rebases the independently reviewed advisory adapter from `30b618f1`
 onto merged PR 145 (`5196dc70`), preserving PR 158's execution repair. Adapter source, sealed input reader, original
 fixtures, tests and asset hook are byte-identical to that reviewed version. Integration retains both Pattern and
-OSV catalogs, security/ADR sections, asset hooks and installed-worker checks; OSV is ADR 27 on this main branch.
+OSV catalogs, security/ADR sections, asset hooks and installed-worker checks; OSV is ADR 29 on this main branch.
 
 Checked on the rebased source: Sentinel dependency-closure build and typecheck; 54 affected OSV, package, Pattern,
 preview and actual detached-CLI tests, zero skips; 181 script tests, zero skips; catalog and exact-title lint.
