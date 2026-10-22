@@ -32,21 +32,21 @@ npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsig
 farsight --version   # farsight X.Y.Z · built … · commit …
 ```
 
-Node 24 is the supported runtime. How releases are cut: [docs/RELEASING.md](docs/RELEASING.md); what changed:
+Node 24 and npm are sufficient to install and run a release; pnpm is only needed to develop Farsight. How releases are cut: [docs/RELEASING.md](docs/RELEASING.md); what changed:
 [CHANGELOG.md](CHANGELOG.md).
 
 ## Quickstart
 
-From a checkout instead of a release:
+After installing a release, open the application you want to understand:
 
 ```sh
-pnpm install && pnpm build && node scripts/pack.mjs
-npm install -g ./build/farsight-cli-*.tgz
-
-farsight ingest .        # parse this very repo into graph.json
+cd /path/to/your-project
+farsight ingest .        # parse your project into graph.json
 farsight serve           # explore it at http://localhost:4477
 farsight mcp             # feed it to LLM agents over MCP
 ```
+
+To build Farsight from a checkout, use Node 24 and pnpm 9: `pnpm install && pnpm build && node scripts/pack.mjs`, then `npm install -g ./build/farsight-cli-*.tgz`.
 
 Full walkthrough (config, MCP setup, multi-repo): **[docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)**.
 

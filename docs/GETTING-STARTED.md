@@ -5,10 +5,12 @@ Farsight parses your codebase into a semantic graph, then lets you explore it th
 ## Install
 
 **From a release (no checkout needed):** each [GitHub Release](https://github.com/zalos/farsight/releases) notes the
-install line, e.g. `npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz`,
-then `farsight --version` names the version and commit. See [RELEASING.md](RELEASING.md).
+install line, e.g. `npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz`.
+Replace `X.Y.Z` with the version in those notes. Then `farsight --version` names the installed version and commit.
+You need Node 24 or newer and npm; no pnpm, Farsight checkout or Java build tool is required to install and run
+the packed CLI. Continue with **1. Parse a repo** below, from your application folder. See [RELEASING.md](RELEASING.md).
 
-**Option A — build the installable (recommended for trying it out):**
+**Build the installable from source (development):**
 
 ```sh
 git clone <this-repo> && cd farsight
@@ -21,16 +23,16 @@ You now have a global `farsight` command. (Publishing to the npm registry as `fa
 
 Keep the `./` prefix (or use an absolute path): a bare `build/...` argument that doesn't resolve from your cwd is parsed by npm as a GitHub `user/repo` shorthand and dies with a confusing SSH error.
 
-**Option B — run from the workspace (for hacking on Farsight):**
+**Run from the workspace (development):**
 
 ```sh
 pnpm install && pnpm build
 alias farsight="node $PWD/packages/cli/dist/cli.js"
 ```
 
-Requirements: Node ≥ 22 to build the workspace (≥ 20 to run the packed CLI). No other toolchain — the fast parsing comes from oxc's prebuilt native bindings.
+Building the workspace requires Node 24 or newer and pnpm 9.0.0. The packed CLI requires Node 24 or newer; parsing uses prebuilt native bindings.
 
-Not on any package registry yet — to use Farsight from *another* project on this machine, see [Using Farsight in another app](#using-farsight-in-another-app-local-only-no-registry-yet) below.
+npm can install a GitHub Release tarball directly, even without an npm registry publication. See [Using Farsight in another app](#using-farsight-in-another-app) for global and project-local installations.
 
 ## 1. Parse a repo
 
@@ -148,7 +150,7 @@ impact_of("createInvoice")      → what breaks if the signature changes
 If you *are* an agent setting Farsight up in a project (assuming `farsight` is installed — see the next section if it isn't), the whole setup is:
 
 ```sh
-# 1. sanity: node ≥ 20 and the CLI resolves
+# 1. sanity: Node 24 or newer and the CLI resolves
 node --version && farsight ingest --help 2>&1 | head -1
 
 # 2. parse the repo into a graph snapshot at the project root
@@ -369,19 +371,17 @@ farsight journeys --storyline invoice   # one storyline's steps, and under the p
 
 `examples/invoice-app/docs/design/screens.json` is the dogfood fixture: two built screens (one with an SVG wireframe), one designed-but-unbuilt screen listing `deleteInvoice`, one page with no design row, one operation the design lists that its page never reaches; two personas (*Billing*, *Operations*), two groups, one journey under both personas, one storyline over its three flows, and a `journeys` placement in its `farsight.config.json`. `examples/nx-workspace` keeps one manifest per app (`apps/billing-web/…` found by name, `apps/ops-admin/…` declared by that app's own config; each with an *Access* group) beside the root one — whose storyline *A billing day* chains the journeys of both apps — and its root config's `journeys.personas` puts *Billing* before *Operations* whichever manifest is read first.
 
-## Using Farsight in another app (local-only, no registry yet)
+## Using Farsight in another app
 
-Until `farsight-cli` is published to npm, every consuming app installs from this checkout. Three ways, in order of preference:
+Install a pinned GitHub Release with npm on each machine. The consuming application does not need pnpm or a Farsight checkout. Replace `X.Y.Z` in the commands below with a published release version.
 
 ### Option A — global install from the tarball (recommended)
 
-Build once here, use everywhere:
+Install once on the machine:
 
 ```sh
-cd /path/to/farsight
-pnpm install && pnpm build
-node scripts/pack.mjs                          # → build/farsight-cli-*.tgz
-npm install -g ./build/farsight-cli-*.tgz
+npm install -g https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz
+farsight --version
 ```
 
 Then in any app:
@@ -400,7 +400,7 @@ If you'd rather not pollute the global bin, install the tarball into the app:
 
 ```sh
 cd /path/to/other-app
-npm install --save-dev /path/to/farsight/build/farsight-cli-*.tgz
+npm install --save-dev https://github.com/zalos/farsight/releases/download/vX.Y.Z/farsight-cli-X.Y.Z.tgz
 npx farsight ingest . --repo other-app
 ```
 
@@ -417,7 +417,7 @@ MCP config then goes through `npx`:
 }
 ```
 
-Caveat: npm records the tarball path in `package.json` (`file:../farsight/build/...`), so teammates without this checkout can't `npm install` — fine for a solo machine, awkward for a shared repo. Prefer Option A for shared repos until we publish.
+Commit the resulting `package.json` and lockfile so teammates install the same release with npm. A local development tarball also works, but npm records its local file path; that path must exist on every machine using it.
 
 ### Option C — zero install: point back at the workspace
 

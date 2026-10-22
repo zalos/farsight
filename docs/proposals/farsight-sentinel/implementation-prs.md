@@ -321,6 +321,11 @@ pause permits in-flight completion; cancellation revokes publication; disk/resou
 
 Implement service facade and owner-only local IPC; plan/run/status/wait/pause/resume/cancel/retry commands;
 detached owner handshake; a minimal JSON/Markdown report with shared `Counted` totals and recheck commands.
+Add `farsight-sentinel init` for an npm-only consumer: create the private settings file from scrubbed defaults without
+overwriting existing configuration, explain the chosen profile and local prerequisites, and join PR 06's
+workspace adoption flow. Store credential references only. Initialization does not download scanner assets or
+start a scan. Document installation from a pinned GitHub Release tarball followed by initialization, planning,
+running and opening a report.
 Add one original coded fixture detector so the entire path is demonstrable. Label this foundation preview,
 not full scanner/framework coverage. Use catalog strings in runtime errors and commands from the start.
 Add business twins and definitions for SARIF, CWE, frontier, epoch and the remaining terms in the architecture's
@@ -332,7 +337,8 @@ existing exit 2 confirmation behavior. JSON always includes the typed outcome an
 **Done when:** duplicate start requests return one run; disconnect does not stop work; status is bounded;
 exit codes preserve both findings and incomplete-coverage facts; long/multibyte paths and stale/wrong-owner
 sockets are covered on both hosts; no confirmation result can be mistaken for a completed scan; report can
-regenerate without execution.
+regenerate without execution; a clean Node/npm-only prefix can install, initialize twice without losing
+configuration, plan, run and read the report without pnpm or a Farsight checkout.
 **Demo:** one TS/Java fixture scan from plan to interrupted run to complete report.
 
 ### PR 10 — selected pattern scanner and original source rules
@@ -677,19 +683,24 @@ E5/E8 and model UI checks before advertising the optional model release.
 **Suggested title:** `feat: package Sentinel with portable replay and release checks`
 
 **Files:** `src/bundles/`, GC/retention completion, `scripts/pack-sentinel.mjs`, consumer tests, CI selection,
-installation/operator docs, support matrix and third-party notices.
+installation/operator docs, release/publish workflows, support matrix and third-party notices.
 **Depends on:** 01–20, 23a, 24, 25; accepted deterministic E1–E4/E7 and applicable E8 evidence.
 No dependency on 21, 22, 23b or 25b; E3 can document unavailable deep capability rather than pass a false claim.
 
 Finish consistent export/restore, artifact closure, private vs redacted profiles, explicit pin/prune and quotas.
 Install the actual tarball outside the workspace on macOS/Linux; verify public types, CLI, MCP and host handshake.
+Publish both Farsight and Sentinel tarballs on the GitHub Release, deriving each filename and install line from
+that package's own version. Set Sentinel's release version explicitly; do not infer it from Farsight's version.
 Scanner setup is explicit and version-pinned. Registry publication and live dogfood rollout are separate actions.
 Expand the packaging job introduced in 02, isolation job in 07 and recovery jobs in 08; do not defer their
 first selection until this PR. Keep every existing required job and its path-selection behavior intact.
 
 **Done when:** original checkout can disappear and a restored bundle still supports a new deterministic rule;
 malicious archives cannot escape or execute; GC cannot remove retained evidence; full release stories pass;
-disabling/uninstalling Sentinel preserves data and Farsight startup. **Demo:** clean install → scan → interrupt →
+disabling/uninstalling Sentinel preserves data and Farsight startup; both independently versioned release
+artifacts pass clean global-prefix npm consumer checks with only Node/npm, no pnpm or checkout. Check each
+package alone and both together, including Farsight ingest/serve and Sentinel init/scan/report; verify the
+published URLs after release. **Demo:** clean install → scan → interrupt →
 resume → compare → export → restore. State any unavailable deep capability in the release notes.
 Separately copy only the shareable HTML report to a clean recipient environment with network disabled and
 neither Farsight nor Sentinel installed: all essential content/internal anchors/print views still work. Opening

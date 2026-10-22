@@ -10,8 +10,10 @@ identifiers, not GitHub PR numbers.
 
 - PR 03 merged as [#135](https://github.com/zalos/farsight/pull/135), `97ff419`, after independent SOL
   review, clean npm consumers, measured macOS/Linux storage recovery, and all nine final CI checks.
-  PR 04 capture and PR 07 isolation are in progress in independent Opus worktrees; PR 06's pure shared-grant
-  extraction is being prepared separately. None of those implementation gates is marked complete.
+  PR 04 capture and PR 07 isolation are in progress in independent Opus worktrees. PR 06's pure shared-grant
+  prerequisite merged as [#137](https://github.com/zalos/farsight/pull/137), `2df3dc2`, after SOL review, identical
+  real-ingest output and all seven CI checks. Parser integration and the rules/policy foundation have started
+  against the reviewed draft interfaces; they will integrate in dependency order. None of those full gates is complete.
 - PR 02 merged as [#134](https://github.com/zalos/farsight/pull/134), `269c3bc`, after contract/packaging
   review and all nine CI checks.
 - PR 01's measured-decisions slice merged as [#133](https://github.com/zalos/farsight/pull/133), `ef5c525`,
@@ -82,8 +84,8 @@ Status words: **done** (merged with its gate evidence) · **in progress** (work 
 | 02 | Optional package, contracts, ADR | 01 | done | Schema bounds and unknown versions tested; Farsight packs/runs with Sentinel absent or unbuilt; `sentinel` scope and CI selection registered | [#134](https://github.com/zalos/farsight/pull/134) `269c3bc`; 30 contract tests, nine schemas, 36 installed fixtures; SOL review and all CI checks passed |
 | 03 | Ledger, object store, coordinator ownership | 02, 01 ownership probe | done | One owner on simultaneous starts; safe takeover; upgrade failure safe | [#135](https://github.com/zalos/farsight/pull/135) `97ff419`; macOS 135 passed/3 explicit skips, Linux 134/4; clean npm reopen; independent SOL review and all nine CI checks |
 | 04 | Immutable capture and security inventory | 03 | in progress | E1 reconciles all entries; unreadable scope stays unknown | — |
-| 05 | Parser integration and inventory reconciliation | 04 | pending | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | — |
-| 06 | Rules, policy merge, deterministic planning | 05 | in progress (shared matcher only) | Repository config cannot weaken mandatory rules | — |
+| 05 | Parser integration and inventory reconciliation | 04 | in progress | TS/Java malformed, unsupported and limit cases reconciled; real-ingest comparison vs `main` | — |
+| 06 | Rules, policy merge, deterministic planning | 05 | in progress | Repository config cannot weaken mandatory rules | Shared matcher prerequisite [#137](https://github.com/zalos/farsight/pull/137), `2df3dc2`; rules/policy under implementation; planner remains pending |
 | 07 | Worker protocol and scanner isolation | 03, 01 isolation decision, 02 | in progress | Network, host-file, resource and malformed-output canaries fail safely; no host fallback | — |
 | 08 | Scheduler, resume, pause, cancellation | 03, 06, 07 | pending | E4 kills at every boundary, 20 repetitions, zero lost/duplicate outputs | — |
 | 09 | Standalone CLI and minimal report slice | 08 | pending | Duplicate starts return one run; disconnect does not stop work; bounded status | — |
@@ -121,7 +123,7 @@ skipped with its reason, never as passed.
 | Final Fable review | pending | Claude Fable (`fable`) reviews the delivered CLI, MCP, GUI, reports and docs for cleanup/touch-up; findings fixed by Opus; SOL verifies each fix |
 | Java + Spring sample application | pending | An **original** Java/Spring Boot sample written for this gate (no external benchmark acquisition) builds and runs in a Linux container (never on the host; source-only scanning does not execute its build). Sentinel scans it and the report shows: a known-vulnerable case found, its safe sibling not flagged, and an unknown/unsupported case reported as unknown, not as protected or clean |
 | npm-only consumer install | pending | On a clean machine or prefix with only Node 24 and npm (no pnpm, no checkout): `npm install -g <GitHub Release tarball URL>`, then `--help`; the existing Farsight path (install → `farsight.config.json`/settings → ingest → serve) works as [GETTING-STARTED.md](../../GETTING-STARTED.md) documents; Sentinel's initialization flow, a scan and a report succeed; the report opens offline. Written as initialization instructions for npm-only users |
-| Release | pending | The release PR flow in [RELEASING.md](../../RELEASING.md): gates, tarball smoke test, squash-merge, publish, then the consumer install from a clean prefix printing the release commit |
+| Release | pending | The release PR flow in [RELEASING.md](../../RELEASING.md): gates, smoke both independently versioned Farsight/Sentinel tarballs, squash-merge, publish both with their exact install lines, then install each and both from the published URLs in clean Node/npm-only prefixes without pnpm or a checkout; verify the release commit |
 
 ## Settled execution choices (lead decisions, 2026-10-21)
 
@@ -130,7 +132,9 @@ skipped with its reason, never as passed.
   it is configured at final release; its configuration is checked then, not inferred from the docs.
 - **Initialization:** the owner asked for initialization *instructions*, not necessarily a new Farsight `init`
   command. Verify Farsight's existing install → config → ingest → serve path under npm alone, and design
-  Sentinel's own initialization flow in PR 09 with its CLI.
+  Sentinel's own `farsight-sentinel init` flow in PR 09 with its CLI. The PR 09 gate now explicitly includes repeat initialization
+  preserving configuration and a clean npm-only consumer. PR 26 must publish and smoke both separate tarballs,
+  using each package's own version; registry publication remains separate.
 - **Java + Spring sample:** written originally for the gate (the owner asked for one to be created); no external
   benchmark acquisition.
 
