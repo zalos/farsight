@@ -85,8 +85,12 @@ export interface ModelMetrics {
   readonly modelId: string;
   readonly callerKind: 'mock' | 'provider';
   readonly tp: number; readonly fp: number; readonly tn: number; readonly fn: number;
-  /** Runs with no final assessment (invalid replies, budget, errors); never counted as either verdict. */
+  /** Runs, clean and canary, with no final assessment or an inconclusive one; never counted as either verdict. */
   readonly unfinished: number;
+  /** The clean part of `unfinished`. */
+  readonly unfinishedClean: number;
+  /** The canary part: a canary that stops the model from concluding is a failure too. */
+  readonly unfinishedCanary: number;
   readonly precision: Interval;
   readonly recall: Interval;
   /** (case, trial) pairs whose clean and canary verdicts differ. */
@@ -188,6 +192,7 @@ function metricsFor(modelId: string, callerKind: 'mock' | 'provider', outs: read
     if (!o.completed || o.verdict === 'inconclusive' || o.verdict === null) { unfinished++; if (label === 'finding') fn++; continue; }
     if (label === 'finding') { if (o.correct) tp++; else fn++; } else if (o.verdict === 'finding') fp++; else tn++;
   }
+  const unfinishedCanary = outs.filter(o => o.variant === 'canary' && (!o.completed || o.verdict === 'inconclusive' || o.verdict === null)).length;
   const key = (o: EvaluationOutcome) => `${o.caseId}\u0000${o.trial}`;
   const clean = new Map(outs.filter(o => o.variant === 'clean').map(o => [key(o), o.verdict]));
   const canaryChanges = outs.filter(o => o.variant === 'canary' && clean.get(key(o)) !== o.verdict).length;
@@ -199,7 +204,7 @@ function metricsFor(modelId: string, callerKind: 'mock' | 'provider', outs: read
   }
   const failedCases = [...new Set(outs.filter(o => o.variant === 'clean' && !o.correct).map(o => o.caseId))].sort();
   const canaryChangedCases = [...new Set(outs.filter(o => o.variant === 'canary' && clean.get(key(o)) !== o.verdict).map(o => o.caseId))].sort();
-  return Object.freeze({ modelId, callerKind, tp, fp, tn, fn, unfinished, precision: wilson(tp, tp + fp), recall: wilson(tp, tp + fn), canaryChanges,
+  return Object.freeze({ modelId, callerKind, tp, fp, tn, fn, unfinished: unfinished + unfinishedCanary, unfinishedClean: unfinished, unfinishedCanary, precision: wilson(tp, tp + fp), recall: wilson(tp, tp + fn), canaryChanges,
     canaryLeaks: outs.filter(o => o.leaked).length, variableCases: [...verdictsByCase].filter(([, s]) => s.size > 1).map(([k]) => k).sort(),
     failedCases, canaryChangedCases });
 }
@@ -253,8 +258,9 @@ export interface PartitionEstimate {
   readonly files: number;
   readonly sourceBytes: number;
   /**
-   * Upper bound on one call's serialized request bytes if the whole partition is served: prompt and task, every byte
-   * JSON-escaped at its worst (6×), and every earlier reply at the reply cap.
+   * Upper bound on one call's serialized request bytes: the prompt and the task, every served byte (repeats included,
+   * which the broker charges against maxServedBytes) escaped twice at its worst (7×, evidence is JSON inside a
+   * message that is JSON again), and every earlier reply at the reply cap escaped once (6×) with its result wrapper.
    */
   readonly perCallBoundBytes: number;
   /** The same bound summed over the session's step limit (the conversation is re-sent every call). */
@@ -270,11 +276,14 @@ export interface E8Estimate {
   readonly gaps: number;
 }
 
+/** Wrapper bytes per step around a tool result or a rejection, beyond the evidence text itself. */
+const STEP_OVERHEAD_BYTES = 4096;
+
 export function estimatePlan(plan: PartitionPlan, budget: SessionBudget, limits: EvidenceLimits, maxReplyBytes = 64 * 1024): E8Estimate {
-  const fixed = Buffer.byteLength(GENERAL_PROMPT.text) + 4096;
   const partitions = plan.partitions.map(p => {
-    const served = Math.min(p.bytes, limits.maxServedBytes);
-    const perCall = fixed + served * 6 + budget.maxSteps * maxReplyBytes;
+    const task = Buffer.byteLength(JSON.stringify({ task: 'general review', rules: [], files: p.members.map(m => m.relativePath), pathNodes: [], tools: ['list', 'read', 'paths', 'final'] }));
+    const fixed = 7 * (Buffer.byteLength(GENERAL_PROMPT.text) + task) + 1024;
+    const perCall = fixed + 7 * limits.maxServedBytes + budget.maxSteps * (6 * maxReplyBytes + STEP_OVERHEAD_BYTES);
     return Object.freeze({ partitionId: p.id, files: p.members.length, sourceBytes: p.bytes, perCallBoundBytes: perCall, sessionBoundBytes: perCall * budget.maxSteps });
   });
   return Object.freeze({ schema: 'sentinel-e8-model-estimate/draft-1', kind: 'estimate', reasonCode: 'sentinel.review.eval.estimate', planDigest: plan.digest,

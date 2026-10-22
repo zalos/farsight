@@ -148,6 +148,30 @@ function taskMessage(spec: SessionSpec): ChatMessage {
   });
 }
 
+/** Rebuilds every tool-result message from re-derived slices; null when any saved one differs. */
+function rederive(messages: readonly ChatMessage[], broker: EvidenceBroker, withheld: readonly string[]): { servedBytes: number } | null {
+  let servedBytes = 0;
+  for (let i = 2; i < messages.length; i++) {
+    const m = messages[i]!;
+    if (m.role !== 'user') continue;
+    let v: unknown;
+    try { v = JSON.parse(m.content); } catch { return null; }
+    const evidence = (v as { evidence?: unknown }).evidence;
+    if (!Array.isArray(evidence)) continue;
+    const entries = [];
+    for (const e of evidence as { id?: string }[]) {
+      if (typeof e?.id !== 'string') return null;
+      if (withheld.includes(e.id)) { entries.push(e); continue; }
+      const item = broker.served(e.id);
+      if (!item) return null;
+      servedBytes += Buffer.byteLength(item.text);
+      entries.push({ id: item.id, path: item.relativePath, lines: [item.startLine, item.endLine], untrusted: true, text: item.text });
+    }
+    if (JSON.stringify({ ...(v as object), evidence: entries }) !== m.content) return null;
+  }
+  return { servedBytes };
+}
+
 export interface RunSessionOptions {
   readonly caller: ModelCaller;
   readonly checkpoints: CheckpointStore;
@@ -181,7 +205,18 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
     if (!checked.ok) reviewFail('sentinel.review.checkpoint', `the checkpoint does not validate: ${checked.errors[0]?.path} ${checked.errors[0]?.message}`);
     if (cp.sessionId !== spec.sessionId || cp.specDigest !== digest) reviewFail('sentinel.review.checkpoint', 'the checkpoint is for another scope, prompt, budget or tool set');
     if (cp.messages[0]!.content !== spec.prompt.text) reviewFail('sentinel.review.checkpoint', 'the checkpoint does not start with this session\u2019s prompt');
-    await broker.restore(cp.served, cp.toolCalls);
+    if (cp.messages[1]!.role !== 'user' || cp.messages[1]!.content !== taskMessage(spec).content) reviewFail('sentinel.review.checkpoint', 'the checkpoint\u2019s task is not this session\u2019s');
+    // The transcript is re-derived, never trusted: every slice from the snapshot bytes under the current disclosure
+    // filter, and every tool result rebuilt from those slices and compared with what was saved.
+    const withheld = await broker.restore(cp.served, cp.toolCalls);
+    const rebuilt = rederive(cp.messages, broker, withheld);
+    if (rebuilt === null) reviewFail('sentinel.review.checkpoint', 'the checkpoint\u2019s transcript is not what its evidence gives');
+    if (withheld.length && !cp.final && !cp.stopped) {
+      // Evidence the model already saw is now withheld: the conversation cannot continue with it, and is not resent.
+      cp = { ...cp, stopped: 'sentinel.review.frontier.withheld' };
+      await opts.checkpoints.save(cp);
+    }
+    broker.chargeRestored(rebuilt!.servedBytes);
   } else {
     cp = { schema: CHECKPOINT_SCHEMA, sessionId: spec.sessionId, specDigest: digest, startedAt: stamp(now()),
       messages: [{ role: 'system', content: spec.prompt.text }, taskMessage(spec)], served: [], toolCalls: 0, invalid: 0, inputBytes: 0,
@@ -226,7 +261,17 @@ export async function runSession(spec: SessionSpec, opts: RunSessionOptions): Pr
     }
     const messages: ChatMessage[] = [...cp.messages, { role: 'assistant', content: reply.content }];
     const op = { operationId, state: 'settled' as const, inputBytes: bytes, usage: { inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens } };
-    const v = validateReply(reply.content, broker, tools);
+    // A reply that arrives after the deadline or a cancel is recorded (it was charged) and not acted on.
+    const late: ReviewFrontierCode | null = opts.signal?.aborted ? 'sentinel.review.frontier.canceled'
+      : now() - startedAt > spec.budget.deadlineMs ? 'sentinel.review.frontier.deadline' : null;
+    if (late) {
+      await save({ ...cp, messages, inputBytes: cp.inputBytes + bytes, identity: reply.identity, operations: [...cp.operations, { ...op, outcome: late }], stopped: late });
+      break;
+    }
+    // An output cut at its allowance is incomplete: never a final assessment or a tool request.
+    const v = reply.truncated
+      ? { ok: false as const, code: 'sentinel.review.reply.truncated' as const, detail: 'the reply stopped at its output allowance' }
+      : validateReply(reply.content, broker, tools);
     if (!v.ok) {
       const invalid = cp.invalid + 1;
       const over = invalid > spec.budget.maxInvalidReplies;
@@ -268,9 +313,13 @@ function finish(spec: SessionSpec, cp: ReviewCheckpoint, broker: EvidenceBroker,
   const completed = cp.final !== null;
   const observations: ObservationEnvelope[] = [];
   if (completed && cp.final!.verdict === 'finding' && cp.identity) {
-    const restored = new Map(cp.served.map(e => [e.id, e]));
     cp.final!.claims.forEach((c, i) => {
-      const evidence = c.citations.map(id => restored.get(id)!.citation);
+      // Re-derived from the snapshot bytes by the broker, never the saved copy.
+      const evidence = c.citations.map(id => {
+        const item = broker.served(id);
+        if (!item) return reviewFail('sentinel.review.integrity', 'a claim cites evidence this session cannot re-derive');
+        return { ...item.citation };
+      });
       const obs: ObservationEnvelope = {
         schema: 'sentinel-observation/draft-1',
         id: `obs-${canonicalDigest({ session: spec.sessionId, i, c }).slice(7, 39)}`,

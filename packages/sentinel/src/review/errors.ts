@@ -11,7 +11,7 @@ export const TOOL_REFUSAL_CODES = Object.freeze([
 /** Why a reply was not accepted. */
 export const REPLY_REJECTION_CODES = Object.freeze([
   'sentinel.review.reply.notJson', 'sentinel.review.reply.shape', 'sentinel.review.reply.unknownCitation',
-  'sentinel.review.reply.citationChanged', 'sentinel.review.reply.missingCitation', 'sentinel.review.reply.inspectedUnread',
+  'sentinel.review.reply.citationChanged', 'sentinel.review.reply.missingCitation', 'sentinel.review.reply.inspectedUnread', 'sentinel.review.reply.truncated',
 ] as const);
 
 /** Why part of a review's scope was left unfinished or unreviewed. */

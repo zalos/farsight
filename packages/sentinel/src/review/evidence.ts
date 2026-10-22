@@ -20,6 +20,8 @@ import { reviewFail, type ReviewFrontierCode, type ToolRefusalCode } from './err
 
 const sha = (b: Uint8Array | string) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
 const REVIEWABLE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|java)$/;
+/** Source in a language the review does not read: a gap, never silently dropped. */
+const OTHER_SOURCE = /\.(py|pyi|rb|go|rs|php|cs|kt|kts|scala|swift|c|cc|cpp|cxx|h|hpp|m|mm|sh|bash|zsh|ps1|pl|pm|lua|dart|ex|exs|erl|clj|groovy|r|jl|vue|svelte)$/i;
 
 export interface PartitionBounds {
   readonly maxFiles: number;
@@ -78,7 +80,7 @@ export function partitionInventory(snapshot: Pick<SnapshotEnvelope, 'id' | 'entr
     .sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
   for (const e of entries as CaptureEntry[]) {
     if (e.kind === 'directory-boundary') { gap(e.relativePath, 'sentinel.review.frontier.unknownScope'); continue; }
-    if (!REVIEWABLE.test(e.relativePath)) continue;
+    if (!REVIEWABLE.test(e.relativePath)) { if (OTHER_SOURCE.test(e.relativePath)) gap(e.relativePath, 'sentinel.review.frontier.unsupportedLanguage'); continue; }
     if (e.kind !== 'file' || e.disposition !== 'included') { gap(e.relativePath, 'sentinel.review.frontier.notCaptured'); continue; }
     if (e.bytes > bounds.maxBytes) { gap(e.relativePath, 'sentinel.review.frontier.tooLarge'); continue; }
     files.push({ relativePath: e.relativePath, content: e.content, bytes: e.bytes });
@@ -250,18 +252,34 @@ export class EvidenceBroker {
   /** The item a citation names, if this broker served it. */
   served(id: string): EvidenceItem | undefined { return this.#served.get(id); }
 
-  /** Restores slices served before a checkpoint, re-reading and re-verifying their bytes. */
-  async restore(items: readonly ServedCitation[], toolCalls: number): Promise<void> {
+  /**
+   * Re-derives slices served before a checkpoint from the snapshot bytes, under the current disclosure filter. Every
+   * field of a saved citation must equal the re-derived one (snapshot, source, path, content, span, quote, lines, id);
+   * the re-derived item, never the saved one, is what later citations use. Returns the ids the filter now withholds.
+   */
+  async restore(items: readonly ServedCitation[], toolCalls: number): Promise<string[]> {
+    const withheld: string[] = [];
     for (const item of items) {
-      const f = this.#files.get(item.citation.relativePath);
-      if (!f || f.content !== item.citation.content) reviewFail('sentinel.review.checkpoint', 'a checkpointed slice is outside this scope');
+      const c = item.citation;
+      const f = this.#files.get(c.relativePath);
+      if (!f || c.snapshotId !== this.#scope.snapshotId || c.sourceId !== this.#scope.sourceId || c.content !== f.content) {
+        reviewFail('sentinel.review.checkpoint', 'a checkpointed slice is outside this scope');
+      }
       const again = await this.#slice(f!, item.startLine, item.endLine);
-      if (again.id !== item.id || again.citation.quoteDigest !== item.citation.quoteDigest) reviewFail('sentinel.review.checkpoint', 'a checkpointed slice no longer matches the captured bytes');
+      const a = again.citation;
+      if (again.id !== item.id || again.startLine !== item.startLine || again.endLine !== item.endLine || a.span.startByte !== c.span.startByte
+        || a.span.endByte !== c.span.endByte || a.quoteDigest !== c.quoteDigest || a.relativePath !== c.relativePath) {
+        reviewFail('sentinel.review.checkpoint', 'a checkpointed slice is not what the snapshot bytes give for its lines');
+      }
+      if (this.#withhold(again.relativePath, again.citation.span) === 'withhold') { withheld.push(item.id); continue; }
       this.#served.set(item.id, again);
-      this.#servedBytes += Buffer.byteLength(again.text);
     }
     this.#toolCalls = toolCalls;
+    return withheld;
   }
+
+  /** Charges evidence already in a resumed conversation: every serve counts, repeats included. */
+  chargeRestored(bytes: number): void { this.#servedBytes += bytes; }
 
   async #bytes(f: PartitionMember): Promise<Uint8Array> {
     const hit = this.#cache.get(f.content);
@@ -318,11 +336,10 @@ export class EvidenceBroker {
         if (this.#withhold(item.relativePath, item.citation.span) === 'withhold') return refuse('sentinel.review.tool.withheld', 'this span is withheld from disclosure');
         const size = Buffer.byteLength(item.text);
         if (size > this.#limits.maxSliceBytes) return refuse('sentinel.review.tool.budget', 'the slice is larger than one read may return');
-        if (!this.#served.has(item.id)) {
-          if (this.#servedBytes + size > this.#limits.maxServedBytes) return refuse('sentinel.review.tool.budget', 'the session was served all the evidence it may be');
-          this.#servedBytes += size;
-          this.#served.set(item.id, item);
-        }
+        // Every serve is charged, a repeat included: the conversation carries each copy.
+        if (this.#servedBytes + size > this.#limits.maxServedBytes) return refuse('sentinel.review.tool.budget', 'the session was served all the evidence it may be');
+        this.#servedBytes += size;
+        if (!this.#served.has(item.id)) this.#served.set(item.id, item);
         return { ok: true, tool: 'read', data: { path: item.relativePath, startLine: item.startLine, endLine: item.endLine }, evidence: [item] };
       }
       default:

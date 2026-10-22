@@ -465,3 +465,104 @@ test('withheld citations take their files out of review whole, named by entry in
     assert.throws(() => withheldEntries(snap, 'web', [bad as any]), (e: any) => e.code === 'sentinel.review.invalidInput');
   }
 });
+
+// ---- review regressions (SOL, 7545618e) ----
+class MemoryCP { data: any = null; async load() { return this.data ? structuredClone(this.data) : null; } async save(cp: any) { this.data = structuredClone(cp); } }
+const finalNo = () => JSON.stringify({ action: 'final', verdict: 'no-finding', claims: [], inspected: [] });
+
+test('a reply after the deadline or a cancel is recorded and not acted on', async () => {
+  const f = files(SRC);
+  let clock = 0;
+  const lateCaller = { kind: 'mock' as const, async call() { clock = 1000; return { content: finalNo(), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  const late = await runSession({ ...spec(f), budget: { ...BUDGET, deadlineMs: 1 } }, { caller: lateCaller, checkpoints: new MemoryCP(), read: f.read, now: () => clock });
+  assert.deepEqual([late.record.outcome, late.record.verdict], ['unfinished', null]);
+  assert.ok(late.record.frontiers.some(x => x.reasonCode === 'sentinel.review.frontier.deadline'));
+  assert.equal(late.record.operations[0]!.state, 'settled', 'it was charged');
+  const abort = new AbortController();
+  const cancelCaller = { kind: 'mock' as const, async call() { abort.abort(); return { content: finalNo(), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  const canceled = await runSession(spec(f), { caller: cancelCaller, checkpoints: new MemoryCP(), read: f.read, signal: abort.signal });
+  assert.equal(canceled.record.outcome, 'unfinished');
+  assert.ok(canceled.record.frontiers.some(x => x.reasonCode === 'sentinel.review.frontier.canceled'));
+});
+
+test('a truncated reply is rejected, never a conclusion', async () => {
+  const f = files(SRC);
+  const caller = { kind: 'mock' as const, async call() { return { content: finalNo(), truncated: true, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  const r = await runSession(spec(f), { caller, checkpoints: new MemoryCP(), read: f.read });
+  assert.equal(r.record.outcome, 'unfinished');
+  assert.ok(r.record.operations.every(o => o.outcome === 'sentinel.review.reply.truncated'));
+});
+
+test('resume re-derives the transcript under the current disclosure filter: withheld evidence stops it, nothing is resent', async () => {
+  const f = files(SRC);
+  const cp = new MemoryCP();
+  let n = 0;
+  const first = { kind: 'mock' as const, async call() { if (n++) throw new Error('crash'); return { content: JSON.stringify({ action: 'read', path: 'src/a.ts', startLine: 1, endLine: 3 }), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  const crashCP = { load: () => cp.load(), save: async (c: any) => { if (c.operations.length > 1) throw new Error('simulated crash'); await cp.save(c); } };
+  await assert.rejects(runSession(spec(f), { caller: first, checkpoints: crashCP, read: f.read }));
+  let called = 0, checked = 0;
+  const second = { kind: 'mock' as const, async call() { called++; return { content: finalNo(), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  const r = await runSession(spec(f), { caller: second, checkpoints: cp, read: f.read, withhold: () => { checked++; return 'withhold'; } });
+  assert.ok(checked > 0, 'the filter was asked again on resume');
+  assert.equal(called, 0, 'no call carried the now-withheld text');
+  assert.equal(r.record.outcome, 'unfinished');
+  assert.ok(r.record.frontiers.some(x => x.reasonCode === 'sentinel.review.frontier.withheld'));
+  // A tampered transcript (the saved tool result text edited) is refused.
+  const cp2 = new MemoryCP();
+  await runSession(spec(f), { caller: scripted([() => JSON.stringify({ action: 'read', path: 'src/a.ts', startLine: 1, endLine: 3 }), () => 'not json', () => 'not json', () => 'not json']).caller, checkpoints: cp2, read: f.read });
+  const i = cp2.data.messages.findIndex((m: any) => m.role === 'user' && m.content.includes('"evidence"'));
+  cp2.data.messages[i].content = cp2.data.messages[i].content.replace('SELECT', 'INSERT');
+  cp2.data.stopped = null; cp2.data.invalid = 0;
+  await assert.rejects(runSession(spec(f), { caller: second, checkpoints: cp2, read: f.read }), (e: any) => e.code === 'sentinel.review.checkpoint' || e.code === 'sentinel.review.integrity');
+});
+
+test('a restored citation must be exactly what the snapshot bytes give: forged spans or sources never become observations', async () => {
+  const f = files(SRC);
+  const cp = new MemoryCP();
+  const caller = scripted([() => JSON.stringify({ action: 'read', path: 'src/a.ts', startLine: 1, endLine: 3 }),
+    (m: any) => JSON.stringify({ action: 'final', verdict: 'finding', inspected: ['src/a.ts'], claims: [{ statement: 'A claim.', citations: lastEvidence(m) }] })]).caller;
+  const good = await runSession(spec(f), { caller, checkpoints: cp, read: f.read });
+  const saved = structuredClone(cp.data);
+  for (const forge of [(c: any) => { c.served[0].citation.span = { startByte: 5000, endByte: 6000 }; }, (c: any) => { c.served[0].citation.sourceId = 'another-source'; },
+    (c: any) => { c.served[0].citation.snapshotId = 'snap-other'; }, (c: any) => { c.served[0].endLine = 2; }]) {
+    cp.data = structuredClone(saved);
+    forge(cp.data);
+    await assert.rejects(runSession(spec(f), { caller, checkpoints: cp, read: f.read }), (e: any) => e.code === 'sentinel.review.checkpoint');
+  }
+  cp.data = structuredClone(saved);
+  const again = await runSession(spec(f), { caller, checkpoints: cp, read: f.read });
+  assert.deepEqual(again.observations[0]!.evidence, good.observations[0]!.evidence);
+});
+
+test('source in a language review does not read is a gap, not silence', () => {
+  const entries = [{ sourceId: 'web', relativePath: 'src/service.py', kind: 'file', disposition: 'included', content: sha('print(1)'), bytes: 8, generated: false },
+    { sourceId: 'web', relativePath: 'README.md', kind: 'file', disposition: 'included', content: sha('# x'), bytes: 3, generated: false }];
+  const p = partitionInventory({ id: 'snap-1', entries } as any, 'web', { maxFiles: 1, maxBytes: 100 });
+  assert.deepEqual(p.gaps, [{ scopeId: 'web:src/service.py', reasonCode: 'sentinel.review.frontier.unsupportedLanguage' }]);
+});
+
+test('E5: an inconclusive or unfinished canary run counts as unfinished', async () => {
+  const c = { id: 'case-a', label: 'finding' as const, evidencePaths: ['src/a.ts'], clean: { 'src/a.ts': 'clean code\n' }, canary: { 'src/a.ts': 'MARK code\n' }, canaryToken: 'MARK' };
+  const corpus1 = { cases: [c], labelReview: null };
+  const caller = { kind: 'mock' as const, async call(req: any) {
+    const ev = JSON.parse(req.messages.at(-1).content).evidence?.[0];
+    const content = !ev ? JSON.stringify({ action: 'read', path: 'src/a.ts', startLine: 1, endLine: 1 })
+      : ev.text.includes('MARK') ? JSON.stringify({ action: 'final', verdict: 'inconclusive', claims: [], inspected: ['src/a.ts'] })
+        : JSON.stringify({ action: 'final', verdict: 'finding', claims: [{ statement: 'A claim.', citations: [ev.id] }], inspected: ['src/a.ts'] });
+    return { content, truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } };
+  } };
+  const r = await runEvaluation(planEvaluation(['a'], corpus1, 1), corpus1, { a: caller }, { limits: LIMITS, budget: BUDGET });
+  assert.deepEqual([r.metrics[0]!.unfinished, r.metrics[0]!.unfinishedClean, r.metrics[0]!.unfinishedCanary], [1, 0, 1]);
+});
+
+test('E8: the per-call bound holds against repeated evidence and worst-case escaping', async () => {
+  const f = files({ 'src/controls.ts': '//' + '\u0001'.repeat(40_000) + '\n' });
+  const plan = partitionInventory({ id: 'snap-1', entries: f.members.map(m => ({ ...m, sourceId: 'web', kind: 'file', disposition: 'included', generated: false })) } as any, 'web', { maxFiles: 1, maxBytes: 100_000 });
+  const budget = { ...BUDGET, maxSteps: 50, maxInputBytes: 512 * 1024 * 1024 };
+  const bound = estimatePlan(plan, budget, LIMITS).partitions[0]!.perCallBoundBytes;
+  let largest = 0;
+  const caller = { kind: 'mock' as const, async call(req: any) { largest = Math.max(largest, Buffer.byteLength(JSON.stringify(req.messages)));
+    return { content: JSON.stringify({ action: 'read', path: 'src/controls.ts', startLine: 1, endLine: 1 }), truncated: false, identity: MOCK_ID, usage: { inputTokens: 1, outputTokens: 1 } }; } };
+  await runSession(generalSpec({ runId: 'run-1', attemptId: 'att-1', plan, partitionId: plan.partitions[0]!.id, limits: LIMITS, budget }), { caller, checkpoints: new MemoryCP(), read: f.read });
+  assert.ok(largest <= bound, `largest request ${largest} within the stated bound ${bound}`);
+});

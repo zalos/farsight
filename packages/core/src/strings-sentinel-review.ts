@@ -20,6 +20,7 @@ export const SENTINEL_REVIEW_STRINGS: Record<string, StringEntry> = {
   'sentinel.review.reply.citationChanged': same('the cited evidence no longer matches the captured bytes', 'A citation is re-checked against the snapshot\'s bytes before it is accepted. One that no longer matches is rejected.'),
   'sentinel.review.reply.missingCitation': same('a claim cites no evidence', 'A claim without a citation, or a finding without a cited claim, is rejected.'),
   'sentinel.review.reply.inspectedUnread': same('the reply says it inspected files it never read', 'What a review inspected is taken from what it was served, never from what the model says. A reply that claims more is rejected.'),
+  'sentinel.review.reply.truncated': same('the reply stopped at its output allowance', 'An answer the provider cut off is incomplete, so it is neither a tool request nor a conclusion. It counts as a rejected reply.'),
   // ---- frontiers ----
   'sentinel.review.frontier.budget': same('stopped at the review\'s budget', 'The review used all the input, tokens or money it was allowed. What it had not finished stays unfinished; nothing is assumed about it.'),
   'sentinel.review.frontier.steps': same('stopped at the review\'s limit on model calls', 'The review made as many model calls as it may. Its scope is unfinished.'),
