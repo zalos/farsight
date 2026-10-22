@@ -15,7 +15,7 @@ import { DEFAULT_SETTINGS, ReceiptBook, admit, effectivePolicy } from '../dist/p
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
 import { validateEnvelope } from '../dist/validate.js';
 import {
-  SURFACE_NODE_KINDS, planBoundaryFor, adapterOf, capturedInputsOf, checksCoveredBy, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom,
+  SURFACE_NODE_KINDS, planBoundaryFor, evaluateRequiredCoverage, verifyWorkEnvelope, adapterOf, capturedInputsOf, checksCoveredBy, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom,
   plannerSnapshotFrom, planAnalysis, planBootstrap, verifyPlanRevision, workEnvelopesFor,
 } from '../dist/planner/index.js';
 import { commitRepo, needsStore, openCaptureStore, scratch, unlock } from './snapshot-helpers.ts';
@@ -160,6 +160,20 @@ test('captured, parsed, locked and adopted inputs plan, admit and convert end to
   assert.throws(() => planBoundaryFor(first, { ...request, run: { ...run, planRevision: 9 } }), /plan revision/);
   assert.throws(() => planBoundaryFor(boot, request), /only an analysis revision/);
   assert.throws(() => boundary.adapterFor({ ...boundary.works[0]!, id: 'work-other' }), /not part of this boundary/);
+
+  // The boundary carries the plan: required coverage is computed from coverage records the stages produce.
+  assert.equal(boundary.plan, first);
+  let n = 0;
+  const records = boundary.works.flatMap(w => {
+    verifyWorkEnvelope(first, w);
+    return boundary.checksFor(w).map(checkId => ({ schema: 'sentinel-coverage/draft-1' as const, id: `cov-${++n}`, runId: run.id, checkId, workId: w.id,
+      workRevision: w.revision, status: 'complete' as const, granularity: 'per-file-per-rule' as const, assessedScopeArtifact: D('scope'),
+      limitationsArtifact: D('limitations'), basis: { kind: 'executed' as const, attemptId: `att-${n}` }, skipped: [], recordedAt: '2026-10-22T12:00:00Z' }));
+  });
+  assert.equal(evaluateRequiredCoverage(first, []).requiredComplete, 0, 'work alone completes nothing');
+  const coverage = evaluateRequiredCoverage(first, records);
+  assert.equal(coverage.requiredComplete, first.checks.filter(c => c.state === 'planned' && c.required).length);
+  assert.equal(coverage.complete, false, 'the unsupported route checks and the missing rule keep it incomplete');
 
   // 7. A pack update adds the third rule: a new revision over the same snapshot and published bootstrap.
   const firstJson = JSON.stringify(first);

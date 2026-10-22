@@ -485,8 +485,14 @@ or parsed again, and the earlier revision and its lock stay exactly as pinned.
 The coordinator receives its `PlanBoundary` (`planBoundaryFor`, analysis revisions only, with the run checked
 against the plan's pins) of canonical `sentinel-work/draft-1` envelopes (`workEnvelopesFor`): stage resources come
 from the trusted profile within the work contract's ceilings, and each unit's influence manifest is the canonical
-JSON its artifact id names. `checksCoveredBy` and `capturedInputsOf` return exactly what the plan assigned; nothing
-in the conversion adds coverage. Persistence and admission of a plan stay with the coordinator and the policy
+JSON its artifact id names. Each unit's inputs pin the captured content artifacts, which its input fingerprint
+covers; `verifyWorkEnvelope` refuses a work envelope whose fingerprint, manifest, dependencies or identity differ from
+the plan's unit, and `capturedInputsOf` refuses bytes other than the pinned ones. The boundary also carries the sealed
+plan and each work's exact checks. Required coverage is computed by `evaluateRequiredCoverage` from
+`sentinel-coverage/draft-1` records alone: a required check is complete only through a `complete` record for this run,
+this check and its assigned work revision, executed or reusing a publication the plan lists. Imported evidence,
+unrelated reuse and work merely finishing never count; an unplanned required check or a required rule gap keeps
+coverage incomplete. Persistence and admission of a plan stay with the coordinator and the policy
 gate (`run.start` on the plan digest). Not decided here: the capability registry that states what each stage
 establishes (the profile carries it explicitly), framework control-fact work (framework-order stays unavailable
 until packs exist), and scheduling for model review.

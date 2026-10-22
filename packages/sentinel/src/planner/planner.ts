@@ -261,6 +261,9 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
   const checks: PlannedCheck[] = [];
   /** The captured file each planned check reads (none for a repository scope). */
   const readsFile = new Map<string, string>();
+  /** Each included file's content artifact, keyed by source and path. */
+  const contentOf = new Map<string, string>();
+  for (const e of snapshot.entries) if (e.kind === 'file' && e.disposition === 'included') contentOf.set(`${e.sourceId}\u0000${e.relativePath}`, e.content);
   const add = (c: Omit<PlannedCheck, 'id' | 'environment' | 'mode'>, path: string | null) => {
     if (checks.length >= limits.maxChecks) throw new PlanError('sentinel.plan.tooManyChecks', String(limits.maxChecks));
     const id = `chk-${shortHash({ scope: c.scopeId, family: c.familyId, revision: c.ruleRevision, environment, mode: 'deterministic' })}`;
@@ -321,6 +324,7 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
       if (!adapterKnown) { state('unsupported', 'sentinel.plan.adapterNotLocked' satisfies PlanReasonCode); continue; }
       if (missingName !== undefined) { state('unsupported', missingCapability?.reasonCode ?? 'sentinel.plan.capabilityUnavailable'); continue; }
       if (needsParse && c.path !== null && fileClass.get(c.sourceId)!.get(c.path) !== 'parsed') { state('scope-unavailable', 'sentinel.plan.parseRequired'); continue; }
+      if (c.path !== null && !contentOf.has(`${c.sourceId}\u0000${c.path}`)) { state('scope-unavailable', 'sentinel.plan.inputNotCaptured'); continue; }
       state('planned');
     }
   }
@@ -354,13 +358,14 @@ export function planAnalysis(request: AnalysisRequest): PlanRevision {
         inventory: snapshot.inventoryDigest, environment, analysis: analyses.get(sourceId)!.analysisFingerprint,
         rules: families.map(f => { const r = rulePin.get(f)!; return [r.familyId, r.revision, r.definitionDigest, r.packDigest]; }),
         adapterId, implementationDigest, scopes: [...scopes].sort(),
+        inputs: [...files].sort().map(f => [f, contentOf.get(`${sourceId}\u0000${f}`)!]),
         databases: needsDatabases ? lock.databases.map(d => [d.databaseId, d.snapshotDigest]).sort() : [],
       });
       const id = `work-check-${shortHash({ runId, revision, adapterId, sourceId, checks: ids })}`;
       work.push({ id, revision: 1, stage: 'check', contract: `sentinel.stage.check.${adapterId}`, implementationDigest, sourceId, adapterId,
         dependencies: [...request.bootstrap].map(r => ({ id: r.id, revision: r.revision })).sort(byKey(r => `${r.id}@${r.revision}`)),
         inputFingerprint, checks: ids, scopes: [...scopes].sort(),
-        inputs: [...files].sort().map(relativePath => ({ sourceId, relativePath })) });
+        inputs: [...files].sort().map(relativePath => ({ sourceId, relativePath, content: contentOf.get(`${sourceId}\u0000${relativePath}`)! })) });
       for (const c of ids) assigned.set(c, id);
       batch = []; scopes = new Set(); files = new Set();
     };

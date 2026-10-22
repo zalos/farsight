@@ -10,5 +10,7 @@ export type {
   PlannerPolicy, PlannerSnapshot, PlannerAnalysis, PlannerProfile, PlannerLimits, PlannerLanguage, PlannerScopeKind, CapabilityEntry,
 } from './types.js';
 export { plannerLockFrom, plannerPolicyFrom, plannerSnapshotFrom, plannerAnalysisFrom } from './adapters.js';
-export { workEnvelopesFor, influenceManifestOf, canonicalArtifactId, checksCoveredBy, adapterOf, capturedInputsOf, planBoundaryFor } from './boundary.js';
+export { workEnvelopesFor, influenceManifestOf, canonicalArtifactId, checksCoveredBy, adapterOf, capturedInputsOf, planBoundaryFor, verifyWorkEnvelope } from './boundary.js';
 export type { ExecutionProfile, WorkConversion, InfluenceManifest, ConvertedWork, BoundaryInput, PlanBoundaryParts, BoundaryRequest } from './boundary.js';
+export { evaluateRequiredCoverage } from './coverage.js';
+export type { RequiredCoverage, CheckCoverage } from './coverage.js';

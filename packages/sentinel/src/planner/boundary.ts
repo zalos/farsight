@@ -126,6 +126,7 @@ export function capturedInputsOf(plan: PlanRevision, ref: WorkRef, snapshot: Pic
   return unit.inputs.map(i => {
     const id = included.get(`${i.sourceId}\u0000${i.relativePath}`);
     if (!id) throw mismatch(`${i.sourceId}:${i.relativePath} is not an included file of the pinned snapshot`);
+    if (id !== i.content) throw mismatch(`${i.sourceId}:${i.relativePath} holds other bytes than the plan pinned`);
     return { sourceId: i.sourceId, relativePath: i.relativePath, id };
   });
 }
@@ -136,12 +137,34 @@ export interface BoundaryInput {
   readonly path: string;
 }
 
-/** Exactly the coordinator's PlanBoundary (PR 08): the run, its canonical work and the two lookups execution needs. */
+/**
+ * The coordinator's PlanBoundary (PR 08): the run, its canonical work and the two lookups execution needs, plus the
+ * sealed plan itself (every check with its required flag and state, and the rule gaps) and the exact checks each
+ * work covers, so required coverage is computed from coverage evidence, never from work having finished.
+ */
 export interface PlanBoundaryParts {
   readonly run: RunEnvelope;
   readonly works: readonly WorkEnvelope[];
   adapterFor(work: WorkEnvelope): Id;
   inputsFor(work: WorkEnvelope): readonly BoundaryInput[];
+  readonly plan: PlanRevision;
+  checksFor(work: WorkEnvelope): readonly Id[];
+}
+
+/**
+ * Refuses a work envelope that is not exactly the plan's unit: same identity, run, plan revision, stage, input
+ * fingerprint, dependencies, and an influence manifest whose artifact id is the canonical id of the unit's manifest.
+ */
+export function verifyWorkEnvelope(plan: PlanRevision, work: WorkEnvelope): void {
+  const unit = unitOf(sealedPlan(plan), work);
+  const deps = (r: readonly WorkRef[]) => JSON.stringify(r.map(d => [d.id, d.revision]));
+  const checks: Array<[string, unknown, unknown]> = [
+    ['run', work.runId, plan.runId], ['plan revision', work.planRevision, plan.revision], ['stage contract', work.stage.contract, unit.contract],
+    ['implementation', work.stage.implementationDigest, unit.implementationDigest], ['input fingerprint', work.inputFingerprint, unit.inputFingerprint],
+    ['dependencies', deps(work.dependencies), deps(unit.dependencies)],
+    ['influence manifest', work.influenceManifest, canonicalArtifactId(influenceManifestOf(plan, unit))],
+  ];
+  for (const [what, got, want] of checks) if (got !== want) throw mismatch(`${work.id}: the ${what} is not the plan's`);
 }
 
 export interface BoundaryRequest {
@@ -177,7 +200,8 @@ export function planBoundaryFor(plan: PlanRevision, request: BoundaryRequest): P
     return plan.units.find(u => u.id === w.id && u.revision === w.revision)!;
   };
   return Object.freeze({
-    run, works: Object.freeze(works),
+    run, works: Object.freeze(works), plan,
+    checksFor: (w: WorkEnvelope) => Object.freeze([...known(w).checks]),
     adapterFor: (w: WorkEnvelope) => known(w).adapterId!,
     inputsFor: (w: WorkEnvelope) => Object.freeze(capturedInputsOf(plan, known(w), request.snapshot)
       .map(i => Object.freeze({ id: i.id, path: request.pathOf(i) }))),

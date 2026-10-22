@@ -3,7 +3,7 @@
 // physical work units that cover exactly the planned checks. A revision is immutable and carries a digest of its
 // content; a change is a new revision, never an edit. A check that is not planned is kept with its reason and is
 // never covered by any work unit.
-import type { CatalogKey, Count, Digest, Id, Ordinal, RelativePath, ScopeId, WorkRef } from './common.js';
+import type { ArtifactId, CatalogKey, Count, Digest, Id, Ordinal, RelativePath, ScopeId, WorkRef } from './common.js';
 import type { RuleFamilyId, RuleScopeKind } from './rules.js';
 
 /** A check's planning state. Only `planned` is assigned to work; every other state carries its reason. */
@@ -31,10 +31,11 @@ export interface PlanCheck {
   unit?: WorkRef;
 }
 
-/** A captured file a work unit reads. */
+/** A captured file a work unit reads, by the exact content artifact the plan pinned. */
 export interface PlanInput {
   sourceId: Id;
   relativePath: RelativePath;
+  content: ArtifactId;
 }
 
 /** One physical work unit. It covers exactly `checks`, however many rules or scopes it batches. */

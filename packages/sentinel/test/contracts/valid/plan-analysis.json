@@ -60,7 +60,7 @@
           "revision": 1
         }
       ],
-      "inputFingerprint": "sha256:3b1ef30cea58a230a582e2cf18c530e3ccef04e6d3c9cbde40ce42540195b46f",
+      "inputFingerprint": "sha256:1282029c2918ec8e8837b43a9a1fc178b9c12c574f251c3a128784ee9d8378d2",
       "checks": [
         "chk-3921d5ff956235a8ef3ce502",
         "chk-5b9dedafb82f11f117f9aee8"
@@ -72,11 +72,13 @@
       "inputs": [
         {
           "sourceId": "web",
-          "relativePath": "src/a.ts"
+          "relativePath": "src/a.ts",
+          "content": "sha256:072fc23b941d05af2383888f292b78e406e0e82a4a3f8ee698113dd9bcc79e5f"
         },
         {
           "sourceId": "web",
-          "relativePath": "src/b.ts"
+          "relativePath": "src/b.ts",
+          "content": "sha256:363f5941f4d8df68d4bd5a6a9fa72f57f452e7ea9880d3a622cdaae065f1b5fb"
         }
       ]
     }
@@ -181,5 +183,5 @@
     "units": 1
   },
   "requiredCoverageAchievable": false,
-  "digest": "sha256:40b2dcdf1b904e83c0bd62ab880ffda56c7cb87f683425241f43c844b35ba5be"
+  "digest": "sha256:cc51f52be50faae28dd1f01de164c2ca6b5815f6c32586c99047c6cc03098947"
 }
