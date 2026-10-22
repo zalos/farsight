@@ -59,19 +59,36 @@ type Fs = { existsSync(p: string): boolean; mkdirSync(p: string, o?: object): vo
 type Crypto = { createHash(a: string): { update(b: Uint8Array): { digest(e: string): string } } };
 type BufferCtor = { from(text: string, encoding: string): Buffer };
 const builtin = <T>(name: string): T => (globalThis as any).process.getBuiltinModule(name) as T;
+// A synthetic, test-only qualification admitting exactly the host and SQLite running this test; it is a fixture,
+// not product policy. The real policy lives in packages/sentinel/src/store/runtime.ts.
+export const SQLITE_RELEASE_POLICY = Object.freeze({
+  qualified: Object.freeze([Object.freeze({ host: ${JSON.stringify(process.platform + '-' + process.arch)},
+    sqlite: ${JSON.stringify(process.versions.sqlite)}, status: 'candidate' as const,
+    evidence: 'synthetic packer-test fixture: admits only the host and SQLite running this test' })]),
+});
 export const STORAGE_ERROR_CODES = {
   ledger: ['sentinel.store.staleEpoch', 'sentinel.store.notFound', 'sentinel.store.objectMissing'],
-  store: ['sentinel.store.pathNotCanonical', 'sentinel.store.permissions'],
+  store: ['sentinel.store.pathNotAbsolute', 'sentinel.store.permissions', 'sentinel.store.platformUnqualified',
+    'sentinel.store.runtimeUnqualified'],
+  objects: ['sentinel.store.objectMissing'],
 } as const;
 export class StoreError extends Error {
   readonly code: string;
   constructor(code: string) { super(code); this.name = 'StoreError'; this.code = code; }
 }
+export class LedgerError extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.name = 'LedgerError'; this.code = code; }
+}
+export class ObjectStoreError extends Error {
+  readonly code: string;
+  constructor(code: string) { super(code); this.name = 'ObjectStoreError'; this.code = code; }
+}
 export interface WorkRef { id: string; revision: number }
 export interface StoredObject { id: string; codec: 'identity'; storedDigest: string; rawSize: number; storedSize: number }
 export interface PublicationReceipt { work: WorkRef; attemptId: string; sequence: number }
 export interface ReachabilityReport { ok: boolean; missing: string[] }
-interface Recorded { id: string; coordinatorEpoch: string }
+interface Recorded { id: string; coordinatorEpoch: string; influenceManifest?: string; invocation?: string }
 interface State { opens: number; runs: string[]; staged: Record<string, string[]>; objects: Record<string, string>;
   publications: Record<string, { attemptId: string; outputs: { id: string }[] }> }
 export interface SentinelStore {
@@ -87,6 +104,8 @@ export interface SentinelStore {
   readonly objects: {
     identify(bytes: Uint8Array): { id: string };
     put(bytes: Uint8Array, options: { expect: { id: string } }): Promise<StoredObject>;
+    identifyCanonicalJson(value: unknown): { id: string };
+    putCanonicalJson(value: unknown, options: { expect: { id: string } }): Promise<StoredObject>;
   };
   readArtifact(id: string): Promise<Buffer>;
   inspect(): Promise<ReachabilityReport>;
@@ -96,7 +115,13 @@ export interface SentinelStore {
 export async function openStore(path: string, options: { waitMs?: number } = {}): Promise<SentinelStore> {
   void options;
   const fs = builtin<Fs>('node:fs');
-  if (!path.startsWith('/') || path.split('/').some((s) => s === '.' || s === '..')) throw new StoreError('sentinel.store.pathNotCanonical');
+  if (!path.startsWith('/') || path.split('/').some((s) => s === '.' || s === '..')) throw new StoreError('sentinel.store.pathNotAbsolute');
+  const proc = (globalThis as any).process as { platform: string; arch: string; versions: { sqlite?: string } };
+  const host = proc.platform + '-' + proc.arch;
+  if (!SQLITE_RELEASE_POLICY.qualified.some((q) => q.host === host)) throw new StoreError('sentinel.store.platformUnqualified');
+  if (!SQLITE_RELEASE_POLICY.qualified.some((q) => q.host === host && q.sqlite === proc.versions.sqlite)) {
+    throw new StoreError('sentinel.store.runtimeUnqualified');
+  }
   if (!fs.existsSync(path)) fs.mkdirSync(path, { mode: 0o700 });
   if ((fs.statSync(path).mode & 0o077) !== 0) throw new StoreError('sentinel.store.permissions');
   const file = path + '/store.json';
@@ -109,22 +134,28 @@ export async function openStore(path: string, options: { waitMs?: number } = {})
   const sha = (bytes: Uint8Array) => 'sha256:' + builtin<Crypto>('node:crypto').createHash('sha256').update(bytes).digest('hex');
   const bytesOf = (id: string): Buffer => {
     const text = state.objects[id];
-    if (text === undefined) throw new StoreError('sentinel.store.objectMissing');
+    if (text === undefined) throw new ObjectStoreError('sentinel.store.objectMissing');
     return builtin<{ Buffer: BufferCtor }>('node:buffer').Buffer.from(text, 'base64');
   };
-  const current = (r: Recorded) => { if (r.coordinatorEpoch !== epoch) throw new StoreError('sentinel.store.staleEpoch'); };
+  const current = (r: Recorded) => { if (r.coordinatorEpoch !== epoch) throw new LedgerError('sentinel.store.staleEpoch'); };
+  // A manifest or invocation the work or attempt names must be stored bytes, as the real ledger roots them.
+  const stored = (id: string | undefined) => { if (id !== undefined && !(id in state.objects)) throw new LedgerError('sentinel.store.objectMissing'); };
+  const canonical = (v: unknown): string => Array.isArray(v) ? '[' + v.map(canonical).join(',') + ']'
+    : v !== null && typeof v === 'object' ? '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canonical((v as Record<string, unknown>)[k])).join(',') + '}'
+    : JSON.stringify(v);
+  const utf8 = (v: unknown) => new TextEncoder().encode(canonical(v));
   const key = (w: WorkRef) => w.id + '@' + w.revision;
   return {
     epoch,
     ledger: {
       createRun(run) { current(run); state.runs.push(run.id); save(); },
-      createWork(work) { current(work); },
-      startAttempt(attempt) { current(attempt); },
+      createWork(work) { current(work); stored(work.influenceManifest); },
+      startAttempt(attempt) { current(attempt); stored(attempt.invocation); },
       registerStaging(stageId, artifacts) { state.staged[stageId] = artifacts.map((a) => a.id); save(); },
       publish(input) {
         const staged = state.staged[input.stageId];
-        if (!staged) throw new StoreError('sentinel.store.notFound');
-        for (const r of input.receipts) if (!staged.includes(r.id) || sha(bytesOf(r.id)) !== r.id) throw new StoreError('sentinel.store.objectMissing');
+        if (!staged) throw new LedgerError('sentinel.store.notFound');
+        for (const r of input.receipts) if (!staged.includes(r.id) || sha(bytesOf(r.id)) !== r.id) throw new LedgerError('sentinel.store.objectMissing');
         state.publications[key(input.work)] = { attemptId: input.attemptId, outputs: input.outputs.map((id) => ({ id })) };
         delete state.staged[input.stageId];
         save();
@@ -136,13 +167,15 @@ export async function openStore(path: string, options: { waitMs?: number } = {})
       identify(bytes) { return { id: sha(bytes) }; },
       async put(bytes, options) {
         const id = sha(bytes);
-        if (id !== options.expect.id) throw new StoreError('sentinel.store.objectMissing');
+        if (id !== options.expect.id) throw new ObjectStoreError('sentinel.store.objectMissing');
         let binary = '';
         for (const b of bytes) binary += String.fromCharCode(b);
         state.objects[id] = (globalThis as any).btoa(binary);
         save();
         return { id, codec: 'identity', storedDigest: id, rawSize: bytes.length, storedSize: bytes.length };
       },
+      identifyCanonicalJson(value) { return this.identify(utf8(value)); },
+      putCanonicalJson(value, options) { return this.put(utf8(value), options); },
     },
     async readArtifact(id) { return bytesOf(id); },
     async inspect() {
@@ -155,7 +188,7 @@ export async function openStore(path: string, options: { waitMs?: number } = {})
 }
 `);
   write(root, 'packages/sentinel/src/index.ts', [
-    "export { StoreError, openStore } from './store/index.js';",
+    "export { StoreError, LedgerError, ObjectStoreError, openStore } from './store/index.js';",
     "import { ENVELOPES, type EnvelopeKind, type ReportEnvelope, type RunEnvelope, type WorkEnvelope, type AttemptEnvelope } from './contracts/index.js';",
     "export * from './contracts/index.js';",
     'export interface EnvelopeTypes { report: ReportEnvelope; run: RunEnvelope; work: WorkEnvelope; attempt: AttemptEnvelope }',
