@@ -690,6 +690,40 @@ checks detector bytes against the pinned pack digest, and returns every other ru
 batch of at most 2,000 targets to keep timed output under its 3 MiB bound. **Not decided here:** registering the adapter
 in the production registry, the planner's batching, the scan command (PR 09), and amd64 qualification.
 
+36. **Sentinel retains bounded call paths as structural evidence and imports deep analysis only when attested and bound (2026-10-22).**
+No evaluated engine qualified for cross-file flow in E3 (`feasibility-decisions.json`, `engine.crossFile`), so
+Sentinel selects, bundles, downloads and runs no deep engine, and `interprocedural-flow` stays unavailable with
+`sentinel.capability.noQualifiedEngine`. Two draft boundaries replace it honestly, exported as
+`farsight-sentinel/analysis`. **Bounded call paths** (`sentinel-paths/draft-1`, `boundedCallPaths`): one index per
+parser artifact; a breadth-first search over the parser's `calls` edges (optionally `http` and `renders`; never
+guard, validation or test edges) within explicit depth, fan-out and visit bounds; strongly connected components are
+reported as call cycles, and every node is visited once, so cycles terminate. A query is `reached` (the shortest
+path, each step with the parser's resolution and its captured call sites), `not-reached-bounded` with the frontier
+kinds it met, or `not-reached-complete` only when nothing was left unexplored and every visited function's captured
+text is accounted for: the parser records no edge for a computed call, a call on an unknown value, a global or a
+function handed on as a value, so each visited function's whole-line bytes are scanned lexically (Unicode
+identifiers included, a keyword read as a property counted) and any call-like site beyond the recorded ones, or any
+function name used as a value, is a frontier (the scan may over-count, never under-count). A parser edge to a
+top-level function whose name the calling function also binds (a parameter, a local) is not followed
+(`shadowedCall`). The artifact, its parser index, the snapshot and the reader are bound before anything is cached or
+read: the index must be the artifact's own analysis (the envelope names the artifact's fingerprint), every location it
+cites must be a captured file of that snapshot with the same content id, bytes read must hash to the id cited, and
+caches are keyed by the artifact and index together, so nothing computed for one capture is served for another. The envelope binds the snapshot, source, analysis fingerprint, a digest of the graph read and the
+bounds, and always states `establishes: call-reachability` with `notDataFlow` and `graphOnly`: a path never claims
+flow, taint, sanitization or protection. **Attested deep import** (`sentinel-deep-import/draft-1`,
+`importDeepAnalysis`): a customer-run analyzer's flows are untrusted input. A document that does not validate is
+refused. Nothing it asserts about itself is trusted: it is used only with the owner's spent receipt for the new
+owner-only `evidence.import` action, bound to the canonical digest of the whole document (tool, version,
+distribution, licence terms, provenance, configuration and flows) and to the snapshot and source
+(`deepImportIntent`); without it, or with one for any other document, snapshot or action, it yields nothing;
+one bound to another snapshot or source, or to any file whose content differs from the capture, is unbound; a flow
+location outside a file the tool read, or past its bytes, is unknown. Accepted flows become `imported` observations
+(producer `imported`, the document digest as provenance) limited to the tool's stated files and configuration; they
+never count as executed checks, and the analyzer's mode name and stated build are recorded, never read as a
+capability. Runtime control facts and framework packs stay separate: nothing here reads guard edges or turns a path
+into an authorization proof. Not decided here: scan wiring (PR 09/10), selecting an engine if a future one
+qualifies, and how imported observations are correlated (PR 19). Words are `strings-sentinel-analysis.ts`.
+
 27. **Sentinel's first framework pack reads Spring Security servlet chains from source, for one exact version (2026-10-22).**
 
 `@farsight/sentinel` gains a public `./frameworks/spring` export: `analyzeSpring(input)`, which returns one validated

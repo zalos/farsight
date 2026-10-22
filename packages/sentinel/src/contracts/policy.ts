@@ -8,7 +8,7 @@ import type { RuleCapability, RuleFamilyId, Severity } from './rules.js';
 /** Every action the Sentinel gate decides. */
 export type SentinelAction =
   | 'run.start' | 'capture.source' | 'disposition.propose' | 'disposition.approve' | 'rule.promote'
-  | 'tool.acquire' | 'paid.admit' | 'disclosure.send' | 'settings.adopt'
+  | 'tool.acquire' | 'paid.admit' | 'disclosure.send' | 'settings.adopt' | 'evidence.import'
   /** Stop starting new work in a run; work in flight may finish. A write: decided like any other action. */
   | 'run.pause'
   /** Stop a run's workers; the ledger then refuses its publications. */

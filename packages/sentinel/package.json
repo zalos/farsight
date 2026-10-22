@@ -54,6 +54,10 @@
       "types": "./dist/review/providers/index.d.ts",
       "import": "./dist/review/providers/index.js"
     },
+    "./analysis": {
+      "types": "./dist/analysis/index.d.ts",
+      "import": "./dist/analysis/index.js"
+    },
     "./frameworks/express": {
       "types": "./dist/frameworks/express/index.d.ts",
       "import": "./dist/frameworks/express/index.js"

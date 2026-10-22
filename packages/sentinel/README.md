@@ -222,6 +222,26 @@ client of the service gets what the adopted grants give agents, which by default
 say *unavailable* (exit 3) until plan revisions exist. With `--json`, every result carries its `outcome`, `exitCode`, the three
 admission verdicts (`policy`, `capability`, `credential`) and its facts. See ADR 37 in `docs/ARCHITECTURE.md`.
 
+### Bounded call paths and imported deep analysis (draft)
+
+```ts
+import { boundedCallPaths, importDeepAnalysis } from 'farsight-sentinel/analysis';
+
+const paths = await boundedCallPaths({ snapshot, analysis: analysis.sources[0], readContent, queries: [{ from, to }] });
+paths.results[0].outcome;   // reached | not-reached-complete | not-reached-bounded (with its frontiers)
+paths.establishes;          // always 'call-reachability': a path is never a data flow
+
+const imported = await importDeepAnalysis({ document, snapshot, authorization: spentReceipt, readContent, importedAt });
+imported.status;            // refused | untrusted | unbound | imported (observations limited to the tool's scope)
+```
+
+Sentinel ships no deep engine: none qualified for cross-file flow (E3), so deep checks stay unsupported. A path
+search follows the parser's call edges within explicit bounds and reports cycles; it says "not reached" without a
+frontier only when every visited function's calls are accounted for by the graph. A customer's own analyzer output
+is imported only with the owner's spent receipt for exactly that document and snapshot (`deepImportIntent`; the
+document's own attestation is never trusted alone) and a binding to the exact captured bytes; imported flows never
+count as checks Sentinel ran. ADR 36.
+
 ## Spring Security servlet pack (draft, PR 17)
 
 `src/frameworks/spring/` turns one source's parser evidence into `sentinel-controls/draft-1` control facts for its

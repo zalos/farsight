@@ -62,6 +62,8 @@ import { SENTINEL_EXECUTION_STRINGS } from './strings-sentinel-execution.js';
 import { SENTINEL_POLICY_STRINGS } from './strings-sentinel-policy.js';
 import { SENTINEL_PROVIDER_STRINGS } from './strings-sentinel-providers.js';
 
+import { SENTINEL_ANALYSIS_STRINGS } from './strings-sentinel-analysis.js';
+
 import { SENTINEL_NEXT_STRINGS } from './strings-sentinel-next.js';
 
 import { SENTINEL_SPRING_STRINGS } from './strings-sentinel-spring.js';
@@ -208,6 +210,9 @@ export const STRINGS: Record<string, StringEntry> = {
   // Sentinel's glossary: each code-register term and its business twin, sentinel.term.biz.* (strings-sentinel-glossary.ts)
   ...SENTINEL_GLOSSARY_STRINGS,
   ...SENTINEL_PROVIDER_STRINGS,
+
+  // Sentinel's bounded call paths and imported deep-analysis results (strings-sentinel-analysis.ts)
+  ...SENTINEL_ANALYSIS_STRINGS,
 
   ...SENTINEL_NEXT_STRINGS,
 
