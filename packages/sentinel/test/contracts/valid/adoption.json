@@ -1,0 +1,8 @@
+{
+  "schema": "sentinel-adoption/draft-1",
+  "workspaceIdentity": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "workspacePath": "/work/example",
+  "settingsDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "receipt": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "adoptedAt": "2026-10-22T10:00:00.000000000Z"
+}

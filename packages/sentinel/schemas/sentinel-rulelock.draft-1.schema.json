@@ -1,0 +1,349 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/RuleLockEnvelope",
+  "definitions": {
+    "RuleLockEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-rulelock/draft-1"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "previous": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LockedPack"
+          },
+          "maxItems": 256
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LockedTool"
+          },
+          "maxItems": 256
+        },
+        "databases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LockedDatabase"
+          },
+          "maxItems": 256
+        },
+        "createdAt": {
+          "$ref": "#/definitions/Timestamp"
+        }
+      },
+      "required": [
+        "schema",
+        "revision",
+        "previous",
+        "packs",
+        "tools",
+        "databases",
+        "createdAt"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-rulelock/draft-1 — the exact packs, tools and databases a plan may use. Immutable: promotion writes a new revision that names its predecessor's digest."
+    },
+    "Ordinal": {
+      "type": "integer",
+      "description": "A positive integer ordinal or revision.",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "Digest": {
+      "type": "string",
+      "description": "A SHA-256 content address, lower-case hex.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "LockedPack": {
+      "type": "object",
+      "properties": {
+        "packId": {
+          "$ref": "#/definitions/Id"
+        },
+        "version": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "packDigest": {
+          "$ref": "#/definitions/Digest",
+          "description": "Digest of the sorted file inventory: any changed, added or removed file changes it."
+        },
+        "rights": {
+          "$ref": "#/definitions/Rights"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PackFile"
+          },
+          "minItems": 1,
+          "maxItems": 4096
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LockedRule"
+          },
+          "minItems": 1,
+          "maxItems": 1024
+        },
+        "promotion": {
+          "type": "object",
+          "properties": {
+            "receipt": {
+              "$ref": "#/definitions/Digest"
+            },
+            "at": {
+              "$ref": "#/definitions/Timestamp"
+            }
+          },
+          "required": [
+            "receipt",
+            "at"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "packId",
+        "version",
+        "packDigest",
+        "rights",
+        "files",
+        "rules",
+        "promotion"
+      ],
+      "additionalProperties": false
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    },
+    "ShortText": {
+      "type": "string",
+      "description": "A short label (a severity as supplied, a framework name).",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "Rights": {
+      "type": "object",
+      "properties": {
+        "spdx": {
+          "$ref": "#/definitions/ShortText",
+          "description": "An SPDX license expression as published by the origin."
+        },
+        "origin": {
+          "$ref": "#/definitions/RuleOrigin"
+        },
+        "upstream": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "$ref": "#/definitions/ShortText"
+            },
+            "revision": {
+              "$ref": "#/definitions/ShortText"
+            }
+          },
+          "required": [
+            "name",
+            "revision"
+          ],
+          "additionalProperties": false,
+          "description": "Third-party only: the upstream name and revision it was taken from."
+        },
+        "licenseFile": {
+          "$ref": "#/definitions/RelativePath",
+          "description": "A license file inside the pack, when the license requires one to travel with it."
+        }
+      },
+      "required": [
+        "spdx",
+        "origin"
+      ],
+      "additionalProperties": false,
+      "description": "Rights recorded for a pack, a tool or a database. Third-party content names where it came from."
+    },
+    "RuleOrigin": {
+      "type": "string",
+      "enum": [
+        "sentinel-original",
+        "third-party"
+      ],
+      "description": "Where a pack's content came from."
+    },
+    "RelativePath": {
+      "type": "string",
+      "description": "A source-relative POSIX path: no leading or trailing slash, no `.`/`..` segment, no empty segment, no backslash or NUL. A newline or other line break inside a name is a legal POSIX name and is kept as captured; the checks use `[\\s\\S]`, never `.`, so a line break cannot hide a `..` segment from them.",
+      "pattern": "^(?![/])(?![\\s\\S]*[/]$)(?!([\\s\\S]*[/])?\\.{1,2}([/]|$))(?![\\s\\S]*[/][/])[^\\\\\\u0000]+$",
+      "maxLength": 4096
+    },
+    "PackFile": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "#/definitions/RelativePath"
+        },
+        "digest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "size": {
+          "$ref": "#/definitions/Count"
+        }
+      },
+      "required": [
+        "path",
+        "digest",
+        "size"
+      ],
+      "additionalProperties": false,
+      "description": "One file of a pack, by its bytes."
+    },
+    "Count": {
+      "type": "integer",
+      "description": "A non-negative integer.",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "LockedRule": {
+      "type": "object",
+      "properties": {
+        "familyId": {
+          "$ref": "#/definitions/RuleFamilyId"
+        },
+        "revision": {
+          "$ref": "#/definitions/Ordinal"
+        },
+        "definitionDigest": {
+          "$ref": "#/definitions/Digest"
+        }
+      },
+      "required": [
+        "familyId",
+        "revision",
+        "definitionDigest"
+      ],
+      "additionalProperties": false,
+      "description": "A rule as locked: its family, revision and the digest over its definition and every file it names."
+    },
+    "RuleFamilyId": {
+      "type": "string",
+      "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
+      "maxLength": 128
+    },
+    "Timestamp": {
+      "type": "string",
+      "description": "A UTC RFC 3339 timestamp with an explicit Z offset and a real calendar date (no leap second), years 0000–9999 proleptic Gregorian, up to nine fractional digits. The pattern bounds each field; the `date-time` format check refuses a day the month does not have. Comparisons keep all nine digits.",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?Z$",
+      "format": "date-time"
+    },
+    "LockedTool": {
+      "type": "object",
+      "properties": {
+        "adapterId": {
+          "$ref": "#/definitions/Id"
+        },
+        "version": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "artifactDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "platform": {
+          "$ref": "#/definitions/ShortText"
+        },
+        "rights": {
+          "$ref": "#/definitions/Rights"
+        },
+        "promotion": {
+          "type": "object",
+          "properties": {
+            "receipt": {
+              "$ref": "#/definitions/Digest"
+            },
+            "at": {
+              "$ref": "#/definitions/Timestamp"
+            }
+          },
+          "required": [
+            "receipt",
+            "at"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "adapterId",
+        "version",
+        "artifactDigest",
+        "platform",
+        "rights",
+        "promotion"
+      ],
+      "additionalProperties": false,
+      "description": "An installed scanner, pinned by digest. A lock entry never authorizes downloading or running it."
+    },
+    "LockedDatabase": {
+      "type": "object",
+      "properties": {
+        "databaseId": {
+          "$ref": "#/definitions/Id"
+        },
+        "snapshotDigest": {
+          "$ref": "#/definitions/Digest"
+        },
+        "capturedAt": {
+          "$ref": "#/definitions/Timestamp"
+        },
+        "rights": {
+          "$ref": "#/definitions/Rights"
+        },
+        "promotion": {
+          "type": "object",
+          "properties": {
+            "receipt": {
+              "$ref": "#/definitions/Digest"
+            },
+            "at": {
+              "$ref": "#/definitions/Timestamp"
+            }
+          },
+          "required": [
+            "receipt",
+            "at"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "databaseId",
+        "snapshotDigest",
+        "capturedAt",
+        "rights",
+        "promotion"
+      ],
+      "additionalProperties": false,
+      "description": "An advisory or other database snapshot, pinned by digest."
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-rulelock.draft-1.schema.json",
+  "title": "sentinel-rulelock/draft-1"
+}

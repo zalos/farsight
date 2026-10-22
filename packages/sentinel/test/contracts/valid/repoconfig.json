@@ -1,0 +1,22 @@
+{
+  "schema": "sentinel-repoconfig/draft-1",
+  "requestedRules": [
+    "sentinel.sql.dynamic-query"
+  ],
+  "disabledRules": [
+    "sentinel.secrets.committed-credential"
+  ],
+  "thresholds": {
+    "failOnSeverity": "critical"
+  },
+  "suppressions": [
+    {
+      "familyId": "sentinel.sql.dynamic-query",
+      "scopeId": "api:src/db.ts",
+      "rationale": "reviewed elsewhere"
+    }
+  ],
+  "providers": [
+    "hosted-review"
+  ]
+}

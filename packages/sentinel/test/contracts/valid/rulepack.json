@@ -1,0 +1,53 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "sentinel-core",
+  "version": "0.1.0",
+  "rights": {
+    "spdx": "MIT",
+    "origin": "sentinel-original"
+  },
+  "rules": [
+    {
+      "familyId": "sentinel.sql.dynamic-query",
+      "revision": 1,
+      "titleKey": "sentinel.rule.dynamicQuery",
+      "applicability": {
+        "languages": [
+          "typescript",
+          "javascript"
+        ],
+        "scopeKind": "source-file"
+      },
+      "requires": [
+        "source-bytes",
+        "pattern-match"
+      ],
+      "implementation": {
+        "adapterId": "pattern-engine",
+        "rulePath": "detectors/dynamic-query.yml"
+      },
+      "meaning": "candidate",
+      "severity": "high",
+      "evidenceRequired": [
+        "source-span",
+        "matched-pattern"
+      ],
+      "limitationKeys": [
+        "sentinel.limitation.noFlow"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-89"
+        ]
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/sql/concatenated.ts"
+        ],
+        "negative": [
+          "fixtures/sql/parameterized.ts"
+        ]
+      }
+    }
+  ]
+}

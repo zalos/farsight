@@ -1,0 +1,58 @@
+{
+  "schema": "sentinel-rulepack/draft-1",
+  "packId": "vendor-pack",
+  "version": "2.3.0",
+  "rights": {
+    "spdx": "Apache-2.0",
+    "origin": "third-party",
+    "upstream": {
+      "name": "vendor rules",
+      "revision": "v2.3.0"
+    },
+    "licenseFile": "LICENSE"
+  },
+  "rules": [
+    {
+      "familyId": "vendor.java.spring-csrf",
+      "revision": 1,
+      "titleKey": "sentinel.rule.dynamicQuery",
+      "applicability": {
+        "languages": [
+          "java"
+        ],
+        "scopeKind": "surface",
+        "frameworks": [
+          "spring"
+        ]
+      },
+      "requires": [
+        "framework-order"
+      ],
+      "implementation": {
+        "adapterId": "framework-spring",
+        "rulePath": "rules/csrf.yml"
+      },
+      "meaning": "finding",
+      "severity": "medium",
+      "evidenceRequired": [
+        "control-fact"
+      ],
+      "limitationKeys": [
+        "sentinel.limitation.noFlow"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-89"
+        ]
+      },
+      "fixtures": {
+        "positive": [
+          "fixtures/a.java"
+        ],
+        "negative": [
+          "fixtures/b.java"
+        ]
+      }
+    }
+  ]
+}

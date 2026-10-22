@@ -1,0 +1,96 @@
+// Human receipts: the owner's confirmation of one exact intent. A receipt is bound to the intent's canonical digest
+// (action, input, effects, budget, scope), to the state and policy revision it was given against, and to a short
+// expiry; it is spent once. Receipts live in the owner's user state outside the checkout: a receipt id that was not
+// issued there is unknown, and a spent one cannot be spent again, even by another process.
+//
+// Spending is public (the coordinator spends a receipt when it admits); issuing lives in owner-receipts.ts, which
+// the package does not export: MCP tools, the HTTP bridge and model output have no way to mint a receipt, so an
+// agent's request that needs confirmation waits for a person.
+import { join } from 'node:path';
+import type { ActionIntent, ReceiptEnvelope } from '../contracts/index.js';
+import { compareTimestamps, validateEnvelope } from '../validate.js';
+import { canonicalDigest } from './digest.js';
+import { policyFail } from './errors.js';
+import { createPrivateFileOnce, readPrivateFile } from './user-state.js';
+import { snapshot } from './immutable.js';
+
+const MAX_RECEIPT_BYTES = 16 * 1024;
+export const STORE = 'sentinel.receipt.storeUnsafe' as const;
+
+/** The digest a receipt and an admission bind to. */
+export const intentDigest = (intent: ActionIntent): string => canonicalDigest(intent);
+
+/** A receipt that has been checked against its intent and spent. Only `ReceiptBook.consume` makes one. */
+export interface ConsumedReceipt {
+  readonly receipt: ReceiptEnvelope;
+  readonly digest: string;
+}
+
+/** What a spent receipt authorizes, captured when it was spent and held privately: the caller cannot reach it. */
+export interface ReceiptAuthority {
+  readonly action: ReceiptEnvelope['action'];
+  readonly intentDigest: string;
+  readonly digest: string;
+}
+
+const consumed = new WeakMap<object, ReceiptAuthority>();
+
+/** True only for a receipt object this process consumed through `ReceiptBook.consume`. */
+export function isConsumedReceipt(value: unknown): value is ConsumedReceipt {
+  return typeof value === 'object' && value !== null && consumed.has(value);
+}
+
+/** The authority recorded when the receipt was spent, or undefined for anything `consume` did not return. */
+export function receiptAuthority(value: unknown): ReceiptAuthority | undefined {
+  return typeof value === 'object' && value !== null ? consumed.get(value) : undefined;
+}
+
+/** What the owner's confirmation is checked against when the receipt is spent. */
+export interface ReceiptBinding {
+  intent: ActionIntent;
+  stateDigest: string;
+  policyRevision: string;
+}
+
+const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+export const stamp = (d: Date) => d.toISOString().replace(/\.(\d{3})Z$/, '.$1000000Z');
+
+export class ReceiptBook {
+  readonly #dir: string;
+
+  /** `dir` is a private user-state folder outside every checkout, e.g. `join(trustDirectory(), 'receipts')`. */
+  constructor(dir: string) { this.#dir = dir; }
+
+  get directory(): string { return this.#dir; }
+
+  /**
+   * Checks the receipt against exactly this intent, state and policy revision at `now`, then spends it. A receipt
+   * is spent only when every check passes; a second spend, from any process, is refused.
+   */
+  consume(receiptId: string, given: ReceiptBinding, now: Date): ConsumedReceipt {
+    const binding = snapshot(given);
+    if (!ID.test(receiptId)) policyFail('sentinel.receipt.unknown', 'not a receipt id');
+    const bytes = readPrivateFile(join(this.#dir, `${receiptId}.json`), MAX_RECEIPT_BYTES, STORE);
+    if (!bytes) return policyFail('sentinel.receipt.unknown', 'no receipt with this id was issued here');
+    let value: unknown;
+    try { value = JSON.parse(bytes.toString('utf8')); } catch { return policyFail('sentinel.receipt.unknown', 'the receipt record is not JSON'); }
+    const checked = validateEnvelope('receipt', value);
+    if (!checked.ok || checked.value.id !== receiptId) return policyFail('sentinel.receipt.unknown', 'the receipt record is not valid');
+    const receipt = checked.value;
+    if (compareTimestamps(receipt.expiresAt, stamp(now)) <= 0) policyFail('sentinel.receipt.expired', 'the receipt has expired; confirm again');
+    if (compareTimestamps(receipt.issuedAt, stamp(now)) > 0) policyFail('sentinel.receipt.mismatch', 'the receipt was issued in the future');
+    if (receipt.action !== binding.intent.action || receipt.intentDigest !== intentDigest(binding.intent)) {
+      policyFail('sentinel.receipt.mismatch', 'the receipt confirms a different action, input, effect, budget or scope');
+    }
+    if (receipt.stateDigest !== binding.stateDigest) policyFail('sentinel.receipt.mismatch', 'the state changed since the receipt was given');
+    if (receipt.policyRevision !== binding.policyRevision) policyFail('sentinel.receipt.mismatch', 'the policy changed since the receipt was given');
+    if (!createPrivateFileOnce(this.#dir, `${receiptId}.spent`, Buffer.from(stamp(now)), STORE)) {
+      policyFail('sentinel.receipt.alreadyUsed', 'the receipt was already used');
+    }
+    const frozen = snapshot(receipt);
+    const digest = canonicalDigest(frozen);
+    const out: ConsumedReceipt = Object.freeze({ receipt: frozen, digest });
+    consumed.set(out, Object.freeze({ action: frozen.action, intentDigest: frozen.intentDigest, digest }));
+    return out;
+  }
+}

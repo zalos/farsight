@@ -6,8 +6,10 @@ import { ENVELOPES, MAX_ENVELOPE_BYTES, type EnvelopeKind } from './contracts/in
 import type {
   AttemptEnvelope, CoverageEnvelope, DispositionEnvelope, ObservationEnvelope, PolicyResult, ProtocolMessage,
   ReportCount, ReportEnvelope, RunEnvelope, SnapshotEnvelope, WorkEnvelope, FindingPlace, HelloMessage,
-  WelcomeMessage, RefuseMessage,
+  WelcomeMessage, RefuseMessage, RulePackManifest, RuleLockEnvelope, SettingsEnvelope, RepoConfigEnvelope,
+  EffectivePolicyEnvelope, AdoptionEnvelope, ReceiptEnvelope, AdmissionEnvelope, ControlFactsEnvelope, Rights, Budget,
 } from './contracts/index.js';
+import { OWNER_ACTIONS } from './contracts/index.js';
 
 export interface EnvelopeTypes {
   snapshot: SnapshotEnvelope;
@@ -19,6 +21,15 @@ export interface EnvelopeTypes {
   disposition: DispositionEnvelope;
   report: ReportEnvelope;
   protocol: ProtocolMessage;
+  rulepack: RulePackManifest;
+  rulelock: RuleLockEnvelope;
+  settings: SettingsEnvelope;
+  repoconfig: RepoConfigEnvelope;
+  policy: EffectivePolicyEnvelope;
+  adoption: AdoptionEnvelope;
+  receipt: ReceiptEnvelope;
+  admission: AdmissionEnvelope;
+  controls: ControlFactsEnvelope;
 }
 
 /** Stable error codes; message text is safe context, never raw input. */
@@ -368,8 +379,132 @@ const protocol: Check<ProtocolMessage> = (v, out) => {
   if (v.type === 'hello' && new Set(v.supported).size !== v.supported.length) out.add(err('/supported', 'duplicate version'));
 };
 
+const rightsErrors = (out: Bounded, at: string, r: Rights) => {
+  if (r.origin === 'third-party' && !r.upstream) out.add(err(`${at}/upstream`, 'third-party content names its upstream'));
+  if (r.origin === 'sentinel-original' && r.upstream) out.add(err(`${at}/upstream`, 'original content has no upstream'));
+  if (r.licenseFile !== undefined) pathError(out, `${at}/licenseFile`, r.licenseFile);
+};
+
+const budgetErrors = (out: Bounded, at: string, b: Budget) => {
+  if (b.maxCost !== null && !b.currency) out.add(err(`${at}/currency`, 'a monetary budget needs its currency'));
+  if (b.maxCost === null && b.currency) out.add(err(`${at}/currency`, 'a currency without a monetary budget'));
+};
+
+const rulepack: Check<RulePackManifest> = (v, out) => {
+  rightsErrors(out, '/rights', v.rights);
+  for (const i of duplicates(v.rules, r => r.familyId)) out.add(err(`/rules/${i}/familyId`, 'a pack defines each rule family once'));
+  v.rules.forEach((r, i) => {
+    pathError(out, `/rules/${i}/implementation/rulePath`, r.implementation.rulePath);
+    r.fixtures.positive.forEach((f, j) => pathError(out, `/rules/${i}/fixtures/positive/${j}`, f));
+    r.fixtures.negative.forEach((f, j) => pathError(out, `/rules/${i}/fixtures/negative/${j}`, f));
+    const positive = new Set(r.fixtures.positive);
+    r.fixtures.negative.forEach((f, j) => { if (positive.has(f)) out.add(err(`/rules/${i}/fixtures/negative/${j}`, 'a fixture cannot be both positive and negative')); });
+    for (const j of duplicates(r.requires, c => c)) out.add(err(`/rules/${i}/requires/${j}`, 'duplicate capability'));
+  });
+};
+
+const rulelock: Check<RuleLockEnvelope> = (v, out) => {
+  if ((v.revision === 1) !== (v.previous === null)) out.add(err('/previous', 'only the first lock revision has no predecessor'));
+  for (const i of duplicates(v.packs, p => p.packId)) out.add(err(`/packs/${i}/packId`, 'a lock pins each pack once'));
+  for (const i of duplicates(v.packs.flatMap(p => p.rules), r => r.familyId)) out.add(err('/packs', `a rule family is locked once (entry ${i})`));
+  v.packs.forEach((p, i) => {
+    rightsErrors(out, `/packs/${i}/rights`, p.rights);
+    p.files.forEach((f, j) => pathError(out, `/packs/${i}/files/${j}/path`, f.path));
+    for (const j of duplicates(p.files, f => f.path)) out.add(err(`/packs/${i}/files/${j}`, 'duplicate file'));
+  });
+  for (const i of duplicates(v.tools, t => `${t.adapterId}\u0000${t.platform}`)) out.add(err(`/tools/${i}`, 'a lock pins one tool per adapter and platform'));
+  v.tools.forEach((t, i) => rightsErrors(out, `/tools/${i}/rights`, t.rights));
+  for (const i of duplicates(v.databases, d => d.databaseId)) out.add(err(`/databases/${i}/databaseId`, 'duplicate database'));
+  v.databases.forEach((d, i) => rightsErrors(out, `/databases/${i}/rights`, d.rights));
+};
+
+const LOOPBACK = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:[0-9]{1,5})?$/;
+const OWNER: ReadonlySet<string> = new Set(OWNER_ACTIONS);
+
+const settings: Check<SettingsEnvelope> = (v, out) => {
+  for (const i of duplicates(v.mandatoryRules, r => r)) out.add(err(`/mandatoryRules/${i}`, 'duplicate rule'));
+  for (const i of duplicates(v.providers, p => p.id)) out.add(err(`/providers/${i}/id`, 'duplicate provider'));
+  const providers = new Set(v.providers.map(p => p.id));
+  v.providers.forEach((p, i) => {
+    if (p.endpoint.startsWith('http:') && !LOOPBACK.test(p.endpoint)) out.add(err(`/providers/${i}/endpoint`, 'plain http is accepted only on the loopback interface'));
+    budgetErrors(out, `/providers/${i}/budget`, p.budget);
+  });
+  v.grants.forEach((g, i) => {
+    if ((g.principals ?? ['human']).includes('agent') && g.actions.some(a => OWNER.has(a))) {
+      out.add(err(`/grants/${i}`, 'an owner action cannot be granted to an agent'));
+    }
+    g.scope?.providers?.forEach((p, j) => { if (!providers.has(p)) out.add(err(`/grants/${i}/scope/providers/${j}`, 'the grant names a provider the settings do not define')); });
+  });
+};
+
+const repoconfig: Check<RepoConfigEnvelope> = (v, out) => {
+  for (const i of duplicates(v.requestedRules, r => r)) out.add(err(`/requestedRules/${i}`, 'duplicate rule'));
+  for (const i of duplicates(v.disabledRules, r => r)) out.add(err(`/disabledRules/${i}`, 'duplicate rule'));
+};
+
+const policy: Check<EffectivePolicyEnvelope> = (v, out) => {
+  for (const i of duplicates(v.rules, r => r.familyId)) out.add(err(`/rules/${i}`, 'duplicate rule'));
+  if ((v.settingsTrust === 'adopted') !== (v.settingsDigest !== null)) out.add(err('/settingsDigest', 'only adopted settings have a digest in effect'));
+};
+
+const adoption: Check<AdoptionEnvelope> = (v, out) => {
+  if (!v.workspacePath.startsWith('/')) out.add(err('/workspacePath', 'the workspace path is absolute'));
+};
+
+/** The longest a receipt may live: a confirmation is for this action, now. */
+export const MAX_RECEIPT_TTL_MS = 60 * 60 * 1000;
+
+/** Nanoseconds since the epoch of a schema-valid timestamp, exact (whole seconds through Date.UTC, years ≥ 1970 only matter here). */
+function nanos(t: string): bigint {
+  const m = TIMESTAMP.exec(t)!;
+  const seconds = BigInt(Date.parse(`${t.slice(0, 19)}Z`)) / 1000n;
+  return seconds * 1_000_000_000n + BigInt((m[7] ?? '').padEnd(9, '0'));
+}
+
+const receipt: Check<ReceiptEnvelope> = (v, out) => {
+  if (compareTimestamps(v.expiresAt, v.issuedAt) <= 0) out.add(err('/expiresAt', 'expires at or before issue'));
+  else if (nanos(v.expiresAt) - nanos(v.issuedAt) > BigInt(MAX_RECEIPT_TTL_MS) * 1_000_000n) out.add(err('/expiresAt', 'a receipt lives at most one hour'));
+};
+
+const admission: Check<AdmissionEnvelope> = (v, out) => {
+  const { policy: p, capability: c, credential: k } = v.verdicts;
+  for (const [name, x] of [['policy', p], ['capability', c], ['credential', k]] as const) {
+    if (!x.asked && x.allowed) out.add(err(`/verdicts/${name}`, 'a verdict that was not asked cannot allow'));
+  }
+  if (!p.asked) out.add(err('/verdicts/policy/asked', 'policy is always asked first'));
+  if (!p.allowed && (c.asked || k.asked)) out.add(err('/verdicts', 'nothing is asked after the policy denies'));
+  if ((k.basis === 'not-asked') !== !k.asked) out.add(err('/verdicts/credential/basis', 'basis not-asked exactly when the credential was not asked'));
+  if (k.basis === 'unknown' && k.allowed) out.add(err('/verdicts/credential', 'an unknown credential scope denies'));
+  const all = p.allowed && c.allowed && k.allowed;
+  if (v.outcome === 'denied' && all) out.add(err('/outcome', 'all three verdicts allowed'));
+  if (v.outcome !== 'denied' && !all) out.add(err('/outcome', 'admission needs all three verdicts'));
+  if (v.outcome === 'admitted' && OWNER.has(v.action) && v.receipt === null) out.add(err('/receipt', 'an owner action is admitted only with a receipt'));
+  if (v.outcome !== 'admitted' && v.receipt !== null) out.add(err('/receipt', 'only an admitted action uses a receipt'));
+  if (OWNER.has(v.action) && v.requestedBy.principal === 'agent' && p.allowed) out.add(err('/verdicts/policy', 'an agent is never allowed an owner action'));
+};
+
+const controls: Check<ControlFactsEnvelope> = (v, out) => {
+  for (const i of duplicates(v.facts, f => f.id)) out.add(err(`/facts/${i}/id`, 'duplicate fact'));
+  for (const i of duplicates(v.facts, f => `${f.surfaceId}\u0000${f.property}\u0000${f.order}`)) out.add(err(`/facts/${i}`, 'one fact per surface, property and position'));
+  v.facts.forEach((f, i) => {
+    if (f.verdict === 'unknown') {
+      if (!f.reasonCode) out.add(err(`/facts/${i}/reasonCode`, 'an unknown verdict says why'));
+    } else {
+      if (f.evidence.length === 0) out.add(err(`/facts/${i}/evidence`, 'a resolved verdict names the evidence that establishes it'));
+      if (v.framework.version === null) out.add(err(`/facts/${i}/verdict`, 'an unresolved framework version leaves every fact unknown'));
+      if (f.reasonCode) out.add(err(`/facts/${i}/reasonCode`, 'only an unknown verdict carries a reason'));
+    }
+    f.evidence.forEach((e, j) => {
+      pathError(out, `/facts/${i}/evidence/${j}/relativePath`, e.relativePath);
+      if (e.span.endByte < e.span.startByte) out.add(err(`/facts/${i}/evidence/${j}/span`, 'span ends before it starts'));
+      if (e.snapshotId !== v.snapshotId) out.add(err(`/facts/${i}/evidence/${j}/snapshotId`, 'evidence cites another snapshot'));
+    });
+  });
+};
+
 const INVARIANTS: { [K in EnvelopeKind]: Check<EnvelopeTypes[K]> } = {
   snapshot, run, work, attempt, observation, coverage, disposition, report, protocol,
+  rulepack, rulelock, settings, repoconfig, policy, adoption, receipt, admission, controls,
 };
 
 /**

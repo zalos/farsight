@@ -1,0 +1,242 @@
+// Trusted policy (PR 06): the owner's settings, the repository's requests, the effective policy that results, the
+// owner's adoption of a settings file, the human receipt that confirms one exact action, and the admission record
+// with its three ANDed verdicts. The repository requests; only adopted settings grant.
+import type { BoundedText, CatalogKey, Count, DecimalAmount, Digest, Id, ScopeId, ShortText, Timestamp } from './common.js';
+import type { DecisionChannel } from './disposition.js';
+import type { RuleCapability, RuleFamilyId, Severity } from './rules.js';
+
+/** Every action the Sentinel gate decides. */
+export type SentinelAction =
+  | 'run.start' | 'capture.source' | 'disposition.propose' | 'disposition.approve' | 'rule.promote'
+  | 'tool.acquire' | 'paid.admit' | 'disclosure.send' | 'settings.adopt';
+
+/** What an admitted action may do beyond reading captured artifacts. */
+export type ActionEffect = 'local-artifacts' | 'source-disclosure' | 'paid-inference' | 'network' | 'tool-execution';
+
+/** Who asks. A claimed name grants nothing; the channel the request arrived on is what is recorded. */
+export type Principal = 'human' | 'agent';
+
+/**
+ * An ISO 4217 currency code.
+ * @pattern ^[A-Z]{3}$
+ */
+export type CurrencyCode = string;
+
+/** A spending bound. A paid action needs both a token and a cost bound. */
+export interface Budget {
+  maxTokens: Count | null;
+  maxCost: DecimalAmount | null;
+  currency: CurrencyCode | null;
+}
+
+/**
+ * An OS-keychain reference. Settings hold references only, never secret values or environment names.
+ * @pattern ^keychain:farsight/[a-z0-9][a-z0-9-]{0,62}$
+ */
+export type KeychainRef = string;
+
+/**
+ * A provider endpoint origin: scheme, host and optional port, no path, query or credentials.
+ * @pattern ^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$
+ * @maxLength 300
+ */
+export type EndpointOrigin = string;
+
+/** A grant over Sentinel actions, read by core's shared matcher (`decideGrants`). */
+export interface SentinelGrant {
+  /**
+   * @minItems 1
+   * @maxItems 9
+   */
+  actions: SentinelAction[];
+  /** @maxItems 2 */
+  principals?: Principal[];
+  confirm?: 'always' | 'agent' | 'never';
+  /** Narrows the grant: profiles and providers it covers, effects it permits. Absent means not narrowed. */
+  scope?: {
+    /** @maxItems 32 */
+    profiles?: Id[];
+    /** @maxItems 32 */
+    providers?: Id[];
+    /** @maxItems 5 */
+    effects?: ActionEffect[];
+  };
+}
+
+export interface ProviderSettings {
+  id: Id;
+  kind: 'ollama' | 'openai-compatible';
+  endpoint: EndpointOrigin;
+  credential: KeychainRef | null;
+  /** `local-only` keeps source on this machine; `hosted` sends permitted context off it. */
+  disclosure: 'local-only' | 'hosted';
+  /** The most one admitted action may reserve. */
+  budget: Budget;
+}
+
+export interface PolicyThresholds {
+  /** Findings at or above this severity fail the policy. Lower is stricter. */
+  failOnSeverity: Severity;
+  /** Required checks that do not complete fail the policy with exit 2. */
+  requireCompleteCoverage: boolean;
+  /** @maxItems 10 */
+  requiredCapabilities: RuleCapability[];
+}
+
+/**
+ * sentinel-settings/draft-1 — `.farsight/sentinel/settings.json`. Its place in a checkout does not make it trusted:
+ * only an owner adoption of these exact bytes for this workspace does.
+ */
+export interface SettingsEnvelope {
+  schema: 'sentinel-settings/draft-1';
+  /** @maxItems 1024 */
+  mandatoryRules: RuleFamilyId[];
+  thresholds: PolicyThresholds;
+  /** @maxItems 64 */
+  grants: SentinelGrant[];
+  /** `confirm` (the default for untrusted settings): an agent's allowed action still waits for a person. */
+  agentActions: 'confirm' | 'allow';
+  /** @maxItems 16 */
+  providers: ProviderSettings[];
+}
+
+/** A repository's request to suppress a finding. Recorded and refused: approval is an owner disposition. */
+export interface SuppressionRequest {
+  familyId: RuleFamilyId;
+  scopeId: ScopeId;
+  rationale: BoundedText;
+}
+
+/**
+ * sentinel-repoconfig/draft-1 — version-controlled scan intent. It requests; it cannot grant, weaken or approve.
+ */
+export interface RepoConfigEnvelope {
+  schema: 'sentinel-repoconfig/draft-1';
+  /** @maxItems 1024 */
+  requestedRules: RuleFamilyId[];
+  /**
+   * Requests to remove rules. Never honoured for a mandatory rule; listed so the refusal is visible.
+   * @maxItems 1024
+   */
+  disabledRules: RuleFamilyId[];
+  thresholds: Partial<PolicyThresholds>;
+  /** @maxItems 1024 */
+  suppressions: SuppressionRequest[];
+  /**
+   * Providers the repository asks to use; only those the adopted settings define are usable.
+   * @maxItems 16
+   */
+  providers: Id[];
+}
+
+/** How far the settings file is trusted. Anything but `adopted` falls back to the built-in defaults. */
+export type SettingsTrust = 'adopted' | 'not-adopted' | 'changed' | 'missing' | 'invalid';
+
+/** What the repository asked for that the effective policy did not grant, and why. */
+export interface RefusedRequest {
+  request: 'disable-rule' | 'weaken-threshold' | 'suppression' | 'provider';
+  /** @maxLength 200 */
+  subject: string;
+  reasonCode: CatalogKey;
+}
+
+/**
+ * sentinel-policy/draft-1 — the redacted effective policy. The only policy view served: no endpoint, keychain
+ * reference or raw settings byte appears in it.
+ */
+export interface EffectivePolicyEnvelope {
+  schema: 'sentinel-policy/draft-1';
+  settingsTrust: SettingsTrust;
+  settingsDigest: Digest | null;
+  repoConfigDigest: Digest | null;
+  /** @maxItems 2048 */
+  rules: { familyId: RuleFamilyId; source: 'mandatory' | 'requested' | 'both' }[];
+  thresholds: PolicyThresholds;
+  agentActions: 'confirm' | 'allow';
+  /** @maxItems 64 */
+  grants: { actions: SentinelAction[]; principals: Principal[]; confirm: 'always' | 'agent' | 'never' | 'default'; scoped: boolean }[];
+  /** @maxItems 16 */
+  providers: { id: Id; kind: 'ollama' | 'openai-compatible'; disclosure: 'local-only' | 'hosted'; credential: 'keychain' | 'none' }[];
+  /** @maxItems 4096 */
+  refused: RefusedRequest[];
+}
+
+/**
+ * sentinel-adoption/draft-1 — the owner's adoption of one settings file for one workspace, kept in user state
+ * outside the checkout. Any changed byte, another workspace or a re-created folder has no authority.
+ */
+export interface AdoptionEnvelope {
+  schema: 'sentinel-adoption/draft-1';
+  workspaceIdentity: Digest;
+  /**
+   * The canonical workspace path, recorded for the owner to read; the identity is what is compared.
+   * @maxLength 4096
+   */
+  workspacePath: string;
+  settingsDigest: Digest;
+  receipt: Digest;
+  adoptedAt: Timestamp;
+}
+
+/** The exact action a receipt or an admission is about. Its canonical digest is what they bind to. */
+export interface ActionIntent {
+  action: SentinelAction;
+  /** Digest of the action's exact input (a candidate pack, a settings file, a plan revision, a context packet). */
+  input: Digest;
+  /** @maxItems 5 */
+  effects: ActionEffect[];
+  budget: Budget;
+  scope: {
+    profile: Id | null;
+    provider: Id | null;
+    /** @maxItems 256 */
+    targets: ScopeId[];
+  };
+}
+
+/**
+ * sentinel-receipt/draft-1 — a human owner's confirmation of one exact intent: one use, short-lived, bound to the
+ * state and policy it was given against. Only the owner's local CLI flow issues one; no product agent can.
+ */
+export interface ReceiptEnvelope {
+  schema: 'sentinel-receipt/draft-1';
+  id: Id;
+  actor: { channel: 'owner-cli'; principal: ShortText };
+  action: SentinelAction;
+  intentDigest: Digest;
+  stateDigest: Digest;
+  policyRevision: Digest;
+  issuedAt: Timestamp;
+  expiresAt: Timestamp;
+}
+
+/** One verdict as recorded. `asked: false` when an earlier verdict already denied, so nothing was contacted. */
+export interface AdmissionVerdict {
+  allowed: boolean;
+  asked: boolean;
+  reasonCode: CatalogKey;
+  detail: BoundedText;
+}
+
+/** The credential verdict says how authority was established, including when none was needed. */
+export interface CredentialVerdict extends AdmissionVerdict {
+  basis: 'local-only' | 'keychain-scope' | 'unknown' | 'not-asked';
+}
+
+/** Whether an action was admitted, denied, or waits for the owner. */
+export type AdmissionOutcome = 'admitted' | 'denied' | 'awaiting-confirmation';
+
+/**
+ * sentinel-admission/draft-1 — the three ANDed verdicts for one intent: policy, capability, credential authority.
+ */
+export interface AdmissionEnvelope {
+  schema: 'sentinel-admission/draft-1';
+  action: SentinelAction;
+  intentDigest: Digest;
+  requestedBy: { principal: Principal; channel: DecisionChannel };
+  policyRevision: Digest;
+  verdicts: { policy: AdmissionVerdict; capability: AdmissionVerdict; credential: CredentialVerdict };
+  outcome: AdmissionOutcome;
+  receipt: Digest | null;
+  decidedAt: Timestamp;
+}

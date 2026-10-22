@@ -23,6 +23,15 @@ PR 02 in [`implementation-prs.md`](../../docs/proposals/farsight-sentinel/implem
 | `disposition` | `sentinel-disposition/draft-1` | A scoped, expiring decision; only the owner's CLI channel can record an approval |
 | `report` | `sentinel-report/draft-1` | A projection at a pinned ledger sequence and evaluation time: findings with placement, gaps, decisions, scoped counts |
 | `protocol` | `sentinel-worker/draft-1` | Every worker/coordinator message, from `hello` to `result` |
+| `rulepack` | `sentinel-rulepack/draft-1` | A rule pack's manifest: rules with declarative applicability, required capabilities, fixtures and rights |
+| `rulelock` | `sentinel-rulelock/draft-1` | The immutable lock a plan pins: packs by inventory digest, rules by definition digest, tools and databases by digest |
+| `settings` | `sentinel-settings/draft-1` | The owner's trusted settings: mandatory rules, thresholds, grants, providers with keychain references |
+| `repoconfig` | `sentinel-repoconfig/draft-1` | The repository's requests; refused where they would weaken trusted policy |
+| `policy` | `sentinel-policy/draft-1` | The redacted effective policy, with every refused request |
+| `adoption` | `sentinel-adoption/draft-1` | The owner's adoption of one settings digest for one workspace identity |
+| `receipt` | `sentinel-receipt/draft-1` | A human owner's one-use, short-lived confirmation of one exact intent |
+| `admission` | `sentinel-admission/draft-1` | The three ANDed verdicts (policy, capability, credential authority) and the outcome |
+| `controls` | `sentinel-controls/draft-1` | A framework pack's control facts per surface, property and chain position (PRs 14–17) |
 
 The types under `src/contracts/` are the one source. `pnpm --filter @farsight/sentinel schemas` generates
 `schemas/*.schema.json` and the bundled `src/schemas.generated.ts`; `schemas:check` fails on drift, and the
@@ -54,6 +63,16 @@ time. Invalidation remains the service's own finding.
 Spans are zero-based, half-open UTF-8 byte offsets. Paths are source-relative POSIX paths with no `.`/`..`
 segment. Money is a decimal string. Resource ceilings are the PR 01 proposed defaults (2 GiB, 2 CPUs,
 128 PIDs, 120 s, 4 MiB output); a profile can only lower them.
+
+## Rule packs, the lock and trusted policy (draft)
+
+`./rules` reads a candidate pack as data (`readPackDirectory`, `validatePack`) and promotes it into an immutable lock
+(`promote`) only with the owner's spent receipt for that candidate against that lock; a plan pins `lockDigest(lock)`
+and `verifyPinnedLock` refuses any other revision. `resolveLockedRules` returns the original definitions of the locked rules from the exact validated packs the lock pins, refusing any other pack. `./policy` parses settings and repository intent, merges them so the
+repository can only tighten (`effectivePolicy`, whose `view` is the only policy to serve), binds settings to a workspace
+through owner adoption in user state (`adoptionIntent`, `adoptSettings`, `loadPolicyInputs`), spends receipts once
+(`ReceiptBook.consume`) and records three-verdict admission (`admit`). Receipt issuing is internal to the owner CLI
+flow and is not exported. There is no planner yet (ADR 23).
 
 ## The local store (draft)
 

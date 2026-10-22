@@ -1,0 +1,49 @@
+{
+  "schema": "sentinel-controls/draft-1",
+  "snapshotId": "snap-1",
+  "framework": {
+    "id": "nest",
+    "version": "10.4.1"
+  },
+  "packDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+  "environmentDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+  "registrationDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+  "capability": "framework-order",
+  "facts": [
+    {
+      "id": "fact-1",
+      "property": "authentication",
+      "surfaceId": "api::src/invoices.controller.ts::InvoicesController.submit",
+      "order": 0,
+      "verdict": "applies",
+      "controlId": "api::src/auth.guard.ts::AuthGuard",
+      "evidence": [
+        {
+          "snapshotId": "snap-1",
+          "sourceId": "api",
+          "relativePath": "src/app.module.ts",
+          "content": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+          "span": {
+            "startByte": 10,
+            "endByte": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "fact-2",
+      "property": "authorization",
+      "surfaceId": "api::src/invoices.controller.ts::InvoicesController.submit",
+      "order": 1,
+      "verdict": "unknown",
+      "evidence": [],
+      "reasonCode": "sentinel.framework.runtimeFactory"
+    }
+  ],
+  "frontiers": [
+    {
+      "scopeId": "api:src/main.ts",
+      "reasonCode": "sentinel.framework.dynamicModule"
+    }
+  ]
+}

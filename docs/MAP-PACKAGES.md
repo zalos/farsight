@@ -72,7 +72,16 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   publication; its words are `strings-sentinel-parser.ts`. The
   ledger's `admitSnapshot`/`getSnapshot` and schema step 2 (`snapshots`, the rebuilt event log) admit a snapshot
   without a run. `test/snapshot-*.test.ts` builds real Git
-  fixtures with the git CLI; capture itself never runs it. Depends only on graph, code-parser and core; nothing in the
+  fixtures with the git CLI; capture itself never runs it.
+  Rule packs, the rule lock and
+  trusted policy (ADR 23): `src/rules/pack.ts` (read a candidate pack as data, validate it, digest every file it names),
+  `src/rules/lock.ts` (immutable lock revisions, receipt-confirmed promotion, `verifyPinnedLock`), `src/rules/resolve.ts` (`resolveLockedRules`: a pinned lock plus the exact validated packs → original rule definitions with their pins, for the planner), `src/policy/settings.ts`
+  (settings and repository intent, the stricter-wins merge and the redacted effective policy), `adoption.ts` (owner
+  adoption bound to workspace identity and settings digest in user state), `receipts.ts` (spend a receipt once) beside
+  the unexported `owner-receipts.ts` (issue one; owner CLI only), `admission.ts` (the three verdicts over core
+  `decideGrants`) and `user-state.ts` (owner-only files); `src/contracts/controls.ts` is the framework control-fact
+  contract PRs 14–17 emit; the reason codes are `strings-sentinel-policy.ts`; `test/rules-policy.test.ts` covers them.
+  Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in
   `pnpm -r test`. `scripts/pack-sentinel.mjs` builds the separate `farsight-sentinel` tarball from the
   manifest's `bin` and root export; `scripts/test-sentinel-package.mjs` installs it into a clean npm consumer and

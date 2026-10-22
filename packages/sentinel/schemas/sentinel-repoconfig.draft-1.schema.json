@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$ref": "#/definitions/RepoConfigEnvelope",
+  "definitions": {
+    "RepoConfigEnvelope": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "sentinel-repoconfig/draft-1"
+        },
+        "requestedRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleFamilyId"
+          },
+          "maxItems": 1024
+        },
+        "disabledRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RuleFamilyId"
+          },
+          "description": "Requests to remove rules. Never honoured for a mandatory rule; listed so the refusal is visible.",
+          "maxItems": 1024
+        },
+        "thresholds": {
+          "type": "object",
+          "properties": {
+            "failOnSeverity": {
+              "$ref": "#/definitions/Severity",
+              "description": "Findings at or above this severity fail the policy. Lower is stricter."
+            },
+            "requireCompleteCoverage": {
+              "type": "boolean",
+              "description": "Required checks that do not complete fail the policy with exit 2."
+            },
+            "requiredCapabilities": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/RuleCapability"
+              },
+              "maxItems": 10
+            }
+          },
+          "additionalProperties": false
+        },
+        "suppressions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/SuppressionRequest"
+          },
+          "maxItems": 1024
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Id"
+          },
+          "description": "Providers the repository asks to use; only those the adopted settings define are usable.",
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "schema",
+        "requestedRules",
+        "disabledRules",
+        "thresholds",
+        "suppressions",
+        "providers"
+      ],
+      "additionalProperties": false,
+      "description": "sentinel-repoconfig/draft-1 — version-controlled scan intent. It requests; it cannot grant, weaken or approve."
+    },
+    "RuleFamilyId": {
+      "type": "string",
+      "description": "A stable rule family: `sentinel.<area>.<name>` for original rules, `<vendor>.<area>.<name>` otherwise.",
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*){2,7}$",
+      "maxLength": 128
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "description": "The severity a rule assigns. Ordered: info < low < medium < high < critical."
+    },
+    "RuleCapability": {
+      "type": "string",
+      "enum": [
+        "source-bytes",
+        "pattern-match",
+        "source-span",
+        "call-occurrence",
+        "resolved-receiver-type",
+        "framework-order",
+        "interprocedural-flow",
+        "runtime-observation",
+        "dependency-manifest",
+        "advisory-database"
+      ],
+      "description": "A property a stage must establish before the rule can be checked. A profile that lacks one leaves the check unsupported; nothing weaker runs under the rule's identity."
+    },
+    "SuppressionRequest": {
+      "type": "object",
+      "properties": {
+        "familyId": {
+          "$ref": "#/definitions/RuleFamilyId"
+        },
+        "scopeId": {
+          "$ref": "#/definitions/ScopeId"
+        },
+        "rationale": {
+          "$ref": "#/definitions/BoundedText"
+        }
+      },
+      "required": [
+        "familyId",
+        "scopeId",
+        "rationale"
+      ],
+      "additionalProperties": false,
+      "description": "A repository's request to suppress a finding. Recorded and refused: approval is an owner disposition."
+    },
+    "ScopeId": {
+      "type": "string",
+      "description": "A scope reference such as `<sourceId>:<relativePath>` or a surface ID. Untrusted protocol data: bounded, free of control characters, never resolved as a filesystem path.",
+      "pattern": "^[A-Za-z0-9][^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$",
+      "maxLength": 4300
+    },
+    "BoundedText": {
+      "type": "string",
+      "description": "Untrusted text supplied by a producer (a scanner message, a rationale). Always escaped when rendered.",
+      "maxLength": 4000
+    },
+    "Id": {
+      "type": "string",
+      "description": "A ledger identifier. Opaque, bounded and free of path separators and whitespace.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "maxLength": 128
+    }
+  },
+  "$id": "https://github.com/zalos/farsight/packages/sentinel/schemas/sentinel-repoconfig.draft-1.schema.json",
+  "title": "sentinel-repoconfig/draft-1"
+}

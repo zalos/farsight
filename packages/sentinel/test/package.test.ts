@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CAPABILITIES } from '../dist/index.js';
+import { CAPABILITIES, POLICY_ERROR_CODES, POLICY_REASON_CODES } from '../dist/index.js';
 
 const pkgDir = fileURLToPath(new URL('../', import.meta.url));
 const packagesDir = fileURLToPath(new URL('../../', import.meta.url));
@@ -58,6 +58,16 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'execution/processes.js': ['node:child_process'],
   'execution/registry.js': ['node:crypto', 'node:fs', 'node:path'],
   'execution/supervisor.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Trusted policy (ADR 21): core's pure grant matcher and credential-shape check; user state through node:fs only.
+  'policy/admission.js': ['@farsight/core/dist/grants.js'],
+  'policy/adoption.js': ['node:fs', 'node:os', 'node:path'],
+  'policy/digest.js': ['node:crypto'],
+  'policy/owner-receipts.js': ['node:crypto'],
+  'policy/receipts.js': ['node:path'],
+  'policy/settings.js': ['@farsight/core/dist/credential-shapes.js'],
+  'policy/user-state.js': ['node:crypto', 'node:fs', 'node:path'],
+  // Rule packs are read as data: listed and opened, never imported, evaluated or spawned.
+  'rules/pack.js': ['node:fs', 'node:path'],
   'validate.js': ['ajv'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
@@ -168,14 +178,15 @@ test('help and version say plainly that no scanner exists', () => {
   assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
-test('every analysis capability is explicitly unavailable; only contracts, the draft store, draft capture and draft parser reconciliation are available', () => {
+test('draft contracts, store, capture, parser and policy are available; planning and scanners remain unavailable', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy']);
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   for (const id of ['scan-cli', 'pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
+  assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'unavailable', 'no planner yet');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
   assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.reasonCode, 'sentinel.capability.noQualifiedEngine');
@@ -223,6 +234,7 @@ test('every printed word is a registered catalog entry with a definition', async
   for (const c of CAPABILITIES) used.add(c.reasonCode);
   for (const code of ['unknownKind', 'tooLarge', 'malformedJson', 'missingVersion', 'wrongKind', 'unsupportedVersion', 'invalid', 'invariant', 'errorLimit']) used.add(`sentinel.contract.${code}`);
   used.add('sentinel.protocol.noSharedVersion');
+  for (const code of [...POLICY_ERROR_CODES, ...POLICY_REASON_CODES]) used.add(code);
   assert.ok(used.size > 30);
   for (const key of used) {
     const entry = STRINGS[key];
