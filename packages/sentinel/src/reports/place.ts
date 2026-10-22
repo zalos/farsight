@@ -9,7 +9,7 @@ import { affectedReach, flowWalks } from '@farsight/core/dist/affected.js';
 import { impactOf } from '@farsight/core/dist/impact.js';
 import { personaOfScreen } from '@farsight/core/dist/journeys.js';
 import type { FindingPlace, ReportCount } from '../contracts/index.js';
-import { PROJECTION_VERSION, type PinnedContext, type PlaceReason } from './context.js';
+import { contextProblem, PROJECTION_VERSION, type ContextBinding, type PinnedContext, type PlaceReason } from './context.js';
 
 const MAX = { nodeIds: 256, screens: 512, journeys: 512, personas: 64 } as const;
 const SOURCE = 'sentinel place fold draft-1';
@@ -40,9 +40,12 @@ export function unplaced(binding: FindingPlace['binding'], reasons: readonly str
 }
 
 /** Places canonical node ids (the parser's, under the snapshot source id) on the pinned context. */
-export function placeNodes(ctx: PinnedContext | undefined, nodeIds: readonly string[], options: { hops?: number } = {}): FindingPlace {
+export function placeNodes(ctx: PinnedContext | undefined, nodeIds: readonly string[], options: ContextBinding & { hops?: number }): FindingPlace {
   if (!ctx) return unplaced('unavailable', ['sentinel.place.noContext']);
+  const problem = contextProblem(ctx, options);
+  if (problem) return unplaced(problem === 'sentinel.place.contextMismatch' ? 'mismatched' : 'unavailable', [problem]);
   if (ctx.binding !== 'matched' || !ctx.graph || !ctx.artifact) return unplaced(ctx.binding, ctx.reasons, ctx);
+  if (nodeIds.some(id => !id.startsWith(`${options.sourceId}::`))) return unplaced('mismatched', ['sentinel.place.contextMismatch']);
   const limitations = new Set<PlaceReason>();
   if (!nodeIds.length) return { ...unplaced('unavailable', ['sentinel.place.noAnchorSymbol'], ctx), binding: 'matched', context: contextOf(ctx) };
   const index = indexOf(ctx);
@@ -123,15 +126,17 @@ const GAP_SYMBOLS = 64;
  * Places the files a gap covers: the code symbols the pinned context locates in them, through the same fold as a
  * finding. A gap placed this way says which screens rely on code a check did not cover; it claims nothing else.
  */
-export function placeFiles(ctx: PinnedContext | undefined, files: readonly string[]): FindingPlace {
+export function placeFiles(ctx: PinnedContext | undefined, files: readonly string[], expected: ContextBinding): FindingPlace {
   if (!ctx) return unplaced('unavailable', ['sentinel.place.noContext']);
+  const problem = contextProblem(ctx, expected);
+  if (problem) return unplaced(problem === 'sentinel.place.contextMismatch' ? 'mismatched' : 'unavailable', [problem]);
   if (ctx.binding !== 'matched' || !ctx.graph || !ctx.artifact) return unplaced(ctx.binding, ctx.reasons, ctx);
   const wanted = new Set(files);
   const ids = ctx.graph.nodes.filter(n => n.loc?.repo === ctx.repo && wanted.has(n.loc.path) && CODE_KINDS.has(n.kind)).map(n => `${ctx.sourceId}::${n.id.slice(ctx.repo.length + 2)}`);
   if (!ids.length) return { ...unplaced('unavailable', ['sentinel.place.noAnchorSymbol'], ctx), binding: 'matched', context: contextOf(ctx) };
   // A gap over a large scope is placed by a bounded, deterministic subset of its symbols, and says so.
   const sorted = [...new Set(ids)].sort();
-  const place = placeNodes(ctx, sorted.slice(0, GAP_SYMBOLS));
+  const place = placeNodes(ctx, sorted.slice(0, GAP_SYMBOLS), expected);
   return sorted.length > GAP_SYMBOLS ? { ...place, limitationKeys: [...new Set([...place.limitationKeys, 'sentinel.place.truncated'])].sort() } : place;
 }
 

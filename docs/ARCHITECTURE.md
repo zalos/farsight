@@ -864,7 +864,13 @@ names has the captured content id, every node it locates for the source is in a 
 `farsight.config.json` or `screens.json` is among its inputs, and the owner confirmed exactly this context document for
 this snapshot and source (the owner-only `context.pin` action, a spent receipt): matching hashes alone do not show its
 journeys and labels are true. The verified graph is copied and frozen, so later changes to the caller's objects reach
-nothing; core's folds run on their own working copy. The receipt records what was verified. A mismatched context, a graph without journeys (a portable parser artifact) or no context leaves the place
+nothing; core's folds run on their own working copy. The receipt records what was verified. A pin is also an opaque
+runtime capability: its private provenance retains the authentic spent owner grant and exact snapshot/source.
+Copying its fields, serialized receipt, prototype or proxy conveys no authority. `placeNodes` and `placeFiles`
+require the consumer's `ContextBinding` (`snapshotId`, `sourceId`); both direct placement and report/gap consumers
+check that exact binding. Report finding placement also checks observation and citation snapshot/source identities.
+Pins for another capture/source are unplaced and excluded from the report's context artifact closure. Artifact and
+receipt byte arrays are returned as copies so caller mutation cannot change retained provenance. A mismatched context, a graph without journeys (a portable parser artifact) or no context leaves the place
 empty with its reason; no current graph is consulted and nothing enriches or fetches. **Placement** reuses core's cached
 `flowWalks`, `impactOf` + `affectedReach` and `personaOfScreen`: direct use where a screen's walk contains the symbol,
 potential impact where only dependents reach it, screens deduplicated, personas kept with their screens, bounds

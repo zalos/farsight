@@ -277,7 +277,9 @@ severity and byte spans at a captured path.
 import { compareAssessments } from 'farsight-sentinel/findings';
 import { pinApplicationContext, generateReport } from 'farsight-sentinel/reports';
 
-const context = pinApplicationContext({ snapshot, sourceId: 'app', repo: 'invoice-app', graph, inputs });
+// The trusted owner integration confirms contextPinIntent(request) and consumes its receipt.
+const request = { snapshot, sourceId: 'app', repo: 'invoice-app', graph, inputs };
+const context = pinApplicationContext({ ...request, authorization: consumedOwnerConfirmation });
 const { document, json, markdown, html, sarif } = await generateReport({ /* run, observations, coverage, counts,
   readContent, contexts: new Map([['app', context]]), disclosure: 'shareable', comparison? */ });
 ```
@@ -285,7 +287,10 @@ const { document, json, markdown, html, sarif } = await generateReport({ /* run,
 Observations are grouped into findings by rule family and anchors (symbol and cited text, never line numbers), and
 compared with a baseline as exact, probable or ambiguous matches; a baseline finding is resolved only by a comparable
 complete check. Findings are placed on screens, journeys and personas only through an application context whose
-inputs match the capture; otherwise they are reported unplaced with the reason. The HTML file works offline with
+inputs match the capture and whose exact document, snapshot and source the owner confirmed; otherwise they are
+reported unplaced with the reason. A returned pin is a process-local capability: copying or serializing its fields
+does not preserve authority. Direct `placeNodes` and `placeFiles` calls also require the report's exact
+`{ snapshotId, sourceId }`; report generation supplies and checks this binding for findings and gaps. The HTML file works offline with
 JavaScript disabled and loads nothing; Markdown, JSON and SARIF carry the same counts. ADR 38.
 
 ## Versions and evolution

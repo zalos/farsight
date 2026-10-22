@@ -15,7 +15,7 @@ import { validateEnvelope } from '../validate.js';
 import { correlate, type Finding } from '../findings/correlate.js';
 import { normalizeObservation, SEVERITIES, type Severity } from '../findings/normalize.js';
 import type { Comparison } from '../findings/compare.js';
-import type { PinnedContext } from './context.js';
+import { contextProblem, type PinnedContext } from './context.js';
 import { placeFiles, placeNodes, unplaced } from './place.js';
 import { camel, labelKey, labelPartKey } from './words.js';
 
@@ -103,7 +103,8 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   const read = (id: string) => { let p = cache.get(id); if (!p) cache.set(id, p = input.readContent(id)); return p; };
   const used = new Set<string>();
   const artifacts = new Map<string, Uint8Array>();
-  for (const ctx of input.contexts?.values() ?? []) {
+  for (const [sourceId, ctx] of input.contexts ?? []) {
+    if (contextProblem(ctx, { snapshotId: input.run.snapshotId, sourceId })) continue;
     if (ctx.artifact) artifacts.set(ctx.artifact.id, ctx.artifact.bytes);
     artifacts.set(ctx.receipt.id, ctx.receipt.bytes);
   }
@@ -111,10 +112,14 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
 
   const reportFindings: ReportFinding[] = [];
   for (const f of findings) {
-    const ctx = f.sourceIds.length === 1 ? input.contexts?.get(f.sourceIds[0]!) : undefined;
+    const sourceId = f.sourceIds[0]!;
+    const ctx = f.sourceIds.length === 1 ? input.contexts?.get(sourceId) : undefined;
+    const bound = f.observations.every(o => o.snapshotId === input.run.snapshotId && o.observation.evidence.every(e => e.snapshotId === input.run.snapshotId && e.sourceId === sourceId));
     // A secret finding is never placed: its symbols name the file it is in.
     const place = f.secret ? unplaced('unavailable', ['sentinel.place.secretWithheld'])
-      : f.sourceIds.length > 1 ? unplaced('unavailable', ['sentinel.place.noContext']) : placeNodes(ctx, f.nodeIds);
+      : f.sourceIds.length > 1 ? unplaced('unavailable', ['sentinel.place.noContext'])
+        : !bound ? unplaced('mismatched', ['sentinel.place.contextMismatch'])
+          : placeNodes(ctx, f.nodeIds, { snapshotId: input.run.snapshotId, sourceId });
     const evidence: ReportEvidence[] = [];
     const seen = new Set<string>();
     for (const o of f.observations) {
@@ -183,7 +188,7 @@ export async function buildReport(input: ReportInput, precomputed?: readonly Fin
   }
   const gapPlace = (p: PlannedCheck, files: readonly string[]) => {
     const ctx = input.contexts?.get(p.sourceId);
-    return placeFiles(ctx, files);
+    return placeFiles(ctx, files, { snapshotId: input.run.snapshotId, sourceId: p.sourceId });
   };
   const gaps: ReportGap[] = [];
   for (const p of input.plannedChecks) {

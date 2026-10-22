@@ -42,9 +42,16 @@ export type PlaceReason =
   | 'sentinel.place.noContext' | 'sentinel.place.noJourneys' | 'sentinel.place.inputMismatch' | 'sentinel.place.inputNotCaptured'
   | 'sentinel.place.unboundNode' | 'sentinel.place.inputOmitted' | 'sentinel.place.nodeNotInContext' | 'sentinel.place.truncated'
   | 'sentinel.place.gapUnplaced' | 'sentinel.place.noAnchorSymbol' | 'sentinel.place.notOnScreen' | 'sentinel.place.notOwnerConfirmed'
-  | 'sentinel.place.secretWithheld';
+  | 'sentinel.place.secretWithheld' | 'sentinel.place.contextMismatch';
 
+/** The capture and source a placement consumer is producing evidence about. */
+export interface ContextBinding { readonly snapshotId: string; readonly sourceId: string }
+
+declare const pinnedContextBrand: unique symbol;
 export interface PinnedContext {
+  /** A pin is a runtime capability; copying its public fields does not copy its authority. */
+  readonly [pinnedContextBrand]: true;
+  readonly snapshotId: string;
   readonly binding: 'matched' | 'mismatched' | 'unavailable';
   readonly reasons: readonly PlaceReason[];
   readonly sourceId: string;
@@ -55,6 +62,25 @@ export interface PinnedContext {
   readonly receipt: { readonly id: ArtifactId; readonly bytes: Uint8Array };
   /** Present only when the binding matched. */
   readonly graph?: ContextGraph;
+}
+
+// Only pinApplicationContext registers these identities after validating the real spent owner grant. Structural
+// objects, copies and proxies are not capabilities. Keep the original authority beside its exact capture binding.
+const provenance = new WeakMap<object, { snapshotId: string; sourceId: string; authority: ReturnType<typeof receiptAuthority> }>();
+
+/** Package-internal consuming boundary: public fields and serialized receipt bytes confer no authority. */
+export function contextProblem(context: unknown, expected: ContextBinding | undefined): PlaceReason | undefined {
+  const known = typeof context === 'object' && context !== null ? provenance.get(context) : undefined;
+  if (!known) return 'sentinel.place.notOwnerConfirmed';
+  if (!expected || expected.snapshotId !== known.snapshotId || expected.sourceId !== known.sourceId) return 'sentinel.place.contextMismatch';
+  if ((context as PinnedContext).binding === 'matched' && !known.authority) return 'sentinel.place.notOwnerConfirmed';
+  return undefined;
+}
+
+/** Artifact byte arrays cannot be frozen; hand out copies so callers cannot change the retained provenance. */
+function retainedArtifact(id: ArtifactId, bytes: Uint8Array): { readonly id: ArtifactId; readonly bytes: Uint8Array } {
+  const retained = Uint8Array.from(bytes);
+  return Object.freeze({ id, get bytes() { return Uint8Array.from(retained); } });
 }
 
 const PROJECTION_VERSION = 'sentinel-place/draft-1';
@@ -89,6 +115,8 @@ export function contextPinIntent(request: Pick<ContextRequest, 'snapshot' | 'sou
 
 export function pinApplicationContext(request: ContextRequest): PinnedContext {
   const { snapshot, sourceId, repo } = request;
+  const snapshotId = snapshot.id;
+  const authority = receiptAuthority(request.authorization);
   // Everything is read from a sealed copy: a caller's later change to its own objects reaches nothing here.
   const graph = request.graph ? seal(request.graph) : undefined;
   const inputs = request.inputs ? seal(request.inputs) : undefined;
@@ -118,22 +146,23 @@ export function pinApplicationContext(request: ContextRequest): PinnedContext {
       checkedNodes++;
       if (!read.has(n.loc.path)) reasons.add('sentinel.place.unboundNode');
     }
-    const authority = receiptAuthority(request.authorization);
-    const intent = contextPinIntent({ snapshot, sourceId, repo, graph, inputs })!;
+    const intent = contextPinIntent({ snapshot: { id: snapshotId, entries: snapshot.entries }, sourceId, repo, graph, inputs })!;
     if (reasons.size) binding = 'mismatched';
     else if (!graph.nodes.some(n => n.kind === 'flow')) { binding = 'unavailable'; reasons.add('sentinel.place.noJourneys'); }
     else if (!authority || authority.action !== 'context.pin' || authority.intentDigest !== intentDigest(intent)) { binding = 'unavailable'; reasons.add('sentinel.place.notOwnerConfirmed'); }
     else binding = 'matched';
   }
   const receiptDoc = {
-    schema: 'sentinel-context-receipt/draft-1', snapshotId: snapshot.id, sourceId, repo, projectionVersion: PROJECTION_VERSION,
+    schema: 'sentinel-context-receipt/draft-1', snapshotId, sourceId, repo, projectionVersion: PROJECTION_VERSION,
     context: artifact?.id ?? null, binding, reasons: [...reasons].sort(), verifiedInputs: verified, checkedNodes,
     producer: request.producer ?? null,
   };
   const receiptBytes = bytesOf(receiptDoc);
-  return Object.freeze({
-    binding, reasons: Object.freeze([...reasons].sort()), sourceId, repo,
-    ...(artifact ? { artifact: Object.freeze(artifact) } : {}), receipt: Object.freeze({ id: idOf(receiptBytes), bytes: receiptBytes }),
+  const pinned = Object.freeze({
+    snapshotId, binding, reasons: Object.freeze([...reasons].sort()), sourceId, repo,
+    ...(artifact ? { artifact: retainedArtifact(artifact.id, artifact.bytes) } : {}), receipt: retainedArtifact(idOf(receiptBytes), receiptBytes),
     ...(binding === 'matched' ? { graph: graph! } : {}),
-  });
+  }) as PinnedContext;
+  provenance.set(pinned, { snapshotId, sourceId, authority });
+  return pinned;
 }

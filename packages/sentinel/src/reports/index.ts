@@ -8,7 +8,7 @@ import { toSarif } from './sarif.js';
 import { canonicalJson } from '@farsight/graph';
 
 export { pinApplicationContext, contextPinIntent, PROJECTION_VERSION } from './context.js';
-export type { ContextGraph, ContextInput, ContextRequest, PinnedContext, PlaceReason } from './context.js';
+export type { ContextGraph, ContextInput, ContextRequest, ContextBinding, PinnedContext, PlaceReason } from './context.js';
 export { placeFiles, placeNodes, unplaced } from './place.js';
 export { buildReport, findingsOf, DISCLOSURE_PROFILES, REPORT_SOURCE, ReportError } from './document.js';
 export type { BaselineFindingSummary, DisclosureProfile, PlannedCheck, ReportBuild, ReportInput } from './document.js';
