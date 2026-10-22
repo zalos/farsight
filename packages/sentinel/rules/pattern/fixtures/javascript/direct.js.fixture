@@ -1,0 +1,4 @@
+// Original synthetic fixture: a query built by concatenation.
+export function findVendor(db, id) {
+  return db.query("SELECT * FROM vendors WHERE id = " + id);
+}

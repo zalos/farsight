@@ -1,0 +1,7 @@
+// Original synthetic fixture: a request value is passed as a bound parameter.
+class LocalSafe {
+  Object search(Request req, Db db) {
+    String term = req.value();
+    return db.query("SELECT * FROM invoices WHERE note = ?", term);
+  }
+}
