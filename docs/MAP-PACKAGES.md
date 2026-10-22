@@ -87,11 +87,14 @@ declarations are read in `packages/code-parser/src/nest.ts` and resolved to rule
   envelopes, influence manifests, exact coverage and captured inputs for the coordinator) and `errors.ts`. The
   revision contract is `contracts/plan.ts` (`sentinel-plan/draft-1`); persistence and admission belong to PR 08.
   The pattern adapter (PR 10,
-  `src/adapters/pattern/`, not yet in the production registry): `adapter.ts` (Semgrep 1.181.0 pinned by image digest,
-  the fixed engine arguments, the registry definition and the support statement), `worker-source.ts` (the original
+  `src/adapters/pattern/`, not yet in the production registry): `adapter.ts` (Semgrep 1.181.0 pinned by image digest
+  with its measured and unmeasured platforms, the fixed engine arguments, `buildPatternAdapter` for the registry
+  definition and test variants, and the support statement), `resolved.ts` (PR 06 resolved rules → adapter rules, or
+  explicit unsupported checks), `worker-source.ts` (the original
   in-container protocol shim, pinned by digest in the adapter's command), `job.ts` (rule checks and the attempt's
-  inputs), `normalize.ts` (coordinator-side findings and per-file coverage from the verified outputs) and `run.ts` (one
-  attempt through the PR 07 execution service); its original rule pack is `rules/pattern/`, its words
+  inputs), `normalize.ts` (coordinator-side findings and per-file-per-rule coverage from the verified outputs and the engine's match times) and `run.ts` (one
+  attempt through the PR 07 execution service); its original rule pack is `rules/pattern/` (shipped in the tarball with the worker and a digest/rights manifest by
+  `scripts/package-assets.mjs`, which `scripts/pack-sentinel.mjs` calls), its words
   `strings-sentinel-pattern.ts`, its tests `test/pattern-adapter.test.ts` and, with `SENTINEL_ISOLATION=1`,
   `test/pattern-conformance.test.ts` against the real image. Depends only on graph, code-parser and core; nothing in the
   Farsight application depends on it, and `farsight-cli` neither bundles nor starts it. Its schema tests run in

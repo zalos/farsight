@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import { createExecutionService } from '../dist/execution/service.js';
-import { PATTERN_ADAPTER, patternRuleOf, runPatternAttempt } from '../dist/adapters/pattern/index.js';
+import { PATTERN_ADAPTER, ENGINE_ARGS, buildPatternAdapter, patternRuleOf, runPatternAttempt } from '../dist/adapters/pattern/index.js';
 import { removeScratch, scratch, storeIn } from './execution-helpers.ts';
 
 const enabled = process.env.SENTINEL_ISOLATION === '1';
@@ -19,6 +19,8 @@ const sha = (b: Uint8Array | string) => `sha256:${createHash('sha256').update(b)
 const manifest = JSON.parse(readFileSync(`${PACK}sentinel-pack.json`, 'utf8'));
 const RULES = manifest.rules.map((r: any) => patternRuleOf(r.familyId, r.revision, readFileSync(`${PACK}${r.implementation.rulePath}`)));
 
+/** A test variant with a one-second per-rule engine timeout (the engine's smallest): its own shim and adapter digest. */
+const RULE_TIMEOUT = buildPatternAdapter({ id: 'pattern-semgrep-rule-timeout', engineArgs: ENGINE_ARGS.map((a, i) => (ENGINE_ARGS[i - 1] === '--timeout' ? '1' : a)) });
 let root: { root: string; work: string };
 let store: any;
 let service: any;
@@ -28,7 +30,7 @@ before(async () => {
   root = scratch('pattern');
   store = await storeIn(root.root);
   const deadline = { ...PATTERN_ADAPTER, id: 'pattern-semgrep-deadline', limits: { timeoutMs: 1500, helloTimeoutMs: 1500, cancelGraceMs: 500 } };
-  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([PATTERN_ADAPTER, deadline]), containers: true });
+  service = await createExecutionService(store, { scratchRoot: root.work, registry: createAdapterRegistry([PATTERN_ADAPTER, deadline, RULE_TIMEOUT.definition]), containers: true });
 });
 after(async () => { if (enabled) { await store.close(); removeScratch(root.root); } });
 
@@ -47,8 +49,9 @@ function targets(extra: Record<string, string | Buffer> = {}) {
   }
   return out;
 }
-const attempt = (t: ReturnType<typeof targets>, adapterId?: string) => runPatternAttempt(service, {
-  attemptId: `att-pattern-${n++}`, work: { id: 'work-pattern', revision: 1 }, rules: RULES, targets: t, scratch: root.root, ...(adapterId ? { adapterId } : {}),
+const attempt = (t: ReturnType<typeof targets>, adapterId?: string, adapter?: typeof RULE_TIMEOUT) => runPatternAttempt(service, {
+  attemptId: `att-pattern-${n++}`, work: { id: 'work-pattern', revision: 1 }, rules: RULES, targets: t, scratch: root.root,
+  ...(adapterId ? { adapterId } : {}), ...(adapter ? { adapter } : {}),
 });
 const POSITIVE = 'export function f(db, id) {\n  return db.query("SELECT * FROM t WHERE id = " + id);\n}\n';
 
@@ -77,13 +80,19 @@ test('the pinned engine finds the original positives, none of the negatives, and
   // The multibyte file's span is in bytes: 17 bytes of comment line before the query line.
   const mb = r.findings.find(f => f.relativePath === 'controls/multibyte.ts')!;
   assert.equal(mb.span.quoteDigest, sha('db.query("SELECT * FROM t WHERE id = " + id)'));
-  const status = Object.fromEntries(r.coverage.map(c => [c.relativePath, `${c.status}:${c.reasonCode.split('.').pop()}`]));
-  assert.equal(status['controls/unsupported.rs'], 'not-applicable:noRuleLanguage');
-  assert.equal(status['controls/broken.ts'], 'partial:partialParse');
-  assert.equal(status['controls/big.ts'], 'skipped:tooLarge');
-  for (const p of Object.keys(status).filter(p => !p.startsWith('controls/'))) assert.equal(status[p], 'complete:complete', p);
+  const status = (path: string) => r.coverage.filter(c => c.relativePath === path).map(c => `${c.familyId?.split('.').pop() ?? '-'}=${c.status}:${c.reasonCode.split('.').pop()}`);
+  assert.deepEqual(status('controls/unsupported.rs'), ['-=not-applicable:noRuleLanguage']);
+  assert.deepEqual(status('controls/broken.ts'), ['concatenated-query-tsjs=partial:partialParse', 'request-to-query-tsjs=partial:partialParse']);
+  assert.deepEqual(status('controls/big.ts'), ['concatenated-query-tsjs=skipped:tooLarge', 'request-to-query-tsjs=skipped:tooLarge']);
+  // Each pack file: every rule complete, except a taint rule on a file without the source call, which the engine's
+  // prefilter did not run: reported as not run, never as checked.
+  for (const c of r.coverage.filter(x => !x.relativePath.startsWith('controls/'))) {
+    const hasSource = /\.value\(\)/.test(readFileSync(targets().find(x => x.relativePath === c.relativePath)!.path, 'utf8'));
+    const expected = c.familyId!.includes('request-to-query') && !hasSource ? 'not-run' : 'complete';
+    assert.equal(c.status, expected, `${c.relativePath} ${c.familyId}`);
+  }
   assert.deepEqual(r.refused, []);
-  console.log(`# conformance: ${r.findings.length} findings, ${r.coverage.length} files, ${wall} ms`);
+  console.log(`# conformance: ${r.findings.length} findings, ${r.coverage.length} coverage rows, ${wall} ms`);
 });
 
 test('repository content cannot hide a target or a result: ignore files, suppression comments and default-ignored folders', { skip }, async () => {
@@ -98,10 +107,10 @@ test('repository content cannot hide a target or a result: ignore files, suppres
   }));
   const found = new Set(r.findings.map(f => f.relativePath));
   for (const p of ['typescript/direct.ts', 'controls/suppressed.ts', 'node_modules/pkg/index.ts', 'tests/fixture.ts', 'dist/out.js']) assert.ok(found.has(p), p);
-  const status = Object.fromEntries(r.coverage.map(c => [c.relativePath, c.status]));
-  assert.equal(status['.semgrepignore'], 'excluded');
-  assert.equal(status['controls/.gitignore'], 'excluded');
-  assert.equal(status['node_modules/pkg/index.ts'], 'complete');
+  const status = (p: string) => r.coverage.filter(c => c.relativePath === p).map(c => c.status);
+  assert.deepEqual(status('.semgrepignore'), ['excluded']);
+  assert.deepEqual(status('controls/.gitignore'), ['excluded']);
+  assert.deepEqual(status('node_modules/pkg/index.ts'), ['complete', 'not-run']);
 });
 
 test('a captured file shaped like a job cannot replace the job: the worker refuses and nothing counts as checked', { skip }, async () => {
@@ -110,6 +119,18 @@ test('a captured file shaped like a job cannot replace the job: the worker refus
   assert.equal(r.attempt, 'failed');
   assert.equal(r.findings.length, 0);
   assert.ok(r.coverage.every(c => c.status === 'error' || c.status === 'not-applicable'));
+});
+
+test('an engine-reported rule timeout marks exactly that rule on that file, and the run still counts the rest', { skip }, async () => {
+  // Measured on darwin-arm64: a 40,000-term concatenation exceeds a one-second rule limit for both TS rules. The engine
+  // cannot guarantee that on faster hardware, so this pins the reporting path, not a performance threshold.
+  const chain = `export function f(req, db) {\n  const v = req.value();\n  const sql = ${Array.from({ length: 40_000 }, () => 'v').join(' + ')};\n  return db.query(sql);\n}\n`;
+  const r = await attempt(targets({ 'heavy/chain.ts': chain }), undefined, RULE_TIMEOUT);
+  assert.equal(r.attempt, 'succeeded');
+  const rows = r.coverage.filter(c => c.relativePath === 'heavy/chain.ts').map(c => `${c.familyId}=${c.status}:${c.reasonCode.split('.').pop()}`);
+  assert.deepEqual(rows, ['sentinel.sql.concatenated-query-tsjs=partial:ruleTimeout', 'sentinel.sql.request-to-query-tsjs=partial:ruleTimeout']);
+  assert.ok(r.coverage.filter(c => c.relativePath === 'typescript/local.ts').every(c => c.status === 'complete'), 'other files still count');
+  assert.equal(r.findings.filter(f => f.relativePath === 'heavy/chain.ts').length, 0);
 });
 
 test('cross-file flow is not claimed: a request value passed to a sink in another file earns no taint finding', { skip }, async () => {

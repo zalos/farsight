@@ -5,7 +5,9 @@
 // source set, one per envelope; the package's valid fixtures validate through the installed
 // package and a changed version is refused; the draft store (`farsight-sentinel/store`) opens, publishes
 // verified evidence in one process and reads it back in another; and no Farsight application package
-// arrives. No scanner, container, model or network service is started; npm may fetch Sentinel's declared
+// arrives; the pattern rule pack and worker ship with exact digests and rights. No scanner, container, model or
+// network service is started, except that with SENTINEL_ISOLATION=1 the shipped pattern worker and pack run once in
+// the pinned engine image through the isolated execution service (never pulled); npm may fetch Sentinel's declared
 // third-party dependencies.
 //
 //   pnpm test:sentinel:package        # builds Sentinel's closure, packs, then runs this
@@ -279,7 +281,66 @@ try {
   assert.ok(!modules.includes('farsight-cli'), 'farsight-cli is not installed with Sentinel');
   assert.ok(!modules.includes('@farsight'), 'no workspace package is resolved from a registry');
 
-  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, npm consumer`);
+  // Pattern assets: the original rule pack and the in-container worker ship with exact digests and rights, resolvable
+  // through the exports map. The adapter itself stays internal and unregistered.
+  let patternDemo = '';
+  const assetManifest = join(installed, 'assets', 'pattern', 'manifest.json');
+  if (existsSync(join(sourceDir, 'scripts', 'package-assets.mjs'))) {
+    assert.ok(existsSync(assetManifest), 'the pattern asset manifest is packaged');
+    const viaAssets = await evalModule(`import { createRequire } from 'node:module'; const r = createRequire(process.cwd() + '/'); console.log(r.resolve('farsight-sentinel/assets/pattern/manifest.json'));`);
+    assert.ok(viaAssets.trim().endsWith('assets/pattern/manifest.json'), 'pattern assets resolve through the exports map');
+    const assets = JSON.parse(readFileSync(assetManifest, 'utf8'));
+    assert.equal(assets.registered, false);
+    const worker = readFileSync(join(installed, assets.worker.path));
+    assert.equal(`sha256:${createHash('sha256').update(worker).digest('hex')}`, assets.worker.digest, 'the worker bytes match their digest');
+    assert.equal(assets.adapter.command.at(-1), `/input/${assets.worker.digest.slice(7)}`, 'the fixed command names the shipped worker');
+    assert.match(assets.adapter.image, /^semgrep\/semgrep@sha256:[0-9a-f]{64}$/);
+    assert.deepEqual(assets.pack.rights, { spdx: 'MIT', origin: 'sentinel-original' });
+    for (const f of assets.pack.files) {
+      const bytes = readFileSync(join(installed, assets.pack.path, f.path));
+      assert.equal(`sha256:${createHash('sha256').update(bytes).digest('hex')}`, f.digest, f.path);
+      assert.equal(bytes.length, f.size, f.path);
+    }
+    const sourceFiles = readdirSync(join(sourceDir, 'rules', 'pattern'), { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).length;
+    assert.equal(assets.pack.files.length, sourceFiles, 'every pack file is listed');
+    patternDemo = `pattern assets (${assets.pack.files.length} pack files, worker ${assets.worker.digest.slice(7, 19)})`;
+    // With SENTINEL_ISOLATION=1 and the pinned image installed, the shipped worker and pack run in the real engine
+    // through the workspace's isolated execution service (the service is internal by design; no host fallback).
+    if (process.env.SENTINEL_ISOLATION === '1') {
+      const dist = join(sourceDir, 'dist');
+      const imp = (p) => import(new URL(`file://${join(dist, p)}`).href);
+      const { PATTERN_ADAPTER, PATTERN_WORKER_DIGEST } = await imp('adapters/pattern/adapter.js');
+      assert.deepEqual(assets.adapter.command, [...PATTERN_ADAPTER.command], 'the shipped adapter is the workspace adapter');
+      assert.equal(assets.worker.digest, PATTERN_WORKER_DIGEST);
+      const { patternRuleOf, runPatternAttempt } = await imp('adapters/pattern/index.js');
+      const { createAdapterRegistry } = await imp('execution/registry.js');
+      const { createExecutionService } = await imp('execution/service.js');
+      const { openStore } = await imp('store/index.js');
+      const packDir = join(installed, assets.pack.path);
+      const pack = JSON.parse(readFileSync(join(packDir, 'sentinel-pack.json'), 'utf8'));
+      const rules = pack.rules.map((r) => patternRuleOf(r.familyId, r.revision, readFileSync(join(packDir, r.implementation.rulePath))));
+      const targets = pack.rules.flatMap((r) => [...r.fixtures.positive, ...r.fixtures.negative]).filter((v, i, a) => a.indexOf(v) === i).map((p) => {
+        const path = join(packDir, p);
+        return { relativePath: p.replace(/^fixtures\//, '').replace(/\.fixture$/, ''), path, artifact: `sha256:${createHash('sha256').update(readFileSync(path)).digest('hex')}` };
+      });
+      const scratch = realpathSync(consumer.dir);
+      const work = join(scratch, 'pattern-work');
+      mkdirSync(work, { mode: 0o700 });
+      const store = await openStore(join(scratch, 'pattern-store'));
+      try {
+        const service = await createExecutionService(store, { scratchRoot: work, registry: createAdapterRegistry([PATTERN_ADAPTER]), containers: true });
+        const result = await runPatternAttempt(service, { attemptId: 'att-package-pattern', work: { id: 'work-package', revision: 1 }, rules, targets, scratch });
+        assert.equal(result.attempt, 'succeeded');
+        const positives = new Set(pack.rules.flatMap((r) => r.fixtures.positive.map((p) => `${r.familyId} ${p.replace(/^fixtures\//, '').replace(/\.fixture$/, '')}`)));
+        assert.deepEqual(new Set(result.findings.map((f) => `${f.familyId} ${f.relativePath}`)), positives, 'the shipped pack finds its positives and none of its negatives');
+        patternDemo += `, engine run ${result.findings.length} findings`;
+      } finally {
+        await store.close();
+      }
+    }
+  }
+
+  console.log(`sentinel package ok: ${bins.join(', ')} --help, ${subpaths.length} typed exports (${contracts.length} contract types compiled), ${schemaCount} schemas, ${validated} fixtures, ${storeDemo}${parserExported ? ', parser types compiled' : ''}, ${patternDemo ? `${patternDemo}, ` : ''}npm consumer`);
 } finally {
   consumer.cleanup();
 }

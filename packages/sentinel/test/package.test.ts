@@ -55,6 +55,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/pattern/adapter.js': ['node:crypto'],
   'adapters/pattern/job.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/pattern/normalize.js': ['node:crypto'],
+  'adapters/pattern/resolved.js': ['node:crypto'],
   'adapters/pattern/run.js': ['node:fs', 'node:path'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
