@@ -87,6 +87,10 @@ process.stdin.on('data', b => {
 const next = async () => { while (!lines.length) await new Promise(r => { wake = r; }); return lines.shift(); };
 const awaitStart = async () => { const w = await next(); if (w.type !== 'welcome') process.exit(9); return next(); };
 
+// A worker that outlives a dead coordinator: a timer keeps it alive after its stdin closes.
+// It also ignores the broken pipe it meets once the coordinator is gone, so only recovery can stop it.
+if (behavior === 'linger-ok') { setTimeout(() => {}, 30_000); process.stdout.on('error', () => {}); }
+
 switch (behavior) {
   case 'no-hello': await sleep(60_000); break;
   case 'message-before-hello': raw('{"protocol":"sentinel-worker/draft-1","type":"progress"}\n'); await sleep(60_000); break;
@@ -106,6 +110,13 @@ switch (behavior) {
     const start = await awaitStart();
     switch (behavior) {
       case 'ok': result(start, honestWork(start)); break;
+      case 'fail-once': {
+        // Fails its first attempt (a retryable exit), then succeeds; the marker is a synthetic scratch file.
+        if (!existsSync(argument)) { writeFileSync(argument, 'attempted'); process.exit(5); }
+        result(start, honestWork(start)); break;
+      }
+      case 'linger-ok': result(start, honestWork(start)); await sleep(20); process.exit(0);
+      case 'slow-ok': await sleep(1500); result(start, honestWork(start)); break;
       case 'stderr-some': process.stderr.write('d'.repeat(2000)); result(start, honestWork(start)); break;
       case 'stderr-flood': process.stderr.write('E'.repeat(1024 * 1024)); result(start, honestWork(start)); break;
       case 'progress-then-ok': send({ protocol: P, type: 'progress', ...bound(start), completed: 1, planned: 2 }); result(start, honestWork(start)); break;

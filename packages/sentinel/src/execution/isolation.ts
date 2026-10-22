@@ -275,6 +275,27 @@ export class ContainerBackend {
     if (!removed) throw new ExecutionError('sentinel.execution.reconciliationPending', intent);
   }
 
+  /**
+   * Recovery's question about a journaled intent from an earlier epoch: is its container there, and if so remove it
+   * (by the generated name and by the labels, exact ID only). `not-found` is not proof of absence; the caller keeps
+   * the intent.
+   */
+  async settleIntent(intent: { name: string; owner: string; store: Id; attempt: Id; epoch: Id; invocation: string }, signal?: AbortSignal): Promise<'removed' | 'not-found' | 'uncertain'> {
+    const labels = { owner: intent.owner, store: intent.store, attempt: intent.attempt, epoch: intent.epoch, invocation: intent.invocation };
+    let removed = false;
+    const byName = await this.#runner.run(['inspect', '--type', 'container', '--format', '{{json .}}', intent.name], signal);
+    if (succeeded(byName)) {
+      let c: { Id?: string } | undefined;
+      try { c = JSON.parse(byName.stdout.toString('utf8')); } catch { return 'uncertain'; }
+      if (!c || !labelsMatch(c as never, null, labels)) return 'uncertain';
+      if (await this.remove(String(c.Id), labels, signal) !== 'removed-owned-container') return 'uncertain';
+      removed = true;
+    } else if (!absentContainer(byName)) return 'uncertain';
+    const swept = await this.reconcileOwned(labels, signal);
+    if (swept.uncertain.length) return 'uncertain';
+    return removed || swept.removed.length ? 'removed' : 'not-found';
+  }
+
   /** Start the created container attached: stdin carries coordinator frames, stdout worker frames, stderr diagnostics. */
   startAttached(id: string): WorkerProcess {
     if (!CONTAINER_ID.test(id)) throw new ExecutionError('sentinel.execution.commandFailed', { operation: 'start' });

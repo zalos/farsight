@@ -1,0 +1,49 @@
+// A synthetic plan for the coordinator tests: canonical run and work envelopes (the shape PR 06 will hand over)
+// forming a diamond A → {B, C} → D, executed by built-in fake scanners from the hostile-worker fixture.
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { builtInRegistry, inputs } from './execution-helpers.ts';
+
+const digest = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
+
+export function syntheticPlan(root: string, behaviours: Record<string, string> = {}, options: { runId?: string; limits?: Record<string, number>; argument?: string } = {}) {
+  const runId = options.runId ?? 'run-e4';
+  const units = ['A', 'B', 'C', 'D'];
+  const deps: Record<string, string[]> = { A: [], B: ['A'], C: ['A'], D: ['B', 'C'] };
+  const behaviourOf = (u: string) => behaviours[u] ?? 'ok';
+  const registry = builtInRegistry(join(root, 'adapters'), [...new Set(units.map(behaviourOf))], options.limits ?? {}, options.argument);
+  const captured = inputs(root);
+  const run = {
+    schema: 'sentinel-run/draft-1', id: runId, parentId: null, baselineId: null, snapshotId: 'snap-synthetic', planRevision: 1,
+    coordinatorEpoch: 'epoch-planning', ruleLockDigest: digest('rules'), toolLockDigest: digest('tools'), policyRevisionDigest: digest('policy'),
+    requestedScope: { sourceIds: ['synthetic'], profile: 'static' }, budgets: { maxTokens: null, maxCost: null, deadlineMs: 600_000 },
+    createdAt: '2026-10-22T00:00:00Z', state: 'planned',
+  };
+  const works = units.map(u => ({
+    schema: 'sentinel-work/draft-1', id: `work-${u}`, revision: 1, runId, planRevision: 1,
+    stage: { contract: 'sentinel.stage.synthetic', contractVersion: 'draft-1', kind: 'coded', implementationDigest: digest(`stage-${u}`) },
+    inputFingerprint: digest(`inputs-${u}`), influenceManifest: digest(`influence-${u}`),
+    dependencies: deps[u]!.map(d => ({ id: `work-${d}`, revision: 1 })),
+    resources: { deadlineMs: 120_000, memoryBytes: 2_147_483_648, cpuQuota: 2, maxPids: 128, maxOutputBytes: 4_194_304 },
+    coordinatorEpoch: 'epoch-planning', createdAt: '2026-10-22T00:00:00Z', state: 'pending', activeAttemptId: null,
+  }));
+  const plan = {
+    run, works,
+    adapterFor: (w: { id: string }) => `test-${behaviourOf(w.id.slice(5))}`,
+    inputsFor: () => captured,
+  };
+  return { plan: plan as any, registry, units };
+}
+
+/** Every plan unit's publication and how many publications each work revision got, read from the ledger. */
+export function publications(store: any, runId: string) {
+  const counts = new Map<string, number>();
+  let after = 0;
+  for (;;) {
+    const page = store.ledger.readEvents({ after, limit: 500, runId });
+    for (const e of page.events) if (e.kind === 'work-published') counts.set(e.work.id, (counts.get(e.work.id) ?? 0) + 1);
+    if (!page.more) break;
+    after = page.cursor;
+  }
+  return counts;
+}
