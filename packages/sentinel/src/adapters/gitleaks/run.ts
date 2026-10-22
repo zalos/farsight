@@ -8,13 +8,14 @@ import type { ArtifactId, Id, WorkRef } from '../../contracts/common.js';
 import type { ExecutionService } from '../../execution/service.js';
 import { releaseWorkDir, type WorkerOutcome } from '../../execution/supervisor.js';
 import { GITLEAKS_PRODUCTION_BUILD, type GitleaksAdapterBuild } from './adapter.js';
-import { buildSecretsJob, type SecretsTarget } from './job.js';
+import { buildSecretsJob, type SecretsSnapshot, type SecretsTarget } from './job.js';
 import { normalizeSecretsRun, type SecretsScanResult } from './normalize.js';
 
 export interface SecretsAttempt {
   attemptId: Id;
   work: WorkRef;
-  snapshotId: Id;
+  /** The snapshot the targets are entries of; only its id and entries are read. */
+  snapshot: SecretsSnapshot;
   sourceId: Id;
   targets: readonly SecretsTarget[];
   /** A private folder for the job files. */
@@ -48,7 +49,7 @@ export async function runSecretsAttempt(service: ExecutionService, attempt: Secr
   const adapter = attempt.adapter ?? GITLEAKS_PRODUCTION_BUILD;
   const jobDir = mkdtempSync(join(attempt.scratch, 'gitleaks-job-'));
   try {
-    const built = buildSecretsJob({ snapshotId: attempt.snapshotId, sourceId: attempt.sourceId, targets: attempt.targets }, jobDir, adapter);
+    const built = buildSecretsJob({ snapshot: attempt.snapshot, sourceId: attempt.sourceId, targets: attempt.targets }, jobDir, adapter);
     const outcome = await service.run({
       adapterId: adapter.definition.id, attemptId: attempt.attemptId, work: attempt.work, inputs: built.inputs,
       ...(attempt.signal ? { signal: attempt.signal } : {}),

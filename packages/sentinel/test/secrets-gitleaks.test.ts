@@ -8,9 +8,10 @@ import { join } from 'node:path';
 import { createAdapterRegistry } from '../dist/execution/registry.js';
 import {
   GITLEAKS_ADAPTER, GITLEAKS_CONFIG, GITLEAKS_ENGINE, GITLEAKS_REPORT_TEMPLATE, GITLEAKS_RULE_IDS, GITLEAKS_WORKER_BYTES, GITLEAKS_WORKER_DIGEST,
-  OBSERVATION_MESSAGE, NAME_MESSAGE, OPAQUE_PREFIX, LOCATION_OPAQUE, buildGitleaksAdapter, buildSecretsJob, lineSpan, normalizeSecretsRun, readReport, toolAllowlisted, GITLEAKS_MAX_FILE_BYTES,
+  OBSERVATION_MESSAGE, NAME_MESSAGE, ENTRY_SCOPE, buildGitleaksAdapter, buildSecretsJob, lineSpan, normalizeSecretsRun, readReport, toolAllowlisted, GITLEAKS_MAX_FILE_BYTES,
 } from '../dist/adapters/gitleaks/index.js';
-import { GENERIC_VALUE, VALUE, absent, captured, sha, treeFiles } from './secrets-helpers.ts';
+import { GENERIC_VALUE, VALUE, absent, captured, sha, snapshotFor, treeFiles } from './secrets-helpers.ts';
+import { resolveWithheldLocation } from '../dist/snapshot/locations.js';
 
 const root = mkdtempSync(join(tmpdir(), 'sentinel-secrets-unit-'));
 after(() => rmSync(root, { recursive: true, force: true }));
@@ -42,7 +43,7 @@ test('the pins: the official release, its image index, its default rules, and a 
 test('the job: shim, job, contents in order; unsent files are skipped scopes with their reasons', () => {
   const big = Buffer.alloc(GITLEAKS_MAX_FILE_BYTES + 1, 0x61);
   const targets = captured(dir(), treeFiles({ 'web/package-lock.json': '{}\n', 'assets/logo.png': 'x', 'big.bin.txt': big, 'odd\nname.txt': 'x', 'same/copy.env': `SENTINEL_SYNTHETIC_TOKEN=${VALUE}\n` }));
-  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+  const built = buildSecretsJob({ ...snapshotFor('snap-1', 'src-1', targets), sourceId: 'src-1' }, dir());
   assert.equal(built.inputs[0]!.id, GITLEAKS_WORKER_DIGEST);
   assert.equal(built.inputs[1]!.id, built.jobDigest);
   const text = readFileSync(built.inputs[1]!.path, 'utf8');
@@ -55,8 +56,15 @@ test('the job: shim, job, contents in order; unsent files are skipped scopes wit
   ]);
   // Each distinct content is an input once, after the shim and the job.
   assert.equal(new Set(built.inputs.map(i => i.id)).size, built.inputs.length);
-  assert.throws(() => buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets: [{ ...targets[0]!, artifact: sha('other') }] }, dir()), /inputInvalid/);
-  assert.throws(() => buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets: [{ ...targets[0]!, relativePath: '../x' }] }, dir()), /inputInvalid/);
+  const { snapshot, targets: t } = snapshotFor('snap-1', 'src-1', targets, [{ sourceId: 'src-1', relativePath: 'x', kind: 'file', disposition: 'excluded', reasonCode: 'sentinel.reason.excluded', generated: false }]);
+  const refused = (scope: any) => assert.throws(() => buildSecretsJob(scope, dir()), /inputInvalid/);
+  refused({ snapshot, sourceId: 'src-1', targets: [{ ...t[0]!, path: targets[1]!.path }] });      // other bytes than the entry names
+  refused({ snapshot, sourceId: 'src-1', targets: [{ entry: 0, path: t[0]!.path }] });           // an excluded entry
+  refused({ snapshot, sourceId: 'src-1', targets: [{ entry: 999, path: t[0]!.path }] });         // no such entry
+  refused({ snapshot, sourceId: 'src-2', targets: [t[0]!] });                                      // another source's entry
+  refused({ snapshot, sourceId: 'src-1', targets: [t[0]!, t[0]!] });                               // one entry twice
+  const unsafe = snapshotFor('snap-1', 'src-1', [{ ...targets[0]!, relativePath: '../x' }]);
+  refused({ ...unsafe, sourceId: 'src-1' });
 });
 
 test('the pinned global allowlist reads the way Gitleaks reads it', () => {
@@ -101,9 +109,16 @@ test('a location is whole lines, never a part of one', () => {
 
 // --- the normaliser over synthetic outcomes ---
 
+let lastSnapshot: any;
+/** A result's citation or scope, resolved over the private snapshot the way a local reader does. */
+const pathOfEvidence = (e: any) => { const r = resolveWithheldLocation(lastSnapshot, e); return r.ok ? r.entry.relativePath : undefined; };
+const pathOfScope = (scopeId: string) => lastSnapshot.entries[Number(ENTRY_SCOPE.exec(scopeId)?.[2] ?? -1)]?.relativePath;
+
 function synthetic(options: { exitCode?: number; failure?: string | null; report?: string | null; architecture?: string; state?: string; stderr?: string; extraOutput?: boolean; qualify?: string; files?: Record<string, string | Buffer | null> } = {}) {
   const targets = captured(dir(), treeFiles(options.files));
-  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+  const scoped = snapshotFor('snap-1', 'src-1', targets);
+  lastSnapshot = scoped.snapshot;
+  const built = buildSecretsJob({ ...scoped, sourceId: 'src-1' }, dir());
   // job.files in order: .gitleaksignore, config/service.env, notes/allowed.md, src/clean.ts
   const report = options.report === undefined ? 'F\tgithub-pat\t2\t2\t1\nF\tgithub-pat\t1\t1\t2\n' : options.report;
   const reportBytes = report === null ? undefined : Buffer.from(report);
@@ -128,16 +143,14 @@ test('findings become redacted observations citing whole lines; existing finding
   const r = synthetic();
   assert.equal(r.status, 'complete');
   absent(JSON.stringify(r), 'the scan result');
-  // Every location is an opaque reference; the private table resolves it exactly.
-  const where = new Map(r.privateLocations.map(l => [l.reference, l.relativePath]));
-  assert.deepEqual(r.observations.map(o => `${o.producerRuleId} ${where.get(o.evidence[0]!.relativePath)} ${o.evidence[0]!.span.startByte}-${o.evidence[0]!.span.endByte}`).sort(),
+  // Every citation is a withheld location; only the private snapshot resolves it, exactly.
+  assert.deepEqual(r.observations.map(o => `${o.producerRuleId} ${pathOfEvidence(o.evidence[0])} ${o.evidence[0]!.span.startByte}-${o.evidence[0]!.span.endByte}`).sort(),
     ['github-pat config/service.env 43-108', 'github-pat notes/allowed.md 0-63']);
-  assert.ok(r.observations.every(o => o.evidence[0]!.relativePath.startsWith(OPAQUE_PREFIX) && o.limitationKeys.includes(LOCATION_OPAQUE)));
+  assert.ok(r.observations.every(o => o.evidence.every(e => 'location' in e && e.location === 'withheld' && !('relativePath' in e))));
   for (const path of ['config/service.env', 'notes/allowed.md', 'src/clean.ts', '.gitleaksignore']) {
     assert.ok(!JSON.stringify(r).includes(path), 'no captured path is in what the result exports');
   }
-  assert.equal('privateLocations' in { ...r }, false, 'a spread or JSON leaves the private table out');
-  assert.equal(Object.keys(r).includes('privateLocations'), false);
+  assert.ok([...r.scanned].every(x => ENTRY_SCOPE.test(x)), 'scopes name entries, not paths');
   assert.ok(r.observations.every(o => o.message === OBSERVATION_MESSAGE && o.originalSeverity === 'unrated' && !('quoteDigest' in o.evidence[0]!)));
   assert.equal(r.scanned.length, 4);
   assert.equal(r.audit.engine, 'gitleaks 8.30.1');
@@ -180,7 +193,7 @@ test('every failure is an error over every target with a coded reason, never zer
   }
 });
 
-test('a name the detector cannot see out of context is never printed: every location is opaque', () => {
+test('a name the detector cannot see out of context is never printed: every citation is a withheld location', () => {
   // generic-api-key matches GENERIC_VALUE only as an assignment; as a file name no detector sees it
   const files = { 'config/keys.env': `api_key = "${GENERIC_VALUE}"\n`, [`cache/${GENERIC_VALUE}`]: 'clean\n', [`keys/${VALUE}.txt`]: 'x\n' };
   // job.files: .gitleaksignore, cache/<generic>, config/keys.env, config/service.env, keys/<ghp>.txt, notes/allowed.md, src/clean.ts
@@ -188,37 +201,38 @@ test('a name the detector cannot see out of context is never printed: every loca
   absent(JSON.stringify(r), 'the exported result', GENERIC_VALUE);
   absent(JSON.stringify(r), 'the exported result');
   assert.equal(r.status, 'complete');
-  const loc = new Map(r.privateLocations.map(l => [l.reference, l]));
-  assert.equal(loc.size, 7, 'every target has a reference');
-  assert.ok([...loc.keys()].every(k => k.startsWith(OPAQUE_PREFIX)));
   const generic = r.observations.find(o => o.producerRuleId === 'generic-api-key')!;
-  assert.equal(loc.get(generic.evidence[0]!.relativePath)!.relativePath, 'config/keys.env');
+  assert.equal(pathOfEvidence(generic.evidence[0]), 'config/keys.env');
   const name = r.observations.find(o => o.message === NAME_MESSAGE)!;
-  assert.ok(loc.get(name.evidence[0]!.relativePath)!.relativePath === `keys/${VALUE}.txt`, 'the private table resolves exactly');
-  assert.ok(name.limitationKeys.includes(LOCATION_OPAQUE) && name.limitationKeys.includes('sentinel.secrets.nameMatch'));
-  assert.ok(r.scanned.every(s => s.startsWith(`src-1:${OPAQUE_PREFIX}`)));
+  assert.ok(pathOfEvidence(name.evidence[0]) === `keys/${VALUE}.txt`, 'the private snapshot resolves exactly');
+  assert.ok(name.limitationKeys.includes('sentinel.secrets.nameMatch'));
+  assert.ok(r.scanned.every(x => ENTRY_SCOPE.test(x)));
+  assert.equal(r.scanned.length, 7);
 });
 
-test('identical files stay distinct; unsent and failed scopes are opaque too; capture entries are kept privately', () => {
-  const targets = captured(dir(), treeFiles({ 'a/same.txt': 'same\n', 'b/same.txt': 'same\n', 'odd\nname.env': 'x\n' }))
-    .map(t => ({ ...t, entryId: `entry-${t.relativePath.length}-${t.relativePath.charCodeAt(0)}` }));
-  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+test('identical files resolve to their own entries; a reference resolves only in its snapshot, source and content', () => {
+  const targets = captured(dir(), treeFiles({ 'a/same.txt': 'same\n', 'b/same.txt': 'same\n', 'odd\nname.env': 'x\n' }));
+  const scoped = snapshotFor('snap-1', 'src-1', targets);
+  const built = buildSecretsJob({ ...scoped, sourceId: 'src-1' }, dir());
   const outcome: any = { state: 'failed', code: 'sentinel.execution.workerExited', attemptId: 'a', adapter: { id: 'x', digest: sha('x') }, invocation: { digest: sha('i') },
     outputs: [], diagnostics: { text: '' }, container: { image: { architecture: 'arm64', reference: 'r', id: 'i' } } };
   const r = normalizeSecretsRun({ job: built.job, jobDigest: built.jobDigest, outcome, observedAt: '2026-10-22T00:00:00.000Z', outputBytes: () => undefined, targetBytes: () => undefined });
   assert.equal(r.status, 'error');
-  assert.ok(r.skipped.every(s => s.scopeId.startsWith(`src-1:${OPAQUE_PREFIX}`)));
+  assert.ok(r.skipped.every(x => ENTRY_SCOPE.test(x.scopeId)), 'error scopes name entries');
   assert.ok(!JSON.stringify(r).includes('same.txt') && !JSON.stringify(r).includes('odd'));
-  const same = r.privateLocations.filter(l => l.relativePath.endsWith('same.txt'));
-  assert.equal(same.length, 2);
+  const same = built.job.files.filter(f => f.relativePath.endsWith('same.txt'));
   assert.equal(same[0]!.artifact, same[1]!.artifact, 'the same content');
-  assert.notEqual(same[0]!.reference, same[1]!.reference, 'two references');
-  assert.ok(same.every(l => l.entryId?.startsWith('entry-')), 'their capture entries are kept');
+  const cite = (f: any) => ({ location: 'withheld' as const, snapshotId: 'snap-1', sourceId: 'src-1', entry: f.entry, content: f.artifact, span: { startByte: 0, endByte: 0 } });
+  const resolved = same.map(f => resolveWithheldLocation(scoped.snapshot as any, cite(f)));
+  assert.deepEqual(resolved.map(x => x.ok && x.entry.relativePath), ['a/same.txt', 'b/same.txt'], 'each to its own entry, never the first content match');
+  for (const bad of [{ snapshotId: 'snap-2' }, { sourceId: 'src-2' }, { entry: 999 }, { content: sha('other') }]) {
+    assert.deepEqual(resolveWithheldLocation(scoped.snapshot as any, { ...cite(same[0]), ...bad } as any), { ok: false, reasonCode: 'sentinel.capture.locationUnresolved' });
+  }
 });
 
 test('the job lists sent files, then the names of unsent ones, so the engine screens every name', () => {
   const targets = captured(dir(), treeFiles({ 'images.png/token.env': `T=${VALUE}\n`, 'odd\nname.env': 'x\n' }));
-  const built = buildSecretsJob({ snapshotId: 'snap-1', sourceId: 'src-1', targets }, dir());
+  const built = buildSecretsJob({ ...snapshotFor('snap-1', 'src-1', targets), sourceId: 'src-1' }, dir());
   assert.deepEqual(built.job.unsent.map(u => `${u.relativePath.replace('\n', '\\n')} ${u.reasonCode}`).sort(),
     ['images.png/token.env sentinel.secrets.toolAllowlisted', 'odd\\nname.env sentinel.secrets.pathUnsupported']);
   assert.deepEqual(built.job.names.map(n => n.relativePath), ['.gitleaksignore', 'config/service.env', 'notes/allowed.md', 'src/clean.ts', 'images.png/token.env']);

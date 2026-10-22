@@ -6,13 +6,11 @@
 // report it is read from carries only rule, lines and file by construction (the pinned template), and each line is
 // checked against exactly that shape, so neither a report nor an observation can carry part of a value.
 //
-// Locations: no exported or normalized field carries a captured path. Every target — scanned, skipped, cited — is
-// named by an opaque reference, `.sentinel-opaque/<ordinal>` (its place in path order over the job's targets), and
-// every observation that cites one carries `sentinel.secrets.locationOpaque`, so no consumer reads it as a source
-// path. A name can hold a secret the detector cannot see out of context (a value assigned in one file and used as
-// another file's name), so no name is ever judged safe to print. The exact location — source, path, content digest
-// and capture entry — is in `privateLocations`, which is not enumerable (JSON and object spreads leave it out) and is
-// for local navigation only; the captured snapshot it points into stays private.
+// Locations (ADR 28): no normalized or exported field carries a captured path, because a name can hold a secret no
+// detector sees out of context (a value assigned in one file and used as another file's name). Every observation
+// cites `WithheldLocationEvidence` — the snapshot, source, capture-entry index and content — never `SourceEvidence`
+// with a path; scanned, skipped and error scopes are `<sourceId>#entry:<n>`. Only the private snapshot resolves an
+// entry to its path (`resolveWithheldLocation`), and only when snapshot, source, entry and content all agree.
 //
 // Failure is never zero findings: a failed attempt, an unmeasured platform, a malformed or inconsistent record or
 // report, an engine error, a missing or oversized report, an unknown rule or file, or lines a file does not have make
@@ -30,12 +28,10 @@ import { GITLEAKS_RULE_IDS } from './rules.js';
 export const OBSERVATION_MESSAGE = 'A value shaped like a secret matched this detector. The value is withheld; open the cited lines in the captured source to review it.';
 export const OBSERVATION_LIMITATIONS = Object.freeze(['sentinel.secrets.valueWithheld', 'sentinel.secrets.lineLocation'] as const);
 export const NAME_MESSAGE = 'A file name shaped like a secret matched this detector. The name is withheld; the cited location reference identifies the file in the captured source.';
-export const NAME_LIMITATIONS = Object.freeze(['sentinel.secrets.valueWithheld', 'sentinel.secrets.nameMatch', 'sentinel.secrets.locationOpaque'] as const);
-/** Marks an observation whose evidence `relativePath` is an opaque location reference, not a source path. */
-export const LOCATION_OPAQUE = 'sentinel.secrets.locationOpaque';
-/** The prefix of every location reference; never a captured path. */
-export const OPAQUE_PREFIX = '.sentinel-opaque/';
-export const opaqueReference = (ordinal: number) => `${OPAQUE_PREFIX}${ordinal}`;
+export const NAME_LIMITATIONS = Object.freeze(['sentinel.secrets.valueWithheld', 'sentinel.secrets.nameMatch'] as const);
+/** The scope of one captured file by its entry: `<sourceId>#entry:<n>`; `#` is not in a source ID, so it never reads as a path scope. */
+export const entryScope = (sourceId: string, entry: number) => `${sourceId}#entry:${entry}`;
+export const ENTRY_SCOPE = /^([A-Za-z0-9][A-Za-z0-9._:-]*)#entry:(0|[1-9][0-9]{0,8})$/;
 export const MAX_SECRETS_OBSERVATIONS = 10_000;
 export const RECORD_MEDIA_TYPE = 'application/vnd.sentinel.gitleaks-run+json';
 export const REPORT_MEDIA_TYPE = 'application/vnd.sentinel.gitleaks-report';
@@ -59,15 +55,6 @@ export interface SecretsAudit {
   readonly report: Digest | null;
 }
 
-/** Where a reference points, exactly. Private: for local navigation by someone allowed to open the captured source. */
-export interface PrivateLocation {
-  readonly reference: string;
-  readonly sourceId: string;
-  readonly relativePath: string;
-  readonly artifact: string;
-  readonly entryId?: string;
-}
-
 export interface SecretsScanResult {
   readonly status: SecretsScanStatus;
   /** Why the scan is an error. Absent for complete and partial. */
@@ -77,8 +64,6 @@ export interface SecretsScanResult {
   readonly scanned: readonly string[];
   /** Scopes not scanned, each with its reason. For an error, every target. */
   readonly skipped: readonly ScopedReason[];
-  /** Not enumerable, never exported: each reference's exact location. */
-  readonly privateLocations: readonly PrivateLocation[];
   /** The image platform the engine ran on: measured, or a candidate only under an explicit qualification run. */
   readonly platform: { readonly architecture: string | null; readonly state: 'measured' | 'candidate' | 'refused' };
   readonly audit: SecretsAudit;
@@ -175,22 +160,14 @@ export function lineSpan(bytes: Uint8Array, startLine: number, endLine: number):
   return { startByte, endByte };
 }
 
-export const scopeOf = (sourceId: string, path: string) => `${sourceId}:${path}`;
-
-/** Attaches the private locations without making them part of what JSON or a spread carries. */
-function withPrivate<T extends object>(result: T, locations: readonly PrivateLocation[]): T & { privateLocations: readonly PrivateLocation[] } {
-  Object.defineProperty(result, 'privateLocations', { value: Object.freeze(locations.map((l) => Object.freeze({ ...l }))), enumerable: false });
-  return Object.freeze(result) as T & { privateLocations: readonly PrivateLocation[] };
-}
 
 export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
   const { job, outcome } = input;
   const all = [...job.files, ...job.unsent].sort((a, b) => a.ordinal - b.ordinal);
-  const refOf = new Map(all.map(t => [t.relativePath, opaqueReference(t.ordinal)]));
-  const ref = (path: string) => refOf.get(path)!;
-  const locations: PrivateLocation[] = all.map(t => ({ reference: ref(t.relativePath), sourceId: job.sourceId, relativePath: t.relativePath, artifact: t.artifact,
-    ...(t.entryId !== undefined ? { entryId: t.entryId } : {}) }));
-  const scope = (path: string) => scopeOf(job.sourceId, ref(path));
+  const entryOf = new Map(all.map(t => [t.relativePath, t.entry]));
+  const scope = (path: string) => entryScope(job.sourceId, entryOf.get(path)!);
+  const cite = (path: string, content: string, span: { startByte: number; endByte: number }) =>
+    ({ location: 'withheld' as const, snapshotId: job.snapshotId, sourceId: job.sourceId, entry: entryOf.get(path)!, content, span });
   let record: RunRecord | undefined;
   const audit = (): SecretsAudit => ({
     engine: `${GITLEAKS_ENGINE.name} ${GITLEAKS_ENGINE.version}`, adapterId: outcome.adapter.id, adapterDigest: outcome.adapter.digest,
@@ -203,10 +180,10 @@ export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
   const listed = GITLEAKS_IMAGE_PLATFORMS.some(p => p.architecture === architecture);
   const platform = Object.freeze({ architecture, state: architecture !== null && GITLEAKS_MEASURED_ARCHITECTURES.has(architecture) ? 'measured' as const
     : listed && architecture === input.qualifyingArchitecture ? 'candidate' as const : 'refused' as const });
-  const error = (reasonCode: CatalogKey): SecretsScanResult => withPrivate({
+  const error = (reasonCode: CatalogKey): SecretsScanResult => Object.freeze({
     status: 'error' as const, reasonCode, observations: [], scanned: [],
     skipped: all.map(t => ({ scopeId: scope(t.relativePath), reasonCode })), platform, audit: audit(),
-  }, locations);
+  });
   if (outcome.state !== 'succeeded' || !outcome.result) {
     const coded = WORKER_CODE.exec(outcome.diagnostics.text)?.[1];
     return error((coded ?? (outcome.state === 'timed-out' ? 'sentinel.secrets.toolTimedOut' : outcome.code) ?? 'sentinel.secrets.workerError') as CatalogKey);
@@ -241,11 +218,11 @@ export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
     for (const l of lines) {
       if (l.kind === 'name') {
         const t = job.names[l.line - 1]!;
-        add(JSON.stringify(['name', l.rule, ref(t.relativePath)]), {
+        add(JSON.stringify(['name', l.rule, entryOf.get(t.relativePath)]), {
           schema: 'sentinel-observation/draft-1', snapshotId: job.snapshotId, producer, producerRuleId: l.rule, originalSeverity: 'unrated',
           message: NAME_MESSAGE,
           // The name is not in the content, so no span inside it is claimed: a zero-length citation of the file.
-          evidence: [{ snapshotId: job.snapshotId, sourceId: job.sourceId, relativePath: ref(t.relativePath), content: t.artifact, span: { startByte: 0, endByte: 0 } }],
+          evidence: [cite(t.relativePath, t.artifact, { startByte: 0, endByte: 0 })],
           limitationKeys: [...NAME_LIMITATIONS], observedAt: input.observedAt,
         });
         continue;
@@ -254,20 +231,19 @@ export function normalizeSecretsRun(input: NormalizeInput): SecretsScanResult {
       const bytes = input.targetBytes(file.artifact);
       if (!bytes || bytes.length !== file.bytes || sha(bytes) !== file.artifact) refuse('sentinel.secrets.inputInvalid');
       const span = lineSpan(bytes!, l.start, l.end);
-      const at = ref(file.relativePath);
-      add(JSON.stringify(['content', l.rule, at, l.start, l.end]), {
+      add(JSON.stringify(['content', l.rule, file.entry, l.start, l.end]), {
         schema: 'sentinel-observation/draft-1', snapshotId: job.snapshotId, producer, producerRuleId: l.rule, originalSeverity: 'unrated',
         message: OBSERVATION_MESSAGE,
-        evidence: [{ snapshotId: job.snapshotId, sourceId: job.sourceId, relativePath: at, content: file.artifact, span }],
-        limitationKeys: [...OBSERVATION_LIMITATIONS, LOCATION_OPAQUE],
+        evidence: [cite(file.relativePath, file.artifact, span)],
+        limitationKeys: [...OBSERVATION_LIMITATIONS],
         observedAt: input.observedAt,
       });
     }
     const skipped = job.unsent.map(u => ({ scopeId: scope(u.relativePath), reasonCode: u.reasonCode }));
-    return withPrivate({
+    return Object.freeze({
       status: skipped.length ? 'partial' as const : 'complete' as const, observations: [...observations.values()],
       scanned: job.files.map(f => scope(f.relativePath)), skipped, platform, audit: audit(),
-    }, locations);
+    });
   } catch (e) {
     return error(e instanceof Refused ? e.code : 'sentinel.secrets.outputRefused');
   }

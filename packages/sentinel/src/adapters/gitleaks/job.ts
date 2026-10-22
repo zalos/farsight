@@ -16,25 +16,27 @@ import { createHash } from 'node:crypto';
 import { closeSync, constants as FS, fstatSync, openSync, readSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArtifactId, CatalogKey, Id } from '../../contracts/common.js';
+import type { IncludedFileEntry, SnapshotEnvelope } from '../../contracts/snapshot.js';
 import type { CapturedInput } from '../../execution/supervisor.js';
 import { isSafeRelativePath } from '../../validate.js';
 import { GITLEAKS_MAX_FILE_BYTES, GITLEAKS_PRODUCTION_BUILD, type GitleaksAdapterBuild } from './adapter.js';
 import { GITLEAKS_GLOBAL_ALLOWLIST_PATHS } from './rules.js';
 
+/** One captured file to scan: its entry in the snapshot (which names its source, path and content) and its bytes. */
 export interface SecretsTarget {
-  /** Source-relative path as captured. */
-  readonly relativePath: string;
-  /** The captured content's digest. */
-  readonly artifact: ArtifactId;
+  /** Index of the file's entry in `SnapshotEnvelope.entries`: an included file of this source. */
+  readonly entry: number;
   /** Where the captured bytes are now; re-hashed here and again when the execution service copies them. */
   readonly path: string;
-  /** The capture entry this file is, when the caller has one: kept privately, so identical files stay distinct. */
-  readonly entryId?: string;
 }
 
+/** The part of the snapshot the job reads: its identity and its entries. */
+export type SecretsSnapshot = Pick<SnapshotEnvelope, 'id' | 'entries'>;
+
 /** `ordinal`: the target's place in path order over every target of the job, the basis of its opaque reference. */
-export interface SecretsJobFile { readonly index: number; readonly ordinal: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly bytes: number; readonly entryId?: string }
-export interface SecretsUnsent { readonly ordinal: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly reasonCode: CatalogKey; readonly entryId?: string }
+/** Job records are private (the job holds paths); results cite `entry` only. */
+export interface SecretsJobFile { readonly index: number; readonly ordinal: number; readonly entry: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly bytes: number }
+export interface SecretsUnsent { readonly ordinal: number; readonly entry: number; readonly relativePath: string; readonly artifact: ArtifactId; readonly reasonCode: CatalogKey }
 
 /** A name the engine screens: line `line` (1-based) of `scan/paths.txt`. */
 export interface SecretsJobName { readonly line: number; readonly relativePath: string; readonly artifact: ArtifactId }
@@ -98,16 +100,27 @@ export function toolAllowlisted(relativePath: string): boolean {
   return seen.some(path => GITLEAKS_GLOBAL_ALLOWLIST_PATHS.some(re => re.test(path)));
 }
 
-export function buildSecretsJob(scope: { snapshotId: Id; sourceId: Id; targets: readonly SecretsTarget[] }, dir: string,
+export function buildSecretsJob(scope: { snapshot: SecretsSnapshot; sourceId: Id; targets: readonly SecretsTarget[] }, dir: string,
   adapter: GitleaksAdapterBuild = GITLEAKS_PRODUCTION_BUILD): BuiltSecretsJob {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(scope.snapshotId) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(scope.sourceId)) invalid('snapshot or source id');
+  const snapshotId = scope.snapshot?.id;
+  if (typeof snapshotId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(snapshotId) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(scope.sourceId)) invalid('snapshot or source id');
   if (scope.targets.length > MAX_SECRETS_FILES) invalid(`at most ${MAX_SECRETS_FILES} files per attempt`);
+  // Each target is an included file of this source in this snapshot; its path and digest come from the entry.
+  const entries = new Set<number>();
+  const resolved = scope.targets.map(t => {
+    const e = Number.isSafeInteger(t.entry) ? scope.snapshot.entries[t.entry] : undefined;
+    if (!e || e.kind !== 'file' || e.disposition !== 'included' || e.sourceId !== scope.sourceId) invalid('a target is not an included file of this source in this snapshot');
+    if (entries.has(t.entry)) invalid('duplicate target entry');
+    entries.add(t.entry);
+    const file = e as IncludedFileEntry;
+    return { entry: t.entry, relativePath: file.relativePath, artifact: file.content, path: t.path };
+  });
   const seen = new Set<string>();
   const files: SecretsJobFile[] = [];
   const unsent: SecretsUnsent[] = [];
-  const sorted = [...scope.targets].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
+  const sorted = [...resolved].sort((a, b) => (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
   for (const [ordinal, t] of sorted.entries()) {
-    const entry = t.entryId !== undefined ? { entryId: t.entryId } : {};
+    const entry = { entry: t.entry };
     if (!isSafeRelativePath(t.relativePath)) invalid('unsafe target path');
     if (seen.has(t.relativePath)) invalid('duplicate target path');
     seen.add(t.relativePath);
@@ -136,7 +149,7 @@ export function buildSecretsJob(scope: { snapshotId: Id; sourceId: Id; targets: 
   const text = Buffer.from(`${lines.join('\n')}\n`, 'utf8');
   const jobDigest = sha256(text);
   const job: SecretsJob = Object.freeze({
-    schema: 'sentinel-gitleaks-job/draft-1', snapshotId: scope.snapshotId, sourceId: scope.sourceId, worker: adapter.workerDigest,
+    schema: 'sentinel-gitleaks-job/draft-1', snapshotId, sourceId: scope.sourceId, worker: adapter.workerDigest,
     files: Object.freeze(files.map(f => Object.freeze(f))), unsent: Object.freeze(unsent.map(u => Object.freeze(u))),
     names: Object.freeze(names.map(n => Object.freeze(n))), namesScreened,
   });

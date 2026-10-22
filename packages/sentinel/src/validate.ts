@@ -309,7 +309,8 @@ const attempt: Check<AttemptEnvelope> = (v, out) => {
 
 const observation: Check<ObservationEnvelope> = (v, out) => {
   v.evidence.forEach((e, i) => {
-    pathError(out, `/evidence/${i}/relativePath`, e.relativePath);
+    // A withheld location carries no path to check; an ordinary citation's path is checked as everywhere.
+    if (!('location' in e)) pathError(out, `/evidence/${i}/relativePath`, e.relativePath);
     if (e.span.endByte < e.span.startByte) out.add(err(`/evidence/${i}/span`, 'span ends before it starts'));
     if (e.snapshotId !== v.snapshotId) out.add(err(`/evidence/${i}/snapshotId`, 'evidence cites another snapshot'));
   });

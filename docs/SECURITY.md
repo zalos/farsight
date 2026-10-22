@@ -78,9 +78,9 @@ The secret scan (ADR 28) runs the pinned official Gitleaks image only inside its
 shim, over a rebuilt copy of the captured files, with a pinned configuration and no repository ignore list, baseline
 or inline allow. Matched values never leave the container: the tool's messages and raw output stay there, its report
 names only the rule, lines and a job index (no path), and each observation keeps only the detector, the file and whole
-lines. No result prints a file name: a name can hold a secret no detector recognises out of context, so every file is
-cited by an opaque reference, and only a private, non-exported location table (with the captured snapshot, which stays
-on the machine) resolves it. Names the engine finds secret-shaped are reported as findings themselves. A folder the engine's own allowlist prunes is listed as skipped, with everything in it.
+lines. No result prints a file name: a name can hold a secret no detector recognises out of context, so every finding cites
+the file by its place in the captured snapshot (`WithheldLocationEvidence`), and only the private snapshot resolves it,
+exactly, through one bounded resolver. Names the engine finds secret-shaped are reported as findings themselves. A folder the engine's own allowlist prunes is listed as skipped, with everything in it.
 A tool error, an unreadable report or a file that was
 not scanned is a failed or partial scan, never a clean one. The image is installed by digest ahead of time (CI pulls
 it in the isolation job); a scan never pulls. Its tests assemble an inert synthetic token at run time, so the

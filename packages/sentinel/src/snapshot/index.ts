@@ -10,6 +10,8 @@ export type { OpenedSnapshot, RestoreOptions, RestoredSnapshot, RestoredSource, 
 export { MATERIALIZATION_SCHEMA, validateMaterialization } from './materialization.js';
 export type { Materialization, MaterializedSource, MaterializedFile } from './materialization.js';
 export { reconcileInventory } from './reconcile.js';
+export { resolveWithheldLocation } from './locations.js';
+export type { ResolvedLocation } from './locations.js';
 export type { Reconciliation } from './reconcile.js';
 export { DEFAULT_CAPTURE_POLICY } from './policy.js';
 export type { CapturePolicy } from './policy.js';

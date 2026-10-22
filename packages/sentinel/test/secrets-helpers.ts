@@ -64,3 +64,17 @@ export function allowlistCorpus(): string[] {
   for (const near of ['data/config.sockets', 'data/configsocket', 'images/token.env', 'data/config.ſockets', 'png/token.env', 'data/config.ṕng']) out.add(near);
   return [...out].sort();
 }
+
+/**
+ * A snapshot holding the captured files as included entries of one source, and the targets naming them by entry, the
+ * way the coordinator hands a scan its files. `extra` entries (other kinds, other sources) can sit beside them.
+ */
+export function snapshotFor(snapshotId: string, sourceId: string, files: ReturnType<typeof captured>, extra: object[] = []) {
+  const entries: any[] = [...extra];
+  const targets = files.map((f) => {
+    entries.push({ sourceId, relativePath: f.relativePath, kind: 'file', disposition: 'included', content: f.artifact, bytes: Buffer.from(require_(f.path)).length, generated: false });
+    return { entry: entries.length - 1, path: f.path };
+  });
+  return { snapshot: { id: snapshotId, entries }, targets };
+}
+import { readFileSync as require_ } from 'node:fs';
