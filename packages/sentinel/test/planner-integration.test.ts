@@ -1,0 +1,163 @@
+// PR 06 end to end with the real modules: capture a synthetic repository into a real store, parse it with the
+// public parser, validate rule packs, promote them into the rule lock with owner receipts, derive the effective
+// policy, plan, decide admission for the plan, and convert it into canonical work envelopes. Then a pack update
+// adds a rule: a new revision plans it over the published bootstrap with no recapture, and the earlier revision
+// and lock are unchanged. Synthetic fixtures only; nothing is scanned and no network is used.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { captureSnapshot } from '../dist/snapshot/index.js';
+import { parseSnapshot } from '../dist/snapshot/parser.js';
+import { emptyLock, lockDigest, promote, promotionIntent, validatePack, verifyPinnedLock } from '../dist/rules/index.js';
+import { DEFAULT_SETTINGS, ReceiptBook, admit, effectivePolicy } from '../dist/policy/index.js';
+import { issueReceipt } from '../dist/policy/owner-receipts.js';
+import { validateEnvelope } from '../dist/validate.js';
+import {
+  SURFACE_NODE_KINDS, adapterOf, capturedInputsOf, checksCoveredBy, plannerAnalysisFrom, plannerLockFrom, plannerPolicyFrom,
+  plannerSnapshotFrom, planAnalysis, planBootstrap, verifyPlanRevision, workEnvelopesFor,
+} from '../dist/planner/index.js';
+import { commitRepo, needsStore, openCaptureStore, scratch, unlock } from './snapshot-helpers.ts';
+
+const D = (s: string) => `sha256:${createHash('sha256').update(s).digest('hex')}`;
+const NOW = new Date('2026-10-22T12:00:00.000Z');
+
+const REPO: Record<string, string> = {
+  'src/util.ts': 'export function run(code: string) {\n  return eval(code);\n}\n',
+  'src/bad.ts': 'export function (\n',
+  'app/api/items/route.ts': 'export async function GET() {\n  return new Response("[]");\n}\n',
+  'src/main/java/App.java': 'package app;\npublic class App {\n  public int run() { return 1; }\n}\n',
+  'package.json': '{ "name": "fixture", "version": "1.0.0" }\n',
+  '.github/workflows/ci.yml': 'on: push\njobs: {}\n',
+};
+
+const rule = (familyId: string, over: Record<string, unknown> = {}) => ({
+  familyId, revision: 1, titleKey: 'sentinel.rule.fixture',
+  applicability: { languages: ['typescript', 'javascript'], scopeKind: 'source-file' },
+  requires: ['source-bytes', 'pattern-match'], implementation: { adapterId: 'sentinel-pattern', rulePath: `detectors/${familyId}.yml` },
+  meaning: 'candidate', severity: 'high', evidenceRequired: ['source-span'], limitationKeys: [], mappings: { cwe: ['CWE-95'] },
+  fixtures: { positive: [`fixtures/${familyId}-bad.ts`], negative: [`fixtures/${familyId}-good.ts`] }, ...over,
+});
+
+const EVAL = rule('sentinel.ts.eval');
+const ROUTE = rule('sentinel.http.route-guard', { applicability: { languages: ['typescript'], scopeKind: 'surface' }, requires: ['framework-order'] });
+const CALL = rule('sentinel.ts.dangerous-call', { requires: ['call-occurrence'] });
+
+/** A validated pack holding `rules`, built as bytes the way readPackDirectory would return them. */
+function pack(rules: ReturnType<typeof rule>[]) {
+  const files = new Map<string, Uint8Array>();
+  files.set('sentinel-pack.json', Buffer.from(JSON.stringify({ schema: 'sentinel-rulepack/draft-1', packId: 'fixture-pack', version: `0.${rules.length}.0`,
+    rights: { spdx: 'MIT', origin: 'sentinel-original' }, rules })));
+  for (const r of rules) {
+    files.set(r.implementation.rulePath, Buffer.from(`rule: ${r.familyId}\n`));
+    for (const f of [...r.fixtures.positive, ...r.fixtures.negative]) files.set(f, Buffer.from(`// ${f}\n`));
+  }
+  return validatePack(files);
+}
+
+const profile = {
+  id: 'profile-local',
+  capabilities: [
+    { capability: 'source-bytes', available: true }, { capability: 'pattern-match', available: true },
+    { capability: 'call-occurrence', available: true, perFileParse: true },
+    { capability: 'framework-order', available: false, reasonCode: 'sentinel.capability.notImplemented' },
+  ],
+  builtInAdapters: [{ adapterId: 'sentinel-pattern', implementationDigest: D('builtin pattern adapter') }],
+  stages: { capture: D('capture stage'), parse: D('parse stage'), inventory: D('inventory stage') },
+};
+const LIMITS = { deadlineMs: 60_000, memoryBytes: 512 * 1024 * 1024, cpuQuota: 1, maxPids: 32, maxOutputBytes: 1024 * 1024 };
+const execution = { resources: { capture: LIMITS, parse: LIMITS, inventory: LIMITS, check: LIMITS } };
+
+test('captured, parsed, locked and adopted inputs plan, admit and convert end to end; a new rule needs no recapture', needsStore, async t => {
+  // 1. Capture and parse (the checkout is gone before parsing).
+  const dir = scratch(t);
+  const root = join(dir, 'repo');
+  commitRepo(root, REPO);
+  const fx = await openCaptureStore(t, dir);
+  const { snapshot } = await captureSnapshot(fx.store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/app', root }] });
+  unlock(root);
+  rmSync(root, { recursive: true, force: true });
+  const work = join(dir, 'work');
+  mkdirSync(work, { mode: 0o700 });
+  const parsed = await parseSnapshot(fx.store, { snapshotId: snapshot.id, workDir: work, selection: { gitignore: true, testFiles: 'include' },
+    limits: { maxFiles: 100, maxFileBytes: 65536, maxTotalBytes: 1 << 20, maxEntries: 10_000, maxDurationMs: 60_000 } });
+  const analyses = parsed.sources.map(s => plannerAnalysisFrom(s));
+  const surfaces = analyses[0]!.surfaces;
+  assert.ok(surfaces.length > 0 && surfaces.every(s => SURFACE_NODE_KINDS.includes(s.kind as never)), JSON.stringify(surfaces));
+  assert.ok(surfaces.some(s => s.kind === 'route' && s.path === 'app/api/items/route.ts'), 'the Next route handler is an HTTP surface');
+
+  // 2. Promote a pack into the lock with the owner's receipt.
+  const book = new ReceiptBook(join(scratch(t, 'sentinel-trust-'), 'receipts'));
+  const confirmPromotion = (lock: any, candidate: any) => {
+    const intent = promotionIntent(lock, candidate);
+    const pin = lockDigest(lock);
+    const r = issueReceipt(book, { channel: 'owner-cli', principal: 'owner' }, { intent, stateDigest: pin, policyRevision: D('promotion') }, { now: NOW, ttlMs: 600_000 });
+    return promote(lock, candidate, book.consume(r.id, { intent, stateDigest: pin, policyRevision: D('promotion') }, NOW), NOW);
+  };
+  const v1 = pack([EVAL, ROUTE]);
+  const lock2 = confirmPromotion(emptyLock(NOW), { kind: 'pack', pack: v1 });
+
+  // 3. The adopted settings make all three rules mandatory; the third is not in the lock yet.
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), mandatoryRules: [EVAL.familyId, ROUTE.familyId, CALL.familyId],
+    grants: [{ actions: ['run.start'], principals: ['human', 'agent'], confirm: 'agent' as const }] };
+  const policy = effectivePolicy({ trust: 'adopted', settings, settingsDigest: D('settings'), repoConfig: null, repoConfigDigest: null });
+
+  // 4. Plan: bootstrap, then analysis over the real snapshot and parser evidence.
+  const boot = planBootstrap({ runId: 'run-1', sourceIds: ['app'], profile });
+  const inventory = boot.units.at(-1)!;
+  const bootstrapRefs = [{ id: inventory.id, revision: inventory.revision }];
+  const first = planAnalysis({ runId: 'run-1', revision: 2, previous: boot, bootstrap: bootstrapRefs, profile,
+    snapshot: plannerSnapshotFrom(snapshot), analyses, lock: plannerLockFrom(lock2, [v1], lockDigest(lock2)), policy: plannerPolicyFrom(policy) });
+  assert.ok(validateEnvelope('plan', first).ok && verifyPlanRevision(first));
+  const byScope = (familyId: string) => Object.fromEntries(first.checks.filter(c => c.familyId === familyId).map(c => [c.scopeId, c.state]));
+  assert.equal(byScope(EVAL.familyId)['app:src/util.ts'], 'planned');
+  assert.equal(byScope(EVAL.familyId)['app:src/bad.ts'], 'planned', 'a pattern over bytes needs no parse');
+  assert.ok(first.checks.filter(c => c.familyId === ROUTE.familyId).every(c => c.state === 'unsupported' && c.required));
+  assert.equal(first.checks.filter(c => c.familyId === ROUTE.familyId).length, surfaces.filter(s => s.path.endsWith('.ts')).length);
+  assert.deepEqual(first.ruleGaps, [{ familyId: CALL.familyId, required: true, reasonCode: 'sentinel.plan.ruleNotLocked' }]);
+  assert.equal(first.requiredCoverageAchievable, false);
+  assert.equal(first.pins.ruleLockDigest, lockDigest(lock2));
+  assert.equal(first.pins.policyDigest, policy.revision);
+
+  // 5. Admission of the plan: an agent's start waits for a person; the person's own request is admitted.
+  const intent = { action: 'run.start' as const, input: first.digest, effects: ['local-artifacts' as const],
+    budget: { maxTokens: null, maxCost: null, currency: null }, scope: { profile: profile.id, provider: null, targets: [first.digest] } };
+  const decide = (principal: 'agent' | 'human', channel: 'mcp' | 'owner-cli') => admit({ intent, requestedBy: { principal, channel }, policy,
+    stateDigest: first.digest, now: NOW, capability: () => ({ available: true, detail: 'built-in adapters only' }),
+    credential: () => ({ basis: 'local-only' as const, detail: 'no remote credential is needed' }) });
+  assert.equal(decide('agent', 'mcp').record.outcome, 'awaiting-confirmation');
+  assert.equal(decide('human', 'owner-cli').record.outcome, 'admitted');
+
+  // 6. Canonical work envelopes for the coordinator, covering exactly the planned checks.
+  const converted = workEnvelopesFor(first, { coordinatorEpoch: 'epoch-test', createdAt: '2026-10-22T12:00:00Z', execution });
+  assert.equal(converted.length, first.units.length);
+  for (const { envelope, manifest } of converted) {
+    assert.ok(validateEnvelope('work', envelope).ok);
+    assert.equal(envelope.state, 'pending', 'every check waits for the published inventory');
+    assert.deepEqual(manifest.checks, checksCoveredBy(first, envelope));
+    assert.equal(adapterOf(first, envelope), 'sentinel-pattern');
+    for (const input of capturedInputsOf(first, envelope, snapshot)) {
+      assert.ok(snapshot.entries.some((e: any) => e.disposition === 'included' && e.content === input.id && e.relativePath === input.relativePath));
+    }
+  }
+  const covered = converted.flatMap(c => c.manifest.checks).sort();
+  assert.deepEqual(covered, first.checks.filter(c => c.state === 'planned').map(c => c.id).sort(), 'no invented coverage');
+
+  // 7. A pack update adds the third rule: a new revision over the same snapshot and published bootstrap.
+  const firstJson = JSON.stringify(first);
+  const v2 = pack([EVAL, ROUTE, CALL]);
+  const lock3 = confirmPromotion(lock2, { kind: 'pack', pack: v2 });
+  const second = planAnalysis({ runId: 'run-1', revision: 3, previous: first, bootstrap: bootstrapRefs, profile,
+    snapshot: plannerSnapshotFrom(snapshot), analyses, lock: plannerLockFrom(lock3, [v2], lockDigest(lock3)), policy: plannerPolicyFrom(policy) });
+  const call = Object.fromEntries(second.checks.filter(c => c.familyId === CALL.familyId).map(c => [c.scopeId, [c.state, c.reasonCode ?? null]]));
+  assert.deepEqual(call['app:src/util.ts'], ['planned', null]);
+  assert.deepEqual(call['app:src/bad.ts'], ['scope-unavailable', 'sentinel.plan.parseRequired'], 'the parser evidence decides');
+  assert.deepEqual(second.ruleGaps, []);
+  assert.ok(second.units.every(u => u.stage === 'check'), 'no capture or parse again');
+  assert.equal(second.pins.snapshotId, snapshot.id);
+  assert.equal(second.previous, first.digest);
+  assert.equal(JSON.stringify(first), firstJson, 'the earlier revision is unchanged');
+  assert.deepEqual(verifyPinnedLock(JSON.parse(JSON.stringify(lock2)), first.pins.ruleLockDigest!), lock2, 'its lock is still the pinned one');
+  assert.throws(() => plannerLockFrom(lock3, [v1]), /not the definition|no validated pack/, 'the old pack cannot stand in for the new lock');
+});

@@ -71,7 +71,7 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'validate.js': ['ajv'],
   // The planner's reason codes are catalog words.
   'planner/errors.js': ['@farsight/core/dist/strings-sentinel-plan.js'],
-  'planner/adapters.js': ['node:crypto'],
+  'planner/boundary.js': ['node:crypto'],
   // The store's reason codes are catalog words; core's catalog is the only Farsight module the library reads.
   'store/errors.js': ['@farsight/core/dist/strings-sentinel-store.js'],
   'store/ledger-json.js': ['node:crypto'],
@@ -181,15 +181,15 @@ test('help and version say plainly that no scanner exists', () => {
   assert.equal(version.stdout.trim(), `farsight-sentinel ${manifest.version}, contracts draft-1`);
 });
 
-test('draft contracts, store, capture, parser and policy are available; planning and scanners remain unavailable', () => {
+test('draft contracts, store, capture, parser, policy and planner are available; scanners remain unavailable', () => {
   const r = cli('capabilities', '--json');
   assert.equal(r.status, 0);
   const listed = JSON.parse(r.stdout).capabilities as typeof CAPABILITIES;
   assert.deepEqual(listed, JSON.parse(JSON.stringify(CAPABILITIES)));
-  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy']);
+  assert.deepEqual(listed.filter(c => c.state !== 'unavailable').map(c => c.id), ['contract-validation', 'ledger', 'source-capture', 'parser-reconciliation', 'trusted-policy', 'rules-and-planning']);
   assert.equal(listed.find(c => c.id === 'parser-reconciliation')?.reasonCode, 'sentinel.capability.draftParser');
   for (const id of ['scan-cli', 'pattern-scan', 'coordinator', 'reports']) assert.equal(listed.find(c => c.id === id)?.state, 'unavailable', id);
-  assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'unavailable', 'no planner yet');
+  assert.equal(listed.find(c => c.id === 'rules-and-planning')?.state, 'available-draft');
   assert.ok(listed.filter(c => c.state !== 'unavailable').every(c => c.state === 'available-draft'));
   for (const c of listed) assert.match(c.reasonCode, /^sentinel\.capability\./);
   assert.equal(listed.find(c => c.id === 'interprocedural-flow')?.reasonCode, 'sentinel.capability.noQualifiedEngine');
