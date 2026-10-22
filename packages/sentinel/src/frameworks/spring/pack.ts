@@ -71,9 +71,10 @@ function resolveVersion(input: SpringPackInput, pom: { raw: Buffer; content: Art
 const MAPPING_VERBS: Record<string, string> = { GetMapping: 'GET', PostMapping: 'POST', PutMapping: 'PUT', DeleteMapping: 'DELETE', PatchMapping: 'PATCH' };
 interface Mapping { readonly methods: readonly string[] | null; readonly paths: readonly string[]; readonly at: At[] }
 
+/** Joins a class base path and a method path without trimming a trailing slash (it is significant; see patterns.ts). */
 const join = (base: string, path: string) => {
-  const j = `/${base}/${path}`.replace(/\/+/g, '/');
-  return j.length > 1 ? j.replace(/\/$/, '') : j;
+  const parts = [base, path].filter(p => p !== '');
+  return parts.length ? `/${parts.join('/')}`.replace(/\/+/g, '/') : '/';
 };
 
 function mappingOf(file: JavaFile, method: JavaNode): Mapping | undefined {
@@ -393,7 +394,8 @@ export async function analyzeSpring(input: SpringPackInput): Promise<ControlFact
           const v = verdictsFor(first.action, first.rule ?? {}, first.chain.anonymous, cfg);
           const extra = [first.chain.anonymousAt, ...(v.reason === 'sentinel.spring.rolePrefixCustomized' ? cfg.rolePrefixCustomized : [])]
             .filter((x): x is At => !!x).map(toEvidence).filter((e): e is SourceEvidence => !!e);
-          both(route.id, SPRING_ORDER.chain, v.verdicts, dedupe([...evidence, ...extra]), v.reason);
+          // A resolved fact also cites the version pin it relies on: the POM's Boot parent and starters.
+          both(route.id, SPRING_ORDER.chain, v.verdicts, dedupe([...evidence, ...extra, ...version.evidence]), v.reason);
           chainAnonymous = first.chain.anonymous;
           if (!filterReasons.length && first.chain.customFilters.length) {
             both(route.id, SPRING_ORDER.filters, unknownBoth, [...surfaceEvidence, ...first.chain.customFilters.map(toEvidence).filter((e): e is SourceEvidence => !!e)], 'sentinel.spring.customFilter');

@@ -744,7 +744,7 @@ are never proof.
   proxyable handler.
 
 Chains are taken in `@Order`, and a chain without a `securityMatcher` matches every request. Path patterns are compared
-as templates: a result is `match` or `no-match` only when it holds for every request the route can receive. Partial
+as templates: a result is `match` or `no-match` only when it holds for every request the route can receive. A trailing slash is never trimmed: Spring Framework 6.2's patterns do not equate `/x/` and `/x` by default, and configuration can change that, so a pattern or route ending in `/` is unknown. Partial
 matches, equal orders that could both match, profiles not selected, conditional beans, non-literal matchers and
 helper-built chains are `unknown`. A route no chain matches is `unknown` (`sentinel.spring.noChainMatches`), with every
 chain matcher cited, and never protected: source alone cannot exclude a chain a dependency contributes. Missing or

@@ -3,7 +3,8 @@
 // receive. The answer is `match` only when every such request matches, `no-match` only when none does, and
 // `unknown` whenever the subset cannot tell. Supported segments: literals, `*` (one whole segment), `{name}` (one
 // whole segment) and a trailing `**`. Anything else — `?`, partial wildcards, regex variables, `**` before the end —
-// is unknown.
+// is unknown. A trailing slash is never trimmed: Spring Framework 6.2's path patterns do not treat `/x/` and `/x` as
+// the same path by default, and a configuration can change that, so a pattern or route ending in `/` is unknown.
 
 export type MatchResult = 'match' | 'no-match' | 'unknown';
 
@@ -13,7 +14,8 @@ type Segment = { kind: 'literal'; text: string } | { kind: 'one' } | { kind: 're
 export function segments(pattern: string): Segment[] | undefined {
   if (!pattern.startsWith('/') || pattern.includes('//') || pattern.includes('\\')) return undefined;
   if (pattern === '/') return [];
-  const parts = pattern.slice(1).replace(/\/$/, '').split('/');
+  if (pattern.endsWith('/')) return undefined;
+  const parts = pattern.slice(1).split('/');
   const out: Segment[] = [];
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i]!;

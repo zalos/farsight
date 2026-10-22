@@ -18,7 +18,7 @@ export const SPRING_SUPPORT = Object.freeze({
     chain: 'securityMatcher(literal patterns) called once',
     rules: 'authorizeHttpRequests(lambda): requestMatchers([HttpMethod.X,] literal patterns) | anyRequest(), each followed by one decision',
     decisions: Object.freeze(['permitAll', 'authenticated', 'fullyAuthenticated', 'hasRole', 'hasAnyRole', 'hasAuthority', 'hasAnyAuthority', 'denyAll']),
-    patterns: 'literal segments, *, {name} and a trailing /**; anything else is unknown',
+    patterns: 'literal segments, *, {name} and a trailing /**; a trailing slash is significant and unknown; anything else is unknown',
   }),
   routes: '@GetMapping/@PostMapping/@PutMapping/@DeleteMapping/@PatchMapping or @RequestMapping with literal paths and RequestMethod values, under an optional class @RequestMapping',
   methodSecurity: Object.freeze({

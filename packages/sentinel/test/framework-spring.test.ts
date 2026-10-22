@@ -470,3 +470,49 @@ test('probe 6: the POM is read as structure, so element order cannot hide a vers
     assert.equal(e.framework.version, null, name);
   }
 });
+
+test('probe 7: a trailing slash is never trimmed into equivalence', needsStore, async t => {
+  const env = (await pack(t, app({ security: security(`
+  @Bean
+  @Order(1)
+  public SecurityFilterChain slash(HttpSecurity http) throws Exception {
+    http.securityMatcher("/x/").authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }
+
+  @Bean
+  @Order(2)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+    return http.build();
+  }`), routes: controller(`
+  @GetMapping("/x")
+  public Map<String, Object> x() { return Map.of(); }
+
+  @GetMapping("/y/")
+  public Map<String, Object> y() { return Map.of(); }`) }))).envelope;
+  // Spring Framework 6.2 does not match /x against /x/ by default; the pack never claims the slash chain protects /x.
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.chainMatcherUnsupported', 'unknown:sentinel.spring.chainMatcherUnsupported']);
+  assert.ok(!['applies'].includes(fact(env, 'GET /x', 'authentication', SPRING_ORDER.chain).verdict));
+  assert.equal(matchTemplate('/x', '/x/'), 'unknown');
+  assert.equal(matchTemplate('/x/', '/x/**'), 'unknown');
+  assert.equal(matchTemplate('/x', '/x/**'), 'match');
+});
+
+test('probe 8: POM evidence cites exact bytes after multibyte comments, including the closing tag', needsStore, async t => {
+  const comment = '<!-- configuration \u{1F600} for café été \u{1F680} -->\n  ';
+  const withComment = (boot: string) => POM({ boot }).replace('<parent>', `${comment}<parent>`);
+  const ok = await pack(t, { ...ORDERED_CHAINS, 'pom.xml': withComment('3.4.3') });
+  const chainFact = fact(ok.envelope, 'GET /api/secure/data', 'authentication', SPRING_ORDER.chain);
+  const pomTexts = (await cited(ok.fx, { evidence: chainFact.evidence.filter((e: any) => e.relativePath === 'pom.xml') }));
+  const parent = pomTexts.find(text => text.startsWith('<parent>'));
+  assert.ok(parent, 'the parent element is cited');
+  assert.ok(parent!.endsWith('</parent>'), 'the closing tag is inside the span');
+  assert.match(parent!, /<version>3\.4\.3<\/version>/);
+  assert.ok(pomTexts.some(text => /^<dependency>[\s\S]*spring-boot-starter-security[\s\S]*<\/dependency>$/.test(text)));
+  const unsupported = await pack(t, { ...ORDERED_CHAINS, 'pom.xml': withComment('3.4.2') });
+  const f = unsupported.envelope.facts[0];
+  assert.equal(f.reasonCode, 'sentinel.spring.versionUnsupported');
+  const text = (await cited(unsupported.fx, { evidence: f.evidence.filter((e: any) => e.relativePath === 'pom.xml') })).join('\n');
+  assert.ok(text.startsWith('<parent>') && text.endsWith('</parent>') && text.includes('<version>3.4.2</version>'), text);
+});
