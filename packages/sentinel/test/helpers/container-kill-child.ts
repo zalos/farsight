@@ -12,7 +12,8 @@ import { containerPlan } from '../coordinator-helpers.ts';
 
 const [root, scenario, waitMs] = process.argv.slice(2);
 const store = await storeIn(root!);
-const { plan, registry } = await containerPlan(root!, scenario === 'cancel' ? { A: 'hang' } : {});
+// The recovering run (none-cancel) must execute the same approved plan as the one that crashed.
+const { plan, registry } = await containerPlan(root!, scenario === 'cancel' || scenario === 'none-cancel' ? { A: 'hang' } : {});
 const wrapRunner = (real: any) => ({
   ...real,
   run: async (args: readonly string[], signal?: AbortSignal) => {

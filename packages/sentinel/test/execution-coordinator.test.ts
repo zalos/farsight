@@ -60,7 +60,10 @@ test('a run executes the whole DAG once, publishing every unit exactly once', as
     const c = await Coordinator.open({ store, plan, registry, scratchRoot: s.work });
     const summary = await c.run();
     assert.equal(summary.state, 'completed');
-    assert.equal(summary.outcome, 'complete-coverage');
+    // Every worker succeeded, but the plan named no required coverage: that is partial, never complete.
+    assert.equal(summary.outcome, 'partial-coverage');
+    assert.ok(summary.coverage.every((c: any) => c.verdict === 'unevaluated'));
+    assert.equal(summary.clean, false);
     assert.equal(summary.published, 4);
     assert.deepEqual([...publications(store, 'run-e4').values()], [1, 1, 1, 1]);
     // Order: A before B and C, both before D.
@@ -311,4 +314,82 @@ test('directory sync: supported is synced; a failure that is not "unsupported" f
   writeFileSync(join(s.root, 'a-file'), 'x');
   assert.throws(() => syncDirectory(join(s.root, 'a-file')), (e: any) => e.code === 'sentinel.execution.durabilityFailed' && e.detail.osCode === 'ENOTDIR');
   assert.throws(() => syncDirectory(join(s.root, 'absent')), (e: any) => e.code === 'sentinel.execution.durabilityFailed' && e.detail.osCode === 'ENOENT');
+});
+
+test('work revisions of another run are refused, as is a recorded run with another identity', async () => {
+  const s = fresh('cross-run');
+  const store = await storeIn(s.root);
+  try {
+    const first = syntheticPlan(s.root);
+    await (await Coordinator.open({ store, plan: first.plan, registry: first.registry, scratchRoot: s.work })).run();
+    // The same work ids and revisions under a new run: refused before anything runs, not reported complete.
+    const second = syntheticPlan(s.root, {}, { runId: 'run-e5' });
+    await assert.rejects(Coordinator.open({ store, plan: second.plan, registry: second.registry, scratchRoot: s.work }),
+      (e: any) => is('sentinel.execution.planInvalid')(e) && /belongs to run run-e4/.test(e.detail.reason));
+    // The same run id with another snapshot: refused.
+    const altered = syntheticPlan(s.root);
+    altered.plan.run.snapshotId = 'snap-other';
+    await assert.rejects(Coordinator.open({ store, plan: altered.plan, registry: altered.registry, scratchRoot: s.work }),
+      (e: any) => is('sentinel.execution.planInvalid')(e) && /another snapshotId/.test(e.detail.reason));
+    assert.equal([...publications(store, 'run-e5').values()].length, 0);
+  } finally { store.close(); }
+});
+
+test('the plan is frozen at open and bound to its adapter, actual inputs and influence manifest', async () => {
+  const s = fresh('bound');
+  const store = await storeIn(s.root);
+  try {
+    // A declared fingerprint, stage digest or manifest that does not match is refused before execution.
+    for (const [field, value, reason] of [['inputFingerprint', `sha256:${'7'.repeat(64)}`, /input fingerprint/], ['influenceManifest', `sha256:${'8'.repeat(64)}`, /influence manifest/]] as const) {
+      const p = syntheticPlan(s.root);
+      (p.plan.works[0] as any)[field] = value;
+      await assert.rejects(Coordinator.open({ store, plan: p.plan, registry: p.registry, scratchRoot: s.work }), (e: any) => is('sentinel.execution.planInvalid')(e) && reason.test(e.detail.reason), field);
+    }
+    const wrongStage = syntheticPlan(s.root);
+    wrongStage.plan.works[0].stage = { ...wrongStage.plan.works[0].stage, implementationDigest: `sha256:${'9'.repeat(64)}` };
+    await assert.rejects(Coordinator.open({ store, plan: wrongStage.plan, registry: wrongStage.registry, scratchRoot: s.work }), (e: any) => /not adapter/.test(e.detail?.reason ?? ''));
+    // After open, changing the caller's objects or callbacks changes nothing that executes.
+    const p = syntheticPlan(s.root);
+    const approved = p.plan.works[0].inputFingerprint;
+    const c = await Coordinator.open({ store, plan: p.plan, registry: p.registry, scratchRoot: s.work });
+    p.plan.works[0].inputFingerprint = `sha256:${'a'.repeat(64)}`;
+    p.plan.adapterFor = () => 'test-hang';
+    p.plan.inputsFor = () => [];
+    const summary = await c.run();
+    assert.equal(summary.published, 4);
+    assert.equal(store.ledger.getWork({ id: 'work-A', revision: 1 }).envelope.inputFingerprint, approved);
+    // The influence manifest is published with the result, so the binding can be inspected.
+    const outputs = store.ledger.getPublication({ id: 'work-A', revision: 1 }).outputs;
+    assert.ok(outputs.some((o: any) => o.schema === 'sentinel-influence/draft-1' && o.id === p.plan.works[0].influenceManifest));
+  } finally { store.close(); }
+});
+
+test('coverage decides the outcome: complete only with every planned check and scope covered; skips are incomplete', async () => {
+  const required = () => ({ checks: ['check-sql'], scope: ['src/app.ts'] });
+  const s1 = fresh('covered');
+  const store1 = await storeIn(s1.root);
+  try {
+    const all = syntheticPlan(s1.root, { A: 'covering-ok', B: 'covering-ok', C: 'covering-ok', D: 'covering-ok' }, { required });
+    const summary = await (await Coordinator.open({ store: store1, plan: all.plan, registry: all.registry, scratchRoot: s1.work })).run();
+    assert.equal(summary.outcome, 'complete-coverage');
+    assert.equal(summary.clean, true);
+  } finally { store1.close(); }
+  const s2 = fresh('skipped');
+  const store2 = await storeIn(s2.root);
+  try {
+    const skip = syntheticPlan(s2.root, { A: 'covering-ok', B: 'skip-scope', C: 'covering-ok', D: 'covering-ok' }, { required });
+    const summary = await (await Coordinator.open({ store: store2, plan: skip.plan, registry: skip.registry, scratchRoot: s2.work })).run();
+    assert.equal(summary.published, 4, 'every worker succeeded');
+    assert.equal(summary.outcome, 'partial-coverage', 'a skipped required scope is not complete coverage');
+    const b = summary.coverage.find((c: any) => c.work.id === 'work-B');
+    assert.deepEqual({ verdict: b.verdict, missingScope: b.missingScope, skipped: b.skipped }, { verdict: 'incomplete', missingScope: ['src/app.ts'], skipped: [{ scopeId: 'src/app.ts', reasonCode: 'sentinel.coverage.unsupported' }] });
+    assert.equal(summary.clean, false);
+  } finally { store2.close(); }
+  // The evaluation is durable: a new coordinator reads it back from the publication.
+  const again = await storeIn(s2.root);
+  try {
+    const skip = syntheticPlan(s2.root, { A: 'covering-ok', B: 'skip-scope', C: 'covering-ok', D: 'covering-ok' }, { required });
+    const resumed = await (await Coordinator.open({ store: again, plan: skip.plan, registry: skip.registry, scratchRoot: s2.work })).run();
+    assert.equal(resumed.coverage.find((c: any) => c.work.id === 'work-B').verdict, 'incomplete');
+  } finally { again.close(); }
 });
