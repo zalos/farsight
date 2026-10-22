@@ -23,59 +23,101 @@ nothing here lets a label stand in for a measurement.
 Pinned candidates, as requested: Express 4.21.2; Nest 10.4.15 with class-validator 0.14.1 and
 class-transformer 0.5.1; Next 14.2.25 with React 18.3.1; Spring Boot 3.4.3 with
 `spring-boot-starter-security`, whose actually resolved Spring Security version this build recorded as
-**6.4.3** (from a real `mvn dependency:tree`, not assumed from the brief). This is four apps and eleven
-scenarios total, not a framework conformance suite, a taint/deep-flow engine, or a supported-version matrix.
-Exact framework behavior for PRs 14–17 still needs its own, separately scoped runtime probes against a
-broader fixture set before any support claim; this slice is evidence toward that gate, not the gate itself.
+**6.4.3** (from a real `mvn dependency:tree`, not assumed from the brief, and checked again on every
+acquisition — see Acquisition below). This is four apps and eleven scenarios total, not a framework
+conformance suite, a taint/deep-flow engine, or a supported-version matrix. Exact framework behavior for
+PRs 14–17 still needs its own, separately scoped runtime probes against a broader fixture set before any
+support claim; this slice is evidence toward that gate, not the gate itself.
 
-## Acquisition versus execution
+## Acquisition, execution and disposal are three separate commands
 
-Every candidate's dependencies are declared with an exact pinned version in its `package.json`/`pom.xml`
-fixture (`packages/sentinel/test/fixtures/framework-feasibility/sources/*/`). The harness
-(`scripts/sentinel-feasibility-frameworks.mjs`, `scripts/sentinel-feasibility/frameworks/*.mjs`) builds one
-pinned Docker image per case — `docker build --platform linux/arm64`, base images pinned by exact digest
-(`node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9`,
+A source review of the first version of this slice found that acquisition and execution were only
+separated *within* one `--run` invocation, which rebuilt (and so re-resolved dependencies from the
+registry) on every invocation rather than freezing a pinned result a trial could repeat against. The
+harness (`scripts/sentinel-feasibility-frameworks.mjs`, `scripts/sentinel-feasibility/frameworks/*.mjs`)
+now has three explicit commands, and `--run` never builds, pulls or resolves anything:
+
+```sh
+node scripts/sentinel-feasibility-frameworks.mjs --acquire --out <fresh-dir>                      # network allowed
+node scripts/sentinel-feasibility-frameworks.mjs --run --acquired <acquire-out-dir> --out <fresh-dir>  # --network none
+node scripts/sentinel-feasibility-frameworks.mjs --dispose --acquired <acquire-out-dir>            # removes exactly those images
+```
+
+**`--acquire`** builds one pinned image per case — `docker build --platform linux/arm64`, base images
+pinned by exact digest (`node@sha256:ebc216c22db53dbde85719a874978d5aec04e6e405ad26a3804c6f9abc4ca1a9`,
 `maven@sha256:5a8b906c4faa11d33f6c74758f67db8eac25441e14b0729f6d50ff78992be58a`, both confirmed
-`linux/arm64` on this host). **Acquisition is exactly this `docker build` step**: its `RUN npm install
---ignore-scripts` / `RUN mvn package` resolves the pinned manifest against the real npm/Maven registries,
-with network allowed and nothing else. `--ignore-scripts` is used on every `npm install`; no native
-postinstall step was required by any of these packages. No bespoke downloader exists in this harness —
-acquisition is Docker's own, ordinary dependency resolution, run once per case, and nothing is fetched at
-any other point.
+`linux/arm64` on this host; `buildImage()` refuses a resulting image whose own reported platform isn't
+`linux/arm64`). Its `RUN npm install --ignore-scripts` / `RUN mvn package` resolves the pinned manifest
+against the real npm/Maven registries — network allowed, and nothing else; `--ignore-scripts` is used on
+every `npm install`, and no native postinstall step was required by any of these packages. Acquisition then
+reads back the exact dependency evidence baked into that same image — `package-lock.json` for the three npm
+cases, `mvn dependency:tree` for Spring — through one more owned, bounded, `--network none` container
+(`cat` only; see below), and **validates every pinned candidate's resolved version against `cases.json`'s
+own declared pins before accepting the acquisition**: a resolved `express` other than `4.21.2`, or any
+Nest/Next package other than its declared pin, fails that case's acquisition outright. Spring's
+`spring-security-core` has no a-priori pin (it is resolved transitively through
+`spring-boot-starter-security`); its actual resolved version is recorded, not assumed, and this run again
+measured `6.4.3`. Acquisition freezes the result — tag, exact content-addressed image ID, dependency
+evidence and its hash, build log (scrubbed) — into `acquisition.json`. No bespoke downloader exists
+anywhere in this harness: acquisition is Docker's and npm's/Maven's own ordinary dependency resolution, run
+once per case.
 
-**Execution is a separate step on the already-built image**: `docker run --platform linux/arm64 --network
-none --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 256 --memory 1g --cpus 1 --tmpfs
-/tmp:rw,noexec,nosuid,size=128m,mode=1777`, plus `--read-only` on three of the four images (Next's runtime
-was observed writing small trace files even after an ahead-of-time `next build`; it alone runs without
-`--read-only`, a recorded, not silent, weaker control — see Limitations). The container's own entrypoint
-(`probe.sh`, generated and hashed by the harness, never downloaded) starts the app, waits for its health
-route over loopback, sends each scenario's real HTTP request over that same loopback — never leaving the
-container's own network namespace, which `--network none` strips of every route but loopback — and prints
-one JSON result line. The harness parses that line outside the container; no inference, no mocked response.
-Ownership/cleanup reuses the existing scanner harness's own `execute`/`scrub`/`cleanupOwned` primitives
-(`scripts/sentinel-feasibility-scanners.mjs`, imported, never edited): every container is created with a
-random per-run owner label, matched by exact ID before start and before removal, and force-removed in a
-`finally` block. All sixteen containers created across every probe run in this slice (four cases × up to
-two attempts while the harness was being fixed) were confirmed removed by owner/ID; the one orphaned
-container and one orphaned image left by an early, since-fixed harness bug (below) were confirmed absent
-after manual `docker rm --force`/`docker rmi --force`, and the final combined run leaves zero
-`sentinel-feasibility-frameworks-*` containers or images. Built images are also removed by the harness
-itself immediately after each case's probe completes; this is a bounded prototype, not an image cache.
+**`--run`** reads `acquisition.json` and, for each case, first confirms by `docker image inspect --format
+'{{.Id}}'` that the exact content-addressed image from acquisition is still present — if it is missing or
+its ID has changed, that case fails immediately with `acquired-image-missing-or-changed-since-acquisition`;
+`--run` never falls back to building or pulling. It then creates and starts a container **from that exact
+image ID** (not the mutable tag) with `--network none --user 65534:65534 --read-only --cap-drop ALL
+--security-opt no-new-privileges:true --memory 1g --memory-swap 1g --cpus 1 --pids-limit 256 --tmpfs
+/tmp:rw,noexec,nosuid,size=128m,mode=1777`. Before the container is ever started, the harness inspects the
+*created-but-not-yet-running* container and requires every one of these eleven properties to match exactly
+what was requested — image ID, network mode, UID, read-only root, dropped capabilities, no-new-privileges,
+memory limit, memory-swap not exceeding the memory limit, CPU quota, PID limit, and zero host bind mounts
+(only the `/tmp` tmpfs) — before calling `docker start`; any mismatch aborts without ever running the probed
+process. After the container exits, a second inspection requires the client's own exit code, the daemon's
+own recorded exit code, `Status: exited`, `Running: false`, `OOMKilled: false` and `Dead: false` to all
+agree, and the image ID and network mode to still match, before the case is allowed to read as `measured`.
+The container's own entrypoint (`probe.sh`, generated and hashed by the harness, never downloaded) starts
+the app, waits for its health route over loopback, sends each scenario's real HTTP request over that same
+loopback — never leaving the container's own network namespace, which `--network none` strips of every
+route but loopback — and prints one JSON result line, parsed outside the container by `parseProbeOutput()`.
+
+**`--dispose`** removes exactly the images one acquisition built, each re-verified present by its own exact
+ID immediately before removal, and re-verified absent immediately after; it is never a broader
+`docker image prune` or a tag-based match. The final evidence run below disposed all four of its acquired
+images after `--run` completed.
+
+Container ownership/cleanup (`inspectOwnedContainer`/`cleanupOwnedContainer` in `runtime.mjs`) is now fully
+self-contained to this module, under this module's own label (`org.farsight.sentinel-feasibility-frameworks.owner`):
+every container is created with a random per-run owner, matched by exact label *and* exact ID before start
+and before removal, and force-removed in a `finally` block regardless of outcome. The first version of this
+slice instead imported the *scanner* harness's `cleanupOwned()` and tried to reuse its label string by
+duplicating it as a literal — an implicit, unreviewable coupling across two lanes' files that a source
+review correctly flagged; this module now owns its full container lifecycle (including the dependency-
+evidence read-back, which previously used an ad hoc `docker run --rm`) and depends on the scanner harness's
+file only for the generic, stateless `execute`/`scrub` process primitives, never anything stateful.
 
 ## Measured results
 
 This lane's file ownership for this slice is limited to the harness/fixture paths and this one document
-(no `docs/proposals/farsight-sentinel/evidence/**` grant), so the full retained envelope is **not**
-committed here; it stays with the implementing lane/session for the integrating lead to request or re-run.
-Its exact bytes are content-addressed at `sha256:646f4be0674facbf367ba094ddffd58271fb7c35f7bbabced4143f62f6f54854`
-(`results.json`, 192 KB), from a single combined
-`node scripts/sentinel-feasibility-frameworks.mjs --run --out <fresh-directory>` run, revision `2bd38f6`
-(dirty: true — a PR 01 continuation branch, not yet committed at measurement time), Node 24.21.0, Docker
-Desktop 4.65.0 engine 29.2.1 on a native Linux/arm64 server. All four cases reached `measured`; the scrubbed
-envelope has no home path and no credential beyond this repository's own inert
-`NOT_A_SECRET_DO_NOT_USE`/`FIXTURE_CANARY_ONLY` markers (`express-order`'s opaque-middleware scenario pins
-`SENTINEL_FIXTURE_OPAQUE_MODE=deny` so that branch is the one actually exercised). Every number and
-statement below is read directly from that envelope.
+(no `docs/proposals/farsight-sentinel/evidence/**` grant), so the full retained envelopes are **not**
+committed here; they stay with the implementing lane/session for the integrating lead to request or re-run.
+This record is from the final, clean-tree run against the committed revision below — not a dirty working
+tree — using the three commands above with no case filter (all four cases, one acquisition, one run, one
+disposal):
+
+- `acquisition.json`: `sha256:1e22742370dd9a1ffd3fd030856f436cc7ccd39e330f5135483e4041bc365c8d` (bytes
+  recorded at acquisition time)
+- `results.json`: `sha256:3988498a08fb7c25ba2542a459bb8e864ef562c439a90c42d1e75f3bd0269efe` (104 KB)
+- revision `536e6b1062681dc4af79367e3389391504a4616c`, **dirty: false** (this is the committed harness, not
+  a working-tree snapshot)
+- Node 24.21.0, Docker Desktop 4.65.0 engine 29.2.1, native Linux/arm64 server
+
+All four cases reached `measured`, every case's pre-start isolation check passed all eleven properties,
+every post-start completion check agreed, and every container's cleanup verified `removed-owned-container`.
+All four acquired images were disposed by exact ID after this run. The scrubbed envelopes have no home path
+and no credential beyond this repository's own inert `NOT_A_SECRET_DO_NOT_USE`/`FIXTURE_CANARY_ONLY` markers
+(`express-order`'s opaque-middleware scenario pins `SENTINEL_FIXTURE_OPAQUE_MODE=deny` so that branch is the
+one actually exercised). Every number and statement below is read directly from those envelopes.
 
 | Case | Scenario | Static label | Expected runtime | Observed runtime | Agrees |
 |---|---|---|---|---|---|
@@ -120,31 +162,58 @@ divergent behavior underneath that honest abstention — not a defect in the fix
   clearest case in this slice for why "no implicit fallback chain is invented" has to stay a measured fact,
   never a convenient assumption, in any later Spring adapter (PR 17).
 
-Acquisition evidence retained per case (also in the linked envelope): `express-order` and `nest-validation`
-and `next-matcher` each retain the exact `package-lock.json` npm resolved during their image build (29,675 /
-57,393 / 14,230 bytes respectively, each sha256-identified in the envelope); `spring-chains` retains a real
-`mvn dependency:tree` (2,726 bytes) naming `spring-security-config`/`spring-security-core`/
-`spring-security-web` all at `6.4.3` under `spring-boot-starter-security:3.4.3`. These are read back from
-the already-built image with `docker run --rm --network none --entrypoint cat`, after the image exists —
-reading a baked-in file, not a second acquisition.
+Dependency acquisition evidence retained per case (also in `acquisition.json`, version-checked as described
+above): `express-order`, `nest-validation` and `next-matcher` each retain the exact `package-lock.json` npm
+resolved during their image build, every pinned candidate's resolved version matching its declared pin
+exactly (`valid: true, mismatches: []`); `spring-chains` retains a real `mvn dependency:tree` naming
+`spring-security-config`/`spring-security-core`/`spring-security-web` all at `6.4.3` under
+`spring-boot-starter-security:3.4.3` (`resolvedSpringSecurityCoreVersion: "6.4.3"`). These are read back from
+the already-built image through the same owned, `--network none`, UID-65534, read-only container lifecycle
+as the probe itself — reading a baked-in file, never a second acquisition.
 
-## Harness correctness, found and fixed during this slice
+## Harness correctness, found and fixed across two rounds
 
-The first end-to-end attempt (`express-order`) built successfully but the probe step reported
-`container ownership mismatch; refusing start or removal`: this module's own container-ownership label key
-did not match the string the *imported*, unmodified `cleanupOwned()` (from
-`scripts/sentinel-feasibility-scanners.mjs`) checks internally. The fix was to reuse that exact label string
-rather than invent a second one; the file left an orphaned container and image from the failed attempt,
-both confirmed and manually removed before the clean reruns in this record. The second defect was a
-double-wrapping bug: each `probe.sh` printed `{"ok":true,"observations":{...}}`, and the harness's own
-parser wrapped that whole payload inside a second `{ok, observations}` shell, so `nest-validation`'s first
-clean-looking run ("state: measured") actually carried `observed: null` on every scenario because the
-assessment function was reading the wrong nesting level. The fix narrows the marker-line contract to a
-single `{"status": "ok"|"<failure-reason>", "observations"?: {...}}` object, asserted by a dedicated
-`parseProbeOutput` test (`scripts/test/sentinel-feasibility-frameworks.test.mjs`) that rejects a missing
-marker, invalid JSON, and a payload with no `status` field. Both defects are named here rather than
-silently folded into a clean-looking final run, consistent with this proposal's own retained-failure
-convention (see the prior slice's "initial failed scanner trial" and "failed noexec trial").
+**First pass (self-found before any outside review):** the first end-to-end attempt (`express-order`) built
+successfully but the probe step reported `container ownership mismatch; refusing start or removal` — an
+earlier version of this module imported the *scanner* harness's `cleanupOwned()` and had to duplicate its
+private label string as a literal to make ownership checks pass, and got the string wrong on the first try.
+The orphaned container and image that attempt left were confirmed and manually removed. The second
+self-found defect was a double-wrapping bug: each `probe.sh` printed `{"ok":true,"observations":{...}}`,
+and the harness's own parser wrapped that whole payload inside a second `{ok, observations}` shell, so one
+case's first clean-looking run ("state: measured") actually carried `observed: null` on every scenario. The
+fix at the time narrowed the marker-line contract to a single `{"status": ..., "observations"?: {...}}`
+object.
+
+**Second pass (a manager source review of that fixed version) found four further, more serious defects,**
+named here in full rather than folded into a clean-looking final run:
+
+1. **A vacuous pass was still possible.** `evaluateCaseOutcome`'s predecessor filtered out every scenario
+   whose `matchesExpected` was `null` before checking `.every(...)` — so a probe payload that parsed as
+   valid JSON but carried the wrong keys (every scenario's `observed` reading as `null`) would leave an
+   *empty* filtered array, and `[].every(...)` is vacuously `true`: the case would read `measured` with
+   nothing actually checked. `evaluateCaseOutcome()` now requires every declared scenario to carry a real,
+   non-null observation — a missing one fails the case outright — and only *then* separately checks that
+   every scenario with a fixed expectation matched it. A regression test constructs exactly the
+   all-`null`-observation case and asserts it fails, not passes.
+2. **The cross-module label coupling above was still fragile even after the first fix**, because it worked
+   only by this module silently matching an unexported constant in a file it does not own; a future edit to
+   that constant would silently break this module's cleanup again with no compiler or test to catch it.
+   `runtime.mjs` now owns its own `inspectOwnedContainer`/`cleanupOwnedContainer` under its own label and
+   depends on the scanner harness only for the stateless `execute`/`scrub` primitives.
+3. **`--run` built and potentially re-resolved dependencies on every invocation**, instead of separating
+   acquisition from execution into two commands a trial could repeat against a frozen result — fixed by the
+   `--acquire`/`--run`/`--dispose` split described above.
+4. **Containers ran without any pre-start isolation verification, without the unprivileged run UID, and
+   Next's probe ran with its entire root filesystem writable** instead of a bounded fix. Investigating the
+   actual Next failure under UID 65534 (rather than assuming it was unfixable) found a plain, ordinary
+   cause: `COPY`'d files are owned by `root` at build time, and UID 65534 could not even open
+   `/app/package.json` — `npm error EACCES ... open '/app/package.json'`, reproduced directly. Adding
+   `RUN chown -R 65534:65534 /app` to all four Dockerfiles (not just Next's) fixed this for real; all four
+   candidates now run fully read-only and non-root with no exception anywhere, verified by the pre-start
+   inspection described above on every run.
+
+All four cases were re-measured clean after every one of these four fixes, under the new pipeline, against
+the committed revision cited above.
 
 ## Limitations
 
@@ -152,19 +221,20 @@ convention (see the prior slice's "initial failed scanner trial" and "failed noe
   dynamic/dynamic-import registration, custom decorators, interceptors, WebFlux, or any multi-filter-chain
   interaction beyond the two chains built here, and makes no claim about any version other than the one
   pinned per candidate.
-- The Next.js probe container runs without `--read-only` after an observed runtime trace-file write even
-  with the app pre-built; the other three run fully read-only. This is a recorded, not silent, weaker
-  control for that one candidate, in the same spirit as the existing scanner harness's documented Opengrep
-  `noexec` exception.
 - One successful run per scenario is one measurement, not a repeated-trial statistic; no flake/variance
   rate is established for any of the four probes.
-- Spring Security's resolved version (6.4.3) is recorded from this one build's dependency tree, not pinned
-  independently; a different Spring Boot patch release could resolve a different Spring Security patch.
+- Spring Security's resolved version (6.4.3) is recorded from this build's dependency tree, not pinned
+  independently; a different Spring Boot patch release could resolve a different Spring Security patch —
+  which is exactly why `--acquire` records and the doc above reports the actually resolved version rather
+  than assuming it stays fixed.
 - `package-lock.json`/`mvn dependency:tree` evidence names exact resolved versions but does not itself
   constitute an advisory/vulnerability check (PR 12 territory) or a license audit.
 - This slice does not touch `core/openapi.ts`'s `guardsOf()`/`matchesGuard()`; the existing protocol's
   caution that those remain reconciliation heuristics, never an enforcement oracle, is unaffected and
   unextended here.
+- Acquired images are not cached/reused across separate `--acquire` invocations by design (each gets a
+  fresh random tag); an operator who wants to run `--run` multiple times against the same acquisition
+  should keep its `--out` directory until `--dispose` is actually wanted.
 - No model call, no host scanner, no production Sentinel package, and no change to any shared PR 01 file
   (`scripts/sentinel-feasibility.mjs`, `scripts/sentinel-feasibility-scanners.mjs`,
   `packages/sentinel/test/fixtures/feasibility/**`) is part of this slice.
@@ -172,26 +242,28 @@ convention (see the prior slice's "initial failed scanner trial" and "failed noe
 ## Reproduce
 
 ```sh
-node scripts/sentinel-feasibility-frameworks.mjs                                   # preview; no docker call
-node scripts/sentinel-feasibility-frameworks.mjs --case express-order              # preview one case
-node scripts/sentinel-feasibility-frameworks.mjs --run --out /tmp/sentinel-fw-new  # build + probe all four
+node scripts/sentinel-feasibility-frameworks.mjs                                              # preview; no docker call
+node scripts/sentinel-feasibility-frameworks.mjs --case express-order                          # preview one case
+node scripts/sentinel-feasibility-frameworks.mjs --acquire --out /tmp/sentinel-fw-acq          # build; network allowed
+node scripts/sentinel-feasibility-frameworks.mjs --run --acquired /tmp/sentinel-fw-acq --out /tmp/sentinel-fw-run  # --network none
+node scripts/sentinel-feasibility-frameworks.mjs --dispose --acquired /tmp/sentinel-fw-acq     # remove exactly those images
 ```
 
-`--out` must not already exist. Each case builds a pinned image (network allowed), runs it with
-`--network none`, assesses the real result against the corpus's static label, and removes the image.
-Requires Docker with a `linux/arm64` server (the harness refuses silently mismatched platforms the same
-way the scanner harness does: `docker build --platform linux/arm64` and `docker run --platform linux/arm64`
-fail outright on a server that cannot satisfy that platform, rather than falling back to emulation).
+Every `--out` must not already exist. `--run` never builds, pulls or resolves anything; it fails outright if
+the image `--acquire` froze is missing or has changed. Requires Docker with a `linux/arm64` server (the
+harness refuses silently mismatched platforms: `docker build --platform linux/arm64` and the acquired
+image's own reported platform must both be `linux/arm64`, rather than falling back to emulation).
 
 ## Recommendation for PR 01's capability decision and the PRs 14–17 support matrix
 
 Accept this slice as E2 **prototype** evidence, not a completed framework support claim: it demonstrates
 that the "retain source-grounded labels; runtime/prototype order, matcher and chain evidence ... still
 required" gate from the prior results record is answerable in practice, with a repeatable, self-cleaning,
-network-separated method, on all four candidates the owner named. It does not by itself clear PRs 14–17's
-own acceptance gates (bypass/late/unknown negative siblings reviewed against a broader fixture set, exact
-supported-version behavior, no false protected verdict across dynamic/custom-decorator/multi-chain
-variants). The one result worth carrying forward as a named risk for PR 17 specifically: Spring Security's
-real behavior for a request matching no configured `SecurityFilterChain` is to apply none of that chain's
-filters, not to fall back to the nearest chain's policy — any Spring adapter must treat "no matching chain"
-as its own unprotected-by-omission finding, never silently inherit a neighboring chain's verdict.
+acquisition/execution-separated method with verified isolation, on all four candidates the owner named. It
+does not by itself clear PRs 14–17's own acceptance gates (bypass/late/unknown negative siblings reviewed
+against a broader fixture set, exact supported-version behavior, no false protected verdict across
+dynamic/custom-decorator/multi-chain variants). The one result worth carrying forward as a named risk for
+PR 17 specifically: Spring Security's real behavior for a request matching no configured
+`SecurityFilterChain` is to apply none of that chain's filters, not to fall back to the nearest chain's
+policy — any Spring adapter must treat "no matching chain" as its own unprotected-by-omission finding, never
+silently inherit a neighboring chain's verdict.
