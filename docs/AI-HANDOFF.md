@@ -57,9 +57,10 @@ instructions over Farsight's existing install/config/ingest/serve path plus a Se
 the Java + Spring sample is original. Resolved since: retention
 windows are explicit-prune eligibility, never automatic deletion in v1; the final reviewer is the installed
 `fable` alias. Pending live-evaluation configuration (not an implementation or deterministic-release blocker):
-a second model — only `qwen3:4b` is local — or a hosted endpoint with a spend cap for PR 22's two-model,
-600-paired-case evaluation. PR 29/30 runtime testing stays on the synthetic/sample local app only. This change is
-Markdown/JSON documentation only (no runtime checks selected); the two original Claude reviews are unchanged.
+a second model — only `qwen3:4b` is local — or a hosted endpoint with a spend cap for PR 22's evaluation
+(two models × 30 cases × 5 trials × 2 variants: 300 clean plus 300 paired canary evaluations, 600 total). PR 29/30 runtime testing stays on the synthetic/sample local app only. This change is
+Markdown/JSON documentation only; no builds or tests ran locally for it, and CI selection is unchanged
+(`feasibility-decisions.json` is an unknown path, so CI selects every check); the two original Claude reviews are unchanged.
 
 ## Sentinel PR01 measured decisions — 2026-10-22
 

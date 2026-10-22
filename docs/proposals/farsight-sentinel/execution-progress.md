@@ -25,6 +25,7 @@ identifiers, not GitHub PR numbers.
 
 | Role | Who | Responsibility |
 |---|---|---|
+| Integration lead | Root (Codex lead session) | Owns shared contracts and dependencies, reviews integration, enforces each gate's definition of done, merges and runs the release |
 | Implementation | Claude Opus | Each package in its own worktree and PR, through validation and an open PR |
 | Review | SOL reviewers | Review each PR against its backlog gate; findings in Conventional Comments |
 | Final cleanup review | Claude Fable (CLI alias `fable`, confirmed installed; the reviewer of the existing [implementation review](claude-review-implementation.md)) | One touch-up review across the delivered product before release |
@@ -38,7 +39,8 @@ All planned packages progress to the end of the backlog, then the end gates belo
   inspect, pin and prune are explicit. PR 01's age/count windows (`resourceDefaults.retention` in the
   [decision manifest](feasibility-decisions.json)) mark objects **eligible** for an explicit prune only.
   Automatic deletion needs a later owner opt-in. Applies to PR 03 and PR 26.
-- **Live model evaluation (PR 22):** needs two models and 600 paired clean/canary cases. Only one local model
+- **Live model evaluation (PR 22):** needs two models × 30 cases × 5 trials × 2 variants: 300 clean evaluations
+  plus 300 paired canary evaluations, 600 in total. Only one local model
   (`qwen3:4b`) is installed; the owner has been asked to choose a second local model or a hosted endpoint with a
   spend cap. This is **pending live-evaluation configuration**, not a blocker for implementation of PR 21/22
   or for the deterministic release.
