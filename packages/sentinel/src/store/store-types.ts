@@ -44,6 +44,7 @@ export const LEDGER_ERROR_CODES = [
   'sentinel.store.objectVerifierUnavailable',
   'sentinel.store.asyncTransaction',
   'sentinel.store.snapshotStale',
+  'sentinel.store.corruptRecord',
 ] as const;
 export type LedgerErrorCode = (typeof LEDGER_ERROR_CODES)[number];
 
@@ -201,7 +202,12 @@ export interface GcSnapshot {
   staged: ArtifactId[];
   /** Artifacts pinned by a retained report's closure. */
   reports: ArtifactId[];
-  /** Content addresses named by work or attempts that have not finished (influence manifests, invocations). */
+  /**
+   * Every artifact a retained work or attempt envelope names: influence manifests, reuse derivations, invocations,
+   * ended attempts' outputs and diagnostics. All are roots: there is no retention lifecycle until an explicit prune.
+   */
+  retained: ArtifactId[];
+  /** The subset of `retained` named by work or attempts that have not finished. */
   active: ArtifactId[];
   /** Every recorded parent → child link. */
   links: Array<[ArtifactId, ArtifactId]>;

@@ -756,12 +756,7 @@ export class Ledger {
     return this.#read(() => {
       const col = (sql: string) => this.#all(sql).map(r => String(Object.values(r)[0]));
       const sequence = Number(this.#get('SELECT coalesce(max(sequence), 0) AS s FROM events')?.s ?? 0);
-      const active = new Set([
-        ...col(`SELECT influence_manifest FROM work_units WHERE state NOT IN ('published','failed')`),
-        ...this.#all("SELECT envelope FROM attempts WHERE state = 'running'")
-          .map(r => (JSON.parse(String(r.envelope)) as { invocation?: string }).invocation)
-          .filter((v): v is string => typeof v === 'string'),
-      ]);
+      const { retained, active } = this.#retainedRoots();
       return {
         storeId: this.storeId,
         complete: true as const,
@@ -769,6 +764,7 @@ export class Ledger {
         referenced: col('SELECT DISTINCT artifact_id FROM artifact_refs ORDER BY artifact_id'),
         staged: col('SELECT DISTINCT artifact_id FROM staging_artifacts ORDER BY artifact_id'),
         reports: col('SELECT DISTINCT artifact_id FROM report_artifacts ORDER BY artifact_id'),
+        retained: [...retained].sort(),
         active: [...active].sort(),
         links: this.#all('SELECT parent_id, child_id FROM artifact_links ORDER BY parent_id, child_id')
           .map(r => [String(r.parent_id), String(r.child_id)] as [string, string]),
@@ -776,6 +772,49 @@ export class Ledger {
           FROM artifact_objects o JOIN artifacts a ON a.id = o.artifact_id ORDER BY o.artifact_id, o.codec`).map(toReceipt),
       };
     });
+  }
+
+  /**
+   * The artifacts every retained work and attempt envelope names, each envelope re-validated under its contract and
+   * cross-checked against its columns. A record that cannot be read is an integrity error, never a smaller root set.
+   * Plain digests (stage implementation, input fingerprint) and IDs are not artifacts and are not roots.
+   */
+  #retainedRoots(): { retained: Set<string>; active: Set<string> } {
+    const retained = new Set<string>();
+    const active = new Set<string>();
+    const corrupt = (what: string) => new LedgerError('sentinel.store.corruptRecord', `a retained ${what} cannot be read`);
+    const parse = <K extends 'work' | 'attempt'>(kind: K, text: unknown) => {
+      let value: unknown;
+      try { value = JSON.parse(String(text)); } catch { throw corrupt(kind); }
+      const result = validateEnvelope(kind, value);
+      if (!result.ok) throw corrupt(kind);
+      return result.value;
+    };
+    const add = (ids: Array<string | undefined>, live: boolean) => {
+      for (const id of ids) {
+        if (id === undefined) continue;
+        retained.add(id);
+        if (live) active.add(id);
+      }
+    };
+    for (const r of this.#all('SELECT id, revision, state, influence_manifest, envelope FROM work_units')) {
+      const w = parse('work', r.envelope);
+      if (w.id !== r.id || w.revision !== r.revision || w.influenceManifest !== r.influence_manifest) throw corrupt('work');
+      add([w.influenceManifest, w.state === 'satisfied-by-reuse' ? w.reuse.derivationArtifact : undefined],
+        !['published', 'failed', 'satisfied-by-reuse'].includes(String(r.state)));
+    }
+    for (const r of this.#all('SELECT id, state, envelope, final_envelope FROM attempts')) {
+      const start = parse('attempt', r.envelope);
+      if (start.id !== r.id) throw corrupt('attempt');
+      const running = r.state === 'running';
+      add([start.invocation], running);
+      if (!running) {
+        const end = parse('attempt', r.final_envelope);
+        if (end.id !== r.id || end.state !== r.state || end.state === 'running') throw corrupt('attempt');
+        add([end.invocation, ...end.outputs, end.error?.diagnostics], false);
+      }
+    }
+    return { retained, active };
   }
 
   /** The last committed event sequence. */

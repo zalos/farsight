@@ -428,3 +428,60 @@ test('a stage removal is visible on its run-filtered event stream', async t => {
   const aborted = ledger.readEvents({ runId: 'run-1', limit: 500 }).events.at(-1)!;
   assert.deepEqual(aborted.work, W1);
 });
+
+test('every artifact a retained work or attempt names stays a root after it finishes', async t => {
+  const { ledger } = await setup(t);
+  const MANIFEST = 'sha256:6666666666666666666666666666666666666666666666666666666666666666';
+  const INVOCATION = 'sha256:8888888888888888888888888888888888888888888888888888888888888888';
+  start(ledger, 'epoch-1', 'att-1', 1);
+  ledger.endAttempt({ work: W1, attemptId: 'att-1', state: 'failed', endedAt: '2026-10-21T12:01:00Z', workState: 'ready' });
+  start(ledger, 'epoch-1', 'att-2', 2);
+  stageAndPublish(ledger, W1, 'att-2', 'stage-1', 'published output');
+  const done = ledger.gcSnapshot();
+  assert.ok(done.retained.includes(MANIFEST), 'a published work keeps its influence manifest');
+  assert.ok(done.retained.includes(INVOCATION), 'finished attempts (failed and succeeded) keep their invocation');
+  assert.ok(done.retained.includes(sha('published output')), 'an ended attempt keeps its outputs');
+  assert.deepEqual(done.active, [], 'nothing is still running');
+
+  // Reuse derivations and diagnostics cannot be produced by this PR's API yet; record them as a later writer would.
+  const db = raw(ledger);
+  t.after(() => db.close());
+  const VALID = new URL('./contracts/valid/', import.meta.url);
+  const fixture = async (n: string) => JSON.parse(await (await import('node:fs/promises')).readFile(new URL(`${n}.json`, VALID), 'utf8'));
+  const reused = { ...(await fixture('work-reused')), id: 'work-reuse', revision: 1, runId: 'run-1', coordinatorEpoch: 'epoch-1',
+    influenceManifest: sha('reuse manifest'), dependencies: [] };
+  db.prepare(`INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
+    coordinator_epoch, state, active_attempt_id, envelope) VALUES ('work-reuse', 1, 'run-1', ?, ?, ?, 'epoch-1',
+    'satisfied-by-reuse', NULL, ?)`).run(reused.planRevision, reused.inputFingerprint, reused.influenceManifest, JSON.stringify(reused));
+  const begun = { ...attemptEnvelope('epoch-1', { id: 'att-diag', ordinal: 9 }) };
+  const ended = { ...(await fixture('attempt-ended')), id: 'att-diag', ordinal: 9, coordinatorEpoch: 'epoch-1',
+    worker: begun.worker, error: { code: 'sentinel.error.timeout', retryable: true, diagnostics: sha('diagnostics') } };
+  db.prepare(`INSERT INTO attempts (id, work_id, work_revision, ordinal, coordinator_epoch, state, usage_certainty, started_at,
+    ended_at, envelope, final_usage_certainty, final_envelope) VALUES ('att-diag', 'work-pattern-api', 1, 9, 'epoch-1',
+    'failed', 'not-applicable', ?, ?, ?, 'not-applicable', ?)`).run(ended.startedAt, ended.endedAt, JSON.stringify(begun),
+    JSON.stringify(ended));
+  // A raw write appends no event, so it is invisible to assertSnapshotCurrent: that is why only the ledger writes.
+  ledger.assertSnapshotCurrent(done);
+  const all = ledger.gcSnapshot();
+  for (const id of [sha('reuse manifest'), 'sha256:7777777777777777777777777777777777777777777777777777777777777777',
+    sha('diagnostics'), 'sha256:9999999999999999999999999999999999999999999999999999999999999999']) {
+    assert.ok(all.retained.includes(id), id);
+  }
+  assert.ok(!all.retained.includes(reused.inputFingerprint), 'a plain fingerprint is not an artifact root');
+  assert.ok(!all.retained.includes(reused.stage.implementationDigest), 'an implementation digest is not an artifact root');
+
+  ledger.createWork(workEnvelope('epoch-1', { id: 'work-new', influenceManifest: sha('new manifest') }) as never);
+  assert.throws(() => ledger.assertSnapshotCurrent(all), code('sentinel.store.snapshotStale'));
+  const next = ledger.gcSnapshot();
+  assert.ok(next.retained.includes(sha('new manifest')) && next.active.includes(sha('new manifest')));
+});
+
+test('an unreadable retained record fails the snapshot closed instead of shrinking its roots', async t => {
+  const { ledger } = await setup(t);
+  const db = raw(ledger);
+  t.after(() => db.close());
+  db.prepare(`INSERT INTO work_units (id, revision, run_id, plan_revision, input_fingerprint, influence_manifest,
+    coordinator_epoch, state, active_attempt_id, envelope) VALUES ('work-bad', 1, 'run-1', 1, ?, ?, 'epoch-1', 'published',
+    NULL, '{}')`).run(sha('f'), sha('m'));
+  assert.throws(() => ledger.gcSnapshot(), code('sentinel.store.corruptRecord'));
+});
