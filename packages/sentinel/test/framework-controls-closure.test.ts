@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CLOSURE_REFUSED, FRAMEWORK_CONTROLS_WORKER, workerClosure, writeClosureEntry } from '../dist/frameworks/controls/index.js';
@@ -78,4 +78,72 @@ test('the same closure writes the same entry; a different file under that name i
   assert.deepEqual(writeClosureEntry(dir, fx.worker), a);
   writeFileSync(a.module, '// tampered\n');
   assert.throws(() => writeClosureEntry(dir, fx.worker));
+});
+
+/** A worker whose one dependency is reached through a node_modules link, as pnpm and workspaces install it. */
+function linked(t: any) {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sentinel-closure-link-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const pkg = join(root, 'pkg');
+  const control = join(pkg, 'dist', 'frameworks', 'controls');
+  mkdirSync(control, { recursive: true });
+  mkdirSync(join(pkg, 'node_modules'), { recursive: true });
+  writeFileSync(join(pkg, 'package.json'), '{"type":"module"}');
+  const worker = join(control, 'worker.js');
+  writeFileSync(worker, "import dep from 'dep-a';\nexport async function runFrameworkControlsWorker() { process.stdout.write(dep); }\n");
+  const target = (dir: string, word: string, files = true) => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'dep-a', version: '1.0.0', type: 'module', main: 'index.js', ...(files ? { files: ['index.js'] } : {}) }));
+    writeFileSync(join(dir, 'index.js'), `export default ${JSON.stringify(word)};\n`);
+  };
+  target(join(root, 'workspace-a'), 'original-a');
+  target(join(root, 'workspace-b'), 'changed-b');
+  const link = join(pkg, 'node_modules', 'dep-a');
+  symlinkSync(join(root, 'workspace-a'), link);
+  const entries = join(root, 'entries');
+  mkdirSync(entries, { mode: 0o700 });
+  return { root, pkg, control, worker, link, target, entry: writeClosureEntry(entries, worker) };
+}
+
+test('a dependency link retargeted after registration is refused before anything runs (review blocker)', t => {
+  const fx = linked(t);
+  assert.equal(run(fx.entry.module).stdout, 'original-a', 'a workspace package reached through a link runs unchanged');
+  // The resolved package's bytes are unchanged; only the link Node follows to find it now points elsewhere.
+  unlinkSync(fx.link);
+  symlinkSync(join(fx.root, 'workspace-b'), fx.link);
+  const r = run(fx.entry.module);
+  assert.deepEqual([r.status, r.stdout], [CLOSURE_REFUSED, '']);
+});
+
+test('a nearer package that would shadow the pinned one is refused; the pinned package\'s own bytes still are', t => {
+  const fx = linked(t);
+  // A new node_modules nearer to the worker than the pinned one.
+  fx.target(join(fx.control, 'node_modules', 'dep-a'), 'shadow', false);
+  const shadowed = run(fx.entry.module);
+  assert.deepEqual([shadowed.status, shadowed.stdout], [CLOSURE_REFUSED, '']);
+  rmSync(join(fx.control, 'node_modules'), { recursive: true });
+  assert.equal(run(fx.entry.module).stdout, 'original-a');
+  writeFileSync(join(fx.root, 'workspace-a', 'index.js'), 'export default "changed-in-place";\n');
+  assert.equal(run(fx.entry.module).status, CLOSURE_REFUSED);
+});
+
+test('a module folder moved behind a link with identical bytes is refused: Node would resolve from elsewhere', t => {
+  const fx = linked(t);
+  const moved = join(fx.root, 'moved-dist');
+  renameSync(join(fx.pkg, 'dist'), moved);
+  symlinkSync(moved, join(fx.pkg, 'dist'));
+  assert.equal(run(fx.entry.module).status, CLOSURE_REFUSED);
+});
+
+test('an installed (copied, not linked) package closure runs unchanged and binds its resolution', t => {
+  const fx = linked(t);
+  unlinkSync(fx.link);
+  cpSync(join(fx.root, 'workspace-a'), fx.link, { recursive: true });
+  const dir = join(fx.root, 'entries-installed');
+  mkdirSync(dir, { mode: 0o700 });
+  const entry = writeClosureEntry(dir, fx.worker);
+  assert.equal(run(entry.module).stdout, 'original-a');
+  rmSync(fx.link, { recursive: true });
+  symlinkSync(join(fx.root, 'workspace-a'), fx.link);
+  assert.equal(run(entry.module).status, CLOSURE_REFUSED, 'the same bytes reached another way are another resolution');
 });

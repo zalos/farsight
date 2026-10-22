@@ -5,14 +5,16 @@
 // Sentinel file the worker reaches through static or literal dynamic imports, and every package it or they import,
 // whole (an installed package's directory; a workspace package's published files), with each package's own
 // dependencies in turn. The entry's digest, which the supervisor pins and the plan records, covers every byte of the
-// manifest. At start, under the launch gate and before the worker is imported, the entry re-reads every listed file
-// and package folder and exits, writing nothing, if any byte, link, folder listing or absence differs.
+// manifest, including how Node finds each package (every `node_modules` candidate it would try, and the real path the
+// one it takes resolves to). At start, under the launch gate and before the worker is imported, the entry re-reads
+// every listed file, package folder and resolution and exits, writing nothing, if any byte, link, folder listing,
+// resolution or absence differs.
 //
 // What this guarantees: a changed build or installation after registration is refused, and any change to the
 // closure is a different adapter identity. It is not a defence against a process that can write the installation
 // between that check and the import, which could equally rewrite Node itself.
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -22,10 +24,13 @@ export const FRAMEWORK_CONTROLS_WORKER = fileURLToPath(new URL('./worker.js', im
 export const CLOSURE_REFUSED = 71;
 
 /**
- * One listed path: its SHA-256, the target of a link, that it must not exist, or (a package's folders) the SHA-256 of
- * its sorted names, so a file added inside a package is a change too.
+ * One listed path: its SHA-256 (`file`), the target of a link inside a package (`link`), that it must not exist
+ * (`absent`), the SHA-256 of a package folder's sorted names (`dir`, so a file added inside a package is a change too),
+ * the real path a logical path must still resolve to (`resolves`: a `node_modules` candidate Node takes, or a module
+ * reached through a link), or that a `node_modules` candidate Node would try first holds no folder (`unresolved`, so a
+ * nearer package cannot shadow the pinned one).
  */
-export type ClosureEntry = readonly [path: string, kind: 'file' | 'link' | 'absent' | 'dir', value: string];
+export type ClosureEntry = readonly [path: string, kind: 'file' | 'link' | 'absent' | 'dir' | 'resolves' | 'unresolved', value: string];
 
 export interface WorkerClosure {
   readonly entries: readonly ClosureEntry[];
@@ -41,15 +46,6 @@ const SPECIFIERS = [
 ];
 const packageName = (spec: string) => (spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0]!);
 
-/** The package folder a bare name resolves to from `from`, by Node's node_modules walk, as a real path; or null. */
-function packageDir(name: string, from: string): string | null {
-  for (let d = from; ; d = dirname(d)) {
-    const candidate = join(d, 'node_modules', name, 'package.json');
-    if (existsSync(candidate)) return realpathSync(dirname(candidate));
-    if (dirname(d) === d) return null;
-  }
-}
-
 /**
  * The worker's closure as it is on disk now; `extra` modules (the coordinator-side driver) are pinned with theirs.
  * Pure reads; nothing is imported or run.
@@ -58,7 +54,28 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
   const out = new Map<string, ClosureEntry>();
   const portable = new Map<string, string>();
   const root = realpathSync(dirname(dirname(dirname(entry))));
-  const add = (path: string, kind: ClosureEntry[1], value: string, name: string) => { out.set(path, [path, kind, value]); portable.set(name, `${kind}:${value}`); };
+  const add = (path: string, kind: ClosureEntry[1], value: string, name: string) => { out.set(`${path}\u0000${kind}`, [path, kind, value]); portable.set(name, `${kind}:${value}`); };
+  const where = (p: string) => relative(root, p);
+  // Node's package lookup from `from`, as it runs it: every `node_modules/<name>` from the importing folder up to the
+  // root, the first that is a folder wins and is then used by its real path. Each candidate before it is bound as
+  // holding no folder and the winner as resolving to exactly that real path, so neither a retargeted link nor a nearer
+  // new package can change what loads. Returns the real folder, or null when no candidate is one.
+  const resolutions = new Map<string, string | null>();
+  const packageDir = (name: string, from: string): string | null => {
+    const key = `${from}\u0000${name}`;
+    if (resolutions.has(key)) return resolutions.get(key)!;
+    let found: string | null = null;
+    for (let d = from; ; d = dirname(d)) {
+      const candidate = join(d, 'node_modules', name);
+      let isDir = false;
+      try { isDir = statSync(candidate).isDirectory(); } catch { isDir = false; }
+      if (isDir) { found = realpathSync(candidate); add(candidate, 'resolves', found, `resolve:${where(from)}:${name}`); break; }
+      add(candidate, 'unresolved', '', `candidate:${where(from)}:${where(candidate)}`);
+      if (dirname(d) === d) break;
+    }
+    resolutions.set(key, found);
+    return found;
+  };
   const listPackage = (dir: string, name: string, pkg: any) => {
     const installed = dir.split(sep).includes('node_modules');
     // An installed package holds only what its publisher packed; a workspace package ships its `files`.
@@ -80,7 +97,7 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
   const packages = new Set<string>();
   const visitPackage = (name: string, from: string) => {
     const dir = packageDir(name, from);
-    if (!dir) { add(join(from, 'node_modules', name), 'absent', '', `pkg:${name}@absent`); return; }
+    if (!dir) return;
     if (packages.has(dir)) return;
     packages.add(dir);
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
@@ -92,8 +109,13 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
     if (files.has(abs)) return;
     files.add(abs);
     if (!existsSync(abs)) { add(abs, 'absent', '', relative(root, abs)); return; }
+    // Node loads a module by its real path and resolves its imports from there: a path through a link is bound to it.
+    const real = realpathSync(abs);
+    if (real !== abs) { add(abs, 'resolves', real, `module:${where(abs)}`); visitFile(real); return; }
     const bytes = readFileSync(abs);
     add(abs, 'file', sha(bytes), relative(root, abs));
+    // Its own path must stay real: Node resolves its relative imports and its package lookups from there.
+    add(abs, 'resolves', abs, `real:${where(abs)}`);
     if (!/\.[cm]?js$/.test(abs)) return;
     const text = bytes.toString('utf8');
     for (const re of SPECIFIERS) for (const m of text.matchAll(re)) {
@@ -114,7 +136,7 @@ export function workerClosure(entry: string = FRAMEWORK_CONTROLS_WORKER, extra: 
 export function closureEntrySource(closure: WorkerClosure, worker: string = FRAMEWORK_CONTROLS_WORKER): string {
   return `// Generated: the framework inspection worker behind its byte closure (closure ${closure.digest}).
 import { createHash } from 'node:crypto';
-import { lstatSync, readdirSync, readFileSync, readlinkSync } from 'node:fs';
+import { lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from 'node:fs';
 const CLOSURE = ${JSON.stringify(closure.entries)};
 for (const [path, kind, value] of CLOSURE) {
   let st = null;
@@ -122,6 +144,8 @@ for (const [path, kind, value] of CLOSURE) {
   const ok = kind === 'absent' ? st === null
     : kind === 'link' ? st !== null && st.isSymbolicLink() && readlinkSync(path) === value
     : kind === 'dir' ? st !== null && st.isDirectory() && createHash('sha256').update(JSON.stringify(readdirSync(path).sort())).digest('hex') === value
+    : kind === 'resolves' ? (() => { try { return realpathSync(path) === value; } catch { return false; } })()
+    : kind === 'unresolved' ? (() => { try { return !statSync(path).isDirectory(); } catch { return true; } })()
     : st !== null && st.isFile() && createHash('sha256').update(readFileSync(path)).digest('hex') === value;
   if (!ok) process.exit(${CLOSURE_REFUSED});
 }
