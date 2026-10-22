@@ -676,3 +676,158 @@ test('round 3, probe 4: a parent POM resolved from a relative path is not truste
     assert.ok(envelope.facts.every((f: any) => f.verdict === 'unknown' && f.reasonCode === 'sentinel.spring.versionUnresolved'), name);
   }
 });
+
+// ---- review round 4 (SOL, a7486fa): Java shadowing, composed conditions, composed @Bean ----
+
+const ABSTRACT_CONFIGURER = 'org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer';
+const csrfByReference = (extraBody: string) => security(`
+  @Bean
+  public SecurityFilterChain c(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+        .csrf(AbstractHttpConfigurer::disable);
+    return http.build();
+  }
+${extraBody}`).replace('import org.springframework.security.web.SecurityFilterChain;',
+  `import org.springframework.security.web.SecurityFilterChain;\nimport ${ABSTRACT_CONFIGURER};`);
+
+test('round 4, probe 1: a nested type shadows the imported Spring type it is named after', needsStore, async t => {
+  const env = (await pack(t, app({ security: csrfByReference(`
+  static class AbstractHttpConfigurer {
+    static void disable(org.springframework.security.config.annotation.web.configurers.CsrfConfigurer<HttpSecurity> c) {
+      c.disable().removeConfigurer(org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer.class);
+    }
+  }`), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported']);
+});
+
+test('round 4, near neighbour: a member type inherited from a captured superclass shadows the import too', needsStore, async t => {
+  const env = (await pack(t, app({
+    security: csrfByReference('').replace('public class SecurityConfig {', 'public class SecurityConfig extends Relaxations {'),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/Relaxations.java': `package app;
+
+public abstract class Relaxations {
+  public static class AbstractHttpConfigurer {
+    public static void disable(Object c) {}
+  }
+}
+` },
+  }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.configurerArgumentUnsupported', 'unknown:sentinel.spring.configurerArgumentUnsupported']);
+  // Without a colliding declaration the imported Spring reference stays inert.
+  const plain = (await pack(t, app({ security: csrfByReference(''), routes: ROUTE_X }))).envelope;
+  assert.deepEqual(verdicts(plain, 'GET /x'), ['applies', 'does-not-apply']);
+});
+
+const OPEN_FALLBACK = `
+  @Bean
+  @Order(2)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    ${OPEN_BODY}
+  }`;
+const protectedChains = (annotation: string, method = '') => `package app;
+
+${IMPORTS}
+@${annotation}
+public class ProtectedChains {
+  @Bean
+  @Order(0)${method}
+  public SecurityFilterChain secure(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+    return http.build();
+  }
+}
+`;
+const annotationType = (name: string, imports: string, metas: string) => `package app;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+${imports}
+@Retention(RetentionPolicy.RUNTIME)
+${metas}
+public @interface ${name} {}
+`;
+
+test('round 4, probe 2: a profile carried by a composed configuration annotation leaves activity unknown', needsStore, async t => {
+  const env = (await pack(t, app({
+    security: security(OPEN_FALLBACK),
+    routes: ROUTE_X,
+    extra: {
+      'src/main/java/app/ProdConfiguration.java': annotationType('ProdConfiguration',
+        'import org.springframework.context.annotation.Configuration;\nimport org.springframework.context.annotation.Profile;\n', '@Configuration\n@Profile("prod")'),
+      'src/main/java/app/ProtectedChains.java': protectedChains('ProdConfiguration'),
+    },
+  }), ['dev'])).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['unknown:sentinel.spring.conditionComposed', 'unknown:sentinel.spring.conditionComposed'],
+    'the protected chain may be active; it is never read as active under every profile');
+  // The same profile written directly on the class is read: under dev the open fallback decides.
+  const direct = (await pack(t, app({
+    security: security(OPEN_FALLBACK),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/ProtectedChains.java': protectedChains('Configuration\n@org.springframework.context.annotation.Profile("prod")') },
+  }), ['dev'])).envelope;
+  assert.deepEqual(verdicts(direct, 'GET /x'), ['does-not-apply', 'does-not-apply']);
+});
+
+test('round 4, near neighbour: a composed condition or an unreadable annotation on the bean method leaves activity unknown', needsStore, async t => {
+  const composed = (await pack(t, app({
+    security: security(OPEN_FALLBACK),
+    routes: ROUTE_X,
+    extra: {
+      'src/main/java/app/WhenEnabled.java': annotationType('WhenEnabled',
+        'import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;\n', '@ConditionalOnProperty("app.secure")'),
+      'src/main/java/app/ProtectedChains.java': protectedChains('Configuration', '\n  @WhenEnabled'),
+    },
+  }), ['dev'])).envelope;
+  assert.deepEqual(verdicts(composed, 'GET /x'), ['unknown:sentinel.spring.conditionComposed', 'unknown:sentinel.spring.conditionComposed']);
+  // A library annotation the snapshot does not hold could carry a condition or an order: the chain is not read.
+  const library = (await pack(t, app({
+    security: security(OPEN_FALLBACK),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/ProtectedChains.java': protectedChains('Configuration', '\n  @com.example.lib.Tuned') },
+  }), ['dev'])).envelope;
+  assert.equal(verdicts(library, 'GET /x').every(v => v.startsWith('unknown:')), true);
+});
+
+const composedBeanChains = (annotation: string) => `package app;
+
+${IMPORTS}
+@Configuration
+public class OpenChains {
+  @${annotation}
+  @Order(0)
+  public SecurityFilterChain open(HttpSecurity http) throws Exception {
+    ${OPEN_BODY}
+  }
+}
+`;
+
+test('round 4, probe 3: a chain declared through a composed @Bean annotation takes part', needsStore, async t => {
+  const env = (await pack(t, app({
+    security: security(SECURE_CHAIN),
+    routes: ROUTE_X,
+    extra: {
+      'src/main/java/app/OpenBean.java': annotationType('OpenBean', 'import org.springframework.context.annotation.Bean;\n', '@Bean'),
+      'src/main/java/app/OpenChains.java': composedBeanChains('OpenBean'),
+    },
+  }))).envelope;
+  assert.deepEqual(verdicts(env, 'GET /x'), ['does-not-apply', 'does-not-apply'], 'the earlier open chain declared by @OpenBean decides');
+});
+
+test('round 4, near neighbour: a library bean annotation or a composed @Order leaves the chain unknown', needsStore, async t => {
+  const library = (await pack(t, app({
+    security: security(SECURE_CHAIN),
+    routes: ROUTE_X,
+    extra: { 'src/main/java/app/OpenChains.java': composedBeanChains('com.example.lib.OpenBean') },
+  }))).envelope;
+  assert.deepEqual(verdicts(library, 'GET /x'), ['unknown:sentinel.spring.beanDeclarationUnknown', 'unknown:sentinel.spring.beanDeclarationUnknown']);
+  const ordered = (await pack(t, app({
+    security: security(SECURE_CHAIN),
+    routes: ROUTE_X,
+    extra: {
+      'src/main/java/app/First.java': annotationType('First', 'import org.springframework.core.annotation.Order;\n', '@Order(0)'),
+      'src/main/java/app/OpenChains.java': composedBeanChains('Bean').replace('@Order(0)', '@First'),
+    },
+  }))).envelope;
+  assert.deepEqual(verdicts(ordered, 'GET /x'), ['unknown:sentinel.spring.chainOrderUnsupported', 'unknown:sentinel.spring.chainOrderUnsupported']);
+});

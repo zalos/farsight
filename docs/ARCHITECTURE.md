@@ -717,7 +717,13 @@ attribute or auto-configuration registration makes classes outside that scan `un
 whose type is a `SecurityFilterChain`, in any qualified spelling, is a chain. Any other `…FilterChain` bean is an
 unknown candidate, never omitted. Names resolve through imports, the package and qualified names in captured source:
 composed annotations, superclasses and interface default `@Bean` methods are followed there, and anything resolved
-outside Java's or Spring's own types is unknown. A chain the pack cannot see or place sorts ahead of every known one.
+outside Java's or Spring's own types is unknown. Java shadowing is honoured: a type the file declares, or a member
+type inherited from a captured supertype, shadows an import of the same name, so where it could, the name is unknown
+rather than the import. Spring merges meta-annotations, so `@Bean`, `@Order`, `@Profile` and `@Conditional` are read
+through captured composed annotations: a composed `@Bean` declares a chain, while a composed order or condition, or an
+annotation from uncaptured code that could carry one, leaves the chain's position or activity unknown
+(`sentinel.spring.chainOrderUnsupported`, `sentinel.spring.conditionComposed`, `sentinel.spring.beanDeclarationUnknown`).
+A chain the pack cannot see or place sorts ahead of every known one.
 A chain's configurer arguments must be provably inert: a lambda that only configures its own parameter and never
 continues past `disable()` (which returns the builder); Spring's own `AbstractHttpConfigurer::disable`; Spring's
 `withDefaults()`; Spring constants; or literals. An application method reference, or anything that could reach the

@@ -6,7 +6,7 @@ import {
   annotationsOf, callArgs, callName, fluentChain, literalString, modifierWords, named, stringValues, walk,
   type Annotation, type JavaFile, type JavaNode,
 } from './syntax.js';
-import { componentStatus, hasAnnotation, packageOf, TypeIndex, type Tri } from './types.js';
+import { annotationFacts, componentStatus, hasAnnotation, packageOf, TypeIndex, type AnnotationFacts, type Tri } from './types.js';
 
 /** A node in a parsed file: the evidence a fact can cite. */
 export interface At { readonly file: JavaFile; readonly node: JavaNode }
@@ -95,7 +95,8 @@ export const SPRING_REASON_CODES = Object.freeze([
   'sentinel.spring.methodSecurityExpressionUnsupported', 'sentinel.spring.methodSecurityProxyPrerequisite',
   'sentinel.spring.methodSecurityLegacy', 'sentinel.spring.componentScanUnresolved', 'sentinel.spring.chainCandidateUnrecognized',
   'sentinel.spring.configurerArgumentUnsupported', 'sentinel.spring.anonymousConfigured', 'sentinel.spring.anonymousRole',
-  'sentinel.spring.rolePrefixCustomized', 'sentinel.spring.chainInheritanceUnknown',
+  'sentinel.spring.rolePrefixCustomized', 'sentinel.spring.chainInheritanceUnknown', 'sentinel.spring.conditionComposed',
+  'sentinel.spring.beanDeclarationUnknown',
 ] as const);
 export type SpringReason = typeof SPRING_REASON_CODES[number];
 
@@ -114,7 +115,6 @@ const classesOf = (file: JavaFile): JavaNode[] => {
   return out;
 };
 const methodsOf = (cls: JavaNode): JavaNode[] => named(cls.childForFieldName('body')).filter(n => n.type === 'method_declaration');
-const has = (anns: Annotation[], name: string) => anns.find(a => a.name === name);
 const returnType = (m: JavaNode) => m.childForFieldName('type')?.text ?? '';
 /** A type's simple name: the last segment of a qualified name, without type arguments or array brackets. */
 export const simpleType = (text: string) => text.replace(/<[\s\S]*>/g, '').replace(/\[\s*\]/g, '').trim().split('.').pop()!.trim();
@@ -140,30 +140,54 @@ const resolvesTo = (ctx: Ctx, file: JavaFile, written: string, fqn: string) => {
   return r.kind === 'external' && r.fqn === fqn;
 };
 
-function activityOf(file: JavaFile, ...annLists: Annotation[][]): Activity {
+/** Spring's condition annotations: @Profile, @Conditional and every @ConditionalOn… of Spring Boot. */
+const isCondition = (a: { spring: string | null }) => a.spring !== null && (a.spring === 'Profile' || a.spring.startsWith('Conditional'));
+
+/**
+ * Whether a bean is active, from the registered class's annotations and the bean method's. A direct @Profile with
+ * plain names is read; a direct @Conditional is unknown. A condition carried by a composed annotation (Spring merges
+ * meta-annotations) or an annotation whose meta-annotations cannot be read leaves activity unknown, never "always".
+ */
+function activityOf(...lists: AnnotationFacts[]): Activity {
   const conditions: ProfileCondition[] = [];
-  for (const anns of annLists) {
-    for (const a of anns) {
-      if (a.name.startsWith('Conditional')) return { kind: 'unsupported', reason: 'sentinel.spring.conditionalBean', at: { file, node: a.node } };
-      if (a.name !== 'Profile') continue;
+  for (const facts of lists) {
+    for (const { ann: a, file, spring } of facts.direct) {
+      if ((spring ?? a.name.split('.').pop()!).startsWith('Conditional')) return { kind: 'unsupported', reason: 'sentinel.spring.conditionalBean', at: { file, node: a.node } };
+      if (spring !== 'Profile') continue;
       const names = stringValues(a.positional[0] ?? a.pairs.get('value'));
       if (!names || !names.length || names.some(n => !/^!?[A-Za-z0-9_.-]+$/.test(n))) {
         return { kind: 'unsupported', reason: 'sentinel.spring.profileExpressionUnsupported', at: { file, node: a.node } };
       }
       conditions.push({ names, at: { file, node: a.node } });
     }
+    const composed = facts.meta.find(isCondition);
+    if (composed) return { kind: 'unsupported', reason: 'sentinel.spring.conditionComposed', at: { file: composed.file, node: composed.ann.node } };
+    if (facts.opaque) return { kind: 'unsupported', reason: 'sentinel.spring.conditionComposed', at: facts.opaque };
   }
   return conditions.length ? { kind: 'profiles', conditions } : { kind: 'always' };
 }
 
-/** `@Order(n)` with a literal (possibly negative) integer. */
-function orderOf(file: JavaFile, anns: Annotation[]): { order: number | null; at?: At; unsupported?: At } {
-  const a = has(anns, 'Order');
-  if (!a) return { order: null };
-  const v = a.positional[0] ?? a.pairs.get('value');
+/**
+ * `@Order(n)` with a literal (possibly negative) integer, directly on the bean method. Spring also reads @Order through
+ * composed annotations, so a meta-annotated @Order, or an annotation whose meta-annotations cannot be read, leaves the
+ * position unknown.
+ */
+function orderOf(facts: AnnotationFacts): { order: number | null; at?: At; unsupported?: At } {
+  const composed = facts.meta.find(a => a.spring === 'Order');
+  if (composed) return { order: null, unsupported: { file: composed.file, node: composed.ann.node } };
+  if (facts.opaque) return { order: null, unsupported: facts.opaque };
+  const d = facts.direct.find(x => x.spring === 'Order');
+  if (!d) return { order: null };
+  const v = d.ann.positional[0] ?? d.ann.pairs.get('value');
   const text = v?.text.replace(/\s+/g, '') ?? '';
-  if (!/^-?\d{1,10}$/.test(text)) return { order: null, unsupported: { file, node: a.node } };
-  return { order: Number(text), at: { file, node: a.node } };
+  if (!/^-?\d{1,10}$/.test(text)) return { order: null, unsupported: { file: d.file, node: d.ann.node } };
+  return { order: Number(text), at: { file: d.file, node: d.ann.node } };
+}
+
+/** Whether a method is a @Bean: directly, through a captured composed annotation, or unknown when an annotation is opaque. */
+function beanStatus(facts: AnnotationFacts): Tri {
+  if (facts.direct.some(a => a.spring === 'Bean') || facts.meta.some(a => a.spring === 'Bean')) return 'yes';
+  return facts.opaque ? 'unknown' : 'no';
 }
 
 function stringArgs(args: JavaNode[]): string[] | undefined {
@@ -231,17 +255,18 @@ function rulesOf(ctx: Ctx, file: JavaFile, lambda: JavaNode): Rule[] | undefined
  * One chain bean. `file` holds the method (a superclass or interface for an inherited bean); `classAnns` are the
  * registered class's own annotations (its @Profile applies to the beans it registers).
  */
-function chainOf(ctx: Ctx, file: JavaFile, cls: JavaNode, m: JavaNode, classAnns: Annotation[], registration: Registration): Chain {
-  const anns = annotationsOf(m);
+function chainOf(ctx: Ctx, file: JavaFile, cls: JavaNode, m: JavaNode, classFacts: AnnotationFacts, registration: Registration, bean: Tri): Chain {
+  const facts = annotationFacts(ctx.index, file, m);
   const id = `${file.path}#${m.childForFieldName('name')?.text ?? '?'}`;
   const at = { file, node: m };
-  const ord = orderOf(file, anns);
+  const ord = orderOf(facts);
   const base = {
-    id, at, order: ord.order, ...(ord.at ? { orderAt: ord.at } : {}), activity: activityOf(file, classAnns, anns),
+    id, at, order: ord.order, ...(ord.at ? { orderAt: ord.at } : {}), activity: activityOf(classFacts, facts),
   };
   // A chain whose position is unknown could come first, so it sorts ahead of every known one.
   const unsupported = (reason: SpringReason, node: JavaNode): Chain =>
     ({ ...base, ...(ord.unsupported ? { order: EARLIEST } : {}), matcher: { kind: 'unsupported', at: { file, node } }, rules: { unsupported: { file, node } }, customFilters: [], anonymous: 'custom', unsupported: { reason, at: { file, node } } });
+  if (bean === 'unknown') return unsupported('sentinel.spring.beanDeclarationUnknown', facts.opaque?.node ?? m);
   if (ord.unsupported) return unsupported('sentinel.spring.chainOrderUnsupported', ord.unsupported.node);
   if (registration === 'unknown') return unsupported('sentinel.spring.chainRegistrationUnknown', cls);
   const type = ctx.index.resolve(file, returnType(m));
@@ -437,7 +462,7 @@ const isConfiguration = (ctx: Ctx, file: JavaFile, cls: JavaNode): Tri => {
   return unknown ? 'unknown' : 'no';
 };
 
-interface BeanSource { readonly file: JavaFile; readonly method: JavaNode }
+interface BeanSource { readonly file: JavaFile; readonly method: JavaNode; readonly bean: Tri }
 
 /**
  * The @Bean methods a registered class contributes: its own, its captured superclasses' (Spring processes a
@@ -455,10 +480,11 @@ function beanMethodsOf(ctx: Ctx, file: JavaFile, cls: JavaNode): { methods: Bean
     seen.add(node);
     classes.push({ file: f, node });
     for (const m of named(node.childForFieldName('body')).filter(n => n.type === 'method_declaration')) {
-      if (!has(annotationsOf(m), 'Bean')) continue;
+      const bean = beanStatus(annotationFacts(ctx.index, f, m));
+      if (bean === 'no') continue;
       if (interfaceDefaultsOnly && !modifierWords(m).has('default')) continue;
       const name = m.childForFieldName('name')?.text ?? '?';
-      if (!methods.has(name)) methods.set(name, { file: f, method: m });
+      if (!methods.has(name)) methods.set(name, { file: f, method: m, bean });
     }
     const supers: string[] = [];
     const superclass = node.childForFieldName('superclass');
@@ -495,6 +521,7 @@ export function readConfiguration(files: readonly JavaFile[], resourcePaths: rea
   for (const file of files) {
     for (const cls of classesOf(file)) {
       const classAnns = annotationsOf(cls);
+      const classFacts = annotationFacts(ctx.index, file, cls);
       const registered = registration.of(file, cls);
       const header = `${cls.childForFieldName('superclass')?.text ?? ''} ${cls.childForFieldName('interfaces')?.text ?? ''}`;
       if (/\b(OncePerRequestFilter|GenericFilterBean|Filter)\b/.test(header) && (registered !== 'not-registered' || classAnns.some(a => a.name === 'WebFilter'))) {
@@ -513,10 +540,10 @@ export function readConfiguration(files: readonly JavaFile[], resourcePaths: rea
           frontiers.push({ reason: 'sentinel.spring.componentScanUnresolved', at: { file: c.file, node: direct?.node ?? c.node } });
         } else if (anyEms === 'yes') {
           methodSecurity.push(direct
-            ? { at: { file: c.file, node: direct.node }, activity: activityOf(file, classAnns), prePost: boolAttr(direct, 'prePostEnabled', true),
+            ? { at: { file: c.file, node: direct.node }, activity: activityOf(classFacts), prePost: boolAttr(direct, 'prePostEnabled', true),
                 secured: boolAttr(direct, 'securedEnabled', false), jsr250: boolAttr(direct, 'jsr250Enabled', false), proxyMode: !direct.pairs.has('mode') }
             // Enabled through a composed annotation: which kinds it enables is not read.
-            : { at: { file: c.file, node: c.node }, activity: activityOf(file, classAnns), prePost: null, secured: null, jsr250: null, proxyMode: false });
+            : { at: { file: c.file, node: c.node }, activity: activityOf(classFacts), prePost: null, secured: null, jsr250: null, proxyMode: false });
         }
         // Legacy method security, or a configuration class whose annotations could hide it, makes method security unknown.
         const legacy = hasAnnotation(ctx.index, c.file, c.node, LEGACY);
@@ -529,11 +556,11 @@ export function readConfiguration(files: readonly JavaFile[], resourcePaths: rea
           }
         }
       }
-      for (const { file: mf, method: m } of beans.methods) {
+      for (const { file: mf, method: m, bean } of beans.methods) {
         const type = simpleType(returnType(m));
         // Every bean that could be a chain is a candidate: a known chain type is read, any other chain-like type is
         // an unknown candidate, never silently omitted.
-        if (CHAIN_TYPES.has(type) || /FilterChain$/.test(type)) chains.push(chainOf(ctx, mf, cls, m, classAnns, registered));
+        if (CHAIN_TYPES.has(type) || /FilterChain$/.test(type)) chains.push(chainOf(ctx, mf, cls, m, classFacts, registered, bean));
         else if (type === 'WebSecurityCustomizer') frontiers.push({ reason: 'sentinel.spring.webSecurityCustomizer', at: { file: mf, node: m } });
         else if (type === 'GrantedAuthorityDefaults') rolePrefixCustomized.push({ file: mf, node: m });
         else if (/Filter$/.test(type) || type === 'FilterRegistrationBean' || type === 'DelegatingFilterProxyRegistrationBean') {

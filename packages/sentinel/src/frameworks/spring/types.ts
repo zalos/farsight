@@ -31,6 +31,7 @@ export class TypeIndex {
   private readonly byFqn = new Map<string, Declared[]>();
   private readonly bySimple = new Map<string, Declared[]>();
   private readonly imports = new Map<JavaFile, Imports>();
+  private readonly shadowCache = new Map<JavaFile, Map<string, Declared[]>>();
 
   constructor(files: readonly JavaFile[]) {
     for (const file of files) {
@@ -85,12 +86,18 @@ export class TypeIndex {
     }
     const imp = this.imports.get(file);
     const single = imp?.single.get(text);
+    // Java scoping: a type declared in this file, or a member type inherited from a captured supertype, shadows an
+    // import or a package type within its class body. Where the name is used is not known here, so a shadowing
+    // declaration resolves only when nothing else could supply the name; otherwise the name is ambiguous.
+    const shadows = this.shadowsIn(file, text);
+    if (shadows.length) {
+      const top = shadows.length === 1 && shadows[0]!.file === file && shadows[0]!.fqn === [packageOf(file), text].filter(Boolean).join('.');
+      const nothingElse = !single && !imp?.wildcards.length && !JAVA_LANG.has(text);
+      return (top && !single) || (shadows.length === 1 && nothingElse) ? { kind: 'captured', decl: shadows[0]! } : { kind: 'unknown' };
+    }
     if (single) return one(this.byFqn.get(single)) ?? { kind: 'external', fqn: single };
     const local = one(this.byFqn.get([packageOf(file), text].filter(Boolean).join('.')));
     if (local) return local;
-    // A type declared in this file (a nested type referred to by its simple name).
-    const inFile = (this.bySimple.get(text) ?? []).filter(d => d.file === file);
-    if (inFile.length === 1) return { kind: 'captured', decl: inFile[0]! };
     if (imp?.wildcards.length) {
       const candidates = imp.wildcards.flatMap(w => this.byFqn.get(`${w}.${text}`) ?? []);
       if (candidates.length === 1) return { kind: 'captured', decl: candidates[0]! };
@@ -103,6 +110,53 @@ export class TypeIndex {
     }
     if (JAVA_LANG.has(text)) return { kind: 'external', fqn: `java.lang.${text}` };
     return { kind: 'unknown' };
+  }
+
+  /**
+   * Declarations named `name` that can shadow an import in `file`: any type the file declares, and member types of
+   * captured supertypes of the file's types (inherited member types are in scope in a subclass body).
+   */
+  private shadowsIn(file: JavaFile, name: string): Declared[] {
+    const key = `${name}`;
+    let perFile = this.shadowCache.get(file);
+    if (!perFile) this.shadowCache.set(file, perFile = new Map());
+    const hit = perFile.get(key);
+    if (hit) return hit;
+    const result = this.computeShadows(file, name);
+    perFile.set(key, result);
+    return result;
+  }
+
+  private computeShadows(file: JavaFile, name: string): Declared[] {
+    const out = new Set<Declared>((this.bySimple.get(name) ?? []).filter(d => d.file === file));
+    const seen = new Set<JavaNode>();
+    const visitSupers = (f: JavaFile, node: JavaNode) => {
+      const supers: string[] = [];
+      const sc = node.childForFieldName('superclass');
+      if (sc) supers.push(named(sc)[0]?.text ?? sc.text.replace(/^extends\s+/, ''));
+      const ifaces = node.childForFieldName('interfaces') ?? named(node).find(n => n.type === 'extends_interfaces' || n.type === 'super_interfaces');
+      for (const list of named(ifaces)) for (const t of named(list)) supers.push(t.text);
+      for (const t of supers) {
+        const simple = t.replace(/<[\s\S]*>/g, '').trim();
+        // Resolve the supertype by its own scope, without consulting shadowing (a supertype name cannot be shadowed
+        // by its own members), and only through captured declarations.
+        const decls = simple.includes('.') ? this.byFqn.get(simple) ?? [] :
+          [this.imports.get(f)?.single.get(simple), [packageOf(f), simple].filter(Boolean).join('.')]
+            .flatMap(q => (q ? this.byFqn.get(q) ?? [] : [])).concat((this.bySimple.get(simple) ?? []).filter(d => d.file === f));
+        for (const d of new Set(decls)) {
+          if (seen.has(d.node)) continue;
+          seen.add(d.node);
+          // Tree nodes are not identity-stable: a member type is one whose enclosing body belongs to `d`.
+          for (const m of this.bySimple.get(name) ?? []) {
+            const owner = m.node.parent?.parent;
+            if (m.file === d.file && owner && owner.startIndex === d.node.startIndex && owner.endIndex === d.node.endIndex) out.add(m);
+          }
+          visitSupers(d.file, d.node);
+        }
+      }
+    };
+    walk(file.root, n => { if (DECL_KINDS[n.type]) visitSupers(file, n); });
+    return [...out];
   }
 
   private capturedPackage(pkg: string): boolean {
@@ -174,4 +228,51 @@ export function hasAnnotation(index: TypeIndex, file: JavaFile, node: JavaNode, 
     } else if (r.kind === 'unknown') unknown = true;
   }
   return unknown ? 'unknown' : 'no';
+}
+
+/** An annotation with what it certainly is: one of Spring's own (by simple name), or not Spring's. */
+export interface ResolvedAnnotation {
+  readonly ann: Annotation;
+  readonly file: JavaFile;
+  /** The simple name when the annotation is certainly one of Spring's own; null when it is not Spring's. */
+  readonly spring: string | null;
+}
+
+/**
+ * The annotations on a declaration, with the meta-annotations of every captured annotation among them (transitively).
+ * An annotation whose meaning cannot be read — unresolved, ambiguous with a non-Spring candidate, or from a library
+ * outside Java, Jakarta, Lombok and Spring — is opaque: it could carry any meta-annotation, so callers stay unknown.
+ */
+export interface AnnotationFacts {
+  readonly direct: readonly ResolvedAnnotation[];
+  readonly meta: readonly ResolvedAnnotation[];
+  readonly opaque?: { readonly file: JavaFile; readonly node: JavaNode };
+}
+
+const STANDARD_PREFIXES = ['java.', 'javax.', 'jakarta.', 'lombok.'];
+
+export function annotationFacts(index: TypeIndex, file: JavaFile, node: JavaNode): AnnotationFacts {
+  const direct: ResolvedAnnotation[] = [];
+  const meta: ResolvedAnnotation[] = [];
+  let opaque: { file: JavaFile; node: JavaNode } | undefined;
+  const seen = new Set<JavaNode>();
+  const visit = (f: JavaFile, n: JavaNode, into: ResolvedAnnotation[]) => {
+    for (const a of annotationsOf(n)) {
+      const r = index.resolve(f, a.node.childForFieldName('name')?.text ?? a.name);
+      const simple = a.name.split('.').pop()!;
+      if (r.kind === 'external' || r.kind === 'one-of') {
+        const fqns = r.kind === 'external' ? [r.fqn] : r.fqns;
+        if (fqns.every(q => q.startsWith('org.springframework.'))) into.push({ ann: a, file: f, spring: simple });
+        else if (fqns.every(q => STANDARD_PREFIXES.some(p => q.startsWith(p)))) into.push({ ann: a, file: f, spring: null });
+        else { into.push({ ann: a, file: f, spring: null }); opaque ??= { file: f, node: a.node }; }
+      } else if (r.kind === 'captured' && r.decl.kind === 'annotation') {
+        into.push({ ann: a, file: f, spring: null });
+        if (seen.has(r.decl.node)) continue;
+        seen.add(r.decl.node);
+        visit(r.decl.file, r.decl.node, meta);
+      } else { into.push({ ann: a, file: f, spring: null }); opaque ??= { file: f, node: a.node }; }
+    }
+  };
+  visit(file, node, direct);
+  return { direct, meta, ...(opaque ? { opaque } : {}) };
 }
