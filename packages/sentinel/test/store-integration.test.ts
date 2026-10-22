@@ -17,11 +17,12 @@ const W1 = { id: 'work-pattern-api', revision: 1 };
 const ENDED = '2026-10-21T12:01:00Z';
 const coded = (code: string) => (e: unknown) => (e as { code?: unknown })?.code === code;
 
-// Only qualified hosts and SQLite releases open a store. Elsewhere the facade must refuse, and the tests that need
-// an open store are skipped with that reason; a skip is never qualification evidence.
+// Only qualified hosts and SQLite releases open a store. Off CI, elsewhere, the facade must refuse and the tests that
+// need an open store are skipped with that reason; a skip is never qualification evidence. On CI nothing skips: an
+// unqualified CI host or SQLite release runs every store test and fails at the gate, loudly.
 const HOST = `${process.platform}-${process.arch}`;
 const QUALIFIED = SQLITE_RELEASE_POLICY.hosts.includes(HOST) && SQLITE_RELEASE_POLICY.qualifiedSqlite.includes(process.versions.sqlite ?? '');
-const needsStore = QUALIFIED ? {} : { skip: `${HOST} with SQLite ${process.versions.sqlite ?? 'none'} is not a qualified store host` };
+const needsStore = QUALIFIED || process.env.CI ? {} : { skip: `${HOST} with SQLite ${process.versions.sqlite ?? 'none'} is not a qualified store host` };
 
 /** A canonical, private scratch folder; the store is created inside it. */
 function scratch(t: { after(fn: () => void): void }): string {
@@ -225,7 +226,7 @@ test('the facade exposes domain operations only', needsStore, async t => {
     'no scan capability is claimed');
 });
 
-test('an unqualified host or SQLite release is refused before any store file exists', { skip: QUALIFIED && 'this host is qualified' }, async t => {
+test('an unqualified host or SQLite release is refused before any store file exists', { skip: (QUALIFIED || !!process.env.CI) && 'this host is qualified, or CI requires the store tests themselves' }, async t => {
   const storePath = scratch(t);
   await assert.rejects(openStore(storePath), (e: unknown) =>
     ['sentinel.store.platformUnqualified', 'sentinel.store.runtimeUnqualified'].includes((e as { code?: string }).code ?? ''));

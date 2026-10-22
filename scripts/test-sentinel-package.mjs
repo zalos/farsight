@@ -147,6 +147,27 @@ try {
   const validated = Number((await consumer.exec(process.execPath, ['fixtures.mjs'])).stdout);
   assert.equal(validated, cases.length);
 
+  // One store facade, whichever export it is reached through: the root and ./store give the same openStore and the
+  // same error classes, so an error from one is an instance of the other's class.
+  const identity = JSON.parse(await evalModule(`
+    const root = await import('farsight-sentinel');
+    const store = await import('farsight-sentinel/store');
+    let error;
+    try { await root.openStore('relative/store'); } catch (e) { error = e; }
+    console.log(JSON.stringify({
+      openStore: root.openStore === store.openStore,
+      StoreError: root.StoreError === store.StoreError,
+      LedgerError: root.LedgerError === store.LedgerError,
+      ObjectStoreError: root.ObjectStoreError === store.ObjectStoreError,
+      code: error?.code ?? null,
+      crossInstance: error instanceof store.StoreError,
+    }));
+  `));
+  assert.deepEqual(identity, {
+    openStore: true, StoreError: true, LedgerError: true, ObjectStoreError: true,
+    code: 'sentinel.store.pathNotAbsolute', crossInstance: true,
+  }, 'the root and ./store exports share one facade and one set of error classes');
+
   // The store, as a consumer uses it: one process opens a new store and publishes verified evidence; a
   // fresh process reopens it under a new epoch, reads the artifact back and is refused a record from the
   // earlier epoch. The store lives in a canonical, private folder of the consumer's scratch directory.
@@ -196,7 +217,8 @@ try {
   const policy = JSON.parse(await evalModule("const { SQLITE_RELEASE_POLICY: p } = await import('farsight-sentinel/store'); console.log(JSON.stringify(p));"));
   const host = `${process.platform}-${process.arch}`;
   let storeDemo;
-  if (policy.hosts.includes(host) && policy.qualifiedSqlite.includes(process.versions.sqlite)) {
+  // On CI nothing falls back to the refusal branch: an unqualified CI host fails here, loudly.
+  if ((policy.hosts.includes(host) && policy.qualifiedSqlite.includes(process.versions.sqlite)) || process.env.CI) {
     const written = JSON.parse((await node('store-write.mjs')).stdout.trim());
     const read = JSON.parse((await node('store-read.mjs', [written.epoch])).stdout.trim());
     assert.notEqual(read.epoch, written.epoch, 'a new process owns the store under a new epoch');
