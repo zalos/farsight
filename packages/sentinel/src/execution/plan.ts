@@ -4,10 +4,11 @@
 // captured inputs are resolved once; nothing the caller does to its objects or callbacks afterwards changes what
 // executes. Each work is bound exactly:
 //   - its stage's implementationDigest is the trusted adapter's digest;
-//   - its inputFingerprint is inputFingerprintOf(the captured input ids) — the fingerprint the worker's start
-//     message carries and its result must repeat;
-//   - its influenceManifest is the artifact id of the influence manifest below (canonical JSON listing every
-//     fingerprint input), which is published with the result so the binding can be inspected.
+//   - its influenceManifest is the artifact id of the influence manifest below: canonical JSON naming the stage,
+//     the exact adapter, the exact captured inputs, the PR 07 protocol fingerprint of those inputs (what the
+//     worker's start message carries and its result must repeat) and the work's declared inputFingerprint, which
+//     may cover wider influences than the inputs and is bound to them here. It is published with the result,
+//     together with the invocation record, so the binding to what actually ran can be inspected.
 // A work revision or run already in the ledger must be this plan's, field for field; a reference to another run's
 // work is refused (reuse across runs needs an explicit satisfied-by-reuse lineage, which this coordinator does not
 // execute). Coverage is evaluated from the worker's own result against the plan's required checks and scope.
@@ -49,6 +50,9 @@ export interface InfluenceManifest {
   stage: WorkEnvelope['stage'];
   adapter: { id: Id; digest: Digest };
   inputs: ArtifactId[];
+  /** inputFingerprintOf(inputs): the fingerprint the worker protocol carries. */
+  protocolFingerprint: Digest;
+  /** The work's own declared inputFingerprint (it may cover more than these inputs). */
   inputFingerprint: Digest;
   dependencies: WorkRef[];
   resources: WorkEnvelope['resources'];
@@ -59,11 +63,12 @@ const sha = (b: Uint8Array) => `sha256:${createHash('sha256').update(b).digest('
 const refuse = (reason: string): never => { throw new ExecutionError('sentinel.execution.planInvalid', { reason }); };
 
 /** The influence manifest a work's influenceManifest must name, and its artifact id. */
-export function influenceManifest(work: Pick<WorkEnvelope, 'id' | 'revision' | 'stage' | 'dependencies' | 'resources'>, adapter: { id: Id; digest: Digest }, inputs: readonly ArtifactId[]): { manifest: InfluenceManifest; id: ArtifactId } {
+export function influenceManifest(work: Pick<WorkEnvelope, 'id' | 'revision' | 'stage' | 'dependencies' | 'resources' | 'inputFingerprint'>, adapter: { id: Id; digest: Digest }, inputs: readonly ArtifactId[]): { manifest: InfluenceManifest; id: ArtifactId } {
   const sorted = [...inputs].sort();
   const manifest: InfluenceManifest = {
     schema: INFLUENCE_SCHEMA, work: { id: work.id, revision: work.revision }, stage: work.stage, adapter: { id: adapter.id, digest: adapter.digest },
-    inputs: sorted, inputFingerprint: inputFingerprintOf(sorted), dependencies: work.dependencies.map(d => ({ id: d.id, revision: d.revision })), resources: work.resources,
+    inputs: sorted, protocolFingerprint: inputFingerprintOf(sorted), inputFingerprint: work.inputFingerprint,
+    dependencies: work.dependencies.map(d => ({ id: d.id, revision: d.revision })), resources: work.resources,
   };
   return { manifest, id: sha(canonicalJsonBytes(manifest)) };
 }
@@ -98,9 +103,8 @@ export function validatePlan(source: PlanSource, registry: AdapterRegistry): Val
     const captured = deepFreeze(structuredClone([...source.inputsFor(original)]));
     const ids = captured.map(c => c.id);
     if (new Set(ids).size !== ids.length) refuse(`work ${k} lists an input twice`);
-    if (w.inputFingerprint !== inputFingerprintOf(ids)) refuse(`work ${k} input fingerprint does not match its captured inputs`);
     const m = influenceManifest(w, adapter, ids);
-    if (w.influenceManifest !== m.id) refuse(`work ${k} influence manifest does not match its stage, adapter, inputs, dependencies and resources`);
+    if (w.influenceManifest !== m.id) refuse(`work ${k} influence manifest does not bind its stage, adapter, inputs, fingerprint, dependencies and resources`);
     const req = source.requiredCoverage?.(original);
     if (req) required.set(k, deepFreeze(structuredClone({ checks: [...req.checks], scope: [...req.scope] })));
     adapters.set(k, adapter); inputs.set(k, captured); manifests.set(k, deepFreeze(m.manifest));
@@ -150,6 +154,17 @@ export interface CoverageEvaluation {
  * complete: unevaluated. Any skipped or unresolved entry, a planned check not covered, or required scope not
  * scanned (or skipped) is incomplete. A process that exited cleanly proves nothing about coverage.
  */
+/**
+ * What actually ran must be what the approved plan bound: the invocation's adapter digest, its exact inputs and the
+ * protocol fingerprint the result repeated. Returns a reason when it differs.
+ */
+export function bindingMismatch(manifest: InfluenceManifest, invocation: { adapter: { digest: Digest }; inputs: readonly ArtifactId[]; inputFingerprint: Digest }, result: ResultMessage): string | undefined {
+  if (invocation.adapter.digest !== manifest.adapter.digest) return 'the invocation ran another adapter';
+  if (JSON.stringify([...invocation.inputs].sort()) !== JSON.stringify(manifest.inputs)) return 'the invocation read other inputs';
+  if (invocation.inputFingerprint !== manifest.protocolFingerprint || result.inputFingerprint !== manifest.protocolFingerprint) return 'the result names other inputs';
+  return undefined;
+}
+
 export function evaluateCoverage(work: WorkRef, result: ResultMessage, required: RequiredCoverage | undefined): CoverageEvaluation {
   const skipped = result.skipped.map(s => ({ scopeId: s.scopeId, reasonCode: s.reasonCode }));
   const unresolved = result.unresolvedFrontiers.map(s => ({ scopeId: s.scopeId, reasonCode: s.reasonCode }));

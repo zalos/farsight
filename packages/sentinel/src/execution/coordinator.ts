@@ -27,9 +27,9 @@ import {
   type Capacity, type CommittedUnit, type RetryPolicy, type UnitDecision,
 } from './scheduler.js';
 import { createExecutionService, type ExecutionService } from './service.js';
-import { releaseWorkDir, type CapturedInput, type WorkerOutcome } from './supervisor.js';
+import { releaseWorkDir, type CapturedInput, type InvocationRecord, type WorkerOutcome } from './supervisor.js';
 import {
-  checkRecordedRun, checkRecordedWork, COVERAGE_EVALUATION_SCHEMA, evaluateCoverage, INFLUENCE_SCHEMA, validatePlan,
+  bindingMismatch, checkRecordedRun, checkRecordedWork, COVERAGE_EVALUATION_SCHEMA, evaluateCoverage, INFLUENCE_SCHEMA, validatePlan,
   type CoverageEvaluation, type RequiredCoverage, type ValidatedPlan,
 } from './plan.js';
 
@@ -130,6 +130,10 @@ export class Coordinator {
   readonly #pendingNow: ContainerIntent[] = [];
   #pauseRequested = false;
   #cancelRequested = false;
+  /** The run's aggregate deadline (its recorded creation plus budgets.deadlineMs), and the signal it fires. */
+  #runDeadline = Number.POSITIVE_INFINITY;
+  readonly #deadline = new AbortController();
+  #deadlinePassed = false;
 
   /** Evaluations read back from publications, by work. */
   readonly #coverage = new Map<string, CoverageEvaluation>();
@@ -142,7 +146,8 @@ export class Coordinator {
     this.#cleanupWaitMs = wait;
     this.#backendOptions = o.backendOptions;
     this.#pool = new ReservationPool(o.capacity ?? DEFAULT_CAPACITY);
-    this.#retry = checkRetryPolicy(o.retry ?? DEFAULT_RETRY);
+    // Copied and frozen: changing the caller's policy object after open changes nothing.
+    this.#retry = Object.freeze(checkRetryPolicy({ ...(o.retry ?? DEFAULT_RETRY) }));
     if (o.hooks) this.#hooks = o.hooks;
     this.recovery = recovery;
   }
@@ -196,11 +201,15 @@ export class Coordinator {
   /** Execute (or resume) the run until it completes, pauses or is canceled. */
   async run(): Promise<RunSummary> {
     const runId = this.#plan.run.id;
+    // A pause asked for before this call holds this run: it is recorded, and nothing is admitted.
+    const pauseFirst = this.#pauseRequested;
     // Earlier publications' coverage evaluations, read once; they decide the outcome together with this run's.
     await this.#loadCoverage();
     let state = this.#runState();
     if (state === undefined) {
-      this.#store.ledger.createRun({ ...this.#plan.run, state: 'running', coordinatorEpoch: this.#store.epoch } as RunEnvelope);
+      // Recorded now: the run's time budget runs from here.
+      this.#store.ledger.createRun({ ...structuredClone(this.#plan.run), state: 'running', coordinatorEpoch: this.#store.epoch, createdAt: now() } as RunEnvelope);
+      state = 'running';
     } else if (state === 'completed' || state === 'canceled') {
       return this.#summary();
     } else if (state === 'canceling') {
@@ -208,9 +217,26 @@ export class Coordinator {
     } else {
       // planned, paused, or a pause an earlier epoch did not finish: run() resumes.
       if (state === 'pausing') { this.#store.ledger.setRunState(runId, 'paused'); state = 'paused'; }
-      if ((state === 'planned' || state === 'paused') && !this.#pauseRequested && !this.#cancelRequested) this.#store.ledger.setRunState(runId, 'running');
+      if ((state === 'planned' || state === 'paused') && !pauseFirst && !this.#cancelRequested) { this.#store.ledger.setRunState(runId, 'running'); state = 'running'; }
+    }
+    if (pauseFirst) {
+      if (this.#runState() === 'running') this.#store.ledger.setRunState(runId, 'pausing');
+      this.#pauseRequested = false;
+      this.#finishRunState('paused');
+      return this.#summary();
     }
     this.#pauseRequested = false;
+    const recorded = this.#store.ledger.getRun(runId)!;
+    this.#runDeadline = Date.parse(recorded.envelope.createdAt) + recorded.envelope.budgets.deadlineMs;
+    const remaining = this.#runDeadline - Date.now();
+    const deadlineTimer = setTimeout(() => { this.#deadlinePassed = true; this.#deadline.abort(); }, Math.max(0, Math.min(remaining, 2_147_000_000)));
+    if (remaining <= 0) { this.#deadlinePassed = true; this.#deadline.abort(); }
+    try {
+      return await this.#drive(runId);
+    } finally { clearTimeout(deadlineTimer); }
+  }
+
+  async #drive(runId: Id): Promise<RunSummary> {
 
     // Unconfirmed cleanup holds admission: a prior worker may still run and hold what a new one would be given.
     const blocked = await this.#awaitCleanup();
@@ -220,7 +246,7 @@ export class Coordinator {
     for (;;) {
       const decisions = this.progress();
       this.#persistHolds(decisions);
-      const admitting = !this.#pauseRequested && !this.#cancelRequested && this.#runState() === 'running' && this.#pendingNow.length === 0;
+      const admitting = !this.#pauseRequested && !this.#cancelRequested && !this.#deadlinePassed && this.#runState() === 'running' && this.#pendingNow.length === 0;
       let admitted = 0;
       if (admitting) {
         for (const d of decisions) {
@@ -236,6 +262,7 @@ export class Coordinator {
       }
       if (inflight.size === 0) {
         if (this.#cancelRequested) { this.#finishRunState('canceled'); break; }
+        if (this.#deadlinePassed && this.#runState() === 'running') { this.#expire(); break; }
         if (this.#pendingNow.length) {
           const still = await this.#awaitCleanup();
           if (still.length) return this.#summary(still);
@@ -259,6 +286,20 @@ export class Coordinator {
       }
     }
     return this.#summary();
+  }
+
+  /** The run's budget is spent: hold what has not run, then end the run as an execution failure. */
+  #expire(): void {
+    for (const d of this.progress()) {
+      if (d.state !== 'ready' && d.state !== 'waiting') continue;
+      const row = this.#store.ledger.getWork(d.ref);
+      const work = this.#work(d.ref);
+      if (!row && work.dependencies.some(dep => !this.#store.ledger.getWork(dep))) continue;
+      if (!row) this.#create(work, 'pending');
+      const current = this.#store.ledger.getWork(d.ref)!;
+      if (['pending', 'ready'].includes(current.state)) this.#store.ledger.setWorkState(d.ref, 'blocked', { reasonCode: 'sentinel.execution.runDeadline' });
+    }
+    this.#store.ledger.setRunState(this.#plan.run.id, 'completed', { outcome: 'execution-failure' });
   }
 
   /** What recovery could not confirm and nobody acknowledged: each one blocks admission. */
@@ -332,32 +373,42 @@ export class Coordinator {
       else if (row.state === 'pending') this.#store.ledger.setWorkState(ref, 'ready');
       const ordinal = this.#store.ledger.listAttempts(ref).length + 1;
       const id = attemptIdFor(ref, ordinal);
+      // The attempt's deadline is the work's, cut to what is left of the run's budget.
+      const left = Math.max(1, Math.floor(this.#runDeadline - Date.now()));
+      const resources = { ...structuredClone(work.resources), deadlineMs: Math.min(work.resources.deadlineMs, left) };
+      let invocation: { digest: string; record: InvocationRecord } | undefined;
       outcome = await this.#service.run({
         adapterId: this.#plan.adapterOf(ref).id, attemptId: id, work: ref, inputs: this.#plan.inputsOf(ref),
-        signal: this.#cancel.signal, intents: this.#intents, workers: this.#workers, resources: work.resources,
+        signal: AbortSignal.any([this.#cancel.signal, this.#deadline.signal]), intents: this.#intents, workers: this.#workers, resources,
         ...(this.#hooks ? { hooks: { at: (b: 'before-spawn' | 'after-spawn') => this.#hooks!.at?.(b, { work: ref, attemptId: id }) } } : {}),
-        onWorker: worker => {
+        onWorker: (worker, inv) => {
+          invocation = inv;
+          // The attempt names its exact invocation record (the record's own artifact id), published with the result.
           this.#store.ledger.startAttempt({
             schema: 'sentinel-attempt/draft-1', id, work: ref, ordinal, coordinatorEpoch: this.#store.epoch, operationId: id,
-            worker, startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running',
+            worker, startedAt: now(), usage: { certainty: 'not-applicable' }, state: 'running', invocation: inv.digest,
           });
           attemptId = id;
           this.#hooks?.at?.('after-attempt-start', { work: ref, attemptId: id });
         },
       });
-      if (outcome.state === 'succeeded' && attemptId && outcome.result!.inputFingerprint !== work.inputFingerprint) {
-        this.#end(ref, attemptId, 'failed', 'sentinel.execution.resultMismatch', { reason: 'the result names other inputs than the approved plan' });
+      const mismatch = outcome.state === 'succeeded' && invocation ? bindingMismatch(this.#plan.manifestOf(ref), invocation.record, outcome.result!) : undefined;
+      if (outcome.state === 'succeeded' && attemptId && (mismatch || !invocation)) {
+        this.#end(ref, attemptId, 'failed', 'sentinel.execution.resultMismatch', { reason: mismatch ?? 'no invocation was recorded' });
       } else if (outcome.state === 'succeeded' && attemptId) {
         try {
           const evaluation = evaluateCoverage(ref, outcome.result!, this.#plan.requiredOf(ref));
           await publishOutcome({ store: this.#store, work: ref, attemptId, result: outcome.result!, outputs: outcome.outputs, endedAt: now(),
-            records: [{ value: this.#plan.manifestOf(ref), schema: INFLUENCE_SCHEMA }, { value: evaluation, schema: COVERAGE_EVALUATION_SCHEMA }],
+            records: [{ value: this.#plan.manifestOf(ref), schema: INFLUENCE_SCHEMA }, { value: invocation!.record, schema: 'sentinel-invocation/draft-1' },
+              { value: evaluation, schema: COVERAGE_EVALUATION_SCHEMA }],
             ...(this.#hooks ? { hooks: { at: (b, c) => this.#hooks!.at?.(b, c) } } : {}) });
           this.#coverage.set(key(ref), evaluation);
         } catch (error) {
           const canceled = error instanceof LedgerError && error.code === 'sentinel.store.wrongState';
           this.#end(ref, attemptId, canceled ? 'canceled' : 'failed', canceled ? 'sentinel.execution.canceled' : codeOf(error), detailOf(error));
         }
+      } else if (attemptId && this.#deadlinePassed && !this.#cancelRequested) {
+        this.#end(ref, attemptId, 'failed', 'sentinel.execution.runDeadline', outcome.detail);
       } else if (attemptId) {
         this.#end(ref, attemptId, outcome.state === 'canceled' ? 'canceled' : 'failed', outcome.code ?? 'sentinel.execution.workerExited', outcome.detail);
       } else {
