@@ -4,6 +4,7 @@
 // observations only; nothing in the fixture is built or run.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { cpSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,7 +12,7 @@ import { Ajv } from 'ajv';
 import { captureSnapshot } from '../dist/snapshot/index.js';
 import { compareAssessments } from '../dist/findings/index.js';
 import {
-  pinApplicationContext, contextPinIntent, buildReport, generateReport, renderHtml, renderMarkdown, toSarif, countText, COUNT_ORDER, ReportError,
+  pinApplicationContext, contextPinIntent, placeNodes, placeFiles, buildReport, generateReport, renderHtml, renderMarkdown, toSarif, countText, COUNT_ORDER, ReportError,
 } from '../dist/reports/index.js';
 import { ReceiptBook } from '../dist/policy/receipts.js';
 import { issueReceipt } from '../dist/policy/owner-receipts.js';
@@ -393,4 +394,97 @@ test('SARIF output validates against the official SARIF 2.1.0 schema', { ...need
     const sarif = toSarif((await report(s, [o], { disclosure })).document);
     assert.equal(validate(sarif), true, JSON.stringify(validate.errors));
   }
+});
+
+// ---- runtime authority at every context consumer ----
+const INVOICE_NODE = 'app::src/server/invoiceService.ts::createInvoice';
+const INVOICE_FILE = 'src/server/invoiceService.ts';
+
+test('context capability: direct placement accepts the genuine pin and refuses structural copies and proxies', needsStore, async t => {
+  const s = await setup(t);
+  const ctx = pin(s);
+  const expected = { snapshotId: s.snapshot.id, sourceId: 'app' };
+  assert.ok(placeNodes(ctx, [INVOICE_NODE], expected).screens.length > 0);
+  assert.ok(placeFiles(ctx, [INVOICE_FILE], expected).screens.length > 0);
+  const unauthorized = pin(s, { authorization: undefined });
+  const forgeries = [{ ...unauthorized, binding: 'matched', reasons: [], graph: s.graph }, { ...ctx },
+    JSON.parse(JSON.stringify(ctx)), Object.create(ctx), new Proxy(ctx, {})];
+  for (const forged of forgeries) {
+    for (const place of [placeNodes(forged, [INVOICE_NODE], expected), placeFiles(forged, [INVOICE_FILE], expected)]) {
+      assert.equal(place.binding, 'unavailable');
+      assert.deepEqual(place.screens, []);
+      assert.ok(place.limitationKeys.includes('sentinel.place.notOwnerConfirmed'));
+    }
+  }
+});
+
+test('context capability: every placement needs its exact snapshot and source, including a missing expectation', needsStore, async t => {
+  const s = await setup(t);
+  const ctx = pin(s);
+  for (const expected of [undefined, { snapshotId: 'other-snapshot', sourceId: 'app' }, { snapshotId: s.snapshot.id, sourceId: 'other-source' }]) {
+    for (const place of [(placeNodes as any)(ctx, [INVOICE_NODE], expected), (placeFiles as any)(ctx, [INVOICE_FILE], expected)]) {
+      assert.notEqual(place.binding, 'matched');
+      assert.deepEqual(place.screens, []);
+      assert.ok(place.limitationKeys.includes('sentinel.place.contextMismatch'));
+    }
+  }
+  assert.equal(placeNodes(ctx, ['other-source::src/server/invoiceService.ts::createInvoice'], { snapshotId: s.snapshot.id, sourceId: 'app' }).binding, 'mismatched');
+});
+
+test('context capability: a real second capture cannot reuse the first pin for findings, gaps or artifact closure', needsStore, async t => {
+  const s = await setup(t);
+  const ctx = pin(s);
+  const bytes = await s.readContent(s.entry(INVOICE_FILE).content);
+  writeFileSync(join(s.root, INVOICE_FILE), Buffer.concat([bytes, Buffer.from('\n// synthetic capture B change\n')]));
+  const { snapshot } = await captureSnapshot(s.fx.store, { mode: 'working-copy', sources: [{ sourceId: 'app', repositoryId: 'example/invoice-app', root: s.root }] });
+  assert.notEqual(snapshot.id, s.snapshot.id);
+  const current = { ...s, snapshot, entry: (p: string) => snapshot.entries.find((e: any) => e.relativePath === p && e.kind === 'file') };
+  const o = await observation(current, INVOICE_FILE, 'export async function createInvoice', { nodeId: INVOICE_NODE });
+  const { document } = await report(current, [o], { contexts: new Map([['app', ctx]]) });
+  for (const place of [document.findings[0]!.place, document.gaps[0]!.place]) {
+    assert.equal(place.binding, 'mismatched');
+    assert.ok(place.limitationKeys.includes('sentinel.place.contextMismatch'));
+    assert.deepEqual(place.screens, []);
+  }
+  assert.ok(!document.artifactClosure.includes(ctx.artifact!.id));
+  assert.ok(!document.artifactClosure.includes(ctx.receipt.id));
+});
+
+test('context capability: report consumers reject observation, citation and map-source mismatches', needsStore, async t => {
+  const s = await setup(t);
+  const ctx = pin(s);
+  const original = await observation(s, INVOICE_FILE, 'export async function createInvoice', { nodeId: INVOICE_NODE });
+  for (const field of ['observation', 'citation', 'source'] as const) {
+    const o: any = structuredClone(original);
+    let contexts: any = new Map([['app', ctx]]);
+    if (field === 'observation') o.snapshotId = 'other-snapshot';
+    if (field === 'citation') o.evidence[0].snapshotId = 'other-snapshot';
+    if (field === 'source') { o.evidence[0].sourceId = 'other-source'; o.evidence[0].nodeId = INVOICE_NODE.replace('app::', 'other-source::'); contexts = new Map([['other-source', ctx]]); }
+    const { document } = await report(s, [o], { contexts });
+    assert.equal(document.findings[0]!.place.binding, 'mismatched', field);
+    assert.ok(document.findings[0]!.place.limitationKeys.includes('sentinel.place.contextMismatch'), field);
+    assert.deepEqual(document.findings[0]!.place.screens, [], field);
+  }
+});
+
+test('context capability: caller byte-array mutations cannot change retained artifacts or receipts', needsStore, async t => {
+  const s = await setup(t);
+  const ctx = pin(s);
+  const o = await observation(s, INVOICE_FILE, 'export async function createInvoice', { nodeId: INVOICE_NODE });
+  const before = await report(s, [o], { contexts: new Map([['app', ctx]]) });
+  ctx.artifact!.bytes.fill(0);
+  ctx.receipt.bytes.fill(0);
+  const after = await report(s, [o], { contexts: new Map([['app', ctx]]) });
+  assert.deepEqual(after.document, before.document);
+  for (const a of after.artifacts) assert.equal(`sha256:${createHash('sha256').update(a.bytes).digest('hex')}`, a.id);
+});
+
+test('context capability: authorization access cannot swap the snapshot identity being authenticated', needsStore, async t => {
+  const s = await setup(t);
+  const snapshot = { ...s.snapshot };
+  const other = { ...snapshot, id: 'other-snapshot' };
+  const authorization = ownerConfirms(t, contextPinIntent({ snapshot: other, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs }));
+  const ctx = pinApplicationContext({ snapshot, sourceId: 'app', repo: 'invoice-app', graph: s.graph, inputs: s.inputs,
+    get authorization() { snapshot.id = other.id; return authorization; } });
+  assert.notEqual(ctx.binding, 'matched');
 });

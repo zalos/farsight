@@ -89,6 +89,20 @@ implementation/review. Spring registration, callback and inheritance edge cases 
 These later packages are not complete. The computer restart removed temporary validation artifacts; the
 planner's comparison and checks above were recreated afterward. No primary build or dogfood refresh occurred.
 
+## Sentinel report-context authority — 2026-10-22
+
+Branch `codex/sentinel-report-context-fixes` starts from the PR 19 report fix. A genuine pin now has private runtime
+provenance anchored to its consumed owner grant. Direct placement and report/gap consumers require the exact
+snapshot and source; copied fields, serialized receipts, prototypes, proxies and pins from another capture cannot
+place findings. Report placement checks observation/citation identities too, and invalid contexts do not enter
+its artifact closure. Artifact byte access returns copies so caller mutation cannot alter retained provenance.
+
+The changed code is in `reports/context.ts`, `place.ts`, `document.ts` and the report export, with one catalog reason
+for a different capture/source. Six new actual-consumer tests accompany the existing report tests. The five-package
+build and all 40 focused report/comparison and original independent checks pass with zero skips, including official
+SARIF validation and the offline JavaScript-disabled browser/print case. Independent review is still required.
+No model, CLI, driver or application graph behavior changed.
+
 ## Sentinel parser merged; rules and policy integration — 2026-10-22
 
 PR [#141](https://github.com/zalos/farsight/pull/141) merged at `500351c` after all ten final CI checks and
