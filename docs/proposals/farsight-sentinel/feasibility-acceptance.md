@@ -31,7 +31,7 @@ No production Sentinel contract, framework pack, scanner adapter or UI is introd
 The lead reviewed the original engine corpus at `fde63bc`: hashes and literal spans agree with the original
 sources. Its paired labels describe SQL structure under the documented query-binding facade assumptions.
 The Rust control must be described as outside the selected rules' language scope, not unsupported by the
-scanner itself. The corrected immutable index and measurement records will identify the final inputs.
+scanner itself. The Rust correction is retained in the earlier measurements. A second review then found that the three safe cross-file caller spans named the positive call on line 3. Commit `55ccab3` corrects those safe spans to line 6. The lead independently reread all six TS/JS/Java caller locations against their hashed source bytes before the corrected final trial: positives concatenate request text into SQL at line 3; safe siblings pass constant SQL and a separate value at line 6. Sink spans, rules, source bytes, labels and denominators are unchanged. The accepted static-label index SHA-256 is `6548f0d047e8f80c0aca3b2f0a178003169141f30a66f8d117cb5d585fa39715`. The original index review-status field remains unchanged for immutable provenance; this record supplies the independent review. Prior results retain their original index hash and the source-span limitation.
 
 Pattern eligibility requires all three direct positive symbols, zero hits on the nine safe siblings, zero
 unattributed findings, no engine errors on valid inputs, and reconciliation of all nine eligible paths. Local
