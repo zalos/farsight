@@ -839,3 +839,25 @@ shared required-coverage evaluator. Normalized observations and per-check covera
 provenance and shared scoped counts. Regeneration needs neither source checkout nor scanner assets. Full finding
 policy, placement, framework/model integration and complete reports remain subsequent work; no command in this
 slice declares policy satisfaction. Actual verified worker outcomes retain architecture qualification authority.
+25. **Sentinel's secret scan keeps the detector and whole lines, never the value, and a failed scan is never clean (2026-10-22).**
+PR 11 scans the captured current tree with Gitleaks through the PR 07 execution service, as an external adapter in a
+pinned Linux container only (`src/adapters/gitleaks.ts`, `gitleaks-worker.ts`). **Shape:** Gitleaks cannot speak the
+worker protocol, so the container runs Node with Sentinel's own worker program as its fixed command; the adapter digest
+pins that program's bytes and the image digest pins Node and the Gitleaks binary. No production pin is registered
+(`GITLEAKS_PINS` is empty) until an image is measured and installed; nothing downloads one. **Inputs:** a canonical
+manifest (source-relative path, content digest, size per captured file) and exactly those contents. The worker rebuilds
+the tree in the container's tmpfs one folder below the scan root, runs Gitleaks with a pinned configuration (the
+release's built-in rules, nothing allowed), an empty ignore folder, `--ignore-gitleaks-allow` and no baseline, so a
+repository's `.gitleaks.toml`, `.gitleaksignore`, baseline or `gitleaks:allow` comment cannot suppress an observation.
+**Redaction:** Gitleaks runs with full redaction; its raw report stays in the tmpfs and is removed with the container;
+its stdout and stderr are drained and dropped because a tool message can quote input. An observation is built from a
+closed field list (rule ID, a captured file, a whole-line byte span, a fixed message, fixed limitation keys) and the
+coordinator re-checks every one against that shape, so no field can carry part of a value. **Failure:** a tool exit
+other than no-leaks or leaks-found, a missing, oversized, malformed or inconsistent report, a finding outside the
+captured files, a refused observation or a captured file the result does not account for makes the scan an `error`
+over every captured file with a coded reason; a file over the size limit is a skipped scope and the scan is `partial`.
+The worker reports only a catalog code on stderr. **Audit:** the result names the adapter digest, the tool version and
+image (reference and id), the configuration digest and the manifest. **Not decided here:** the image pin and its
+acquisition, the report and CLI surface (PR 09), and history scanning. **Cost:** a location is whole lines, so a long
+line cites more than the match; and the version's default allowlist (paths and stop words Gitleaks itself skips) is
+part of the pin, not configurable per repository.

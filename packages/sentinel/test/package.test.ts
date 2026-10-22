@@ -79,6 +79,10 @@ const ALLOWED_IMPORTS: Record<string, readonly string[]> = {
   'adapters/zizmor/job.js': ['node:crypto', 'node:fs', 'node:path'],
   'adapters/zizmor/normalize.js': ['node:crypto'],
   'adapters/zizmor/run.js': ['node:fs', 'node:path'],
+  // The Gitleaks adapter (PR 11). The worker module is the program a container runs; it starts the pinned tool there
+  // and only when run as the worker (asserted below). Importing it, or the coordinator side, starts nothing.
+  'adapters/gitleaks-worker.js': ['node:child_process', 'node:crypto', 'node:fs', 'node:os', 'node:path'],
+  'adapters/gitleaks.js': ['node:crypto', 'node:fs', 'node:path', 'node:url'],
   // Worker execution (PR 07). Only processes.js may start a process (asserted below); nothing networked.
   'execution/assets.js': ['node:fs', 'node:path', 'node:url'],
   'execution/bootstrap.js': ['node:fs', 'node:path'],
@@ -191,6 +195,12 @@ test('the library imports only its reviewed modules, and nothing that could star
     ['spawn(process.execPath']);
   assert.match(launch, /shell: false/);
   assert.match(launch, /'serve', '--workspace'/);
+  // The Gitleaks worker starts one process, the pinned tool, with an argument list, only from its run-guarded main.
+  const worker = readFileSync(`${dist}adapters/gitleaks-worker.js`, 'utf8');
+  const workerSpawns = [...worker.matchAll(/(?<![.\w])(spawnSync|spawn|execFileSync|execFile|execSync|exec|fork)\s*\(([^,)]*)/g)].map(m => `${m[1]}(${m[2]!.trim()}`);
+  assert.deepEqual(workerSpawns, ['spawn(GITLEAKS_BIN']);
+  assert.doesNotMatch(worker, /shell:\s*true/);
+  assert.match(worker, /if \(globalThis\.SENTINEL_GITLEAKS_RUN \|\| process\.argv\[1\] === '--sentinel-gitleaks-worker'\)/);
 });
 
 /** Runs `code` in a fresh process that records every child spawn, then reports spawns, SQLite and new files. */
