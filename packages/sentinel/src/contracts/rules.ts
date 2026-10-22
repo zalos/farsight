@@ -8,8 +8,11 @@ import type { CweId } from './observation.js';
 /** Languages a rule can apply to in the first release. */
 export type RuleLanguage = 'typescript' | 'javascript' | 'java';
 
-/** What one check of the rule is about: one file, one surface (route/handler), a manifest, CI config, or the whole repository. */
-export type RuleScopeKind = 'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'repository';
+/**
+ * What one check of the rule is about: one file, one surface (route/handler), a manifest, CI config, an
+ * infrastructure configuration file (a Dockerfile, Kubernetes YAML, Terraform), or the whole repository.
+ */
+export type RuleScopeKind = 'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'infrastructure-config' | 'repository';
 
 /**
  * A property a stage must establish before the rule can be checked. A profile that lacks one leaves the check

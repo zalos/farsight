@@ -287,9 +287,10 @@
         "surface",
         "dependency-manifest",
         "ci-config",
+        "infrastructure-config",
         "repository"
       ],
-      "description": "What one check of the rule is about: one file, one surface (route/handler), a manifest, CI config, or the whole repository."
+      "description": "What one check of the rule is about: one file, one surface (route/handler), a manifest, CI config, an infrastructure configuration file (a Dockerfile, Kubernetes YAML, Terraform), or the whole repository."
     },
     "FrameworkId": {
       "type": "string",

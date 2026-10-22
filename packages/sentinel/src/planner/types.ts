@@ -14,7 +14,7 @@ import type {
 } from '../contracts/plan.js';
 
 export type PlannerLanguage = 'typescript' | 'javascript' | 'java';
-export type PlannerScopeKind = 'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'repository';
+export type PlannerScopeKind = 'source-file' | 'surface' | 'dependency-manifest' | 'ci-config' | 'infrastructure-config' | 'repository';
 
 /** One locked rule with the parts of its verified definition planning needs. */
 export interface PlannerRule {
